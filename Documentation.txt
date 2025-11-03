@@ -1,0 +1,27 @@
+Run the following command to initialize a new Node.js project:
+npm init -y
+
+Install WebSocket Library
+npm install ws
+
+Run the Bot:
+node bot.js
+
+
+
+Optional: Automating with PM2 (Optional)
+If you want the bot to run continuously in the background, even if you close your terminal, you can use a process manager like PM2:
+
+Install PM2 globally:
+npm install pm2 -g
+
+
+Run the bot using PM2:
+pm2 start bot.js
+
+
+To monitor the bot:
+pm2 logs bot
+
+To stop the bot:
+pm2 stop bot
