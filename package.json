@@ -1,0 +1,25 @@
+{
+  "name": "deriv-digit-differ-bot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "dependencies": {
+    "@deriv/deriv-api": "^1.0.15",
+    "dotenv": "^17.2.2",
+    "nodemailer": "^6.9.15",
+    "winston": "^3.8.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "jest": "^29.0.0",
+    "nodemon": "^2.0.0"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "test": "jest",
+    "dev": "nodemon index.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}
