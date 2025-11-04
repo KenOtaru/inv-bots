@@ -375,11 +375,11 @@ class EnsembleManager extends StrategyManager {
         }
         // Fallback: build a flat vector placing the predicted prob at the chosen digit,
         // distribute the remainder uniformly (not ideal, but maintains a vector)
-        const p = Math.min(0.2, Math.max(0.01, decision.predictedProb ?? 0.1));
-        const rest = (1 - p) / 9;
-        const vec = Array(10).fill(rest);
-        vec[decision.digitToAvoid] = p;
-        return vec;
+        // const p = Math.min(0.2, Math.max(0.01, decision.predictedProb ?? 0.1));
+        // const rest = (1 - p) / 9;
+        // const vec = Array(10).fill(rest);
+        // vec[decision.digitToAvoid] = p;
+        // return vec;
     }
 }
 
@@ -722,7 +722,8 @@ class EnhancedDigitDifferTradingBot {
 
     // Use StrategyManager to choose digit to avoid
     const lossPressure = this.consecutiveLosses; // tighten gating if losing
-    const decision = this.strategyManager.decide(asset, history, this.lastDigits[asset], lossPressure);
+    const lastDigit = history[history.length - 1];
+    const decision = this.strategyManager.decide(asset, history, lastDigit, lossPressure);
     if (!decision) {
         // No sufficiently confident edge; skip
         return;
@@ -732,7 +733,9 @@ class EnhancedDigitDifferTradingBot {
     this.lastDecision = decision;
 
     console.log(`[${asset}] Strategy=${decision.strategy} avoid=${decision.digitToAvoid} p≈${decision.predictedProb.toFixed(3)} margin≈${decision.confidenceMargin.toFixed(3)}`);
-    this.placeTrade(asset, decision.digitToAvoid, Math.round((1 - decision.predictedProb) * 1000) / 1000);
+    if(decision.digitToAvoid >= 6) {
+        this.placeTrade(asset, decision.digitToAvoid, Math.round((1 - decision.predictedProb) * 1000) / 1000);
+    }
 }
 
 
@@ -829,7 +832,9 @@ class EnhancedDigitDifferTradingBot {
             this.sendLossEmail(asset);
         }
 
-        this.logTradingSummary(asset);
+        if(!this.endOfDay) {
+            this.logTradingSummary(asset);
+        }
 
         // If there are suspended assets, reactivate the first one on win
         if (this.suspendedAssets.size > 3) {
@@ -842,12 +847,14 @@ class EnhancedDigitDifferTradingBot {
         
         if (this.consecutiveLosses >= this.config.maxConsecutiveLosses || this.totalProfitLoss <= -this.config.stopLoss) {
             console.log('Stop condition reached. Stopping trading.');
+            this.endOfDay = true;
             this.disconnect();
             return;
         }
 
         if (this.totalProfitLoss >= this.config.takeProfit) {
             console.log('Take Profit Reached... Stopping trading.');
+            this.endOfDay = true;
             this.sendEmailSummary();
             this.disconnect();
             return;
@@ -890,46 +897,36 @@ class EnhancedDigitDifferTradingBot {
 
     // Check for Disconnect and Reconnect
     checkTimeForDisconnectReconnect() {
-        // Set start time when first connecting
-        if (!this.startTime) {
-            this.startTime = new Date();
-            console.log(`Bot started at: ${this.startTime.toLocaleTimeString()}`);
-        }
-
         setInterval(() => {
             const now = new Date();
-            const elapsedHours = (now - this.startTime) / (1000 * 60 * 60); // Convert to hours
+            const currentHours = now.getHours();
+            const currentMinutes = now.getMinutes();
 
-            // Check if 2 hours have elapsed
-            // if (elapsedHours >= 2 && this.isWinTrade) {
-            //     console.log(`2 hours of trading completed. Started at ${this.startTime.toLocaleTimeString()}, stopping now at ${now.toLocaleTimeString()}`);
-            //     this.Pause = true;
-            //     this.unsubscribeAllTicks();
-            //     this.disconnect();
-            //     this.endOfDay = true;
-            //     return;
-            // }
-
-            // Optional: Log remaining time every interval
-            if (!this.endOfDay) {
-                const remainingMins = Math.max(0, 120 - (elapsedHours * 60));
-                // console.log(`Time remaining: ${remainingMins.toFixed(0)} minutes`);
+            // Check for afternoon resume condition (7:00 AM)
+            if (this.endOfDay && currentHours === 14 && currentMinutes >= 0) {
+                console.log("It's 7:00 AM, reconnecting the bot.");
+                this.LossDigitsList = [];
+                this.tradeInProgress = false;
+                this.usedAssets = new Set();
+                this.RestartTrading = true;
+                this.Pause = false;
+                this.endOfDay = false;
+                this.tradedDigitArray = [];
+                this.tradedDigitArray2 = [];
+                this.tradeNum = Math.floor(Math.random() * (40 - 21 + 1)) + 21;
+                this.connect();
             }
-
-            // Reset for next day
-            // const currentHours = now.getHours();
-            // const currentMinutes = now.getMinutes();
-
-            // if (this.endOfDay && currentHours === 8 && currentMinutes >= 0) {
-            //     console.log("It's 8:00 AM, reconnecting the bot for a new session.");
-            //     this.startTime = new Date(); // Reset start time
-            //     this.assets.forEach(asset => {
-            //         this.lastPredictions[asset] = [];
-            //     });
-            //     this.Pause = false;
-            //     this.endOfDay = false;
-            //     this.connect();
-            // }
+    
+            // Check for evening stop condition (after 5:00 PM)
+            if (this.isWinTrade && !this.endOfDay) {
+                if (currentHours >= 23 && currentMinutes >= 0) {
+                    console.log("It's past 5:00 PM after a win trade, disconnecting the bot.");
+                    this.sendDisconnectResumptionEmailSummary();
+                    this.Pause = true;
+                    this.disconnect();
+                    this.endOfDay = true;
+                }
+            }
         }, 20000); // Check every 20 seconds
     }
     
@@ -961,7 +958,7 @@ class EnhancedDigitDifferTradingBot {
         if (!this.endOfDay) {
             setInterval(() => {
                 this.sendEmailSummary();
-            }, 1800000); // 30 minutes
+            }, 21600000); // 6 Hours
         }
     }
 
@@ -1075,11 +1072,11 @@ const bot = new EnhancedDigitDifferTradingBot('0P94g4WdSrSrzir', {
     multiplier: 11.3,
     maxConsecutiveLosses: 3, 
     stopLoss: 129,
-    takeProfit: 25,
+    takeProfit: 5000,
     requiredHistoryLength: 1000,
     winProbabilityThreshold: 0.6,
-    minWaitTime: 120000,   // 2 min
-    maxWaitTime: 100000,    // 7 min 420000
+    minWaitTime: 300000, //5 Minutes
+    maxWaitTime: 2600000, //1 Hour
 });
 
 bot.start();
