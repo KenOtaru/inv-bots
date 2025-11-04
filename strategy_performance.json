@@ -299,11 +299,11 @@
         "winRate": 100
       },
       "gapDetection": {
-        "wins": 16,
+        "wins": 17,
         "losses": 1,
-        "lastUsed": 1762115569050,
-        "totalTrades": 17,
-        "winRate": 94.11764705882352
+        "lastUsed": 1762254517359,
+        "totalTrades": 18,
+        "winRate": 94.44444444444444
       },
       "momentumReversal": {
         "wins": 3,
@@ -416,5 +416,5 @@
     "RDBULL": "gapDetection",
     "RDBEAR": "fibonacciRetracement"
   },
-  "timestamp": "2025-11-02T20:32:55.109Z"
+  "timestamp": "2025-11-04T11:08:43.450Z"
 }

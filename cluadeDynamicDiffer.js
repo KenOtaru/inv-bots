@@ -32,6 +32,7 @@ class HybridSuperBot {
         this.totalProfitLoss = 0;
         this.tradeInProgress = false;
         this.suspendedAssets = new Set();
+        this.endOfDay = false;
 
         // Tick data storage
         this.tickHistories = {};
@@ -106,7 +107,10 @@ class HybridSuperBot {
                 pass: 'jfjhtmussgfpbgpk'
             }
         };
+
         this.emailRecipient = 'kenotaru@gmail.com';
+
+        this.startEmailTimer();
     }
 
     connect() {
@@ -771,19 +775,23 @@ class HybridSuperBot {
 
         this.totalProfitLoss += profit;
         this.updateLayerWeights(won);
-        this.logSummary();
+
+        if(!this.endOfDay) {
+            this.logSummary();
+        }
 
         // Check stop conditions
         if (this.consecutiveLosses >= this.config.maxConsecutiveLosses || 
             this.totalProfitLoss <= -this.config.stopLoss) {
             console.log('\n🛑 Stop loss reached - Shutting down');
-            this.sendEmailSummary();
+            this.endOfDay = true;
             this.disconnect();
             return;
         }
 
         if (this.totalProfitLoss >= this.config.takeProfit) {
             console.log('\n🎉 Take profit reached - Mission accomplished!');
+            this.endOfDay = true;
             this.sendEmailSummary();
             this.disconnect();
             return;
@@ -791,15 +799,21 @@ class HybridSuperBot {
 
         this.disconnect();
 
+        if (!won) {
+            this.sendLossEmail(asset);
+        }
+
         const waitTime = Math.floor(Math.random() * 
             (this.config.maxWaitTime - this.config.minWaitTime + 1)) + this.config.minWaitTime;
 
         console.log(`⏳ Waiting ${Math.round(waitTime / 60000)} minutes before next trade...\n`);
 
-        setTimeout(() => {
-            this.tradeInProgress = false;
-            this.connect();
-        }, waitTime);
+        if(!this.endOfDay) {
+            setTimeout(() => {
+                this.tradeInProgress = false;
+                this.connect();
+            }, waitTime);
+        }
     }
 
     suspendAsset(asset) {
@@ -811,6 +825,40 @@ class HybridSuperBot {
             this.suspendedAssets.delete(first);
             console.log(`✅ Reactivated asset: ${first}`);
         }
+    }
+
+    checkTimeForDisconnectReconnect() {
+        setInterval(() => {
+            const now = new Date();
+            const currentHours = now.getHours();
+            const currentMinutes = now.getMinutes();
+
+            // Check for afternoon resume condition (7:00 AM)
+            if (this.endOfDay && currentHours === 14 && currentMinutes >= 0) {
+                console.log("It's 7:00 AM, reconnecting the bot.");
+                this.LossDigitsList = [];
+                this.tradeInProgress = false;
+                this.usedAssets = new Set();
+                this.RestartTrading = true;
+                this.Pause = false;
+                this.endOfDay = false;
+                this.tradedDigitArray = [];
+                this.tradedDigitArray2 = [];
+                this.tradeNum = Math.floor(Math.random() * (40 - 21 + 1)) + 21;
+                this.connect();
+            }
+    
+            // Check for evening stop condition (after 5:00 PM)
+            if (this.isWinTrade && !this.endOfDay) {
+                if (currentHours >= 23 && currentMinutes >= 0) {
+                    console.log("It's past 5:00 PM after a win trade, disconnecting the bot.");
+                    this.sendDisconnectResumptionEmailSummary();
+                    this.Pause = true;
+                    this.disconnect();
+                    this.endOfDay = true;
+                }
+            }
+        }, 20000); // Check every 20 seconds
     }
 
     logSummary() {
@@ -893,6 +941,14 @@ class HybridSuperBot {
         }
     }
 
+    startEmailTimer() {
+        if (!this.endOfDay) {
+            setInterval(() => {
+                this.sendEmailSummary();
+            }, 21600000); // 6 Hours
+        }
+    }
+
     async sendLossEmail(asset, predictedDigit) {
         const transporter = nodemailer.createTransport(this.emailConfig);
 
@@ -963,6 +1019,7 @@ class HybridSuperBot {
         console.log('='.repeat(60) + '\n');
         
         this.connect();
+        this.checkTimeForDisconnectReconnect();
     }
 }
 
@@ -972,10 +1029,10 @@ const bot = new HybridSuperBot('0P94g4WdSrSrzir', {
     multiplier: 11.3,
     maxConsecutiveLosses: 3,
     stopLoss: 129,
-    takeProfit: 5,
+    takeProfit: 5000,
     requiredHistoryLength: 1000,
-    minWaitTime: 120000,
-    maxWaitTime: 180000,
+    minWaitTime: 300000, //5 Minutes
+    maxWaitTime: 2600000, //1 Hour
 });
 
 bot.start();

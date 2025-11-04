@@ -469,7 +469,9 @@ class EnhancedDigitDifferTradingBot {
             this.sendLossEmail(asset);
         }
 
-        this.logTradingSummary(asset);
+        if(!this.endOfDay) {
+            this.logTradingSummary(asset);
+        }
 
         // If there are suspended assets, reactivate the first one on win
         if (this.suspendedAssets.size > 3) {
@@ -482,12 +484,14 @@ class EnhancedDigitDifferTradingBot {
         
         if (this.consecutiveLosses >= this.config.maxConsecutiveLosses || this.totalProfitLoss <= -this.config.stopLoss) {
             console.log('Stop condition reached. Stopping trading.');
+            this.endOfDay = true;
             this.disconnect();
             return;
         }
 
         if (this.totalProfitLoss >= this.config.takeProfit) {
             console.log('Take Profit Reached... Stopping trading.');
+            this.endOfDay = true;
             this.sendEmailSummary();
             this.disconnect();
             return;
@@ -530,46 +534,36 @@ class EnhancedDigitDifferTradingBot {
 
     // Check for Disconnect and Reconnect
     checkTimeForDisconnectReconnect() {
-        // Set start time when first connecting
-        if (!this.startTime) {
-            this.startTime = new Date();
-            console.log(`Bot started at: ${this.startTime.toLocaleTimeString()}`);
-        }
-
         setInterval(() => {
             const now = new Date();
-            const elapsedHours = (now - this.startTime) / (1000 * 60 * 60); // Convert to hours
+            const currentHours = now.getHours();
+            const currentMinutes = now.getMinutes();
 
-            // Check if 2 hours have elapsed
-            // if (elapsedHours >= 2 && this.isWinTrade) {
-            //     console.log(`2 hours of trading completed. Started at ${this.startTime.toLocaleTimeString()}, stopping now at ${now.toLocaleTimeString()}`);
-            //     this.Pause = true;
-            //     this.unsubscribeAllTicks();
-            //     this.disconnect();
-            //     this.endOfDay = true;
-            //     return;
-            // }
-
-            // Optional: Log remaining time every interval
-            if (!this.endOfDay) {
-                const remainingMins = Math.max(0, 120 - (elapsedHours * 60));
-                // console.log(`Time remaining: ${remainingMins.toFixed(0)} minutes`);
+            // Check for afternoon resume condition (7:00 AM)
+            if (this.endOfDay && currentHours === 14 && currentMinutes >= 0) {
+                console.log("It's 7:00 AM, reconnecting the bot.");
+                this.LossDigitsList = [];
+                this.tradeInProgress = false;
+                this.usedAssets = new Set();
+                this.RestartTrading = true;
+                this.Pause = false;
+                this.endOfDay = false;
+                this.tradedDigitArray = [];
+                this.tradedDigitArray2 = [];
+                this.tradeNum = Math.floor(Math.random() * (40 - 21 + 1)) + 21;
+                this.connect();
             }
-
-            // Reset for next day
-            // const currentHours = now.getHours();
-            // const currentMinutes = now.getMinutes();
-
-            // if (this.endOfDay && currentHours === 8 && currentMinutes >= 0) {
-            //     console.log("It's 8:00 AM, reconnecting the bot for a new session.");
-            //     this.startTime = new Date(); // Reset start time
-            //     this.assets.forEach(asset => {
-            //         this.lastPredictions[asset] = [];
-            //     });
-            //     this.Pause = false;
-            //     this.endOfDay = false;
-            //     this.connect();
-            // }
+    
+            // Check for evening stop condition (after 5:00 PM)
+            if (this.isWinTrade && !this.endOfDay) {
+                if (currentHours >= 23 && currentMinutes >= 0) {
+                    console.log("It's past 5:00 PM after a win trade, disconnecting the bot.");
+                    this.sendDisconnectResumptionEmailSummary();
+                    this.Pause = true;
+                    this.disconnect();
+                    this.endOfDay = true;
+                }
+            }
         }, 20000); // Check every 20 seconds
     }
     
@@ -601,7 +595,7 @@ class EnhancedDigitDifferTradingBot {
         if (!this.endOfDay) {
             setInterval(() => {
                 this.sendEmailSummary();
-            }, 1800000); // 30 minutes
+            }, 21600000); // 6 Hours
         }
     }
 
@@ -628,7 +622,7 @@ class EnhancedDigitDifferTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: 'LF_Digit_Differ-Multi_Asset_Bot - Summary',
+            subject: 'DynamicDiffer-Multi_Asset_Bot - Summary',
             text: summaryText
         };
 
@@ -673,7 +667,7 @@ class EnhancedDigitDifferTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: 'LF_Digit_Differ-Multi_Asset_Bot - Loss Alert',
+            subject: 'DynamicDiffer-Multi_Asset_Bot - Loss Alert',
             text: summaryText
         };
 
@@ -691,7 +685,7 @@ class EnhancedDigitDifferTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: 'LF_Digit_Differ-Multi_Asset_Bot - Error Report',
+            subject: 'DynamicDiffer-Multi_Asset_Bot - Error Report',
             text: `An error occurred: ${errorMessage}`
         };
 
@@ -1536,11 +1530,11 @@ const bot = new DynamicDigitDifferTradingBot('0P94g4WdSrSrzir', {
     multiplier: 11.3,
     maxConsecutiveLosses: 3,
     stopLoss: 129,
-    takeProfit: 25,
+    takeProfit: 5000,
     requiredHistoryLength: 1000,
     winProbabilityThreshold: 100,
-    minWaitTime: 120000,
-    maxWaitTime: 60000,
+    minWaitTime: 300000, //5 Minutes
+    maxWaitTime: 2600000, //1 Hour
     minPatternStrength: 0.01,
     maxStrategyReuse: 3,
     patternWindowSizes: [12, 25, 50, 100, 200],
