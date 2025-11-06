@@ -716,7 +716,8 @@ class EnhancedDigitDifferTradingBot {
 }
 
 // Usage
-const bot = new EnhancedDigitDifferTradingBot('0P94g4WdSrSrzir', {
+const bot = new EnhancedDigitDifferTradingBot('DMylfkyce6VyZt7', {
+    // 'DMylfkyce6VyZt7', '0P94g4WdSrSrzir'
     initialStake: 0.61,
     multiplier: 11.3,
     maxConsecutiveLosses: 3, 
