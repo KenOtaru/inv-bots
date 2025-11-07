@@ -1031,8 +1031,10 @@ const bot = new HybridSuperBot('0P94g4WdSrSrzir', {
     stopLoss: 129,
     takeProfit: 5000,
     requiredHistoryLength: 1000,
-    minWaitTime: 300000, //5 Minutes
-    maxWaitTime: 2600000, //1 Hour
+    minWaitTime: 180000,
+    maxWaitTime: 300000,
+    // minWaitTime: 300000, //5 Minutes
+    // maxWaitTime: 2600000, //1 Hour
 });
 
 bot.start();
