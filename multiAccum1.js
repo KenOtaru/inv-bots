@@ -471,13 +471,13 @@ class EnhancedDerivTradingBot {
             
             if (!assetState.tradeInProgress && !this.shouldStopTrading()) {
                 
-                // if (appearedOnceArray1.length > 0) {
-                    // if (appearedOnceArray.includes(currentDigitCount2)
-                    //     && assetState.stayedInArray25[0] !== currentDigitCount2
-                    //     && assetState.stayedInArray25[1] !== currentDigitCount2
-                    //     && assetState.tradedDigitArray[assetState.tradedDigitArray.length - 1] !== currentDigitCount2
-                    //     && assetState.stayedInArray25[15] >= 0
-                    // ) {
+                if (appearedOnceArray1.length > 0) {
+                    if (appearedOnceArray.includes(currentDigitCount2)
+                        && assetState.stayedInArray25[0] !== currentDigitCount2
+                        && assetState.stayedInArray25[1] !== currentDigitCount2
+                        && assetState.tradedDigitArray[assetState.tradedDigitArray.length - 1] !== currentDigitCount2
+                        && assetState.stayedInArray25[15] >= 0
+                    ) {
                         assetState.tradedDigitArray.push(currentDigitCount2);
                         assetState.filteredArray = appearedOnceArray;
                         this.filterNum = appearedOnceArray.length;
@@ -495,8 +495,8 @@ class EnhancedDerivTradingBot {
                             6 Array: ${appearedOnceArray4} (${appearedOnceArray4.length})
                         `)
                         this.placeTrade(asset);
-                    // }
-                // }
+                    }
+                }
             }
         }
     }

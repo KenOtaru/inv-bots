@@ -1,7 +1,6 @@
 require('dotenv').config();
 const WebSocket = require('ws');
 const nodemailer = require('nodemailer');
-const crypto = require('crypto');
 
 class EnhancedDigitDifferTradingBot {
     constructor(token, config = {}) {
@@ -69,8 +68,13 @@ class EnhancedDigitDifferTradingBot {
         this.suspendedAssets = new Set();
         this.rStats = {};
         this.sys = 1;
-        this.filterNum = 2;
+        this.filterNum = 7;
         this.kLoss = 0.01;
+
+        // Per-asset runtime state map
+        this.assetStates = {};
+        // Map proposal IDs back to assets
+        this.pendingProposals = new Map();
 
         this.assets.forEach(asset => {
             this.tickHistories[asset] = [];
@@ -80,6 +84,14 @@ class EnhancedDigitDifferTradingBot {
             this.lastDigits2[asset] = null;
             this.predictedDigits[asset] = null;
             this.lastPredictions[asset] = [];
+            this.assetStates[asset] = {
+                stayedInArray25: [],
+                tradedDigitArray: [],
+                filteredArray: [],
+                totalArray: [],
+                currentProposalId: null,
+                tradeInProgress: false,
+            };
         });
 
         //Email Configuration
@@ -204,6 +216,24 @@ class EnhancedDigitDifferTradingBot {
         this.sendRequest(request);
     }
 
+    requestProposal(asset) {
+
+        const proposal = {
+            proposal: 1,
+            amount: this.currentStake.toFixed(2),
+            basis: 'stake',
+            contract_type: 'ACCU',
+            currency: 'USD',
+            symbol: asset,
+            growth_rate: this.config.growthRate,
+            limit_order: {
+                take_profit: this.kLoss            
+            }
+        };
+
+        this.sendRequest(proposal);
+    }
+
     handleMessage(message) {
         if (message.msg_type === 'authorize') {
             if (message.error) {
@@ -226,6 +256,8 @@ class EnhancedDigitDifferTradingBot {
             this.retryCount = 0;
             this.initializeSubscriptions();
 
+        } else if (message.msg_type === 'proposal') {
+            this.handleProposal(message);
         } else if (message.msg_type === 'history') {
             const asset = message.echo_req.ticks_history;
             this.handleTickHistory(asset, message.history);
@@ -309,6 +341,70 @@ class EnhancedDigitDifferTradingBot {
             this.analyzeTicks(asset);
         }
     }
+
+    handleProposal(response) {
+        if (response.error) {
+            console.error('Proposal error:', response.error.message);
+            return;
+        }
+
+        // Get asset from echo_req
+        let asset = null;
+        if (response.echo_req && response.echo_req.symbol) {
+            asset = response.echo_req.symbol;
+        }
+
+        // Fallback: map from proposal id if symbol missing
+        if (!asset && response.proposal && response.proposal.id) {
+            asset = this.pendingProposals.get(response.proposal.id) || null;
+        }
+
+        // Validate asset against the configured list
+        if (!asset || !this.assets.includes(asset)) {
+            console.log(`Unknown asset: ${asset}`);
+            return;
+        }
+
+        const assetState = this.assetStates[asset];
+
+        if (response.proposal) {
+            const stayedInArray = response.proposal.contract_details.ticks_stayed_in;
+            assetState.stayedInArray = stayedInArray;
+            
+            const currentDigitCount = assetState.stayedInArray[99] + 1;
+            assetState.currentProposalId = response.proposal.id;
+            console.log(`filter Number: ${this.filterNum}`);
+            console.log(`Current StayedIn Digit Count: ${assetState.stayedInArray[99]} (${currentDigitCount})`);
+            
+            // Store proposal ID to asset mapping
+            this.pendingProposals.set(response.proposal.id, asset);
+
+            const digitFrequency = {};
+            assetState.stayedInArray.forEach(digit => {
+                digitFrequency[digit] = (digitFrequency[digit] || 0) + 1;
+            });
+
+            const appearedOnceArray = Object.keys(digitFrequency)
+                .filter(digit => digitFrequency[digit] === this.filterNum) 
+                .map(Number);
+
+
+            console.log('Digits that appeared once:', appearedOnceArray); 
+            
+            if (!assetState.tradeInProgress) {
+                
+                if (appearedOnceArray.includes(currentDigitCount) && assetState.stayedInArray[99] >= 0) {
+                    assetState.tradedDigitArray.push(currentDigitCount);
+                    assetState.filteredArray = appearedOnceArray;
+                    console.log("Asset", asset)
+                    console.log("Asset Array", assetState.stayedInArray)
+                    console.log("Traded Asset Array", assetState.tradedDigitArray)
+
+                    this.placeTrade(asset);
+                }
+            }
+        }
+    }
     
     analyzeTicks(asset) {
         if (this.tradeInProgress) {
@@ -326,7 +422,7 @@ class EnhancedDigitDifferTradingBot {
             return;
         }
 
-        this.placeTrade(asset);
+        this.requestProposal(asset);
     }
 
     
@@ -335,25 +431,21 @@ class EnhancedDigitDifferTradingBot {
             return;
         }
        
-        this.tradeInProgress = true;
+        const assetState = this.assetStates[asset];
+        if (!assetState || !assetState.currentProposalId) {
+            console.log(`Cannot place trade. Missing proposal for asset ${asset}.`);
+            return;
+        }
+
+        const request = {
+            buy: assetState.currentProposalId,
+            price: this.currentStake.toFixed(2)
+        };
 
         console.log(`🚀 Placing trade for Asset: [${asset}]  | Stake: ${this.currentStake.toFixed(2)}`);
-        const request = {
-            buy: 1,
-            price: this.currentStake, 
-            parameters: {
-                amount: this.currentStake,
-                basis: 'stake',
-                contract_type: 'ACCU',
-                currency: 'USD',
-                symbol: asset,
-                growth_rate: this.config.growthRate,
-                limit_order: {
-                    take_profit: this.kLoss            
-                }
-            }
-        };
         this.sendRequest(request);
+        this.tradeInProgress = true;
+        assetState.tradeInProgress = true;
     }
 
     subscribeToOpenContract(contractId) {
@@ -375,6 +467,9 @@ class EnhancedDigitDifferTradingBot {
         const asset = contract.underlying;
         const won = contract.status === 'won';
         const profit = parseFloat(contract.profit);
+        if (this.assetStates[asset]) {
+            this.assetStates[asset].tradeInProgress = false;
+        }
         
         console.log(`[${asset}] Trade outcome: ${won ? '✅ WON' : '❌ LOST'}`);
 
@@ -384,24 +479,17 @@ class EnhancedDigitDifferTradingBot {
             this.isWinTrade = true;
             this.consecutiveLosses = 0;
             this.currentStake = this.config.initialStake;
+            this.filterNum = 7;
         } else {
             this.totalLosses++;
             this.consecutiveLosses++;
             this.isWinTrade = false;
+            this.filterNum++;
 
             if (this.consecutiveLosses === 2) this.consecutiveLosses2++;
             else if (this.consecutiveLosses === 3) this.consecutiveLosses3++;
             else if (this.consecutiveLosses === 4) this.consecutiveLosses4++;
             else if (this.consecutiveLosses === 5) this.consecutiveLosses5++;
-
-            // Suspend the asset after a loss
-            // this.suspendAsset(asset);
-
-            if (this.sys === 1) {
-                this.sys = 2;
-            } else {
-                this.sys = 1;
-            }
                
 
             this.currentStake = Math.ceil(this.currentStake * this.config.multiplier * 100) / 100;
@@ -432,7 +520,7 @@ class EnhancedDigitDifferTradingBot {
         }
 
         // Suspend the asset after a trade
-        this.suspendAsset(asset);
+        // this.suspendAsset(asset);
         
         if (this.consecutiveLosses >= this.config.maxConsecutiveLosses || this.totalProfitLoss <= -this.config.stopLoss) {
             console.log('Stop condition reached. Stopping trading.');
@@ -459,6 +547,14 @@ class EnhancedDigitDifferTradingBot {
                 this.connect();
             }, randomWaitTime);
         }
+    }
+
+    shouldStopTrading() {
+        if (this.endOfDay) return true;
+        if (this.consecutiveLosses >= this.config.maxConsecutiveLosses) return true;
+        if (this.totalProfitLoss <= -this.config.stopLoss) return true;
+        if (this.totalProfitLoss >= this.config.takeProfit) return true;
+        return false;
     }
 
     // Add new method to handle asset suspension
@@ -574,7 +670,7 @@ class EnhancedDigitDifferTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: 'Accumulator_Multi_Asset_Bot - Summary',
+            subject: 'LiveAccumulator_Multi_Asset_Bot - Summary',
             text: summaryText
         };
 
@@ -618,7 +714,7 @@ class EnhancedDigitDifferTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: 'Accumulator_Multi_Asset_Bot - Loss Alert',
+            subject: 'LiveAccumulator_Multi_Asset_Bot - Loss Alert',
             text: summaryText
         };
 
@@ -636,7 +732,7 @@ class EnhancedDigitDifferTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: 'Accumulator_Multi_Asset_Bot - Error Report',
+            subject: 'LiveAccumulator_Multi_Asset_Bot - Error Report',
             text: `An error occurred: ${errorMessage}`
         };
 
@@ -660,14 +756,14 @@ const bot = new EnhancedDigitDifferTradingBot('DMylfkyce6VyZt7', {
     initialStake: 1,
     multiplier: 21,
     maxConsecutiveLosses: 3, 
-    stopLoss: 110,
-    takeProfit: 5000,
+    stopLoss: 210,
+    takeProfit: 500,
     growthRate: 0.05,
     accuTakeProfit: 0.5,
     requiredHistoryLength: 1000,
     winProbabilityThreshold: 100,
-    minWaitTime: 120000, //2 Minutes
-    maxWaitTime: 300000, //5 Minutes
+    minWaitTime: 1000, //2 Minutes
+    maxWaitTime: 1000, //5 Minutes
     // minWaitTime: 300000, //5 Minutes
     // maxWaitTime: 2600000, //1 Hour
     minOccurrencesThreshold: 1,
