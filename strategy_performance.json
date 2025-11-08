@@ -2,419 +2,419 @@
   "strategyPerformance": {
     "R_10": {
       "frequencyAnalysis": {
-        "wins": 13,
-        "losses": 1,
-        "lastUsed": 1762094521624,
-        "totalTrades": 14,
-        "winRate": 92.85714285714286
+        "wins": 0,
+        "losses": 0,
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "gapDetection": {
-        "wins": 7,
-        "losses": 1,
-        "lastUsed": 1762093177224,
-        "totalTrades": 8,
-        "winRate": 87.5
+        "wins": 0,
+        "losses": 0,
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "momentumReversal": {
-        "wins": 13,
-        "losses": 2,
-        "lastUsed": 1762023626192,
-        "totalTrades": 15,
-        "winRate": 86.66666666666667
+        "wins": 0,
+        "losses": 0,
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "sequenceBreaker": {
-        "wins": 10,
+        "wins": 0,
         "losses": 0,
-        "lastUsed": 1762095236975,
-        "totalTrades": 10,
-        "winRate": 100
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "volatilityCluster": {
-        "wins": 7,
-        "losses": 1,
-        "lastUsed": 1761990092695,
-        "totalTrades": 8,
-        "winRate": 87.5
+        "wins": 0,
+        "losses": 0,
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "fibonacciRetracement": {
-        "wins": 5,
+        "wins": 0,
         "losses": 0,
-        "lastUsed": 1762025016138,
-        "totalTrades": 5,
-        "winRate": 100
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "movingAverageCrossover": {
         "wins": 0,
         "losses": 0,
-        "lastUsed": 1762095012969,
+        "lastUsed": 0,
         "totalTrades": 0,
         "winRate": 0
       },
       "bollingerBandSqueeze": {
         "wins": 0,
         "losses": 0,
-        "lastUsed": 1762093073324,
+        "lastUsed": 0,
         "totalTrades": 0,
         "winRate": 0
       }
     },
     "R_25": {
       "frequencyAnalysis": {
-        "wins": 18,
-        "losses": 2,
-        "lastUsed": 1761986294457,
-        "totalTrades": 20,
-        "winRate": 90
+        "wins": 0,
+        "losses": 0,
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "gapDetection": {
-        "wins": 8,
-        "losses": 2,
-        "lastUsed": 1762024664300,
-        "totalTrades": 10,
-        "winRate": 80
+        "wins": 0,
+        "losses": 0,
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "momentumReversal": {
-        "wins": 7,
-        "losses": 1,
-        "lastUsed": 1762094697009,
-        "totalTrades": 8,
-        "winRate": 87.5
+        "wins": 0,
+        "losses": 0,
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "sequenceBreaker": {
-        "wins": 5,
+        "wins": 0,
         "losses": 0,
-        "lastUsed": 1762094219280,
-        "totalTrades": 5,
-        "winRate": 100
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "volatilityCluster": {
-        "wins": 10,
+        "wins": 0,
         "losses": 0,
-        "lastUsed": 1762094807036,
-        "totalTrades": 10,
-        "winRate": 100
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "fibonacciRetracement": {
-        "wins": 6,
-        "losses": 1,
-        "lastUsed": 1762023820315,
-        "totalTrades": 7,
-        "winRate": 85.71428571428571
+        "wins": 0,
+        "losses": 0,
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "movingAverageCrossover": {
         "wins": 0,
         "losses": 0,
-        "lastUsed": 1761940102216,
+        "lastUsed": 0,
         "totalTrades": 0,
         "winRate": 0
       },
       "bollingerBandSqueeze": {
         "wins": 0,
         "losses": 0,
-        "lastUsed": 1761993600298,
+        "lastUsed": 0,
         "totalTrades": 0,
         "winRate": 0
       }
     },
     "R_50": {
       "frequencyAnalysis": {
-        "wins": 2,
+        "wins": 0,
         "losses": 0,
-        "lastUsed": 1761989524360,
-        "totalTrades": 2,
-        "winRate": 100
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "gapDetection": {
-        "wins": 7,
-        "losses": 1,
-        "lastUsed": 1762092694987,
-        "totalTrades": 8,
-        "winRate": 87.5
+        "wins": 0,
+        "losses": 0,
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "momentumReversal": {
-        "wins": 8,
+        "wins": 0,
         "losses": 0,
-        "lastUsed": 1761993804385,
-        "totalTrades": 8,
-        "winRate": 100
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "sequenceBreaker": {
-        "wins": 26,
-        "losses": 1,
-        "lastUsed": 1762094697016,
-        "totalTrades": 27,
-        "winRate": 96.29629629629629
+        "wins": 0,
+        "losses": 0,
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "volatilityCluster": {
-        "wins": 3,
+        "wins": 0,
         "losses": 0,
-        "lastUsed": 1761988826232,
-        "totalTrades": 3,
-        "winRate": 100
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "fibonacciRetracement": {
-        "wins": 8,
+        "wins": 0,
         "losses": 0,
-        "lastUsed": 1761993992166,
-        "totalTrades": 8,
-        "winRate": 100
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "movingAverageCrossover": {
         "wins": 0,
         "losses": 0,
-        "lastUsed": 1762025110228,
+        "lastUsed": 0,
         "totalTrades": 0,
         "winRate": 0
       },
       "bollingerBandSqueeze": {
         "wins": 0,
         "losses": 0,
-        "lastUsed": 1762094521611,
+        "lastUsed": 0,
         "totalTrades": 0,
         "winRate": 0
       }
     },
     "R_75": {
       "frequencyAnalysis": {
-        "wins": 10,
+        "wins": 0,
         "losses": 0,
-        "lastUsed": 1762023900435,
-        "totalTrades": 10,
-        "winRate": 100
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "gapDetection": {
-        "wins": 12,
-        "losses": 1,
-        "lastUsed": 1762095133067,
-        "totalTrades": 13,
-        "winRate": 92.3076923076923
+        "wins": 0,
+        "losses": 0,
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "momentumReversal": {
-        "wins": 17,
-        "losses": 2,
-        "lastUsed": 1762094219269,
-        "totalTrades": 19,
-        "winRate": 89.47368421052632
+        "wins": 0,
+        "losses": 0,
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "sequenceBreaker": {
-        "wins": 7,
-        "losses": 1,
-        "lastUsed": 1762024768217,
-        "totalTrades": 8,
-        "winRate": 87.5
+        "wins": 0,
+        "losses": 0,
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "volatilityCluster": {
-        "wins": 6,
-        "losses": 1,
-        "lastUsed": 1762094325243,
-        "totalTrades": 7,
-        "winRate": 85.71428571428571
+        "wins": 0,
+        "losses": 0,
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "fibonacciRetracement": {
-        "wins": 4,
+        "wins": 0,
         "losses": 0,
-        "lastUsed": 1762092969147,
-        "totalTrades": 4,
-        "winRate": 100
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "movingAverageCrossover": {
-        "wins": 1,
+        "wins": 0,
         "losses": 0,
-        "lastUsed": 1761989524338,
-        "totalTrades": 1,
-        "winRate": 100
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "bollingerBandSqueeze": {
         "wins": 0,
         "losses": 0,
-        "lastUsed": 1762095013721,
+        "lastUsed": 0,
         "totalTrades": 0,
         "winRate": 0
       }
     },
     "R_100": {
       "frequencyAnalysis": {
-        "wins": 4,
-        "losses": 1,
-        "lastUsed": 1762025110376,
-        "totalTrades": 5,
-        "winRate": 80
+        "wins": 0,
+        "losses": 0,
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "gapDetection": {
-        "wins": 4,
-        "losses": 1,
-        "lastUsed": 1762094619021,
-        "totalTrades": 5,
-        "winRate": 80
+        "wins": 1,
+        "losses": 0,
+        "lastUsed": 1762595573980,
+        "totalTrades": 1,
+        "winRate": 100
       },
       "momentumReversal": {
-        "wins": 7,
+        "wins": 0,
         "losses": 0,
-        "lastUsed": 1762095236966,
-        "totalTrades": 7,
-        "winRate": 100
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "sequenceBreaker": {
-        "wins": 7,
+        "wins": 0,
         "losses": 0,
-        "lastUsed": 1762092773508,
-        "totalTrades": 7,
-        "winRate": 100
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "volatilityCluster": {
-        "wins": 11,
-        "losses": 2,
-        "lastUsed": 1761945741882,
-        "totalTrades": 13,
-        "winRate": 84.61538461538461
+        "wins": 0,
+        "losses": 0,
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "fibonacciRetracement": {
-        "wins": 11,
-        "losses": 1,
-        "lastUsed": 1762023370202,
-        "totalTrades": 12,
-        "winRate": 91.66666666666666
+        "wins": 0,
+        "losses": 0,
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "movingAverageCrossover": {
         "wins": 0,
         "losses": 0,
-        "lastUsed": 1762094521037,
+        "lastUsed": 0,
         "totalTrades": 0,
         "winRate": 0
       },
       "bollingerBandSqueeze": {
         "wins": 0,
         "losses": 0,
-        "lastUsed": 1761994082340,
+        "lastUsed": 0,
         "totalTrades": 0,
         "winRate": 0
       }
     },
     "RDBULL": {
       "frequencyAnalysis": {
-        "wins": 7,
+        "wins": 0,
         "losses": 0,
-        "lastUsed": 1762095013801,
-        "totalTrades": 7,
-        "winRate": 100
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "gapDetection": {
-        "wins": 17,
-        "losses": 1,
-        "lastUsed": 1762254517359,
-        "totalTrades": 18,
-        "winRate": 94.44444444444444
+        "wins": 0,
+        "losses": 0,
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "momentumReversal": {
-        "wins": 3,
+        "wins": 0,
         "losses": 0,
-        "lastUsed": 1762024768207,
-        "totalTrades": 3,
-        "winRate": 100
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "sequenceBreaker": {
-        "wins": 7,
-        "losses": 1,
-        "lastUsed": 1761992684213,
-        "totalTrades": 8,
-        "winRate": 87.5
+        "wins": 0,
+        "losses": 0,
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "volatilityCluster": {
-        "wins": 20,
-        "losses": 2,
-        "lastUsed": 1762024892212,
-        "totalTrades": 22,
-        "winRate": 90.9090909090909
+        "wins": 0,
+        "losses": 0,
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "fibonacciRetracement": {
-        "wins": 6,
-        "losses": 1,
-        "lastUsed": 1762094437426,
-        "totalTrades": 7,
-        "winRate": 85.71428571428571
+        "wins": 0,
+        "losses": 0,
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "movingAverageCrossover": {
         "wins": 0,
         "losses": 0,
-        "lastUsed": 1761993600241,
+        "lastUsed": 0,
         "totalTrades": 0,
         "winRate": 0
       },
       "bollingerBandSqueeze": {
         "wins": 0,
         "losses": 0,
-        "lastUsed": 1761941163983,
+        "lastUsed": 0,
         "totalTrades": 0,
         "winRate": 0
       }
     },
     "RDBEAR": {
       "frequencyAnalysis": {
-        "wins": 2,
-        "losses": 1,
-        "lastUsed": 1761987744440,
-        "totalTrades": 3,
-        "winRate": 66.66666666666666
+        "wins": 0,
+        "losses": 0,
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "gapDetection": {
-        "wins": 5,
+        "wins": 0,
         "losses": 0,
-        "lastUsed": 1762094099010,
-        "totalTrades": 5,
-        "winRate": 100
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "momentumReversal": {
-        "wins": 6,
-        "losses": 1,
-        "lastUsed": 1762092773050,
-        "totalTrades": 7,
-        "winRate": 85.71428571428571
+        "wins": 0,
+        "losses": 0,
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "sequenceBreaker": {
-        "wins": 15,
-        "losses": 2,
-        "lastUsed": 1761991078233,
-        "totalTrades": 17,
-        "winRate": 88.23529411764706
+        "wins": 0,
+        "losses": 0,
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "volatilityCluster": {
-        "wins": 16,
+        "wins": 0,
         "losses": 0,
-        "lastUsed": 1762023732222,
-        "totalTrades": 16,
-        "winRate": 100
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "fibonacciRetracement": {
-        "wins": 7,
+        "wins": 0,
         "losses": 0,
-        "lastUsed": 1762094919159,
-        "totalTrades": 7,
-        "winRate": 100
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       },
       "movingAverageCrossover": {
         "wins": 0,
-        "losses": 1,
-        "lastUsed": 1762093073185,
-        "totalTrades": 1,
+        "losses": 0,
+        "lastUsed": 0,
+        "totalTrades": 0,
         "winRate": 0
       },
       "bollingerBandSqueeze": {
-        "wins": 1,
+        "wins": 0,
         "losses": 0,
-        "lastUsed": 1762025110371,
-        "totalTrades": 1,
-        "winRate": 100
+        "lastUsed": 0,
+        "totalTrades": 0,
+        "winRate": 0
       }
     }
   },
   "currentStrategy": {
-    "R_10": "sequenceBreaker",
-    "R_25": "volatilityCluster",
-    "R_50": "sequenceBreaker",
-    "R_75": "gapDetection",
-    "R_100": "momentumReversal",
-    "RDBULL": "gapDetection",
-    "RDBEAR": "fibonacciRetracement"
+    "R_10": null,
+    "R_25": null,
+    "R_50": null,
+    "R_75": null,
+    "R_100": "gapDetection",
+    "RDBULL": null,
+    "RDBEAR": null
   },
-  "timestamp": "2025-11-04T11:08:43.450Z"
+  "timestamp": "2025-11-08T09:52:59.873Z"
 }
