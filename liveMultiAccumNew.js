@@ -70,7 +70,7 @@ class EnhancedDigitDifferTradingBot {
         this.suspendedAssets = new Set();
         this.rStats = {};
         this.sys = 1;
-        this.filterNum = 7;
+        this.filterNum = 9;
         this.kLoss = 0.01;
         this.sysCount = 0;
         this.stopLossStake = false;
@@ -333,10 +333,10 @@ class EnhancedDigitDifferTradingBot {
 
         this.digitCounts[asset][lastDigit]++;
 
-        // console.log(`[${asset}] ${tick.quote}: ${this.tickHistories[asset].slice(-5).join(', ')}`);
+        //console.log(`[${asset}] ${tick.quote}: ${this.tickHistories[asset].slice(-5).join(', ')}`);
 
         if (this.tickHistories[asset].length < this.config.requiredHistoryLength) {
-            console.log(`[${asset}] Waiting for more ticks. Current length: ${this.tickHistories[asset].length}`);
+            // console.log(`[${asset}] Waiting for more ticks. Current length: ${this.tickHistories[asset].length}`);
             return; 
         }
 
@@ -364,7 +364,7 @@ class EnhancedDigitDifferTradingBot {
 
         // Validate asset against the configured list
         if (!asset || !this.assets.includes(asset)) {
-            console.log(`Unknown asset: ${asset}`);
+            // console.log(`Unknown asset: ${asset}`);
             return;
         }
 
@@ -421,7 +421,7 @@ class EnhancedDigitDifferTradingBot {
 
         // Don't analyze suspended assets
         if (this.suspendedAssets.has(asset)) {
-            console.log(`Skipping analysis for suspended asset: ${asset}`);
+            // console.log(`Skipping analysis for suspended asset: ${asset}`);
             return;
         }
 
@@ -482,14 +482,19 @@ class EnhancedDigitDifferTradingBot {
             this.isWinTrade = true;
             this.consecutiveLosses = 0;
             //New Stake System
-            if(this.sys >= 2) {
-                if(this.sysCount === 15) {
+            if(this.sys === 2) {
+                if(this.sysCount === 5) {
                     this.sys = 1;
                     this.sysCount = 0;
                 }
-            }  
+            } else if (this.sys === 3) {
+                if(this.sysCount === 2) {
+                    this.sys = 1;
+                    this.sysCount = 0;
+                }
+            } 
             this.currentStake = this.config.initialStake;
-            this.filterNum = 7;
+            this.filterNum = 9;
         } else {
             this.totalLosses++;
             this.consecutiveLosses++;
@@ -500,22 +505,17 @@ class EnhancedDigitDifferTradingBot {
             else if (this.consecutiveLosses === 3) this.consecutiveLosses3++;
             else if (this.consecutiveLosses === 4) this.consecutiveLosses4++;
             else if (this.consecutiveLosses === 5) this.consecutiveLosses5++;
-               
-
-            // this.currentStake = Math.ceil(this.currentStake * this.config.multiplier * 100) / 100;
+            
         }  
 
         this.totalProfitLoss += profit;	
         this.Pause = true;
 
-        const randomWaitTime = Math.floor(Math.random() * (this.config.maxWaitTime - this.config.minWaitTime + 1)) + this.config.minWaitTime;
-        const waitTimeMinutes = Math.round(randomWaitTime / 60000);
-
-        this.waitTime = waitTimeMinutes;
-        this.waitSeconds = randomWaitTime;
-
         if (!won) {
             this.sendLossEmail(asset);
+            //Suspend All Assets (Non-Loss)
+            this.suspendAllExcept(asset);
+
             //New Stake System
             if(this.consecutiveLosses >= 2) {
                 if(this.sys === 1) {
@@ -536,37 +536,38 @@ class EnhancedDigitDifferTradingBot {
             }
             
             //New Stake System
-            // if(this.sys === 1) {
-            //     // this.currentStake = Math.ceil(this.currentStake * this.config.multiplier * 100) / 100;
-            //     this.currentStake = this.config.multiplier;
-            //     this.sys = 1;
-            // } else {
-            //     if (this.sys === 2 && this.consecutiveLosses === 1) {
-            //         this.currentStake = this.config.multiplier2;
-            //         this.sysCount++;
-            //     } else if (this.sys === 3 && this.consecutiveLosses === 1) {
-            //         this.currentStake = this.config.multiplier3; 
-            //         this.sysCount++;
-            //     } else {
-            //         this.currentStake = this.config.initialStake;
-            //     }
-            // } 
-
-            this.currentStake = Math.ceil(this.currentStake * this.config.multiplier * 100) / 100;
+            if(this.sys === 1) {
+                // this.currentStake = Math.ceil(this.currentStake * this.config.multiplier * 100) / 100;
+                this.currentStake = this.config.multiplier;
+                this.sys = 1;
+            } else {
+                if (this.sys === 2 && this.consecutiveLosses === 1) {
+                    this.currentStake = this.config.multiplier2;
+                    this.sysCount++;
+                } else if (this.sys === 3 && this.consecutiveLosses === 1) {
+                    this.currentStake = this.config.multiplier3; 
+                    this.sysCount++;
+                } else {
+                    this.currentStake = this.config.initialStake;
+                }
+            } 
+        } else {
+            //Reactivate All Assets (Non-Loss)
+            if (this.suspendedAssets.size > 0) {
+                this.reactivateAllSuspended();
+            }
         }
+
+        //Wait Time
+        const randomWaitTime = Math.floor(Math.random() * (this.config.maxWaitTime - this.config.minWaitTime + 1)) + this.config.minWaitTime;
+        const waitTimeMinutes = Math.round(randomWaitTime / 60000);
+
+        this.waitTime = waitTimeMinutes;
+        this.waitSeconds = randomWaitTime;
 
         if(!this.endOfDay) {
             this.logTradingSummary(asset);
         }
-
-        // If there are suspended assets, reactivate the first one on win
-        if (this.suspendedAssets.size > 1) {
-            const firstSuspendedAsset = Array.from(this.suspendedAssets)[0];
-            this.reactivateAsset(firstSuspendedAsset);
-        }
-
-        // Suspend the asset after a trade
-        // this.suspendAsset(asset);
         
         if (this.consecutiveLosses >= this.config.maxConsecutiveLosses || this.totalProfitLoss <= -this.config.stopLoss || this.stopLossStake) {
             console.log('Stop condition reached. Stopping trading.');
@@ -598,13 +599,31 @@ class EnhancedDigitDifferTradingBot {
     // Add new method to handle asset suspension
     suspendAsset(asset) {
         this.suspendedAssets.add(asset);
-        console.log(`🚫 Suspended asset: ${asset}`);
+        // console.log(`🚫 Suspended asset: ${asset}`);
     }
 
     // Add new method to reactivate asset
     reactivateAsset(asset) {
         this.suspendedAssets.delete(asset);
-        console.log(`✅ Reactivated asset: ${asset}`);
+        // console.log(`✅ Reactivated asset: ${asset}`);
+    }
+
+    // Add new method to handle all other assets suspension
+    suspendAllExcept(asset) {
+        this.assets.forEach(a => {
+            if (a !== asset) {
+                this.suspendAsset(a);
+            }
+        });
+        this.suspendedAssets.delete(asset);
+        // console.log(`🚫 Suspended all except: ${asset}`);
+    }
+
+    // Add new method to reactivate all suspended assets
+    reactivateAllSuspended() {
+        Array.from(this.suspendedAssets).forEach(a => {
+            this.reactivateAsset(a);
+        });
     }
 
     unsubscribeAllTicks() {
@@ -704,9 +723,6 @@ class EnhancedDigitDifferTradingBot {
         x3 Losses: ${this.consecutiveLosses3}
         x4 Losses: ${this.consecutiveLosses4}
         x5 Losses: ${this.consecutiveLosses5}
-
-        Currently Suspended Assets: ${Array.from(this.suspendedAssets).join(', ') || 'None'}
-
         Current Stake: $${this.currentStake.toFixed(2)}
         Total Profit/Loss Amount: ${this.totalProfitLoss.toFixed(2)}
         Win Rate: ${((this.totalWins / this.totalTrades) * 100).toFixed(2)}%
@@ -715,7 +731,7 @@ class EnhancedDigitDifferTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: 'LiveAccumulator_Multi_Asset_Bot - Summary',
+            subject: 'nLiveAccumulator_Multi_Asset_Bot - Summary',
             text: summaryText
         };
 
@@ -749,7 +765,7 @@ class EnhancedDigitDifferTradingBot {
         Filtered Array: ${assetState.filteredArray}
         Traded ArrayNum: ${assetState.tradedDigitArray.slice(-50)}
         Filter Number: ${this.filterNum}
-
+        
         Last 10 Digits: ${lastFewTicks.join(', ')} 
 
         Total Profit/Loss Amount: ${this.totalProfitLoss.toFixed(2)}
@@ -763,7 +779,7 @@ class EnhancedDigitDifferTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: 'LiveAccumulator_Multi_Asset_Bot - Loss Alert',
+            subject: 'nLiveAccumulator_Multi_Asset_Bot - Loss Alert',
             text: summaryText
         };
 
@@ -793,9 +809,6 @@ class EnhancedDigitDifferTradingBot {
         x3 Losses: ${this.consecutiveLosses3}
         x4 Losses: ${this.consecutiveLosses4}
         x5 Losses: ${this.consecutiveLosses5}
-
-        Currently Suspended Assets: ${Array.from(this.suspendedAssets).join(', ') || 'None'}
-
         Current Stake: $${this.currentStake.toFixed(2)}
         Total Profit/Loss Amount: ${this.totalProfitLoss.toFixed(2)}
         Win Rate: ${((this.totalWins / this.totalTrades) * 100).toFixed(2)}%
@@ -804,7 +817,7 @@ class EnhancedDigitDifferTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: 'LiveAccumulator_Multi_Asset_Bot - Summary',
+            subject: 'nLiveAccumulator_Multi_Asset_Bot - Summary',
             text: summaryText
         };
 
@@ -822,7 +835,7 @@ class EnhancedDigitDifferTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: 'LiveAccumulator_Multi_Asset_Bot - Error Report',
+            subject: 'nLiveAccumulator_Multi_Asset_Bot - Error Report',
             text: `An error occurred: ${errorMessage}`
         };
 
@@ -841,15 +854,15 @@ class EnhancedDigitDifferTradingBot {
 }
 
 // Usage
-const bot = new EnhancedDigitDifferTradingBot('DMylfkyce6VyZt7', {
+const bot = new EnhancedDigitDifferTradingBot('hsj0tA0XJoIzJG5', {
     // 'DMylfkyce6VyZt7', '0P94g4WdSrSrzir', 'hsj0tA0XJoIzJG5', 'rgNedekYXvCaPeP'
     initialStake: 1,
     multiplier: 21,
-    multiplier2: 50,
-    multiplier3: 100,
-    maxConsecutiveLosses: 3, 
+    multiplier2: 100,
+    multiplier3: 1000,
+    maxConsecutiveLosses: 6, 
     stopLoss: 100,
-    takeProfit: 500,
+    takeProfit: 1500,
     growthRate: 0.05,
     accuTakeProfit: 0.5,
     requiredHistoryLength: 1000,
