@@ -760,8 +760,10 @@ const bot = new AIWeightedEnsembleBot('DMylfkyce6VyZt7', {
     stopLoss: 129,
     takeProfit: 5000,
     requiredHistoryLength: 1000,
-    minWaitTime: 300000, //5 Minutes
-    maxWaitTime: 2600000, //1 Hour
+    minWaitTime: 1200, // 2 Minutes
+    maxWaitTime: 300, // 5 Minutes
+    // minWaitTime: 300000, //5 Minutes
+    // maxWaitTime: 2600000, //1 Hour
 });
 
 bot.start();
