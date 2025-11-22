@@ -81,7 +81,7 @@ class EnhancedDigitDifferTradingBot {
 
         // NEW: Advanced risk management
         this.riskManager = {
-            maxDailyLoss: config.stopLoss * 0.7,
+            // maxDailyLoss: config.stopLoss * 0.7,
             currentSessionRisk: 0,
             riskPerTrade: 0.02,
             cooldownPeriod: 0,
@@ -411,97 +411,27 @@ class EnhancedDigitDifferTradingBot {
         return true;
     }
 
-    // NEW: Smart filter number calculation based on learning
-    calculateAdaptiveFilter(asset, currentDigitCount) {
-        const baseFilter = 8;
-        const assetState = this.assetStates[asset];
-        const lossHistory = this.learningSystem.lossPatterns[asset] || [];
-        const historyLength = this.extendedStayedIn[asset].length || 100;
-
-        // Scale base filter with history length (normalize to 100-sample equivalent)
-        let scaledBase = Math.round((historyLength / 100) * baseFilter);
-
-        // Analyze recent losses with this digit count
-        const recentLossesWithSameCount = lossHistory
-            .slice(-10)
-            .filter(loss => loss.digitCount === currentDigitCount)
-            .length;
-
-        // If this digit count has failed recently, be more conservative
-        let adjustedFilter = scaledBase;
-
-        if (recentLossesWithSameCount >= 2) {
-            adjustedFilter += recentLossesWithSameCount * 2;
-            // console.log(`[${asset}] Adjusting filter due to recent losses at count ${currentDigitCount}: ${adjustedFilter}`);
-        }
-
-        // Check filter performance history
-        const filterStats = this.learningSystem.filterPerformance[adjustedFilter] || { wins: 0, losses: 0 };
-        const winRate = filterStats.wins + filterStats.losses > 0
-            ? filterStats.wins / (filterStats.wins + filterStats.losses)
-            : 0.5;
-
-        // If this filter has poor performance, try different one
-        if (winRate < 0.4 && filterStats.wins + filterStats.losses > 5) {
-            adjustedFilter += 3;
-            // console.log(`[${asset}] Filter ${adjustedFilter - 3} has low win rate (${(winRate*100).toFixed(1)}%), trying ${adjustedFilter}`);
-        }
-
-        return adjustedFilter;
-    }
 
     // NEW: Pattern detection - avoid trading if similar pattern led to loss
-    detectDangerousPattern(asset, currentDigitCount, stayedInArray) {
-        const patternKey = `${asset}_${currentDigitCount}`;
-        const recentLosses = this.learningSystem.lossPatterns[asset] || [];
+    // detectDangerousPattern(asset, currentDigitCount, stayedInArray) {
+    //     const patternKey = `${asset}_${currentDigitCount}`;
+    //     const recentLosses = this.learningSystem.lossPatterns[asset] || [];
 
-        // Check if we've seen similar patterns fail recently
-        const similarLosses = recentLosses
-            .slice(-5)
-            .filter(loss => {
-                return loss.digitCount === currentDigitCount &&
-                    Math.abs(loss.arraySum - stayedInArray.reduce((a, b) => a + b, 0)) < 100;
-            });
+    //     // Check if we've seen similar patterns fail recently
+    //     const similarLosses = recentLosses
+    //         .slice(-5)
+    //         .filter(loss => {
+    //             return loss.digitCount === currentDigitCount &&
+    //                 Math.abs(loss.arraySum - stayedInArray.reduce((a, b) => a + b, 0)) < 100;
+    //         });
 
-        if (similarLosses.length >= 2) {
-            // console.log(`[${asset}] Dangerous pattern detected: ${similarLosses.length} similar losses recently`);
-            return true;
-        }
+    //     if (similarLosses.length >= 2) {
+    //         // console.log(`[${asset}] Dangerous pattern detected: ${similarLosses.length} similar losses recently`);
+    //         return true;
+    //     }
 
-        return false;
-    }
-
-    // NEW: Select best asset to trade based on multiple factors
-    selectBestAsset() {
-        const candidates = [];
-
-        for (const asset of this.assets) {
-            if (this.suspendedAssets.has(asset)) continue;
-            if (this.assetStates[asset].tradeInProgress) continue;
-            if (!this.isMarketConditionFavorable(asset)) continue;
-
-            const volatility = this.learningSystem.volatilityScores[asset] || 0;
-            const assetState = this.assetStates[asset];
-            const recentWinRate = this.calculateAssetWinRate(asset);
-
-            // Score each asset
-            const score = (
-                recentWinRate * 50 + // Win rate importance
-                (0.5 - Math.abs(0.5 - volatility)) * 30 + // Optimal volatility
-                (3 - assetState.consecutiveLosses) * 20 // Fewer losses better
-            );
-
-            candidates.push({ asset, score });
-        }
-
-        if (candidates.length === 0) return null;
-
-        // Sort by score and return best
-        candidates.sort((a, b) => b.score - a.score);
-        // console.log(`Asset scores:`, candidates.map(c => `${c.asset}:${c.score.toFixed(1)}`).join(', '));
-
-        return candidates[0].asset;
-    }
+    //     return false;
+    // }
 
     // NEW: Calculate recent win rate for an asset
     calculateAssetWinRate(asset) {
@@ -514,7 +444,7 @@ class EnhancedDigitDifferTradingBot {
         return wins / recentTrades.length;
     }
 
-    // NEW: Record trade outcome for learning
+    // MODIFIED: Record outcome and update learning (keep but enhance)
     recordTradeOutcome(asset, won, digitCount, filterUsed, stayedInArray) {
         const outcome = {
             asset,
@@ -526,18 +456,14 @@ class EnhancedDigitDifferTradingBot {
             volatility: this.learningSystem.volatilityScores[asset],
         };
 
-        // Store in loss patterns
         if (!this.learningSystem.lossPatterns[asset]) {
             this.learningSystem.lossPatterns[asset] = [];
         }
         this.learningSystem.lossPatterns[asset].push(outcome);
-
-        // Keep only last 50 trades
-        if (this.learningSystem.lossPatterns[asset].length > 50) {
+        if (this.learningSystem.lossPatterns[asset].length > 100) {
             this.learningSystem.lossPatterns[asset].shift();
         }
 
-        // Update filter performance
         if (!this.learningSystem.filterPerformance[filterUsed]) {
             this.learningSystem.filterPerformance[filterUsed] = { wins: 0, losses: 0 };
         }
@@ -545,58 +471,25 @@ class EnhancedDigitDifferTradingBot {
             this.learningSystem.filterPerformance[filterUsed].wins++;
         } else {
             this.learningSystem.filterPerformance[filterUsed].losses++;
-        }
-
-        // Track consecutive losses at same digit
-        if (!won) {
-            const key = `${asset}_${digitCount}`;
-            this.riskManager.consecutiveSameDigitLosses[key] =
-                (this.riskManager.consecutiveSameDigitLosses[key] || 0) + 1;
-        } else {
-            // Reset on win
-            const key = `${asset}_${digitCount}`;
-            this.riskManager.consecutiveSameDigitLosses[key] = 0;
-        }
-    }
-
-    // NEW: Diversify digit selection instead of repeating same digit
-    selectAlternativeDigit(asset, currentDigitCount, filteredArray, stayedInArray) {
-        const key = `${asset}_${currentDigitCount}`;
-        const sameDigitLosses = this.riskManager.consecutiveSameDigitLosses[key] || 0;
-
-        // If we've lost twice on the same digit, try different strategy
-        if (sameDigitLosses >= 2) {
-            // console.log(`[${asset}] Too many losses on digit count ${currentDigitCount}, seeking alternative`);
-
-            // Find other digit counts that appear in filtered array
-            const alternatives = filteredArray.filter(d => d !== currentDigitCount);
-
-            if (alternatives.length > 0) {
-                // Select alternative with least recent losses
-                let bestAlt = alternatives[0];
-                let minLosses = 999;
-
-                for (const alt of alternatives) {
-                    const altKey = `${asset}_${alt}`;
-                    const altLosses = this.riskManager.consecutiveSameDigitLosses[altKey] || 0;
-                    if (altLosses < minLosses) {
-                        minLosses = altLosses;
-                        bestAlt = alt;
-                    }
-                }
-
-                // console.log(`[${asset}] Switching from digit ${currentDigitCount} to ${bestAlt}`);
-                return bestAlt;
+            // Dynamically adjust threshold if losing
+            if (this.totalLosses % 3 === 0) {
+                // this.config.survivalThreshold += 0.005; // Make stricter
+                console.log(`Adjusted survival threshold to ${this.config.survivalThreshold} after losses`);
             }
         }
 
-        return currentDigitCount;
-    }
-
-    // Helper to check array equality
-    arraysEqual(a, b) {
-        if (a.length !== b.length) return false;
-        return a.every((v, i) => v === b[i]);
+        if (!won) {
+            const key = `${asset}_${digitCount}`;
+            this.riskManager.consecutiveSameDigitLosses[key] = (this.riskManager.consecutiveSameDigitLosses[key] || 0) + 1;
+        } else {
+            const key = `${asset}_${digitCount}`;
+            this.riskManager.consecutiveSameDigitLosses[key] = 0;
+            // Relax threshold on wins
+            // if (this.config.survivalThreshold > 0.98) {
+            //     this.config.survivalThreshold -= 0.001;
+            //     console.log(`Relaxed survival threshold to ${this.config.survivalThreshold} after win`);
+            // }
+        }
     }
 
     // MODIFIED: Enhanced proposal handler with learning integration and extended history
@@ -679,7 +572,7 @@ class EnhancedDigitDifferTradingBot {
     shouldTradeBasedOnSurvivalProb(asset, stayedInArray) {
         // Check market conditions first
         if (this.detectDangerousPattern(asset)) {
-            // console.log(`[${asset}] Skipping trade due to dangerous pattern`);
+            console.log(`[${asset}] Skipping trade due to dangerous pattern`);
             return false;
         }
         if (!this.isMarketConditionFavorable(asset)) {
@@ -756,7 +649,7 @@ class EnhancedDigitDifferTradingBot {
 
         // NEW: Check market conditions before requesting proposal
         if (!this.isMarketConditionFavorable(asset)) {
-            // console.log(`[${asset}] Skipping trade due to market conditions`);
+            console.log(`[${asset}] Skipping trade due to market conditions`);
             return;
         }
 
@@ -851,7 +744,7 @@ class EnhancedDigitDifferTradingBot {
             }
 
             // NEW: Reset adaptive filters on win
-            this.learningSystem.adaptiveFilters[asset] = 8;
+            // this.learningSystem.adaptiveFilters[asset] = 8;
         } else {
             this.totalLosses++;
             this.consecutiveLosses++;
@@ -970,54 +863,6 @@ class EnhancedDigitDifferTradingBot {
         }
     }
 
-    // MODIFIED: Record outcome and update learning (keep but enhance)
-    recordTradeOutcome(asset, won, digitCount, filterUsed, stayedInArray) {
-        const outcome = {
-            asset,
-            result: won ? 'win' : 'loss',
-            digitCount,
-            filterUsed,
-            arraySum: stayedInArray.reduce((a, b) => a + b, 0),
-            timestamp: Date.now(),
-            volatility: this.learningSystem.volatilityScores[asset],
-        };
-
-        if (!this.learningSystem.lossPatterns[asset]) {
-            this.learningSystem.lossPatterns[asset] = [];
-        }
-        this.learningSystem.lossPatterns[asset].push(outcome);
-        if (this.learningSystem.lossPatterns[asset].length > 25) {
-            this.learningSystem.lossPatterns[asset].shift();
-        }
-
-        if (!this.learningSystem.filterPerformance[filterUsed]) {
-            this.learningSystem.filterPerformance[filterUsed] = { wins: 0, losses: 0 };
-        }
-        if (won) {
-            this.learningSystem.filterPerformance[filterUsed].wins++;
-        } else {
-            this.learningSystem.filterPerformance[filterUsed].losses++;
-            // Dynamically adjust threshold if losing
-            if (this.totalLosses % 3 === 0) {
-                // this.config.survivalThreshold += 0.005; // Make stricter
-                console.log(`Adjusted survival threshold to ${this.config.survivalThreshold} after losses`);
-            }
-        }
-
-        if (!won) {
-            const key = `${asset}_${digitCount}`;
-            this.riskManager.consecutiveSameDigitLosses[key] = (this.riskManager.consecutiveSameDigitLosses[key] || 0) + 1;
-        } else {
-            const key = `${asset}_${digitCount}`;
-            this.riskManager.consecutiveSameDigitLosses[key] = 0;
-            // Relax threshold on wins
-            // if (this.config.survivalThreshold > 0.98) {
-            //     this.config.survivalThreshold -= 0.001;
-            //     console.log(`Relaxed survival threshold to ${this.config.survivalThreshold} after win`);
-            // }
-        }
-    }
-
 
     // Add new method to handle asset suspension
     suspendAsset(asset) {
@@ -1084,11 +929,70 @@ class EnhancedDigitDifferTradingBot {
                 this.Pause = false;
                 this.endOfDay = false;
                 this.tradedDigitArray = [];
+                // Asset-specific data
+                this.digitCounts = {};
+                this.tickSubscriptionIds = {};
+                this.tickHistories = {};
+                this.lastDigits = {};
+                this.predictedDigits = {};
+                this.lastPredictions = {};
+                this.assetStates = {};
+                this.pendingProposals = new Map();
+                this.previousStayedIn = {};
+                this.extendedStayedIn = {}; // Extended historical run lengths (up to 5000)
+
+                // NEW: Advanced analytics and learning system
+                this.learningSystem = {
+                    lossPatterns: {},
+                    failedDigitCounts: {},
+                    volatilityScores: {},
+                    filterPerformance: {},
+                    resetPatterns: {},
+                    timeWindowPerformance: [],
+                    adaptiveFilters: {},
+                };
+
+                // NEW: Advanced risk management
+                this.riskManager = {
+                    // maxDailyLoss: config.stopLoss * 0.7,
+                    currentSessionRisk: 0,
+                    riskPerTrade: 0.02,
+                    cooldownPeriod: 0,
+                    lastLossTime: null,
+                    consecutiveSameDigitLosses: {},
+                };
+
+                this.assets.forEach(asset => {
+                    this.tickHistories[asset] = [];
+                    this.digitCounts[asset] = Array(10).fill(0);
+                    this.lastDigits[asset] = null;
+                    this.predictedDigits[asset] = null;
+                    this.lastPredictions[asset] = [];
+                    this.assetStates[asset] = {
+                        stayedInArray: [],
+                        tradedDigitArray: [],
+                        filteredArray: [],
+                        totalArray: [],
+                        currentProposalId: null,
+                        tradeInProgress: false,
+                        consecutiveLosses: 0,
+                        lastTradeResult: null,
+                        digitFrequency: {},
+                    };
+                    this.previousStayedIn[asset] = null;
+                    this.extendedStayedIn[asset] = [];
+
+                    // Initialize learning system for each asset
+                    this.learningSystem.lossPatterns[asset] = [];
+                    this.learningSystem.volatilityScores[asset] = 0;
+                    this.learningSystem.adaptiveFilters[asset] = 8;
+                    this.riskManager.consecutiveSameDigitLosses[asset] = {};
+                });
 
                 this.connect();
             }
 
-            // Check for evening stop condition (after 5:00 PM GMT+1)
+            // Check for evening stop condition (after 5:00 PM GMT+1) 17
             if (this.isWinTrade && !this.endOfDay) {
                 if (currentHours >= 17 && currentMinutes >= 0) {
                     console.log("It's past 5:00 PM GMT+1 after a win trade, disconnecting the bot.");
@@ -1096,65 +1000,6 @@ class EnhancedDigitDifferTradingBot {
                     this.Pause = true;
                     this.disconnect();
                     this.endOfDay = true;
-                    // Asset-specific data
-                    this.digitCounts = {};
-                    this.tickSubscriptionIds = {};
-                    this.tickHistories = {};
-                    this.lastDigits = {};
-                    this.predictedDigits = {};
-                    this.lastPredictions = {};
-                    this.assetStates = {};
-                    this.pendingProposals = new Map();
-                    this.previousStayedIn = {};
-                    this.extendedStayedIn = {}; // Extended historical run lengths (up to 5000)
-
-                    // NEW: Advanced analytics and learning system
-                    this.learningSystem = {
-                        lossPatterns: {},
-                        failedDigitCounts: {},
-                        volatilityScores: {},
-                        filterPerformance: {},
-                        resetPatterns: {},
-                        timeWindowPerformance: [],
-                        adaptiveFilters: {},
-                    };
-
-                    // NEW: Advanced risk management
-                    this.riskManager = {
-                        maxDailyLoss: config.stopLoss * 0.7,
-                        currentSessionRisk: 0,
-                        riskPerTrade: 0.02,
-                        cooldownPeriod: 0,
-                        lastLossTime: null,
-                        consecutiveSameDigitLosses: {},
-                    };
-
-                    this.assets.forEach(asset => {
-                        this.tickHistories[asset] = [];
-                        this.digitCounts[asset] = Array(10).fill(0);
-                        this.lastDigits[asset] = null;
-                        this.predictedDigits[asset] = null;
-                        this.lastPredictions[asset] = [];
-                        this.assetStates[asset] = {
-                            stayedInArray: [],
-                            tradedDigitArray: [],
-                            filteredArray: [],
-                            totalArray: [],
-                            currentProposalId: null,
-                            tradeInProgress: false,
-                            consecutiveLosses: 0,
-                            lastTradeResult: null,
-                            digitFrequency: {},
-                        };
-                        this.previousStayedIn[asset] = null;
-                        this.extendedStayedIn[asset] = [];
-
-                        // Initialize learning system for each asset
-                        this.learningSystem.lossPatterns[asset] = [];
-                        this.learningSystem.volatilityScores[asset] = 0;
-                        this.learningSystem.adaptiveFilters[asset] = 8;
-                        this.riskManager.consecutiveSameDigitLosses[asset] = {};
-                    });
                 }
             }
         }, 20000); // Check every 20 seconds
@@ -1235,7 +1080,7 @@ class EnhancedDigitDifferTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: 'Qwen_Enhanced Accumulator Bot - Performance Summary',
+            subject: 'Grok_Enhanced Accumulator Bot - Performance Summary',
             text: summaryText
         };
 
@@ -1291,7 +1136,7 @@ class EnhancedDigitDifferTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: `Qwen_Enhanced Accumulator Bot - Loss Alert [${asset}]`,
+            subject: `Grok_Enhanced Accumulator Bot - Loss Alert [${asset}]`,
             text: summaryText
         };
 
@@ -1347,7 +1192,7 @@ class EnhancedDigitDifferTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: 'Qwen_Enhanced Accumulator Bot - Performance Summary',
+            subject: 'Grok_Enhanced Accumulator Bot - Performance Summary',
             text: summaryText
         };
 
@@ -1363,7 +1208,7 @@ class EnhancedDigitDifferTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: 'Qwen_Enhanced Accumulator Bot - Error Report',
+            subject: 'Grok_Enhanced Accumulator Bot - Error Report',
             text: `An error occurred: ${errorMessage}`
         };
 
