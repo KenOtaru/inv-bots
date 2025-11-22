@@ -47,7 +47,26 @@ class MarkovDifferBot {
             losses: 0,
             profit: 0,
             startTime: new Date(),
+            consecutiveLosses2: 0,
+            consecutiveLosses3: 0,
+            consecutiveLosses4: 0,
+            consecutiveLosses5: 0,
         };
+
+        this.emailConfig = {
+            service: 'gmail',
+            auth: {
+                user: 'kenzkdp2@gmail.com',
+                pass: 'jfjhtmussgfpbgpk'
+            }
+        };
+        this.emailRecipient = 'kenotaru@gmail.com';
+
+        this.startEmailTimer();
+        this.endOfDay = false;
+        this.isWinTrade = false;
+        this.waitTime = 0;
+        this.waitSeconds = 0;
 
         // Asset Data
         // Structure: { assetName: { history: [], markov: Matrix, lastDigits: [], suspended: bool, ... } }
@@ -70,8 +89,7 @@ class MarkovDifferBot {
 
         // Email Config (Optional)
         this.emailConfig = {
-            enabled: false, // Set to true if email is configured
-            // Add nodemailer config here if needed
+            enabled: true,
         };
     }
 
@@ -95,6 +113,7 @@ class MarkovDifferBot {
 ╚══════════════════════════════════════════════════════════════╝
         `);
         this.connect();
+        this.checkTimeForDisconnectReconnect();
     }
 
     connect() {
@@ -387,11 +406,21 @@ class MarkovDifferBot {
             // Check Take Profit
             if (this.stats.profit >= this.config.takeProfit) {
                 console.log('🎉 TAKE PROFIT REACHED! Stopping bot.');
+                this.sendEmailSummary();
                 this.stop();
             }
 
+            this.isWinTrade = true;
+
         } else {
             data.consecutiveLosses++;
+            this.isWinTrade = false;
+
+            // Update global consecutive loss counters
+            if (data.consecutiveLosses === 2) this.stats.consecutiveLosses2++;
+            else if (data.consecutiveLosses === 3) this.stats.consecutiveLosses3++;
+            else if (data.consecutiveLosses === 4) this.stats.consecutiveLosses4++;
+            else if (data.consecutiveLosses === 5) this.stats.consecutiveLosses5++;
 
             // Martingale / Recovery
             data.currentStake = data.currentStake * this.config.martingaleMultiplier;
@@ -399,6 +428,8 @@ class MarkovDifferBot {
             data.currentStake = Math.round(data.currentStake * 100) / 100;
 
             console.log(`🔻 [${asset}] Loss #${data.consecutiveLosses}. Increasing stake to $${data.currentStake}`);
+
+            this.sendLossEmail(asset, data);
 
             // Suspend Asset if too many losses
             if (data.consecutiveLosses >= this.config.maxConsecutiveLosses) {
@@ -419,7 +450,175 @@ class MarkovDifferBot {
                 this.stop();
             }
         }
+
+        if (!this.endOfDay) {
+            this.logTradingSummary(asset, data);
+        }
     }
+
+    logTradingSummary(asset, data) {
+        console.log('Trading Summary:');
+        console.log(`Total Trades: ${this.stats.totalTrades}`);
+        console.log(`Total Trades Won: ${this.stats.wins}`);
+        console.log(`Total Trades Lost: ${this.stats.losses}`);
+        console.log(`x2 Losses: ${this.stats.consecutiveLosses2}`);
+        console.log(`x3 Losses: ${this.stats.consecutiveLosses3}`);
+        console.log(`x4 Losses: ${this.stats.consecutiveLosses4}`);
+        console.log(`x5 Losses: ${this.stats.consecutiveLosses5}`);
+        console.log(`Total Profit/Loss Amount: ${this.stats.profit.toFixed(2)}`);
+        console.log(`[${asset}] Current Stake: $${data.currentStake.toFixed(2)}`);
+    }
+
+    startEmailTimer() {
+        if (!this.endOfDay) {
+            setInterval(() => {
+                this.sendEmailSummary();
+            }, 21600000); // 6 Hours
+        }
+    }
+
+    async sendEmailSummary() {
+        const transporter = nodemailer.createTransport(this.emailConfig);
+
+        const summaryText = `
+        Trading Summary:
+        Total Trades: ${this.stats.totalTrades}
+        Total Trades Won: ${this.stats.wins}
+        Total Trades Lost: ${this.stats.losses}
+        x2 Losses: ${this.stats.consecutiveLosses2}
+        x3 Losses: ${this.stats.consecutiveLosses3}
+        x4 Losses: ${this.stats.consecutiveLosses4}
+        x5 Losses: ${this.stats.consecutiveLosses5}
+
+        Total Profit/Loss Amount: ${this.stats.profit.toFixed(2)}
+        `;
+
+        const mailOptions = {
+            from: this.emailConfig.auth.user,
+            to: this.emailRecipient,
+            subject: 'Markov_Digit_Differ_Bot - Summary',
+            text: summaryText
+        };
+
+        try {
+            await transporter.sendMail(mailOptions);
+        } catch (error) {
+            console.error('Error sending email:', error);
+        }
+    }
+
+    async sendLossEmail(asset, data) {
+        const transporter = nodemailer.createTransport(this.emailConfig);
+        const lastFewTicks = data.lastDigits.slice(-20);
+
+        const summaryText = `
+        Trade Summary:
+        Total Trades: ${this.stats.totalTrades}
+        Total Trades Won: ${this.stats.wins}
+        Total Trades Lost: ${this.stats.losses}
+        x2 Losses: ${this.stats.consecutiveLosses2}
+        x3 Losses: ${this.stats.consecutiveLosses3}
+        x4 Losses: ${this.stats.consecutiveLosses4}
+        x5 Losses: ${this.stats.consecutiveLosses5}
+
+        Total Profit/Loss Amount: ${this.stats.profit.toFixed(2)}
+
+        Last Digit Analysis:
+        Asset: ${asset}
+        Last 20 Digits: ${lastFewTicks.join(', ')} 
+
+        Current Stake: $${data.currentStake.toFixed(2)}
+        `;
+
+        const mailOptions = {
+            from: this.emailConfig.auth.user,
+            to: this.emailRecipient,
+            subject: 'Markov_Digit_Differ_Bot - Loss Alert',
+            text: summaryText
+        };
+
+        try {
+            await transporter.sendMail(mailOptions);
+        } catch (error) {
+            console.error('Error sending loss email:', error);
+        }
+    }
+
+    async sendDisconnectResumptionEmailSummary() {
+        const transporter = nodemailer.createTransport(this.emailConfig);
+        const now = new Date();
+        const currentHours = now.getHours();
+        const currentMinutes = now.getMinutes();
+
+        const summaryText = `
+        Disconnect/Reconnect Email: Time (${currentHours}:${currentMinutes})
+        Trading Summary:
+        Total Trades: ${this.stats.totalTrades}
+        Total Trades Won: ${this.stats.wins}
+        Total Trades Lost: ${this.stats.losses}
+        x2 Losses: ${this.stats.consecutiveLosses2}
+        x3 Losses: ${this.stats.consecutiveLosses3}
+        x4 Losses: ${this.stats.consecutiveLosses4}
+        x5 Losses: ${this.stats.consecutiveLosses5}
+
+        Total Profit/Loss Amount: ${this.stats.profit.toFixed(2)}
+        `;
+
+        const mailOptions = {
+            from: this.emailConfig.auth.user,
+            to: this.emailRecipient,
+            subject: 'Markov_Digit_Differ_Bot - Connection/Dissconnection Summary',
+            text: summaryText
+        };
+
+        try {
+            await transporter.sendMail(mailOptions);
+        } catch (error) {
+            console.error('Error sending email:', error);
+        }
+    }
+
+    async sendErrorEmail(errorMessage) {
+        const transporter = nodemailer.createTransport(this.emailConfig);
+
+        const mailOptions = {
+            from: this.emailConfig.auth.user,
+            to: this.emailRecipient,
+            subject: 'Markov_Digit_Differ_Bot - Error Report',
+            text: `An error occurred: ${errorMessage}`
+        };
+
+        try {
+            await transporter.sendMail(mailOptions);
+        } catch (error) {
+            console.error('Error sending error email:', error);
+        }
+    }
+
+    checkTimeForDisconnectReconnect() {
+        setInterval(() => {
+            const now = new Date();
+            const gmtPlus1Time = new Date(now.getTime() + (1 * 60 * 60 * 1000));
+            const currentHours = gmtPlus1Time.getUTCHours();
+            const currentMinutes = gmtPlus1Time.getUTCMinutes();
+
+            if (this.endOfDay && currentHours === 8 && currentMinutes >= 0) {
+                console.log("It's 8:00 AM GMT+1, reconnecting the bot.");
+                this.endOfDay = false;
+                this.connect();
+            }
+
+            if (this.isWinTrade && !this.endOfDay) {
+                if (currentHours >= 17 && currentMinutes >= 0) {
+                    console.log("It's past 5:00 PM GMT+1 after a win trade, disconnecting the bot.");
+                    this.sendDisconnectResumptionEmailSummary();
+                    this.ws.close();
+                    this.endOfDay = true;
+                }
+            }
+        }, 20000);
+    }
+
 
     stop() {
         console.log('🛑 Stopping Bot...');
@@ -436,7 +635,7 @@ const TOKEN = process.env.DERIV_TOKEN || 'DMylfkyce6VyZt7'; // Fallback to token
 const bot = new MarkovDifferBot(TOKEN, {
     dryRun: true, // Set to false for real money
     initialStake: 0.61,
-    martingaleMultiplier: 11.3, // High multiplier needed for Differ (payout ~9-10%)
+    martingaleMultiplier: 1, // High multiplier needed for Differ (payout ~9-10%)
     probabilityThreshold: 0.01, // Only trade if < 2% chance of hitting the digit
     minStateSamples: 10, // Learn quickly
     stopLoss: 50, // Stop if total loss exceeds this
