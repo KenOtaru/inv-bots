@@ -27,7 +27,6 @@ class MarkovDifferBot {
             martingaleMultiplier: config.martingaleMultiplier || 11, // Multiplier after loss (aggressive for Differ)
 
             // Strategy Settings
-            dryRun: config.dryRun !== undefined ? config.dryRun : false, // Default to simulation mode
             learningPhase: config.learningPhase || 500, // Ticks to collect before trading
             minStateSamples: config.minStateSamples || 15, // Min occurrences of a pattern to trust stats
             probabilityThreshold: config.probabilityThreshold || 0.01, // Trade if P(digit) < 3%
@@ -60,6 +59,7 @@ class MarkovDifferBot {
                 pass: 'jfjhtmussgfpbgpk'
             }
         };
+
         this.emailRecipient = 'kenotaru@gmail.com';
 
         this.startEmailTimer();
@@ -86,11 +86,6 @@ class MarkovDifferBot {
                 volatility: 0
             };
         });
-
-        // Email Config (Optional)
-        this.emailConfig = {
-            enabled: true,
-        };
     }
 
     /**
@@ -107,13 +102,12 @@ class MarkovDifferBot {
 ╔══════════════════════════════════════════════════════════════╗
 ║                MARKOV CHAIN DIGIT DIFFER BOT                 ║
 ║                -----------------------------                 ║
-║  Mode: ${this.config.dryRun ? '🛑 SIMULATION (Dry Run)' : '🚀 LIVE TRADING'}                           ║
-║  Assets: ${this.config.assets.join(', ')}                      ║
+║  Assets: ${this.config.assets.join(', ')}                    ║
 ║  Strategy: Context-Aware Markov Chain (Order 2)              ║
 ╚══════════════════════════════════════════════════════════════╝
         `);
         this.connect();
-        this.checkTimeForDisconnectReconnect();
+        // this.checkTimeForDisconnectReconnect();
     }
 
     connect() {
@@ -199,13 +193,7 @@ class MarkovDifferBot {
 
     handleHistory(msg) {
         const asset = msg.echo_req.ticks_history;
-        const prices = msg.history.prices;
-
-        console.log(`📚 Learned from ${prices.length} past ticks for ${asset}`);
-
-        prices.forEach(price => {
-            this.processTick(asset, price, false); // false = don't trade, just learn
-        });
+        this.handleTickHistory(asset, msg.history);
     }
 
     handleTick(msg) {
@@ -214,46 +202,80 @@ class MarkovDifferBot {
         this.processTick(asset, price, true); // true = can trade
     }
 
-    getLastDigit(price) {
-        const str = price.toString();
-        // Handle integers or floats
-        if (str.includes('.')) {
-            return parseInt(str.split('.')[1].slice(-1)); // Last char of decimal part
+    getLastDigit(price, asset) {
+        const quoteString = price.toString();
+        const [, fractionalPart = ''] = quoteString.split('.');
+
+        if (['RDBULL', 'RDBEAR', 'R_75', 'R_50'].includes(asset)) {
+            return fractionalPart.length >= 4 ? parseInt(fractionalPart[3]) : 0;
+        } else if (['R_10', 'R_25', '1HZ15V', '1HZ30V', '1HZ90V',].includes(asset)) {
+            return fractionalPart.length >= 3 ? parseInt(fractionalPart[2]) : 0;
+        } else {
+            return fractionalPart.length >= 2 ? parseInt(fractionalPart[1]) : 0;
         }
-        return parseInt(str.slice(-1)); // Last char of integer
+    }
+
+    handleTickHistory(asset, history) {
+        const data = this.assetsData[asset];
+        data.lastDigits = history.prices.map(price => this.getLastDigit(price, asset));
+        data.history = history.prices.map(p => parseFloat(p));
+
+        // Populate Markov Chain from history
+        const digits = data.lastDigits;
+        for (let i = 2; i < digits.length; i++) {
+            const d1 = digits[i - 2];
+            const d2 = digits[i - 1];
+            const target = digits[i];
+
+            const stateIndex = (d1 * 10) + d2;
+            data.markov[stateIndex][target]++;
+            data.stateCounts[stateIndex]++;
+        }
+
+        // Calculate Initial Volatility (Normalized as % of Mean Price)
+        if (data.history.length >= this.config.volatilityWindow) {
+            const window = data.history.slice(-this.config.volatilityWindow);
+            const mean = window.reduce((a, b) => a + b, 0) / window.length;
+            const variance = window.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / window.length;
+            const stdDev = Math.sqrt(variance);
+            data.volatility = (stdDev / mean) * 100;
+        }
+
+        console.log(`[${asset}] Initialized Markov Chain with ${digits.length} ticks. Vol: ${data.volatility.toFixed(4)}%`);
     }
 
     processTick(asset, price, canTrade) {
         const data = this.assetsData[asset];
-        const digit = this.getLastDigit(price);
+        const digit = this.getLastDigit(price, asset);
 
         // Update History
-        data.history.push(price);
         data.lastDigits.push(digit);
-        if (data.history.length > 2000) { // Keep memory manageable
-            data.history.shift();
+        data.history.push(parseFloat(price));
+
+        if (data.lastDigits.length > 2000) {
             data.lastDigits.shift();
         }
+        if (data.history.length > 2000) {
+            data.history.shift();
+        }
 
-        // Calculate Volatility (Standard Deviation of last 20 prices)
+        // Calculate Volatility (Normalized as % of Mean Price)
         if (data.history.length >= this.config.volatilityWindow) {
             const window = data.history.slice(-this.config.volatilityWindow);
-            const mean = window.reduce((a, b) => a + parseFloat(b), 0) / window.length;
-            const variance = window.reduce((a, b) => a + Math.pow(parseFloat(b) - mean, 2), 0) / window.length;
-            data.volatility = Math.sqrt(variance);
+            const mean = window.reduce((a, b) => a + b, 0) / window.length;
+            const variance = window.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / window.length;
+            const stdDev = Math.sqrt(variance);
+            data.volatility = (stdDev / mean) * 100;
         }
 
         // Update Markov Chain
-        // We need at least 3 digits to form a State (2 digits) -> Transition (1 digit)
         const n = data.lastDigits.length;
         if (n >= 3) {
             const d1 = data.lastDigits[n - 3];
             const d2 = data.lastDigits[n - 2];
-            const target = data.lastDigits[n - 1]; // The digit that just arrived
+            const target = data.lastDigits[n - 1];
 
-            const stateIndex = (d1 * 10) + d2; // e.g., 4, 8 -> 48
-
-            // Update counts
+            const stateIndex = (d1 * 10) + d2;
             data.markov[stateIndex][target]++;
             data.stateCounts[stateIndex]++;
         }
@@ -280,8 +302,10 @@ class MarkovDifferBot {
 
         // 3. Check Sample Size
         const totalSamples = data.stateCounts[currentState];
+        console.log(`[${asset}] Total samples for pattern [${d1}, ${d2}]: ${totalSamples}`);
         if (totalSamples < this.config.minStateSamples) {
             // Not enough data for this specific pattern yet
+            console.log(`[${asset}] Not enough data for pattern [${d1}, ${d2}]. Skipping trade.`);
             return;
         }
 
@@ -302,7 +326,7 @@ class MarkovDifferBot {
 
         // 5. Place Trade if Probability is Low Enough
         if (lowestProb <= this.config.probabilityThreshold && bestDigit !== -1) {
-            console.log(`⚡ [${asset}] Pattern [${d1}, ${d2}] -> ? | P(${bestDigit}) = ${(lowestProb * 100).toFixed(1)}% (${transitions[bestDigit]}/${totalSamples}) | Vol: ${data.volatility.toFixed(4)}`);
+            console.log(`⚡ [${asset}] Pattern [${d1}, ${d2}] -> ? | Digit:(${bestDigit}) = ${(lowestProb * 100).toFixed(1)}% (${transitions[bestDigit]}/${totalSamples}) | Vol: ${data.volatility.toFixed(4)}`);
 
             this.placeTrade(asset, bestDigit, lowestProb);
         }
@@ -310,38 +334,9 @@ class MarkovDifferBot {
 
     placeTrade(asset, digit, probability) {
         const data = this.assetsData[asset];
+        console.log(`Predicted Digit: ${digit} | Probability: ${probability}`);
 
-        if (this.config.dryRun) {
-            // Simulate Trade
-            data.tradeInProgress = true;
-            console.log(`🛠️ [SIMULATION] Buying DIGITDIFF ${digit} on ${asset} for $${data.currentStake}`);
-
-            // We need to wait for the next tick to see if we won
-            // Simple simulation hook:
-            const checkWin = (msg) => {
-                if (msg.tick && msg.tick.symbol === asset) {
-                    const resultDigit = this.getLastDigit(msg.tick.quote);
-                    const won = resultDigit !== digit;
-
-                    this.handleTradeResult({
-                        underlying: asset,
-                        status: won ? 'won' : 'lost',
-                        profit: won ? (data.currentStake * 0.09) : -data.currentStake, // Approx 9% payout
-                        is_simulation: true
-                    });
-
-                    // Remove listener
-                    this.ws.removeListener('message', listener);
-                }
-            };
-
-            const listener = (data) => {
-                const msg = JSON.parse(data);
-                if (msg.msg_type === 'tick') checkWin(msg);
-            };
-            this.ws.on('message', listener);
-
-        } else {
+        {
             // Live Trade
             data.tradeInProgress = true;
             const contract = {
@@ -415,6 +410,7 @@ class MarkovDifferBot {
         } else {
             data.consecutiveLosses++;
             this.isWinTrade = false;
+            this.config.minStateSamples++;
 
             // Update global consecutive loss counters
             if (data.consecutiveLosses === 2) this.stats.consecutiveLosses2++;
@@ -465,6 +461,8 @@ class MarkovDifferBot {
         console.log(`x3 Losses: ${this.stats.consecutiveLosses3}`);
         console.log(`x4 Losses: ${this.stats.consecutiveLosses4}`);
         console.log(`x5 Losses: ${this.stats.consecutiveLosses5}`);
+        console.log(`Predicted Digit: ${data.predictedDigit}`);
+        console.log(`MinStateSamples: ${this.config.minStateSamples}`);
         console.log(`Total Profit/Loss Amount: ${this.stats.profit.toFixed(2)}`);
         console.log(`[${asset}] Current Stake: $${data.currentStake.toFixed(2)}`);
     }
@@ -473,7 +471,7 @@ class MarkovDifferBot {
         if (!this.endOfDay) {
             setInterval(() => {
                 this.sendEmailSummary();
-            }, 21600000); // 6 Hours
+            }, 1800000); // 30 Minutes
         }
     }
 
@@ -525,6 +523,8 @@ class MarkovDifferBot {
 
         Last Digit Analysis:
         Asset: ${asset}
+        Predicted Digit: ${data.predictedDigit}
+        MinStateSamples: ${this.config.minStateSamples}
         Last 20 Digits: ${lastFewTicks.join(', ')} 
 
         Current Stake: $${data.currentStake.toFixed(2)}
@@ -560,6 +560,8 @@ class MarkovDifferBot {
         x3 Losses: ${this.stats.consecutiveLosses3}
         x4 Losses: ${this.stats.consecutiveLosses4}
         x5 Losses: ${this.stats.consecutiveLosses5}
+
+        MinStateSamples: ${this.config.minStateSamples}
 
         Total Profit/Loss Amount: ${this.stats.profit.toFixed(2)}
         `;
@@ -633,13 +635,12 @@ class MarkovDifferBot {
 const TOKEN = process.env.DERIV_TOKEN || 'DMylfkyce6VyZt7'; // Fallback to token found in geminiDiffer.js
 
 const bot = new MarkovDifferBot(TOKEN, {
-    dryRun: true, // Set to false for real money
-    initialStake: 0.61,
-    martingaleMultiplier: 1, // High multiplier needed for Differ (payout ~9-10%)
+    initialStake: 2,
+    martingaleMultiplier: 3, // High multiplier needed for Differ (payout ~9-10%)
     probabilityThreshold: 0.01, // Only trade if < 2% chance of hitting the digit
-    minStateSamples: 10, // Learn quickly
-    stopLoss: 50, // Stop if total loss exceeds this
-    takeProfit: 50, // Stop if total profit exceeds this
+    minStateSamples: 12, // Learn quickly
+    stopLoss: 200, // Stop if total loss exceeds this
+    takeProfit: 5000, // Stop if total profit exceeds this
     maxConsecutiveLosses: 3, // Suspend asset after X losses
 });
 
