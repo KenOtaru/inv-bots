@@ -42,7 +42,7 @@ class EnhancedAccumulatorBot {
         this.correlationAnalyzer = new CorrelationAnalyzer(config.riskControl);
         this.kellyCalculator = new KellyCalculator({
             ...config.stakeManagement,
-            accountBalance: 1000 // Initial placeholder, will update from API
+            accountBalance: 100 // Initial placeholder, will update from API
         });
         this.performanceTracker = new PerformanceTracker();
 
@@ -407,7 +407,10 @@ class EnhancedAccumulatorBot {
             contract_type: 'ACCU',
             currency: 'USD',
             symbol: asset,
-            growth_rate: growthRate
+            growth_rate: growthRate,
+            limit_order: {
+                take_profit: 0.01
+            }
         };
 
         this.sendRequest(proposal);
@@ -476,14 +479,16 @@ class EnhancedAccumulatorBot {
 
         const isSurvivalGood = survivalProb.conditionalSurvival > minSurvival;
         const isBayesianGood = bayesianEst.combined > 0.55; // Edge required
-        const isMCGood = mcResult.isPositiveEV && mcResult.isAcceptableRisk;
+        // const isMCGood = mcResult.isPositiveEV && mcResult.isAcceptableRisk;
+        const isMCGood = mcResult.probabilityOfRuin.toFixed(2) < 0.14;
 
         if (isSurvivalGood && isBayesianGood && isMCGood) {
             console.log(`[${asset}] ✅ TRADE SIGNAL | Stake: $${stake.toFixed(2)} | WinProb: ${(winProb * 100).toFixed(1)}% | Survival: ${(survivalProb.conditionalSurvival * 100).toFixed(1)}% | Regime: ${regimeParams.growthRate}`);
+            console.log(`[${asset}] Trade Details | S:${survivalProb.conditionalSurvival.toFixed(2)} B:${bayesianEst.combined.toFixed(2)} MC:${mcResult.isPositiveEV}(mcP:${mcResult.probabilityOfRuin.toFixed(2)} | mcEv:${mcResult.expectedValue.toFixed(2)})`);
             this.placeTrade(proposal.id, stake);
         } else {
             console.log(`[${asset}] ❌ SKIP | S:${isSurvivalGood} B:${isBayesianGood} MC:${isMCGood} | Regime: ${regimeParams.growthRate}`);
-            console.log(`[${asset}] SKIP Details | S:${survivalProb.conditionalSurvival.toFixed(2)} B:${bayesianEst.combined.toFixed(2)} MC:${mcResult.isPositiveEV}(mcR:${mcResult.isAcceptableRisk} | mcP:${mcResult.probabilityOfRuin.toFixed(2)} | mcEv:${mcResult.expectedValue.toFixed(2)})`);
+            console.log(`[${asset}] SKIP Details | S:${survivalProb.conditionalSurvival.toFixed(2)} B:${bayesianEst.combined.toFixed(2)} MC:${mcResult.isPositiveEV}(mcP:${mcResult.probabilityOfRuin.toFixed(2)} | mcEv:${mcResult.expectedValue.toFixed(2)})`);
         }
     }
 

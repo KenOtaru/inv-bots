@@ -15,7 +15,7 @@ module.exports = {
     stakeManagement: {
         initialStake: 1.0,
         minStake: 0.35,
-        maxStake: 50.0,
+        maxStake: 20.0, //50.0
 
         // Kelly Criterion
         useKelly: true,
@@ -40,7 +40,7 @@ module.exports = {
         maxDrawdownPercent: 0.15, // Stop if account drops 15% from peak
 
         // Session Limits
-        maxDailyTrades: 50,
+        maxDailyTrades: 150,
         maxConsecutiveLosses: 4, // Strict stop after 2 losses
         cooldownAfterLoss: 300000, // 5 minutes cooldown
 
