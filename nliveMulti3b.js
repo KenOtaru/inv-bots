@@ -483,7 +483,7 @@ class EnhancedAccumulatorBot {
             this.placeTrade(proposal.id, stake);
         } else {
             console.log(`[${asset}] ❌ SKIP | S:${isSurvivalGood} B:${isBayesianGood} MC:${isMCGood} | Regime: ${regimeParams.growthRate}`);
-            console.log(`[${asset}] SKIP Details | S:${survivalProb.conditionalSurvival.toFixed(2)} B:${bayesianEst.combined.toFixed(2)} MC:${mcResult.isPositiveEV} | Regime: ${regimeParams.growthRate.toFixed(2)}`);
+            console.log(`[${asset}] SKIP Details | S:${survivalProb.conditionalSurvival.toFixed(2)} B:${bayesianEst.combined.toFixed(2)} MC:${mcResult.isPositiveEV}(mcR:${mcResult.isAcceptableRisk} | mcP:${mcResult.probabilityOfRuin.toFixed(2)} | mcEv:${mcResult.expectedValue.toFixed(2)})`);
         }
     }
 
