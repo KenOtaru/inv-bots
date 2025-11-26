@@ -39,6 +39,10 @@ class EnhancedAccumulatorBot {
         this.totalPnL = 0;
         this.consecutiveLosses = 0;
         this.pnlHistory = [];
+        this.survival = {
+            probability: 0,
+            confidence: 0,
+        };
 
         // Asset data
         this.assetData = {};
@@ -76,16 +80,15 @@ class EnhancedAccumulatorBot {
 
     printStats() {
         const winRate = this.totalTrades > 0 ? (this.totalWins / this.totalTrades * 100).toFixed(1) : 0;
-        const pnlColor = this.totalPnL >= 0 ? colors.green : colors.red;
 
         const stats = boxen(
             `${colors.cyan('Wins:')} ${colors.green(this.totalWins)}   ` +
             `${colors.cyan('Losses:')} ${colors.red(this.totalLosses)}   ` +
             `${colors.cyan('Win Rate:')} ${colors.yellow(winRate + '%')}\n` +
-            `${colors.cyan('Total P/L:')} ${pnlColor('$' + this.totalPnL.toFixed(2))}   ` +
+            `${colors.cyan('Total P/L:')} ${('$' + this.totalPnL.toFixed(2))}   ` +
             `${colors.cyan('Stake:')} ${colors.magenta('$' + this.currentStake.toFixed(2))}   ` +
             `${colors.cyan('Trades:')} ${this.totalTrades}`,
-            { padding: 1, borderColor: 'cyan', title: 'Trading Stats' }
+            // { padding: 1, borderColor: 'cyan', title: 'Trading Stats' }
         );
         console.log(stats);
     }
@@ -148,6 +151,25 @@ class EnhancedAccumulatorBot {
             case 'history':
                 this.handleHistory(msg);
                 break;
+        }
+    }
+
+    handleHistory(msg) {
+        const asset = msg.echo_req.ticks_history;
+        if (!this.assetData[asset]) return;
+
+        const prices = msg.history.prices;
+        if (prices && prices.length > 0) {
+            prices.forEach(price => {
+                const digit = this.getLastDigit(price, asset);
+                this.assetData[asset].tickHistory.push(digit);
+            });
+
+            if (this.assetData[asset].tickHistory.length > 500) {
+                this.assetData[asset].tickHistory = this.assetData[asset].tickHistory.slice(-500);
+            }
+
+            this.log(`Loaded ${prices.length} historical ticks for ${asset}`, 'success');
         }
     }
 
@@ -225,18 +247,18 @@ class EnhancedAccumulatorBot {
     printAssetAnalysis(asset) {
         const d = this.assetData[asset];
         const avgVol = ((d.volatility.short + d.volatility.medium) / 2 * 100).toFixed(1);
-        const scoreColor = d.score >= 70 ? colors.green : d.score >= 50 ? colors.yellow : colors.red;
 
         console.log((
-            `${(asset)} → Score: ${scoreColor(d.score.toFixed(0))} | Vol: ${avgVol}%`,
-            { padding: 0, margin: 0, borderColor: 'gray', float: 'center' }
+            `${(asset)} → Score: ${(d.score.toFixed(0))} | Vol: ${avgVol}% | Survival: ${(this.survival.probability.toFixed(2) + '%')}`
         ));
     }
 
     shouldTrade(asset) {
         if (this.tradeInProgress) return false;
         if (Date.now() < this.riskManager.cooldownUntil) return false;
-        return this.assetData[asset].score >= 60;
+        const d = this.assetData[asset];
+        const avgVol = ((d.volatility.short + d.volatility.medium) / 2 * 100).toFixed(1);
+        return this.assetData[asset].score >= 50 && avgVol < 85;
     }
 
     requestProposal(asset) {
@@ -247,7 +269,7 @@ class EnhancedAccumulatorBot {
             contract_type: "ACCU",
             currency: "USD",
             symbol: asset,
-            growth_rate: CONFIG.growthRate * 100
+            growth_rate: CONFIG.growthRate
         }));
     }
 
@@ -264,6 +286,7 @@ class EnhancedAccumulatorBot {
         this.assetData[asset].previousStayedIn = stayedIn.slice();
 
         const survival = this.calculateSurvivalProbability(asset, stayedIn);
+        this.survival = survival;
         const currentK = stayedIn[99] + 1;
 
         this.printTradeDecision(asset, survival, currentK);
@@ -300,13 +323,7 @@ class EnhancedAccumulatorBot {
     }
 
     printTradeDecision(asset, survival, currentK) {
-        const color = survival.probability >= 0.985 ? color.green : color.yellow;
-        console.log((
-            `${(asset)}\n` +
-            `K: ${currentK} → Survival: ${((survival.probability * 100).toFixed(2) + '%')}\n` +
-            `Confidence: ${survival.confidence.toUpperCase()}`,
-            { title: 'Trade Decision', borderColor: survival.probability >= 0.985 ? 'green' : 'yellow' }
-        ));
+        console.log((`${(asset)}\n` + `KCount: ${currentK} → Survival: ${((survival.probability * 100).toFixed(2) + '%')}\n` + `Confidence: ${survival.confidence.toUpperCase()}`));
     }
 
     placeTrade(asset, proposalId, survival) {
