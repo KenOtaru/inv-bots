@@ -11,11 +11,14 @@ module.exports = {
     // Assets to trade
     assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
 
+    // Starting Amount
+    accountBalance: 100,
+
     // Stake Management (Kelly Criterion & Anti-Martingale)
     stakeManagement: {
         initialStake: 1.0,
         minStake: 0.35,
-        maxStake: 20.0, //50.0
+        maxStake: 50.0, //50.0
 
         // Kelly Criterion
         useKelly: true,
@@ -73,7 +76,7 @@ module.exports = {
         tradingHours: {
             start: 7,
             end: 19,
-            enabled: true
+            enabled: false //true
         }
     },
 
