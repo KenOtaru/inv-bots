@@ -350,6 +350,10 @@ class EnhancedAccumulatorBot {
     }
 
     handleContractClose(contract) {
+        this.handleResult(contract);
+    }
+
+    handleResult(contract) {
         const won = contract.profit > 0;
         const profit = parseFloat(contract.profit);
         const asset = contract.underlying;
