@@ -239,28 +239,21 @@ class EnhancedAccumulatorBot {
         if (avgVol > 0.85 || avgVol < 0.3) score -= 25;
         this.assetData[asset].score = Math.max(0, Math.min(100, score));
 
-        this.printAssetAnalysis(asset);
-        if (this.shouldTrade(asset)) {
+        const avgVol2 = ((this.assetData[asset].volatility.short + this.assetData[asset].volatility.medium) / 2 * 100).toFixed(1);
+
+        console.log((
+            `${(asset)} → Score: ${(this.assetData[asset].score.toFixed(0))} | Vol: ${avgVol2}%`
+        ));
+
+        if (this.tradeInProgress) return false;
+        if (Date.now() < this.riskManager.cooldownUntil) return false;
+
+        //Should Trade
+        if (this.assetData[asset].score >= 50 && avgVol2 < 85) {
             this.requestProposal(asset);
         }
     }
 
-    printAssetAnalysis(asset) {
-        const d = this.assetData[asset];
-        const avgVol = ((d.volatility.short + d.volatility.medium) / 2 * 100).toFixed(1);
-
-        console.log((
-            `${(asset)} → Score: ${(d.score.toFixed(0))} | Vol: ${avgVol}% | Survival: ${(this.survival.probability.toFixed(2) + '%')}`
-        ));
-    }
-
-    shouldTrade(asset) {
-        if (this.tradeInProgress) return false;
-        if (Date.now() < this.riskManager.cooldownUntil) return false;
-        const d = this.assetData[asset];
-        const avgVol = ((d.volatility.short + d.volatility.medium) / 2 * 100).toFixed(1);
-        return this.assetData[asset].score >= 50 && avgVol < 85;
-    }
 
     requestProposal(asset) {
         this.ws.send(JSON.stringify({
@@ -270,7 +263,10 @@ class EnhancedAccumulatorBot {
             contract_type: "ACCU",
             currency: "USD",
             symbol: asset,
-            growth_rate: CONFIG.growthRate
+            growth_rate: CONFIG.growthRate,
+            limit_order: {
+                take_profit: 0.01
+            }
         }));
     }
 
@@ -300,9 +296,9 @@ class EnhancedAccumulatorBot {
         this.survival = survival;
         const currentK = stayedIn[99] + 1;
 
-        this.printTradeDecision(asset, survival, currentK);
-
+        //Survival Check
         if (survival.probability >= this.riskManager.adaptiveThreshold && survival.confidence !== 'low') {
+            this.printTradeDecision(asset, survival, currentK);
             this.placeTrade(asset, msg.proposal.id, survival);
         }
     }
@@ -334,12 +330,12 @@ class EnhancedAccumulatorBot {
     }
 
     printTradeDecision(asset, survival, currentK) {
-        console.log((`${(asset)}\n` + `KCount: ${currentK} → Survival: ${((survival.probability * 100).toFixed(2) + '%')}\n` + `Confidence: ${survival.confidence.toUpperCase()}`));
+        console.log((`${(asset)}\n` + `KCount: ${currentK} → Survival: ${((survival.probability).toFixed(2) + '%')}\n` + `Confidence: ${survival.confidence.toUpperCase()}`));
     }
 
     placeTrade(asset, proposalId, survival) {
         this.tradeInProgress = true;
-        this.log(`PLACING TRADE on ${asset} | $${this.currentStake} | ${(survival.probability * 100).toFixed(2)}%`, 'trade');
+        this.log(`PLACING TRADE on ${asset} | $${this.currentStake} | ${(survival.probability).toFixed(2)}%`, 'trade');
         this.ws.send(JSON.stringify({ buy: proposalId, price: this.currentStake.toFixed(2) }));
     }
 
