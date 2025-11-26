@@ -1,48 +1,49 @@
-#!/usr/bin/env node
-
 const WebSocket = require('ws');
+const fs = require('fs');
 const chalk = require('chalk');
 const figlet = require('figlet');
 const boxen = require('boxen');
 const cliProgress = require('cli-progress');
-const prompt = require('prompt-sync')({ sigint: true });
+const prompt = require('prompt-sync')();
 
 // ===================== CONFIGURATION =====================
 const CONFIG = {
-    apiToken: '', // Will be prompted
+    apiToken: 'Dz2V2KvRf4Uukt3',
     assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
-    initialStake: 1,
-    growthRate: 0.05,
-    takeProfit: 50,
-    stopLoss: 100,
-    survivalThreshold: 0.985,
-    minWaitTime: 120000,
-    maxWaitTime: 300000,
-    volatilityUpperBound: 0.85,
-    volatilityLowerBound: 0.35,
-    maxConsecutiveLosses: 3,
+    initialStake: 1.00,
+    targetProfit: 5.00,
+    stopLoss: 50.00,
+    maxConsecutiveLosses: 2,
+    takeProfit: 100.00,
+    growthRate: 0.03,
+    survivalThreshold: 0.98, // 98% survival probability
+    minWaitTime: 2000,
+    maxWaitTime: 5000
 };
 
-// ===================== BOT CLASS =====================
+// Colors for logging
+const colors = {
+    green: chalk.green,
+    red: chalk.red,
+    yellow: chalk.yellow,
+    cyan: chalk.cyan,
+    magenta: chalk.magenta,
+    white: chalk.white
+};
+
 class EnhancedAccumulatorBot {
     constructor() {
         this.ws = null;
-        this.connected = false;
-        this.tradeInProgress = false;
-        this.currentTradeId = null;
         this.currentStake = CONFIG.initialStake;
-
-        // Stats
-        this.totalTrades = 0;
+        this.totalPnL = 0;
         this.totalWins = 0;
         this.totalLosses = 0;
-        this.totalPnL = 0;
         this.consecutiveLosses = 0;
+        this.totalTrades = 0;
+        this.tradeInProgress = false;
+        this.currentTradeId = null;
         this.pnlHistory = [];
-        this.survival = {
-            probability: 0,
-            confidence: 0,
-        };
+        this.survival = { probability: 0, confidence: 'low' };
 
         // Asset data
         this.assetData = {};
@@ -67,9 +68,9 @@ class EnhancedAccumulatorBot {
     log(msg, type = 'info') {
         const timestamp = new Date().toLocaleTimeString();
         const icons = { success: '✓', error: '✗', warning: '⚠', trade: '↗', info: 'ℹ' };
-        const colors = { success: 'green', error: 'red', warning: 'yellow', trade: 'cyan', info: 'white' };
+        // const colors = { success: 'green', error: 'red', warning: 'yellow', trade: 'cyan', info: 'white' };
 
-        console.log(`${(`[${timestamp}]`)} ${colors[type]}${icons[type]} ${msg}`);
+        console.log(`${(`[${timestamp}]`)} ${icons[type]} ${msg}`);
     }
 
     printHeader() {
@@ -256,7 +257,107 @@ class EnhancedAccumulatorBot {
     shouldTrade(asset) {
         if (this.tradeInProgress) return false;
         if (Date.now() < this.riskManager.cooldownUntil) return false;
-        let profit = this.;
+        const d = this.assetData[asset];
+        const avgVol = ((d.volatility.short + d.volatility.medium) / 2 * 100).toFixed(1);
+        return this.assetData[asset].score >= 50 && avgVol < 85;
+    }
+
+    requestProposal(asset) {
+        this.ws.send(JSON.stringify({
+            proposal: 1,
+            amount: this.currentStake.toFixed(2),
+            basis: "stake",
+            contract_type: "ACCU",
+            currency: "USD",
+            symbol: asset,
+            growth_rate: CONFIG.growthRate
+        }));
+    }
+
+    handleProposal(msg) {
+        if (msg.error) return this.log('Proposal error: ' + msg.error.message, 'error');
+        const asset = msg.echo_req.symbol;
+        const stayedIn = msg.proposal.contract_details.ticks_stayed_in;
+
+        // Initialize history from the first proposal if empty
+        if (this.assetData[asset].extendedStayedIn.length === 0 && stayedIn.length > 0) {
+            for (let i = 0; i < stayedIn.length - 1; i++) {
+                if (stayedIn[i + 1] < stayedIn[i] + 1) {
+                    this.assetData[asset].extendedStayedIn.push(stayedIn[i]);
+                }
+            }
+            this.log(`Initialized ${asset} history with ${this.assetData[asset].extendedStayedIn.length} past runs`, 'info');
+        }
+
+        // Update extended history
+        const prev = this.assetData[asset].previousStayedIn;
+        if (prev && stayedIn[99] !== prev[99] + 1) {
+            this.assetData[asset].extendedStayedIn.push(prev[99] + 1);
+        }
+        this.assetData[asset].previousStayedIn = stayedIn.slice();
+
+        const survival = this.calculateSurvivalProbability(asset, stayedIn);
+        this.survival = survival;
+        const currentK = stayedIn[99] + 1;
+
+        this.printTradeDecision(asset, survival, currentK);
+
+        if (survival.probability >= this.riskManager.adaptiveThreshold && survival.confidence !== 'low') {
+            this.placeTrade(asset, msg.proposal.id, survival);
+        }
+    }
+
+    calculateSurvivalProbability(asset, stayedInArray) {
+        const history = this.assetData[asset].extendedStayedIn;
+        const currentK = stayedInArray[99] + 1;
+
+        if (history.length < 10) return { probability: 0.5, confidence: 'low' };
+
+        const freq = {};
+        history.forEach(l => freq[l] = (freq[l] || 0) + 1);
+
+        let survival = 1;
+        let atRisk = history.length;
+        for (let k = 1; k < currentK; k++) {
+            const events = freq[k] || 0;
+            survival *= (1 - events / atRisk);
+            atRisk -= events;
+        }
+
+        const nextHazard = (freq[currentK] || 0) / atRisk || 0.1;
+        const prob = 1 - nextHazard;
+
+        return {
+            probability: prob,
+            confidence: history.length > 50 ? 'high' : history.length > 20 ? 'medium' : 'low'
+        };
+    }
+
+    printTradeDecision(asset, survival, currentK) {
+        console.log((`${(asset)}\n` + `KCount: ${currentK} → Survival: ${((survival.probability * 100).toFixed(2) + '%')}\n` + `Confidence: ${survival.confidence.toUpperCase()}`));
+    }
+
+    placeTrade(asset, proposalId, survival) {
+        this.tradeInProgress = true;
+        this.log(`PLACING TRADE on ${asset} | $${this.currentStake} | ${(survival.probability * 100).toFixed(2)}%`, 'trade');
+        this.ws.send(JSON.stringify({ buy: proposalId, price: this.currentStake.toFixed(2) }));
+    }
+
+    handleBuy(msg) {
+        if (msg.error) {
+            this.log('Buy failed: ' + msg.error.message, 'error');
+            this.tradeInProgress = false;
+            return;
+        }
+        this.currentTradeId = msg.buy.contract_id;
+        this.ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: this.currentTradeId, subscribe: 1 }));
+    }
+
+    handleContractClose(contract) {
+        const won = contract.profit > 0;
+        const profit = parseFloat(contract.profit);
+        const asset = contract.underlying;
+
         this.totalTrades++;
         this.totalPnL += profit;
         this.pnlHistory.push(this.totalPnL);
