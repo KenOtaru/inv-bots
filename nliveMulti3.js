@@ -392,46 +392,25 @@ class EnhancedDigitDifferTradingBot {
 
         // Too volatile - avoid trading
         if (volatility > 0.90) {
-            // console.log(`[${asset}] Market too volatile (${volatility.toFixed(2)}), skipping`);
+            console.log(`[${asset}] Market too volatile (${volatility.toFixed(2)}), skipping`);
             return false;
         }
 
         // Too stable - hard to profit
         if (volatility < 0.31) {
-            // console.log(`[${asset}] Market too stable (${volatility.toFixed(2)}), skipping`);
+            console.log(`[${asset}] Market too stable (${volatility.toFixed(2)}), skipping`);
             return false;
         }
 
         // Check if we've lost too much on this asset recently
         if (assetState.consecutiveLosses >= 2) {
-            // console.log(`[${asset}] Too many consecutive losses on this asset, skipping`);
+            console.log(`[${asset}] Too many consecutive losses on this asset, skipping`);
             return false;
         }
 
         return true;
     }
 
-
-    // NEW: Pattern detection - avoid trading if similar pattern led to loss
-    // detectDangerousPattern(asset, currentDigitCount, stayedInArray) {
-    //     const patternKey = `${asset}_${currentDigitCount}`;
-    //     const recentLosses = this.learningSystem.lossPatterns[asset] || [];
-
-    //     // Check if we've seen similar patterns fail recently
-    //     const similarLosses = recentLosses
-    //         .slice(-5)
-    //         .filter(loss => {
-    //             return loss.digitCount === currentDigitCount &&
-    //                 Math.abs(loss.arraySum - stayedInArray.reduce((a, b) => a + b, 0)) < 100;
-    //         });
-
-    //     if (similarLosses.length >= 2) {
-    //         // console.log(`[${asset}] Dangerous pattern detected: ${similarLosses.length} similar losses recently`);
-    //         return true;
-    //     }
-
-    //     return false;
-    // }
 
     // NEW: Calculate recent win rate for an asset
     calculateAssetWinRate(asset) {
@@ -570,17 +549,26 @@ class EnhancedDigitDifferTradingBot {
 
     // NEW: Method to decide trade based on estimated survival probability using extended history
     shouldTradeBasedOnSurvivalProb(asset, stayedInArray) {
-        // Check market conditions first
-        if (this.detectDangerousPattern(asset)) {
-            console.log(`[${asset}] Skipping trade due to dangerous pattern`);
-            return false;
-        }
-        if (!this.isMarketConditionFavorable(asset)) {
-            // console.log(`[${asset}] Skipping trade due to market conditions`);
+        const currentDigitCount = stayedInArray[99] + 1; // Calculate current digit count
+
+        // Check for dangerous pattern based on similar past losses
+        if (this.detectDangerousPattern(asset, currentDigitCount, stayedInArray)) {
+            console.log(`[${asset}] ⚠️  PATTERN ALERT: Skipping trade - Similar pattern led to recent losses`);
             return false;
         }
 
-        const current_k = stayedInArray[99] + 1; // Keep original +1 adjustment for current count
+        // Check for frequent short runs pattern
+        if (this.detectDangerousPattern2(asset)) {
+            console.log(`[${asset}] ⚠️  SHORT RUN ALERT: Skipping trade - Too many short runs detected`);
+            return false;
+        }
+
+        // Check market conditions
+        if (!this.isMarketConditionFavorable(asset)) {
+            console.log(`[${asset}] Skipping trade due to unfavorable market conditions`);
+            return false;
+        }
+        const current_k = currentDigitCount; // Use the already calculated digit countst current_k = stayedInArray[99] + 1; // Keep original +1 adjustment for current count
 
         // Use extended history for frequency
         const history = this.extendedStayedIn[asset];
@@ -631,14 +619,45 @@ class EnhancedDigitDifferTradingBot {
     }
 
     // MODIFIED: Integrate with new decision
-    detectDangerousPattern(asset) {
-        // Existing logic, but enhanced with extended history
-        const history = this.extendedStayedIn[asset];
-        // Example: Check for frequent short runs recently
-        const recentShort = history.slice(-10).filter(l => l < 5).length;
-        if (recentShort > 5) {
+    detectDangerousPattern(asset, currentDigitCount, stayedInArray) {
+        const recentLosses = this.learningSystem.lossPatterns[asset] || [];
+        // Only check if we have enough loss history
+        if (recentLosses.length === 0) {
+            return false;
+        }
+        const currentArraySum = stayedInArray.reduce((a, b) => a + b, 0);
+        // Check if we've seen similar patterns fail recently
+        const similarLosses = recentLosses
+            .filter(loss => loss.result === 'loss') // Only count actual losses
+            .slice(-10) // Look at last 10 trades
+            .filter(loss => {
+                // Similar if same digit count and similar array sum
+                return loss.digitCount === currentDigitCount &&
+                    Math.abs(loss.arraySum - currentArraySum) < 100;
+            });
+        if (similarLosses.length >= 2) {
+            console.log(`[${asset}] 🚨 Dangerous pattern detected: ${similarLosses.length} similar losses recently (digitCount: ${currentDigitCount}, arraySum: ${currentArraySum})`);
             return true;
         }
+        return false;
+    }
+
+    detectDangerousPattern2(asset) {
+        const history = this.extendedStayedIn[asset];
+
+        // Need sufficient history
+        if (!history || history.length < 10) {
+            return false;
+        }
+
+        // Check for frequent short runs recently (runs that ended before tick 5)
+        const recentShort = history.slice(-10).filter(l => l < 5).length;
+
+        if (recentShort > 6) {
+            console.log(`[${asset}] 🚨 Too many short runs: ${recentShort}/10 recent runs ended before tick 5`);
+            return true;
+        }
+
         return false;
     }
 
@@ -769,7 +788,7 @@ class EnhancedDigitDifferTradingBot {
 
         if (!won) {
             // Longer wait after losses to let market conditions change
-            baseWaitTime = this.config.minWaitTime + (this.consecutiveLosses * 60000); // +1min per loss
+            baseWaitTime = this.config.minWaitTime //+ (this.consecutiveLosses * 60000); // +1min per loss
             this.sendLossEmail(asset);
             //Suspend All Assets (Non-Loss)
             this.suspendAsset(asset);
@@ -1229,7 +1248,7 @@ class EnhancedDigitDifferTradingBot {
 
 // Usage
 const bot = new EnhancedDigitDifferTradingBot('DMylfkyce6VyZt7', {
-    // 'DMylfkyce6VyZt7', '0P94g4WdSrSrzir', 'hsj0tA0XJoIzJG5', 'rgNedekYXvCaPeP'
+    // 'DMylfkyce6VyZt7', '0P94g4WdSrSrzir', rgNedekYXvCaPeP, hsj0tA0XJoIzJG5, Dz2V2KvRf4Uukt3
     initialStake: 1,
     multiplier: 21,
     multiplier2: 100,
