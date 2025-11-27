@@ -11,11 +11,12 @@ const CONFIG = {
     apiToken: 'Dz2V2KvRf4Uukt3',
     assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
     initialStake: 1.00,
-    targetProfit: 5.00,
+    targetProfit: 0.25,
+    multiplier: 4,
     stopLoss: 50.00,
-    maxConsecutiveLosses: 2,
+    maxConsecutiveLosses: 3,
     takeProfit: 100.00,
-    growthRate: 0.03,
+    growthRate: 0.05,
     survivalThreshold: 0.98, // 98% survival probability
     minWaitTime: 2000,
     maxWaitTime: 5000
@@ -82,14 +83,13 @@ class EnhancedAccumulatorBot {
     printStats() {
         const winRate = this.totalTrades > 0 ? (this.totalWins / this.totalTrades * 100).toFixed(1) : 0;
 
-        const stats = boxen(
-            `${colors.cyan('Wins:')} ${colors.green(this.totalWins)}   ` +
-            `${colors.cyan('Losses:')} ${colors.red(this.totalLosses)}   ` +
-            `${colors.cyan('Win Rate:')} ${colors.yellow(winRate + '%')}\n` +
-            `${colors.cyan('Total P/L:')} ${('$' + this.totalPnL.toFixed(2))}   ` +
-            `${colors.cyan('Stake:')} ${colors.magenta('$' + this.currentStake.toFixed(2))}   ` +
-            `${colors.cyan('Trades:')} ${this.totalTrades}`,
-            // { padding: 1, borderColor: 'cyan', title: 'Trading Stats' }
+        const stats = (
+            `${('Wins:')} ${this.totalWins}   ` +
+            `${('Losses:')} ${this.totalLosses}   ` +
+            `${('Win Rate:')} ${winRate + '%'}\n` +
+            `${('Total P/L:')} ${('$' + this.totalPnL.toFixed(2))}   ` +
+            `${('Stake:')} ${('$' + this.currentStake.toFixed(2))}   ` +
+            `${('Trades:')} ${this.totalTrades}`
         );
         console.log(stats);
     }
@@ -249,7 +249,7 @@ class EnhancedAccumulatorBot {
         if (Date.now() < this.riskManager.cooldownUntil) return false;
 
         //Should Trade
-        if (this.assetData[asset].score >= 50 && avgVol2 < 85) {
+        if (this.assetData[asset].score >= 50 && avgVol2 < 80) {
             this.requestProposal(asset);
         }
     }
@@ -265,7 +265,7 @@ class EnhancedAccumulatorBot {
             symbol: asset,
             growth_rate: CONFIG.growthRate,
             limit_order: {
-                take_profit: 0.01
+                take_profit: (this.currentStake / 4).toFixed(2)
             }
         }));
     }
@@ -369,12 +369,16 @@ class EnhancedAccumulatorBot {
             this.currentStake = CONFIG.initialStake;
         } else {
             this.log(`LOST $${Math.abs(profit).toFixed(2)} on ${asset}`, 'error');
-            this.currentStake = this.consecutiveLosses >= 2 ? CONFIG.initialStake : CONFIG.initialStake * 2.5;
+            // if(this.consecutiveLosses === 1){
+            this.currentStake = this.currentStake * CONFIG.multiplier;
+            // }else{
+            //     this.currentStake = CONFIG.initialStake * 2.5;
+            // }
         }
 
         this.tradeInProgress = false;
         this.printStats();
-        this.printRunLengthDistribution();
+        // this.printRunLengthDistribution();
 
         // Stop conditions
         if (this.totalPnL >= CONFIG.takeProfit) {
