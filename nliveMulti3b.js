@@ -42,10 +42,9 @@ class EnhancedAccumulatorBot {
         this.correlationAnalyzer = new CorrelationAnalyzer(config.riskControl);
         this.kellyCalculator = new KellyCalculator({
             ...config.stakeManagement,
-            accountBalance: config.accountBalance // Initial placeholder, will update from API
+            accountBalance: 100 // Initial placeholder, will update from API
         });
         this.performanceTracker = new PerformanceTracker();
-        this.accountBalance = config.accountBalance;
 
         // Asset-Specific State
         this.assetState = {};
@@ -214,7 +213,7 @@ class EnhancedAccumulatorBot {
 
     handleBalance(message) {
         if (message.balance) {
-            const balance = this.accountBalance; //parseFloat(message.balance.balance);
+            const balance = parseFloat(message.balance.balance);
             this.kellyCalculator.updateBalance(balance);
             this.performanceTracker.currentBalance = balance;
 
@@ -410,7 +409,7 @@ class EnhancedAccumulatorBot {
             symbol: asset,
             growth_rate: growthRate,
             limit_order: {
-                take_profit: this.kellyCalculator.calculateTakeProfit(growthRate, 10)
+                take_profit: 0.01
             }
         };
 
@@ -450,9 +449,9 @@ class EnhancedAccumulatorBot {
 
         // Calculate Stake using Kelly
         const winProb = bayesianEst.combined;
-        const payoutRatio = this.kellyCalculator.estimatePayoutRatio(message.echo_req.growth_rate, 10);
+        const payoutRatio = this.kellyCalculator.estimatePayoutRatio(message.echo_req.growth_rate);
 
-        let stake = this.kellyCalculator.calculateStakeSize(winProb, payoutRatio, this.accountBalance);
+        let stake = this.kellyCalculator.calculateStakeSize(winProb, payoutRatio);
 
         // Apply Anti-Martingale if enabled
         if (this.config.stakeManagement.useAntiMartingale && state.currentStreak > 0) {
@@ -566,16 +565,14 @@ class EnhancedAccumulatorBot {
             }
         }
 
-        this.accountBalance += profit;
-
         // Update Learning Systems
         this.performanceTracker.recordTrade({
             asset,
             stake: parseFloat(contract.buy_price),
-            growthRate: contract.growth_rate,
+            growthRate: 0.03, // Need to track this better
             outcome: won ? 'win' : 'loss',
             profit,
-            duration: contract.duration,
+            duration: 10, // Placeholder
             regime: this.regimeDetector.currentRegime
         });
 
