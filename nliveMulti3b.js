@@ -905,11 +905,13 @@ class EnsembleDecisionMaker {
         const agreement = values.length > 1 ?
             1 - (Math.max(...values) - Math.min(...values)) : 0;
 
+        // console.log('Agreement:', agreement);
+
         return {
             score: ensembleScore,
             agreement,
             details,
-            shouldTrade: ensembleScore > this.adaptiveThreshold && agreement > 0.3
+            shouldTrade: ensembleScore > this.adaptiveThreshold && agreement > 0.5
         };
     }
 
@@ -1231,7 +1233,7 @@ class EnhancedAccumulatorBot {
             reconnectInterval: config.reconnectInterval || 5000,
             minWaitTime: config.minWaitTime || 200 * 1000,
             maxWaitTime: config.maxWaitTime || 500 * 1000,
-            survivalThreshold: 0.99,
+            survivalThreshold: config.survivalThreshold || 0.98,
             minSamplesForEstimate: 50,
             // New config options
             learningModeThreshold: config.learningModeThreshold || 100,
@@ -1994,9 +1996,11 @@ class EnhancedAccumulatorBot {
 
         // Combine all predictions
         const ensemble = this.ensembleDecisionMaker.combinePredicitions(predictions);
+        console.log('Ensemble Decision:', ensemble.score.toFixed(2), ' (', this.adaptiveThreshold, ') |', ensemble.agreement.toFixed(2), '(0.5) |', 'shouldTrade:', ensemble.shouldTrade);
 
         // Additional check with survival threshold
         const survivalCheck = this.shouldTradeBasedOnSurvivalProb(asset, stayedInArray);
+        console.log('Survival Check:', survivalCheck);
 
         // Final decision
         const shouldTrade = ensemble.shouldTrade &&
@@ -2674,262 +2678,11 @@ const bot = new EnhancedAccumulatorBot(token, {
     enableNeuralNetwork: true,
     enablePatternRecognition: true,
     learningModeThreshold: 100,
-    survivalThreshold: 0.99,
+    survivalThreshold: 0.6,
     maxConsecutiveLosses: 3,
-    
+
 });
 
 bot.start();
 
 module.exports = { EnhancedAccumulatorBot, StatisticalEngine, PatternEngine, NeuralEngine, EnsembleDecisionMaker, PersistenceManager };
-
-
-
-// # Enhanced AI Accumulator Trading Bot v2.0
-
-// ## 🚀 Overview
-
-// A sophisticated Deriv Accumulator trading bot with advanced AI-powered learning and prediction systems. This enhanced version implements a 5-tier learning architecture for improved trading decisions.
-
-// ---
-
-// ## 📊 Architecture
-
-// ### Tier 1: Statistical Learning Engine
-// - **Kaplan-Meier Survival Estimator** - Proper survival analysis with 95% confidence intervals
-// - **Nelson-Aalen Hazard Estimator** - Cumulative hazard rate calculation
-// - **Bayesian Probability Updater** - Beta-Binomial conjugate prior with adaptive decay
-// - **Shannon Entropy Calculator** - Market predictability measurement
-// - **Kernel-Smoothed Hazard** - Gaussian kernel for hazard rate estimation
-
-// ### Tier 2: Pattern Recognition Engine
-// - **N-Gram Analyzer** - Detects recurring 1-5 digit sequences
-// - **Markov Chain Analyzer** - Multi-order transition matrices for run length prediction
-// - **Run Length Modeler** - Weibull/Exponential distribution fitting
-// - **Regime Detector** - Market state classification (volatile, stable, unpredictable, normal)
-// - **Pattern Similarity Detector** - Historical pattern matching
-
-// ### Tier 3: Neural Network Predictor
-// - **Multi-Layer Perceptron** - 60 inputs → 32 → 16 → 1 output architecture
-// - **Xavier Initialization** - Optimal weight initialization
-// - **Online Learning** - Continuous training from trade outcomes
-// - **Momentum Optimizer** - Accelerated gradient descent
-// - **Monte Carlo Uncertainty** - Dropout-like confidence estimation
-
-// ### Tier 4: Ensemble Decision Maker
-// - **Weighted Model Voting** - Combines all model predictions
-// - **Adaptive Weight Adjustment** - Models weighted by recent performance
-// - **Threshold Optimization** - Self-adjusting trading threshold
-// - **Agreement Scoring** - Measures model consensus
-
-// ### Tier 5: Persistence Manager
-// - **Pattern Storage** - Saves N-gram and Markov models
-// - **Model Checkpoints** - Neural network weight persistence
-// - **Performance History** - Rolling 10,000 trade log
-// - **Cross-Session Learning** - Restores learning state on restart
-
-// ---
-
-// ## 🔧 Installation
-
-// ```bash
-// # Clone or copy the bot file
-// cp enhanced-accumulator-bot.js your-project/
-
-// # Install dependencies
-// npm install ws nodemailer dotenv
-
-// # Create .env file
-// echo "DERIV_TOKEN=your_deriv_api_token" > .env
-
-// # Run the bot
-// node enhanced-accumulator-bot.js
-// ```
-
-// ---
-
-// ## ⚙️ Configuration
-
-// ```javascript
-// const bot = new EnhancedAccumulatorBot(token, {
-//     // Trading Settings
-//     initialStake: 10.5,           // Initial stake amount
-//     stopLoss: 50,                 // Maximum loss before stopping
-//     takeProfit: 1,                // Profit target
-    
-//     // Assets
-//     assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
-    
-//     // Learning System
-//     enableNeuralNetwork: true,     // Enable neural network predictions
-//     enablePatternRecognition: true,// Enable pattern analysis
-//     learningModeThreshold: 100,    // Observations before trading
-//     survivalThreshold: 0.99,       // Minimum survival probability
-//     minSamplesForEstimate: 50,     // Minimum samples for estimates
-    
-//     // Timing
-//     minWaitTime: 200000,           // Minimum wait between trades (ms)
-//     maxWaitTime: 500000,           // Maximum wait between trades (ms)
-//     saveInterval: 300000,          // Auto-save interval (5 minutes)
-    
-//     // Risk Management (preserved from original)
-//     multiplier: 21,
-//     multiplier2: 100,
-//     multiplier3: 1000,
-//     maxConsecutiveLosses: 5,
-// });
-// ```
-
-// ---
-
-// ## 📁 File Structure
-
-// ```
-// your-project/
-// ├── enhanced-accumulator-bot.js  # Main bot file
-// ├── .env                         # API token
-// ├── package.json                 # Dependencies
-// └── bot_memory/                  # Auto-created learning data
-//     ├── bot_state.json          # Full learning state
-//     └── performance_log.json    # Trade history
-// ```
-
-// ---
-
-// ## 🧠 How the Learning System Works
-
-// ### 1. Observation Phase
-// When first started, the bot enters a learning mode:
-// ```
-// 🎓 Learning mode: 20/100 observations
-// 🎓 Learning mode: 40/100 observations
-// ...
-// ✅ Learning phase complete. Trading enabled.
-// ```
-
-// ### 2. Multi-Model Prediction
-// Each trade decision uses all available models:
-// ```
-// [R_50] Survival Analysis: KM=0.9923, NA=0.9918, Combined=0.9920
-// [R_50] 🎯 TRADE SIGNAL | Score: 0.8745 | Confidence: 0.82
-// [R_50] Model contributions: {"kaplanMeier":"99.2%","bayesian":"78.5%","markov":"85.0%","neural":"82.3%","pattern":"60.0%"}
-// ```
-
-// ### 3. Continuous Learning
-// After each trade, the system updates:
-// - Bayesian priors (win/loss probability)
-// - Neural network weights (via backpropagation)
-// - Model performance tracking
-// - Ensemble weight adjustment
-
-// ### 4. Adaptive Thresholds
-// Every 20 trades, the system optimizes:
-// - Trading threshold based on historical performance
-// - Model weights based on recent accuracy
-
-// ---
-
-// ## 📈 Expected Performance
-
-// | Metric | Before | After |
-// |--------|--------|-------|
-// | Win Rate | 60-70% | 75-85% |
-// | Pattern Detection | Basic | Multi-method |
-// | Adaptability | Static | Self-adjusting |
-// | Market Awareness | None | Real-time regime detection |
-// | Learning Persistence | None | Cross-session |
-
-// ---
-
-// ## 🔍 Logging Output
-
-// ### Trade Summary
-// ```
-// ═══════════════════════════════════════════════════════════
-//                     TRADING SUMMARY
-// ═══════════════════════════════════════════════════════════
-// Total Trades: 45
-// Total Wins: 38 | Total Losses: 7
-// x2 Losses: 2 | x3 Losses: 0
-// Total Profit/Loss: $12.50
-// Win Rate: 84.44%
-// Current Stake: $10.50
-// ───────────────────────────────────────────────────────────
-// Asset: [R_50]
-// Recent Win Rate: 90.0% | Volatility: 65.2%
-// Neural Net Accuracy: 78.5% | Trend: improving
-// Adaptive Threshold: 0.756
-// ───────────────────────────────────────────────────────────
-// Suspended Assets: None
-// Wait Time: 4 minutes (245000 ms)
-// ═══════════════════════════════════════════════════════════
-// ```
-
-// ### Neural Network Updates
-// ```
-// 🧠 Neural Network: Accuracy=78.5%, Trend=improving
-// ```
-
-// ---
-
-// ## ⚠️ Safety Features
-
-// 1. **Dangerous Pattern Detection** - Skips trades matching recent loss patterns
-// 2. **Short Run Alert** - Avoids trading during volatile run sequences
-// 3. **High Hazard Detection** - Skips when kernel hazard > 0.3
-// 4. **Regime Awareness** - Avoids volatile market regimes
-// 5. **Bayesian Confidence Check** - Requires minimum confidence level
-// 6. **Asset Suspension** - Temporarily suspends losing assets
-
-// ---
-
-// ## 📧 Email Notifications
-
-// The bot sends automated emails for:
-// - **Performance Summary** - Every 30 minutes
-// - **Loss Alerts** - After each losing trade
-// - **Disconnect/Reconnect** - At scheduled times
-// - **Error Reports** - On critical errors
-
-// ---
-
-// ## 🔄 Daily Schedule (GMT+1)
-
-// - **7:00 AM** - Bot reconnects and resets daily counters
-// - **5:00 PM** - Bot disconnects after winning trade
-// - Learning data is preserved across restarts
-
-// ---
-
-// ## 🛠️ Troubleshooting
-
-// ### Bot not trading?
-// 1. Check learning mode status (needs 100 observations)
-// 2. Verify market conditions aren't too volatile
-// 3. Check extended history length (needs 50+ samples)
-// 4. Ensure survival probability > 0.99
-
-// ### Performance declining?
-// 1. Clear `bot_memory/` folder to reset learning
-// 2. Adjust `survivalThreshold` higher (0.995)
-// 3. Increase `learningModeThreshold` for more data
-
-// ### API errors?
-// 1. Verify DERIV_TOKEN in .env file
-// 2. Check Deriv API status
-// 3. Ensure sufficient account balance
-
-// ---
-
-// ## 📝 License
-
-// For personal use only. Trading involves risk.
-
-// ---
-
-// ## 🔗 Dependencies
-
-// - `ws` - WebSocket client
-// - `nodemailer` - Email notifications
-// - `dotenv` - Environment variables
-// - `fs` / `path` - File system (built-in)
