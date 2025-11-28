@@ -449,6 +449,7 @@ class MarkovDifferBot {
         // Strategy Management
         if (won) {
             data.consecutiveLosses = 0;
+            this.consecutiveLosses = 0;
             this.currentStake = this.config.initialStake; // Reset stake
 
             // Check Take Profit
@@ -462,22 +463,22 @@ class MarkovDifferBot {
             this.isWinTrade = true;
         } else {
             data.consecutiveLosses++;
+            this.consecutiveLosses++;
             this.isWinTrade = false;
             // this.config.minStateSamples++;
 
             // Update global consecutive loss counters
-            if (data.consecutiveLosses === 2) this.stats.consecutiveLosses2++;
-            else if (data.consecutiveLosses === 3) this.stats.consecutiveLosses3++;
-            else if (data.consecutiveLosses === 4) this.stats.consecutiveLosses4++;
-            else if (data.consecutiveLosses === 5) this.stats.consecutiveLosses5++;
+            if (this.consecutiveLosses === 2) this.stats.consecutiveLosses2++;
+            else if (this.consecutiveLosses === 3) this.stats.consecutiveLosses3++;
+            else if (this.consecutiveLosses === 4) this.stats.consecutiveLosses4++;
+            else if (this.consecutiveLosses === 5) this.stats.consecutiveLosses5++;
 
-            // Martingale / Recovery
             // Martingale / Recovery
             this.currentStake = this.currentStake * this.config.martingaleMultiplier;
             // Round to 2 decimals
             this.currentStake = Math.round(this.currentStake * 100) / 100;
 
-            console.log(`🔻 [${asset}] Loss #${data.consecutiveLosses}. Increasing stake to $${this.currentStake}`);
+            console.log(`🔻 [${asset}] Loss #${this.consecutiveLosses}. Increasing stake to $${this.currentStake}`);
 
             this.sendLossEmail(asset, data);
 
@@ -495,7 +496,7 @@ class MarkovDifferBot {
             }
 
             // Check Stop Loss
-            if (this.stats.profit <= -this.config.stopLoss || this.stats.consecutiveLosses3 >= 1) {
+            if (this.stats.profit <= -this.config.stopLoss || this.consecutiveLosses >= this.config.maxConsecutiveLosses) {
                 console.log('💀 STOP LOSS REACHED! Stopping bot.');
                 this.endOfDay = true;
                 this.stop();
