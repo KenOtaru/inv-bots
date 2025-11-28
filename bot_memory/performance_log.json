@@ -6,5 +6,13 @@
     "digitCount": 1,
     "volatility": 0.8979591836734694,
     "timestamp": 1764341032113
+  },
+  {
+    "asset": "R_75",
+    "won": true,
+    "profit": 0.01,
+    "digitCount": 3,
+    "volatility": 0.8979591836734694,
+    "timestamp": 1764341551958
   }
 ]

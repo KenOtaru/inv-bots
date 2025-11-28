@@ -905,7 +905,7 @@ class EnsembleDecisionMaker {
         const agreement = values.length > 1 ?
             1 - (Math.max(...values) - Math.min(...values)) : 0;
 
-        console.log('Adaptive Threshold:', this.adaptiveThreshold);
+        // console.log('Adaptive Threshold:', this.adaptiveThreshold);
 
         return {
             score: ensembleScore,
@@ -2678,9 +2678,10 @@ const bot = new EnhancedAccumulatorBot(token, {
     enableNeuralNetwork: true,
     enablePatternRecognition: true,
     learningModeThreshold: 100,
-    survivalThreshold: 0.6,
+    survivalThreshold: 0.8,
     maxConsecutiveLosses: 3,
-
+    minWaitTime: 2000,
+    maxWaitTime: 2000,
 });
 
 bot.start();
