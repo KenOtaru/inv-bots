@@ -905,7 +905,7 @@ class EnsembleDecisionMaker {
         const agreement = values.length > 1 ?
             1 - (Math.max(...values) - Math.min(...values)) : 0;
 
-        // console.log('Agreement:', agreement);
+        console.log('Adaptive Threshold:', this.adaptiveThreshold);
 
         return {
             score: ensembleScore,
