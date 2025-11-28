@@ -99,7 +99,7 @@ class EnhancedAccumulatorBot {
 
     connect() {
         if (this.endOfDay) return;
-        this.printHeader();
+        // this.printHeader();
         this.log('Connecting to Deriv WebSocket...', 'info');
 
         this.ws = new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
@@ -371,17 +371,17 @@ class EnhancedAccumulatorBot {
         if (won) {
             this.log(`WON $${profit.toFixed(2)} on ${asset} | Total: $${this.totalPnL.toFixed(2)}`, 'success');
             this.currentStake = CONFIG.initialStake;
+            this.consecutiveLosses = 0;
             this.isWinTrade = true;
         } else {
             this.log(`LOST $${Math.abs(profit).toFixed(2)} on ${asset}`, 'error');
-            this.sendLossEmail(asset);
             this.isWinTrade = false;
             this.consecutiveLosses++;
 
-            if (this.consecutiveLosses === 1) this.consecutiveLosses2++;
-            if (this.consecutiveLosses === 2) this.consecutiveLosses3++;
-            if (this.consecutiveLosses === 3) this.consecutiveLosses4++;
-            if (this.consecutiveLosses === 4) this.consecutiveLosses5++;
+            if (this.consecutiveLosses === 2) this.consecutiveLosses2++;
+            if (this.consecutiveLosses === 3) this.consecutiveLosses3++;
+            if (this.consecutiveLosses === 4) this.consecutiveLosses4++;
+            if (this.consecutiveLosses === 5) this.consecutiveLosses5++;
 
             this.currentStake = this.currentStake * CONFIG.multiplier;
         }
@@ -389,6 +389,10 @@ class EnhancedAccumulatorBot {
         this.tradeInProgress = false;
         this.printStats();
         // this.printRunLengthDistribution();
+
+        if (!won) {
+            this.sendLossEmail(asset);
+        }
 
         // Stop conditions
         if (this.totalPnL >= CONFIG.takeProfit) {
@@ -621,6 +625,7 @@ function start() {
     CONFIG.apiToken = 'Dz2V2KvRf4Uukt3';
 
     const bot = new EnhancedAccumulatorBot();
+    bot.printHeader();
     bot.connect();
     bot.checkTimeForDisconnectReconnect();
 
