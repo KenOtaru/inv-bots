@@ -867,7 +867,7 @@ class EnsembleDecisionMaker {
 
         this.recentDecisions = [];
         this.thresholdHistory = [];
-        this.adaptiveThreshold = 0.75;
+        this.adaptiveThreshold = 0.7;
     }
 
     /**
@@ -911,7 +911,7 @@ class EnsembleDecisionMaker {
             score: ensembleScore,
             agreement,
             details,
-            shouldTrade: ensembleScore > this.adaptiveThreshold && agreement > 0.5
+            shouldTrade: ensembleScore >= this.adaptiveThreshold && agreement > 0.5
         };
     }
 
@@ -983,8 +983,8 @@ class EnsembleDecisionMaker {
     optimizeThreshold() {
         if (this.recentDecisions.length < 50) return;
 
-        const thresholds = [0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9];
-        let bestThreshold = 0.75;
+        const thresholds = [0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8];
+        let bestThreshold = 0.7;
         let bestScore = -Infinity;
 
         thresholds.forEach(threshold => {
@@ -1996,7 +1996,7 @@ class EnhancedAccumulatorBot {
 
         // Combine all predictions
         const ensemble = this.ensembleDecisionMaker.combinePredicitions(predictions);
-        console.log('Ensemble Decision:', ensemble.score.toFixed(2), ' (', this.adaptiveThreshold, ') |', ensemble.agreement.toFixed(2), '(0.5) |', 'shouldTrade:', ensemble.shouldTrade);
+        console.log('Ensemble Decision:', ensemble.score.toFixed(2), ' (', this.ensembleDecisionMaker.adaptiveThreshold, ') |', ensemble.agreement.toFixed(2), '(0.5) |', 'shouldTrade:', ensemble.shouldTrade);
 
         // Additional check with survival threshold
         const survivalCheck = this.shouldTradeBasedOnSurvivalProb(asset, stayedInArray);
