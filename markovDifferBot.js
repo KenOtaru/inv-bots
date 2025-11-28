@@ -692,6 +692,7 @@ class MarkovDifferBot {
 
 // Use the token from the existing file or env
 const TOKEN = process.env.DERIV_TOKEN || 'DMylfkyce6VyZt7'; // Fallback to token found in geminiDiffer.js
+// 'DMylfkyce6VyZt7', '0P94g4WdSrSrzir', rgNedekYXvCaPeP, hsj0tA0XJoIzJG5, Dz2V2KvRf4Uukt3
 
 const bot = new MarkovDifferBot(TOKEN, {
     initialStake: 0.61,
