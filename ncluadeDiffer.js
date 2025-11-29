@@ -807,7 +807,7 @@ class DigitEnsembleDecisionMaker {
             streak: { correct: 0, total: 0 }
         };
         this.recentDecisions = [];
-        this.confidenceThreshold = 0.90;
+        this.confidenceThreshold = 0.80;
     }
 
     selectDigitToDiffer(predictions) {
@@ -1110,6 +1110,7 @@ class EnhancedDigitDifferBot {
         this.Pause = false;
         this.selectedDigit = null;
         this.selectedAsset = null;
+        this.isWinTrade = false;
 
         // Digit-specific tracking
         this.tickHistories = {};
@@ -1206,7 +1207,7 @@ class EnhancedDigitDifferBot {
     // ========================================================================
 
     connect() {
-        if (!this.Pause) {
+        if (!this.endOfDay) {
             console.log('Attempting to connect to Deriv API...');
             this.ws = new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
 
@@ -1231,7 +1232,7 @@ class EnhancedDigitDifferBot {
             this.ws.on('close', () => {
                 console.log('Disconnected from Deriv API');
                 this.connected = false;
-                if (!this.Pause) {
+                if (!this.endOfDay) {
                     this.handleDisconnect();
                 }
             });
@@ -1563,6 +1564,7 @@ class EnhancedDigitDifferBot {
             if (assetState) {
                 assetState.consecutiveLosses = 0;
             }
+            this.isWinTrade = true;
         } else {
             this.totalLosses++;
             this.consecutiveLosses++;
@@ -1574,6 +1576,7 @@ class EnhancedDigitDifferBot {
             if (assetState) {
                 assetState.consecutiveLosses++;
             }
+            this.isWinTrade = false;
 
             this.sendLossEmail(asset, actualDigit);
         }
@@ -1611,9 +1614,11 @@ class EnhancedDigitDifferBot {
 
         this.tradeInProgress = false;
 
-        setTimeout(() => {
-            this.tradeInProgress = false;
-        }, waitTime);
+        if (!this.endOfDay) {
+            setTimeout(() => {
+                this.tradeInProgress = false;
+            }, waitTime);
+        }
     }
 
     recordTradeOutcome(asset, won, predictedDigit, actualDigit, profit) {
@@ -1810,6 +1815,60 @@ class EnhancedDigitDifferBot {
         }
     }
 
+    async sendDisconnectResumptionEmailSummary() {
+        const transporter = nodemailer.createTransport(this.emailConfig);
+        const now = new Date();
+        const currentHours = now.getHours();
+        const currentMinutes = now.getMinutes();
+
+        const summaryText = `
+        Disconnect/Reconnect Email: Time (${currentHours}:${currentMinutes})
+        Trading Summary:
+        Total Trades: ${this.totalTrades}
+        Total Trades Won: ${this.totalWins}
+        Total Trades Lost: ${this.totalLosses}
+        
+        Total Profit/Loss Amount: ${this.totalProfitLoss.toFixed(2)}
+        `;
+
+        const mailOptions = {
+            from: this.emailConfig.auth.user,
+            to: this.emailRecipient,
+            subject: 'Smart Differ Bot - Connection/Disconnection Summary',
+            text: summaryText
+        };
+
+        try {
+            await transporter.sendMail(mailOptions);
+        } catch (error) {
+            console.error('Error sending email:', error);
+        }
+    }
+
+    checkTimeForDisconnectReconnect() {
+        setInterval(() => {
+            const now = new Date();
+            const gmtPlus1Time = new Date(now.getTime() + (1 * 60 * 60 * 1000));
+            const currentHours = gmtPlus1Time.getUTCHours();
+            const currentMinutes = gmtPlus1Time.getUTCMinutes();
+
+            if (this.endOfDay && currentHours === 8 && currentMinutes >= 0) {
+                console.log("It's 8:00 AM GMT+1, reconnecting the bot.");
+                this.endOfDay = false;
+                this.connect();
+            }
+
+            if (this.isWinTrade && !this.endOfDay) {
+                if (currentHours >= 17 && currentMinutes >= 0) {
+                    console.log("It's past 5:00 PM GMT+1 after a win trade, disconnecting the bot.");
+                    this.sendDisconnectResumptionEmailSummary();
+                    this.disconnect();
+                    this.endOfDay = true;
+                }
+            }
+        }, 5000);
+    }
+
     // ========================================================================
     // START METHOD
     // ========================================================================
@@ -1838,6 +1897,7 @@ class EnhancedDigitDifferBot {
         console.log('');
 
         this.connect();
+        this.checkTimeForDisconnectReconnect();
     }
 }
 
@@ -1845,7 +1905,7 @@ class EnhancedDigitDifferBot {
 // RUN THE BOT
 // ============================================================================
 
-const token = 'DMylfkyce6VyZt7';
+const token = '0P94g4WdSrSrzir';
 
 const bot = new EnhancedDigitDifferBot(token, {
     // 'DMylfkyce6VyZt7', '0P94g4WdSrSrzir', rgNedekYXvCaPeP, hsj0tA0XJoIzJG5, Dz2V2KvRf4Uukt3
@@ -1854,7 +1914,7 @@ const bot = new EnhancedDigitDifferBot(token, {
     stopLoss: 86,
     takeProfit: 5000,
     tickDuration: 1,
-    minConfidence: 0.95,
+    minConfidence: 0.90,
     assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
     enableNeuralNetwork: true,
     enablePatternRecognition: true,
