@@ -1,5 +1,5 @@
 /**
- * Enhanced Deriv Smart Differ Trading Bot
+ * Smart Deriv Differ Trading Bot
  * Version 2.0 - Advanced AI Learning System
  * 
  * Smart Differ: Win if the last digit of the final tick is DIFFERENT from your chosen digit
@@ -1082,7 +1082,7 @@ class DigitPersistenceManager {
 }
 
 // ============================================================================
-// MAIN ENHANCED Smart DIFFER TRADING BOT
+// MAIN Smart DIFFER TRADING BOT
 // ============================================================================
 
 class EnhancedDigitDifferBot {
@@ -1771,7 +1771,7 @@ class EnhancedDigitDifferBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: 'Enhanced Smart Differ Bot - Performance Summary',
+            subject: 'Smart Differ Bot - Performance Summary',
             text: summaryText
         };
 
@@ -1831,7 +1831,7 @@ class EnhancedDigitDifferBot {
 
     start() {
         console.log('═══════════════════════════════════════════════════════════');
-        console.log('  🎲 ENHANCED DIGIT DIFFER TRADING BOT v2.0');
+        console.log('  🎲 Smart Differ TRADING BOT v2.0');
         console.log('═══════════════════════════════════════════════════════════');
         console.log('');
         console.log('  📊 Contract Type: DIGIT DIFFER');
