@@ -1100,6 +1100,10 @@ class EnhancedDigitDifferBot {
         // Trading state
         this.currentStake = this.config.initialStake;
         this.consecutiveLosses = 0;
+        this.consecutiveLosses2 = 0;
+        this.consecutiveLosses3 = 0;
+        this.consecutiveLosses4 = 0;
+        this.consecutiveLosses5 = 0;
         this.currentTradeId = null;
         this.totalTrades = 0;
         this.totalWins = 0;
@@ -1578,6 +1582,12 @@ class EnhancedDigitDifferBot {
             }
             this.isWinTrade = false;
 
+            // Update global consecutive loss counters
+            if (this.consecutiveLosses === 2) this.consecutiveLosses2++;
+            else if (this.consecutiveLosses === 3) this.consecutiveLosses3++;
+            else if (this.consecutiveLosses === 4) this.consecutiveLosses4++;
+            else if (this.consecutiveLosses === 5) this.consecutiveLosses5++;
+
             this.sendLossEmail(asset, actualDigit);
         }
 
@@ -1697,6 +1707,10 @@ class EnhancedDigitDifferBot {
         console.log(`Wins: ${this.totalWins} | Losses: ${this.totalLosses}`);
         console.log(`Win Rate: ${this.totalTrades > 0 ? ((this.totalWins / this.totalTrades) * 100).toFixed(2) : 0}%`);
         console.log(`Total P/L: $${this.totalProfitLoss.toFixed(2)}`);
+        console.log(`x2 Losses2: ${this.consecutiveLosses2}`);
+        console.log(`x3 Losses3: ${this.consecutiveLosses3}`);
+        console.log(`x4 Losses4: ${this.consecutiveLosses4}`);
+        console.log(`x5 Losses5: ${this.consecutiveLosses5}`);
         console.log(`Current Stake: $${this.currentStake.toFixed(2)}`);
         console.log('───────────────────────────────────────────────────────────');
         console.log(`[${asset}] Market Entropy: ${(entropy * 100).toFixed(1)}%`);
@@ -1733,6 +1747,10 @@ class EnhancedDigitDifferBot {
     TRADING PERFORMANCE:
     Total Trades: ${this.totalTrades}
     Wins: ${this.totalWins} | Losses: ${this.totalLosses}
+    x2 Losses2: ${this.consecutiveLosses2}
+    x3 Losses3: ${this.consecutiveLosses3}
+    x4 Losses4: ${this.consecutiveLosses4}
+    x5 Losses5: ${this.consecutiveLosses5}
     Win Rate: ${this.totalTrades > 0 ? ((this.totalWins / this.totalTrades) * 100).toFixed(2) : 0}%
     
     FINANCIAL:
@@ -1791,7 +1809,10 @@ class EnhancedDigitDifferBot {
     CURRENT STATUS:
     Total Trades: ${this.totalTrades}
     Wins: ${this.totalWins} | Losses: ${this.totalLosses}
-    Consecutive Losses: ${this.consecutiveLosses}
+    x2 Losses2: ${this.consecutiveLosses2}
+    x3 Losses3: ${this.consecutiveLosses3}
+    x4 Losses4: ${this.consecutiveLosses4}
+    x5 Losses5: ${this.consecutiveLosses5}
     Current Stake: $${this.currentStake.toFixed(2)}
     Total P/L: $${this.totalProfitLoss.toFixed(2)}
     
@@ -1827,6 +1848,10 @@ class EnhancedDigitDifferBot {
         Total Trades: ${this.totalTrades}
         Total Trades Won: ${this.totalWins}
         Total Trades Lost: ${this.totalLosses}
+        x2 Losses2: ${this.consecutiveLosses2}
+        x3 Losses3: ${this.consecutiveLosses3}
+        x4 Losses4: ${this.consecutiveLosses4}
+        x5 Losses5: ${this.consecutiveLosses5}
         
         Total Profit/Loss Amount: ${this.totalProfitLoss.toFixed(2)}
         `;
