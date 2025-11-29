@@ -1860,9 +1860,10 @@ class EnhancedDigitDifferBot {
 // RUN THE BOT
 // ============================================================================
 
-const token = '0P94g4WdSrSrzir';
+const token = 'DMylfkyce6VyZt7';
 
 const bot = new EnhancedDigitDifferBot(token, {
+    // 'DMylfkyce6VyZt7', '0P94g4WdSrSrzir', rgNedekYXvCaPeP, hsj0tA0XJoIzJG5, Dz2V2KvRf4Uukt3
     initialStake: 0.61,
     multiplier: 11.3,
     stopLoss: 86,
@@ -1873,7 +1874,7 @@ const bot = new EnhancedDigitDifferBot(token, {
     enableNeuralNetwork: true,
     enablePatternRecognition: true,
     learningModeThreshold: 50,
-    requiredHistoryLength: 100,
+    requiredHistoryLength: 200,
 });
 
 bot.start();

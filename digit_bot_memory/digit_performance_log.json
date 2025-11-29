@@ -126,5 +126,245 @@
     "actualDigit": 6,
     "profit": 0.05,
     "timestamp": 1764418848558
+  },
+  {
+    "asset": "R_75",
+    "won": false,
+    "predictedDigit": 1,
+    "actualDigit": 1,
+    "profit": -0.61,
+    "timestamp": 1764434738586
+  },
+  {
+    "asset": "R_10",
+    "won": true,
+    "predictedDigit": 1,
+    "actualDigit": 0,
+    "profit": 0.66,
+    "timestamp": 1764434746519
+  },
+  {
+    "asset": "R_50",
+    "won": true,
+    "predictedDigit": 1,
+    "actualDigit": 2,
+    "profit": 0.66,
+    "timestamp": 1764434750526
+  },
+  {
+    "asset": "R_10",
+    "won": false,
+    "predictedDigit": 1,
+    "actualDigit": 1,
+    "profit": -0.61,
+    "timestamp": 1764434754468
+  },
+  {
+    "asset": "R_75",
+    "won": true,
+    "predictedDigit": 9,
+    "actualDigit": 8,
+    "profit": 0.05,
+    "timestamp": 1764434758431
+  },
+  {
+    "asset": "R_100",
+    "won": true,
+    "predictedDigit": 8,
+    "actualDigit": 5,
+    "profit": 0.66,
+    "timestamp": 1764434764442
+  },
+  {
+    "asset": "R_10",
+    "won": true,
+    "predictedDigit": 1,
+    "actualDigit": 6,
+    "profit": 0.05,
+    "timestamp": 1764434766516
+  },
+  {
+    "asset": "R_25",
+    "won": true,
+    "predictedDigit": 1,
+    "actualDigit": 3,
+    "profit": 0.05,
+    "timestamp": 1764434768531
+  },
+  {
+    "asset": "R_100",
+    "won": true,
+    "predictedDigit": 1,
+    "actualDigit": 6,
+    "profit": 0.05,
+    "timestamp": 1764434772475
+  },
+  {
+    "asset": "R_50",
+    "won": true,
+    "predictedDigit": 1,
+    "actualDigit": 4,
+    "profit": 0.05,
+    "timestamp": 1764434776411
+  },
+  {
+    "asset": "R_50",
+    "won": true,
+    "predictedDigit": 0,
+    "actualDigit": 2,
+    "profit": 0.05,
+    "timestamp": 1764434778462
+  },
+  {
+    "asset": "R_25",
+    "won": true,
+    "predictedDigit": 2,
+    "actualDigit": 6,
+    "profit": 0.05,
+    "timestamp": 1764434780538
+  },
+  {
+    "asset": "R_10",
+    "won": true,
+    "predictedDigit": 0,
+    "actualDigit": 2,
+    "profit": 0.05,
+    "timestamp": 1764434784442
+  },
+  {
+    "asset": "R_25",
+    "won": true,
+    "predictedDigit": 1,
+    "actualDigit": 4,
+    "profit": 0.05,
+    "timestamp": 1764434786594
+  },
+  {
+    "asset": "R_10",
+    "won": true,
+    "predictedDigit": 1,
+    "actualDigit": 9,
+    "profit": 0.05,
+    "timestamp": 1764434790626
+  },
+  {
+    "asset": "R_25",
+    "won": true,
+    "predictedDigit": 0,
+    "actualDigit": 3,
+    "profit": 0.05,
+    "timestamp": 1764434792426
+  },
+  {
+    "asset": "R_10",
+    "won": true,
+    "predictedDigit": 0,
+    "actualDigit": 1,
+    "profit": 0.05,
+    "timestamp": 1764434798488
+  },
+  {
+    "asset": "R_25",
+    "won": true,
+    "predictedDigit": 1,
+    "actualDigit": 6,
+    "profit": 0.05,
+    "timestamp": 1764434800499
+  },
+  {
+    "asset": "R_25",
+    "won": true,
+    "predictedDigit": 1,
+    "actualDigit": 8,
+    "profit": 0.05,
+    "timestamp": 1764434802531
+  },
+  {
+    "asset": "R_25",
+    "won": true,
+    "predictedDigit": 0,
+    "actualDigit": 2,
+    "profit": 0.05,
+    "timestamp": 1764434807138
+  },
+  {
+    "asset": "R_25",
+    "won": true,
+    "predictedDigit": 1,
+    "actualDigit": 5,
+    "profit": 0.05,
+    "timestamp": 1764434810538
+  },
+  {
+    "asset": "R_25",
+    "won": true,
+    "predictedDigit": 7,
+    "actualDigit": 9,
+    "profit": 0.05,
+    "timestamp": 1764434814430
+  },
+  {
+    "asset": "R_50",
+    "won": true,
+    "predictedDigit": 7,
+    "actualDigit": 3,
+    "profit": 0.05,
+    "timestamp": 1764434816458
+  },
+  {
+    "asset": "R_50",
+    "won": true,
+    "predictedDigit": 6,
+    "actualDigit": 3,
+    "profit": 0.05,
+    "timestamp": 1764434820535
+  },
+  {
+    "asset": "R_50",
+    "won": true,
+    "predictedDigit": 0,
+    "actualDigit": 2,
+    "profit": 0.05,
+    "timestamp": 1764434824556
+  },
+  {
+    "asset": "R_10",
+    "won": true,
+    "predictedDigit": 4,
+    "actualDigit": 9,
+    "profit": 0.05,
+    "timestamp": 1764434828550
+  },
+  {
+    "asset": "R_10",
+    "won": true,
+    "predictedDigit": 1,
+    "actualDigit": 8,
+    "profit": 0.05,
+    "timestamp": 1764434830565
+  },
+  {
+    "asset": "R_100",
+    "won": true,
+    "predictedDigit": 1,
+    "actualDigit": 3,
+    "profit": 0.05,
+    "timestamp": 1764434834467
+  },
+  {
+    "asset": "R_100",
+    "won": true,
+    "predictedDigit": 6,
+    "actualDigit": 4,
+    "profit": 0.05,
+    "timestamp": 1764434836555
+  },
+  {
+    "asset": "R_50",
+    "won": true,
+    "predictedDigit": 0,
+    "actualDigit": 3,
+    "profit": 0.05,
+    "timestamp": 1764434842573
   }
 ]
