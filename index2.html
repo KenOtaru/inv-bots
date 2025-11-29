@@ -84,72 +84,21 @@
         .trade-loss {
             border-left: 4px solid #ef4444;
         }
-
-        .asset-tab {
-            transition: all 0.2s ease;
-        }
-
-        .asset-tab.active {
-            background: linear-gradient(135deg, #3b82f6, #6366f1);
-        }
-
-        .asset-tab:not(.active):hover {
-            background: rgba(59, 130, 246, 0.3);
-        }
-
-        .asset-badge {
-            font-size: 0.65rem;
-            padding: 1px 4px;
-        }
-
-        .config-input {
-            width: 100%;
-            background-color: #1f2937;
-            border: 1px solid #4b5563;
-            border-radius: 0.5rem;
-            padding: 0.5rem 0.75rem;
-            font-size: 0.875rem;
-            color: #ffffff;
-            outline: none;
-            transition: border-color 0.2s;
-        }
-
-        .config-input:focus {
-            border-color: #3b82f6;
-        }
-
-        .config-input::placeholder {
-            color: #6b7280;
-        }
-
-        /* Fix for select dropdowns - ensure text is visible */
-        .config-input option {
-            background-color: #1f2937;
-            color: #ffffff;
-            padding: 0.5rem;
-        }
-
-        .config-label {
-            display: block;
-            font-size: 0.75rem;
-            color: #9ca3af;
-            margin-bottom: 0.25rem;
-        }
     </style>
 </head>
 
 <body class="bg-gray-900 text-white min-h-screen">
     <!-- Header -->
-    <header class="bg-gray-800 border-b border-gray-700 px-4 sm:px-6 py-4">
-        <div class="flex flex-col sm:flex-row items-center justify-between max-w-7xl mx-auto gap-3">
+    <header class="bg-gray-800 border-b border-gray-700 px-6 py-4">
+        <div class="flex items-center justify-between max-w-7xl mx-auto">
             <div class="flex items-center gap-3">
                 <div class="text-3xl">🎲</div>
                 <div>
                     <h1
-                        class="text-lg sm:text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+                        class="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
                         Enhanced Digit Differ Bot
                     </h1>
-                    <p class="text-xs text-gray-400">AI-Powered Multi-Asset Trading System v2.2</p>
+                    <p class="text-xs text-gray-400">AI-Powered Trading System v2.0</p>
                 </div>
             </div>
             <div class="flex items-center gap-4">
@@ -162,254 +111,121 @@
         </div>
     </header>
 
-    <main class="max-w-7xl mx-auto p-4 sm:p-6">
+    <main class="max-w-7xl mx-auto p-6">
         <!-- Control Panel -->
-        <div class="glass rounded-xl p-4 sm:p-6 mb-6 border border-gray-700">
-            <!-- Configuration Header -->
-            <div
-                class="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-6 pb-4 border-b border-gray-700 gap-3">
-                <h2 class="text-xl font-bold flex items-center gap-2">
-                    <span>⚙️</span> Bot Configuration
-                </h2>
-                <div class="flex gap-2">
+        <div class="glass rounded-xl p-6 mb-6 border border-gray-700">
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">API Token</label>
+                    <input type="password" id="apiToken" placeholder="Enter Deriv API Token"
+                        class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 focus:border-blue-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Asset</label>
+                    <select id="assetSelect"
+                        class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 focus:border-blue-500 focus:outline-none">
+                        <option value="R_10">Volatility 10 Index</option>
+                        <option value="R_25">Volatility 25 Index</option>
+                        <option value="R_50" selected>Volatility 50 Index</option>
+                        <option value="R_75">Volatility 75 Index</option>
+                        <option value="R_100">Volatility 100 Index</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Stake ($)</label>
+                    <input type="number" id="stakeInput" value="1" min="0.35" step="0.01"
+                        class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 focus:border-blue-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Tick Duration</label>
+                    <select id="durationSelect"
+                        class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 focus:border-blue-500 focus:outline-none">
+                        <option value="1" selected>1 Tick</option>
+                        <option value="2">2 Ticks</option>
+                        <option value="3">3 Ticks</option>
+                        <option value="5">5 Ticks</option>
+                    </select>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Stop Loss ($)</label>
+                    <input type="number" id="stopLoss" value="10" min="1"
+                        class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 focus:border-blue-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Take Profit ($)</label>
+                    <input type="number" id="takeProfit" value="5" min="1"
+                        class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 focus:border-blue-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Min Confidence</label>
+                    <input type="number" id="minConfidence" value="0.12" min="0.05" max="0.5" step="0.01"
+                        class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 focus:border-blue-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Martingale Multiplier</label>
+                    <input type="number" id="martingaleMultiplier" value="2.2" min="1.1" max="10" step="0.1"
+                        class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 focus:border-blue-500 focus:outline-none">
+                </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mt-4">
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Martingale Steps</label>
+                    <input type="number" id="martingaleSteps" value="5" min="1" max="20" step="1"
+                        class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 focus:border-blue-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Reset After Max Steps</label>
+                    <select id="resetAfterMax"
+                        class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2 focus:border-blue-500 focus:outline-none">
+                        <option value="reset" selected>Reset to Initial Stake</option>
+                        <option value="stop">Stop Trading</option>
+                        <option value="continue">Continue (No Reset)</option>
+                    </select>
+                </div>
+                <div class="flex items-end">
+                    <div class="w-full bg-gray-800 border border-gray-600 rounded-lg px-4 py-2">
+                        <div class="text-xs text-gray-400">Martingale Step</div>
+                        <div class="flex items-center gap-2">
+                            <span id="currentMartingaleStep" class="text-lg font-bold text-yellow-400">0</span>
+                            <span class="text-gray-500">/</span>
+                            <span id="maxMartingaleSteps" class="text-gray-400">5</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex items-end gap-2">
+                    <button id="startBtn" onclick="toggleBot()"
+                        class="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold py-2 px-6 rounded-lg transition-all">
+                        ▶ Start Bot
+                    </button>
                     <button onclick="saveSettings()"
-                        class="bg-blue-600 hover:bg-blue-500 text-white py-2 px-4 rounded-lg transition-all text-sm font-medium flex items-center gap-2 shadow-lg"
+                        class="bg-blue-600 hover:bg-blue-500 text-white py-2 px-3 rounded-lg transition-all"
                         title="Save Settings">
-                        <span>💾</span> <span class="hidden sm:inline">Save</span>
+                        💾
                     </button>
                     <button onclick="loadSettings()"
-                        class="bg-purple-600 hover:bg-purple-500 text-white py-2 px-4 rounded-lg transition-all text-sm font-medium flex items-center gap-2 shadow-lg"
+                        class="bg-purple-600 hover:bg-purple-500 text-white py-2 px-3 rounded-lg transition-all"
                         title="Load Settings">
-                        <span>📂</span> <span class="hidden sm:inline">Load</span>
+                        📂
                     </button>
                     <button onclick="clearData()"
-                        class="bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-lg transition-all text-sm font-medium shadow-lg"
+                        class="bg-gray-700 hover:bg-gray-600 text-white py-2 px-4 rounded-lg transition-all"
                         title="Clear Learning Data">
                         🗑️
                     </button>
                 </div>
             </div>
-
-            <!-- Section 1: Connection & Account -->
-            <div class="mb-6">
-                <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                    <span>🔐</span> Connection & Account
-                </h3>
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                        <label class="config-label">API Token *</label>
-                        <input type="password" id="apiToken" placeholder="Enter your Deriv API Token"
-                            class="config-input">
-                    </div>
-                    <div>
-                        <label class="config-label">Email for Notifications</label>
-                        <input type="email" id="notificationEmail" placeholder="your@email.com" class="config-input">
-                    </div>
-                </div>
-            </div>
-
-            <!-- Section 2: Trading Parameters -->
-            <div class="mb-6">
-                <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                    <span>📊</span> Trading Parameters
-                </h3>
-                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-                    <div>
-                        <label class="config-label">Primary Asset</label>
-                        <select id="assetSelect" class="config-input">
-                            <option value="R_10">Volatility 10</option>
-                            <option value="R_25">Volatility 25</option>
-                            <option value="R_50" selected>Volatility 50</option>
-                            <option value="R_75">Volatility 75</option>
-                            <option value="R_100">Volatility 100</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="config-label">Stake ($)</label>
-                        <input type="number" id="stakeInput" value="1" min="0.35" step="0.01" class="config-input">
-                    </div>
-                    <div>
-                        <label class="config-label">Tick Duration</label>
-                        <select id="durationSelect" class="config-input">
-                            <option value="1" selected>1 Tick</option>
-                            <option value="2">2 Ticks</option>
-                            <option value="3">3 Ticks</option>
-                            <option value="5">5 Ticks</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="config-label">Stop Loss ($)</label>
-                        <input type="number" id="stopLoss" value="10" min="1" class="config-input">
-                    </div>
-                    <div>
-                        <label class="config-label">Take Profit ($)</label>
-                        <input type="number" id="takeProfit" value="5" min="1" class="config-input">
-                    </div>
-                </div>
-            </div>
-
-            <!-- Section 3: Martingale Strategy -->
-            <div class="mb-6">
-                <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                    <span>🎰</span> Martingale Strategy
-                </h3>
-                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-                    <div>
-                        <label class="config-label">Multiplier</label>
-                        <input type="number" id="martingaleMultiplier" value="2.2" min="1.1" max="10" step="0.1"
-                            class="config-input">
-                    </div>
-                    <div>
-                        <label class="config-label">Max Steps</label>
-                        <input type="number" id="martingaleSteps" value="5" min="1" max="20" step="1"
-                            class="config-input">
-                    </div>
-                    <div>
-                        <label class="config-label">After Max Steps</label>
-                        <select id="resetAfterMax" class="config-input">
-                            <option value="reset" selected>Reset Stake</option>
-                            <option value="stop">Stop Trading</option>
-                            <option value="continue">Continue</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="config-label">Min Confidence</label>
-                        <input type="number" id="minConfidence" value="0.12" min="0.05" max="0.5" step="0.01"
-                            class="config-input">
-                    </div>
-                    <!-- Current Step Display - Commented Out
-                    <div class="flex flex-col justify-end">
-                        <div class="bg-gray-800 border border-gray-600 rounded-lg px-3 py-2 text-center">
-                            <div class="text-xs text-gray-400">Current Step</div>
-                            <div class="flex items-center justify-center gap-1">
-                                <span id="currentMartingaleStep" class="text-lg font-bold text-yellow-400">0</span>
-                                <span class="text-gray-500">/</span>
-                                <span id="maxMartingaleSteps" class="text-gray-400">5</span>
-                            </div>
-                        </div>
-                    </div>
-                    -->
-                    <!-- Hidden elements for JS compatibility -->
-                    <span id="currentMartingaleStep" class="hidden">0</span>
-                    <span id="maxMartingaleSteps" class="hidden">5</span>
-                </div>
-            </div>
-
-            <!-- Section 4: Status & Control -->
-            <div class="mb-6">
-                <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-                    <span>🚀</span> Status & Control
-                </h3>
-                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                    <div class="bg-gray-800/70 border border-gray-600 rounded-lg p-4 flex items-center justify-between">
-                        <div>
-                            <div class="text-xs text-gray-400 mb-1">Current Stake</div>
-                            <div id="currentStakeDisplay" class="text-2xl font-bold text-yellow-400">$1.00</div>
-                        </div>
-                        <div class="text-3xl">💰</div>
-                    </div>
-                    <div class="bg-gray-800/70 border border-gray-600 rounded-lg p-4 flex items-center justify-between">
-                        <div>
-                            <div class="text-xs text-gray-400 mb-1">Bot Status</div>
-                            <div id="botStatusText" class="text-lg font-semibold text-gray-300">Ready</div>
-                        </div>
-                        <div class="text-3xl">🤖</div>
-                    </div>
-                    <div class="flex items-stretch">
-                        <button id="startBtn" onclick="toggleBot()"
-                            class="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold py-4 px-6 rounded-lg transition-all text-lg shadow-lg flex items-center justify-center gap-2">
-                            <span>▶</span> Start Bot
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Section 5: Multi-Asset Trading -->
-            <div class="p-4 bg-gray-800/50 rounded-lg border border-gray-600">
-                <div class="flex flex-col sm:flex-row sm:items-center justify-between mb-3 gap-2">
-                    <div class="flex items-center gap-3">
-                        <label class="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" id="multiAssetEnabled"
-                                class="w-4 h-4 rounded bg-gray-700 border-gray-600 text-blue-500 focus:ring-blue-500 focus:ring-offset-gray-800">
-                            <span class="text-sm font-medium">Enable Multi-Asset Trading</span>
-                        </label>
-                        <span class="text-xs text-gray-500 hidden sm:inline">(Trade multiple assets
-                            simultaneously)</span>
-                    </div>
-                    <div id="activeAssetsCount" class="text-xs text-gray-400">0 assets active</div>
-                </div>
-                <div id="multiAssetOptions" class="hidden">
-                    <div class="text-xs text-gray-400 mb-2">Select assets to trade:</div>
-                    <div class="flex flex-wrap gap-2 mb-3">
-                        <label
-                            class="flex items-center gap-2 bg-gray-700 px-3 py-2 rounded-lg cursor-pointer hover:bg-gray-600 transition-colors">
-                            <input type="checkbox" value="R_10"
-                                class="asset-checkbox w-4 h-4 rounded bg-gray-600 border-gray-500 text-blue-500">
-                            <span class="text-sm">R_10</span>
-                            <span id="status_R_10" class="asset-badge rounded bg-gray-600 text-gray-400">--</span>
-                        </label>
-                        <label
-                            class="flex items-center gap-2 bg-gray-700 px-3 py-2 rounded-lg cursor-pointer hover:bg-gray-600 transition-colors">
-                            <input type="checkbox" value="R_25"
-                                class="asset-checkbox w-4 h-4 rounded bg-gray-600 border-gray-500 text-blue-500">
-                            <span class="text-sm">R_25</span>
-                            <span id="status_R_25" class="asset-badge rounded bg-gray-600 text-gray-400">--</span>
-                        </label>
-                        <label
-                            class="flex items-center gap-2 bg-gray-700 px-3 py-2 rounded-lg cursor-pointer hover:bg-gray-600 transition-colors">
-                            <input type="checkbox" value="R_50"
-                                class="asset-checkbox w-4 h-4 rounded bg-gray-600 border-gray-500 text-blue-500"
-                                checked>
-                            <span class="text-sm">R_50</span>
-                            <span id="status_R_50" class="asset-badge rounded bg-gray-600 text-gray-400">--</span>
-                        </label>
-                        <label
-                            class="flex items-center gap-2 bg-gray-700 px-3 py-2 rounded-lg cursor-pointer hover:bg-gray-600 transition-colors">
-                            <input type="checkbox" value="R_75"
-                                class="asset-checkbox w-4 h-4 rounded bg-gray-600 border-gray-500 text-blue-500">
-                            <span class="text-sm">R_75</span>
-                            <span id="status_R_75" class="asset-badge rounded bg-gray-600 text-gray-400">--</span>
-                        </label>
-                        <label
-                            class="flex items-center gap-2 bg-gray-700 px-3 py-2 rounded-lg cursor-pointer hover:bg-gray-600 transition-colors">
-                            <input type="checkbox" value="R_100"
-                                class="asset-checkbox w-4 h-4 rounded bg-gray-600 border-gray-500 text-blue-500">
-                            <span class="text-sm">R_100</span>
-                            <span id="status_R_100" class="asset-badge rounded bg-gray-600 text-gray-400">--</span>
-                        </label>
-                    </div>
-                    <div class="flex flex-wrap gap-4 text-xs">
-                        <label class="flex items-center gap-2">
-                            <input type="checkbox" id="parallelTrading"
-                                class="w-3 h-3 rounded bg-gray-700 border-gray-600 text-green-500">
-                            <span class="text-gray-400">Allow parallel trades</span>
-                        </label>
-                        <label class="flex items-center gap-2">
-                            <input type="checkbox" id="suspendOnLoss"
-                                class="w-3 h-3 rounded bg-gray-700 border-gray-600 text-orange-500" checked>
-                            <span class="text-gray-400">Suspend asset on loss</span>
-                        </label>
-                    </div>
-                </div>
-            </div>
         </div>
 
-        <!-- Asset Tabs (for multi-asset mode) -->
-        <div id="assetTabs" class="hidden mb-4">
-            <div class="flex gap-2 flex-wrap" id="assetTabsContainer">
-                <!-- Asset tabs will be populated here -->
-            </div>
-        </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <!-- Left Column: Live Digits & Predictions -->
-            <div class="lg:col-span-2 space-y-4 sm:space-y-6">
+            <div class="lg:col-span-2 space-y-6">
                 <!-- Live Tick Display -->
-                <div class="glass rounded-xl p-4 sm:p-6 border border-gray-700">
-                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2">
+                <div class="glass rounded-xl p-6 border border-gray-700">
+                    <div class="flex justify-between items-center mb-4">
                         <h2 class="text-lg font-semibold flex items-center gap-2">
                             <span>📊</span> Live Market Data
-                            <span id="currentAssetDisplay" class="text-sm font-normal text-blue-400 ml-2">[R_50]</span>
                         </h2>
                         <div id="lastPrice" class="text-xl font-mono text-blue-400">--</div>
                     </div>
@@ -425,37 +241,37 @@
                     <!-- Digit Frequency Distribution -->
                     <div>
                         <div class="text-sm text-gray-400 mb-2">Digit Distribution (Hot 🔥 / Cold ❄️)</div>
-                        <div class="grid grid-cols-10 gap-1 sm:gap-2" id="digitDistribution">
+                        <div class="grid grid-cols-10 gap-2" id="digitDistribution">
                             <!-- Distribution bars will be here -->
                         </div>
                     </div>
                 </div>
 
                 <!-- AI Prediction Panel -->
-                <div class="glass rounded-xl p-4 sm:p-6 border border-gray-700">
+                <div class="glass rounded-xl p-6 border border-gray-700">
                     <h2 class="text-lg font-semibold flex items-center gap-2 mb-4">
                         <span>🧠</span> AI Prediction Engine
                     </h2>
 
-                    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-4">
-                        <div class="bg-gray-800 rounded-lg p-3 sm:p-4 text-center">
-                            <div class="text-xs sm:text-sm text-gray-400">Statistical</div>
-                            <div id="statPrediction" class="text-xl sm:text-2xl font-bold text-orange-400">-</div>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                        <div class="bg-gray-800 rounded-lg p-4 text-center">
+                            <div class="text-sm text-gray-400">Statistical</div>
+                            <div id="statPrediction" class="text-2xl font-bold text-orange-400">-</div>
                             <div id="statConfidence" class="text-xs text-gray-500">--% conf</div>
                         </div>
-                        <div class="bg-gray-800 rounded-lg p-3 sm:p-4 text-center">
-                            <div class="text-xs sm:text-sm text-gray-400">Pattern</div>
-                            <div id="patternPrediction" class="text-xl sm:text-2xl font-bold text-purple-400">-</div>
+                        <div class="bg-gray-800 rounded-lg p-4 text-center">
+                            <div class="text-sm text-gray-400">Pattern</div>
+                            <div id="patternPrediction" class="text-2xl font-bold text-purple-400">-</div>
                             <div id="patternConfidence" class="text-xs text-gray-500">--% conf</div>
                         </div>
-                        <div class="bg-gray-800 rounded-lg p-3 sm:p-4 text-center">
-                            <div class="text-xs sm:text-sm text-gray-400">Neural Net</div>
-                            <div id="neuralPrediction" class="text-xl sm:text-2xl font-bold text-blue-400">-</div>
+                        <div class="bg-gray-800 rounded-lg p-4 text-center">
+                            <div class="text-sm text-gray-400">Neural Net</div>
+                            <div id="neuralPrediction" class="text-2xl font-bold text-blue-400">-</div>
                             <div id="neuralConfidence" class="text-xs text-gray-500">--% conf</div>
                         </div>
-                        <div class="bg-gray-800 rounded-lg p-3 sm:p-4 text-center border-2 border-yellow-500">
-                            <div class="text-xs sm:text-sm text-yellow-400">Ensemble</div>
-                            <div id="ensemblePrediction" class="text-xl sm:text-2xl font-bold text-yellow-400">-</div>
+                        <div class="bg-gray-800 rounded-lg p-4 text-center border-2 border-yellow-500">
+                            <div class="text-sm text-yellow-400">Ensemble</div>
+                            <div id="ensemblePrediction" class="text-2xl font-bold text-yellow-400">-</div>
                             <div id="ensembleConfidence" class="text-xs text-gray-500">--% conf</div>
                         </div>
                     </div>
@@ -470,7 +286,7 @@
                 </div>
 
                 <!-- Trade History -->
-                <div class="glass rounded-xl p-4 sm:p-6 border border-gray-700">
+                <div class="glass rounded-xl p-6 border border-gray-700">
                     <div class="flex justify-between items-center mb-4">
                         <h2 class="text-lg font-semibold flex items-center gap-2">
                             <span>📜</span> Trade History
@@ -486,13 +302,13 @@
             </div>
 
             <!-- Right Column: Stats & Learning -->
-            <div class="space-y-4 sm:space-y-6">
+            <div class="space-y-6">
                 <!-- Performance Stats -->
-                <div class="glass rounded-xl p-4 sm:p-6 border border-gray-700">
+                <div class="glass rounded-xl p-6 border border-gray-700">
                     <h2 class="text-lg font-semibold flex items-center gap-2 mb-4">
                         <span>📈</span> Performance
                     </h2>
-                    <div class="space-y-3">
+                    <div class="space-y-4">
                         <div class="flex justify-between items-center">
                             <span class="text-gray-400">Total Trades</span>
                             <span id="totalTrades" class="text-xl font-bold">0</span>
@@ -509,27 +325,7 @@
                                 <span id="totalLosses" class="text-red-400 font-bold">0</span>
                             </span>
                         </div>
-
-                        <!-- Consecutive Losses Section -->
-                        <div class="border-t border-gray-700 pt-3 mt-3">
-                            <div class="text-xs text-gray-500 mb-2">Consecutive Losses</div>
-                            <div class="grid grid-cols-3 gap-2 text-center">
-                                <div class="bg-gray-800 rounded-lg p-2">
-                                    <div class="text-xs text-gray-400">x2</div>
-                                    <div id="x2Losses" class="text-lg font-bold text-orange-400">0</div>
-                                </div>
-                                <div class="bg-gray-800 rounded-lg p-2">
-                                    <div class="text-xs text-gray-400">x3</div>
-                                    <div id="x3Losses" class="text-lg font-bold text-orange-500">0</div>
-                                </div>
-                                <div class="bg-gray-800 rounded-lg p-2">
-                                    <div class="text-xs text-gray-400">x4+</div>
-                                    <div id="x4Losses" class="text-lg font-bold text-red-500">0</div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="border-t border-gray-700 pt-3">
+                        <div class="border-t border-gray-700 pt-4">
                             <div class="flex justify-between items-center">
                                 <span class="text-gray-400">Profit / Loss</span>
                                 <span id="totalPnL" class="text-2xl font-bold">$0.00</span>
@@ -539,25 +335,11 @@
                             <span class="text-gray-400">Current Stake</span>
                             <span id="currentStake" class="font-bold text-yellow-400">$1.00</span>
                         </div>
-                        <div class="flex justify-between items-center">
-                            <span class="text-gray-400">Active Trades</span>
-                            <span id="activeTrades" class="font-bold text-blue-400">0</span>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Multi-Asset Status (shown when multi-asset enabled) -->
-                <div id="multiAssetStatus" class="hidden glass rounded-xl p-4 sm:p-6 border border-gray-700">
-                    <h2 class="text-lg font-semibold flex items-center gap-2 mb-4">
-                        <span>🌐</span> Multi-Asset Status
-                    </h2>
-                    <div id="assetStatusList" class="space-y-2">
-                        <!-- Asset statuses will be populated here -->
                     </div>
                 </div>
 
                 <!-- Learning Metrics -->
-                <div class="glass rounded-xl p-4 sm:p-6 border border-gray-700">
+                <div class="glass rounded-xl p-6 border border-gray-700">
                     <h2 class="text-lg font-semibold flex items-center gap-2 mb-4">
                         <span>🎓</span> Learning Status
                     </h2>
@@ -589,7 +371,7 @@
                 </div>
 
                 <!-- Model Weights -->
-                <div class="glass rounded-xl p-4 sm:p-6 border border-gray-700">
+                <div class="glass rounded-xl p-6 border border-gray-700">
                     <h2 class="text-lg font-semibold flex items-center gap-2 mb-4">
                         <span>⚖️</span> Model Weights
                     </h2>
@@ -634,7 +416,7 @@
                 </div>
 
                 <!-- Activity Log -->
-                <div class="glass rounded-xl p-4 sm:p-6 border border-gray-700">
+                <div class="glass rounded-xl p-6 border border-gray-700">
                     <h2 class="text-lg font-semibold flex items-center gap-2 mb-4">
                         <span>📋</span> Activity Log
                     </h2>
@@ -648,7 +430,7 @@
 
     <!-- Footer -->
     <footer class="text-center py-4 text-gray-500 text-sm">
-        Enhanced Digit Differ Bot v2.2 | AI-Powered Multi-Asset Trading System
+        Enhanced Digit Differ Bot v2.0 | AI-Powered Trading System
     </footer>
 
     <script>
@@ -1095,8 +877,13 @@
                 this.initialized = true;
             }
 
-            relu(x) { return Math.max(0, x); }
-            reluDerivative(x) { return x > 0 ? 1 : 0; }
+            relu(x) {
+                return Math.max(0, x);
+            }
+
+            reluDerivative(x) {
+                return x > 0 ? 1 : 0;
+            }
 
             softmax(arr) {
                 const maxVal = Math.max(...arr);
@@ -1112,26 +899,38 @@
 
                 const activations = [input];
                 let current = input;
+
                 const numLayers = Object.keys(this.weights).length;
 
                 for (let i = 0; i < numLayers; i++) {
                     const nextLayer = [];
+
                     for (let j = 0; j < this.weights[i].length; j++) {
                         let sum = this.biases[i][j];
+
                         for (let k = 0; k < current.length; k++) {
                             sum += current[k] * this.weights[i][j][k];
                         }
-                        nextLayer.push(i < numLayers - 1 ? this.relu(sum) : sum);
+
+                        if (i < numLayers - 1) {
+                            nextLayer.push(this.relu(sum));
+                        } else {
+                            nextLayer.push(sum);
+                        }
                     }
+
                     current = nextLayer;
                     activations.push(current);
                 }
 
-                return { output: this.softmax(current), activations, rawOutput: current };
+                const output = this.softmax(current);
+
+                return { output, activations, rawOutput: current };
             }
 
             trainOnSample(input, targetDigit) {
                 const { output, activations } = this.forward(input);
+
                 const outputGradient = [...output];
                 outputGradient[targetDigit] -= 1;
 
@@ -1145,10 +944,13 @@
                     for (let j = 0; j < this.weights[i].length; j++) {
                         for (let k = 0; k < this.weights[i][j].length; k++) {
                             const grad = delta[j] * prevActivation[k];
-                            this.velocities[`w${i}`][j][k] = this.momentum * this.velocities[`w${i}`][j][k] - this.learningRate * grad;
+                            this.velocities[`w${i}`][j][k] =
+                                this.momentum * this.velocities[`w${i}`][j][k] - this.learningRate * grad;
                             this.weights[i][j][k] += this.velocities[`w${i}`][j][k];
                         }
-                        this.velocities[`b${i}`][j] = this.momentum * this.velocities[`b${i}`][j] - this.learningRate * delta[j];
+
+                        this.velocities[`b${i}`][j] =
+                            this.momentum * this.velocities[`b${i}`][j] - this.learningRate * delta[j];
                         this.biases[i][j] += this.velocities[`b${i}`][j];
                     }
 
@@ -1165,6 +967,7 @@
                 }
 
                 const loss = -Math.log(Math.max(output[targetDigit], 1e-10));
+
                 this.trainingHistory.push({
                     loss,
                     predicted: output.indexOf(Math.max(...output)),
@@ -1172,16 +975,21 @@
                     correct: output.indexOf(Math.max(...output)) === targetDigit
                 });
 
-                if (this.trainingHistory.length > 1000) this.trainingHistory.shift();
+                if (this.trainingHistory.length > 1000) {
+                    this.trainingHistory.shift();
+                }
+
                 return { loss, predicted: output.indexOf(Math.max(...output)) };
             }
 
             predict(input) {
-                return this.forward(input).output;
+                const { output } = this.forward(input);
+                return output;
             }
 
             prepareFeatures(digitSequence, digitFrequencies) {
                 const features = [];
+
                 const recent = digitSequence.slice(-30);
                 while (recent.length < 30) recent.unshift(5);
                 recent.forEach(d => features.push(d / 9));
@@ -1202,7 +1010,10 @@
                 }
                 features.push(Math.min(streakLength, 10) / 10);
 
-                while (features.length < this.inputSize) features.push(0.5);
+                while (features.length < this.inputSize) {
+                    features.push(0.5);
+                }
+
                 return features.slice(0, this.inputSize);
             }
 
@@ -1210,10 +1021,21 @@
                 if (this.trainingHistory.length < 10) {
                     return { accuracy: 0, recentLoss: 1, trend: 'insufficient_data' };
                 }
+
                 const recent = this.trainingHistory.slice(-100);
                 const avgLoss = recent.reduce((a, b) => a + b.loss, 0) / recent.length;
                 const correct = recent.filter(h => h.correct).length;
-                return { accuracy: correct / recent.length, recentLoss: avgLoss, trend: 'stable' };
+                const accuracy = correct / recent.length;
+
+                const firstHalf = recent.slice(0, Math.floor(recent.length / 2));
+                const secondHalf = recent.slice(Math.floor(recent.length / 2));
+                const firstLoss = firstHalf.reduce((a, b) => a + b.loss, 0) / firstHalf.length;
+                const secondLoss = secondHalf.reduce((a, b) => a + b.loss, 0) / secondHalf.length;
+
+                const trend = secondLoss < firstLoss * 0.9 ? 'improving' :
+                    secondLoss > firstLoss * 1.1 ? 'degrading' : 'stable';
+
+                return { accuracy, recentLoss: avgLoss, trend };
             }
 
             exportWeights() {
@@ -1239,13 +1061,20 @@
         // ============================================================================
         class DigitEnsembleDecisionMaker {
             constructor() {
-                this.modelWeights = { statistical: 0.30, pattern: 0.25, neural: 0.25, streak: 0.20 };
+                this.modelWeights = {
+                    statistical: 0.30,
+                    pattern: 0.25,
+                    neural: 0.25,
+                    streak: 0.20
+                };
+
                 this.modelPerformance = {
                     statistical: { correct: 0, total: 0 },
                     pattern: { correct: 0, total: 0 },
                     neural: { correct: 0, total: 0 },
                     streak: { correct: 0, total: 0 }
                 };
+
                 this.recentDecisions = [];
                 this.confidenceThreshold = 0.12;
             }
@@ -1258,7 +1087,9 @@
                     const scores = predictions.statistical;
                     for (let i = 0; i < 10; i++) {
                         const scoreItem = scores.find(s => s.digit === i);
-                        if (scoreItem) combinedScores[i] += scoreItem.score * this.modelWeights.statistical;
+                        if (scoreItem) {
+                            combinedScores[i] += scoreItem.score * this.modelWeights.statistical;
+                        }
                     }
                     details.statistical = scores.slice(0, 3).map(s => `${s.digit}:${s.score.toFixed(1)}`).join(', ');
                 }
@@ -1275,41 +1106,58 @@
                         combinedScores[i] += predictions.neural[i] * 100 * this.modelWeights.neural;
                     }
                     const maxNeural = predictions.neural.indexOf(Math.max(...predictions.neural));
-                    details.neural = `Predicted: ${maxNeural}`;
+                    details.neural = `Predicted: ${maxNeural} (${(predictions.neural[maxNeural] * 100).toFixed(1)}%)`;
                 }
 
-                if (predictions.streak && predictions.streak.streaking !== null) {
-                    combinedScores[predictions.streak.streaking] += 15 * this.modelWeights.streak;
-                    details.streak = `Streaking: ${predictions.streak.streaking}`;
+                if (predictions.streak) {
+                    for (let i = 0; i < 10; i++) {
+                        if (predictions.streak.streaking === i) {
+                            combinedScores[i] += 15 * this.modelWeights.streak;
+                        }
+                    }
+                    details.streak = predictions.streak.streaking !== null ?
+                        `Streaking: ${predictions.streak.streaking}` : 'No streak';
                 }
 
-                const ranked = combinedScores.map((score, digit) => ({ digit, score })).sort((a, b) => b.score - a.score);
+                const ranked = combinedScores
+                    .map((score, digit) => ({ digit, score }))
+                    .sort((a, b) => b.score - a.score);
+
+                const bestDigit = ranked[0].digit;
+                const secondBest = ranked[1].digit;
+
+                // Calculate confidence - normalized to 0-1 range
                 const totalScore = combinedScores.reduce((a, b) => a + b, 0);
                 const avgScore = totalScore / 10;
-                const maxScore = Math.max(...combinedScores);
                 const minScore = Math.min(...combinedScores);
+                const maxScore = Math.max(...combinedScores);
 
-                // Fixed confidence calculation - always between 0 and 1
+                // Use normalized confidence: how much better is best vs average, capped at 1.0
+                // Formula: (best - avg) / (max_possible_deviation)
+                // Where max_possible_deviation = avg (when best could be 2x avg at most in normal cases)
                 let confidence = 0;
                 if (avgScore > 0) {
+                    // Normalize: (best - avg) / avg, then apply sigmoid-like clamping
                     const rawConfidence = (ranked[0].score - avgScore) / avgScore;
-                    // Use sigmoid-like normalization to keep between 0 and 1
+                    // Apply soft clamping using tanh-like function to keep in 0-1 range
                     confidence = Math.min(1, Math.max(0, rawConfidence / (1 + Math.abs(rawConfidence)) + 0.5));
                 }
 
-                // Secondary confidence measure based on score spread
+                // Alternative: use score spread as confidence
                 const scoreSpread = maxScore - minScore;
                 const spreadConfidence = totalScore > 0 ? Math.min(1, scoreSpread / (totalScore * 0.3)) : 0;
 
-                // Blend both confidence measures and ensure it's capped at 1
+                // Blend both confidence measures
                 const finalConfidence = Math.min(1, (confidence + spreadConfidence) / 2);
 
+                const bestProbability = totalScore > 0 ? ranked[0].score / totalScore : 0.1;
+
                 return {
-                    digitToDiffer: ranked[0].digit,
-                    alternativeDigit: ranked[1].digit,
+                    digitToDiffer: bestDigit,
+                    alternativeDigit: secondBest,
                     scores: ranked,
                     confidence: finalConfidence,
-                    probability: totalScore > 0 ? ranked[0].score / totalScore : 0.1,
+                    probability: bestProbability,
                     shouldTrade: finalConfidence > this.confidenceThreshold,
                     details
                 };
@@ -1318,18 +1166,39 @@
             recordOutcome(predictions, chosenDigit, actualDigit, won) {
                 Object.entries(predictions).forEach(([model, pred]) => {
                     if (!pred) return;
+
                     let modelPredicted;
-                    if (model === 'statistical' && Array.isArray(pred)) modelPredicted = pred[0]?.digit;
-                    else if (model === 'pattern' && pred.mostLikely !== undefined) modelPredicted = pred.mostLikely;
-                    else if (model === 'neural' && Array.isArray(pred)) modelPredicted = pred.indexOf(Math.max(...pred));
-                    else if (model === 'streak' && pred.streaking !== null) modelPredicted = pred.streaking;
+                    if (model === 'statistical' && Array.isArray(pred)) {
+                        modelPredicted = pred[0]?.digit;
+                    } else if (model === 'pattern' && pred.mostLikely !== undefined) {
+                        modelPredicted = pred.mostLikely;
+                    } else if (model === 'neural' && Array.isArray(pred)) {
+                        modelPredicted = pred.indexOf(Math.max(...pred));
+                    } else if (model === 'streak' && pred.streaking !== null) {
+                        modelPredicted = pred.streaking;
+                    }
 
                     if (modelPredicted !== undefined) {
                         this.modelPerformance[model].total++;
-                        if (modelPredicted === actualDigit) this.modelPerformance[model].correct++;
+                        if (modelPredicted === actualDigit) {
+                            this.modelPerformance[model].correct++;
+                        }
                     }
                 });
+
                 this.updateModelWeights();
+
+                this.recentDecisions.push({
+                    predictions,
+                    chosenDigit,
+                    actualDigit,
+                    won,
+                    timestamp: Date.now()
+                });
+
+                if (this.recentDecisions.length > 500) {
+                    this.recentDecisions.shift();
+                }
             }
 
             updateModelWeights() {
@@ -1339,8 +1208,9 @@
 
                 Object.entries(this.modelPerformance).forEach(([model, perf]) => {
                     if (perf.total >= minSamples) {
-                        accuracies[model] = perf.correct / perf.total;
-                        totalAccuracy += accuracies[model];
+                        const accuracy = perf.correct / perf.total;
+                        accuracies[model] = accuracy;
+                        totalAccuracy += accuracy;
                     }
                 });
 
@@ -1348,6 +1218,7 @@
                     Object.entries(accuracies).forEach(([model, accuracy]) => {
                         this.modelWeights[model] = Math.pow(accuracy + 0.1, 2);
                     });
+
                     const sum = Object.values(this.modelWeights).reduce((a, b) => a + b, 0);
                     Object.keys(this.modelWeights).forEach(model => {
                         this.modelWeights[model] /= sum;
@@ -1355,19 +1226,43 @@
                 }
             }
 
+            getPerformanceSummary() {
+                const summary = {};
+
+                Object.entries(this.modelPerformance).forEach(([model, perf]) => {
+                    summary[model] = {
+                        accuracy: perf.total > 0 ? (perf.correct / perf.total * 100).toFixed(1) + '%' : 'N/A',
+                        samples: perf.total,
+                        weight: (this.modelWeights[model] * 100).toFixed(1) + '%'
+                    };
+                });
+
+                return {
+                    models: summary,
+                    confidenceThreshold: this.confidenceThreshold.toFixed(3),
+                    totalDecisions: this.recentDecisions.length
+                };
+            }
+
             exportState() {
-                return { modelWeights: this.modelWeights, modelPerformance: this.modelPerformance, confidenceThreshold: this.confidenceThreshold };
+                return {
+                    modelWeights: this.modelWeights,
+                    modelPerformance: this.modelPerformance,
+                    confidenceThreshold: this.confidenceThreshold,
+                    recentDecisions: this.recentDecisions.slice(-200)
+                };
             }
 
             importState(state) {
                 if (state.modelWeights) this.modelWeights = state.modelWeights;
                 if (state.modelPerformance) this.modelPerformance = state.modelPerformance;
                 if (state.confidenceThreshold) this.confidenceThreshold = state.confidenceThreshold;
+                if (state.recentDecisions) this.recentDecisions = state.recentDecisions;
             }
         }
 
         // ============================================================================
-        // MAIN BOT CLASS - MULTI-ASSET ENABLED
+        // MAIN BOT CLASS
         // ============================================================================
         class DigitDifferBot {
             constructor() {
@@ -1375,23 +1270,9 @@
                 this.connected = false;
                 this.isRunning = false;
                 this.token = '';
-                this.notificationEmail = '';
+                this.asset = 'R_50';
 
-                // Multi-asset configuration
-                this.multiAssetEnabled = false;
-                this.activeAssets = ['R_50'];
-                this.selectedAsset = 'R_50';
-                this.parallelTrading = false;
-                this.suspendOnLoss = true;
-                this.suspendedAssets = new Set();
-
-                // Per-asset state
-                this.assetData = {};
-                this.assetTradesInProgress = {};
-                this.assetProposalIds = {};
-                this.assetSelectedDigits = {};
-
-                // Global trading state
+                // Trading State
                 this.currentStake = 1;
                 this.initialStake = 1;
                 this.totalTrades = 0;
@@ -1399,15 +1280,10 @@
                 this.totalLosses = 0;
                 this.totalPnL = 0;
                 this.consecutiveLosses = 0;
+                this.tradeInProgress = false;
                 this.balance = 0;
 
-                // Consecutive loss tracking
-                this.x2Losses = 0;  // Times we hit 2 consecutive losses
-                this.x3Losses = 0;  // Times we hit 3 consecutive losses
-                this.x4Losses = 0;  // Times we hit 4+ consecutive losses
-                this.maxConsecutiveLosses = 0;  // Track the max streak
-
-                // Martingale
+                // Martingale State
                 this.martingaleStep = 0;
                 this.martingaleHistory = [];
 
@@ -1423,11 +1299,14 @@
                     learningThreshold: 50
                 };
 
-                // Global data
+                // Data
+                this.tickHistory = [];
                 this.tradeHistory = [];
                 this.lastPredictions = {};
+                this.selectedDigit = null;
+                this.currentProposalId = null;
 
-                // Shared Learning Engines
+                // Learning Engines
                 this.statisticalEngine = new DigitStatisticalEngine();
                 this.patternEngine = new DigitPatternEngine();
                 this.neuralEngine = new DigitNeuralEngine(50, [64, 32], 10);
@@ -1437,129 +1316,14 @@
                 this.observationCount = 0;
                 this.learningMode = true;
 
+                // Load saved state
                 this.loadState();
-                this.setupMultiAssetUI();
-            }
-
-            setupMultiAssetUI() {
-                document.getElementById('multiAssetEnabled').addEventListener('change', (e) => {
-                    this.multiAssetEnabled = e.target.checked;
-                    document.getElementById('multiAssetOptions').classList.toggle('hidden', !e.target.checked);
-                    document.getElementById('assetTabs').classList.toggle('hidden', !e.target.checked);
-                    document.getElementById('multiAssetStatus').classList.toggle('hidden', !e.target.checked);
-
-                    if (e.target.checked) {
-                        this.updateActiveAssets();
-                        this.updateAssetTabs();
-                    }
-                });
-
-                document.querySelectorAll('.asset-checkbox').forEach(cb => {
-                    cb.addEventListener('change', () => this.updateActiveAssets());
-                });
-
-                document.getElementById('parallelTrading').addEventListener('change', (e) => {
-                    this.parallelTrading = e.target.checked;
-                });
-
-                document.getElementById('suspendOnLoss').addEventListener('change', (e) => {
-                    this.suspendOnLoss = e.target.checked;
-                });
-            }
-
-            updateActiveAssets() {
-                const checkboxes = document.querySelectorAll('.asset-checkbox:checked');
-                this.activeAssets = Array.from(checkboxes).map(cb => cb.value);
-
-                this.activeAssets.forEach(asset => {
-                    if (!this.assetData[asset]) {
-                        this.assetData[asset] = { tickHistory: [], observationCount: 0 };
-                    }
-                    this.assetTradesInProgress[asset] = false;
-                });
-
-                document.getElementById('activeAssetsCount').textContent = `${this.activeAssets.length} assets active`;
-                this.updateAssetTabs();
-                this.updateAssetStatusList();
-            }
-
-            updateAssetTabs() {
-                const container = document.getElementById('assetTabsContainer');
-                container.innerHTML = this.activeAssets.map(asset => {
-                    const isActive = asset === this.selectedAsset;
-                    const isSuspended = this.suspendedAssets.has(asset);
-                    const inProgress = this.assetTradesInProgress[asset];
-
-                    let statusIcon = '';
-                    if (isSuspended) statusIcon = '🔴';
-                    else if (inProgress) statusIcon = '🔄';
-                    else statusIcon = '🟢';
-
-                    return `
-                    <button onclick="bot.switchAsset('${asset}')" 
-                        class="asset-tab px-4 py-2 rounded-lg text-sm font-medium ${isActive ? 'active text-white' : 'bg-gray-700 text-gray-300'}">
-                        ${statusIcon} ${asset}
-                    </button>
-                `;
-                }).join('');
-            }
-
-            updateAssetStatusList() {
-                const container = document.getElementById('assetStatusList');
-                container.innerHTML = this.activeAssets.map(asset => {
-                    const data = this.assetData[asset] || { tickHistory: [] };
-                    const isSuspended = this.suspendedAssets.has(asset);
-                    const inProgress = this.assetTradesInProgress[asset];
-                    const ticks = data.tickHistory?.length || 0;
-
-                    let status = 'Ready';
-                    let statusClass = 'text-green-400';
-                    if (isSuspended) { status = 'Suspended'; statusClass = 'text-red-400'; }
-                    else if (inProgress) { status = 'Trading'; statusClass = 'text-blue-400'; }
-                    else if (ticks < 30) { status = 'Learning'; statusClass = 'text-yellow-400'; }
-
-                    const badge = document.getElementById(`status_${asset}`);
-                    if (badge) {
-                        badge.textContent = status;
-                        badge.className = `asset-badge rounded ${statusClass.replace('text-', 'bg-').replace('400', '500/30')} ${statusClass}`;
-                    }
-
-                    return `
-                    <div class="flex justify-between items-center bg-gray-800 rounded-lg px-3 py-2">
-                        <span class="font-mono">${asset}</span>
-                        <div class="flex items-center gap-3">
-                            <span class="text-xs text-gray-500">${ticks} ticks</span>
-                            <span class="text-xs ${statusClass}">${status}</span>
-                            ${isSuspended ? `<button onclick="bot.reactivateAsset('${asset}')" class="text-xs bg-green-600 hover:bg-green-500 px-2 py-1 rounded">Reactivate</button>` : ''}
-                        </div>
-                    </div>
-                `;
-                }).join('');
-            }
-
-            switchAsset(asset) {
-                this.selectedAsset = asset;
-                this.updateAssetTabs();
-                this.updateUIForAsset(asset);
-                document.getElementById('currentAssetDisplay').textContent = `[${asset}]`;
-            }
-
-            updateUIForAsset(asset) {
-                const data = this.assetData[asset];
-                if (!data || !data.tickHistory) return;
-
-                const recentDigits = data.tickHistory.slice(-20);
-                const container = document.getElementById('recentDigits');
-                container.innerHTML = recentDigits.map((d, i) => {
-                    const isLatest = i === recentDigits.length - 1;
-                    return `<div class="digit-box w-8 h-8 flex items-center justify-center rounded ${isLatest ? 'bg-blue-500 ring-2 ring-blue-300' : 'bg-gray-700'} font-mono font-bold">${d}</div>`;
-                }).join('');
-
-                this.updateDigitDistribution(asset);
             }
 
             connect() {
-                if (this.ws) this.ws.close();
+                if (this.ws) {
+                    this.ws.close();
+                }
 
                 this.log('Connecting to Deriv API...');
                 this.ws = new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
@@ -1585,7 +1349,10 @@
                     this.connected = false;
                     this.updateConnectionStatus(false);
                     this.log('Disconnected from Deriv API');
-                    if (this.isRunning) setTimeout(() => this.connect(), 5000);
+
+                    if (this.isRunning) {
+                        setTimeout(() => this.connect(), 5000);
+                    }
                 };
             }
 
@@ -1617,7 +1384,7 @@
                         this.log('Authentication successful');
                         this.balance = parseFloat(message.authorize.balance);
                         this.updateBalance();
-                        this.subscribeToAllAssets();
+                        this.subscribeToTicks();
                         break;
 
                     case 'tick':
@@ -1631,8 +1398,7 @@
                     case 'buy':
                         if (message.error) {
                             this.log('Trade error: ' + message.error.message, 'error');
-                            const asset = message.echo_req?.symbol;
-                            if (asset) this.assetTradesInProgress[asset] = false;
+                            this.tradeInProgress = false;
                             return;
                         }
                         this.log('Trade placed successfully');
@@ -1650,141 +1416,122 @@
                 }
             }
 
-            subscribeToAllAssets() {
-                const assets = this.multiAssetEnabled ? this.activeAssets : [document.getElementById('assetSelect').value];
-
-                assets.forEach(asset => {
-                    this.send({ ticks: asset, subscribe: 1 });
-                    if (!this.assetData[asset]) {
-                        this.assetData[asset] = { tickHistory: [], observationCount: 0 };
-                    }
+            subscribeToTicks() {
+                this.send({
+                    ticks: this.asset,
+                    subscribe: 1
                 });
-
-                this.send({ balance: 1, subscribe: 1 });
-                this.log(`Subscribed to ${assets.length} asset(s): ${assets.join(', ')}`);
+                this.send({
+                    balance: 1,
+                    subscribe: 1
+                });
+                this.log(`Subscribed to ${this.asset} ticks`);
             }
 
             handleTick(tick) {
-                const asset = tick.symbol;
-                const digit = this.getLastDigit(tick.quote, asset);
+                const digit = this.getLastDigit(tick.quote);
 
-                if (!this.assetData[asset]) {
-                    this.assetData[asset] = { tickHistory: [], observationCount: 0 };
+                this.tickHistory.push(digit);
+                if (this.tickHistory.length > 200) {
+                    this.tickHistory.shift();
                 }
 
-                const data = this.assetData[asset];
-                data.tickHistory.push(digit);
-                if (data.tickHistory.length > 200) data.tickHistory.shift();
-                data.observationCount = (data.observationCount || 0) + 1;
-
-                this.statisticalEngine.updateFrequency(asset, digit);
-                this.patternEngine.updatePatterns(asset, digit);
+                // Update learning engines
+                this.statisticalEngine.updateFrequency(this.asset, digit);
+                this.patternEngine.updatePatterns(this.asset, digit);
                 this.observationCount++;
 
+                // Train neural network
                 if (this.observationCount % 5 === 0) {
                     const features = this.neuralEngine.prepareFeatures(
-                        data.tickHistory,
-                        this.statisticalEngine.getDigitProbabilities(asset)
+                        this.tickHistory,
+                        this.statisticalEngine.getDigitProbabilities(this.asset)
                     );
                     this.neuralEngine.trainOnSample(features, digit);
                 }
 
-                if (asset === this.selectedAsset || (!this.multiAssetEnabled && asset === document.getElementById('assetSelect').value)) {
-                    this.updateUI(tick, digit, asset);
-                }
+                // Update UI
+                this.updateUI(tick, digit);
 
-                if (this.multiAssetEnabled) {
-                    this.updateAssetStatusList();
-                }
-
+                // Check learning mode
                 if (this.learningMode && this.observationCount < this.config.learningThreshold) {
                     this.updateLearningProgress();
                     return;
                 } else if (this.learningMode) {
                     this.learningMode = false;
                     this.log('Learning phase complete. Trading enabled!', 'success');
-                    this.updateLearningProgress();
+                    document.getElementById('learningMode').textContent = 'Trading';
+                    document.getElementById('learningMode').className = 'px-2 py-1 rounded text-xs bg-green-500/20 text-green-400';
                 }
 
-                if (!this.learningMode) {
-                    this.updateLearningProgress();
-                }
-
-                if (this.isRunning && !this.suspendedAssets.has(asset)) {
-                    this.analyzeAndTrade(asset);
+                // Analyze and trade
+                if (this.isRunning && !this.tradeInProgress) {
+                    this.analyzeAndTrade();
                 }
             }
 
-            getLastDigit(quote, asset) {
+            getLastDigit(quote) {
                 const quoteString = quote.toString();
                 const [, fractionalPart = ''] = quoteString.split('.');
 
-                if (['R_75', 'R_50'].includes(asset)) {
+                if (['R_75', 'R_50'].includes(this.asset)) {
                     return fractionalPart.length >= 4 ? parseInt(fractionalPart[3]) : 0;
-                } else if (['R_10', 'R_25'].includes(asset)) {
+                } else if (['R_10', 'R_25'].includes(this.asset)) {
                     return fractionalPart.length >= 3 ? parseInt(fractionalPart[2]) : 0;
                 } else {
                     return fractionalPart.length >= 2 ? parseInt(fractionalPart[1]) : 0;
                 }
             }
 
-            analyzeAndTrade(asset) {
-                const data = this.assetData[asset];
-                if (!data || data.tickHistory.length < 30) return;
+            analyzeAndTrade() {
+                if (this.tickHistory.length < 30) return;
 
-                if (this.assetTradesInProgress[asset]) return;
-                if (!this.parallelTrading && Object.values(this.assetTradesInProgress).some(v => v)) return;
-
-                const predictions = this.getEnsemblePredictions(asset);
+                const predictions = this.getEnsemblePredictions();
                 const decision = this.ensembleDecisionMaker.selectDigitToDiffer(predictions);
 
-                this.lastPredictions[asset] = predictions;
-
-                if (asset === this.selectedAsset) {
-                    this.updatePredictionUI(predictions, decision);
-                }
+                this.lastPredictions = predictions;
+                this.updatePredictionUI(predictions, decision);
 
                 if (decision.shouldTrade) {
-                    this.assetSelectedDigits[asset] = decision.digitToDiffer;
-                    this.log(`[${asset}] Trade signal: Differ from ${decision.digitToDiffer} (conf: ${(decision.confidence * 100).toFixed(1)}%)`);
-                    this.requestProposal(asset, decision.digitToDiffer);
+                    this.selectedDigit = decision.digitToDiffer;
+                    this.log(`Trade signal: Differ from ${decision.digitToDiffer} (conf: ${(decision.confidence * 100).toFixed(1)}%)`);
+                    this.requestProposal();
                 }
             }
 
-            getEnsemblePredictions(asset) {
-                const data = this.assetData[asset];
+            getEnsemblePredictions() {
                 const predictions = {};
 
-                predictions.statistical = this.statisticalEngine.getBestDigitToDiffer(asset);
-                predictions.pattern = this.patternEngine.predictNextDigits(asset);
+                predictions.statistical = this.statisticalEngine.getBestDigitToDiffer(this.asset);
+                predictions.pattern = this.patternEngine.predictNextDigits(this.asset);
 
-                if (this.neuralEngine.initialized && data.tickHistory.length > 0) {
+                if (this.neuralEngine.initialized) {
                     const features = this.neuralEngine.prepareFeatures(
-                        data.tickHistory,
-                        this.statisticalEngine.getDigitProbabilities(asset)
+                        this.tickHistory,
+                        this.statisticalEngine.getDigitProbabilities(this.asset)
                     );
                     predictions.neural = this.neuralEngine.predict(features);
                 }
 
-                const lastDigit = data.tickHistory[data.tickHistory.length - 1];
+                const lastDigit = this.tickHistory[this.tickHistory.length - 1];
                 predictions.streak = {
-                    streaking: this.patternEngine.isDigitStreaking(asset, lastDigit) ? lastDigit : null
+                    streaking: this.patternEngine.isDigitStreaking(this.asset, lastDigit) ? lastDigit : null
                 };
 
                 return predictions;
             }
 
-            requestProposal(asset, barrier) {
+            requestProposal() {
                 this.send({
                     proposal: 1,
                     amount: this.currentStake.toFixed(2),
                     basis: 'stake',
                     contract_type: 'DIGITDIFF',
                     currency: 'USD',
-                    symbol: asset,
+                    symbol: this.asset,
                     duration: this.config.tickDuration,
                     duration_unit: 't',
-                    barrier: barrier
+                    barrier: this.selectedDigit
                 });
             }
 
@@ -1794,34 +1541,22 @@
                     return;
                 }
 
-                const asset = message.echo_req?.symbol;
-                if (!asset) return;
-
-                if (message.proposal && !this.assetTradesInProgress[asset]) {
-                    this.assetProposalIds[asset] = message.proposal.id;
-                    this.placeTrade(asset);
+                if (message.proposal && !this.tradeInProgress) {
+                    this.currentProposalId = message.proposal.id;
+                    this.placeTrade();
                 }
             }
 
-            placeTrade(asset) {
-                if (this.assetTradesInProgress[asset]) return;
-                if (!this.parallelTrading && Object.values(this.assetTradesInProgress).some(v => v)) return;
-
-                const proposalId = this.assetProposalIds[asset];
-                if (!proposalId) return;
+            placeTrade() {
+                if (this.tradeInProgress || !this.currentProposalId) return;
 
                 this.send({
-                    buy: proposalId,
+                    buy: this.currentProposalId,
                     price: this.currentStake.toFixed(2)
                 });
 
-                this.assetTradesInProgress[asset] = true;
-                this.log(`[${asset}] Placing trade: Differ from ${this.assetSelectedDigits[asset]}, Stake: $${this.currentStake.toFixed(2)}`);
-
-                if (this.multiAssetEnabled) {
-                    this.updateAssetTabs();
-                    this.updateAssetStatusList();
-                }
+                this.tradeInProgress = true;
+                this.log(`Placing trade: Differ from ${this.selectedDigit}, Stake: $${this.currentStake.toFixed(2)}`);
             }
 
             subscribeToContract(contractId) {
@@ -1835,14 +1570,12 @@
             handleContractUpdate(contract) {
                 if (!contract.is_sold) return;
 
-                const asset = contract.underlying;
                 const won = contract.status === 'won';
                 const profit = parseFloat(contract.profit);
                 const exitSpot = contract.exit_tick_display_value;
-                const actualDigit = this.getLastDigit(parseFloat(exitSpot), asset);
-                const selectedDigit = this.assetSelectedDigits[asset];
+                const actualDigit = this.getLastDigit(parseFloat(exitSpot));
 
-                this.assetTradesInProgress[asset] = false;
+                this.tradeInProgress = false;
                 this.totalTrades++;
 
                 if (won) {
@@ -1850,35 +1583,21 @@
                     this.consecutiveLosses = 0;
                     this.martingaleStep = 0;
                     this.currentStake = this.initialStake;
-                    this.log(`[${asset}] ✅ WON: +${profit.toFixed(2)} (Digit: ${actualDigit}) | Martingale reset`, 'success');
-
-                    if (this.suspendedAssets.size > 0) {
-                        const toReactivate = this.suspendedAssets.values().next().value;
-                        this.reactivateAsset(toReactivate);
-                    }
+                    this.log(`✅ WON: +${profit.toFixed(2)} (Digit: ${actualDigit}) | Martingale reset`, 'success');
                 } else {
                     this.totalLosses++;
                     this.consecutiveLosses++;
                     this.martingaleStep++;
 
-                    // Track consecutive loss milestones
-                    if (this.consecutiveLosses === 2) {
-                        this.x2Losses++;
-                    } else if (this.consecutiveLosses === 3) {
-                        this.x3Losses++;
-                    } else if (this.consecutiveLosses === 4) {
-                        this.x4Losses++;
-                    }
+                    // Record martingale history
+                    this.martingaleHistory.push({
+                        step: this.martingaleStep,
+                        stake: this.currentStake,
+                        loss: Math.abs(profit),
+                        timestamp: Date.now()
+                    });
 
-                    // Track max consecutive losses
-                    if (this.consecutiveLosses > this.maxConsecutiveLosses) {
-                        this.maxConsecutiveLosses = this.consecutiveLosses;
-                    }
-
-                    if (this.suspendOnLoss && this.multiAssetEnabled) {
-                        this.suspendAsset(asset);
-                    }
-
+                    // Check if max martingale steps reached
                     if (this.martingaleStep >= this.config.martingaleSteps) {
                         this.log(`⚠️ Max martingale steps (${this.config.martingaleSteps}) reached!`, 'warning');
 
@@ -1893,38 +1612,44 @@
                             case 'reset':
                                 this.martingaleStep = 0;
                                 this.currentStake = this.initialStake;
+                                this.log(`Martingale reset to initial stake: ${this.initialStake.toFixed(2)}`, 'warning');
                                 break;
                             case 'continue':
+                                // Continue with the same multiplied stake
                                 this.currentStake = this.currentStake * this.config.multiplier;
+                                this.log(`Continuing with stake: ${this.currentStake.toFixed(2)}`, 'warning');
                                 break;
                         }
                     } else {
+                        // Apply martingale multiplier
                         this.currentStake = this.currentStake * this.config.multiplier;
                     }
 
-                    this.log(`[${asset}] ❌ LOST: -${Math.abs(profit).toFixed(2)} (Digit: ${actualDigit}) | Step ${this.martingaleStep}/${this.config.martingaleSteps}`, 'error');
+                    this.log(`❌ LOST: -${Math.abs(profit).toFixed(2)} (Digit: ${actualDigit}) | Step ${this.martingaleStep}/${this.config.martingaleSteps} | Next: ${this.currentStake.toFixed(2)}`, 'error');
                 }
 
                 this.totalPnL += profit;
 
+                // Record outcome for learning
                 this.ensembleDecisionMaker.recordOutcome(
-                    this.lastPredictions[asset] || {},
-                    selectedDigit,
+                    this.lastPredictions,
+                    this.selectedDigit,
                     actualDigit,
                     won
                 );
 
-                this.addTradeToHistory(won, profit, selectedDigit, actualDigit, asset);
+                // Add to trade history
+                this.addTradeToHistory(won, profit, this.selectedDigit, actualDigit);
+
+                // Update UI
                 this.updateStats();
                 this.updateMartingaleUI();
                 this.updateModelWeightsUI();
+
+                // Save state
                 this.saveState();
 
-                if (this.multiAssetEnabled) {
-                    this.updateAssetTabs();
-                    this.updateAssetStatusList();
-                }
-
+                // Check stop conditions
                 if (this.totalPnL <= -this.config.stopLoss) {
                     this.log('Stop loss reached. Stopping bot.', 'error');
                     this.stop();
@@ -1938,41 +1663,43 @@
                 }
             }
 
-            suspendAsset(asset) {
-                this.suspendedAssets.add(asset);
-                this.log(`[${asset}] Suspended due to loss`, 'warning');
-                this.updateAssetTabs();
-                this.updateAssetStatusList();
-            }
+            updateMartingaleUI() {
+                document.getElementById('currentMartingaleStep').textContent = this.martingaleStep;
+                document.getElementById('maxMartingaleSteps').textContent = this.config.martingaleSteps;
 
-            reactivateAsset(asset) {
-                this.suspendedAssets.delete(asset);
-                this.log(`[${asset}] Reactivated`, 'success');
-                this.updateAssetTabs();
-                this.updateAssetStatusList();
+                // Color code based on step
+                const stepEl = document.getElementById('currentMartingaleStep');
+                if (this.martingaleStep === 0) {
+                    stepEl.className = 'text-lg font-bold text-green-400';
+                } else if (this.martingaleStep < this.config.martingaleSteps / 2) {
+                    stepEl.className = 'text-lg font-bold text-yellow-400';
+                } else if (this.martingaleStep < this.config.martingaleSteps) {
+                    stepEl.className = 'text-lg font-bold text-orange-400';
+                } else {
+                    stepEl.className = 'text-lg font-bold text-red-400';
+                }
             }
 
             // UI Update Methods
-            updateUI(tick, digit, asset) {
+            updateUI(tick, digit) {
                 document.getElementById('lastPrice').textContent = tick.quote;
 
-                const data = this.assetData[asset];
-                if (!data) return;
-
-                const recentDigits = data.tickHistory.slice(-20);
-                const container = document.getElementById('recentDigits');
-                container.innerHTML = recentDigits.map((d, i) => {
+                // Update recent digits
+                const recentDigits = this.tickHistory.slice(-20);
+                const recentDigitsContainer = document.getElementById('recentDigits');
+                recentDigitsContainer.innerHTML = recentDigits.map((d, i) => {
                     const isLatest = i === recentDigits.length - 1;
                     return `<div class="digit-box w-8 h-8 flex items-center justify-center rounded ${isLatest ? 'bg-blue-500 ring-2 ring-blue-300' : 'bg-gray-700'} font-mono font-bold">${d}</div>`;
                 }).join('');
 
-                this.updateDigitDistribution(asset);
+                // Update digit distribution
+                this.updateDigitDistribution();
             }
 
-            updateDigitDistribution(asset) {
-                const probs = this.statisticalEngine.getDigitProbabilities(asset, true);
-                const hotDigits = this.statisticalEngine.getHotDigits(asset);
-                const coldDigits = this.statisticalEngine.getColdDigits(asset);
+            updateDigitDistribution() {
+                const probs = this.statisticalEngine.getDigitProbabilities(this.asset, true);
+                const hotDigits = this.statisticalEngine.getHotDigits(this.asset);
+                const coldDigits = this.statisticalEngine.getColdDigits(this.asset);
 
                 const container = document.getElementById('digitDistribution');
                 container.innerHTML = probs.map((prob, digit) => {
@@ -1980,8 +1707,13 @@
                     let colorClass = 'digit-neutral';
                     let icon = '';
 
-                    if (hotDigits.includes(digit)) { colorClass = 'digit-hot'; icon = '🔥'; }
-                    else if (coldDigits.includes(digit)) { colorClass = 'digit-cold'; icon = '❄️'; }
+                    if (hotDigits.includes(digit)) {
+                        colorClass = 'digit-hot';
+                        icon = '🔥';
+                    } else if (coldDigits.includes(digit)) {
+                        colorClass = 'digit-cold';
+                        icon = '❄️';
+                    }
 
                     return `
                     <div class="flex flex-col items-center">
@@ -1995,26 +1727,31 @@
             }
 
             updatePredictionUI(predictions, decision) {
+                // Statistical
                 if (predictions.statistical && predictions.statistical[0]) {
                     document.getElementById('statPrediction').textContent = predictions.statistical[0].digit;
                     document.getElementById('statConfidence').textContent = `${(predictions.statistical[0].prob * 100).toFixed(0)}% prob`;
                 }
 
+                // Pattern
                 if (predictions.pattern) {
                     document.getElementById('patternPrediction').textContent = predictions.pattern.mostLikely;
                     const conf = predictions.pattern.probabilities[predictions.pattern.mostLikely];
                     document.getElementById('patternConfidence').textContent = `${(conf * 100).toFixed(0)}% conf`;
                 }
 
+                // Neural
                 if (predictions.neural) {
                     const maxIdx = predictions.neural.indexOf(Math.max(...predictions.neural));
                     document.getElementById('neuralPrediction').textContent = maxIdx;
                     document.getElementById('neuralConfidence').textContent = `${(predictions.neural[maxIdx] * 100).toFixed(0)}% conf`;
                 }
 
+                // Ensemble
                 document.getElementById('ensemblePrediction').textContent = decision.digitToDiffer;
                 document.getElementById('ensembleConfidence').textContent = `${(decision.confidence * 100).toFixed(0)}% conf`;
 
+                // Update prediction bars
                 this.updatePredictionBars(decision.scores);
             }
 
@@ -2038,57 +1775,15 @@
             }
 
             updateLearningProgress() {
-                const progressBar = document.getElementById('learningProgress');
-                const observationsEl = document.getElementById('observations');
-                const modeEl = document.getElementById('learningMode');
-
-                if (this.learningMode) {
-                    const displayCount = Math.min(this.observationCount, this.config.learningThreshold);
-                    const progress = Math.min(100, (displayCount / this.config.learningThreshold) * 100);
-
-                    progressBar.style.width = `${progress}%`;
-                    progressBar.classList.remove('bg-green-500');
-                    progressBar.classList.add('bg-blue-500');
-
-                    observationsEl.textContent = `${displayCount} / ${this.config.learningThreshold}`;
-
-                    modeEl.textContent = 'Learning';
-                    modeEl.className = 'px-2 py-1 rounded text-xs bg-yellow-500/20 text-yellow-400';
-                } else {
-                    progressBar.style.width = '100%';
-                    progressBar.classList.remove('bg-blue-500');
-                    progressBar.classList.add('bg-green-500');
-
-                    observationsEl.textContent = `✓ Complete`;
-
-                    modeEl.textContent = 'Trading';
-                    modeEl.className = 'px-2 py-1 rounded text-xs bg-green-500/20 text-green-400';
-                }
-            }
-
-            updateMartingaleUI() {
-                document.getElementById('currentMartingaleStep').textContent = this.martingaleStep;
-                document.getElementById('maxMartingaleSteps').textContent = this.config.martingaleSteps;
-
-                const stepEl = document.getElementById('currentMartingaleStep');
-                if (this.martingaleStep === 0) stepEl.className = 'text-lg font-bold text-green-400';
-                else if (this.martingaleStep < this.config.martingaleSteps / 2) stepEl.className = 'text-lg font-bold text-yellow-400';
-                else if (this.martingaleStep < this.config.martingaleSteps) stepEl.className = 'text-lg font-bold text-orange-400';
-                else stepEl.className = 'text-lg font-bold text-red-400';
-
-                // Update current stake display in config section
-                document.getElementById('currentStakeDisplay').textContent = `$${this.currentStake.toFixed(2)}`;
+                const progress = (this.observationCount / this.config.learningThreshold) * 100;
+                document.getElementById('learningProgress').style.width = `${progress}%`;
+                document.getElementById('observations').textContent = `${this.observationCount} / ${this.config.learningThreshold}`;
             }
 
             updateStats() {
                 document.getElementById('totalTrades').textContent = this.totalTrades;
                 document.getElementById('totalWins').textContent = this.totalWins;
                 document.getElementById('totalLosses').textContent = this.totalLosses;
-
-                // Update consecutive losses display
-                document.getElementById('x2Losses').textContent = this.x2Losses;
-                document.getElementById('x3Losses').textContent = this.x3Losses;
-                document.getElementById('x4Losses').textContent = this.x4Losses;
 
                 const winRate = this.totalTrades > 0 ? (this.totalWins / this.totalTrades * 100) : 0;
                 document.getElementById('winRate').textContent = winRate.toFixed(1) + '%';
@@ -2099,23 +1794,24 @@
 
                 document.getElementById('currentStake').textContent = `$${this.currentStake.toFixed(2)}`;
 
-                const activeTrades = Object.values(this.assetTradesInProgress).filter(v => v).length;
-                document.getElementById('activeTrades').textContent = activeTrades;
-
-                const selectedAsset = this.multiAssetEnabled ? this.selectedAsset : document.getElementById('assetSelect').value;
-                const entropy = this.statisticalEngine.calculateEntropy(selectedAsset);
+                // Update learning metrics
+                const entropy = this.statisticalEngine.calculateEntropy(this.asset);
                 document.getElementById('marketEntropy').textContent = (entropy * 100).toFixed(1) + '%';
 
                 const neuralMetrics = this.neuralEngine.getPerformanceMetrics();
                 document.getElementById('neuralAccuracy').textContent = (neuralMetrics.accuracy * 100).toFixed(1) + '%';
-
-                this.updateLearningProgress();
             }
 
             updateModelWeightsUI() {
                 const weights = this.ensembleDecisionMaker.modelWeights;
                 const container = document.getElementById('modelWeights');
-                const colors = { statistical: 'bg-orange-500', pattern: 'bg-purple-500', neural: 'bg-blue-500', streak: 'bg-green-500' };
+
+                const colors = {
+                    statistical: 'bg-orange-500',
+                    pattern: 'bg-purple-500',
+                    neural: 'bg-blue-500',
+                    streak: 'bg-green-500'
+                };
 
                 container.innerHTML = Object.entries(weights).map(([model, weight]) => {
                     const pct = (weight * 100).toFixed(0);
@@ -2133,22 +1829,25 @@
                 }).join('');
             }
 
-            addTradeToHistory(won, profit, predicted, actual, asset = null) {
+            addTradeToHistory(won, profit, predicted, actual) {
                 const container = document.getElementById('tradeHistory');
-                if (this.tradeHistory.length === 0) container.innerHTML = '';
 
-                this.tradeHistory.unshift({ won, profit, predicted, actual, asset, time: new Date() });
-                if (this.tradeHistory.length > 50) this.tradeHistory.pop();
+                if (this.tradeHistory.length === 0) {
+                    container.innerHTML = '';
+                }
+
+                this.tradeHistory.unshift({ won, profit, predicted, actual, time: new Date() });
+                if (this.tradeHistory.length > 50) {
+                    this.tradeHistory.pop();
+                }
 
                 document.getElementById('tradeCount').textContent = this.tradeHistory.length;
 
-                const assetLabel = asset ? `<span class="text-blue-400 text-xs">[${asset}]</span>` : '';
                 const tradeHtml = `
                 <div class="glass rounded-lg p-3 ${won ? 'trade-win' : 'trade-loss'}">
                     <div class="flex justify-between items-center">
                         <div class="flex items-center gap-2">
                             <span class="text-lg">${won ? '✅' : '❌'}</span>
-                            ${assetLabel}
                             <span>Differ from ${predicted}</span>
                             <span class="text-gray-500">→</span>
                             <span>Actual: ${actual}</span>
@@ -2161,7 +1860,11 @@
             `;
 
                 container.insertAdjacentHTML('afterbegin', tradeHtml);
-                while (container.children.length > 50) container.removeChild(container.lastChild);
+
+                // Keep only last 50 in DOM
+                while (container.children.length > 50) {
+                    container.removeChild(container.lastChild);
+                }
             }
 
             updateConnectionStatus(connected) {
@@ -2184,10 +1887,26 @@
             log(message, type = 'info') {
                 const container = document.getElementById('activityLog');
                 const time = new Date().toLocaleTimeString();
-                const colors = { info: 'text-gray-300', success: 'text-green-400', error: 'text-red-400', warning: 'text-yellow-400' };
 
-                container.insertAdjacentHTML('afterbegin', `<div class="${colors[type]}"><span class="text-gray-500">[${time}]</span> ${message}</div>`);
-                while (container.children.length > 50) container.removeChild(container.lastChild);
+                const colors = {
+                    info: 'text-gray-300',
+                    success: 'text-green-400',
+                    error: 'text-red-400',
+                    warning: 'text-yellow-400'
+                };
+
+                const logHtml = `
+                <div class="${colors[type]}">
+                    <span class="text-gray-500">[${time}]</span> ${message}
+                </div>
+            `;
+
+                container.insertAdjacentHTML('afterbegin', logHtml);
+
+                while (container.children.length > 50) {
+                    container.removeChild(container.lastChild);
+                }
+
                 console.log(`[${time}] ${message}`);
             }
 
@@ -2203,13 +1922,9 @@
                     totalWins: this.totalWins,
                     totalLosses: this.totalLosses,
                     totalPnL: this.totalPnL,
-                    x2Losses: this.x2Losses,
-                    x3Losses: this.x3Losses,
-                    x4Losses: this.x4Losses,
-                    maxConsecutiveLosses: this.maxConsecutiveLosses,
-                    tradeHistory: this.tradeHistory.slice(0, 100),
-                    assetData: this.assetData
+                    tradeHistory: this.tradeHistory.slice(0, 100)
                 };
+
                 localStorage.setItem('digitDifferBotState', JSON.stringify(state));
             }
 
@@ -2218,22 +1933,24 @@
                     const saved = localStorage.getItem('digitDifferBotState');
                     if (saved) {
                         const state = JSON.parse(saved);
+
                         this.statisticalEngine.importState(state.statisticalEngine || {});
                         this.patternEngine.importState(state.patternEngine || {});
                         this.neuralEngine.importWeights(state.neuralEngine || {});
                         this.ensembleDecisionMaker.importState(state.ensembleDecisionMaker || {});
+
                         this.observationCount = state.observationCount || 0;
                         this.totalTrades = state.totalTrades || 0;
                         this.totalWins = state.totalWins || 0;
                         this.totalLosses = state.totalLosses || 0;
                         this.totalPnL = state.totalPnL || 0;
-                        this.x2Losses = state.x2Losses || 0;
-                        this.x3Losses = state.x3Losses || 0;
-                        this.x4Losses = state.x4Losses || 0;
-                        this.maxConsecutiveLosses = state.maxConsecutiveLosses || 0;
                         this.tradeHistory = state.tradeHistory || [];
-                        this.assetData = state.assetData || {};
-                        if (this.observationCount >= this.config.learningThreshold) this.learningMode = false;
+
+                        if (this.observationCount >= this.config.learningThreshold) {
+                            this.learningMode = false;
+                        }
+
+                        console.log('State loaded from localStorage');
                     }
                 } catch (e) {
                     console.error('Error loading state:', e);
@@ -2253,25 +1970,7 @@
                     return;
                 }
 
-                // Get notification email
-                this.notificationEmail = document.getElementById('notificationEmail').value.trim();
-
-                this.multiAssetEnabled = document.getElementById('multiAssetEnabled').checked;
-                this.parallelTrading = document.getElementById('parallelTrading').checked;
-                this.suspendOnLoss = document.getElementById('suspendOnLoss').checked;
-
-                if (this.multiAssetEnabled) {
-                    this.updateActiveAssets();
-                    if (this.activeAssets.length === 0) {
-                        this.log('Please select at least one asset', 'error');
-                        return;
-                    }
-                    this.selectedAsset = this.activeAssets[0];
-                } else {
-                    this.activeAssets = [document.getElementById('assetSelect').value];
-                    this.selectedAsset = this.activeAssets[0];
-                }
-
+                this.asset = document.getElementById('assetSelect').value;
                 this.initialStake = parseFloat(document.getElementById('stakeInput').value) || 1;
                 this.currentStake = this.initialStake;
                 this.config.tickDuration = parseInt(document.getElementById('durationSelect').value) || 1;
@@ -2279,23 +1978,26 @@
                 this.config.takeProfit = parseFloat(document.getElementById('takeProfit').value) || 5;
                 this.config.minConfidence = parseFloat(document.getElementById('minConfidence').value) || 0.12;
                 this.ensembleDecisionMaker.confidenceThreshold = this.config.minConfidence;
+
+                // Martingale settings
                 this.config.multiplier = parseFloat(document.getElementById('martingaleMultiplier').value) || 2.2;
                 this.config.martingaleSteps = parseInt(document.getElementById('martingaleSteps').value) || 5;
                 this.config.resetAfterMax = document.getElementById('resetAfterMax').value || 'reset';
 
+                // Reset martingale state
                 this.martingaleStep = 0;
-                this.suspendedAssets.clear();
+                this.martingaleHistory = [];
+
+                // Update UI
                 this.updateMartingaleUI();
 
                 this.isRunning = true;
                 this.connect();
 
                 document.getElementById('startBtn').textContent = '⏹ Stop Bot';
-                document.getElementById('startBtn').className = 'w-full bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold py-3 px-6 rounded-lg transition-all text-lg';
-                document.getElementById('currentAssetDisplay').textContent = `[${this.selectedAsset}]`;
+                document.getElementById('startBtn').className = 'flex-1 bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white font-semibold py-2 px-6 rounded-lg transition-all';
 
-                const mode = this.multiAssetEnabled ? `Multi-Asset (${this.activeAssets.length})` : 'Single Asset';
-                this.log(`Bot started | ${mode} | Martingale: ${this.config.multiplier}x, ${this.config.martingaleSteps} steps`, 'success');
+                this.log(`Bot started | Martingale: ${this.config.multiplier}x, ${this.config.martingaleSteps} steps, ${this.config.resetAfterMax}`, 'success');
             }
 
             stop() {
@@ -2303,15 +2005,18 @@
                 this.disconnect();
 
                 document.getElementById('startBtn').textContent = '▶ Start Bot';
-                document.getElementById('startBtn').className = 'w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold py-3 px-6 rounded-lg transition-all text-lg';
+                document.getElementById('startBtn').className = 'flex-1 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-semibold py-2 px-6 rounded-lg transition-all';
 
                 this.log('Bot stopped');
                 this.saveState();
             }
 
             toggle() {
-                if (this.isRunning) this.stop();
-                else this.start();
+                if (this.isRunning) {
+                    this.stop();
+                } else {
+                    this.start();
+                }
             }
         }
 
@@ -2320,15 +2025,20 @@
         // ============================================================================
         const bot = new DigitDifferBot();
 
-        function toggleBot() { bot.toggle(); }
-        function clearData() {
-            if (confirm('Are you sure you want to clear all learning data?')) bot.clearState();
+        function toggleBot() {
+            bot.toggle();
         }
 
+        function clearData() {
+            if (confirm('Are you sure you want to clear all learning data? This cannot be undone.')) {
+                bot.clearState();
+            }
+        }
+
+        // Save/Load User Settings Functions
         function saveSettings() {
             const settings = {
                 apiToken: document.getElementById('apiToken').value,
-                notificationEmail: document.getElementById('notificationEmail').value,
                 asset: document.getElementById('assetSelect').value,
                 stake: document.getElementById('stakeInput').value,
                 tickDuration: document.getElementById('durationSelect').value,
@@ -2338,35 +2048,37 @@
                 martingaleMultiplier: document.getElementById('martingaleMultiplier').value,
                 martingaleSteps: document.getElementById('martingaleSteps').value,
                 resetAfterMax: document.getElementById('resetAfterMax').value,
-                multiAssetEnabled: document.getElementById('multiAssetEnabled').checked,
-                selectedAssets: Array.from(document.querySelectorAll('.asset-checkbox:checked')).map(cb => cb.value),
-                parallelTrading: document.getElementById('parallelTrading').checked,
-                suspendOnLoss: document.getElementById('suspendOnLoss').checked,
                 savedAt: new Date().toISOString()
             };
 
             localStorage.setItem('digitDifferBotSettings', JSON.stringify(settings));
+
+            // Show success notification
             bot.log('✅ Settings saved successfully!', 'success');
 
             // Visual feedback
-            const btn = event.target.closest('button');
-            if (btn) {
-                const originalHTML = btn.innerHTML;
-                btn.innerHTML = '<span>✓</span> <span class="hidden sm:inline">Saved!</span>';
-                btn.classList.add('bg-green-600');
-                setTimeout(() => { btn.innerHTML = originalHTML; btn.classList.remove('bg-green-600'); }, 1500);
-            }
+            const btn = event.target;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '✓';
+            btn.classList.add('bg-green-600');
+            setTimeout(() => {
+                btn.innerHTML = originalText;
+                btn.classList.remove('bg-green-600');
+            }, 1500);
         }
 
         function loadSettings() {
             try {
                 const saved = localStorage.getItem('digitDifferBotSettings');
-                if (!saved) { bot.log('⚠️ No saved settings found.', 'warning'); return; }
+                if (!saved) {
+                    bot.log('⚠️ No saved settings found.', 'warning');
+                    return;
+                }
 
                 const settings = JSON.parse(saved);
 
+                // Apply settings to form fields
                 if (settings.apiToken) document.getElementById('apiToken').value = settings.apiToken;
-                if (settings.notificationEmail) document.getElementById('notificationEmail').value = settings.notificationEmail;
                 if (settings.asset) document.getElementById('assetSelect').value = settings.asset;
                 if (settings.stake) document.getElementById('stakeInput').value = settings.stake;
                 if (settings.tickDuration) document.getElementById('durationSelect').value = settings.tickDuration;
@@ -2377,48 +2089,39 @@
                 if (settings.martingaleSteps) document.getElementById('martingaleSteps').value = settings.martingaleSteps;
                 if (settings.resetAfterMax) document.getElementById('resetAfterMax').value = settings.resetAfterMax;
 
-                // Multi-asset settings
-                if (settings.multiAssetEnabled !== undefined) {
-                    document.getElementById('multiAssetEnabled').checked = settings.multiAssetEnabled;
-                    document.getElementById('multiAssetOptions').classList.toggle('hidden', !settings.multiAssetEnabled);
-                    document.getElementById('assetTabs').classList.toggle('hidden', !settings.multiAssetEnabled);
-                    document.getElementById('multiAssetStatus').classList.toggle('hidden', !settings.multiAssetEnabled);
-                }
-                if (settings.selectedAssets) {
-                    document.querySelectorAll('.asset-checkbox').forEach(cb => {
-                        cb.checked = settings.selectedAssets.includes(cb.value);
-                    });
-                }
-                if (settings.parallelTrading !== undefined) document.getElementById('parallelTrading').checked = settings.parallelTrading;
-                if (settings.suspendOnLoss !== undefined) document.getElementById('suspendOnLoss').checked = settings.suspendOnLoss;
-
+                // Update martingale UI display
                 document.getElementById('maxMartingaleSteps').textContent = settings.martingaleSteps || '5';
 
-                bot.log(`📂 Settings loaded (saved: ${new Date(settings.savedAt).toLocaleString()})`, 'success');
+                const savedDate = settings.savedAt ? new Date(settings.savedAt).toLocaleString() : 'Unknown';
+                bot.log(`📂 Settings loaded (saved: ${savedDate})`, 'success');
 
                 // Visual feedback
-                const btn = event.target.closest('button');
-                if (btn) {
-                    const originalHTML = btn.innerHTML;
-                    btn.innerHTML = '<span>✓</span> <span class="hidden sm:inline">Loaded!</span>';
-                    btn.classList.add('bg-green-600');
-                    setTimeout(() => { btn.innerHTML = originalHTML; btn.classList.remove('bg-green-600'); }, 1500);
-                }
+                const btn = event.target;
+                const originalText = btn.innerHTML;
+                btn.innerHTML = '✓';
+                btn.classList.add('bg-green-600');
+                setTimeout(() => {
+                    btn.innerHTML = originalText;
+                    btn.classList.remove('bg-green-600');
+                }, 1500);
+
             } catch (e) {
                 console.error('Error loading settings:', e);
                 bot.log('❌ Error loading settings', 'error');
             }
         }
 
-        // Initialize
+        // Initialize UI on load
         document.addEventListener('DOMContentLoaded', () => {
             bot.updateStats();
             bot.updateLearningProgress();
+
+            // Restore trade history UI
             if (bot.tradeHistory.length > 0) {
                 const container = document.getElementById('tradeHistory');
                 container.innerHTML = '';
                 bot.tradeHistory.forEach(trade => {
-                    bot.addTradeToHistory(trade.won, trade.profit, trade.predicted, trade.actual, trade.asset);
+                    bot.addTradeToHistory(trade.won, trade.profit, trade.predicted, trade.actual);
                 });
             }
         });

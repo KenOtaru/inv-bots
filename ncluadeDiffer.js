@@ -1,8 +1,8 @@
 /**
- * Enhanced Deriv Digit Differ Trading Bot
+ * Enhanced Deriv Smart Differ Trading Bot
  * Version 2.0 - Advanced AI Learning System
  * 
- * Digit Differ: Win if the last digit of the final tick is DIFFERENT from your chosen digit
+ * Smart Differ: Win if the last digit of the final tick is DIFFERENT from your chosen digit
  * Base Win Rate: ~90% (9/10 outcomes win)
  * Strategy: Choose the digit most likely to appear, bet it will DIFFER
  * 
@@ -1082,7 +1082,7 @@ class DigitPersistenceManager {
 }
 
 // ============================================================================
-// MAIN ENHANCED DIGIT DIFFER TRADING BOT
+// MAIN ENHANCED Smart DIFFER TRADING BOT
 // ============================================================================
 
 class EnhancedDigitDifferBot {
@@ -1527,7 +1527,7 @@ class EnhancedDigitDifferBot {
             price: this.currentStake.toFixed(2)
         };
 
-        console.log(`🚀 Placing DIGIT DIFFER trade`);
+        console.log(`🚀 Placing Smart DIFFER trade`);
         console.log(`   Asset: [${asset}] | Digit: ${this.selectedDigit} | Stake: $${this.currentStake.toFixed(2)}`);
 
         this.sendRequest(request);
@@ -1701,7 +1701,7 @@ class EnhancedDigitDifferBot {
         const ensemblePerf = this.ensembleDecisionMaker.getPerformanceSummary();
 
         console.log('═══════════════════════════════════════════════════════════');
-        console.log('              DIGIT DIFFER TRADING SUMMARY');
+        console.log('              Smart DIFFER TRADING SUMMARY');
         console.log('═══════════════════════════════════════════════════════════');
         console.log(`Total Trades: ${this.totalTrades}`);
         console.log(`Wins: ${this.totalWins} | Losses: ${this.totalLosses}`);
@@ -1738,7 +1738,7 @@ class EnhancedDigitDifferBot {
             .join('\n        ');
 
         const summaryText = `
-    ==================== Digit Differ Bot Summary ====================
+    ==================== Smart Differ Bot Summary ====================
     
     TRADING PERFORMANCE:
     Total Trades: ${this.totalTrades}
@@ -1771,7 +1771,7 @@ class EnhancedDigitDifferBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: 'Enhanced Digit Differ Bot - Performance Summary',
+            subject: 'Enhanced Smart Differ Bot - Performance Summary',
             text: summaryText
         };
 
@@ -1814,7 +1814,7 @@ class EnhancedDigitDifferBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: `Digit Differ Bot - Loss Alert [${asset}]`,
+            subject: `Smart Differ Bot - Loss Alert [${asset}]`,
             text: summaryText
         };
 
