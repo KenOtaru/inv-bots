@@ -799,93 +799,78 @@ class DigitNeuralEngine {
 
 class DigitEnsembleDecisionMaker {
     constructor() {
-        this.modelWeights = {
-            statistical: 0.30,
-            pattern: 0.25,
-            neural: 0.25,
-            streak: 0.20
-        };
-
+        this.modelWeights = { statistical: 0.30, pattern: 0.25, neural: 0.25, streak: 0.20 };
         this.modelPerformance = {
             statistical: { correct: 0, total: 0 },
             pattern: { correct: 0, total: 0 },
             neural: { correct: 0, total: 0 },
             streak: { correct: 0, total: 0 }
         };
-
         this.recentDecisions = [];
-        this.confidenceThreshold = 0.15; // Minimum probability advantage to trade
+        this.confidenceThreshold = 0.90;
     }
 
-    /**
-     * Combine all model predictions to select best digit to DIFFER from
-     */
     selectDigitToDiffer(predictions) {
         const combinedScores = Array(10).fill(0);
         const details = {};
 
-        // Statistical model contribution
         if (predictions.statistical) {
             const scores = predictions.statistical;
             for (let i = 0; i < 10; i++) {
-                combinedScores[i] += scores[i].score * this.modelWeights.statistical;
+                const scoreItem = scores.find(s => s.digit === i);
+                if (scoreItem) combinedScores[i] += scoreItem.score * this.modelWeights.statistical;
             }
             details.statistical = scores.slice(0, 3).map(s => `${s.digit}:${s.score.toFixed(1)}`).join(', ');
         }
 
-        // Pattern model contribution
         if (predictions.pattern && predictions.pattern.probabilities) {
             for (let i = 0; i < 10; i++) {
-                // Higher probability = more likely to appear = better to differ from
                 combinedScores[i] += predictions.pattern.probabilities[i] * 100 * this.modelWeights.pattern;
             }
             details.pattern = `Most likely: ${predictions.pattern.mostLikely}`;
         }
 
-        // Neural model contribution
         if (predictions.neural) {
             for (let i = 0; i < 10; i++) {
                 combinedScores[i] += predictions.neural[i] * 100 * this.modelWeights.neural;
             }
             const maxNeural = predictions.neural.indexOf(Math.max(...predictions.neural));
-            details.neural = `Predicted: ${maxNeural} (${(predictions.neural[maxNeural] * 100).toFixed(1)}%)`;
+            details.neural = `Predicted: ${maxNeural}`;
         }
 
-        // Streak model contribution
-        if (predictions.streak) {
-            for (let i = 0; i < 10; i++) {
-                if (predictions.streak.streaking === i) {
-                    // Digit is streaking, might continue
-                    combinedScores[i] += 15 * this.modelWeights.streak;
-                }
-            }
-            details.streak = predictions.streak.streaking !== null ?
-                `Streaking: ${predictions.streak.streaking}` : 'No streak';
+        if (predictions.streak && predictions.streak.streaking !== null) {
+            combinedScores[predictions.streak.streaking] += 15 * this.modelWeights.streak;
+            details.streak = `Streaking: ${predictions.streak.streaking}`;
         }
 
-        // Find best digit (highest combined score = most likely to appear)
-        const ranked = combinedScores
-            .map((score, digit) => ({ digit, score }))
-            .sort((a, b) => b.score - a.score);
-
-        const bestDigit = ranked[0].digit;
-        const secondBest = ranked[1].digit;
-
-        // Calculate confidence (difference between best and average)
-        const avgScore = combinedScores.reduce((a, b) => a + b, 0) / 10;
-        const confidence = (ranked[0].score - avgScore) / avgScore;
-
-        // Probability that best digit will appear (normalized)
+        const ranked = combinedScores.map((score, digit) => ({ digit, score })).sort((a, b) => b.score - a.score);
         const totalScore = combinedScores.reduce((a, b) => a + b, 0);
-        const bestProbability = ranked[0].score / totalScore;
+        const avgScore = totalScore / 10;
+        const maxScore = Math.max(...combinedScores);
+        const minScore = Math.min(...combinedScores);
+
+        // Fixed confidence calculation - always between 0 and 1
+        let confidence = 0;
+        if (avgScore > 0) {
+            const rawConfidence = (ranked[0].score - avgScore) / avgScore;
+            // Use sigmoid-like normalization to keep between 0 and 1
+            confidence = Math.min(1, Math.max(0, rawConfidence / (1 + Math.abs(rawConfidence)) + 0.5));
+        }
+
+        // Secondary confidence measure based on score spread
+        const scoreSpread = maxScore - minScore;
+        const spreadConfidence = totalScore > 0 ? Math.min(1, scoreSpread / (totalScore * 0.3)) : 0;
+
+        // Blend both confidence measures and ensure it's capped at 1
+        const finalConfidence = Math.min(1, (confidence + spreadConfidence) / 2);
 
         return {
-            digitToDiffer: bestDigit,
-            alternativeDigit: secondBest,
+            digitToDiffer: ranked[0].digit,
+            alternativeDigit: ranked[1].digit,
             scores: ranked,
-            confidence,
-            probability: bestProbability,
-            shouldTrade: confidence > this.confidenceThreshold,
+            confidence: finalConfidence,
+            probability: totalScore > 0 ? ranked[0].score / totalScore : 0.1,
+            shouldTrade: finalConfidence > this.confidenceThreshold,
             details
         };
     }
