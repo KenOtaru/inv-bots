@@ -1112,8 +1112,7 @@ class EnhancedDigitDifferBot {
         this.tradeInProgress = false;
         this.endOfDay = false;
         this.Pause = false;
-        this.selectedDigit = null;
-        this.selectedAsset = null;
+        this.Pause = false;
         this.isWinTrade = false;
 
         // Digit-specific tracking
@@ -1142,6 +1141,7 @@ class EnhancedDigitDifferBot {
                 currentProposalId: null,
                 tradeInProgress: false,
                 consecutiveLosses: 0,
+                selectedDigit: null
             };
             this.statisticalEngine.initAsset(asset);
             this.patternEngine.initAsset(asset);
@@ -1439,8 +1439,10 @@ class EnhancedDigitDifferBot {
             console.log(`   Confidence: ${(decision.confidence * 100).toFixed(1)}%`);
             console.log(`   Models: ${JSON.stringify(decision.details)}`);
 
-            this.selectedDigit = decision.digitToDiffer;
-            this.selectedAsset = asset;
+            console.log(`   Confidence: ${(decision.confidence * 100).toFixed(1)}%`);
+            console.log(`   Models: ${JSON.stringify(decision.details)}`);
+
+            this.assetStates[asset].selectedDigit = decision.digitToDiffer;
             this.requestProposal(asset, decision.digitToDiffer);
         }
     }
@@ -1518,7 +1520,7 @@ class EnhancedDigitDifferBot {
         };
 
         console.log(`🚀 Placing Smart DIFFER trade`);
-        console.log(`   Asset: [${asset}] | Digit: ${this.selectedDigit} | Stake: $${this.currentStake.toFixed(2)}`);
+        console.log(`   Asset: [${asset}] | Digit: ${assetState.selectedDigit} | Stake: $${this.currentStake.toFixed(2)}`);
 
         this.sendRequest(request);
         this.tradeInProgress = true;
@@ -1551,12 +1553,14 @@ class EnhancedDigitDifferBot {
             assetState.tradeInProgress = false;
         }
 
+        const predictedDigit = assetState ? assetState.selectedDigit : null;
+
         console.log(`[${asset}] Trade Result: ${won ? '✅ WON' : '❌ LOST'}`);
-        console.log(`   Predicted to differ from: ${this.selectedDigit} | Actual: ${actualDigit}`);
+        console.log(`   Predicted to differ from: ${predictedDigit} | Actual: ${actualDigit}`);
         console.log(`   Profit: $${profit.toFixed(2)}`);
 
         // Record outcome for learning
-        this.recordTradeOutcome(asset, won, this.selectedDigit, actualDigit, profit);
+        this.recordTradeOutcome(asset, won, predictedDigit, actualDigit, profit);
 
         this.totalTrades++;
 
@@ -1588,7 +1592,9 @@ class EnhancedDigitDifferBot {
             else if (this.consecutiveLosses === 4) this.consecutiveLosses4++;
             else if (this.consecutiveLosses === 5) this.consecutiveLosses5++;
 
-            this.sendLossEmail(asset, actualDigit);
+            this.isWinTrade = false;
+
+            this.sendLossEmail(asset, actualDigit, predictedDigit);
         }
 
         this.totalProfitLoss += profit;
@@ -1790,7 +1796,7 @@ class EnhancedDigitDifferBot {
         }
     }
 
-    async sendLossEmail(asset, actualDigit) {
+    async sendLossEmail(asset, actualDigit, predictedDigit) {
         const transporter = nodemailer.createTransport(this.emailConfig);
 
         const recentTrades = this.digitTradeHistory.slice(-10);
@@ -1803,7 +1809,7 @@ class EnhancedDigitDifferBot {
     
     TRADE DETAILS:
     Asset: ${asset}
-    Predicted to differ from: ${this.selectedDigit}
+    Predicted to differ from: ${predictedDigit}
     Actual digit: ${actualDigit}
     
     CURRENT STATUS:
