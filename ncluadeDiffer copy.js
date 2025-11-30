@@ -1101,7 +1101,7 @@ class EnhancedDigitDifferBot {
             maxConsecutiveLosses: config.maxConsecutiveLosses || 5,
             stopLoss: config.stopLoss || 50,
             takeProfit: config.takeProfit || 20,
-            requiredHistoryLength: config.requiredHistoryLength || 100,
+            requiredHistoryLength: config.requiredHistoryLength || 200,
             maxReconnectAttempts: config.maxReconnectAttempts || 10000,
             reconnectInterval: config.reconnectInterval || 5000,
             minWaitTime: config.minWaitTime || 3000,
@@ -1121,6 +1121,11 @@ class EnhancedDigitDifferBot {
         this.totalTrades = 0;
         this.totalWins = 0;
         this.totalLosses = 0;
+        this.consecutiveLosses = 0;
+        this.consecutiveLosses2 = 0;
+        this.consecutiveLosses3 = 0;
+        this.consecutiveLosses4 = 0;
+        this.consecutiveLosses5 = 0;
         this.totalProfitLoss = 0;
         this.tradeInProgress = false;
         this.endOfDay = false;
@@ -1223,7 +1228,7 @@ class EnhancedDigitDifferBot {
     // ========================================================================
 
     connect() {
-        if (!this.Pause) {
+        if (!this.endOfDay) {
             console.log('Attempting to connect to Deriv API...');
             this.ws = new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
 
@@ -1248,7 +1253,7 @@ class EnhancedDigitDifferBot {
             this.ws.on('close', () => {
                 console.log('Disconnected from Deriv API');
                 this.connected = false;
-                if (!this.Pause) {
+                if (!this.endOfDay) {
                     this.handleDisconnect();
                 }
             });
@@ -1583,14 +1588,17 @@ class EnhancedDigitDifferBot {
         } else {
             this.totalLosses++;
             this.consecutiveLosses++;
-            this.currentStake = Math.min(
-                this.currentStake * this.config.multiplier,
-                this.config.stopLoss * 0.5
-            );
+            this.currentStake = this.currentStake * this.config.multiplier;
 
             if (assetState) {
                 assetState.consecutiveLosses++;
             }
+
+            // Update global consecutive loss counters
+            if (this.consecutiveLosses === 2) this.consecutiveLosses2++;
+            else if (this.consecutiveLosses === 3) this.consecutiveLosses3++;
+            else if (this.consecutiveLosses === 4) this.consecutiveLosses4++;
+            else if (this.consecutiveLosses === 5) this.consecutiveLosses5++;
 
             this.sendLossEmail(asset, actualDigit);
         }
@@ -1628,9 +1636,11 @@ class EnhancedDigitDifferBot {
 
         this.tradeInProgress = false;
 
-        setTimeout(() => {
-            this.tradeInProgress = false;
-        }, waitTime);
+        if (!this.endOfDay) {
+            setTimeout(() => {
+                this.tradeInProgress = false;
+            }, waitTime);
+        }
     }
 
     recordTradeOutcome(asset, won, predictedDigit, actualDigit, profit) {
@@ -1703,12 +1713,16 @@ class EnhancedDigitDifferBot {
         const ensemblePerf = this.ensembleDecisionMaker.getPerformanceSummary();
 
         console.log('═══════════════════════════════════════════════════════════');
-        console.log('              DIGIT DIFFER TRADING SUMMARY');
+        console.log('              Smart DIFFER TRADING SUMMARY');
         console.log('═══════════════════════════════════════════════════════════');
         console.log(`Total Trades: ${this.totalTrades}`);
         console.log(`Wins: ${this.totalWins} | Losses: ${this.totalLosses}`);
         console.log(`Win Rate: ${this.totalTrades > 0 ? ((this.totalWins / this.totalTrades) * 100).toFixed(2) : 0}%`);
         console.log(`Total P/L: $${this.totalProfitLoss.toFixed(2)}`);
+        console.log(`x2 Losses2: ${this.consecutiveLosses2}`);
+        console.log(`x3 Losses3: ${this.consecutiveLosses3}`);
+        console.log(`x4 Losses4: ${this.consecutiveLosses4}`);
+        console.log(`x5 Losses5: ${this.consecutiveLosses5}`);
         console.log(`Current Stake: $${this.currentStake.toFixed(2)}`);
         console.log('───────────────────────────────────────────────────────────');
         console.log(`[${asset}] Market Entropy: ${(entropy * 100).toFixed(1)}%`);
@@ -1740,40 +1754,44 @@ class EnhancedDigitDifferBot {
             .join('\n        ');
 
         const summaryText = `
-    ==================== Digit Differ Bot Summary ====================
-    
-    TRADING PERFORMANCE:
-    Total Trades: ${this.totalTrades}
-    Wins: ${this.totalWins} | Losses: ${this.totalLosses}
-    Win Rate: ${this.totalTrades > 0 ? ((this.totalWins / this.totalTrades) * 100).toFixed(2) : 0}%
-    
-    FINANCIAL:
-    Current Stake: $${this.currentStake.toFixed(2)}
-    Total P/L: $${this.totalProfitLoss.toFixed(2)}
-    
-    AI LEARNING SYSTEM:
-    ─────────────────────────────────
-    Neural Network:
-        Accuracy: ${(neuralMetrics.accuracy * 100).toFixed(1)}%
-        Trend: ${neuralMetrics.trend}
-    
-    Model Performance:
-        ${modelPerf || 'No model data yet'}
-    
-    MARKET ANALYSIS:
-    ${this.assets.map(a => {
+        ==================== Smart Differ Bot Summary ====================
+        
+        TRADING PERFORMANCE:
+        Total Trades: ${this.totalTrades}
+        Wins: ${this.totalWins} | Losses: ${this.totalLosses}
+        x2 Losses2: ${this.consecutiveLosses2}
+        x3 Losses3: ${this.consecutiveLosses3}
+        x4 Losses4: ${this.consecutiveLosses4}
+        x5 Losses5: ${this.consecutiveLosses5}
+        Win Rate: ${this.totalTrades > 0 ? ((this.totalWins / this.totalTrades) * 100).toFixed(2) : 0}%
+        
+        FINANCIAL:
+        Current Stake: $${this.currentStake.toFixed(2)}
+        Total P/L: $${this.totalProfitLoss.toFixed(2)}
+        
+        AI LEARNING SYSTEM:
+        ─────────────────────────────────
+        Neural Network:
+            Accuracy: ${(neuralMetrics.accuracy * 100).toFixed(1)}%
+            Trend: ${neuralMetrics.trend}
+        
+        Model Performance:
+            ${modelPerf || 'No model data yet'}
+        
+        MARKET ANALYSIS:
+        ${this.assets.map(a => {
             const entropy = this.statisticalEngine.calculateEntropy(a);
             const hotDigits = this.statisticalEngine.getHotDigits(a);
             return `${a}: Entropy=${(entropy * 100).toFixed(1)}%, Hot Digits=[${hotDigits.join(',')}]`;
         }).join('\n    ')}
-    
-    ===================================================================
-        `;
+        
+        ===================================================================
+            `;
 
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: 'Enhanced Digit Differ Bot - Performance Summary',
+            subject: 'Smart Differ Bot - Performance Summary',
             text: summaryText
         };
 
@@ -1784,7 +1802,7 @@ class EnhancedDigitDifferBot {
         }
     }
 
-    async sendLossEmail(asset, actualDigit) {
+    async sendLossEmail(asset, actualDigit, predictedDigit) {
         const transporter = nodemailer.createTransport(this.emailConfig);
 
         const recentTrades = this.digitTradeHistory.slice(-10);
@@ -1793,30 +1811,33 @@ class EnhancedDigitDifferBot {
         ).join('\n        ');
 
         const summaryText = `
-    ==================== LOSS ALERT ====================
-    
-    TRADE DETAILS:
-    Asset: ${asset}
-    Predicted to differ from: ${this.selectedDigit}
-    Actual digit: ${actualDigit}
-    
-    CURRENT STATUS:
-    Total Trades: ${this.totalTrades}
-    Wins: ${this.totalWins} | Losses: ${this.totalLosses}
-    Consecutive Losses: ${this.consecutiveLosses}
-    Current Stake: $${this.currentStake.toFixed(2)}
-    Total P/L: $${this.totalProfitLoss.toFixed(2)}
-    
-    RECENT TRADES:
-        ${recentAnalysis}
-    
-    ====================================================
-        `;
+        ==================== LOSS ALERT ====================
+        
+        TRADE DETAILS:
+        Asset: ${asset}
+        Predicted to differ from: ${predictedDigit}
+        Actual digit: ${actualDigit}
+        
+        CURRENT STATUS:
+        Total Trades: ${this.totalTrades}
+        Wins: ${this.totalWins} | Losses: ${this.totalLosses}
+        x2 Losses2: ${this.consecutiveLosses2}
+        x3 Losses3: ${this.consecutiveLosses3}
+        x4 Losses4: ${this.consecutiveLosses4}
+        x5 Losses5: ${this.consecutiveLosses5}
+        Current Stake: $${this.currentStake.toFixed(2)}
+        Total P/L: $${this.totalProfitLoss.toFixed(2)}
+        
+        RECENT TRADES:
+            ${recentAnalysis}
+        
+        ====================================================
+            `;
 
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: `Digit Differ Bot - Loss Alert [${asset}]`,
+            subject: `Smart Differ Bot - Loss Alert [${asset}]`,
             text: summaryText
         };
 
@@ -1825,6 +1846,64 @@ class EnhancedDigitDifferBot {
         } catch (error) {
             console.error('Error sending loss email:', error);
         }
+    }
+
+    async sendDisconnectResumptionEmailSummary() {
+        const transporter = nodemailer.createTransport(this.emailConfig);
+        const now = new Date();
+        const currentHours = now.getHours();
+        const currentMinutes = now.getMinutes();
+
+        const summaryText = `
+            Disconnect/Reconnect Email: Time (${currentHours}:${currentMinutes})
+            Trading Summary:
+            Total Trades: ${this.totalTrades}
+            Total Trades Won: ${this.totalWins}
+            Total Trades Lost: ${this.totalLosses}
+            x2 Losses2: ${this.consecutiveLosses2}
+            x3 Losses3: ${this.consecutiveLosses3}
+            x4 Losses4: ${this.consecutiveLosses4}
+            x5 Losses5: ${this.consecutiveLosses5}
+            
+            Total Profit/Loss Amount: ${this.totalProfitLoss.toFixed(2)}
+            `;
+
+        const mailOptions = {
+            from: this.emailConfig.auth.user,
+            to: this.emailRecipient,
+            subject: 'Smart Differ Bot - Connection/Disconnection Summary',
+            text: summaryText
+        };
+
+        try {
+            await transporter.sendMail(mailOptions);
+        } catch (error) {
+            console.error('Error sending email:', error);
+        }
+    }
+
+    checkTimeForDisconnectReconnect() {
+        setInterval(() => {
+            const now = new Date();
+            const gmtPlus1Time = new Date(now.getTime() + (1 * 60 * 60 * 1000));
+            const currentHours = gmtPlus1Time.getUTCHours();
+            const currentMinutes = gmtPlus1Time.getUTCMinutes();
+
+            if (this.endOfDay && currentHours === 8 && currentMinutes >= 0) {
+                console.log("It's 8:00 AM GMT+1, reconnecting the bot.");
+                this.endOfDay = false;
+                this.connect();
+            }
+
+            if (this.isWinTrade && !this.endOfDay) {
+                if (currentHours >= 17 && currentMinutes >= 0) {
+                    console.log("It's past 5:00 PM GMT+1 after a win trade, disconnecting the bot.");
+                    this.sendDisconnectResumptionEmailSummary();
+                    this.disconnect();
+                    this.endOfDay = true;
+                }
+            }
+        }, 5000);
     }
 
     // ========================================================================
@@ -1855,6 +1934,7 @@ class EnhancedDigitDifferBot {
         console.log('');
 
         this.connect();
+        this.checkTimeForDisconnectReconnect();
     }
 }
 
@@ -1862,19 +1942,21 @@ class EnhancedDigitDifferBot {
 // RUN THE BOT
 // ============================================================================
 
-const token = process.env.DERIV_TOKEN || 'YOUR_DERIV_API_TOKEN';
+const token = '0P94g4WdSrSrzir';
 
 const bot = new EnhancedDigitDifferBot(token, {
-    initialStake: 10,
-    multiplier: 2.5,
-    stopLoss: 50,
-    takeProfit: 20,
+    // 'DMylfkyce6VyZt7', '0P94g4WdSrSrzir', rgNedekYXvCaPeP, hsj0tA0XJoIzJG5, Dz2V2KvRf4Uukt3
+    initialStake: 0.61,
+    multiplier: 11.3,
+    stopLoss: 86,
+    takeProfit: 5000,
     tickDuration: 1,
-    minConfidence: 0.85,
+    minConfidence: 0.90,
     assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
     enableNeuralNetwork: true,
     enablePatternRecognition: true,
     learningModeThreshold: 50,
+    requiredHistoryLength: 200,
 });
 
 bot.start();
