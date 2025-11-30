@@ -3,8 +3,9 @@ const WebSocket = require('ws');
 const nodemailer = require('nodemailer');
 
 class EnhancedDigitDifferTradingBot {
-    constructor(token, config = {}) {
+    constructor(token, token2, config = {}) {
         this.token = token;
+        this.token2 = token2;
         this.ws = null;
         this.connected = false;
         this.wsReady = false;
@@ -217,7 +218,7 @@ class EnhancedDigitDifferTradingBot {
     authenticate() {
         console.log('Attempting to authenticate...');
         this.sendRequest({
-            authorize: this.token
+            authorize: this.consecutiveLosses < 1 ? this.token : this.token2
         });
     }
 
@@ -1249,7 +1250,7 @@ class EnhancedDigitDifferTradingBot {
 }
 
 // Usage
-const bot = new EnhancedDigitDifferTradingBot('DMylfkyce6VyZt7', {
+const bot = new EnhancedDigitDifferTradingBot('DMylfkyce6VyZt7', 'hsj0tA0XJoIzJG5', {
     // 'DMylfkyce6VyZt7', '0P94g4WdSrSrzir', rgNedekYXvCaPeP, hsj0tA0XJoIzJG5, Dz2V2KvRf4Uukt3
     initialStake: 1,
     multiplier: 21,
