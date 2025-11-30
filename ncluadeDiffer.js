@@ -807,7 +807,7 @@ class DigitEnsembleDecisionMaker {
             streak: { correct: 0, total: 0 }
         };
         this.recentDecisions = [];
-        this.confidenceThreshold = 0.90;
+        this.confidenceThreshold = 0.85;
     }
 
     selectDigitToDiffer(predictions) {
@@ -1576,10 +1576,7 @@ class EnhancedDigitDifferBot {
         } else {
             this.totalLosses++;
             this.consecutiveLosses++;
-            this.currentStake = Math.min(
-                this.currentStake * this.config.multiplier,
-                this.config.stopLoss * 0.5
-            );
+            this.currentStake = Math.ceil(this.currentStake * this.config.multiplier * 100) / 100;
 
             if (assetState) {
                 assetState.consecutiveLosses++;
@@ -1629,6 +1626,41 @@ class EnhancedDigitDifferBot {
         ) + this.config.minWaitTime;
 
         this.tradeInProgress = false;
+
+        this.selectedDigit = null;
+        this.selectedAsset = null;
+
+        // Digit-specific tracking
+        this.tickHistories = {};
+        this.tickSubscriptionIds = {};
+        this.assetStates = {};
+        this.digitTradeHistory = [];
+
+        // Enhanced Learning Components
+        this.statisticalEngine = new DigitStatisticalEngine();
+        this.patternEngine = new DigitPatternEngine();
+        this.neuralEngine = new DigitNeuralEngine(50, [64, 32], 10);
+        this.ensembleDecisionMaker = new DigitEnsembleDecisionMaker();
+        // this.persistenceManager = new DigitPersistenceManager();
+
+        // Learning mode
+        this.observationCount = 0;
+        this.learningMode = true;
+        this.lastPredictions = {};
+
+        // Initialize assets
+        this.assets.forEach(asset => {
+            this.tickHistories[asset] = [];
+            this.assetStates[asset] = {
+                lastDigit: null,
+                currentProposalId: null,
+                tradeInProgress: false,
+                consecutiveLosses: 0,
+                selectedDigit: null
+            };
+            this.statisticalEngine.initAsset(asset);
+            this.patternEngine.initAsset(asset);
+        });
 
         if (!this.endOfDay) {
             setTimeout(() => {
@@ -1928,7 +1960,7 @@ class EnhancedDigitDifferBot {
         console.log('');
 
         this.connect();
-        this.checkTimeForDisconnectReconnect();
+        // this.checkTimeForDisconnectReconnect();
     }
 }
 
