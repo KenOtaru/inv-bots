@@ -990,81 +990,81 @@ class DigitEnsembleDecisionMaker {
 // TIER 5: PERSISTENCE MANAGER
 // ============================================================================
 
-class DigitPersistenceManager {
-    constructor(baseDir = './digit_bot_memory') {
-        this.baseDir = baseDir;
-        this.ensureDirectory();
-    }
+// class DigitPersistenceManager {
+//     constructor(baseDir = './digit_bot_memory') {
+//         this.baseDir = baseDir;
+//         this.ensureDirectory();
+//     }
 
-    ensureDirectory() {
-        if (!fs.existsSync(this.baseDir)) {
-            fs.mkdirSync(this.baseDir, { recursive: true });
-            console.log(`📁 Created memory directory: ${this.baseDir}`);
-        }
-    }
+//     ensureDirectory() {
+//         if (!fs.existsSync(this.baseDir)) {
+//             fs.mkdirSync(this.baseDir, { recursive: true });
+//             console.log(`📁 Created memory directory: ${this.baseDir}`);
+//         }
+//     }
 
-    save(filename, data) {
-        try {
-            const filepath = path.join(this.baseDir, filename);
-            fs.writeFileSync(filepath, JSON.stringify(data, null, 2));
-            console.log(`💾 Saved: ${filename}`);
-            return true;
-        } catch (error) {
-            console.error(`Error saving ${filename}:`, error.message);
-            return false;
-        }
-    }
+//     save(filename, data) {
+//         try {
+//             const filepath = path.join(this.baseDir, filename);
+//             fs.writeFileSync(filepath, JSON.stringify(data, null, 2));
+//             console.log(`💾 Saved: ${filename}`);
+//             return true;
+//         } catch (error) {
+//             console.error(`Error saving ${filename}:`, error.message);
+//             return false;
+//         }
+//     }
 
-    load(filename) {
-        try {
-            const filepath = path.join(this.baseDir, filename);
-            if (fs.existsSync(filepath)) {
-                const data = JSON.parse(fs.readFileSync(filepath, 'utf8'));
-                console.log(`📂 Loaded: ${filename}`);
-                return data;
-            }
-            return null;
-        } catch (error) {
-            console.error(`Error loading ${filename}:`, error.message);
-            return null;
-        }
-    }
+//     load(filename) {
+//         try {
+//             const filepath = path.join(this.baseDir, filename);
+//             if (fs.existsSync(filepath)) {
+//                 const data = JSON.parse(fs.readFileSync(filepath, 'utf8'));
+//                 console.log(`📂 Loaded: ${filename}`);
+//                 return data;
+//             }
+//             return null;
+//         } catch (error) {
+//             console.error(`Error loading ${filename}:`, error.message);
+//             return null;
+//         }
+//     }
 
-    saveFullState(bot) {
-        const state = {
-            timestamp: Date.now(),
-            statisticalEngine: bot.statisticalEngine.exportState(),
-            patternEngine: bot.patternEngine.exportState(),
-            neuralEngine: bot.neuralEngine.exportWeights(),
-            ensembleDecisionMaker: bot.ensembleDecisionMaker.exportState(),
-            performanceHistory: {
-                totalTrades: bot.totalTrades,
-                totalWins: bot.totalWins,
-                totalLosses: bot.totalLosses,
-                totalProfitLoss: bot.totalProfitLoss
-            },
-            digitTradeHistory: bot.digitTradeHistory.slice(-500)
-        };
+//     saveFullState(bot) {
+//         const state = {
+//             timestamp: Date.now(),
+//             statisticalEngine: bot.statisticalEngine.exportState(),
+//             patternEngine: bot.patternEngine.exportState(),
+//             neuralEngine: bot.neuralEngine.exportWeights(),
+//             ensembleDecisionMaker: bot.ensembleDecisionMaker.exportState(),
+//             performanceHistory: {
+//                 totalTrades: bot.totalTrades,
+//                 totalWins: bot.totalWins,
+//                 totalLosses: bot.totalLosses,
+//                 totalProfitLoss: bot.totalProfitLoss
+//             },
+//             digitTradeHistory: bot.digitTradeHistory.slice(-500)
+//         };
 
-        return this.save('digit_bot_state.json', state);
-    }
+//         return this.save('digit_bot_state.json', state);
+//     }
 
-    loadFullState() {
-        return this.load('digit_bot_state.json');
-    }
+//     loadFullState() {
+//         return this.load('digit_bot_state.json');
+//     }
 
-    appendPerformanceLog(entry) {
-        const logFile = 'digit_performance_log.json';
-        let log = this.load(logFile) || [];
-        log.push({ ...entry, timestamp: Date.now() });
+//     appendPerformanceLog(entry) {
+//         const logFile = 'digit_performance_log.json';
+//         let log = this.load(logFile) || [];
+//         log.push({ ...entry, timestamp: Date.now() });
 
-        if (log.length > 10000) {
-            log = log.slice(-10000);
-        }
+//         if (log.length > 10000) {
+//             log = log.slice(-10000);
+//         }
 
-        return this.save(logFile, log);
-    }
-}
+//         return this.save(logFile, log);
+//     }
+// }
 
 // ============================================================================
 // MAIN Smart DIFFER TRADING BOT
@@ -1126,7 +1126,7 @@ class EnhancedDigitDifferBot {
         this.patternEngine = new DigitPatternEngine();
         this.neuralEngine = new DigitNeuralEngine(50, [64, 32], 10);
         this.ensembleDecisionMaker = new DigitEnsembleDecisionMaker();
-        this.persistenceManager = new DigitPersistenceManager();
+        // this.persistenceManager = new DigitPersistenceManager();
 
         // Learning mode
         this.observationCount = 0;
@@ -1160,10 +1160,10 @@ class EnhancedDigitDifferBot {
         this.reconnectAttempts = 0;
 
         // Load saved state
-        this.loadSavedState();
+        // this.loadSavedState();
 
         // Start periodic save
-        this.startPeriodicSave();
+        // this.startPeriodicSave();
 
         // Start email timer
         this.startEmailTimer();
@@ -1173,38 +1173,38 @@ class EnhancedDigitDifferBot {
     // PERSISTENCE METHODS
     // ========================================================================
 
-    loadSavedState() {
-        const state = this.persistenceManager.loadFullState();
-        if (state) {
-            console.log('📂 Loading saved learning state...');
+    // loadSavedState() {
+    //     const state = this.persistenceManager.loadFullState();
+    //     if (state) {
+    //         console.log('📂 Loading saved learning state...');
 
-            if (state.statisticalEngine) {
-                this.statisticalEngine.importState(state.statisticalEngine);
-            }
-            if (state.patternEngine) {
-                this.patternEngine.importState(state.patternEngine);
-            }
-            if (state.neuralEngine) {
-                this.neuralEngine.importWeights(state.neuralEngine);
-            }
-            if (state.ensembleDecisionMaker) {
-                this.ensembleDecisionMaker.importState(state.ensembleDecisionMaker);
-            }
-            if (state.digitTradeHistory) {
-                this.digitTradeHistory = state.digitTradeHistory;
-            }
+    //         if (state.statisticalEngine) {
+    //             this.statisticalEngine.importState(state.statisticalEngine);
+    //         }
+    //         if (state.patternEngine) {
+    //             this.patternEngine.importState(state.patternEngine);
+    //         }
+    //         if (state.neuralEngine) {
+    //             this.neuralEngine.importWeights(state.neuralEngine);
+    //         }
+    //         if (state.ensembleDecisionMaker) {
+    //             this.ensembleDecisionMaker.importState(state.ensembleDecisionMaker);
+    //         }
+    //         if (state.digitTradeHistory) {
+    //             this.digitTradeHistory = state.digitTradeHistory;
+    //         }
 
-            console.log('✅ Learning state restored successfully');
-        } else {
-            console.log('🆕 No saved state found. Starting fresh learning.');
-        }
-    }
+    //         console.log('✅ Learning state restored successfully');
+    //     } else {
+    //         console.log('🆕 No saved state found. Starting fresh learning.');
+    //     }
+    // }
 
-    startPeriodicSave() {
-        setInterval(() => {
-            this.persistenceManager.saveFullState(this);
-        }, this.config.saveInterval);
-    }
+    // startPeriodicSave() {
+    //     setInterval(() => {
+    //         this.persistenceManager.saveFullState(this);
+    //     }, this.config.saveInterval);
+    // }
 
     // ========================================================================
     // WEBSOCKET METHODS
@@ -1600,7 +1600,7 @@ class EnhancedDigitDifferBot {
         this.totalProfitLoss += profit;
 
         // Save state
-        this.persistenceManager.saveFullState(this);
+        // this.persistenceManager.saveFullState(this);
 
         // Log summary
         this.logTradingSummary(asset);
@@ -1661,13 +1661,13 @@ class EnhancedDigitDifferBot {
         }
 
         // Append to performance log
-        this.persistenceManager.appendPerformanceLog({
-            asset,
-            won,
-            predictedDigit,
-            actualDigit,
-            profit
-        });
+        // this.persistenceManager.appendPerformanceLog({
+        //     asset,
+        //     won,
+        //     predictedDigit,
+        //     actualDigit,
+        //     profit
+        // });
     }
 
     // ========================================================================
@@ -1923,7 +1923,7 @@ class EnhancedDigitDifferBot {
         console.log('    • Persistent Learning Memory');
         console.log('');
         console.log(`  🎓 Learning Mode: ${this.learningMode ? 'Active' : 'Complete'}`);
-        console.log(`  📁 Memory Directory: ./digit_bot_memory/`);
+        // console.log(`  📁 Memory Directory: ./digit_bot_memory/`);
         console.log('═══════════════════════════════════════════════════════════');
         console.log('');
 
@@ -1961,5 +1961,5 @@ module.exports = {
     DigitPatternEngine,
     DigitNeuralEngine,
     DigitEnsembleDecisionMaker,
-    DigitPersistenceManager
+    // DigitPersistenceManager
 };
