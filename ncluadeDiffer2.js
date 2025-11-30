@@ -816,7 +816,7 @@ class DigitEnsembleDecisionMaker {
         };
 
         this.recentDecisions = [];
-        this.confidenceThreshold = 0.65; // Minimum probability advantage to trade
+        this.confidenceThreshold = 0.50; // Minimum probability advantage to trade
     }
 
     /**
@@ -1066,9 +1066,9 @@ class DigitPersistenceManager {
         return this.save('digit_bot_state.json', state);
     }
 
-    loadFullState() {
-        return this.load('digit_bot_state.json');
-    }
+    // loadFullState() {
+    //     return this.load('digit_bot_state.json');
+    // }
 
     appendPerformanceLog(entry) {
         const logFile = 'digit_performance_log.json';
@@ -1177,7 +1177,7 @@ class EnhancedDigitDifferBot {
         this.reconnectAttempts = 0;
 
         // Load saved state
-        this.loadSavedState();
+        // this.loadSavedState();
 
         // Start periodic save
         this.startPeriodicSave();
