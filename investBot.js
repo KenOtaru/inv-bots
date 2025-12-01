@@ -12,7 +12,7 @@ class EnhancedDerivTradingBot {
         this.connected = false;
         this.assets = [
             // 'R_10','R_25','R_50','R_75', 'R_100', 'RDBULL', 'RDBEAR',
-            'RDBEAR'
+            'R_100'
         ];
 
         this.config = {
@@ -50,7 +50,7 @@ class EnhancedDerivTradingBot {
         this.kCountNum = 0;
         this.kLoss = 0;
         this.multiplier2 = false;
-        this.confidenceThreshold = null; 
+        this.confidenceThreshold = null;
         this.kTradeCount = 0;
         this.isWinTrade = true;
         this.waitTime = 0;
@@ -73,7 +73,7 @@ class EnhancedDerivTradingBot {
         // this.loadPredictionOutcomes();
         // this.loadPredictionOutcomes2();
 
-        
+
         // WebSocket management
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 10000;
@@ -117,7 +117,7 @@ class EnhancedDerivTradingBot {
         this.ws.on('close', () => {
             console.log('Disconnected from Deriv API');
             this.connected = false;
-            if(!this.Pause) {
+            if (!this.Pause) {
                 this.handleDisconnect();
             }
         });
@@ -128,7 +128,7 @@ class EnhancedDerivTradingBot {
         try {
             const data = await fs.readFile(filePath, 'utf8');
             const parsed = JSON.parse(data);
-            if (Array.isArray(parsed) && parsed.length === 10 && 
+            if (Array.isArray(parsed) && parsed.length === 10 &&
                 parsed.every(item => typeof item === 'object' && 'wins' in item && 'total' in item)) {
                 this.predictionOutcomes2 = parsed;
                 console.log('Successfully loaded predictionOutcomes from file:', this.predictionOutcomes2);
@@ -145,25 +145,25 @@ class EnhancedDerivTradingBot {
     }
 
     async loadPredictionOutcomes() {
-            const filePath = path.join(__dirname, 'predictionOutcomes2.json');
-            try {
-                const data = await fs.readFile(filePath, 'utf8');
-                const parsed = JSON.parse(data);
-                if (Array.isArray(parsed) && parsed.length === 10 && 
-                    parsed.every(item => typeof item === 'object' && 'wins' in item && 'total' in item)) {
-                    this.predictionOutcomes = parsed;
-                    console.log('Successfully loaded predictionOutcomes from file:', this.predictionOutcomes);
-                } else {
-                    console.warn('Invalid predictionOutcomes data in file, using default initialization.');
-                }
-            } catch (error) {
-                if (error.code === 'ENOENT') {
-                    console.log('No existing predictionOutcomes file found, using default initialization.');
-                } else {
-                    console.error('Error loading predictionOutcomes:', error.message);
-                }
+        const filePath = path.join(__dirname, 'predictionOutcomes2.json');
+        try {
+            const data = await fs.readFile(filePath, 'utf8');
+            const parsed = JSON.parse(data);
+            if (Array.isArray(parsed) && parsed.length === 10 &&
+                parsed.every(item => typeof item === 'object' && 'wins' in item && 'total' in item)) {
+                this.predictionOutcomes = parsed;
+                console.log('Successfully loaded predictionOutcomes from file:', this.predictionOutcomes);
+            } else {
+                console.warn('Invalid predictionOutcomes data in file, using default initialization.');
+            }
+        } catch (error) {
+            if (error.code === 'ENOENT') {
+                console.log('No existing predictionOutcomes file found, using default initialization.');
+            } else {
+                console.error('Error loading predictionOutcomes:', error.message);
             }
         }
+    }
 
     async savePredictionOutcomes2() {
         const filePath = path.join(__dirname, 'gameThoery.json');
@@ -202,12 +202,12 @@ class EnhancedDerivTradingBot {
         if (this.reconnectAttempts < this.maxReconnectAttempts) {
             console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
             setTimeout(() => this.connect(), this.reconnectInterval);
-        } 
+        }
     }
 
     handleApiError(error) {
         console.error('API Error:', error.message);
-        
+
         switch (error.code) {
             case 'InvalidToken':
                 console.error('Invalid token. Please check your API token and restart the bot.');
@@ -268,7 +268,7 @@ class EnhancedDerivTradingBot {
             this.tradeInProgress = false;
             this.lastDigitsList = [];
             this.tickHistory = [];
-            
+
             this.startTrading();
 
         } else if (message.msg_type === 'history') {
@@ -323,14 +323,14 @@ class EnhancedDerivTradingBot {
         if (this.usedAssets.size === this.assets.length) {
             this.usedAssets = new Set();
         }
-            
-        if (this.RestartTrading) {            
+
+        if (this.RestartTrading) {
             let availableAssets = this.assets.filter(asset => !this.usedAssets.has(asset));
             this.currentAsset = availableAssets[Math.floor(Math.random() * availableAssets.length)];
             this.usedAssets.add(this.currentAsset);
         }
         console.log(`Selected asset: ${this.currentAsset}`);
-        
+
         this.unsubscribeFromTicks(() => {
             this.subscribeToTickHistory(this.currentAsset);
             this.subscribeToTicks(this.currentAsset);
@@ -338,28 +338,28 @@ class EnhancedDerivTradingBot {
 
         this.RestartTrading = false;
     }
-        
+
     handleTickHistory(history) {
         this.tickHistory = history.prices.map(price => this.getLastDigit(price, this.currentAsset));
-        
+
     }
 
     handleTickUpdate(tick) {
         const lastDigit = this.getLastDigit(tick.quote, this.currentAsset);
         this.lastDigitsList.push(lastDigit);
-        
+
         // Update tick history
         this.tickHistory.push(lastDigit);
         if (this.tickHistory.length > this.requiredHistoryLength) {
             this.tickHistory.shift();
         }
-                       
-        console.log(`Recent tick History: ${this.tickHistory.slice(-5).join(', ')}`);           
+
+        console.log(`Recent tick History: ${this.tickHistory.slice(-5).join(', ')}`);
 
         // Enhanced logging
-        if(!this.tradeInProgress) { 
-            if(this.kSys === 1) {
-                console.log('Game Analyzer Trading System:', this.kSys); 
+        if (!this.tradeInProgress) {
+            if (this.kSys === 1) {
+                console.log('Game Analyzer Trading System:', this.kSys);
                 this.gameAnalyzer();
             } else if (this.kSys == 2) {
                 console.log('Game1 Analyzer Trading System:', this.kSys);
@@ -368,12 +368,12 @@ class EnhancedDerivTradingBot {
                 console.log('Batch Analyzer Trading System:', this.kSys);
                 this.batchAnalyzer()
             }
-            
+
 
         }
     }
 
-        
+
     gameAnalyzer() {
         if (this.tradeInProgress) {
             console.log('Trade in progress, skipping analysis.');
@@ -462,7 +462,7 @@ class EnhancedDerivTradingBot {
             confidence = (confidence * 0.6) + (outcomes.wins / outcomes.total * 100 * 0.4);
         }
 
-        
+
         if (maxDeviation > 0.2 && entropy < 2.5 && confidence >= 100) { // Trade on significant deviation and non-random patterns
             this.lastPredictedBatchEnd = historyLen;
             this.lastPredictedDigit = predictedDigit;
@@ -577,7 +577,7 @@ class EnhancedDerivTradingBot {
 
         // Confidence: Inverted for Differ
         const confidence = Math.round(100 - minP);
-        
+
         console.log('Adjusted next probabilities:', nextP.map(p => p.toFixed(2)));
         console.log('Predicted Differ digit:', predictedDigit, '(Prob:', minP.toFixed(2), '%, Confidence:', confidence, '%)');
 
@@ -697,7 +697,7 @@ class EnhancedDerivTradingBot {
             return;
         }
 
-        
+
         // Ensure predicted digit differs from last tick
         const lastTick = history[historyLen - 1];
         if (predictedDigit === lastTick) {
@@ -719,7 +719,7 @@ class EnhancedDerivTradingBot {
         }
 
         if (minProb < 20 && entropy < 3.3 && confidence >= 100) { // Trade only on low probability and non-random patterns
-            
+
             this.lastPredictedBatchEnd = historyLen;
             this.lastPredictedDigit = predictedDigit;
             this.xDigit = predictedDigit;
@@ -730,7 +730,7 @@ class EnhancedDerivTradingBot {
             console.log('Confidence:', this.winProbNumber, '%');
             console.log('Current Batch Entropy:', entropy.toFixed(2));
             console.log('-------------------------------------------------');
-            
+
             console.log(`Placing Digit Differ trade on digit ${predictedDigit} (not expected to appear).`);
             this.placeTrade(this.xDigit, this.winProbNumber);
         } else {
@@ -746,14 +746,14 @@ class EnhancedDerivTradingBot {
         }
 
         this.tradeInProgress = true;
-        
+
         console.log(`\n PLACING TRADE`);
         console.log(`Digit: ${predictedDigit} (${confidence}%)`);
         console.log(`Stake: $${this.currentStake.toFixed(2)}`);
-        
+
         const request = {
             buy: 1,
-            price: this.currentStake.toFixed(2), 
+            price: this.currentStake.toFixed(2),
             parameters: {
                 amount: this.currentStake.toFixed(2),
                 basis: 'stake',
@@ -784,132 +784,132 @@ class EnhancedDerivTradingBot {
     }
 
     handleTradeResult(contract) {
-    const won = contract.status === 'won';
-    const profit = parseFloat(contract.profit);
-    
-    console.log(`\n📊 TRADE RESULT: ${won ? '✅ WON' : '❌ LOST'}`);
-    console.log(`Profit/Loss: $${profit.toFixed(2)}`);
-   
-    this.totalTrades++;
-    
-    // Update predictionOutcomes2 for the predicted digit
-    if(this.kSys === 1) {
-        if (this.xDigit !== null && this.predictionOutcomes2 && this.predictionOutcomes2[this.xDigit]) {
-            this.predictionOutcomes2[this.xDigit].total++;
-            if (won) {
-                this.predictionOutcomes2[this.xDigit].wins++;
-            }
-            console.log(`Prediction Outcomes for Digit ${this.xDigit}: ` +
-                        `Wins=${this.predictionOutcomes2[this.xDigit].wins}, ` +
-                        `Total=${this.predictionOutcomes2[this.xDigit].total}, ` +
-                        `Win Rate=${((this.predictionOutcomes2[this.xDigit].wins / 
+        const won = contract.status === 'won';
+        const profit = parseFloat(contract.profit);
+
+        console.log(`\n📊 TRADE RESULT: ${won ? '✅ WON' : '❌ LOST'}`);
+        console.log(`Profit/Loss: $${profit.toFixed(2)}`);
+
+        this.totalTrades++;
+
+        // Update predictionOutcomes2 for the predicted digit
+        if (this.kSys === 1) {
+            if (this.xDigit !== null && this.predictionOutcomes2 && this.predictionOutcomes2[this.xDigit]) {
+                this.predictionOutcomes2[this.xDigit].total++;
+                if (won) {
+                    this.predictionOutcomes2[this.xDigit].wins++;
+                }
+                console.log(`Prediction Outcomes for Digit ${this.xDigit}: ` +
+                    `Wins=${this.predictionOutcomes2[this.xDigit].wins}, ` +
+                    `Total=${this.predictionOutcomes2[this.xDigit].total}, ` +
+                    `Win Rate=${((this.predictionOutcomes2[this.xDigit].wins /
                         this.predictionOutcomes2[this.xDigit].total) * 100).toFixed(2)}%`);
-            
-            // Save predictionOutcomes after update
-            this.savePredictionOutcomes2();
-        }
-    }
 
-    if(this.kSys === 3) {
-        // Update predictionOutcomes for the predicted digit
-        if (this.xDigit !== null && this.predictionOutcomes && this.predictionOutcomes[this.xDigit]) {
-            this.predictionOutcomes[this.xDigit].total++;
-            if (won) {
-                this.predictionOutcomes[this.xDigit].wins++;
+                // Save predictionOutcomes after update
+                this.savePredictionOutcomes2();
             }
-            console.log(`Prediction Outcomes for Digit ${this.xDigit}: ` +
-                        `Wins=${this.predictionOutcomes[this.xDigit].wins}, ` +
-                        `Total=${this.predictionOutcomes[this.xDigit].total}, ` +
-                        `Win Rate=${((this.predictionOutcomes[this.xDigit].wins / 
+        }
+
+        if (this.kSys === 3) {
+            // Update predictionOutcomes for the predicted digit
+            if (this.xDigit !== null && this.predictionOutcomes && this.predictionOutcomes[this.xDigit]) {
+                this.predictionOutcomes[this.xDigit].total++;
+                if (won) {
+                    this.predictionOutcomes[this.xDigit].wins++;
+                }
+                console.log(`Prediction Outcomes for Digit ${this.xDigit}: ` +
+                    `Wins=${this.predictionOutcomes[this.xDigit].wins}, ` +
+                    `Total=${this.predictionOutcomes[this.xDigit].total}, ` +
+                    `Win Rate=${((this.predictionOutcomes[this.xDigit].wins /
                         this.predictionOutcomes[this.xDigit].total) * 100).toFixed(2)}%`);
-            
-            // Save predictionOutcomes after update
-            this.savePredictionOutcomes();
-        }
-    }
-    
-    if (won) {
-        this.totalWins++;            
-        this.consecutiveLosses = 0;
-        this.currentStake = this.config.initialStake;
-    } else {
-        this.isWinTrade = false;
-        this.totalLosses++;
-        this.consecutiveLosses++;
-        
-        if (this.consecutiveLosses === 2) {
-            this.consecutiveLosses2++;
-        } else if (this.consecutiveLosses === 3) {
-            this.consecutiveLosses3++;
-        } else if (this.consecutiveLosses === 4) {
-            this.consecutiveLosses4++;
-        } else if (this.consecutiveLosses === 5) {
-            this.consecutiveLosses5++;
+
+                // Save predictionOutcomes after update
+                this.savePredictionOutcomes();
+            }
         }
 
-        this.currentStake = Math.ceil(this.currentStake * this.config.multiplier * 100) / 100;
+        if (won) {
+            this.totalWins++;
+            this.consecutiveLosses = 0;
+            this.currentStake = this.config.initialStake;
+        } else {
+            this.isWinTrade = false;
+            this.totalLosses++;
+            this.consecutiveLosses++;
 
-        // Update kSystem
-        if(this.kSys === 1) {
+            if (this.consecutiveLosses === 2) {
+                this.consecutiveLosses2++;
+            } else if (this.consecutiveLosses === 3) {
+                this.consecutiveLosses3++;
+            } else if (this.consecutiveLosses === 4) {
+                this.consecutiveLosses4++;
+            } else if (this.consecutiveLosses === 5) {
+                this.consecutiveLosses5++;
+            }
+
+            this.currentStake = Math.ceil(this.currentStake * this.config.multiplier * 100) / 100;
+
+            // Update kSystem
+            if (this.kSys === 1) {
                 this.kSys = 2;
-        } else if (this.kSys == 2) {
-            this.kSys = 3;
-        } else if (this.kSys == 3) {
-            this.kSys = 1;
+            } else if (this.kSys == 2) {
+                this.kSys = 3;
+            } else if (this.kSys == 3) {
+                this.kSys = 1;
+            }
+
+            this.lastPredictedBatchEnd = null;
+            this.lastPredictedDigit = null;
+            this.globalHighestCount = 0;
+            this.globalBestDigits = [];
         }
 
-        this.lastPredictedBatchEnd = null;
-        this.lastPredictedDigit = null;
-        this.globalHighestCount = 0;
-        this.globalBestDigits = [];
-    }
+        this.totalProfitLoss += profit;
 
-    this.totalProfitLoss += profit;
+        if (!won) {
+            this.sendLossEmail();
+        }
 
-    if (!won) {
-        this.sendLossEmail();
-    }
+        this.Pause = true;
+        this.RestartTrading = true;
 
-    this.Pause = true;
-    this.RestartTrading = true; 
+        if (!this.endOfDay) {
+            this.logTradingSummary();
+        }
 
-    if (!this.endOfDay) {
-        this.logTradingSummary();
-    }
+        this.kTrade = false;
 
-    this.kTrade = false;
-    
-    // Take profit condition
-    if (this.totalProfitLoss >= this.config.takeProfit) {
-        console.log('Take Profit Reached... Stopping trading.');
-        this.endOfDay = true;
-        this.sendDisconnectResumptionEmailSummary();
+        // Take profit condition
+        if (this.totalProfitLoss >= this.config.takeProfit) {
+            console.log('Take Profit Reached... Stopping trading.');
+            this.endOfDay = true;
+            this.sendDisconnectResumptionEmailSummary();
+            this.disconnect();
+            return;
+        }
+
+        // Check stopping conditions
+        if (this.consecutiveLosses >= this.config.maxConsecutiveLosses ||
+            this.totalProfitLoss <= -this.config.stopLoss) {
+            console.log('Stopping condition met. Disconnecting...');
+            this.endOfDay = true;
+            this.sendDisconnectResumptionEmailSummary();
+            this.disconnect();
+            return;
+        }
+
         this.disconnect();
-        return;
-    }
 
-    // Check stopping conditions
-    if (this.consecutiveLosses >= this.config.maxConsecutiveLosses ||
-        this.totalProfitLoss <= -this.config.stopLoss) {
-        console.log('Stopping condition met. Disconnecting...');
-        this.endOfDay = true; 
-        this.sendDisconnectResumptionEmailSummary();
-        this.disconnect();
-        return;
+        if (!this.endOfDay) {
+            this.waitTime = Math.floor(Math.random() * (1000 - 1000 + 1)) + 2000;
+            console.log(`⏳ Waiting ${Math.round(this.waitTime / 1000)} seconds before next trade...\n`);
+            setTimeout(() => {
+                this.Pause = false;
+                this.kTrade = false;
+                this.connect();
+            }, this.waitTime);
+        }
     }
-
-    this.disconnect();
-    
-    if (!this.endOfDay) {
-        this.waitTime = Math.floor(Math.random() * (1000 - 1000 + 1)) + 2000;
-        console.log(`⏳ Waiting ${Math.round(this.waitTime/1000)} seconds before next trade...\n`);
-        setTimeout(() => {
-            this.Pause = false;
-            this.kTrade = false;
-            this.connect();
-        }, this.waitTime);
-    }
-}
 
     unsubscribeFromTicks(callback) {
         if (this.tickSubscriptionId) {
@@ -918,7 +918,7 @@ class EnhancedDerivTradingBot {
             };
             this.sendRequest(request);
             console.log(`Unsubscribing from ticks with ID: ${this.tickSubscriptionId}`);
-            
+
             this.ws.once('message', (data) => {
                 const message = JSON.parse(data);
                 if (message.msg_type === 'forget' && message.forget === this.tickSubscriptionId) {
@@ -949,7 +949,7 @@ class EnhancedDerivTradingBot {
                 this.endOfDay = false;
                 this.connect();
             }
-    
+
             // Check for evening stop condition (after 8:00 PM)
             if (this.isWinTrade && !this.endOfDay) {
                 if (currentHours === 17 && currentMinutes >= 0) {
@@ -979,10 +979,10 @@ class EnhancedDerivTradingBot {
         console.log(`Total P/L: $${this.totalProfitLoss.toFixed(2)}`);
         console.log(`Current Stake: $${this.currentStake.toFixed(2)}`);
         console.log('Predicted Digit:', this.xDigit);
-        console.log('Percentage:', this.winProbNumber),'%';
+        console.log('Percentage:', this.winProbNumber), '%';
         console.log('═══════════════════════════════════════\n');
     }
-    
+
     startEmailTimer() {
         setInterval(() => {
             if (!this.endOfDay) {
@@ -1063,7 +1063,7 @@ class EnhancedDerivTradingBot {
         Last 20 Digits: ${klastDigits.join(', ')}
         
         Current Stake: $${this.currentStake.toFixed(2)}
-        `;      
+        `;
 
         const mailOptions = {
             from: this.emailConfig.auth.user,
@@ -1137,7 +1137,7 @@ class EnhancedDerivTradingBot {
         }
     }
 
-    start() {        
+    start() {
         this.connect();
         // this.checkTimeForDisconnectReconnect();
     }
