@@ -10,8 +10,8 @@ class EnhancedDigitDifferTradingBot {
         this.wsReady = false;
 
         this.assets = config.assets || [
-            // 'R_10', 'R_25', 'R_50', 'R_75', 'R_100'
-            'R_100',
+            'R_10', 'R_25', 'R_50', 'R_75', 'R_100'
+            // 'R_100',
         ];
 
         this.config = {
@@ -414,41 +414,6 @@ class EnhancedDigitDifferTradingBot {
         return true;
     }
 
-    // NEW: Smart filter number calculation based on learning
-    calculateAdaptiveFilter(asset, currentDigitCount) {
-        const baseFilter = 8;
-        const assetState = this.assetStates[asset];
-        const lossHistory = this.learningSystem.lossPatterns[asset] || [];
-
-        // Analyze recent losses with this digit count
-        const recentLossesWithSameCount = lossHistory
-            .slice(-10)
-            .filter(loss => loss.digitCount === currentDigitCount)
-            .length;
-
-        // If this digit count has failed recently, be more conservative
-        let adjustedFilter = baseFilter;
-
-        if (recentLossesWithSameCount >= 2) {
-            adjustedFilter += recentLossesWithSameCount * 2;
-            // console.log(`[${asset}] Adjusting filter due to recent losses at count ${currentDigitCount}: ${adjustedFilter}`);
-        }
-
-        // Check filter performance history
-        const filterStats = this.learningSystem.filterPerformance[adjustedFilter] || { wins: 0, losses: 0 };
-        const winRate = filterStats.wins + filterStats.losses > 0
-            ? filterStats.wins / (filterStats.wins + filterStats.losses)
-            : 0.5;
-
-        // If this filter has poor performance, try different one
-        if (winRate < 0.4 && filterStats.wins + filterStats.losses > 5) {
-            adjustedFilter += 3;
-            // console.log(`[${asset}] Filter ${adjustedFilter - 3} has low win rate (${(winRate*100).toFixed(1)}%), trying ${adjustedFilter}`);
-        }
-
-        return adjustedFilter;
-    }
-
     // NEW: Pattern detection - avoid trading if similar pattern led to loss
     detectDangerousPattern(asset, currentDigitCount, stayedInArray) {
         const patternKey = `${asset}_${currentDigitCount}`;
@@ -468,38 +433,6 @@ class EnhancedDigitDifferTradingBot {
         }
 
         return false;
-    }
-
-    // NEW: Select best asset to trade based on multiple factors
-    selectBestAsset() {
-        const candidates = [];
-
-        for (const asset of this.assets) {
-            if (this.suspendedAssets.has(asset)) continue;
-            if (this.assetStates[asset].tradeInProgress) continue;
-            if (!this.isMarketConditionFavorable(asset)) continue;
-
-            const volatility = this.learningSystem.volatilityScores[asset] || 0;
-            const assetState = this.assetStates[asset];
-            const recentWinRate = this.calculateAssetWinRate(asset);
-
-            // Score each asset
-            const score = (
-                recentWinRate * 50 + // Win rate importance
-                (0.5 - Math.abs(0.5 - volatility)) * 30 + // Optimal volatility
-                (3 - assetState.consecutiveLosses) * 20 // Fewer losses better
-            );
-
-            candidates.push({ asset, score });
-        }
-
-        if (candidates.length === 0) return null;
-
-        // Sort by score and return best
-        candidates.sort((a, b) => b.score - a.score);
-        // console.log(`Asset scores:`, candidates.map(c => `${c.asset}:${c.score.toFixed(1)}`).join(', '));
-
-        return candidates[0].asset;
     }
 
     // NEW: Calculate recent win rate for an asset
@@ -604,17 +537,29 @@ class EnhancedDigitDifferTradingBot {
         });
 
         // === BEAUTIFUL LOGGING ===
+        // console.log(`
+        //     ${asset}: STAYED-IN ANALYSIS
+        //     ├─ Last 10 Array: [${last10.join(' → ')}] (${currentCount})
+        //     ├─ Digit Frequency (last 10): ${JSON.stringify(freq)}
+        //     ├─ Appeared 1x: [${appeared[1].join(', ')}]
+        //     ├─ Appeared 2x: [${appeared[2].join(', ')}]
+        //     ├─ Appeared 3x: [${appeared[3].join(', ')}]
+        //     ├─ Appeared 4x: [${appeared[4].join(', ')}]
+        //     ├─ Appeared 5x: [${appeared[5].join(', ')}]
+        //     ├─ Appeared 6x: [${appeared[6].join(', ')}]
+        //     ├─ Appeared 7x: [${appeared[7].join(', ')}]
+        // `.trim());
+
         console.log(`
             ${asset}: STAYED-IN ANALYSIS
-            ├─ Last 10 Array: [${last10.join(' → ')}] (${currentCount})
-            ├─ Digit Frequency (last 10): ${JSON.stringify(freq)}
-            ├─ Appeared 1x: [${appeared[1].join(', ')}]
-            ├─ Appeared 2x: [${appeared[2].join(', ')}]
-            ├─ Appeared 3x: [${appeared[3].join(', ')}]
-            ├─ Appeared 4x: [${appeared[4].join(', ')}]
-            ├─ Appeared 5x: [${appeared[5].join(', ')}]
-            ├─ Appeared 6x: [${appeared[6].join(', ')}]
-            ├─ Appeared 7x: [${appeared[7].join(', ')}]
+            ├─ Last 10 Array: [${last10}] (${currentCount})
+            ├─ Appeared 1x: [${appeared[1]}]
+            ├─ Appeared 2x: [${appeared[2]}]
+            ├─ Appeared 3x: [${appeared[3]}]
+            ├─ Appeared 4x: [${appeared[4]}]
+            ├─ Appeared 5x: [${appeared[5]}]
+            ├─ Appeared 6x: [${appeared[6]}]
+            ├─ Appeared 7x: [${appeared[7]}]
         `.trim());
 
         // === PREVENT DOUBLE TRADING ===
@@ -629,24 +574,29 @@ class EnhancedDigitDifferTradingBot {
             return;
         }
 
-        // === TRADE LOGIC: Priority 7x → 1x ===
+        // === TRADE LOGIC: Priority 7x → 2x (Matching bot2.js) ===
         const lastDigit = last10[last10.length - 1]; // The digit we're betting continues
 
-        for (let times = 7; times >= 3; times--) {
-            if (appeared[times].includes(currentCount)) {
-                console.log(`TRADE SIGNAL! Betting digit ${lastDigit} appears ${times} times (currently ${times}x)`);
+        for (let times = 7; times >= 2; times--) {
+            if (appeared[times].length > 0) {
+                if (appeared[times].includes(currentCount) && last10[9] >= 0) {
+                    console.log(`TRADE SIGNAL! Betting digit ${lastDigit} appears ${times + 1} times (currently ${times}x)`);
 
-                assetState.tradedDigitArray.push(currentCount);
-                assetState.filteredArray = appeared[times];
-                assetState.lastFilterUsed = times;
-                assetState.tradeFrequency = times;
+                    assetState.tradedDigitArray.push(currentCount);
+                    assetState.filteredArray = appeared[times];
+                    assetState.lastFilterUsed = times;
+                    assetState.tradeFrequency = times;
 
-                this.placeTrade(asset);
-                // return; // Exit after first valid signal
+                    this.placeTrade(asset);
+                }
+                // Stop checking lower frequencies because a higher frequency group exists (bot2.js logic)
+                break;
             }
         }
 
-        console.log(`No valid trade signal on ${asset} (digit ${lastDigit} not in any filter)`);
+        if (!assetState.tradeInProgress) {
+            console.log(`No valid trade signal on ${asset} (digit ${lastDigit} not in any filter)`);
+        }
     }
 
     analyzeTicks(asset) {
@@ -797,6 +747,11 @@ class EnhancedDigitDifferTradingBot {
             if (this.suspendedAssets.size > 0) {
                 this.reactivateAllSuspended();
             }
+        }
+
+        // Keep array length controlled (matching bot2.js)
+        if (assetState && assetState.tradedDigitArray.length > 1) {
+            assetState.tradedDigitArray.shift();
         }
 
         const randomWaitTime = Math.floor(
