@@ -577,9 +577,9 @@ class EnhancedDigitDifferTradingBot {
         // === TRADE LOGIC: Priority 7x → 2x (Matching bot2.js) ===
         const lastDigit = last10[last10.length - 1]; // The digit we're betting continues
 
-        for (let times = 7; times >= 2; times--) {
+        for (let times = 4; times >= 2; times--) {
             if (appeared[times].length > 0) {
-                if (appeared[times].includes(currentCount) && last10[9] >= 0) {
+                if (appeared[times].includes(currentCount) && last10[9] >= 2) {
                     console.log(`TRADE SIGNAL! Betting digit ${lastDigit} appears ${times + 1} times (currently ${times}x)`);
 
                     assetState.tradedDigitArray.push(currentCount);
@@ -1013,7 +1013,7 @@ class EnhancedDigitDifferTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: `Enhanced Accumulator Bot - Loss Alert [${asset}]`,
+            subject: `kInspired Accumulator Bot - Loss Alert [${asset}]`,
             text: summaryText
         };
 
@@ -1068,7 +1068,7 @@ class EnhancedDigitDifferTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: 'Enhanced Accumulator Bot - Performance Summary',
+            subject: 'kInspired Accumulator Bot - Performance Summary',
             text: summaryText
         };
 
@@ -1084,7 +1084,7 @@ class EnhancedDigitDifferTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: 'Enhanced Accumulator Bot - Error Report',
+            subject: 'kInspired Accumulator Bot - Error Report',
             text: `An error occurred: ${errorMessage}`
         };
 
@@ -1096,7 +1096,7 @@ class EnhancedDigitDifferTradingBot {
     }
 
     start() {
-        console.log('🚀 Starting Enhanced Accumulator Trading Bot with Learning System');
+        console.log('🚀 Starting kInspired Accumulator Trading Bot with Learning System');
         console.log('Features: Adaptive filters, pattern recognition, volatility analysis');
         this.connect();
         this.checkTimeForDisconnectReconnect(); // Automatically handles disconnect/reconnect at specified times
@@ -1104,7 +1104,7 @@ class EnhancedDigitDifferTradingBot {
 }
 
 // Usage
-const bot = new EnhancedDigitDifferTradingBot('0P94g4WdSrSrzir', {
+const bot = new EnhancedDigitDifferTradingBot('hsj0tA0XJoIzJG5', {
     // 'DMylfkyce6VyZt7', '0P94g4WdSrSrzir', rgNedekYXvCaPeP, hsj0tA0XJoIzJG5, Dz2V2KvRf4Uukt3
     initialStake: 1,
     multiplier: 21,
