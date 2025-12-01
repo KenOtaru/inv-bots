@@ -12,7 +12,7 @@ class EnhancedDerivTradingBot {
             // '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V', // 1 Tick per second
             // 'R_10', 'R_25', 'R_50','R_75', 'R_100'// 1 Tick every 2 seconds
             // '1HZ100V', //'R_75'
-            'R_100'
+            'R_10'
         ];
 
 
@@ -376,24 +376,17 @@ class EnhancedDerivTradingBot {
 
         if (response.proposal) {
             const stayedInArray = response.proposal.contract_details.ticks_stayed_in;
-            this.stayedInArray25 = stayedInArray.slice(-10);
-
-            // console.log('Received proposal:', stayedInArray);
-            console.log('25 proposal:', this.stayedInArray25);
-
+            console.log('Received proposal:', stayedInArray);
             const currentDigitCount = stayedInArray[99] + 1;
-            const currentDigitCount2 = this.stayedInArray25[9] + 1;
-
-            // console.log(`Current StayedIn Digit Count: ${stayedInArray[99]} (${currentDigitCount})`);
-            console.log(`25 Current StayedIn Digit Count: ${this.stayedInArray25[9]} (${currentDigitCount2})`);
+            console.log(`filter Number: ${this.filterNum}`);
+            console.log(`Current StayedIn Digit Count: ${stayedInArray[99]} (${currentDigitCount})`);
             this.currentProposalId = response.proposal.id;
 
             this.totalArray = stayedInArray;
 
-
             // Create frequency map of digits
             const digitFrequency = {};
-            this.stayedInArray25.forEach(digit => {
+            stayedInArray.forEach(digit => {
                 digitFrequency[digit] = (digitFrequency[digit] || 0) + 1;
             });
 
@@ -402,121 +395,177 @@ class EnhancedDerivTradingBot {
 
             // Create array 1
             const appearedOnceArray = Object.keys(digitFrequency)
-                .filter(digit => digitFrequency[digit] === 1)
+                .filter(digit => digitFrequency[digit] === 2)//this.filterNum
                 .map(Number);
 
             // Create array 2
             const appearedOnceArray1 = Object.keys(digitFrequency)
-                .filter(digit => digitFrequency[digit] === 2)
+                .filter(digit => digitFrequency[digit] === 3)
                 .map(Number);
 
             // Create array 3
             const appearedOnceArray2 = Object.keys(digitFrequency)
-                .filter(digit => digitFrequency[digit] === 3)
+                .filter(digit => digitFrequency[digit] === 4)
                 .map(Number);
 
             // Create array 4
             const appearedOnceArray3 = Object.keys(digitFrequency)
-                .filter(digit => digitFrequency[digit] === 4)
+                .filter(digit => digitFrequency[digit] === 5)
                 .map(Number);
 
             // Create array 5
             const appearedOnceArray4 = Object.keys(digitFrequency)
-                .filter(digit => digitFrequency[digit] === 5)
+                .filter(digit => digitFrequency[digit] === 6)
                 .map(Number);
 
             // Create array 6
             const appearedOnceArray5 = Object.keys(digitFrequency)
-                .filter(digit => digitFrequency[digit] === 6)
+                .filter(digit => digitFrequency[digit] === 7)
                 .map(Number);
 
             // Create array 7
             const appearedOnceArray6 = Object.keys(digitFrequency)
-                .filter(digit => digitFrequency[digit] === 7)
+                .filter(digit => digitFrequency[digit] === 8)
                 .map(Number);
 
-            // console.log(`filter Number: ${this.filterNum}`);
+            // Create array 8
+            const appearedOnceArray7 = Object.keys(digitFrequency)
+                .filter(digit => digitFrequency[digit] === 9)
+                .map(Number);
+
+            // Create array 9
+            const appearedOnceArray8 = Object.keys(digitFrequency)
+                .filter(digit => digitFrequency[digit] === 10)
+                .map(Number);
+
+            // Create array 10
+            const appearedOnceArray9 = Object.keys(digitFrequency)
+                .filter(digit => digitFrequency[digit] === 11)
+                .map(Number);
+
+            // Create array 11
+            const appearedOnceArray10 = Object.keys(digitFrequency)
+                .filter(digit => digitFrequency[digit] === 12)
+                .map(Number);
+
 
             console.log(`
                 StayedIn Analysis: 
-                1 Array: ${appearedOnceArray} (${appearedOnceArray.length})
-                2 Array: ${appearedOnceArray1} (${appearedOnceArray1.length})
-                3 Array: ${appearedOnceArray2} (${appearedOnceArray2.length})
-                4 Array: ${appearedOnceArray3} (${appearedOnceArray3.length})
-                5 Array: ${appearedOnceArray4} (${appearedOnceArray4.length})
-                6 Array: ${appearedOnceArray5} (${appearedOnceArray5.length})
-                7 Array: ${appearedOnceArray6} (${appearedOnceArray6.length})
-                `)
+                2 Array: ${appearedOnceArray} (${appearedOnceArray.length})
+                3 Array: ${appearedOnceArray1} (${appearedOnceArray1.length})
+                4 Array: ${appearedOnceArray2} (${appearedOnceArray2.length})
+                5 Array: ${appearedOnceArray3} (${appearedOnceArray3.length})
+                6 Array: ${appearedOnceArray4} (${appearedOnceArray4.length})
+                7 Array: ${appearedOnceArray5} (${appearedOnceArray5.length})
+                8 Array: ${appearedOnceArray6} (${appearedOnceArray6.length})
+                9 Array: ${appearedOnceArray7} (${appearedOnceArray7.length})
+                10 Array: ${appearedOnceArray8} (${appearedOnceArray8.length})
+                11 Array: ${appearedOnceArray9} (${appearedOnceArray9.length})
+                12 Array: ${appearedOnceArray10} (${appearedOnceArray10.length})
+            `);
 
 
             if (!this.tradeInProgress) {
-                console.log('kTraded Digit Array:', this.tradedDigitArray[this.tradedDigitArray.length - 1])
+                console.log('kTraded Digit Array:', this.tradedDigitArray[0]);
 
-                if (appearedOnceArray6.length > 0) {
-                    if ((appearedOnceArray6.includes(currentDigitCount2))
-                        &&
-                        this.stayedInArray25[9] >= 0
+                if (appearedOnceArray10.length > 0) {
+                    if (appearedOnceArray10.includes(currentDigitCount)
+                        && stayedInArray[99] >= 0
                     ) {
-                        this.tradedDigitArray.push(currentDigitCount2)
+                        this.tradedDigitArray.push(currentDigitCount)
+                        this.filteredArray = appearedOnceArray10;
+                        console.log('Traded Digit Array:', this.tradedDigitArray);
+                        // this.placeTrade();
+                    }
+                } else if (appearedOnceArray9.length > 0) {
+                    if (appearedOnceArray9.includes(currentDigitCount)
+                        && stayedInArray[99] >= 0
+                    ) {
+                        this.tradedDigitArray.push(currentDigitCount)
+                        this.filteredArray = appearedOnceArray9;
+                        console.log('Traded Digit Array:', this.tradedDigitArray);
+                        // this.placeTrade();
+                    }
+                } else if (appearedOnceArray8.length > 0) {
+                    if (appearedOnceArray8.includes(currentDigitCount)
+                        && stayedInArray[99] >= 0
+                    ) {
+                        this.tradedDigitArray.push(currentDigitCount)
+                        this.filteredArray = appearedOnceArray8;
+                        console.log('Traded Digit Array:', this.tradedDigitArray);
+                        // this.placeTrade();
+                    }
+                } else if (appearedOnceArray7.length > 0) {
+                    if (appearedOnceArray7.includes(currentDigitCount)
+                        && stayedInArray[99] >= 0
+                    ) {
+                        this.tradedDigitArray.push(currentDigitCount)
+                        this.filteredArray = appearedOnceArray7;
+                        console.log('Traded Digit Array:', this.tradedDigitArray);
+                        // this.placeTrade();
+                    }
+                } else if (appearedOnceArray6.length > 0) {
+                    if (appearedOnceArray6.includes(currentDigitCount)
+                        && stayedInArray[99] >= 7
+                    ) {
+                        this.tradedDigitArray.push(currentDigitCount)
                         this.filteredArray = appearedOnceArray6;
                         console.log('Traded Digit Array:', this.tradedDigitArray);
-                        console.log('kTraded Digit Array:', this.tradedDigitArray[this.tradedDigitArray.length - 1])
-                        this.placeTrade();
+                        // this.placeTrade();
                     }
                 } else if (appearedOnceArray5.length > 0) {
-                    if ((appearedOnceArray5.includes(currentDigitCount2))
-                        &&
-                        this.stayedInArray25[9] >= 0
+                    if (appearedOnceArray5.includes(currentDigitCount)
+                        && stayedInArray[99] >= 7
                     ) {
-                        this.tradedDigitArray.push(currentDigitCount2)
+                        this.tradedDigitArray.push(currentDigitCount)
                         this.filteredArray = appearedOnceArray5;
                         console.log('Traded Digit Array:', this.tradedDigitArray);
-                        console.log('kTraded Digit Array:', this.tradedDigitArray[this.tradedDigitArray.length - 1])
-                        this.placeTrade();
+                        // this.placeTrade();
                     }
                 } else if (appearedOnceArray4.length > 0) {
-                    if ((appearedOnceArray4.includes(currentDigitCount2))
-                        &&
-                        this.stayedInArray25[9] >= 0
+                    if (appearedOnceArray4.includes(currentDigitCount)
+                        && stayedInArray[99] >= 7
                     ) {
-                        this.tradedDigitArray.push(currentDigitCount2)
+                        this.tradedDigitArray.push(currentDigitCount)
                         this.filteredArray = appearedOnceArray4;
                         console.log('Traded Digit Array:', this.tradedDigitArray);
-                        console.log('kTraded Digit Array:', this.tradedDigitArray[this.tradedDigitArray.length - 1])
-                        this.placeTrade();
+                        // this.placeTrade();
                     }
                 } else if (appearedOnceArray3.length > 0) {
-                    if ((appearedOnceArray3.includes(currentDigitCount2))
-                        &&
-                        this.stayedInArray25[9] >= 0
+                    if (appearedOnceArray3.includes(currentDigitCount)
+                        && stayedInArray[99] >= 7
                     ) {
-                        this.tradedDigitArray.push(currentDigitCount2)
+                        this.tradedDigitArray.push(currentDigitCount)
                         this.filteredArray = appearedOnceArray3;
                         console.log('Traded Digit Array:', this.tradedDigitArray);
-                        console.log('kTraded Digit Array:', this.tradedDigitArray[this.tradedDigitArray.length - 1])
-                        this.placeTrade();
+                        // this.placeTrade();
                     }
                 } else if (appearedOnceArray2.length > 0) {
-                    if ((appearedOnceArray2.includes(currentDigitCount2))
-                        &&
-                        this.stayedInArray25[9] >= 0
+                    if (appearedOnceArray2.includes(currentDigitCount)
+                        && stayedInArray[99] >= 7
                     ) {
-                        this.tradedDigitArray.push(currentDigitCount2)
+                        this.tradedDigitArray2.push(currentDigitCount)
                         this.filteredArray = appearedOnceArray2;
                         console.log('Traded Digit Array:', this.tradedDigitArray);
-                        console.log('kTraded Digit Array:', this.tradedDigitArray[this.tradedDigitArray.length - 1])
-                        this.placeTrade();
+                        // this.placeTrade();
                     }
                 } else if (appearedOnceArray1.length > 0) {
-                    if ((appearedOnceArray1.includes(currentDigitCount2))
-                        &&
-                        this.stayedInArray25[9] >= 0
+                    if (appearedOnceArray1.includes(currentDigitCount)
+                        && stayedInArray[99] >= 7
                     ) {
-                        this.tradedDigitArray.push(currentDigitCount2)
+                        this.tradedDigitArray.push(currentDigitCount)
                         this.filteredArray = appearedOnceArray1;
                         console.log('Traded Digit Array:', this.tradedDigitArray);
-                        console.log('kTraded Digit Array:', this.tradedDigitArray[this.tradedDigitArray.length - 1])
-                        this.placeTrade();
+                        // this.placeTrade();
+                    }
+                } else if (appearedOnceArray.length > 0) {
+                    if (appearedOnceArray.includes(currentDigitCount)
+                        && stayedInArray[99] >= 7
+                    ) {
+                        this.tradedDigitArray.push(currentDigitCount)
+                        this.filteredArray = appearedOnceArray;
+                        console.log('Traded Digit Array:', this.tradedDigitArray);
+                        // this.placeTrade();
                     }
                 }
             }
@@ -643,7 +692,7 @@ class EnhancedDerivTradingBot {
         }
 
         // Keep array length under 5 by removing from the start if needed
-        if (this.tradedDigitArray.length > 1) {
+        if (this.tradedDigitArray.length > 5) {
             this.tradedDigitArray.shift();
         }
 
@@ -809,7 +858,7 @@ class EnhancedDerivTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: '>4k5%Accumulator Trading Bot - Summary',
+            subject: 'k5%Accumulator Trading Bot - Summary',
             text: summaryText
         };
 
@@ -854,7 +903,7 @@ class EnhancedDerivTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: '>4k5%Accumulator Trading Bot - Summary',
+            subject: 'k5%Accumulator Trading Bot - Summary',
             text: summaryText
         };
 
@@ -872,7 +921,7 @@ class EnhancedDerivTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: '>4k5%Accumulator Trading Bot - Error Report',
+            subject: 'k5%Accumulator Trading Bot - Error Report',
             text: `An error occurred in the trading bot: ${errorMessage}`
         };
 
@@ -921,7 +970,7 @@ class EnhancedDerivTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: '>4k5%Accumulator Trading Bot - Summary',
+            subject: 'k5%Accumulator Trading Bot - Summary',
             text: summaryText
         };
 
