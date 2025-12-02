@@ -859,7 +859,7 @@ class EnhancedDerivTradingBot {
 }
 
 // Usage
-const bot = new EnhancedDerivTradingBot('DMylfkyce6VyZt7', {
+const bot = new EnhancedDerivTradingBot('hsj0tA0XJoIzJG5', {
     initialStake: 0.61,
     multiplier: 11.3,
     maxStake: 127,
