@@ -12,8 +12,8 @@ module.exports = {
         initialStake: 0.61,           // Starting stake in USD
         multiplier: 11.3,              // Stake multiplier after loss (Martingale)
         maxConsecutiveLosses: 4,      // Stop after this many consecutive losses
-        stopLoss: 50,                 // Maximum total loss before stopping
-        takeProfit: 20,               // Target profit before stopping
+        stopLoss: 400,                 // Maximum total loss before stopping
+        takeProfit: 2000,               // Target profit before stopping
         maxStake: 100,                // Maximum allowed stake
     },
 

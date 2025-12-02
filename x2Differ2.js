@@ -184,7 +184,7 @@ class EnhancedDerivTradingBot {
         this.connected = false;
         this.assets = [
             // 'R_50','R_100','R_25','R_75', 'R_10',
-            'R_100'
+            'R_50'
         ];
 
         this.config = {
@@ -864,8 +864,8 @@ const bot = new EnhancedDerivTradingBot('0P94g4WdSrSrzir', {
     multiplier: 11.3,
     maxStake: 127,
     maxConsecutiveLosses: 4,
-    stopLoss: 127,
-    takeProfit: 100,
+    stopLoss: 400,
+    takeProfit: 2000,
 });
 
 bot.start();
