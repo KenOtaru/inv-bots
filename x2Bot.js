@@ -14,8 +14,8 @@
 
 const WebSocket = require('ws');
 const nodemailer = require('nodemailer');
-const config = require('./x2bot/config');
-const StatisticalAnalyzer = require('./x2bot/StatisticalAnalyzer');
+const config = require('./config');
+const StatisticalAnalyzer = require('./StatisticalAnalyzer');
 
 class DerivDigitDifferBot {
     constructor() {
