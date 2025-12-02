@@ -5,12 +5,12 @@
 
 module.exports = {
     // Deriv API Token - Replace with your actual token
-    API_TOKEN: 'YOUR_API_TOKEN_HERE',
+    API_TOKEN: 'Dz2V2KvRf4Uukt3',
 
     // Trading Parameters
     TRADING: {
-        initialStake: 1.00,           // Starting stake in USD
-        multiplier: 2.5,              // Stake multiplier after loss (Martingale)
+        initialStake: 0.61,           // Starting stake in USD
+        multiplier: 11.3,              // Stake multiplier after loss (Martingale)
         maxConsecutiveLosses: 4,      // Stop after this many consecutive losses
         stopLoss: 50,                 // Maximum total loss before stopping
         takeProfit: 20,               // Target profit before stopping
@@ -20,22 +20,22 @@ module.exports = {
     // Analysis Thresholds - CRITICAL for trade decisions
     ANALYSIS: {
         minHistoryLength: 5000,       // Minimum ticks before trading
-        minConfidence: 0.92,          // Minimum confidence to trade (92%)
-        maxRepetitionRate: 0.08,      // Max acceptable repetition rate (8%)
-        minNonRepStreak: 8,           // Minimum consecutive non-repetitions
+        minConfidence: 0.70,          // Minimum confidence to trade (92%)
+        maxRepetitionRate: 0.10,      // Max acceptable repetition rate (8%)
+        minNonRepStreak: 10,           // Minimum consecutive non-repetitions
         minSampleSize: 500,           // Minimum samples for digit analysis
     },
 
     // Assets to trade (synthetic indices)
-    ASSETS: ['R_100'],
+    ASSETS: ['R_10'],
 
     // Email notifications (optional)
     EMAIL: {
-        enabled: false,
+        enabled: true,
         service: 'gmail',
-        user: 'your-email@gmail.com',
-        pass: 'your-app-password',
-        recipient: 'recipient@email.com'
+        user: 'kenzkdp2@gmail.com',
+        pass: 'jfjhtmussgfpbgpk',
+        recipient: 'kenotaru@gmail.com'
     },
 
     // Timing

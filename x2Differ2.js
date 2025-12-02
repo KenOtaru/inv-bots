@@ -171,7 +171,7 @@ class PatternAnalyzer {
         // Helper for logging
         const analysis = this.analyze(history);
         if (analysis.shouldTrade) {
-            console.log(`Pattern Found: [${analysis.patternType}] -> Predict NOT ${analysis.predictedDigit} (Conf: ${analysis.confidence}%, Samples: ${analysis.samples})`);
+            // console.log(`Pattern Found: [${analysis.patternType}] -> Predict NOT ${analysis.predictedDigit} (Conf: ${analysis.confidence}%, Samples: ${analysis.samples})`);
         }
     }
 }
@@ -451,15 +451,15 @@ class EnhancedDerivTradingBot {
             this.tickHistory.shift();
         }
 
-        // Update pattern analyzer with new history
-        if (!this.tradeInProgress) {
-            this.patternAnalyzer.analyzeHistory(this.tickHistory);
-        }
-
         if (this.tradeInProgress) {
             console.log(`Recent tick History: ${this.tickHistory.slice(-5).join(', ')}`);
         } else {
             console.log(`Received tick: ${this.currentAsset} => ${tick.quote} (Last digit: ${lastDigit})`);
+        }
+
+        // Update pattern analyzer with new history
+        if (!this.tradeInProgress) {
+            this.patternAnalyzer.analyzeHistory(this.tickHistory);
         }
 
         // Enhanced logging
@@ -484,7 +484,8 @@ class EnhancedDerivTradingBot {
 
             // Trade if confidence is high enough
             // We set a high bar for "100% certainty"
-            if (confidence >= 98) {
+            if (confidence >= 98) { //&& predictedDigit === this.tickHistory[this.tickHistory.length - 1]
+                console.log(`Pattern Found: [${analysis.patternType}] -> Predict NOT ${analysis.predictedDigit} (Conf: ${analysis.confidence}%, Samples: ${analysis.samples})`);
                 this.xDigit = predictedDigit;
                 this.confidenceThreshold = confidence;
                 this.placeTrade(predictedDigit, confidence);
@@ -607,6 +608,9 @@ class EnhancedDerivTradingBot {
 
         this.disconnect();
 
+        //Reset Analysis
+        this.patternAnalyzer = new PatternAnalyzer();// Advanced pattern analyzer
+
         if (!this.endOfDay) {
             this.waitTime = Math.floor(Math.random() * (2000 - 1000 + 1)) + 1000;
             console.log(`⏳ Waiting ${Math.round(this.waitTime / 1000)} seconds before next trade...\n`);
@@ -686,9 +690,6 @@ class EnhancedDerivTradingBot {
         console.log(`Total P/L: $${this.totalProfitLoss.toFixed(2)}`);
         console.log(`Current Stake: $${this.currentStake.toFixed(2)}`);
         console.log(`Pattern Confidence: ${this.confidenceThreshold}%`);
-        console.log(`Anti-Algo Score: ${this.antiAlgorithmScore}`);
-        console.log(`Chaos Level: ${this.chaosLevel}`);
-        console.log('Chaos:', this.kChaos);
         console.log('═══════════════════════════════════════\n');
     }
 
@@ -766,9 +767,6 @@ class EnhancedDerivTradingBot {
         Asset: ${this.currentAsset}
         Predicted Digit: ${this.xDigit}
         Confidence: ${this.confidenceThreshold}%
-        Anti-Algorithm Score: ${this.antiAlgorithmScore}
-        Chaos Level: ${this.chaosLevel}
-        Chaos Details: ${this.kChaos}
         
         Recent History:
         --------------
@@ -853,10 +851,6 @@ class EnhancedDerivTradingBot {
 
     start() {
         console.log('🚀 STARTING ENHANCED DERIV TRADING BOT 🚀');
-        console.log('=========================================');
-        console.log('Pattern Recognition: ENABLED');
-        console.log('Advanced Analysis: ACTIVE');
-        console.log('Confidence Threshold: 75%');
         console.log('=========================================\n');
 
         this.connect();
@@ -866,10 +860,10 @@ class EnhancedDerivTradingBot {
 
 // Usage
 const bot = new EnhancedDerivTradingBot('0P94g4WdSrSrzir', {
-    initialStake: 1,
+    initialStake: 0.61,
     multiplier: 11.3,
     maxStake: 127,
-    maxConsecutiveLosses: 3,
+    maxConsecutiveLosses: 4,
     stopLoss: 127,
     takeProfit: 100,
 });
