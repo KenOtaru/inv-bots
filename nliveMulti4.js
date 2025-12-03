@@ -983,7 +983,7 @@ class EnsembleDecisionMaker {
     optimizeThreshold() {
         if (this.recentDecisions.length < 50) return;
 
-        const thresholds = [0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8];
+        const thresholds = [0.7, 0.75, 0.8]; //[0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8];
         let bestThreshold = 0.7;
         let bestScore = -Infinity;
 
@@ -1075,7 +1075,7 @@ class EnsembleDecisionMaker {
 // ============================================================================
 
 class PersistenceManager {
-    constructor(baseDir = './bot_memory') {
+    constructor(baseDir = './bot_memory2') {
         this.baseDir = baseDir;
         this.ensureDirectory();
     }
@@ -2439,11 +2439,11 @@ class EnhancedAccumulatorBot {
     // ========================================================================
 
     startEmailTimer() {
-        if (!this.endOfDay) {
-            setInterval(() => {
+        setInterval(() => {
+            if (!this.endOfDay) {
                 this.sendEmailSummary();
-            }, 1800000);
-        }
+            }
+        }, 1800000);
     }
 
     async sendEmailSummary() {
