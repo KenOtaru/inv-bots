@@ -1098,7 +1098,7 @@ class EnhancedDigitDifferBot {
         this.config = {
             initialStake: config.initialStake || 10,
             multiplier: config.multiplier || 2.5,
-            maxConsecutiveLosses: config.maxConsecutiveLosses || 5,
+            maxConsecutiveLosses: config.maxConsecutiveLosses || 3,
             stopLoss: config.stopLoss || 50,
             takeProfit: config.takeProfit || 20,
             requiredHistoryLength: config.requiredHistoryLength || 200,
@@ -1653,9 +1653,9 @@ class EnhancedDigitDifferBot {
         // this.persistenceManager = new DigitPersistenceManager();
 
         // Learning mode
-        // this.observationCount = 0;
-        // this.learningMode = true;
-        // this.lastPredictions = {};
+        this.observationCount = 0;
+        this.learningMode = true;
+        this.lastPredictions = {};
 
         // Initialize assets
         this.assets.forEach(asset => {
@@ -1983,14 +1983,17 @@ const bot = new EnhancedDigitDifferBot(token, {
     initialStake: 0.61,
     multiplier: 11.3,
     stopLoss: 86,
+    maxConsecutiveLosses: 3,
     takeProfit: 5000,
     tickDuration: 1,
     minConfidence: 0.90,
     assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
     enableNeuralNetwork: true,
     enablePatternRecognition: true,
-    learningModeThreshold: 50,
-    requiredHistoryLength: 200,
+    learningModeThreshold: 500,
+    requiredHistoryLength: 5000,
+    minWaitTime: 2000,
+    maxWaitTime: 5000,
 });
 
 bot.start();
