@@ -11,10 +11,11 @@ module.exports = {
     TRADING: {
         initialStake: 0.61,           // Starting stake in USD
         multiplier: 11.3,              // Stake multiplier after loss (Martingale)
-        maxConsecutiveLosses: 3,      // Stop after this many consecutive losses
-        stopLoss: 86,                 // Maximum total loss before stopping
-        takeProfit: 5000,               // Target profit before stopping
-        maxStake: 100,                // Maximum allowed stake
+        maxConsecutiveLosses: 3,      // Stop after this many consecutive losses per asset
+        stopLoss: 86,                // Maximum total loss before stopping (all assets)
+        takeProfit: 5000,               // Target profit before stopping (all assets)
+        maxStake: 100,                // Maximum allowed stake per asset
+        maxConcurrentTrades: 5,       // Max trades running at same time
     },
 
     // Analysis Thresholds - CRITICAL for trade decisions
@@ -28,8 +29,9 @@ module.exports = {
         minSampleSize: 500,           // Minimum samples for digit analysis 
     },
 
-    // Assets to trade (synthetic indices)
-    ASSETS: ['R_10'],
+    // Assets to trade (synthetic indices) - ALL traded concurrently
+    // ASSETS: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
+    ASSETS: ['R_10', 'R_75', 'R_100', 'RDBEAR', 'RDBULL'],
 
     // Email notifications (optional)
     EMAIL: {
@@ -43,7 +45,8 @@ module.exports = {
     // Timing
     TIMING: {
         reconnectInterval: 5000,      // ms between reconnect attempts
-        maxReconnectAttempts: 500,
-        tradeCooldown: 2000,          // ms to wait after each trade
+        maxReconnectAttempts: 100,
+        tradeCooldown: 3000,          // ms to wait after each trade per asset
+        analysisInterval: 100,        // ms between analysis cycles
     }
 };

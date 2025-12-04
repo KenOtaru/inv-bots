@@ -617,7 +617,7 @@ class DerivDigitDifferBot {
             this.sendFinalSummary();
             this.stop();
             this.endOfDay = true;
-            return true;
+            // return true;
         }
 
         // Check take profit
@@ -665,6 +665,9 @@ class DerivDigitDifferBot {
         }, 5000);
     }
 
+    /**
+     * Start summary email timer
+     */
     startSummaryEmailTimer() {
         setInterval(() => {
             if (!this.endOfDay) {
