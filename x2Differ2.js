@@ -616,7 +616,9 @@ class EnhancedDerivTradingBot {
             return;
         }
 
-        this.disconnect();
+        this.unsubscribeFromTicks(() => {
+            this.disconnect();
+        });
 
         //Reset Analysis
         this.patternAnalyzer = new PatternAnalyzer();// Advanced pattern analyzer
@@ -746,7 +748,7 @@ class EnhancedDerivTradingBot {
 
     async sendLossEmail() {
         const transporter = nodemailer.createTransport(this.emailConfig);
-        const klastDigits = this.tickHistory.slice(-20);
+        const klastDigits = this.tickHistory.slice(-10);
 
         const summaryText = `
         LOSS ALERT - DETAILED ANALYSIS

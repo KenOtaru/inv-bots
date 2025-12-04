@@ -13,21 +13,23 @@ module.exports = {
         multiplier: 11.3,              // Stake multiplier after loss (Martingale)
         maxConsecutiveLosses: 3,      // Stop after this many consecutive losses
         stopLoss: 86,                 // Maximum total loss before stopping
-        takeProfit: 2000,               // Target profit before stopping
+        takeProfit: 5000,               // Target profit before stopping
         maxStake: 100,                // Maximum allowed stake
     },
 
     // Analysis Thresholds - CRITICAL for trade decisions
     ANALYSIS: {
         minHistoryLength: 5000,       // Minimum ticks before trading
-        minConfidence: 0.75,          // Minimum confidence to trade (92%)
-        maxRepetitionRate: 0.9,      // Max acceptable repetition rate (8%)
-        minNonRepStreak: 9,           // Minimum consecutive non-repetitions
-        minSampleSize: 500,           // Minimum samples for digit analysis
+        minConfidence: 0.8,          // Minimum confidence to trade (92%)
+        maxRepetitionRate: 0.10,      // Max acceptable repetition rate (10%)
+        recentRepetitionRate: 0.08,     // Maximum recent repetition rate (8%)
+        selfRepetitionRate: 0.08,     // Maximum self-repetition rate (8%)
+        minNonRepStreak: 6,           // Minimum consecutive non-repetitions
+        minSampleSize: 500,           // Minimum samples for digit analysis 
     },
 
     // Assets to trade (synthetic indices)
-    ASSETS: ['R_50'],
+    ASSETS: ['R_100'],
 
     // Email notifications (optional)
     EMAIL: {
