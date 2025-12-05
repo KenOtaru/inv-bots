@@ -961,11 +961,11 @@ class EnhancedDigitDifferTradingBot {
     }
 
     startEmailTimer() {
-        if (!this.endOfDay) {
-            setInterval(() => {
+        setInterval(() => {
+            if (!this.endOfDay) {
                 this.sendEmailSummary();
-            }, 1800000); // 30 Minutes
-        }
+            }
+        }, 1800000); // 30 Minutes
     }
 
     async sendEmailSummary() {

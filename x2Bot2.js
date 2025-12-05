@@ -42,9 +42,7 @@ class AssetHandler {
         this.consecutiveLosses3 = 0;
         this.consecutiveLosses4 = 0;
         this.consecutiveLosses5 = 0;
-        this.maxConsecutiveLosses = 0;
-        this.endOfDay = false;
-        this.isWinTrade = false;
+        this.consecutiveLossesN = 0;
 
         // Per-asset statistics
         this.totalTrades = 0;
@@ -57,9 +55,6 @@ class AssetHandler {
 
         // Status
         this.isActive = true;
-
-        // Start email timer
-        this.startSummaryEmailTimer();
     }
 
     /**
@@ -192,21 +187,23 @@ class AssetHandler {
             this.wins++;
             this.isWinTrade = true;
             this.consecutiveLosses = 0;
-            this.currentStake = config.TRADING.initialStake;
+            // this.consecutiveLossesN = 0;
+            // this.currentStake = config.TRADING.initialStake;
         } else {
             this.losses++;
             this.isWinTrade = false;
             this.consecutiveLosses++;
+            // this.consecutiveLossesN++;
 
             // Update global consecutive loss counters
-            if (this.consecutiveLosses === 2) this.consecutiveLosses2++;
-            else if (this.consecutiveLosses === 3) this.consecutiveLosses3++;
-            else if (this.consecutiveLosses === 4) this.consecutiveLosses4++;
-            else if (this.consecutiveLosses === 5) this.consecutiveLosses5++;
+            // if (this.consecutiveLossesN === 2) this.consecutiveLosses2++;
+            // else if (this.consecutiveLossesN === 3) this.consecutiveLosses3++;
+            // else if (this.consecutiveLossesN === 4) this.consecutiveLosses4++;
+            // else if (this.consecutiveLossesN === 5) this.consecutiveLosses5++;
 
             // Apply Martingale
-            const newStake = this.currentStake * config.TRADING.multiplier;
-            this.currentStake = Math.min(newStake, config.TRADING.maxStake);
+            // this.currentStake = Math.ceil(this.currentStake * config.TRADING.multiplier * 100) / 100;
+            // this.shouldStopGlobal();
         }
 
         // Set cooldown
@@ -267,12 +264,25 @@ class MultiAssetDerivBot {
             startTime: null
         };
 
+        // Global consecutive loss counters
+        this.consecutiveLossesN = 0;
+        this.consecutiveLosses2 = 0;
+        this.consecutiveLosses3 = 0;
+        this.consecutiveLosses4 = 0;
+        this.consecutiveLosses5 = 0;
+        this.maxConsecutiveLosses = 0;
+        this.endOfDay = false;
+        this.isWinTrade = false;
+
         // Connection management
         this.reconnectAttempts = 0;
         this.isRunning = false;
 
         // Initialize asset handlers
         this.initializeAssets();
+
+        // Start email timer
+        this.startSummaryEmailTimer();
     }
 
     /**
@@ -556,10 +566,10 @@ class MultiAssetDerivBot {
      */
     analyzeAndTrade(asset) {
         // Check global stop conditions first
-        if (this.shouldStopGlobal()) {
-            this.stop();
-            return;
-        }
+        // if (this.shouldStopGlobal()) {
+        //     this.stop();
+        //     return;
+        // }
 
         // Check concurrent trade limit
         const currentActiveTradesCount = this.getActiveTradesCount();
@@ -687,6 +697,9 @@ class MultiAssetDerivBot {
 
         if (won) {
             this.globalStats.totalWins++;
+            this.consecutiveLossesN = 0;
+
+            this.currentStake = config.TRADING.initialStake;
 
             console.log('\n');
             console.log('╔════════════════════════════════════════════════════════════════╗');
@@ -695,12 +708,14 @@ class MultiAssetDerivBot {
             console.log('╚════════════════════════════════════════════════════════════════╝');
         } else {
             this.globalStats.totalLosses++;
+            this.consecutiveLossesN++;
+
 
             console.log('\n');
             console.log('╔════════════════════════════════════════════════════════════════╗');
             console.log(`║                     ❌ [${asset.symbol}] TRADE LOST ❌                     ║`);
             console.log(`║  Loss: -$${Math.abs(profit).toFixed(2).padEnd(54)}║`);
-            console.log(`║  Consecutive Losses: ${asset.consecutiveLosses.toString().padEnd(42)}║`);
+            console.log(`║  Consecutive Losses: ${this.consecutiveLossesN.toString().padEnd(42)}║`);
             console.log(`║  Next Stake: $${asset.currentStake.toFixed(2).padEnd(48)}║`);
             console.log('╚════════════════════════════════════════════════════════════════╝');
 
@@ -708,6 +723,16 @@ class MultiAssetDerivBot {
             if (config.EMAIL.enabled) {
                 this.sendLossNotification(asset, contract);
             }
+
+            this.shouldStopGlobal();
+
+            // Update global consecutive loss counters
+            if (this.consecutiveLossesN === 2) this.consecutiveLosses2++;
+            else if (this.consecutiveLossesN === 3) this.consecutiveLosses3++;
+            else if (this.consecutiveLossesN === 4) this.consecutiveLosses4++;
+            else if (this.consecutiveLossesN === 5) this.consecutiveLosses5++;
+
+            this.currentStake = Math.ceil(this.currentStake * config.TRADING.multiplier * 100) / 100;
         }
 
         // Log summaries
@@ -755,7 +780,7 @@ class MultiAssetDerivBot {
      */
     shouldStopGlobal() {
         // Check global stop loss
-        if (this.globalStats.totalProfitLoss <= -config.TRADING.stopLoss || this.consecutiveLosses >= config.TRADING.maxConsecutiveLosses) {
+        if (this.globalStats.totalProfitLoss <= -config.TRADING.stopLoss || this.consecutiveLossesN >= config.TRADING.maxConsecutiveLosses) {
             console.log('\n⛔ STOPPING: Global stop loss reached');
             this.sendFinalSummary();
             this.stop();
@@ -839,14 +864,17 @@ class MultiAssetDerivBot {
             await transporter.sendMail({
                 from: config.EMAIL.user,
                 to: config.EMAIL.recipient,
-                subject: `x2Deriv Multi-Asset Bot - [${asset.symbol}] Trade Lost`,
+                subject: `Multix2Bot - [${asset.symbol}] Trade Lost`,
                 text: `
                     TRADE LOSS NOTIFICATION
                     =======================
 
                     Asset: ${asset.symbol}
+                     Global Stats:
+                    - Total Trades: ${this.globalStats.totalTrades}
+                    - Total P/L: $${this.globalStats.totalProfitLoss.toFixed(2)}
                     Loss Amount: $${Math.abs(parseFloat(contract.profit)).toFixed(2)}
-                    Consecutive Losses: ${asset.consecutiveLosses}
+                    Total Losses: ${this.globalStats.totalLosses}
                     x2: ${this.consecutiveLosses2}
                     x3: ${this.consecutiveLosses3}
                     x4: ${this.consecutiveLosses4}
@@ -855,11 +883,7 @@ class MultiAssetDerivBot {
                     Asset P/L: $${asset.profitLoss.toFixed(2)}
                     Next Stake: $${asset.currentStake.toFixed(2)}
 
-                    Recent Digits: ${recentDigits}
-
-                    Global Stats:
-                    - Total Trades: ${this.globalStats.totalTrades}
-                    - Total P/L: $${this.globalStats.totalProfitLoss.toFixed(2)} 
+                    Recent Digits: ${recentDigits} 
                 `
             });
         } catch (error) {
@@ -933,7 +957,7 @@ class MultiAssetDerivBot {
             await transporter.sendMail({
                 from: config.EMAIL.user,
                 to: config.EMAIL.recipient,
-                subject: `x2Deriv Multi-Asset Bot - Session Complete`,
+                subject: `Multix2Bot - Session Complete`,
                 text: `
                     SESSION COMPLETE - MULTI-ASSET BOT
                     ==================================
@@ -990,7 +1014,7 @@ class MultiAssetDerivBot {
             await transporter.sendMail({
                 from: config.EMAIL.user,
                 to: config.EMAIL.recipient,
-                subject: `x2Deriv Multi-Asset Bot - Trade Summary`,
+                subject: `Multix2Bot - Trade Summary`,
                 text: `
                     TRADE SUMMARY - MULTI-ASSET BOT
                     ==================================
