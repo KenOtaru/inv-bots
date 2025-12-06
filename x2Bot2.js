@@ -38,11 +38,6 @@ class AssetHandler {
         // Per-asset stake management (independent Martingale)
         this.currentStake = config.TRADING.initialStake;
         this.consecutiveLosses = 0;
-        this.consecutiveLosses2 = 0;
-        this.consecutiveLosses3 = 0;
-        this.consecutiveLosses4 = 0;
-        this.consecutiveLosses5 = 0;
-        this.consecutiveLossesN = 0;
 
         // Per-asset statistics
         this.totalTrades = 0;
@@ -710,13 +705,21 @@ class MultiAssetDerivBot {
             this.globalStats.totalLosses++;
             this.consecutiveLossesN++;
 
+            // Update global consecutive loss counters
+            if (this.consecutiveLossesN === 2) this.consecutiveLosses2++;
+            else if (this.consecutiveLossesN === 3) this.consecutiveLosses3++;
+            else if (this.consecutiveLossesN === 4) this.consecutiveLosses4++;
+            else if (this.consecutiveLossesN === 5) this.consecutiveLosses5++;
+
+            this.currentStake = Math.ceil(this.currentStake * config.TRADING.multiplier * 100) / 100;
+
 
             console.log('\n');
             console.log('╔════════════════════════════════════════════════════════════════╗');
             console.log(`║                     ❌ [${asset.symbol}] TRADE LOST ❌                     ║`);
             console.log(`║  Loss: -$${Math.abs(profit).toFixed(2).padEnd(54)}║`);
             console.log(`║  Consecutive Losses: ${this.consecutiveLossesN.toString().padEnd(42)}║`);
-            console.log(`║  Next Stake: $${asset.currentStake.toFixed(2).padEnd(48)}║`);
+            console.log(`║  Next Stake: $${this.currentStake.toFixed(2).padEnd(48)}║`);
             console.log('╚════════════════════════════════════════════════════════════════╝');
 
             // Send notification on loss
@@ -725,14 +728,6 @@ class MultiAssetDerivBot {
             }
 
             this.shouldStopGlobal();
-
-            // Update global consecutive loss counters
-            if (this.consecutiveLossesN === 2) this.consecutiveLosses2++;
-            else if (this.consecutiveLossesN === 3) this.consecutiveLosses3++;
-            else if (this.consecutiveLossesN === 4) this.consecutiveLosses4++;
-            else if (this.consecutiveLossesN === 5) this.consecutiveLosses5++;
-
-            this.currentStake = Math.ceil(this.currentStake * config.TRADING.multiplier * 100) / 100;
         }
 
         // Log summaries
