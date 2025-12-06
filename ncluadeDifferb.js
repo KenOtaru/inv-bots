@@ -1455,7 +1455,7 @@ class EnhancedDigitDifferTradingBot {
         const decision = this.ensembleDecisionMaker.selectDigitToDiffer(predictions);
 
         if (this.consecutiveLosses > 0) {
-            if (decision.shouldTrade && decision.digitToDiffer !== 0 && decision.digitToDiffer !== 9 && decision.probability > 0.55 && decision.digitToDiffer !== this.tickHistories[asset].slice(-1)[0]) {
+            if (decision.shouldTrade && decision.digitToDiffer !== 0 && decision.digitToDiffer !== 9 && decision.digitToDiffer !== this.tickHistories[asset].slice(-1)[0] && decision.confidence > 0.92) {
                 // Store for later analysis
                 this.lastPredictions[asset] = decision.digitToDiffer;
                 console.log(`[${asset}] 🎯 TRADE SIGNAL`);
@@ -1471,7 +1471,7 @@ class EnhancedDigitDifferTradingBot {
                 this.placeTrade(asset, this.xDigit, this.confidence, this.probability);
             }
         } else {
-            if (decision.shouldTrade && decision.digitToDiffer !== 0 && decision.digitToDiffer !== 9 && decision.digitToDiffer !== this.tickHistories[asset].slice(-1)[0]) {
+            if (decision.shouldTrade && decision.digitToDiffer !== 0 && decision.digitToDiffer !== 9 && decision.digitToDiffer !== this.tickHistories[asset].slice(-1)[0] && decision.confidence > 0.85) {
                 // Store for later analysis
                 this.lastPredictions[asset] = decision.digitToDiffer;
                 console.log(`[${asset}] 🎯 TRADE SIGNAL`);
@@ -1846,7 +1846,7 @@ class EnhancedDigitDifferTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: 'ncluadeDiffer2 - Summary',
+            subject: 'ncluadeDiffer - Summary',
             text: summaryText
         };
 
@@ -1893,7 +1893,7 @@ class EnhancedDigitDifferTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: 'ncluadeDiffer2 - Loss Alert',
+            subject: 'ncluadeDiffer - Loss Alert',
             text: summaryText
         };
 
@@ -1932,7 +1932,7 @@ class EnhancedDigitDifferTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: 'ncluadeDiffer2 - Connection/Dissconnection Summary',
+            subject: 'ncluadeDiffer - Connection/Dissconnection Summary',
             text: summaryText
         };
 
@@ -1950,7 +1950,7 @@ class EnhancedDigitDifferTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: 'ncluadeDiffer2 - Error Report',
+            subject: 'ncluadeDiffer - Error Report',
             text: `An error occurred: ${errorMessage}`
         };
 
@@ -1990,7 +1990,7 @@ class EnhancedDigitDifferTradingBot {
 }
 
 // Usage
-const bot = new EnhancedDigitDifferTradingBot('rgNedekYXvCaPeP', {
+const bot = new EnhancedDigitDifferTradingBot('0P94g4WdSrSrzir', {
     initialStake: 0.61,
     multiplier: 11.3,
     maxConsecutiveLosses: 3,
@@ -1999,8 +1999,8 @@ const bot = new EnhancedDigitDifferTradingBot('rgNedekYXvCaPeP', {
     minConfidence: 0.90,
     enableNeuralNetwork: true,
     enablePatternRecognition: true,
-    learningModeThreshold: 500,
-    requiredHistoryLength: 5000,
+    learningModeThreshold: 50,
+    requiredHistoryLength: 200,
     minWaitTime: 2000, //5 Minutes
     maxWaitTime: 5000, //1 Hour
 });
