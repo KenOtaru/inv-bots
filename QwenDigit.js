@@ -309,6 +309,8 @@ class EnhancedDigitDifferTradingBot {
         const history = this.tickHistories[asset];
         if (history.length < 100) return;
 
+        if (this.suspendedAssets.has(asset)) return;
+
         // ▼▼▼ VOLATILITY FILTER ▼▼▼
         const recentDigits = history.slice(-5);
         const volStdDev = this.standardDeviation(recentDigits);

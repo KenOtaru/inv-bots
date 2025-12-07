@@ -314,6 +314,8 @@ class EnhancedDigitDifferTradingBot {
         const recentVolWindow = history.slice(-this.config.volatilityLookback);
         const recentClusterWindow = history.slice(-this.config.clusterLookback);
 
+        if (this.suspendedAssets.has(asset)) return;
+
         // ▼▼▼ VOLATILITY DETECTION: Count unique digits in recent window ▼▼▼
         const uniqueDigits = [...new Set(recentVolWindow)].length;
         const isHighVolatility = uniqueDigits >= this.config.minUniqueDigits;
