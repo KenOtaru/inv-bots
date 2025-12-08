@@ -613,9 +613,6 @@ class EnhancedDigitDifferTradingBot {
             ├─ Appeared 2x: [${appeared[2]}]
             ├─ Appeared 3x: [${appeared[3]}]
             ├─ Appeared 4x: [${appeared[4]}]
-            ├─ Appeared 5x: [${appeared[5]}]
-            ├─ Appeared 6x: [${appeared[6]}]
-            ├─ Appeared 7x: [${appeared[7]}]
         `.trim());
 
         // === PREVENT DOUBLE TRADING ===
@@ -633,22 +630,22 @@ class EnhancedDigitDifferTradingBot {
         // === TRADE LOGIC: Priority 7x → 2x (Matching bot2.js) ===
         const lastDigit = last10[last10.length - 1]; // The digit we're betting continues
 
-        for (let times = 4; times >= 3; times--) {
-            if (appeared[times].length > 0) {
-                if (appeared[times].includes(currentCount) && last10[9] >= 2) {
-                    console.log(`TRADE SIGNAL! Betting digit ${lastDigit} appears ${times + 1} times (currently ${times}x)`);
+        // for (let times = 3; times >= 2; times--) {
+        if (appeared[2].length > 0) {
+            if (appeared[1].includes(currentCount) && appeared[2].length > 2 && last10[9] >= 2) {
+                console.log(`TRADE SIGNAL! Betting digit ${lastDigit + 1} appears 1 time (currently 2x)`);
 
-                    assetState.tradedDigitArray.push(currentCount);
-                    assetState.filteredArray = appeared[times];
-                    assetState.lastFilterUsed = times;
-                    assetState.tradeFrequency = times;
+                assetState.tradedDigitArray.push(currentCount);
+                assetState.filteredArray = appeared[1];
+                assetState.lastFilterUsed = 1;
+                assetState.tradeFrequency = 1;
 
-                    this.placeTrade(asset);
-                }
-                // Stop checking lower frequencies because a higher frequency group exists (bot2.js logic)
-                break;
+                this.placeTrade(asset);
             }
+            // Stop checking lower frequencies because a higher frequency group exists (bot2.js logic)
+            // break;
         }
+        // }
 
         if (!assetState.tradeInProgress) {
             console.log(`No valid trade signal on ${asset} (digit ${lastDigit} not in any filter)`);
@@ -798,10 +795,15 @@ class EnhancedDigitDifferTradingBot {
             // Longer wait after losses to let market conditions change
             baseWaitTime = this.config.minWaitTime + (this.consecutiveLosses * 60000); // +1min per loss
             this.sendLossEmail(asset);
-            this.suspendAllExcept(asset);
-        } else {
-            if (this.suspendedAssets.size > 0) {
-                this.reactivateAllSuspended();
+            // this.suspendAllExcept(asset);
+            this.suspendAsset(asset);
+        }
+
+        // If there is more than one suspended asset, reactivate the first one on win
+        if (won) {
+            if (this.suspendedAssets.size > 1) {
+                const firstSuspendedAsset = Array.from(this.suspendedAssets)[0];
+                this.reactivateAsset(firstSuspendedAsset);
             }
         }
 
@@ -1037,7 +1039,7 @@ class EnhancedDigitDifferTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: 'kInspired Accumulator Bot - Performance Summary',
+            subject: 'kInspired3 Accumulator Bot - Performance Summary',
             text: summaryText
         };
 
@@ -1093,7 +1095,7 @@ class EnhancedDigitDifferTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: `kInspired Accumulator Bot - Loss Alert [${asset}]`,
+            subject: `kInspired3 Accumulator Bot - Loss Alert [${asset}]`,
             text: summaryText
         };
 
@@ -1148,7 +1150,7 @@ class EnhancedDigitDifferTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: 'kInspired Accumulator Bot - Performance Summary',
+            subject: 'kInspired3 Accumulator Bot - Performance Summary',
             text: summaryText
         };
 
@@ -1164,7 +1166,7 @@ class EnhancedDigitDifferTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: 'kInspired Accumulator Bot - Error Report',
+            subject: 'kInspired3 Accumulator Bot - Error Report',
             text: `An error occurred: ${errorMessage}`
         };
 
@@ -1176,7 +1178,7 @@ class EnhancedDigitDifferTradingBot {
     }
 
     start() {
-        console.log('🚀 Starting kInspired Accumulator Trading Bot with Learning System');
+        console.log('🚀 Starting kInspired3 Accumulator Trading Bot with Learning System');
         console.log('Features: Adaptive filters, pattern recognition, volatility analysis');
         this.connect();
         this.checkTimeForDisconnectReconnect(); // Automatically handles disconnect/reconnect at specified times

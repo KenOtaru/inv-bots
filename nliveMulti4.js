@@ -1074,136 +1074,136 @@ class EnsembleDecisionMaker {
 // TIER 5: PERSISTENCE MANAGER
 // ============================================================================
 
-class PersistenceManager {
-    constructor(baseDir = './bot_memory2') {
-        this.baseDir = baseDir;
-        this.ensureDirectory();
-    }
+// class PersistenceManager {
+//     constructor(baseDir = './bot_memory2') {
+//         this.baseDir = baseDir;
+//         this.ensureDirectory();
+//     }
 
-    ensureDirectory() {
-        if (!fs.existsSync(this.baseDir)) {
-            fs.mkdirSync(this.baseDir, { recursive: true });
-            console.log(`📁 Created memory directory: ${this.baseDir}`);
-        }
-    }
+//     ensureDirectory() {
+//         if (!fs.existsSync(this.baseDir)) {
+//             fs.mkdirSync(this.baseDir, { recursive: true });
+//             console.log(`📁 Created memory directory: ${this.baseDir}`);
+//         }
+//     }
 
-    /**
-     * Save learning data to file
-     */
-    save(filename, data) {
-        try {
-            const filepath = path.join(this.baseDir, filename);
-            fs.writeFileSync(filepath, JSON.stringify(data, null, 2));
-            console.log(`💾 Saved: ${filename}`);
-            return true;
-        } catch (error) {
-            console.error(`Error saving ${filename}:`, error.message);
-            return false;
-        }
-    }
+//     /**
+//      * Save learning data to file
+//      */
+//     save(filename, data) {
+//         try {
+//             const filepath = path.join(this.baseDir, filename);
+//             fs.writeFileSync(filepath, JSON.stringify(data, null, 2));
+//             console.log(`💾 Saved: ${filename}`);
+//             return true;
+//         } catch (error) {
+//             console.error(`Error saving ${filename}:`, error.message);
+//             return false;
+//         }
+//     }
 
-    /**
-     * Load learning data from file
-     */
-    load(filename) {
-        try {
-            const filepath = path.join(this.baseDir, filename);
-            if (fs.existsSync(filepath)) {
-                const data = JSON.parse(fs.readFileSync(filepath, 'utf8'));
-                console.log(`📂 Loaded: ${filename}`);
-                return data;
-            }
-            return null;
-        } catch (error) {
-            console.error(`Error loading ${filename}:`, error.message);
-            return null;
-        }
-    }
+//     /**
+//      * Load learning data from file
+//      */
+//     // load(filename) {
+//     //     try {
+//     //         const filepath = path.join(this.baseDir, filename);
+//     //         if (fs.existsSync(filepath)) {
+//     //             const data = JSON.parse(fs.readFileSync(filepath, 'utf8'));
+//     //             console.log(`📂 Loaded: ${filename}`);
+//     //             return data;
+//     //         }
+//     //         return null;
+//     //     } catch (error) {
+//     //         console.error(`Error loading ${filename}:`, error.message);
+//     //         return null;
+//     //     }
+//     // }
 
-    /**
-     * Save all bot state
-     */
-    saveFullState(bot) {
-        const state = {
-            timestamp: Date.now(),
-            statisticalEngine: {
-                bayesianPriors: bot.statisticalEngine.bayesianPriors
-            },
-            patternEngine: {
-                ngramModels: bot.patternEngine.ngramModels,
-                markovChains: bot.patternEngine.markovChains,
-                regimeStates: bot.patternEngine.regimeStates
-            },
-            neuralEngine: bot.neuralEngine.exportWeights(),
-            ensembleDecisionMaker: bot.ensembleDecisionMaker.exportState(),
-            learningSystem: bot.learningSystem,
-            extendedStayedIn: bot.extendedStayedIn,
-            performanceHistory: {
-                totalTrades: bot.totalTrades,
-                totalWins: bot.totalWins,
-                totalLosses: bot.totalLosses,
-                totalProfitLoss: bot.totalProfitLoss
-            }
-        };
+//     /**
+//      * Save all bot state
+//      */
+//     saveFullState(bot) {
+//         const state = {
+//             timestamp: Date.now(),
+//             statisticalEngine: {
+//                 bayesianPriors: bot.statisticalEngine.bayesianPriors
+//             },
+//             patternEngine: {
+//                 ngramModels: bot.patternEngine.ngramModels,
+//                 markovChains: bot.patternEngine.markovChains,
+//                 regimeStates: bot.patternEngine.regimeStates
+//             },
+//             neuralEngine: bot.neuralEngine.exportWeights(),
+//             ensembleDecisionMaker: bot.ensembleDecisionMaker.exportState(),
+//             learningSystem: bot.learningSystem,
+//             extendedStayedIn: bot.extendedStayedIn,
+//             performanceHistory: {
+//                 totalTrades: bot.totalTrades,
+//                 totalWins: bot.totalWins,
+//                 totalLosses: bot.totalLosses,
+//                 totalProfitLoss: bot.totalProfitLoss
+//             }
+//         };
 
-        return this.save('bot_state.json', state);
-    }
+//         return this.save('bot_state.json', state);
+//     }
 
-    /**
-     * Load all bot state
-     */
-    loadFullState() {
-        return this.load('bot_state.json');
-    }
+//     /**
+//      * Load all bot state
+//      */
+//     loadFullState() {
+//         return this.load('bot_state.json');
+//     }
 
-    /**
-     * Save performance log
-     */
-    appendPerformanceLog(entry) {
-        const logFile = 'performance_log.json';
-        let log = this.load(logFile) || [];
-        log.push({ ...entry, timestamp: Date.now() });
+//     /**
+//      * Save performance log
+//      */
+//     appendPerformanceLog(entry) {
+//         const logFile = 'performance_log.json';
+//         let log = this.load(logFile) || [];
+//         log.push({ ...entry, timestamp: Date.now() });
 
-        // Keep last 10000 entries
-        if (log.length > 10000) {
-            log = log.slice(-10000);
-        }
+//         // Keep last 10000 entries
+//         if (log.length > 10000) {
+//             log = log.slice(-10000);
+//         }
 
-        return this.save(logFile, log);
-    }
+//         return this.save(logFile, log);
+//     }
 
-    /**
-     * Get performance statistics
-     */
-    getPerformanceStats() {
-        const log = this.load('performance_log.json') || [];
-        if (log.length === 0) return null;
+//     /**
+//      * Get performance statistics
+//      */
+//     getPerformanceStats() {
+//         const log = this.load('performance_log.json') || [];
+//         if (log.length === 0) return null;
 
-        const wins = log.filter(e => e.won).length;
-        const losses = log.filter(e => !e.won).length;
+//         const wins = log.filter(e => e.won).length;
+//         const losses = log.filter(e => !e.won).length;
 
-        // Daily breakdown
-        const dailyStats = {};
-        log.forEach(entry => {
-            const date = new Date(entry.timestamp).toISOString().split('T')[0];
-            if (!dailyStats[date]) {
-                dailyStats[date] = { wins: 0, losses: 0, profit: 0 };
-            }
-            if (entry.won) {
-                dailyStats[date].wins++;
-            } else {
-                dailyStats[date].losses++;
-            }
-            dailyStats[date].profit += entry.profit || 0;
-        });
+//         // Daily breakdown
+//         const dailyStats = {};
+//         log.forEach(entry => {
+//             const date = new Date(entry.timestamp).toISOString().split('T')[0];
+//             if (!dailyStats[date]) {
+//                 dailyStats[date] = { wins: 0, losses: 0, profit: 0 };
+//             }
+//             if (entry.won) {
+//                 dailyStats[date].wins++;
+//             } else {
+//                 dailyStats[date].losses++;
+//             }
+//             dailyStats[date].profit += entry.profit || 0;
+//         });
 
-        return {
-            total: { wins, losses, winRate: wins / (wins + losses) },
-            daily: dailyStats,
-            recentTrend: log.slice(-50)
-        };
-    }
-}
+//         return {
+//             total: { wins, losses, winRate: wins / (wins + losses) },
+//             daily: dailyStats,
+//             recentTrend: log.slice(-50)
+//         };
+//     }
+// }
 
 // ============================================================================
 // MAIN ENHANCED TRADING BOT
@@ -1296,7 +1296,7 @@ class EnhancedAccumulatorBot {
         this.ensembleDecisionMaker = new EnsembleDecisionMaker();
 
         // Tier 5: Persistence Manager
-        this.persistenceManager = new PersistenceManager();
+        // this.persistenceManager = new PersistenceManager();
 
         // Learning mode counter
         this.observationCount = 0;
@@ -1370,64 +1370,64 @@ class EnhancedAccumulatorBot {
         this.kLoss = 0.01;
 
         // Load saved state
-        this.loadSavedState();
+        // this.loadSavedState();
 
         // Start periodic save
-        this.startPeriodicSave();
+        // this.startPeriodicSave();
     }
 
     // ========================================================================
     // PERSISTENCE METHODS
     // ========================================================================
 
-    loadSavedState() {
-        const state = this.persistenceManager.loadFullState();
-        if (state) {
-            console.log('📂 Loading saved learning state...');
+    // loadSavedState() {
+    //     const state = this.persistenceManager.loadFullState();
+    //     if (state) {
+    //         console.log('📂 Loading saved learning state...');
 
-            // Restore statistical engine
-            if (state.statisticalEngine) {
-                this.statisticalEngine.bayesianPriors = state.statisticalEngine.bayesianPriors || {};
-            }
+    //         // Restore statistical engine
+    //         if (state.statisticalEngine) {
+    //             this.statisticalEngine.bayesianPriors = state.statisticalEngine.bayesianPriors || {};
+    //         }
 
-            // Restore pattern engine
-            if (state.patternEngine) {
-                this.patternEngine.ngramModels = state.patternEngine.ngramModels || {};
-                this.patternEngine.markovChains = state.patternEngine.markovChains || {};
-                this.patternEngine.regimeStates = state.patternEngine.regimeStates || {};
-            }
+    //         // Restore pattern engine
+    //         if (state.patternEngine) {
+    //             this.patternEngine.ngramModels = state.patternEngine.ngramModels || {};
+    //             this.patternEngine.markovChains = state.patternEngine.markovChains || {};
+    //             this.patternEngine.regimeStates = state.patternEngine.regimeStates || {};
+    //         }
 
-            // Restore neural engine
-            if (state.neuralEngine) {
-                this.neuralEngine.importWeights(state.neuralEngine);
-            }
+    //         // Restore neural engine
+    //         if (state.neuralEngine) {
+    //             this.neuralEngine.importWeights(state.neuralEngine);
+    //         }
 
-            // Restore ensemble decision maker
-            if (state.ensembleDecisionMaker) {
-                this.ensembleDecisionMaker.importState(state.ensembleDecisionMaker);
-            }
+    //         // Restore ensemble decision maker
+    //         if (state.ensembleDecisionMaker) {
+    //             this.ensembleDecisionMaker.importState(state.ensembleDecisionMaker);
+    //         }
 
-            // Restore learning system
-            if (state.learningSystem) {
-                this.learningSystem = { ...this.learningSystem, ...state.learningSystem };
-            }
+    //         // Restore learning system
+    //         if (state.learningSystem) {
+    //             this.learningSystem = { ...this.learningSystem, ...state.learningSystem };
+    //         }
 
-            // Restore extended stayed in
-            if (state.extendedStayedIn) {
-                this.extendedStayedIn = state.extendedStayedIn;
-            }
+    //         // Restore extended stayed in
+    //         if (state.extendedStayedIn) {
+    //             this.extendedStayedIn = state.extendedStayedIn;
+    //         }
 
-            console.log('✅ Learning state restored successfully');
-        } else {
-            console.log('🆕 No saved state found. Starting fresh learning.');
-        }
-    }
+    //         console.log('✅ Learning state restored successfully');
+    //     } else {
+    //         console.log('🆕 No saved state found. Starting fresh learning.');
+    //     }
+    // }
 
-    startPeriodicSave() {
-        setInterval(() => {
-            this.persistenceManager.saveFullState(this);
-        }, this.config.saveInterval);
-    }
+    // startPeriodicSave() {
+    //     setInterval(() => {
+    //         this.persistenceManager.saveFullState(this);
+    //     }, this.config.saveInterval);
+    // }
 
     // ========================================================================
     // WEBSOCKET METHODS (PRESERVED)
@@ -1487,24 +1487,7 @@ class EnhancedAccumulatorBot {
 
         this.tradeInProgress = false;
         this.predictionInProgress = false;
-        this.assets.forEach(asset => {
-            this.tickHistories[asset] = [];
-            this.digitCounts[asset] = Array(10).fill(0);
-            this.lastDigits[asset] = null;
-            this.predictedDigits[asset] = null;
-            this.lastPredictions[asset] = [];
-            this.assetStates[asset] = {
-                stayedInArray: [],
-                tradedDigitArray: [],
-                filteredArray: [],
-                totalArray: [],
-                currentProposalId: null,
-                tradeInProgress: false,
-                consecutiveLosses: 0,
-                lastTradeResult: null,
-                digitFrequency: {},
-            };
-        });
+        this.resetForNewDay();
         this.survivalNum = null;
         this.tickSubscriptionIds = {};
 
@@ -1598,24 +1581,7 @@ class EnhancedAccumulatorBot {
 
             this.tradeInProgress = false;
             this.predictionInProgress = false;
-            this.assets.forEach(asset => {
-                this.tickHistories[asset] = [];
-                this.digitCounts[asset] = Array(10).fill(0);
-                this.lastDigits[asset] = null;
-                this.predictedDigits[asset] = null;
-                this.lastPredictions[asset] = [];
-                this.assetStates[asset] = {
-                    stayedInArray: [],
-                    tradedDigitArray: [],
-                    filteredArray: [],
-                    totalArray: [],
-                    currentProposalId: null,
-                    tradeInProgress: false,
-                    consecutiveLosses: 0,
-                    lastTradeResult: null,
-                    digitFrequency: {},
-                };
-            });
+            this.resetForNewDay();
             this.survivalNum = null;
             this.tickSubscriptionIds = {};
             this.retryCount = 0;
@@ -1869,13 +1835,13 @@ class EnhancedAccumulatorBot {
         }
 
         // Persist performance log
-        this.persistenceManager.appendPerformanceLog({
-            asset,
-            won,
-            profit: won ? this.currentStake * 0.01 : -this.currentStake,
-            digitCount,
-            volatility
-        });
+        // this.persistenceManager.appendPerformanceLog({
+        //     asset,
+        //     won,
+        //     profit: won ? this.currentStake * 0.01 : -this.currentStake,
+        //     digitCount,
+        //     volatility
+        // });
     }
 
     // ========================================================================
@@ -2231,17 +2197,17 @@ class EnhancedAccumulatorBot {
             this.isWinTrade = true;
             this.consecutiveLosses = 0;
 
-            if (this.sys === 2) {
-                if (this.sysCount === 5) {
-                    this.sys = 1;
-                    this.sysCount = 0;
-                }
-            } else if (this.sys === 3) {
-                if (this.sysCount === 2) {
-                    this.sys = 1;
-                    this.sysCount = 0;
-                }
-            }
+            // if (this.sys === 2) {
+            //     if (this.sysCount === 5) {
+            //         this.sys = 1;
+            //         this.sysCount = 0;
+            //     }
+            // } else if (this.sys === 3) {
+            //     if (this.sysCount === 2) {
+            //         this.sys = 1;
+            //         this.sysCount = 0;
+            //     }
+            // }
 
             this.currentStake = this.config.initialStake;
 
@@ -2275,19 +2241,19 @@ class EnhancedAccumulatorBot {
             this.sendLossEmail(asset);
             this.suspendAsset(asset);
 
-            if (this.consecutiveLosses >= 2) {
-                if (this.sys === 1) {
-                    this.sys = 2;
-                } else if (this.sys === 2) {
-                    this.sys = 3;
-                }
-                this.sysCount = 0;
-            }
+            // if (this.consecutiveLosses >= 2) {
+            //     if (this.sys === 1) {
+            //         this.sys = 2;
+            //     } else if (this.sys === 2) {
+            //         this.sys = 3;
+            //     }
+            //     this.sysCount = 0;
+            // }
 
-            if (this.sys === 2 && this.consecutiveLosses === 1 && this.currentStake === this.config.multiplier2) {
-                this.sys = 3;
-                this.sysCount = 0;
-            }
+            // if (this.sys === 2 && this.consecutiveLosses === 1 && this.currentStake === this.config.multiplier2) {
+            //     this.sys = 3;
+            //     this.sysCount = 0;
+            // }
         } else {
             if (this.suspendedAssets.size > 1) {
                 const firstSuspendedAsset = Array.from(this.suspendedAssets)[0];
@@ -2312,7 +2278,7 @@ class EnhancedAccumulatorBot {
         }
 
         // Save state after each trade
-        this.persistenceManager.saveFullState(this);
+        // this.persistenceManager.saveFullState(this);
 
         if (this.consecutiveLosses >= this.config.maxConsecutiveLosses || this.totalProfitLoss <= -this.config.stopLoss || this.stopLossStake) {
             console.log('Stop condition reached. Stopping trading.');
@@ -2339,6 +2305,97 @@ class EnhancedAccumulatorBot {
                 this.connect();
             }, randomWaitTime);
         }
+    }
+
+    //Reset
+    resetForNewDay() {
+        // Asset-specific data
+        this.digitCounts = {};
+        this.tickSubscriptionIds = {};
+        this.tickHistories = {};
+        this.lastDigits = {};
+        this.predictedDigits = {};
+        this.lastPredictions = {};
+        this.assetStates = {};
+        this.pendingProposals = new Map();
+        this.previousStayedIn = {};
+        this.extendedStayedIn = {};
+
+        // ====================================================================
+        // ENHANCED LEARNING COMPONENTS
+        // ====================================================================
+
+        // Tier 1: Statistical Engine
+        this.statisticalEngine = new StatisticalEngine();
+
+        // Tier 2: Pattern Engine
+        this.patternEngine = new PatternEngine();
+
+        // Tier 3: Neural Engine
+        this.neuralEngine = new NeuralEngine(60, [32, 16], 1);
+
+        // Tier 4: Ensemble Decision Maker
+        this.ensembleDecisionMaker = new EnsembleDecisionMaker();
+
+        // Tier 5: Persistence Manager
+        // this.persistenceManager = new PersistenceManager();
+
+        // Learning mode counter
+        // this.observationCount = 0;
+        // this.learningMode = true;
+
+        // Legacy learning system (enhanced)
+        // this.learningSystem = {
+        //     lossPatterns: {},
+        //     failedDigitCounts: {},
+        //     volatilityScores: {},
+        //     filterPerformance: {},
+        //     resetPatterns: {},
+        //     timeWindowPerformance: [],
+        //     adaptiveFilters: {},
+        //     predictionAccuracy: {},
+        // };
+
+        // Risk manager (preserved as requested)
+        // this.riskManager = {
+        //     currentSessionRisk: 0,
+        //     riskPerTrade: 0.02,
+        //     cooldownPeriod: 0,
+        //     lastLossTime: null,
+        //     consecutiveSameDigitLosses: {},
+        // };
+
+        // Initialize assets
+        this.assets.forEach(asset => {
+            this.tickHistories[asset] = [];
+            this.digitCounts[asset] = Array(10).fill(0);
+            this.lastDigits[asset] = null;
+            this.predictedDigits[asset] = null;
+            this.lastPredictions[asset] = [];
+            this.assetStates[asset] = {
+                stayedInArray: [],
+                tradedDigitArray: [],
+                filteredArray: [],
+                totalArray: [],
+                currentProposalId: null,
+                tradeInProgress: false,
+                consecutiveLosses: 0,
+                lastTradeResult: null,
+                digitFrequency: {},
+            };
+            this.previousStayedIn[asset] = null;
+            this.extendedStayedIn[asset] = [];
+
+            // Initialize learning components per asset
+            // this.learningSystem.lossPatterns[asset] = [];
+            // this.learningSystem.volatilityScores[asset] = 0;
+            // this.learningSystem.adaptiveFilters[asset] = 8;
+            // this.learningSystem.predictionAccuracy[asset] = { correct: 0, total: 0 };
+            // this.riskManager.consecutiveSameDigitLosses[asset] = {};
+
+            // Initialize statistical engine
+            this.statisticalEngine.initBayesianPrior(asset);
+        });
     }
 
     // ========================================================================
@@ -2438,38 +2495,6 @@ class EnhancedAccumulatorBot {
                 }
             }
         }, 5000); // Check every 5 seconds
-    }
-
-    resetForNewDay() {
-        this.tradeInProgress = false;
-        this.Pause = false;
-        this.endOfDay = false;
-
-        // Reset asset-specific data but keep learning!
-        this.assets.forEach(asset => {
-            this.tickHistories[asset] = [];
-            this.digitCounts[asset] = Array(10).fill(0);
-            this.lastDigits[asset] = null;
-            this.predictedDigits[asset] = null;
-            this.lastPredictions[asset] = [];
-            this.assetStates[asset] = {
-                stayedInArray: [],
-                tradedDigitArray: [],
-                filteredArray: [],
-                totalArray: [],
-                currentProposalId: null,
-                tradeInProgress: false,
-                consecutiveLosses: 0,
-                lastTradeResult: null,
-                digitFrequency: {},
-            };
-            this.previousStayedIn[asset] = null;
-            // Keep extendedStayedIn for persistent learning!
-        });
-
-        this.tickSubscriptionIds = {};
-        this.pendingProposals = new Map();
-        this.suspendedAssets = new Set();
     }
 
     disconnect() {
@@ -2754,11 +2779,10 @@ const bot = new EnhancedAccumulatorBot(token, {
     initialStake: 1,
     stopLoss: 400,
     takeProfit: 5000,
-    assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
     enableNeuralNetwork: true,
     enablePatternRecognition: true,
     learningModeThreshold: 100,
-    survivalThreshold: 0.8,
+    survivalThreshold: 0.9,
     maxConsecutiveLosses: 3,
     minWaitTime: 2000,
     maxWaitTime: 2000,
@@ -2766,4 +2790,11 @@ const bot = new EnhancedAccumulatorBot(token, {
 
 bot.start();
 
-module.exports = { EnhancedAccumulatorBot, StatisticalEngine, PatternEngine, NeuralEngine, EnsembleDecisionMaker, PersistenceManager };
+module.exports = {
+    EnhancedAccumulatorBot,
+    StatisticalEngine,
+    PatternEngine,
+    NeuralEngine,
+    EnsembleDecisionMaker,
+    // PersistenceManager 
+};
