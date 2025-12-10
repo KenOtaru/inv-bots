@@ -2481,6 +2481,9 @@ class EnhancedAccumulatorBot {
             if (this.endOfDay && currentHours === 7 && currentMinutes >= 0) {
                 console.log("It's 7:00 AM GMT+1, reconnecting the bot.");
                 this.resetForNewDay();
+                this.RestartTrading = true;
+                this.Pause = false;
+                this.endOfDay = false;
                 this.connect();
             }
 
