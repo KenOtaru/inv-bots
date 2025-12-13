@@ -825,7 +825,7 @@ class EnhancedDerivTradingBot {
 
 
     analyzeTicksEnhanced() {
-        if (this.tradeInProgress) {
+        if (this.tradeInProgress || this.tickHistory.length < 20) {
             return;
         }
 
@@ -860,7 +860,7 @@ class EnhancedDerivTradingBot {
         // }
 
         // Least-occurring digit logic 
-        const tickHistory2 = this.tickHistory.slice(-50);
+        const tickHistory2 = this.tickHistory;
         const digitCounts = Array(10).fill(0);
         tickHistory2.forEach(digit => digitCounts[digit]++);
 
