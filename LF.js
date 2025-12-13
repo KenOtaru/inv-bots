@@ -637,7 +637,7 @@ class EnhancedDerivTradingBot {
             this.ws.on('close', () => {
                 console.log('Disconnected from Deriv API');
                 this.connected = false;
-                if (!this.endOfDay) {
+                if (!this.endOfDay && !this.Pause) {
                     this.handleDisconnect();
                 }
             });
@@ -952,8 +952,12 @@ class EnhancedDerivTradingBot {
     handleTradeResult(contract) {
         const won = contract.status === 'won';
         const profit = parseFloat(contract.profit);
+        const exitSpot = contract.exit_tick_display_value;
+        const actualDigit = this.getLastDigit(parseFloat(exitSpot), this.currentAsset);
+        this.actualDigit = actualDigit;
 
         console.log(`\n📊 TRADE RESULT: ${won ? '✅ WON' : '❌ LOST'}`);
+        console.log(`   Predicted to differ from: ${this.xDigit} | Actual: ${actualDigit}`);
         console.log(`Profit/Loss: $${profit.toFixed(2)}`);
 
         this.totalTrades++;
@@ -1203,7 +1207,7 @@ class EnhancedDerivTradingBot {
         Pattern Analysis:
         ----------------
         Asset: ${this.currentAsset}
-        Predicted Digit: ${this.xDigit}
+        Predicted Digit: ${this.xDigit} | Actual Digit: ${this.actualDigit}
         Percentage: ${this.winProbNumber}%
         Chaos Level: ${this.chaosLevel}
         Chaos Details: ${this.kChaos} (${this.regimCount})
