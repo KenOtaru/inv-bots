@@ -612,34 +612,36 @@ class EnhancedDerivTradingBot {
     }
 
     connect() {
-        console.log('Attempting to connect to Deriv API...');
-        this.ws = new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
+        if (!this.endOfDay) {
+            console.log('Attempting to connect to Deriv API...');
+            this.ws = new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
 
-        this.ws.on('open', () => {
-            console.log('Connected to Deriv API');
-            this.connected = true;
-            this.wsReady = true;
-            this.reconnectAttempts = 0;
-            this.authenticate();
-        });
+            this.ws.on('open', () => {
+                console.log('Connected to Deriv API');
+                this.connected = true;
+                this.wsReady = true;
+                this.reconnectAttempts = 0;
+                this.authenticate();
+            });
 
-        this.ws.on('message', (data) => {
-            const message = JSON.parse(data);
-            this.handleMessage(message);
-        });
+            this.ws.on('message', (data) => {
+                const message = JSON.parse(data);
+                this.handleMessage(message);
+            });
 
-        this.ws.on('error', (error) => {
-            console.error('WebSocket error:', error);
-            this.handleDisconnect();
-        });
-
-        this.ws.on('close', () => {
-            console.log('Disconnected from Deriv API');
-            this.connected = false;
-            if (!this.Pause) {
+            this.ws.on('error', (error) => {
+                console.error('WebSocket error:', error);
                 this.handleDisconnect();
-            }
-        });
+            });
+
+            this.ws.on('close', () => {
+                console.log('Disconnected from Deriv API');
+                this.connected = false;
+                if (!this.endOfDay) {
+                    this.handleDisconnect();
+                }
+            });
+        }
     }
 
     sendRequest(request) {
@@ -660,6 +662,10 @@ class EnhancedDerivTradingBot {
             console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
             setTimeout(() => this.connect(), this.reconnectInterval);
         }
+
+        this.tradeInProgress = false;
+        this.lastDigitsList = [];
+        this.tickHistory = [];
     }
 
     handleApiError(error) {
@@ -1050,33 +1056,57 @@ class EnhancedDerivTradingBot {
 
     checkTimeForDisconnectReconnect() {
         setInterval(() => {
+            // Always use GMT +1 time regardless of server location
             const now = new Date();
-            const currentHours = now.getHours();
-            const currentMinutes = now.getMinutes();
+            const gmtPlus1Time = new Date(now.getTime() + (1 * 60 * 60 * 1000)); // Convert UTC → GMT+1
+            const currentHours = gmtPlus1Time.getUTCHours();
+            const currentMinutes = gmtPlus1Time.getUTCMinutes();
+            const currentDay = gmtPlus1Time.getUTCDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
 
-            // Check for morning resume condition (8:00 AM)
+            // Optional: log current GMT+1 time for monitoring
+            // console.log(
+            // "Current GMT+1 time:",
+            // gmtPlus1Time.toISOString().replace("T", " ").substring(0, 19)
+            // );
+
+            // Check if it's Sunday - no trading on Sundays
+            if (currentDay === 0) {
+                if (!this.endOfDay) {
+                    console.log("It's Sunday, disconnecting the bot. No trading on Sundays.");
+                    this.Pause = true;
+                    this.disconnect();
+                    this.endOfDay = true;
+                }
+                return; // Skip all other checks on Sunday
+            }
+
+            // Check for Morning resume condition (7:00 AM GMT+1) - but not on Sunday
             if (this.endOfDay && currentHours === 7 && currentMinutes >= 0) {
-                console.log("It's 8:00 AM, reconnecting the bot.");
+                console.log("It's 7:00 AM GMT+1, reconnecting the bot.");
                 this.LossDigitsList = [];
+                this.tickHistory = [];
+                this.regimCount = 0;
+                this.kChaos = null;
+                this.scanChaos = false;
+                this.requiredHistoryLength = Math.floor(Math.random() * 4981) + 20; //Random
                 this.tradeInProgress = false;
-                this.usedAssets = new Set();
                 this.RestartTrading = true;
                 this.Pause = false;
                 this.endOfDay = false;
                 this.connect();
             }
 
-            // Check for evening stop condition (after 8:00 PM)
+            // Check for evening stop condition (after 5:00 PM GMT+1)
             if (this.isWinTrade && !this.endOfDay) {
-                if (currentHours === 17 && currentMinutes >= 0) {
-                    console.log("It's past 5:00 PM after a win trade, disconnecting the bot.");
+                if (currentHours >= 17 && currentMinutes >= 0) {
+                    console.log("It's past 5:00 PM GMT+1 after a win trade, disconnecting the bot.");
                     this.sendDisconnectResumptionEmailSummary();
                     this.Pause = true;
                     this.disconnect();
                     this.endOfDay = true;
                 }
             }
-        }, 20000);
+        }, 5000); // Check every 5 seconds
     }
 
     disconnect() {
@@ -1259,7 +1289,7 @@ class EnhancedDerivTradingBot {
 
     start() {
         this.connect();
-        // this.checkTimeForDisconnectReconnect();
+        this.checkTimeForDisconnectReconnect();
     }
 }
 
