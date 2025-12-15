@@ -1230,7 +1230,7 @@ const bot = new EnhancedDigitDifferTradingBot('0P94g4WdSrSrzir', {
     multiplier: 21,
     maxConsecutiveLosses: 3,
     stopLoss: 400,
-    takeProfit: 500,
+    takeProfit: 5,
     growthRate: 0.05,
     accuTakeProfit: 0.5,
     requiredHistoryLength: 1000,

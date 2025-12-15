@@ -19,8 +19,8 @@ class EnhancedDerivTradingBot {
             maxStake: config.maxStake || 127,
             repWindow: config.repWindow || 100, // Window for overall repetition rate
             condWindow: config.condWindow || 1000, // Window for conditional (individual digit) repetition rate
-            repHighThreshold: config.repHighThreshold || 0.17, // High threshold for overall rep rate (above average ~0.1)
-            condHighThreshold: config.condHighThreshold || 0.17, // High threshold for conditional rep rate
+            repHighThreshold: config.repHighThreshold || 0.14, // High threshold for overall rep rate (above average ~0.1)
+            condHighThreshold: config.condHighThreshold || 0.13, // High threshold for conditional rep rate
         };
         // Initialize existing properties
         this.currentStake = this.config.initialStake;
@@ -251,7 +251,7 @@ class EnhancedDerivTradingBot {
         }
         console.log(`Recent tick History: ${this.tickHistory.slice(-5).join(', ')}`);
         // console.log('Digits:', this.tickHistory[this.tickHistory.length - 1], '|', this.tickHistory[this.tickHistory.length - 2], '|', this.tickHistory[this.tickHistory.length - 3])
-        console.log('Digits:', this.tickHistory[this.tickHistory.length - 1])
+        // console.log('Digits:', this.tickHistory[this.tickHistory.length - 1])
         // Enhanced logging
         if (!this.tradeInProgress) {
             this.analyzeTicksEnhanced();
@@ -291,11 +291,11 @@ class EnhancedDerivTradingBot {
         this.xDigit = this.lastDigit;
         const repRate = this.computeRecentRepRate(this.config.repWindow);
         const condRate = this.computeConditionalRepRate(this.lastDigit, this.config.condWindow);
-        console.log(`Overall Rep Rate (last ${this.config.repWindow}): ${repRate.toFixed(3)}`);
-        console.log(`Conditional Rep Rate for ${this.lastDigit} (last ${this.config.condWindow}): ${condRate.toFixed(3)}`);
+        console.log(`Overall Rep Rate (last ${this.config.repWindow}): ${repRate.toFixed(2)}%`);
+        console.log(`Conditional Rep Rate for ${this.lastDigit} (last ${this.config.condWindow}): ${condRate.toFixed(2)}%`);
         // Implement suggested approaches: trade only when repetition rates are high (indicating potential mean reversion to lower repetition, i.e., unlikely repeat)
         // This filters for times when a repeat is unlikely
-        if (repRate > this.config.repHighThreshold || condRate > this.config.condHighThreshold) {
+        if (repRate >= this.config.repHighThreshold && condRate >= this.config.condHighThreshold && this.lastDigit !== this.tickHistory[this.tickHistory.length - 2]) {
             console.log('Repetition filters met: Unlikely for repeat to occur. Executing trade.');
             this.placeTrade(this.xDigit);
         } else {
@@ -370,9 +370,9 @@ class EnhancedDerivTradingBot {
             // this.RestartTrading = true;
         }
         this.totalProfitLoss += profit;
-        // if (!won) {
-        // this.sendLossEmail();
-        // }
+        if (!won) {
+        this.sendLossEmail();
+        }
         // this.Pause = true;
         // this.RestartTrading = true;
         if (!this.endOfDay) {
@@ -642,6 +642,6 @@ const bot = new EnhancedDerivTradingBot('rgNedekYXvCaPeP', {
     maxConsecutiveLosses: 3,
     maxStake: 127,
     stopLoss: 86,
-    takeProfit: 5000,
+    takeProfit: 2.5,
 });
 bot.start();
