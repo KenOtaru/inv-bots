@@ -22,10 +22,10 @@ const logger = winston.createLogger({
   ]
 });
 
-const DerivAPI = require('./core/DERIVAPI');
-const StrategyEngine = require('./core/StrategyEngine');
-const RiskManager = require('./core/RiskManager');
-const TelegramBot = require('./core/TelegramBot');
+const DerivAPI = require('./DERIVAPI');
+const StrategyEngine = require('./StrategyEngine');
+const RiskManager = require('./RiskManager');
+const TelegramBot = require('./TelegramBot');
 
 class DerivBot {
   constructor() {

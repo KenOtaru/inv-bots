@@ -1,0 +1,10 @@
+2025-12-15T19:17:11.828Z [info]: Connected to Deriv WebSocket
+2025-12-15T19:17:12.383Z [info]: Authorization request sent (req_id: 1)
+2025-12-15T19:17:13.609Z [info]: Authorization successful. Balance: $9489.34
+2025-12-15T19:17:13.611Z [info]: Authorization completed successfully
+2025-12-15T19:17:13.614Z [info]: Subscribed to ticks: R_75
+2025-12-15T19:28:01.040Z [info]: Connected to Deriv WebSocket
+2025-12-15T19:28:01.045Z [info]: Authorization request sent (req_id: 1)
+2025-12-15T19:28:01.549Z [info]: Authorization successful. Balance: $9489.34
+2025-12-15T19:28:01.551Z [info]: Authorization completed successfully
+2025-12-15T19:28:01.552Z [info]: Subscribed to ticks: R_75
