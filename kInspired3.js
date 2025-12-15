@@ -632,7 +632,7 @@ class EnhancedDigitDifferTradingBot {
 
         // for (let times = 3; times >= 2; times--) {
         if (appeared[2].length > 0) {
-            if (appeared[1].includes(currentCount) && appeared[2].length > 2 && last10[9] >= 2) {
+            if (appeared[1].includes(currentCount) && appeared[2].length > 3 && last10[9] >= 2) {
                 console.log(`TRADE SIGNAL! Betting digit ${lastDigit + 1} appears 1 time (currently 2x)`);
 
                 assetState.tradedDigitArray.push(currentCount);
@@ -1181,7 +1181,7 @@ class EnhancedDigitDifferTradingBot {
         console.log('🚀 Starting kInspired3 Accumulator Trading Bot with Learning System');
         console.log('Features: Adaptive filters, pattern recognition, volatility analysis');
         this.connect();
-        this.checkTimeForDisconnectReconnect(); // Automatically handles disconnect/reconnect at specified times
+        // this.checkTimeForDisconnectReconnect(); // Automatically handles disconnect/reconnect at specified times
     }
 }
 

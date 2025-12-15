@@ -993,7 +993,7 @@ const bot = new EnhancedDigitDifferTradingBot('hsj0tA0XJoIzJG5', {
     multiplier: 11.3,
     maxConsecutiveLosses: 3,
     stopLoss: 129,
-    takeProfit: 5000,
+    takeProfit: 2.5,
     requiredHistoryLength: 5000,
     winProbabilityThreshold: 0.6,
     minWaitTime: 2000, //5 Minutes
