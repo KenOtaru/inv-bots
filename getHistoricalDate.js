@@ -5,8 +5,8 @@ const { getHistoricalRates } = require("dukascopy-node");
     const data = await getHistoricalRates({
       instrument: "eurusd",
       dates: {
-        from: new Date("2025-11-15"),
-        to: new Date("2025-12-16"),
+        from: new Date("2025-11-14"),
+        to: new Date("2025-11-16"),
       },
       timeframe: "h1",
       format: "csv",

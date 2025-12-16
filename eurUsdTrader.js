@@ -211,7 +211,8 @@ class ProfessionalDerivBot {
       const validator = new WalkForwardValidator(this.strategy, this.state.marketData, {
         trainPeriod: 1000,
         testPeriod: 200,
-        totalWalks: 20
+        totalWalks: 20,
+        
       });
       
       const validationReport = await validator.executeWalkForward();
