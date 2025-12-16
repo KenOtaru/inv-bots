@@ -419,7 +419,7 @@ class ProfessionalDerivBot {
   handleNewTick(tick) {
     // Update market data with new tick
     console.log(`📡 New tick: ${tick.quote}`);
-    console.log(`Mode: ${this.config.liveTrade ? '🔴 LIVE TRADING': '✅ PAPER TRADING'}`);
+    // console.log(`Mode: ${this.config.liveTrade ? '🔴 LIVE TRADING': '✅ PAPER TRADING'}`);
   }
 
   shutdown() {
