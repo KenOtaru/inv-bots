@@ -1,4 +1,5 @@
 require('dotenv').config();
+const nodemailer = require('nodemailer');
 const DataPipeline = require('./DataPipeline');
 const DerivAPI = require('./DerivAPI2');
 
@@ -8,7 +9,7 @@ class ProfessionalDerivBot {
     this.config = {
       // Account Settings
       token: process.env.DERIV_TOKEN,
-      paperTrading: process.env.PAPER_TRADING !== 'false', // Default TRUE
+      liveTrade: 'true', // Default False
       
       // Strategy Parameters
       instrument: 'EUR/USD',
@@ -46,10 +47,134 @@ class ProfessionalDerivBot {
     this.api = new DerivAPI(this.config.token);
     this.data = new DataPipeline();
     
+    // ========== EMAIL CONFIGURATION ==========
+    this.emailConfig = {
+      service: 'gmail',
+      auth: {
+        user: 'kenzkdp2@gmail.com',
+        pass: 'jfjhtmussgfpbgpk'
+      }
+    };
+    this.emailRecipient = 'kenotaru@gmail.com';
+    
+    // ========== EMAIL STATE ==========
+    this.totalTrades = 0;
+    this.totalWins = 0;
+    this.totalLosses = 0;
+    this.totalProfitLoss = 0;
+    
+    this.startEmailTimer();
+    
     console.log('🚀 BOT INITIALIZED');
-    console.log(`Mode: ${this.config.paperTrading ? '✅ PAPER TRADING' : '🔴 LIVE TRADING'}`);
+    console.log(`Mode: ${this.config.liveTrade ? '🔴 LIVE TRADING' : '✅ PAPER TRADING'}`);
     console.log(`Capital: $${this.config.initialCapital}`);
     console.log(`Daily Risk Limit: $${(this.config.initialCapital * this.config.maxDailyRisk).toFixed(2)}`);
+  }
+
+  // ========== EMAIL NOTIFICATION METHODS ==========
+  startEmailTimer() {
+    setInterval(() => {
+      this.sendEmailSummary();
+    }, 1800000); // 30 minutes
+  }
+
+  async sendEmailSummary() {
+    const transporter = nodemailer.createTransport(this.emailConfig);
+    const summaryText = `
+    PROFESSIONAL DERIV BOT - TRADING SUMMARY
+    ========================================
+   
+    Performance Metrics:
+    -------------------
+    Total Trades: ${this.totalTrades}
+    Won: ${this.totalWins} | Lost: ${this.totalLosses}
+    Win Rate: ${this.totalTrades > 0 ? ((this.totalWins / this.totalTrades) * 100).toFixed(2) : 0}%
+   
+    Financial Summary:
+    -----------------
+    Total P/L: $${this.totalProfitLoss.toFixed(2)}
+    Current Capital: $${this.state.capital.toFixed(2)}
+    Daily P&L: $${this.state.dailyPnL.toFixed(2)}
+    Daily Risk Utilized: $${this.state.dailyRisked.toFixed(2)}
+    
+    Account Status:
+    ---------------
+    Consecutive Loss Days: ${this.state.consecutiveLossDays}
+    Max Allowed: ${this.config.maxConsecutiveLossDays}
+    Trading Mode: ${this.config.liveTrade ? 'LIVE TRADING' : 'PAPER TRADING'}
+    `;
+    const mailOptions = {
+      from: this.emailConfig.auth.user,
+      to: this.emailRecipient,
+      subject: 'EUR/USD Trader Deriv Bot - Trading Summary',
+      text: summaryText
+    };
+    try {
+      await transporter.sendMail(mailOptions);
+      console.log('📧 Summary email sent successfully');
+    } catch (error) {
+      console.error('Email sending error:', error);
+    }
+  }
+
+  async sendLossEmail(trade) {
+    const transporter = nodemailer.createTransport(this.emailConfig);
+    const summaryText = `
+    LOSS ALERT - DETAILED ANALYSIS
+    ===============================
+   
+    Trade Result: LOSS
+   
+    Performance Metrics:
+    -------------------
+    Total Trades: ${this.totalTrades}
+    Won: ${this.totalWins} | Lost: ${this.totalLosses}
+    Win Rate: ${this.totalTrades > 0 ? ((this.totalWins / this.totalTrades) * 100).toFixed(2) : 0}%
+    Total P/L: $${this.totalProfitLoss.toFixed(2)}
+   
+    Trade Details:
+    --------------
+    Direction: ${trade.signal.direction}
+    Entry Price: $${trade.signal.entry.toFixed(4)}
+    Stake: $${trade.stake.toFixed(2)}
+    Profit: $${trade.profit.toFixed(2)}
+    Confidence: ${(trade.signal.confidence * 100).toFixed(1)}%
+   
+    Account Status:
+    ---------------
+    Current Capital: $${this.state.capital.toFixed(2)}
+    Daily P&L: $${this.state.dailyPnL.toFixed(2)}
+    Daily Risk Utilized: $${this.state.dailyRisked.toFixed(2)}
+    Consecutive Loss Days: ${this.state.consecutiveLossDays}
+    `;
+    const mailOptions = {
+      from: this.emailConfig.auth.user,
+      to: this.emailRecipient,
+      subject: 'EUR/USD Trader Deriv Bot - Loss Alert',
+      text: summaryText
+    };
+    try {
+      await transporter.sendMail(mailOptions);
+      console.log('📧 Loss alert email sent successfully');
+    } catch (error) {
+      console.error('Email sending error:', error);
+    }
+  }
+
+  async sendErrorEmail(errorMessage) {
+    const transporter = nodemailer.createTransport(this.emailConfig);
+    const mailOptions = {
+      from: this.emailConfig.auth.user,
+      to: this.emailRecipient,
+      subject: 'EUR/USD Trader Deriv Bot - Error Report',
+      text: `An error occurred in the trading bot:\n\n${errorMessage}\n\nTime: ${new Date().toLocaleString()}`
+    };
+    try {
+      await transporter.sendMail(mailOptions);
+      console.log('📧 Error email sent successfully');
+    } catch (error) {
+      console.error('Email sending error:', error);
+    }
   }
 
   // ========== MAIN LOOP ==========
@@ -176,12 +301,7 @@ class ProfessionalDerivBot {
     console.log(`   Direction: ${signal.direction} | Stake: $${stake.toFixed(2)}`);
     console.log(`   Confidence: ${(signal.confidence * 100).toFixed(1)}%`);
 
-    if (this.config.paperTrading) {
-      // ===== PAPER TRADING =====
-      console.log('✅ PAPER TRADE EXECUTED');
-      trade.status = 'open';
-      this.simulateTradeOutcome(trade);
-    } else {
+    if (this.config.liveTrade) {
       // ===== LIVE TRADING (Uncomment after validation) =====
       try {
         const proposal = await this.api.getProposal({
@@ -206,6 +326,11 @@ class ProfessionalDerivBot {
         console.error('❌ Live trade failed:', error.message);
         trade.status = 'failed';
       }
+    } else {
+      // ===== PAPER TRADING =====
+      console.log('✅ PAPER TRADE EXECUTED');
+      trade.status = 'open';
+      this.simulateTradeOutcome(trade);
     }
 
     this.state.trades.push(trade);
@@ -242,8 +367,22 @@ class ProfessionalDerivBot {
     this.state.equityCurve.push(this.state.capital);
     this.state.activeTrade = null;
     
+    // Update trade metrics
+    this.totalTrades++;
+    this.totalProfitLoss += profit;
+    if (profit > 0) {
+      this.totalWins++;
+    } else {
+      this.totalLosses++;
+    }
+    
     console.log(`\n📊 TRADE CLOSED: ${status.toUpperCase()}`);
     console.log(`   Profit: $${profit.toFixed(2)} | New Balance: $${this.state.capital.toFixed(2)}`);
+    
+    // Send loss alert email if trade resulted in a loss
+    if (profit < 0) {
+      this.sendLossEmail(trade);
+    }
     
     this.updatePerformanceMetrics();
   }
@@ -280,6 +419,7 @@ class ProfessionalDerivBot {
   handleNewTick(tick) {
     // Update market data with new tick
     console.log(`📡 New tick: ${tick.quote}`);
+    console.log(`Mode: ${this.config.liveTrade ? '🔴 LIVE TRADING': '✅ PAPER TRADING'}`);
   }
 
   shutdown() {
