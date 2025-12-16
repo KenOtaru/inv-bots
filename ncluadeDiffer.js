@@ -1940,7 +1940,7 @@ class EnhancedDigitDifferTradingBot {
             .join('\n        ');
 
         const summaryText = `
-        ncluadeDiffer2 Trading Summary:
+        ncluadeDiffer Trading Summary:
         Total Trades: ${this.totalTrades}
         Total Trades Won: ${this.totalWins}
         Total Trades Lost: ${this.totalLosses}
