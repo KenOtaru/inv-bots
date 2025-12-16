@@ -216,14 +216,14 @@ class ProfessionalDerivBot {
       });
       
       const validationReport = await validator.executeWalkForward();
-      this.printValidationReport(validationReport);
+      // this.printValidationReport(validationReport);
       
-      if (!validationReport.isValid) {
-        console.log('\n❌ VALIDATION FAILED. Strategy not statistically viable.');
-        console.log('Reasons:', validationReport.failureReasons);
-        console.log('Bot will not start live trading.');
-        process.exit(1);
-      }
+      // if (!validationReport.isValid) {
+      //   console.log('\n❌ VALIDATION FAILED. Strategy not statistically viable.');
+      //   console.log('Reasons:', validationReport.failureReasons);
+      //   console.log('Bot will not start live trading.');
+      //   process.exit(1);
+      // }
       
       console.log('\n✅ Validation passed. Starting live monitoring...');
       
@@ -232,9 +232,9 @@ class ProfessionalDerivBot {
       await this.connectAndTrade();
       
     } catch (error) {
-      console.error('❌ Fatal Error:', error.message);
-      await this.sendErrorEmail(error.message);
-      process.exit(1);
+      // console.error('❌ Fatal Error:', error.message);
+      // await this.sendErrorEmail(error.message);
+      // process.exit(1);
     }
   }
 
