@@ -11,6 +11,8 @@
     "dotenv": "^17.2.2",
     "dukascopy-node": "^1.45.1",
     "figlet": "^1.9.4",
+    "kmeans-js": "^0.1.2",
+    "mathjs": "^15.1.0",
     "node-telegram-bot-api": "^0.63.0",
     "nodemailer": "^6.9.15",
     "prompt-sync": "^4.2.0",
