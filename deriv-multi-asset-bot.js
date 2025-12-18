@@ -319,6 +319,7 @@ class AIPortfolioManager {
         const totalRisk = capital * 0.02; // 2% total risk per cycle
 
         if (!this.topAssets.includes(asset)) {
+            console.log(`  ⛔ No stake allocated for ${asset} because it is not in the top 2 assets`);
             return 0;
         }
 
