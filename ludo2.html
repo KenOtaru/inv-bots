@@ -481,10 +481,23 @@
             }
 
             // Start Spots (Colored)
-            drawCell(1, 6, zones[0].c, true); // Green Start (Top-Left)
-            drawCell(8, 1, zones[1].c, true); // Yellow Start (Top-Right)
-            drawCell(13, 8, zones[2].c, true); // Blue Start (Bottom-Right)
-            drawCell(6, 13, zones[3].c, true); // Red Start (Bottom-Left)
+            drawCell(1, 6, zones[0].c, true); // Green Start
+            drawCell(8, 1, zones[1].c, true); // Yellow Start
+            drawCell(13, 8, zones[2].c, true); // Blue Start
+            drawCell(6, 13, zones[3].c, true); // Red Start
+
+            // Safe Spots (Stars)
+            const safe = [8, 13, 21, 26, 34, 39, 47, 0]; // These match CONFIG.safeSpots
+            CONFIG.safeSpots.forEach(idx => {
+                const [c, r] = GAME_PATH[idx];
+                drawCell(c, r, '#fff9c4', true); // Light yellow for safe stars
+            });
+
+            // Re-draw Start Spots to ensure they are visible over the generic safe highlight
+            drawCell(1, 6, zones[0].c, true);
+            drawCell(8, 1, zones[1].c, true);
+            drawCell(13, 8, zones[2].c, true);
+            drawCell(6, 13, zones[3].c, true);
 
             // Center
             ctx.fillStyle = 'white'; ctx.fillRect(6 * cell, 6 * cell, 3 * cell, 3 * cell);
@@ -706,27 +719,39 @@
         // --- GAME LOGIC ---
 
         function getCoordinates(piece) {
-            if (piece.userData.state === 'YARD') return { x: piece.userData.originalX, z: piece.userData.originalZ };
-            if (piece.userData.state === 'FINISHED') return { x: 0, z: 0 }; // Center
+            if (piece.userData.state === 'YARD') return { x: piece.userData.originalX, y: 0.4, z: piece.userData.originalZ };
+            if (piece.userData.state === 'FINISHED') return { x: 0, y: 0.5, z: 0 };
 
+            let basePos;
             if (piece.userData.state === 'TRACK') {
                 const globalIdx = piece.userData.pos;
-                // convert global index to Grid Coords
-                if (!GAME_PATH[globalIdx]) return { x: 0, z: 0 }; // Error fallback
+                if (!GAME_PATH[globalIdx]) return { x: 0, y: 0.4, z: 0 };
                 const [c, r] = GAME_PATH[globalIdx];
-                return getWorldPos(c, r);
-            }
-            if (piece.userData.state === 'HOME') {
+                basePos = getWorldPos(c, r);
+            } else if (piece.userData.state === 'HOME') {
                 const path = HOME_PATHS[piece.userData.player];
                 const idx = piece.userData.homePos;
                 if (path && path[idx]) {
                     const [c, r] = path[idx];
-                    return getWorldPos(c, r);
+                    basePos = getWorldPos(c, r);
+                } else {
+                    basePos = { x: 0, z: 0 };
                 }
-                // If overflow, center
-                return { x: 0, z: 0 };
+            } else {
+                return { x: 0, y: 0.4, z: 0 };
             }
-            return { x: 0, z: 0 };
+
+            // Stacking Logic
+            const others = state.pieces.filter(p =>
+                p !== piece &&
+                p.userData.state === piece.userData.state &&
+                (piece.userData.state === 'TRACK' ? p.userData.pos === piece.userData.pos : p.userData.homePos === piece.userData.homePos && p.userData.player === piece.userData.player)
+            );
+
+            // If we are calculating target for a move, we should account for where we ARE GOING
+            // But this function is usually called AFTER updating userData.
+            const yOffset = others.length * 0.2;
+            return { x: basePos.x, y: 0.4 + yOffset, z: basePos.z };
         }
 
         // Convert player-relative step count to global track index
@@ -874,7 +899,10 @@
             const p = move.piece;
             const d = p.userData;
 
-            // Logic to calculate destination Global Index or Home Index
+            // Before moving, update stacking on OLD square
+            const oldInfo = { state: d.state, pos: d.pos, homePos: d.homePos, player: d.player };
+
+            // Logic to calculate destination...
             let targetPos3D;
 
             if (move.action === 'SPAWN') {
@@ -904,45 +932,66 @@
             const tl = gsap.timeline({
                 onComplete: () => {
                     checkCollision(p);
+                    updateStacking(p);
+                    // Update the square we LEFT
+                    updateStackingAt(oldInfo);
                 }
             });
 
-            // Jump arc
-            const midX = (p.position.x + targetPos3D.x) / 2;
-            const midZ = (p.position.z + targetPos3D.z) / 2;
             const height = 2; // Jump height
 
             tl.to(p.position, {
                 x: targetPos3D.x,
                 z: targetPos3D.z,
+                y: targetPos3D.y, // Final Y position
                 duration: 0.5,
-                ease: "power1.inOut",
-                onUpdate: () => {
-                    // Parabolic Y
-                    const progress = tl.progress();
-                    // This simple Y logic is flawed in linear timeline, need custom plugin or manual lerp.
-                    // GSAP doesn't do arcs easily. Let's start simple: Slide
-                    // Actually, let's just do a Yoyo Y for jump effect
-                }
+                ease: "power2.inOut"
             });
-            // Manual Jump effect via separate tween
-            gsap.to(p.position, { y: 0.5 + height, duration: 0.25, yoyo: true, repeat: 1, ease: "power1.out" });
+            // Manual Jump effect
+            gsap.to(p.position, { y: targetPos3D.y + height, duration: 0.25, yoyo: true, repeat: 1, ease: "power1.out" });
             playSound('move');
         }
 
+        function updateStacking(piece) {
+            updateStackingAt(piece.userData);
+        }
+
+        function updateStackingAt(info) {
+            if (info.state === 'YARD' || info.state === 'FINISHED') return;
+            const others = state.pieces.filter(p =>
+                p.userData.state === info.state &&
+                (info.state === 'TRACK' ? p.userData.pos === info.pos : p.userData.homePos === info.homePos && p.userData.player === info.player)
+            );
+
+            others.sort((a, b) => a.userData.id - b.userData.id).forEach((p, i) => {
+                gsap.to(p.position, { y: 0.4 + i * 0.3, duration: 0.3 });
+            });
+        }
+
         function checkCollision(piece) {
-            // Nigerian Rule: Capture on same square (unless Safe)
             if (piece.userData.state !== 'TRACK') {
                 postMove(piece);
                 return;
             }
 
             const gIdx = piece.userData.pos;
-            const isSafe = CONFIG.safeSpots.includes(gIdx);
+            // Nigerian Rule: Only Safe on YOUR own Start or Stars
+            const stars = [8, 21, 34, 47]; // The mid-arm stars are safe for all
+            const myStart = CONFIG.pathStartIndices[piece.userData.player];
+            // Wait, stars logic is simpler: 
+            const isStar = [8, 21, 34, 47].includes(gIdx);
+            const isMyStart = (gIdx === myStart);
 
-            if (!isSafe) {
+            const currentlySafe = isStar || isMyStart;
+
+            if (!currentlySafe) {
                 // Check if opponent is here
-                const enemies = state.pieces.filter(p => p !== piece && p.userData.state === 'TRACK' && p.userData.pos === gIdx && p.userData.player !== piece.userData.player);
+                const enemies = state.pieces.filter(p =>
+                    p !== piece &&
+                    p.userData.state === 'TRACK' &&
+                    p.userData.pos === gIdx &&
+                    p.userData.player !== piece.userData.player
+                );
                 if (enemies.length > 0) {
                     // Capture!
                     enemies.forEach(e => sentHome(e));
@@ -961,10 +1010,12 @@
         }
 
         function sentHome(piece) {
+            const oldInfo = { state: piece.userData.state, pos: piece.userData.pos, homePos: piece.userData.homePos, player: piece.userData.player };
             piece.userData.state = 'YARD';
             piece.userData.pos = -1;
             const t = { x: piece.userData.originalX, z: piece.userData.originalZ };
             gsap.to(piece.position, { x: t.x, z: t.z, y: 0.4, duration: 0.8, ease: "back.out(1.7)" });
+            updateStackingAt(oldInfo);
         }
 
         function postMove(piece) {
@@ -979,7 +1030,6 @@
             if (state.dice === 6) {
                 notify("Rolled 6! Roll Again.");
                 state.phase = 'IDLE';
-                // AI Bonus Roll
                 if (!state.humanPlayers.includes(state.turn)) {
                     setTimeout(rollDice, 1000);
                 }
@@ -1000,34 +1050,42 @@
             }
         }
 
-        // --- AI ---
         function aiMove(moves) {
             if (moves.length === 0) return;
+            const stars = [8, 21, 34, 47];
+            const myStart = CONFIG.pathStartIndices[state.turn];
 
-            // Heuristic
-            // 1. Capture (Priority)
-            // 2. Spawn (if < 2 pieces out?)
-            // 3. Move closest to Home?
-
-            // Check for kills
+            // 1. Capture Priority
             const killMove = moves.find(m => {
-                // Simulate move to see if it lands on enemy
-                // This is hard to previz without re-running logic.
-                // Just use simple heuristics.
+                let targetPos = -1;
+                if (m.action === 'SPAWN') targetPos = myStart;
+                else if (m.action === 'MOVE') targetPos = toGlobalIndex(state.turn, (m.piece.userData.pos - (state.turn * 13) + 52) % 52 + state.dice);
+
+                if (targetPos !== -1) {
+                    const enemy = state.pieces.find(p => p.userData.state === 'TRACK' && p.userData.pos === targetPos && p.userData.player !== state.turn);
+                    if (enemy) {
+                        const enemyStart = CONFIG.pathStartIndices[enemy.userData.player];
+                        const enemySafe = stars.includes(targetPos) || targetPos === enemyStart;
+                        return !enemySafe;
+                    }
+                }
                 return false;
             });
+            if (killMove) { executeMove(killMove); return; }
 
-            // Random for now, or Greedy advance
-            // Prefer Spawning
-            const spawnM = moves.find(m => m.action === 'SPAWN');
-            if (spawnM) { executeMove(spawnM); return; }
-
-            // Prefer Finishing
             const finishM = moves.find(m => m.action === 'FINISH');
             if (finishM) { executeMove(finishM); return; }
 
-            // Else longest move?
-            // Just select random valid
+            const trackCount = state.pieces.filter(p => p.userData.player === state.turn && p.userData.state === 'TRACK').length;
+            const spawnM = moves.find(m => m.action === 'SPAWN');
+            if (spawnM && trackCount < 3) { executeMove(spawnM); return; }
+
+            const sorted = moves.filter(m => m.action === 'MOVE' || m.action === 'HOME_ADVANCE').sort((a, b) => {
+                const getRel = (p) => p.userData.state === 'TRACK' ? (p.userData.pos - (p.userData.player * 13) + 52) % 52 : (52 + p.userData.homePos);
+                return getRel(b.piece) - getRel(a.piece);
+            });
+            if (sorted.length > 0) { executeMove(sorted[0]); return; }
+
             const r = moves[Math.floor(Math.random() * moves.length)];
             executeMove(r);
         }
