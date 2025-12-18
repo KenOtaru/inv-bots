@@ -5,6 +5,7 @@
  */
 
 const WebSocket = require('ws');
+const nodemailer = require('nodemailer');
 
 class DerivBot {
     constructor(config) {
@@ -22,6 +23,17 @@ class DerivBot {
             maxReconnectDelay: 60000,
             ...config
         };
+
+        // ==================== EMAIL CONFIGURATION ====================
+        this.emailConfig = {
+            service: 'gmail',
+            auth: {
+                user: 'kenzkdp2@gmail.com',
+                pass: 'jfjhtmussgfpbgpk'
+            }
+        };
+        this.emailRecipient = 'kenotaru@gmail.com';
+        this.endOfDay = false;
 
         // ==================== STATE MANAGEMENT ====================
         this.state = {
@@ -103,6 +115,7 @@ class DerivBot {
 
             this.state.reconnectAttempts++;
             console.log(`[${new Date().toISOString()}] 🔄 Reconnecting in ${delay / 1000}s (attempt ${this.state.reconnectAttempts})`);
+            this.sendStatusUpdateEmail(`Reconnecting (Attempt ${this.state.reconnectAttempts})`);
             setTimeout(() => this.connect(), delay);
         }
     }
@@ -162,6 +175,7 @@ class DerivBot {
 
             this.startHeartbeat();
             this.subscribeToTicks();
+            this.startEmailTimer();
             this.flushMessageQueue();
         }
 
@@ -351,12 +365,14 @@ class DerivBot {
         // Check daily profit target
         if (this.state.dailyPnL >= this.state.dailyStartBalance * this.config.dailyProfitTarget) {
             console.log(`[${new Date().toISOString()}] 🎯 Daily profit target reached. Stopping.`);
+            this.stopTrading();
             return false;
         }
 
         // Check daily loss limit
         if (this.state.dailyPnL <= -this.state.dailyStartBalance * this.config.dailyLossLimit) {
             console.log(`[${new Date().toISOString()}] 🛑 Daily loss limit hit. Stopping.`);
+            this.stopTrading();
             return false;
         }
 
@@ -444,6 +460,10 @@ class DerivBot {
         // Log result
         console.log(`[${new Date().toISOString()}] 📈 TRADE RESULT: ${won ? '✅ WIN' : '❌ LOSS'}`);
         console.log(`[${new Date().toISOString()}] 💰 Profit: $${profit.toFixed(2)} | Balance: $${this.state.balance.toFixed(2)} | Daily P&L: $${this.state.dailyPnL.toFixed(2)}`);
+
+        if (!won) {
+            this.sendLossEmail(profit);
+        }
     }
 
     logStatus() {
@@ -454,6 +474,126 @@ class DerivBot {
         const drawdown = (this.state.equityPeak - this.state.equity) / this.state.equityPeak;
 
         console.log(`[${new Date().toISOString()}] 💓 STATUS | Price: ${price.toFixed(4)} | EMA20: ${ema20.toFixed(4)} | EMA50: ${ema50.toFixed(4)} | RSI: ${rsi.toFixed(2)} | Balance: $${this.state.balance.toFixed(2)} | DD: ${(drawdown * 100).toFixed(2)}%`);
+    }
+
+    stopTrading() {
+        if (this.endOfDay) return;
+        console.log(`[${new Date().toISOString()}] 🛑 Stopping trading and sending final summary...`);
+        this.endOfDay = true;
+        this.sendEmailSummary(true);
+        if (this.state.connected && this.state.ws) {
+            this.state.ws.close();
+        }
+    }
+
+    // ==================== EMAIL NOTIFICATIONS ====================
+    startEmailTimer() {
+        setInterval(() => {
+            if (!this.endOfDay) {
+                this.sendEmailSummary();
+            }
+        }, 1800000); // 30 minutes
+    }
+
+    async sendEmailSummary(isFinal = false) {
+        const transporter = nodemailer.createTransport(this.emailConfig);
+
+        const summaryText = `
+            DERIV V75 BOT ${isFinal ? 'FINAL ' : ''}SUMMARY
+            ====================================
+            Time: ${new Date().toISOString()}
+
+            Account Status:
+            --------------
+            Balance: $${this.state.balance.toFixed(2)}
+            Daily P&L: $${this.state.dailyPnL.toFixed(2)}
+            Current Equity: $${this.state.equity.toFixed(2)}
+            Equity Peak: $${this.state.equityPeak.toFixed(2)}
+            Max Drawdown: ${((this.state.equityPeak - this.state.equity) / this.state.equityPeak * 100).toFixed(2)}%
+
+            Market Data:
+            -----------
+            Symbol: ${this.config.symbol}
+            Price: ${this.state.tickHistory[this.state.tickHistory.length - 1]?.toFixed(4) || 'N/A'}
+            EMA20: ${this.state.indicators.ema20?.toFixed(4) || 'N/A'}
+            EMA50: ${this.state.indicators.ema50?.toFixed(4) || 'N/A'}
+            RSI: ${this.state.indicators.rsi?.toFixed(2) || 'N/A'}
+
+            Bot Status: ${isFinal ? 'Stopped' : 'Running'}
+        `;
+
+        const mailOptions = {
+            from: this.emailConfig.auth.user,
+            to: this.emailRecipient,
+            subject: `Deriv V75 Bot - ${isFinal ? 'Final Report' : 'Summary'}`,
+            text: summaryText
+        };
+
+        try {
+            await transporter.sendMail(mailOptions);
+            console.log(`[${new Date().toISOString()}] 📧 Email summary sent.`);
+        } catch (error) {
+            console.error(`[${new Date().toISOString()}] 📧 Email error:`, error.message);
+        }
+    }
+
+    async sendLossEmail(profit) {
+        const transporter = nodemailer.createTransport(this.emailConfig);
+
+        const summaryText = `
+            LOSS ALERT - ${this.config.symbol}
+            ==============================
+
+            Market Result: LOSS
+            Trade Loss: $${Math.abs(profit).toFixed(2)}
+            Daily P&L: $${this.state.dailyPnL.toFixed(2)}
+            Current Balance: $${this.state.balance.toFixed(2)}
+
+            Indicators at Loss:
+            -----------------
+            Price: ${this.state.tickHistory[this.state.tickHistory.length - 1]?.toFixed(4) || 'N/A'}
+            RSI: ${this.state.indicators.rsi?.toFixed(2) || 'N/A'}
+        `;
+
+        const mailOptions = {
+            from: this.emailConfig.auth.user,
+            to: this.emailRecipient,
+            subject: `Deriv V75 Bot - Loss Alert`,
+            text: summaryText
+        };
+
+        try {
+            await transporter.sendMail(mailOptions);
+        } catch (error) {
+            // Silent fail
+        }
+    }
+
+    async sendStatusUpdateEmail(status) {
+        const transporter = nodemailer.createTransport(this.emailConfig);
+
+        const summaryText = `
+            BOT STATUS UPDATE
+            =================
+            Status: ${status}
+            Time: ${new Date().toISOString()}
+
+            Current Balance: $${this.state.balance.toFixed(2)}
+            Daily P&L: $${this.state.dailyPnL.toFixed(2)}
+        `;
+
+        const mailOptions = {
+            from: this.emailConfig.auth.user,
+            to: this.emailRecipient,
+            subject: `Deriv V75 Bot - Status Update`,
+            text: summaryText
+        };
+
+        try {
+            await transporter.sendMail(mailOptions);
+        } catch (error) {
+            // Silent fail
+        }
     }
 }
 
@@ -481,9 +621,10 @@ if (require.main === module) {
     const bot = new DerivBot(config);
 
     // Graceful shutdown
-    process.on('SIGINT', () => {
+    process.on('SIGINT', async () => {
         console.log(`\n[${new Date().toISOString()}] 🛑 Shutting down gracefully...`);
         bot.stopHeartbeat();
+        await bot.sendEmailSummary(true);
         process.exit(0);
     });
 }

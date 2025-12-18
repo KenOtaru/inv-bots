@@ -823,7 +823,7 @@ class MultiAssetDerivBot {
 
         // Check for trading signals
         if (this.shouldAnalyze(asset)) {
-            console.log(`Checking ${asset} for trading signals...`);
+            // console.log(`Checking ${asset} for trading signals...`);
             this.analyzeAndTrade(asset);
         }
     }
@@ -873,18 +873,18 @@ class MultiAssetDerivBot {
         if (state.tradeInProgress) return false;
 
         // Rate limit analysis
-        console.log(`Last analysis time: ${state.lastAnalysisTime}`);
+        // console.log(`Last analysis time: ${state.lastAnalysisTime}`);
         console.log(`Now: ${now}`);
         if (now - state.lastAnalysisTime < 3000) return false;
 
         // Need enough data
-        console.log(`Prices length: ${state.prices.length}`);
-        console.log(`EMA Long: ${ASSET_CONFIG[asset].emaLong}`);
+        // console.log(`Prices length: ${state.prices.length}`);
+        // console.log(`EMA Long: ${ASSET_CONFIG[asset].emaLong}`);
         if (state.prices.length < ASSET_CONFIG[asset].emaLong + 5) return false;
 
         // Check if asset is in top 2
         const topAssets = this.portfolioManager.topAssets;
-        console.log(`Top assets: ${topAssets}`);
+        // console.log(`Top assets: ${topAssets}`);
         if (topAssets.length > 0 && !topAssets.includes(asset)) return false;
 
         return true;
@@ -916,7 +916,7 @@ class MultiAssetDerivBot {
             direction = 'PUT';
         }
 
-        console.log(`📊 ${asset} Signal: ${direction} (EMA: ${state.emaShort.toFixed(4)}/${state.emaLong.toFixed(4)}, RSI: ${state.rsi.toFixed(1)}, Conf: ${confidence.toFixed(1)}%)`);
+        // console.log(`📊 ${asset} Signal: ${direction} (EMA: ${state.emaShort.toFixed(4)}/${state.emaLong.toFixed(4)}, RSI: ${state.rsi.toFixed(1)}, Conf: ${confidence.toFixed(1)}%)`);
 
         if (direction) {
             console.log(`📊 ${asset} Signal: ${direction} (EMA: ${state.emaShort.toFixed(4)}/${state.emaLong.toFixed(4)}, RSI: ${state.rsi.toFixed(1)}, Conf: ${confidence.toFixed(1)}%)`);
@@ -1237,7 +1237,7 @@ class MultiAssetDerivBot {
             ).join('\n');
 
         const summaryText = `
-            MULTI-ASSET BOT ${isFinal ? 'FINAL ' : ''}SUMMARY
+            DERIV MULTI-ASSET BOT ${isFinal ? 'FINAL ' : ''}SUMMARY
             ========================================
 
             Portfolio Performance:
@@ -1270,7 +1270,7 @@ class MultiAssetDerivBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: `Multi-Asset Bot - ${isFinal ? 'Final Report' : 'Summary'}`,
+            subject: `Deriv Multi-Asset Bot - ${isFinal ? 'Final Report' : 'Summary'}`,
             text: summaryText
         };
 
@@ -1306,7 +1306,7 @@ class MultiAssetDerivBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: `Multi-Asset Bot - Loss Alert: ${asset}`,
+            subject: `Deriv Multi-Asset Bot - Loss Alert: ${asset}`,
             text: summaryText
         };
 
@@ -1336,7 +1336,7 @@ class MultiAssetDerivBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: 'Multi-Asset Bot - Status Update',
+            subject: 'Deriv Multi-Asset Bot - Status Update',
             text: summaryText
         };
 
