@@ -80,7 +80,7 @@ const ASSET_CONFIG = {
 // Correlation pairs that cannot trade simultaneously
 const CORRELATED_PAIRS = [
     ['frxEURUSD', 'frxGBPUSD'],
-    ['R_75', 'R_100']
+    ['R_75', 'R_25']
 ];
 
 // ============ TECHNICAL INDICATORS ============
@@ -348,7 +348,7 @@ class RiskManager {
     constructor(bot) {
         this.bot = bot;
         this.dailyLossLimit = 0.05; // 5% of capital
-        this.dailyProfitTarget = 0.025; // 2.5%
+        this.dailyProfitTarget = 0.03; // 3%
         this.maxPositions = 5;
         this.maxTradesPerDirection = 3;
         this.cooldownAfterLosses = 4 * 60 * 60 * 1000; // 4 hours
@@ -477,9 +477,9 @@ class MultiAssetDerivBot {
         // Config
         this.config = {
             stopLoss: config.stopLoss || this.capital * 0.05,
-            takeProfit: config.takeProfit || this.capital * 0.025,
+            takeProfit: config.takeProfit || this.capital * 0.015,
             growthRate: config.growthRate || 0.05,
-            requiredHistoryLength: config.requiredHistoryLength || 100,
+            requiredHistoryLength: config.requiredHistoryLength || 200,
             minTimeBetweenTrades: config.minTimeBetweenTrades || 5000
         };
 
@@ -640,6 +640,9 @@ class MultiAssetDerivBot {
             case 'authorize':
                 this.handleAuthorization(message);
                 break;
+            case 'candles':
+                this.handleCandles(message);
+                break;
             case 'ohlc':
                 this.handleOHLC(message);
                 break;
@@ -674,13 +677,13 @@ class MultiAssetDerivBot {
     // ============ TRADING INITIALIZATION ============
     async startTrading() {
         console.log(`
-╔════════════════════════════════════════════════╗
-║   🚀 MULTI-ASSET TRADING BOT v1.0             ║
-╟────────────────────────────────────────────────╢
-║ Capital: $${this.capital.toFixed(2).padEnd(35)}║
-║ Assets: ${this.activeAssets.join(', ').padEnd(37)}║
-║ Strategy: EMA Crossover + RSI + AI Scoring    ║
-╚════════════════════════════════════════════════╝
+            ╔════════════════════════════════════════════════╗
+            ║   🚀 MULTI-ASSET TRADING BOT v1.0             ║
+            ╟────────────────────────────────────────────────╢
+            ║ Capital: $${this.capital.toFixed(2).padEnd(35)}║
+            ║ Assets: ${this.activeAssets.join(', ').padEnd(37)}║
+            ║ Strategy: EMA Crossover + RSI + AI Scoring    ║
+            ╚════════════════════════════════════════════════╝
         `);
 
         // Subscribe to OHLC candles for each asset
@@ -703,7 +706,7 @@ class MultiAssetDerivBot {
     async subscribeToAsset(asset) {
         console.log(`📈 Subscribing to ${asset}...`);
 
-        // Subscribe to 1-minute OHLC candles
+        // Get initial candle history
         this.sendRequest({
             ticks_history: asset,
             count: this.config.requiredHistoryLength,
@@ -712,13 +715,41 @@ class MultiAssetDerivBot {
             granularity: 60
         });
 
-        await this.delay(300);
+        await this.delay(500);
 
-        // Subscribe to live ticks
+        // Subscribe to live OHLC candles
+        this.sendRequest({
+            ohlc: asset,
+            subscribe: 1,
+            granularity: 60
+        });
+
+        // Also subscribe to live ticks for real-time price updates between candles
         this.sendRequest({
             ticks: asset,
             subscribe: 1
         });
+    }
+
+    handleCandles(message) {
+        const asset = message.echo_req.ticks_history;
+        const state = this.assetStates[asset];
+        const candles = message.candles;
+
+        if (!state || !candles) return;
+
+        console.log(`📊 Received ${candles.length} historical candles for ${asset}`);
+
+        state.candles = candles;
+        state.prices = candles.map(c => parseFloat(c.close));
+        state.highs = candles.map(c => parseFloat(c.high));
+        state.lows = candles.map(c => parseFloat(c.low));
+        state.closes = candles.map(c => parseFloat(c.close));
+
+        console.log(`✅ ${asset} History Initialized: Prices length: ${state.prices.length}`);
+
+        // Initial indicators calculation
+        this.updateIndicators(asset);
     }
 
     // ============ OHLC & TICK HANDLING ============
@@ -730,25 +761,47 @@ class MultiAssetDerivBot {
         const state = this.assetStates[asset];
         if (!state) return;
 
-        // Update candle data
-        state.candles.push(ohlc);
-        state.prices.push(parseFloat(ohlc.close));
-        state.highs.push(parseFloat(ohlc.high));
-        state.lows.push(parseFloat(ohlc.low));
-        state.closes.push(parseFloat(ohlc.close));
+        // Check if this is a new candle or an update to the current one
+        const lastCandle = state.candles[state.candles.length - 1];
+        const isNewCandle = !lastCandle || ohlc.open_time > lastCandle.epoch;
 
-        // Keep history limited
-        const maxLen = 200;
-        if (state.candles.length > maxLen) {
-            state.candles.shift();
-            state.prices.shift();
-            state.highs.shift();
-            state.lows.shift();
-            state.closes.shift();
+        if (isNewCandle) {
+            // New candle started
+            state.candles.push({
+                epoch: ohlc.open_time,
+                open: parseFloat(ohlc.open),
+                high: parseFloat(ohlc.high),
+                low: parseFloat(ohlc.low),
+                close: parseFloat(ohlc.close)
+            });
+            state.prices.push(parseFloat(ohlc.close));
+            state.highs.push(parseFloat(ohlc.high));
+            state.lows.push(parseFloat(ohlc.low));
+            state.closes.push(parseFloat(ohlc.close));
+
+            // Keep history limited
+            const maxLen = 200;
+            while (state.prices.length > maxLen) {
+                state.candles.shift();
+                state.prices.shift();
+                state.highs.shift();
+                state.lows.shift();
+                state.closes.shift();
+            }
+
+            // Calculate indicators on new candle
+            this.updateIndicators(asset);
+        } else {
+            // Update current candle
+            lastCandle.high = Math.max(lastCandle.high, parseFloat(ohlc.high));
+            lastCandle.low = Math.min(lastCandle.low, parseFloat(ohlc.low));
+            lastCandle.close = parseFloat(ohlc.close);
+
+            state.prices[state.prices.length - 1] = parseFloat(ohlc.close);
+            state.highs[state.highs.length - 1] = lastCandle.high;
+            state.lows[state.lows.length - 1] = lastCandle.low;
+            state.closes[state.closes.length - 1] = lastCandle.close;
         }
-
-        // Calculate indicators
-        this.updateIndicators(asset);
     }
 
     handleTick(message) {
@@ -770,6 +823,7 @@ class MultiAssetDerivBot {
 
         // Check for trading signals
         if (this.shouldAnalyze(asset)) {
+            console.log(`Checking ${asset} for trading signals...`);
             this.analyzeAndTrade(asset);
         }
     }
@@ -819,13 +873,18 @@ class MultiAssetDerivBot {
         if (state.tradeInProgress) return false;
 
         // Rate limit analysis
+        console.log(`Last analysis time: ${state.lastAnalysisTime}`);
+        console.log(`Now: ${now}`);
         if (now - state.lastAnalysisTime < 3000) return false;
 
         // Need enough data
+        console.log(`Prices length: ${state.prices.length}`);
+        console.log(`EMA Long: ${ASSET_CONFIG[asset].emaLong}`);
         if (state.prices.length < ASSET_CONFIG[asset].emaLong + 5) return false;
 
         // Check if asset is in top 2
         const topAssets = this.portfolioManager.topAssets;
+        console.log(`Top assets: ${topAssets}`);
         if (topAssets.length > 0 && !topAssets.includes(asset)) return false;
 
         return true;
@@ -856,6 +915,8 @@ class MultiAssetDerivBot {
         else if (crossDown && state.rsi > (100 - config.rsiThreshold) && confidence > 60) {
             direction = 'PUT';
         }
+
+        console.log(`📊 ${asset} Signal: ${direction} (EMA: ${state.emaShort.toFixed(4)}/${state.emaLong.toFixed(4)}, RSI: ${state.rsi.toFixed(1)}, Conf: ${confidence.toFixed(1)}%)`);
 
         if (direction) {
             console.log(`📊 ${asset} Signal: ${direction} (EMA: ${state.emaShort.toFixed(4)}/${state.emaLong.toFixed(4)}, RSI: ${state.rsi.toFixed(1)}, Conf: ${confidence.toFixed(1)}%)`);
@@ -1333,9 +1394,9 @@ class MultiAssetDerivBot {
 const bot = new MultiAssetDerivBot('Dz2V2KvRf4Uukt3', {
     capital: 500,
     // For Binary Options
-    assets: ['R_10', 'R_25', 'R_75', 'BOOM1000', 'CRASH1000', 'frxEURUSD', 'frxGBPUSD', 'frxXAUUSD', 'WLDOIL'],
+    assets: ['R_75', 'BOOM1000', 'CRASH1000', 'frxEURUSD', 'frxXAUUSD'], //['R_10', 'R_25', 'R_75', 'BOOM1000', 'CRASH1000', 'frxEURUSD', 'frxGBPUSD', 'frxUSDJPY', 'frxXAUUSD', 'WLDOIL'];
     // For Forex/Commodities, use:
-    // assets: ['frxEURUSD', 'frxGBPUSD', 'frxXAUUSD', 'WLDOIL'],
+    // assets: ['frxEURUSD', 'frxGBPUSD',  'frxUSDJPY', 'frxXAUUSD', 'WLDOIL'],
     stopLoss: 25,       // 5% of 500
     takeProfit: 12.5    // 2.5% of 500
 });

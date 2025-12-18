@@ -169,7 +169,7 @@ if (!isMainThread) {
 
 // --------------------------- Main code ---------------------------
 const APP_ID = String(process.env.DERIV_APP_ID || process.env.APP_ID || '1089');
-const TOKEN = process.env.DERIV_TOKEN || process.env.TOKEN || '0P94g4WdSrSrzir';
+const TOKEN = '0P94g4WdSrSrzir';//process.env.DERIV_TOKEN || process.env.TOKEN || 
 const PAPER = false; //process.argv.includes('--paper') || !TOKEN;
 const ENDPOINT = `wss://ws.derivws.com/websockets/v3?app_id=${encodeURIComponent(APP_ID)}`;
 
