@@ -397,7 +397,7 @@ class EnhancedDigitDifferTradingBot {
 
         this.digitCounts[asset][lastDigit]++;
 
-        // console.log(`[${asset}] ${tick.quote}: ${this.tickHistories[asset].slice(-5).join(', ')}`);
+        console.log(`[${asset}] ${tick.quote}: ${this.tickHistories[asset].slice(-5).join(', ')}`);
 
         if (this.tickHistories[asset].length < this.config.requiredHistoryLength) {
             // console.log(`[${asset}] Waiting for more ticks. Current length: ${this.tickHistories[asset].length}`);
