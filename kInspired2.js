@@ -631,14 +631,14 @@ class EnhancedDigitDifferTradingBot {
         const lastDigit = last10[last10.length - 1]; // The digit we're betting continues
 
         // for (let times = 3; times >= 3; times--) {
-        if (appeared[3].length > 0) {
-            if (appeared[3].includes(currentCount) && appeared[3].length > 1 && last10[9] >= 2) {
-                console.log(`TRADE SIGNAL! Betting digit ${lastDigit + 1} appears 3 times (currently 3x)`);
+        if (appeared[2].length > 0) {
+            if (appeared[1].includes(currentCount) && appeared[2].length > 2 && last10[9] >= 2 && last10[0] !== lastDigit + 1 && last10[1] !== lastDigit + 1) {
+                console.log(`TRADE SIGNAL! Betting digit ${lastDigit + 1} appears 1 time (currently 2x)`);
 
                 assetState.tradedDigitArray.push(currentCount);
-                assetState.filteredArray = appeared[3];
-                assetState.lastFilterUsed = 3;
-                assetState.tradeFrequency = 3;
+                assetState.filteredArray = appeared[1];
+                assetState.lastFilterUsed = 1;
+                assetState.tradeFrequency = 1;
 
                 this.placeTrade(asset);
             }
@@ -796,7 +796,7 @@ class EnhancedDigitDifferTradingBot {
             baseWaitTime = this.config.minWaitTime + (this.consecutiveLosses * 60000); // +1min per loss
             this.sendLossEmail(asset);
             // this.suspendAllExcept(asset);
-            this.suspendAsset(asset);
+            // this.suspendAsset(asset);
         }
 
         // If there is more than one suspended asset, reactivate the first one on win

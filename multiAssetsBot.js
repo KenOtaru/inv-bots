@@ -3,19 +3,62 @@
 /**
  * Deriv.com Multi-Asset AI Trading Bot - Light Version
  * No TensorFlow dependency - uses rule-based AI instead
+ * 
+ * Features:
+ * - Dynamic top-2 asset selection every 5 minutes
+ * - Per-asset EMA/RSI strategies
+ * - Kelly Criterion stake allocation
+ * - Portfolio-wide & per-asset risk controls
+ * - Correlation blocking
+ * - State persistence
+ * - Email notifications
  */
 
 const WebSocket = require('ws');
-const math = require('mathjs');
+const nodemailer = require('nodemailer');
 const fs = require('fs');
+
+// ==================== LOGGING HELPER ====================
+
+function log(level, message, data = null) {
+    const timestamp = new Date().toISOString();
+    const prefix = {
+        'INFO': '📋',
+        'TRADE': '💰',
+        'SIGNAL': '📊',
+        'SUCCESS': '✅',
+        'ERROR': '❌',
+        'WARNING': '⚠️',
+        'RISK': '🛡️',
+        'EMAIL': '📧'
+    }[level] || '•';
+
+    const logMessage = `[${timestamp}] ${prefix} [${level}] ${message}`;
+    console.log(logMessage);
+
+    if (data) {
+        console.log(`    └─ ${JSON.stringify(data)}`);
+    }
+
+    return logMessage;
+}
 
 // ==================== CONFIGURATION ====================
 
 const CONFIG = {
     // API Configuration
     appId: 1089,
-    apiToken: '0P94g4WdSrSrzir', //process.env.DERIV_TOKEN || '0P94g4WdSrSrzir',
-    websocketUrl: 'wss://ws.derivws.com/websockets/v3',
+    apiToken: 'Dz2V2KvRf4Uukt3',
+    websocketUrl: 'wss://ws.binaryws.com/websockets/v3',
+
+    // Email Configuration
+    email: {
+        service: 'gmail',
+        user: 'kenzkdp2@gmail.com',
+        password: 'jfjhtmussgfpbgpk',
+        recipient: 'kenotaru@gmail.com',
+        summaryInterval: 1800000 // 30 minutes
+    },
 
     // Trading Configuration
     initialCapital: 500,
@@ -33,10 +76,10 @@ const CONFIG = {
             emaLong: 21,
             rsiPeriod: 14,
             rsiThreshold: 35,
-            duration: 15, // minutes
+            duration: 15,
+            durationUnit: 'm',
             maxDailyTrades: 2,
-            subscription: 'candles',
-            granularity: 60, // 1 minute candles
+            granularity: 60,
             correlationGroup: 'volatility'
         },
         'R_25': {
@@ -46,8 +89,8 @@ const CONFIG = {
             rsiPeriod: 14,
             rsiThreshold: 35,
             duration: 20,
+            durationUnit: 'm',
             maxDailyTrades: 2,
-            subscription: 'candles',
             granularity: 60,
             correlationGroup: 'volatility'
         },
@@ -58,10 +101,10 @@ const CONFIG = {
             rsiPeriod: 21,
             rsiThreshold: 40,
             duration: 30,
+            durationUnit: 'm',
             maxDailyTrades: 1,
-            subscription: 'candles',
             granularity: 60,
-            correlationGroup: 'volatility'
+            correlationGroup: 'volatility_high'
         },
         'BOOM1000': {
             type: 'synthetic',
@@ -70,8 +113,8 @@ const CONFIG = {
             rsiPeriod: 7,
             rsiThreshold: 30,
             duration: 5,
+            durationUnit: 'm',
             maxDailyTrades: 3,
-            subscription: 'candles',
             granularity: 60,
             correlationGroup: 'boom_crash'
         },
@@ -82,8 +125,8 @@ const CONFIG = {
             rsiPeriod: 7,
             rsiThreshold: 30,
             duration: 5,
+            durationUnit: 'm',
             maxDailyTrades: 3,
-            subscription: 'candles',
             granularity: 60,
             correlationGroup: 'boom_crash'
         },
@@ -94,10 +137,10 @@ const CONFIG = {
             emaLong: 25,
             rsiPeriod: 14,
             rsiThreshold: 35,
-            duration: 240, // 4 hours
+            duration: 4,
+            durationUnit: 'h',
             maxDailyTrades: 1,
-            subscription: 'candles',
-            granularity: 300, // 5 minute candles
+            granularity: 300,
             correlationGroup: 'eur_usd'
         },
         'frxGBPUSD': {
@@ -106,9 +149,9 @@ const CONFIG = {
             emaLong: 25,
             rsiPeriod: 14,
             rsiThreshold: 35,
-            duration: 240,
+            duration: 4,
+            durationUnit: 'h',
             maxDailyTrades: 1,
-            subscription: 'candles',
             granularity: 300,
             correlationGroup: 'gbp_usd'
         },
@@ -118,34 +161,22 @@ const CONFIG = {
             emaLong: 25,
             rsiPeriod: 14,
             rsiThreshold: 35,
-            duration: 240,
+            duration: 4,
+            durationUnit: 'h',
             maxDailyTrades: 1,
-            subscription: 'candles',
             granularity: 300,
             correlationGroup: 'usd_jpy'
         },
         // Commodities
-        'WTI': {
+        'frxXAUUSD': {
             type: 'commodity',
             emaShort: 15,
             emaLong: 35,
             rsiPeriod: 14,
             rsiThreshold: 35,
-            duration: 60, // 1 hour
+            duration: 1,
+            durationUnit: 'h',
             maxDailyTrades: 2,
-            subscription: 'candles',
-            granularity: 300,
-            correlationGroup: 'commodities'
-        },
-        'XAUUSD': {
-            type: 'commodity',
-            emaShort: 15,
-            emaLong: 35,
-            rsiPeriod: 14,
-            rsiThreshold: 35,
-            duration: 60,
-            maxDailyTrades: 2,
-            subscription: 'candles',
             granularity: 300,
             correlationGroup: 'commodities'
         }
@@ -166,6 +197,170 @@ const CONFIG = {
     }
 };
 
+// ==================== EMAIL MANAGER ====================
+
+class EmailManager {
+    constructor(config) {
+        this.config = config;
+        this.transporter = nodemailer.createTransport({
+            service: config.service,
+            auth: {
+                user: config.user,
+                pass: config.password
+            }
+        });
+        this.lastSummaryTime = Date.now();
+    }
+
+    async sendEmail(subject, text) {
+        try {
+            await this.transporter.sendMail({
+                from: this.config.user,
+                to: this.config.recipient,
+                subject: `[Multi-Asset Bot] ${subject}`,
+                text: text
+            });
+            log('EMAIL', `Sent: ${subject}`);
+        } catch (error) {
+            log('ERROR', `Email failed: ${error.message}`);
+        }
+    }
+
+    async sendStartupEmail(state) {
+        const text = `
+🚀 MULTI-ASSET BOT STARTED
+========================================
+
+Time: ${new Date().toLocaleString()}
+Capital: $${state.capital.toFixed(2)}
+Assets Monitored: ${Object.keys(CONFIG.assets).length}
+Strategy: EMA Crossover + RSI + AI Confidence
+
+Configuration:
+- Max Daily Loss: ${CONFIG.maxDailyLossPercent}%
+- Profit Target: ${CONFIG.dailyProfitTargetPercent}%
+- Max Positions: ${CONFIG.maxOpenPositions}
+- AI Threshold: ${CONFIG.aiConfidenceThreshold * 100}%
+
+Bot is now running and monitoring for signals.
+        `;
+        await this.sendEmail('Bot Started', text);
+    }
+
+    async sendTradeEmail(type, trade, state) {
+        const text = `
+${type === 'OPEN' ? '🎯 TRADE OPENED' : type === 'WIN' ? '✅ TRADE WON' : '❌ TRADE LOST'}
+========================================
+
+Asset: ${trade.symbol}
+Direction: ${trade.signal}
+Stake: $${trade.stake?.toFixed(2) || trade.amount?.toFixed(2)}
+${type !== 'OPEN' ? `Profit: $${trade.profit?.toFixed(2) || 0}` : ''}
+
+Portfolio Status:
+- Capital: $${state.capital.toFixed(2)}
+- Daily P/L: $${(state.portfolio.dailyProfit - state.portfolio.dailyLoss).toFixed(2)}
+- Active Positions: ${state.portfolio.activePositions.length}
+- Daily Trades: ${state.portfolio.dailyTrades}
+        `;
+        await this.sendEmail(`${type}: ${trade.symbol} ${trade.signal}`, text);
+    }
+
+    async sendSummaryEmail(state) {
+        const now = Date.now();
+        if (now - this.lastSummaryTime < CONFIG.email.summaryInterval) return;
+        this.lastSummaryTime = now;
+
+        const winRate = state.portfolio.dailyTrades > 0
+            ? ((state.portfolio.dailyProfit > state.portfolio.dailyLoss ? 1 : 0) * 100).toFixed(1)
+            : 'N/A';
+
+        const assetBreakdown = Object.entries(state.assets)
+            .filter(([_, a]) => a.dailyTrades > 0)
+            .map(([symbol, a]) => `  ${symbol}: ${a.dailyTrades} trades, Win Rate: ${(a.recentWinRate * 100).toFixed(1)}%`)
+            .join('\n') || '  No trades yet';
+
+        const text = `
+📊 30-MINUTE SUMMARY
+========================================
+
+Time: ${new Date().toLocaleString()}
+
+Portfolio:
+- Capital: $${state.capital.toFixed(2)}
+- Daily Profit: $${state.portfolio.dailyProfit.toFixed(2)}
+- Daily Loss: $${state.portfolio.dailyLoss.toFixed(2)}
+- Net P/L: $${(state.portfolio.dailyProfit - state.portfolio.dailyLoss).toFixed(2)}
+
+Trading Stats:
+- Total Trades: ${state.portfolio.dailyTrades}
+- Active Positions: ${state.portfolio.activePositions.length}
+- Top Assets: ${state.currentTopAssets.join(', ') || 'None ranked yet'}
+
+Asset Breakdown:
+${assetBreakdown}
+
+Risk Status:
+- Loss Limit Used: ${((state.portfolio.dailyLoss / (state.capital * CONFIG.maxDailyLossPercent / 100)) * 100).toFixed(1)}%
+- Blacklisted: ${Array.from(state.portfolio.blacklistedAssets).join(', ') || 'None'}
+        `;
+        await this.sendEmail('30-Min Summary', text);
+    }
+
+    async sendLossEmail(asset, state) {
+        if (asset.consecutiveLosses < 2) return;
+
+        const text = `
+⚠️ CONSECUTIVE LOSSES ALERT
+========================================
+
+Asset: ${asset.symbol}
+Consecutive Losses: ${asset.consecutiveLosses}
+Asset P/L: $${(asset.recentWinRate * 100 - 50).toFixed(1)}% win rate
+
+Current Status:
+- Capital: $${state.capital.toFixed(2)}
+- Daily Loss: $${state.portfolio.dailyLoss.toFixed(2)}
+
+${asset.consecutiveLosses >= 3 ? '⏸️ Asset entering 4-hour cooldown.' : 'Monitoring closely.'}
+        `;
+        await this.sendEmail(`Loss Alert: ${asset.symbol}`, text);
+    }
+
+    async sendErrorEmail(error, context) {
+        const text = `
+❌ BOT ERROR
+========================================
+
+Time: ${new Date().toLocaleString()}
+Context: ${context}
+Error: ${error.message}
+Stack: ${error.stack || 'N/A'}
+
+Please check the bot status.
+        `;
+        await this.sendEmail('ERROR: Bot Issue', text);
+    }
+
+    async sendShutdownEmail(state, reason) {
+        const text = `
+🛑 BOT STOPPED
+========================================
+
+Time: ${new Date().toLocaleString()}
+Reason: ${reason}
+
+Final Status:
+- Capital: $${state.capital.toFixed(2)}
+- Daily Profit: $${state.portfolio.dailyProfit.toFixed(2)}
+- Daily Loss: $${state.portfolio.dailyLoss.toFixed(2)}
+- Net P/L: $${(state.portfolio.dailyProfit - state.portfolio.dailyLoss).toFixed(2)}
+- Total Trades: ${state.portfolio.dailyTrades}
+        `;
+        await this.sendEmail('Bot Stopped', text);
+    }
+}
+
 // ==================== STATE MANAGEMENT ====================
 
 class StateManager {
@@ -175,13 +370,11 @@ class StateManager {
             initialCapital: CONFIG.initialCapital,
             connection: null,
             isRunning: false,
-            lastAssetScoreTime: 0,
-            lastPortfolioRebalanceTime: 0,
+            startTime: Date.now(),
+            tickCount: 0,
+            signalsDetected: 0,
 
-            // Asset-specific state
             assets: {},
-
-            // Portfolio state
             portfolio: {
                 dailyLoss: 0,
                 dailyProfit: 0,
@@ -192,7 +385,6 @@ class StateManager {
                 assetCooldowns: new Map()
             },
 
-            // Ranking
             assetRankings: [],
             currentTopAssets: []
         };
@@ -203,35 +395,31 @@ class StateManager {
                 symbol,
                 config: CONFIG.assets[symbol],
                 candles: [],
+                prices: [],
                 emaShort: 0,
                 emaLong: 0,
+                prevEmaShort: 0,
+                prevEmaLong: 0,
                 rsi: 50,
                 dailyTrades: 0,
-                dailyWinRate: 0.55,
+                totalTrades: 0,
+                wins: 0,
+                losses: 0,
                 recentWinRate: 0.55,
                 trendStrength: 0.5,
                 volatility: 0,
                 predictability: 0.5,
-                lastSignal: null,
                 consecutiveLosses: 0,
-                lastTradeTime: 0,
                 score: 0,
-                isSubscribed: false
+                isSubscribed: false,
+                lastTickTime: 0
             };
         });
 
-        // Load persisted state if exists
         this.loadState();
     }
 
-    getState() {
-        return this.state;
-    }
-
-    updateAsset(symbol, updates) {
-        Object.assign(this.state.assets[symbol], updates);
-        this.persistState();
-    }
+    getState() { return this.state; }
 
     addPosition(position) {
         this.state.portfolio.activePositions.push(position);
@@ -242,43 +430,39 @@ class StateManager {
     closePosition(contractId, profit) {
         const position = this.state.portfolio.activePositions.find(p => p.contractId === contractId);
         if (position) {
-            const capitalChange = profit - position.amount;
+            const capitalChange = profit;
             this.state.capital += capitalChange;
+
+            const asset = this.state.assets[position.symbol];
+            asset.totalTrades++;
 
             if (capitalChange > 0) {
                 this.state.portfolio.dailyProfit += capitalChange;
-                this.state.assets[position.symbol].consecutiveLosses = 0;
+                asset.wins++;
+                asset.consecutiveLosses = 0;
             } else {
                 this.state.portfolio.dailyLoss += Math.abs(capitalChange);
-                this.state.assets[position.symbol].consecutiveLosses++;
+                asset.losses++;
+                asset.consecutiveLosses++;
             }
 
-            // Update win rate
-            const asset = this.state.assets[position.symbol];
             const isWin = capitalChange > 0;
-            asset.recentWinRate = this.calculateRollingWinRate(asset, isWin);
+            asset.recentWinRate = asset.recentWinRate * 0.9 + (isWin ? 0.1 : 0);
 
             this.state.portfolio.activePositions = this.state.portfolio.activePositions.filter(
                 p => p.contractId !== contractId
             );
 
             this.persistState();
-            return capitalChange;
+            return { capitalChange, asset, isWin };
         }
-        return 0;
-    }
-
-    calculateRollingWinRate(asset, latestResult) {
-        // Simple exponential moving average of win rate
-        const alpha = 0.1; // Smoothing factor
-        const currentRate = asset.recentWinRate || 0.55;
-        const newResult = latestResult ? 1 : 0;
-        return currentRate * (1 - alpha) + newResult * alpha;
+        return null;
     }
 
     resetDailyStats() {
         const today = new Date().toDateString();
         if (this.state.portfolio.lastResetDate !== today) {
+            log('INFO', 'Resetting daily statistics');
             this.state.portfolio.dailyLoss = 0;
             this.state.portfolio.dailyProfit = 0;
             this.state.portfolio.dailyTrades = 0;
@@ -290,22 +474,19 @@ class StateManager {
 
             this.state.portfolio.blacklistedAssets.clear();
             this.state.portfolio.assetCooldowns.clear();
-
             this.persistState();
         }
     }
 
     blacklistAsset(symbol, hours = 48) {
         this.state.portfolio.blacklistedAssets.add(symbol);
-        setTimeout(() => {
-            this.state.portfolio.blacklistedAssets.delete(symbol);
-        }, hours * 3600000);
-        this.persistState();
+        log('RISK', `Blacklisted ${symbol} for ${hours} hours`);
+        setTimeout(() => this.state.portfolio.blacklistedAssets.delete(symbol), hours * 3600000);
     }
 
     setCooldown(symbol, hours = 4) {
         this.state.portfolio.assetCooldowns.set(symbol, Date.now() + hours * 3600000);
-        this.persistState();
+        log('RISK', `Cooldown set for ${symbol} - ${hours} hours`);
     }
 
     isInCooldown(symbol) {
@@ -321,17 +502,13 @@ class StateManager {
     persistState() {
         try {
             const serialized = JSON.stringify(this.state, (key, value) => {
-                if (value instanceof Set) {
-                    return Array.from(value);
-                }
-                if (value instanceof Map) {
-                    return Object.fromEntries(value);
-                }
+                if (value instanceof Set) return Array.from(value);
+                if (value instanceof Map) return Object.fromEntries(value);
                 return value;
             });
             fs.writeFileSync('bot-state.json', serialized);
         } catch (error) {
-            console.error('Failed to persist state:', error.message);
+            log('ERROR', `Failed to persist state: ${error.message}`);
         }
     }
 
@@ -340,438 +517,60 @@ class StateManager {
             if (fs.existsSync('bot-state.json')) {
                 const data = fs.readFileSync('bot-state.json', 'utf8');
                 const loaded = JSON.parse(data);
-
-                // Restore Set and Map objects
                 loaded.portfolio.blacklistedAssets = new Set(loaded.portfolio.blacklistedAssets || []);
                 loaded.portfolio.assetCooldowns = new Map(Object.entries(loaded.portfolio.assetCooldowns || {}));
-
-                // Merge with current state
                 this.state = { ...this.state, ...loaded };
+                log('INFO', 'Loaded previous state from file');
             }
         } catch (error) {
-            console.error('Failed to load state:', error.message);
+            log('WARNING', `Failed to load state: ${error.message}`);
         }
+    }
+
+    getUptimeString() {
+        const uptime = Date.now() - this.state.startTime;
+        const hours = Math.floor(uptime / 3600000);
+        const minutes = Math.floor((uptime % 3600000) / 60000);
+        return `${hours}h ${minutes}m`;
     }
 }
 
-// ==================== DERIV API CLIENT ====================
+// ==================== TECHNICAL INDICATORS ====================
 
-class DerivAPI {
-    constructor(stateManager) {
-        this.ws = null;
-        this.stateManager = stateManager;
-        this.state = stateManager.getState();
-        this.requestId = 1;
-        this.pendingRequests = new Map();
-        this.subscriptions = new Map();
-    }
-
-    async connect() {
-        return new Promise((resolve, reject) => {
-            try {
-                this.ws = new WebSocket(`${CONFIG.websocketUrl}?app_id=${CONFIG.appId}`);
-
-                this.ws.on('open', () => {
-                    console.log('Connected to Deriv API');
-                    this.authenticate();
-                });
-
-                this.ws.on('message', (data) => {
-                    const response = JSON.parse(data);
-                    this.handleMessage(response);
-                });
-
-                this.ws.on('close', () => {
-                    console.log('Disconnected from Deriv API');
-                    this.reconnect();
-                });
-
-                this.ws.on('error', (error) => {
-                    console.error('WebSocket error:', error);
-                    reject(error);
-                });
-
-                // Wait for authentication
-                const checkAuth = setInterval(() => {
-                    if (this.state.connection?.authorized) {
-                        clearInterval(checkAuth);
-                        resolve();
-                    }
-                }, 1000);
-
-            } catch (error) {
-                reject(error);
-            }
-        });
-    }
-
-    authenticate() {
-        const authRequest = {
-            authorize: CONFIG.apiToken,
-            req_id: this.requestId++
-        };
-        this.send(authRequest);
-    }
-
-    send(message) {
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-            const reqId = message.req_id || this.requestId++;
-            message.req_id = reqId;
-
-            if (message.subscribe || message.buy) {
-                this.pendingRequests.set(reqId, message);
-            }
-
-            this.ws.send(JSON.stringify(message));
-            return reqId;
-        }
-        return null;
-    }
-
-    handleMessage(response) {
-        const { req_id, msg_type, error } = response;
-
-        if (error) {
-            console.error('API Error:', error.message);
-            return;
-        }
-
-        if (msg_type === 'authorize') {
-            this.state.connection = { authorized: true, account: response.authorize };
-            console.log('Authenticated successfully');
-            this.subscribeToBalance();
-        }
-
-        if (req_id && this.pendingRequests.has(req_id)) {
-            const request = this.pendingRequests.get(req_id);
-
-            if (msg_type === 'buy') {
-                this.handleBuyResponse(response, request);
-            } else if (msg_type === 'proposal') {
-                this.handleProposalResponse(response, request);
-            }
-
-            this.pendingRequests.delete(req_id);
-        }
-
-        if (response.subscription && this.subscriptions.has(response.subscription.id)) {
-            const handler = this.subscriptions.get(response.subscription.id);
-            handler(response);
-        }
-    }
-
-    subscribeToBalance() {
-        const request = { balance: 1, subscribe: 1, req_id: this.requestId++ };
-        const reqId = this.send(request);
-
-        if (reqId) {
-            this.subscriptions.set(reqId, (response) => {
-                if (response.balance) {
-                    this.state.capital = parseFloat(response.balance.balance);
-                }
-            });
-        }
-    }
-
-    subscribeToAsset(symbol) {
-        if (this.state.assets[symbol].isSubscribed) return;
-
-        const config = CONFIG.assets[symbol];
-        const request = {
-            ticks_history: symbol,
-            adjust_start_time: 1,
-            count: CONFIG.maxCandleHistory,
-            end: 'latest',
-            start: 1,
-            style: 'candles',
-            granularity: config.granularity,
-            subscribe: 1,
-            req_id: this.requestId++
-        };
-
-        const reqId = this.send(request);
-        if (reqId) {
-            this.subscriptions.set(reqId, (response) => {
-                this.handleCandleResponse(symbol, response);
-            });
-            this.state.assets[symbol].isSubscribed = true;
-            console.log(`Subscribed to ${symbol}`);
-        }
-    }
-
-    handleCandleResponse(symbol, response) {
-        if (response.candles) {
-            const asset = this.state.assets[symbol];
-            asset.candles = response.candles.slice(-CONFIG.maxCandleHistory);
-
-            // Calculate indicators
-            this.calculateIndicators(symbol);
-        }
-
-        if (response.candle) {
-            const asset = this.state.assets[symbol];
-            const candles = asset.candles;
-
-            // Update with new candle
-            const newCandle = response.candle;
-            if (candles.length > 0 && candles[candles.length - 1].epoch === newCandle.epoch) {
-                candles[candles.length - 1] = newCandle;
-            } else {
-                candles.push(newCandle);
-                if (candles.length > CONFIG.maxCandleHistory) {
-                    candles.shift();
-                }
-            }
-
-            this.calculateIndicators(symbol);
-        }
-    }
-
-    calculateIndicators(symbol) {
-        const asset = this.state.assets[symbol];
-        const candles = asset.candles;
-
-        if (candles.length < Math.max(asset.config.emaLong, asset.config.rsiPeriod)) {
-            return;
-        }
-
-        // Calculate EMAs
-        const closes = candles.map(c => c.close);
-        asset.emaShort = this.calculateEMA(closes, asset.config.emaShort);
-        asset.emaLong = this.calculateEMA(closes, asset.config.emaLong);
-
-        // Calculate RSI
-        asset.rsi = this.calculateRSI(closes, asset.config.rsiPeriod);
-
-        // Calculate volatility
-        asset.volatility = this.calculateVolatility(closes);
-
-        // Calculate trend strength
-        asset.trendStrength = this.calculateTrendStrength(candles);
-
-        // Check for signals
-        this.checkTradeSignal(symbol);
-    }
-
-    calculateEMA(prices, period) {
+class TechnicalIndicators {
+    static calculateEMA(prices, period) {
+        if (prices.length < period) return null;
         const k = 2 / (period + 1);
-        let ema = prices[0];
-
-        for (let i = 1; i < prices.length; i++) {
-            ema = prices[i] * k + ema * (1 - k);
+        let ema = prices.slice(0, period).reduce((a, b) => a + b, 0) / period;
+        for (let i = period; i < prices.length; i++) {
+            ema = (prices[i] - ema) * k + ema;
         }
-
         return ema;
     }
 
-    calculateRSI(prices, period) {
-        let gains = 0;
-        let losses = 0;
-
-        for (let i = prices.length - period; i < prices.length; i++) {
-            const change = prices[i] - prices[i - 1];
-            if (change > 0) gains += change;
-            else losses -= change;
+    static calculateRSI(prices, period = 14) {
+        if (prices.length < period + 1) return 50;
+        const changes = [];
+        for (let i = 1; i < prices.length; i++) {
+            changes.push(prices[i] - prices[i - 1]);
         }
-
+        const recentChanges = changes.slice(-period);
+        let gains = 0, losses = 0;
+        for (const change of recentChanges) {
+            if (change > 0) gains += change;
+            else losses += Math.abs(change);
+        }
         const avgGain = gains / period;
         const avgLoss = losses / period;
-
         if (avgLoss === 0) return 100;
-
         const rs = avgGain / avgLoss;
         return 100 - (100 / (1 + rs));
     }
 
-    calculateVolatility(prices) {
-        const returns = [];
-        for (let i = 1; i < prices.length; i++) {
-            returns.push((prices[i] - prices[i - 1]) / prices[i - 1]);
-        }
-
-        const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
-        const variance = returns.reduce((sum, r) => sum + Math.pow(r - mean, 2), 0) / returns.length;
-
-        return Math.sqrt(variance);
-    }
-
-    calculateTrendStrength(candles) {
-        if (candles.length < 20) return 0.5;
-
-        const recent = candles.slice(-10);
-        const highs = recent.map(c => c.high);
-        const lows = recent.map(c => c.low);
-
-        const highTrend = this.calculateEMA(highs, 5);
-        const lowTrend = this.calculateEMA(lows, 5);
-
-        const trendSlope = (highTrend - lowTrend) / recent.length;
-        const normalizedSlope = Math.abs(trendSlope) / recent[recent.length - 1].close;
-
-        return Math.min(normalizedSlope * 100, 1);
-    }
-
-    checkTradeSignal(symbol) {
-        const asset = this.state.assets[symbol];
-        const portfolioManager = global.portfolioManager;
-
-        if (!portfolioManager) return;
-
-        // Only trade top-2 ranked assets
-        if (!portfolioManager.isTopRanked(symbol)) return;
-
-        // Check asset-specific limits
-        if (asset.dailyTrades >= asset.config.maxDailyTrades) return;
-
-        // Check cooldown
-        if (this.stateManager.isInCooldown(symbol)) return;
-
-        // Check blacklist
-        if (this.state.portfolio.blacklistedAssets.has(symbol)) return;
-
-        // Check correlation constraints
-        if (!portfolioManager.canTradeAsset(symbol)) return;
-
-        // Check EMA crossover
-        const candles = asset.candles;
-        if (candles.length < 3) return;
-
-        const prevClose = candles[candles.length - 2].close;
-        const currentClose = candles[candles.length - 1].close;
-
-        const prevEmaShort = this.calculateEMA(candles.slice(0, -1).map(c => c.close), asset.config.emaShort);
-        const prevEmaLong = this.calculateEMA(candles.slice(0, -1).map(c => c.close), asset.config.emaLong);
-        const currentEmaShort = asset.emaShort;
-        const currentEmaLong = asset.emaLong;
-
-        let signal = null;
-
-        // CALL: Short EMA crosses above Long EMA and RSI below threshold
-        if (prevEmaShort <= prevEmaLong && currentEmaShort > currentEmaLong && asset.rsi < asset.config.rsiThreshold) {
-            signal = 'CALL';
-        }
-
-        // PUT: Short EMA crosses below Long EMA and RSI above (100 - threshold)
-        if (prevEmaShort >= prevEmaLong && currentEmaShort < currentEmaLong && asset.rsi > (100 - asset.config.rsiThreshold)) {
-            signal = 'PUT';
-        }
-
-        if (signal) {
-            console.log(`Signal detected: ${signal} on ${symbol}`);
-            portfolioManager.evaluateTradeSignal(symbol, signal);
-        }
-    }
-
-    async sendProposal(symbol, signal) {
-        const asset = this.state.assets[symbol];
-        const portfolioManager = global.portfolioManager;
-        const stake = portfolioManager.calculateStake(symbol);
-
-        const proposal = {
-            proposal: 1,
-            amount: stake,
-            basis: 'stake',
-            contract_type: signal,
-            currency: 'USD',
-            duration: asset.config.duration,
-            duration_unit: 'm',
-            symbol: symbol,
-            req_id: this.requestId++
-        };
-
-        const reqId = this.send(proposal);
-        if (reqId) {
-            this.pendingRequests.set(reqId, { symbol, signal, stake });
-        }
-    }
-
-    handleProposalResponse(response, request) {
-        if (response.proposal) {
-            // Check AI confidence (rule-based)
-            const aiModel = global.aiEngine;
-            const confidence = aiModel.predict(request.symbol, request.signal);
-
-            if (confidence > CONFIG.aiConfidenceThreshold) {
-                this.buyContract(response.proposal.id, request);
-            } else {
-                console.log(`AI rejected trade on ${request.symbol}: confidence ${confidence.toFixed(2)}`);
-            }
-        }
-    }
-
-    buyContract(proposalId, request) {
-        const buyRequest = {
-            buy: proposalId,
-            price: request.stake,
-            req_id: this.requestId++
-        };
-
-        const reqId = this.send(buyRequest);
-        if (reqId) {
-            this.pendingRequests.set(reqId, request);
-        }
-    }
-
-    handleBuyResponse(response, request) {
-        if (response.buy) {
-            const position = {
-                contractId: response.buy.contract_id,
-                symbol: request.symbol,
-                signal: request.signal,
-                amount: request.stake,
-                entryTime: Date.now(),
-                entryPrice: response.buy.price
-            };
-
-            this.stateManager.addPosition(position);
-            this.state.assets[request.symbol].dailyTrades++;
-
-            console.log(`Trade executed: ${request.signal} on ${request.symbol} for $${request.stake}`);
-
-            // Subscribe to contract updates
-            this.subscribeToContract(response.buy.contract_id);
-        }
-    }
-
-    subscribeToContract(contractId) {
-        const request = {
-            proposal_open_contract: 1,
-            contract_id: contractId,
-            subscribe: 1,
-            req_id: this.requestId++
-        };
-
-        const reqId = this.send(request);
-        if (reqId) {
-            this.subscriptions.set(reqId, (response) => {
-                this.handleContractUpdate(response);
-            });
-        }
-    }
-
-    handleContractUpdate(response) {
-        if (response.proposal_open_contract) {
-            const contract = response.proposal_open_contract;
-
-            if (contract.is_sold) {
-                const profit = parseFloat(contract.profit);
-                const capitalChange = this.stateManager.closePosition(contract.contract_id, profit);
-
-                console.log(`Contract ${contract.contract_id} closed: P&L $${capitalChange.toFixed(2)}`);
-
-                // Check risk limits
-                global.riskManager.checkLimits();
-            }
-        }
-    }
-
-    reconnect() {
-        console.log('Attempting to reconnect in 5 seconds...');
-        setTimeout(() => {
-            this.connect().catch(error => {
-                console.error('Reconnection failed:', error.message);
-            });
-        }, 5000);
+    static detectCrossover(currentShort, currentLong, prevShort, prevLong) {
+        const crossUp = prevShort <= prevLong && currentShort > currentLong;
+        const crossDown = prevShort >= prevLong && currentShort < currentLong;
+        return { crossUp, crossDown };
     }
 }
 
@@ -779,127 +578,57 @@ class DerivAPI {
 
 class AIEngine {
     constructor(stateManager) {
-        this.stateManager = stateManager;
         this.state = stateManager.getState();
     }
 
     predict(symbol, signal) {
         const asset = this.state.assets[symbol];
+        if (!asset.candles || asset.candles.length < 10) return 0.5;
 
-        if (!asset.candles || asset.candles.length < 10) {
-            return 0.5;
-        }
+        let confidence = 0.5;
 
-        // Rule-based confidence scoring
-        const confidence = this.calculateRuleBasedConfidence(asset, signal);
-
-        // Update predictability score
-        asset.predictability = confidence;
-
-        return confidence;
-    }
-
-    calculateRuleBasedConfidence(asset, signal) {
-        let confidence = 0.5; // Base confidence
-
-        // Factor 1: Trend alignment (30% weight)
+        // Trend alignment
         const trendScore = this.calculateTrendAlignment(asset, signal);
         confidence += trendScore * 0.3;
 
-        // Factor 2: Volatility regime fit (25% weight)
+        // Volatility fit
         const volScore = this.calculateVolatilityFit(asset);
         confidence += volScore * 0.25;
 
-        // Factor 3: Recent win rate (25% weight)
+        // Recent win rate
         confidence += asset.recentWinRate * 0.25;
 
-        // Factor 4: RSI extreme (20% weight)
+        // RSI score
         const rsiScore = this.calculateRSIScore(asset);
         confidence += rsiScore * 0.2;
 
-        // Factor 5: Confluence bonus (if multiple factors align)
-        const confluenceBonus = this.calculateConfluenceBonus(asset, signal);
-        confidence += confluenceBonus * 0.1;
-
+        asset.predictability = confidence;
         return Math.max(0, Math.min(1, confidence));
     }
 
     calculateTrendAlignment(asset, signal) {
-        // Stronger trend = higher confidence
         const trendStrength = asset.trendStrength;
-
         if (signal === 'CALL') {
-            // Bullish trend alignment
             return asset.emaShort > asset.emaLong ? trendStrength : 0.3;
         } else {
-            // Bearish trend alignment
             return asset.emaShort < asset.emaLong ? trendStrength : 0.3;
         }
     }
 
     calculateVolatilityFit(asset) {
         const vol = asset.volatility || 0.01;
-        const type = asset.config.type;
-
-        // Optimal volatility per asset type
-        const optimalVol = {
-            'synthetic': 0.02,
-            'forex': 0.01,
-            'commodity': 0.015
-        };
-
-        const targetVol = optimalVol[type] || 0.015;
+        const optimalVol = { 'synthetic': 0.02, 'forex': 0.01, 'commodity': 0.015 };
+        const targetVol = optimalVol[asset.config.type] || 0.015;
         const distance = Math.abs(vol - targetVol);
-
-        // Score decreases as volatility deviates from optimal
         return Math.max(0, 1 - distance * 50);
     }
 
     calculateRSIScore(asset) {
         const rsi = asset.rsi;
         const threshold = asset.config.rsiThreshold;
-
-        // Stronger RSI extremes = higher confidence
-        if (rsi < threshold * 0.7 || rsi > (100 - threshold * 0.7)) {
-            return 1.0; // Strong signal
-        } else if (rsi < threshold || rsi > (100 - threshold)) {
-            return 0.7; // Moderate signal
-        }
-        return 0.4; // Weak signal
-    }
-
-    calculateConfluenceBonus(asset, signal) {
-        let bonus = 0;
-        let factors = 0;
-
-        // EMA alignment
-        if ((signal === 'CALL' && asset.emaShort > asset.emaLong) ||
-            (signal === 'PUT' && asset.emaShort < asset.emaLong)) {
-            factors++;
-        }
-
-        // RSI extreme
-        if (asset.rsi < asset.config.rsiThreshold * 0.8 ||
-            asset.rsi > (100 - asset.config.rsiThreshold * 0.8)) {
-            factors++;
-        }
-
-        // Volatility fit
-        if (this.calculateVolatilityFit(asset) > 0.7) {
-            factors++;
-        }
-
-        // Trend strength
-        if (asset.trendStrength > 0.6) {
-            factors++;
-        }
-
-        // Bonus based on number of confluence factors
-        if (factors >= 4) bonus = 0.3;
-        else if (factors >= 3) bonus = 0.2;
-        else if (factors >= 2) bonus = 0.1;
-
-        return bonus;
+        if (rsi < threshold * 0.7 || rsi > (100 - threshold * 0.7)) return 1.0;
+        if (rsi < threshold || rsi > (100 - threshold)) return 0.7;
+        return 0.4;
     }
 }
 
@@ -910,57 +639,47 @@ class PortfolioManager {
         this.stateManager = stateManager;
         this.state = stateManager.getState();
         this.apiClient = apiClient;
-        this.riskManager = global.riskManager;
     }
 
     scoreAssets() {
-        console.log('Scoring assets...');
+        log('INFO', 'Scoring assets for ranking...');
 
+        let scoredCount = 0;
         Object.values(this.state.assets).forEach(asset => {
-            if (!asset.candles || asset.candles.length < 20) {
+            if (!asset.prices || asset.prices.length < 30) {
                 asset.score = 0;
                 return;
             }
 
-            // Calculate components
+            scoredCount++;
             const recentWinRate = asset.recentWinRate;
             const trendStrength = asset.trendStrength;
             const volatilityFit = this.calculateVolatilityFit(asset);
             const predictability = asset.predictability || 0.5;
 
-            // Calculate weighted score
-            const score =
+            asset.score =
                 recentWinRate * CONFIG.scoringWeights.recentWinRate +
                 trendStrength * CONFIG.scoringWeights.trendStrength +
                 volatilityFit * CONFIG.scoringWeights.volatilityFit +
                 predictability * CONFIG.scoringWeights.predictability;
-
-            asset.score = score;
         });
 
-        // Rank assets (exclude blacklisted)
         this.state.assetRankings = Object.values(this.state.assets)
             .filter(asset => !this.state.portfolio.blacklistedAssets.has(asset.symbol))
             .sort((a, b) => b.score - a.score)
             .map(asset => asset.symbol);
 
-        // Select top 2
         this.state.currentTopAssets = this.state.assetRankings.slice(0, 2);
 
-        console.log(`Top assets: ${this.state.currentTopAssets.join(', ')}`);
-
-        // Subscribe to top assets if not already
-        this.state.currentTopAssets.forEach(symbol => {
-            this.apiClient.subscribeToAsset(symbol);
+        log('SUCCESS', `Scoring complete. Top assets: ${this.state.currentTopAssets.join(', ')}`, {
+            scored: scoredCount,
+            rankings: this.state.assetRankings.slice(0, 4).map(s => `${s}:${this.state.assets[s].score.toFixed(2)}`)
         });
     }
 
     calculateVolatilityFit(asset) {
-        // Prefer moderate volatility for most assets
         const optimalVolatility = asset.config.type === 'synthetic' ? 0.02 : 0.01;
         const vol = asset.volatility || 0.01;
-
-        // Gaussian-like scoring around optimal volatility
         const distance = Math.abs(vol - optimalVolatility);
         return Math.max(0, 1 - distance * 50);
     }
@@ -972,25 +691,19 @@ class PortfolioManager {
     canTradeAsset(symbol) {
         const asset = this.state.assets[symbol];
         const activePositions = this.state.portfolio.activePositions;
-
-        // Check correlation constraints
         const correlationGroup = asset.config.correlationGroup;
+
         const sameGroupPositions = activePositions.filter(
-            p => this.state.assets[p.symbol].config.correlationGroup === correlationGroup
+            p => this.state.assets[p.symbol]?.config.correlationGroup === correlationGroup
         );
 
-        // Prevent simultaneous trades in correlated assets
-        if (correlationGroup === 'volatility' && sameGroupPositions.length > 0) {
+        if (['volatility', 'volatility_high', 'boom_crash'].includes(correlationGroup) && sameGroupPositions.length > 0) {
             return false;
         }
 
-        if (correlationGroup === 'boom_crash' && sameGroupPositions.length > 0) {
-            return false;
-        }
-
-        if (correlationGroup === 'eur_usd' || correlationGroup === 'gbp_usd') {
+        if (['eur_usd', 'gbp_usd'].includes(correlationGroup)) {
             const forexPositions = activePositions.filter(
-                p => this.state.assets[p.symbol].config.type === 'forex'
+                p => this.state.assets[p.symbol]?.config.type === 'forex'
             );
             if (forexPositions.length > 0) return false;
         }
@@ -1000,69 +713,36 @@ class PortfolioManager {
 
     calculateStake(symbol) {
         const asset = this.state.assets[symbol];
-        const rankings = this.state.assetRankings;
-        const rankIndex = rankings.indexOf(symbol);
-
-        // Total risk per cycle: 2% of capital
+        const rankIndex = this.state.assetRankings.indexOf(symbol);
         const totalRiskAmount = this.state.capital * (CONFIG.maxRiskPerTradePercent / 100);
-
-        // Allocate based on ranking
         const allocationRatio = rankIndex === 0 ? 0.6 : 0.4;
         const stake = totalRiskAmount * allocationRatio;
 
-        // Apply Kelly Criterion adjustment
-        const kellyFraction = this.kellyCriterion(asset);
-        const adjustedStake = stake * kellyFraction;
-
-        // Ensure minimum stake
-        return Math.max(0.35, Math.min(adjustedStake, this.state.capital * 0.05));
-    }
-
-    kellyCriterion(asset) {
+        // Kelly Criterion
         const winRate = asset.recentWinRate;
-        const avgWin = 0.8; // Assume 80% payout
-        const avgLoss = 1; // 100% loss on losing trades
+        const kelly = Math.max(0.1, Math.min((winRate * 0.8 - (1 - winRate)) / 0.8 * 0.5, 0.25));
 
-        if (avgLoss === 0) return 0.5;
-
-        const kelly = (winRate * avgWin - (1 - winRate) * avgLoss) / avgLoss;
-
-        // Use half Kelly for safety
-        return Math.max(0.1, Math.min(kelly * 0.5, 0.25));
+        return Math.max(0.35, Math.min(stake * kelly, this.state.capital * 0.05));
     }
 
     evaluateTradeSignal(symbol, signal) {
-        // Check if we can open new position
         if (this.state.portfolio.activePositions.length >= CONFIG.maxOpenPositions) {
-            console.log('Max open positions reached');
+            log('RISK', `Max open positions (${CONFIG.maxOpenPositions}) reached`);
             return;
         }
 
-        // Check daily risk limits
-        if (!this.riskManager.canOpenNewTrade()) {
-            console.log('Daily risk limits reached');
+        if (!global.riskManager.canOpenNewTrade()) {
+            log('RISK', 'Daily risk limits reached');
             return;
         }
 
-        // Check asset daily limit
         const asset = this.state.assets[symbol];
         if (asset.dailyTrades >= asset.config.maxDailyTrades) {
-            console.log(`${symbol} daily trade limit reached`);
+            log('RISK', `${symbol} daily trade limit (${asset.config.maxDailyTrades}) reached`);
             return;
         }
 
-        // Send proposal
         this.apiClient.sendProposal(symbol, signal);
-    }
-
-    rebalancePortfolio() {
-        console.log('Rebalancing portfolio...');
-
-        // Re-score assets
-        this.scoreAssets();
-
-        // Adjust allocations if needed
-        // (Implementation would adjust position sizes here)
     }
 }
 
@@ -1076,20 +756,17 @@ class RiskManager {
 
     canOpenNewTrade() {
         const dailyLoss = this.state.portfolio.dailyLoss;
-        const dailyProfit = this.state.portfolio.dailyProfit;
         const capital = this.state.capital;
-
-        // Check daily loss limit
         const maxDailyLoss = capital * (CONFIG.maxDailyLossPercent / 100);
+
         if (dailyLoss >= maxDailyLoss) {
-            console.log(`Daily loss limit reached: $${dailyLoss.toFixed(2)} / $${maxDailyLoss.toFixed(2)}`);
+            log('RISK', `Daily loss limit reached: $${dailyLoss.toFixed(2)} / $${maxDailyLoss.toFixed(2)}`);
             return false;
         }
 
-        // Check profit target (lock 50% of gains)
         const profitTarget = capital * (CONFIG.dailyProfitTargetPercent / 100);
-        if (dailyProfit >= profitTarget) {
-            console.log(`Daily profit target reached: $${dailyProfit.toFixed(2)} / $${profitTarget.toFixed(2)}`);
+        if (this.state.portfolio.dailyProfit >= profitTarget) {
+            log('RISK', `Daily profit target reached: $${this.state.portfolio.dailyProfit.toFixed(2)}`);
             return false;
         }
 
@@ -1097,44 +774,398 @@ class RiskManager {
     }
 
     checkLimits() {
-        const capital = this.state.capital;
-        const initialCapital = this.state.initialCapital;
-
-        // Check if we need to stop for the day
-        const maxDailyLoss = initialCapital * (CONFIG.maxDailyLossPercent / 100);
+        const maxDailyLoss = this.state.initialCapital * (CONFIG.maxDailyLossPercent / 100);
         if (this.state.portfolio.dailyLoss >= maxDailyLoss) {
-            console.log('🛑 DAILY LOSS LIMIT REACHED - STOPPING TRADING');
+            log('RISK', 'DAILY LOSS LIMIT REACHED - STOPPING TRADING');
             this.state.isRunning = false;
+            return 'LOSS_LIMIT';
         }
 
-        // Check profit target
-        const profitTarget = initialCapital * (CONFIG.dailyProfitTargetPercent / 100);
-        if (this.state.portfolio.dailyProfit >= profitTarget) {
-            console.log('🎯 DAILY PROFIT TARGET REACHED - LOCKING GAINS');
-            // Continue trading but be more conservative
-        }
-
-        // Check individual asset risk
         Object.values(this.state.assets).forEach(asset => {
-            // Blacklist if win rate drops below 50% over 20 trades
             if (asset.dailyTrades >= 20 && asset.recentWinRate < 0.5) {
-                console.log(`Blacklisting ${asset.symbol} due to low win rate`);
+                log('WARNING', `Blacklisting ${asset.symbol} - win rate ${(asset.recentWinRate * 100).toFixed(1)}%`);
                 this.stateManager.blacklistAsset(asset.symbol);
             }
 
-            // Set cooldown after 3 consecutive losses
             if (asset.consecutiveLosses >= 3) {
-                console.log(`Setting cooldown for ${asset.symbol} after 3 consecutive losses`);
+                log('WARNING', `Cooldown for ${asset.symbol} - ${asset.consecutiveLosses} consecutive losses`);
                 this.stateManager.setCooldown(asset.symbol);
                 asset.consecutiveLosses = 0;
             }
         });
+
+        return null;
+    }
+}
+
+// ==================== DERIV API CLIENT ====================
+
+class DerivAPI {
+    constructor(stateManager, emailManager) {
+        this.ws = null;
+        this.stateManager = stateManager;
+        this.emailManager = emailManager;
+        this.state = stateManager.getState();
+        this.requestId = 1;
+        this.pendingRequests = new Map();
     }
 
-    calculatePositionSize(symbol) {
-        // This is called by PortfolioManager
-        // Implement additional risk checks here if needed
-        return true;
+    async connect() {
+        return new Promise((resolve, reject) => {
+            log('INFO', 'Connecting to Deriv API...');
+            this.ws = new WebSocket(`${CONFIG.websocketUrl}?app_id=${CONFIG.appId}`);
+
+            this.ws.on('open', () => {
+                log('SUCCESS', 'Connected to Deriv WebSocket');
+                this.authenticate();
+            });
+
+            this.ws.on('message', (data) => {
+                try {
+                    const response = JSON.parse(data);
+                    this.handleMessage(response);
+                } catch (e) {
+                    log('ERROR', `Message parse error: ${e.message}`);
+                }
+            });
+
+            this.ws.on('close', () => {
+                log('WARNING', 'WebSocket disconnected');
+                if (this.state.isRunning) this.reconnect();
+            });
+
+            this.ws.on('error', (error) => {
+                log('ERROR', `WebSocket error: ${error.message}`);
+                this.emailManager.sendErrorEmail(error, 'WebSocket connection');
+                reject(error);
+            });
+
+            const checkAuth = setInterval(() => {
+                if (this.state.connection?.authorized) {
+                    clearInterval(checkAuth);
+                    resolve();
+                }
+            }, 1000);
+
+            setTimeout(() => {
+                clearInterval(checkAuth);
+                reject(new Error('Authentication timeout'));
+            }, 30000);
+        });
+    }
+
+    authenticate() {
+        log('INFO', 'Authenticating...');
+        this.send({ authorize: CONFIG.apiToken });
+    }
+
+    send(message) {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            const reqId = message.req_id || this.requestId++;
+            message.req_id = reqId;
+            this.ws.send(JSON.stringify(message));
+            return reqId;
+        }
+        return null;
+    }
+
+    handleMessage(response) {
+        const { msg_type, error } = response;
+
+        if (error) {
+            log('ERROR', `API Error: ${error.message}`);
+            return;
+        }
+
+        switch (msg_type) {
+            case 'authorize':
+                this.state.connection = { authorized: true };
+                log('SUCCESS', 'Authorization successful');
+                this.subscribeToAllAssets();
+                break;
+
+            case 'candles':
+                this.handleCandles(response);
+                break;
+
+            case 'ohlc':
+                this.handleOHLC(response);
+                break;
+
+            case 'tick':
+                this.handleTick(response);
+                break;
+
+            case 'proposal':
+                this.handleProposal(response);
+                break;
+
+            case 'buy':
+                this.handleBuy(response);
+                break;
+
+            case 'proposal_open_contract':
+                this.handleContractUpdate(response);
+                break;
+        }
+    }
+
+    subscribeToAllAssets() {
+        log('INFO', 'Subscribing to market data...');
+        let count = 0;
+        Object.keys(CONFIG.assets).forEach(symbol => {
+            this.subscribeToAsset(symbol);
+            count++;
+        });
+        log('SUCCESS', `Subscribed to ${count} assets`);
+    }
+
+    subscribeToAsset(symbol) {
+        const config = CONFIG.assets[symbol];
+        this.send({
+            ticks_history: symbol,
+            count: CONFIG.maxCandleHistory,
+            end: 'latest',
+            style: 'candles',
+            granularity: config.granularity,
+            subscribe: 1
+        });
+
+        this.send({ ticks: symbol, subscribe: 1 });
+    }
+
+    handleCandles(response) {
+        const symbol = response.echo_req?.ticks_history;
+        if (!symbol) return;
+
+        const asset = this.state.assets[symbol];
+        if (!asset) return;
+
+        asset.candles = response.candles || [];
+        asset.prices = asset.candles.map(c => parseFloat(c.close));
+        asset.isSubscribed = true;
+        this.updateIndicators(symbol);
+
+        log('INFO', `Loaded ${asset.candles.length} candles for ${symbol}`);
+    }
+
+    handleOHLC(response) {
+        const ohlc = response.ohlc;
+        if (!ohlc) return;
+
+        const symbol = ohlc.symbol;
+        const asset = this.state.assets[symbol];
+        if (!asset) return;
+
+        asset.candles.push(ohlc);
+        if (asset.candles.length > CONFIG.maxCandleHistory) {
+            asset.candles.shift();
+        }
+        asset.prices = asset.candles.map(c => parseFloat(c.close));
+        this.updateIndicators(symbol);
+    }
+
+    handleTick(response) {
+        const tick = response.tick;
+        if (!tick) return;
+
+        const symbol = tick.symbol;
+        const asset = this.state.assets[symbol];
+        if (!asset) return;
+
+        this.state.tickCount++;
+        asset.lastTickTime = Date.now();
+
+        const price = parseFloat(tick.quote);
+        if (asset.prices.length > 0) {
+            asset.prices[asset.prices.length - 1] = price;
+        }
+
+        this.checkSignal(symbol);
+    }
+
+    updateIndicators(symbol) {
+        const asset = this.state.assets[symbol];
+        const prices = asset.prices;
+        const config = asset.config;
+
+        if (prices.length < config.emaLong + 5) return;
+
+        asset.prevEmaShort = asset.emaShort;
+        asset.prevEmaLong = asset.emaLong;
+
+        asset.emaShort = TechnicalIndicators.calculateEMA(prices, config.emaShort);
+        asset.emaLong = TechnicalIndicators.calculateEMA(prices, config.emaLong);
+        asset.rsi = TechnicalIndicators.calculateRSI(prices, config.rsiPeriod);
+
+        // Volatility
+        if (prices.length > 20) {
+            const returns = [];
+            for (let i = 1; i < prices.length; i++) {
+                returns.push((prices[i] - prices[i - 1]) / prices[i - 1]);
+            }
+            const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
+            const variance = returns.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / returns.length;
+            asset.volatility = Math.sqrt(variance);
+        }
+
+        // Trend strength
+        if (asset.emaLong !== 0) {
+            asset.trendStrength = Math.min(Math.abs(asset.emaShort - asset.emaLong) / asset.emaLong * 100, 1);
+        }
+    }
+
+    checkSignal(symbol) {
+        const asset = this.state.assets[symbol];
+        const config = asset.config;
+        const portfolioManager = global.portfolioManager;
+
+        if (!portfolioManager || !portfolioManager.isTopRanked(symbol)) return;
+        if (asset.dailyTrades >= config.maxDailyTrades) return;
+        if (this.stateManager.isInCooldown(symbol)) return;
+        if (this.state.portfolio.blacklistedAssets.has(symbol)) return;
+        if (!portfolioManager.canTradeAsset(symbol)) return;
+
+        const { crossUp, crossDown } = TechnicalIndicators.detectCrossover(
+            asset.emaShort, asset.emaLong, asset.prevEmaShort, asset.prevEmaLong
+        );
+
+        let signal = null;
+        if (crossUp && asset.rsi < config.rsiThreshold) signal = 'CALL';
+        if (crossDown && asset.rsi > (100 - config.rsiThreshold)) signal = 'PUT';
+
+        if (signal) {
+            this.state.signalsDetected++;
+            log('SIGNAL', `${symbol} ${signal}`, {
+                rsi: asset.rsi.toFixed(1),
+                emaShort: asset.emaShort.toFixed(4),
+                emaLong: asset.emaLong.toFixed(4),
+                trendStrength: asset.trendStrength.toFixed(2)
+            });
+            portfolioManager.evaluateTradeSignal(symbol, signal);
+        }
+    }
+
+    sendProposal(symbol, signal) {
+        const stake = global.portfolioManager.calculateStake(symbol);
+        const config = CONFIG.assets[symbol];
+
+        const confidence = global.aiEngine.predict(symbol, signal);
+        if (confidence < CONFIG.aiConfidenceThreshold) {
+            log('RISK', `AI rejected ${symbol} ${signal}: confidence ${(confidence * 100).toFixed(1)}% < ${CONFIG.aiConfidenceThreshold * 100}%`);
+            return;
+        }
+
+        log('TRADE', `Requesting proposal for ${symbol} ${signal}`, {
+            stake: `$${stake.toFixed(2)}`,
+            confidence: `${(confidence * 100).toFixed(1)}%`
+        });
+
+        const reqId = this.send({
+            proposal: 1,
+            amount: stake,
+            basis: 'stake',
+            contract_type: signal,
+            currency: 'USD',
+            duration: config.duration,
+            duration_unit: config.durationUnit,
+            symbol: symbol
+        });
+
+        if (reqId) {
+            this.pendingRequests.set(reqId, { symbol, signal, stake });
+        }
+    }
+
+    handleProposal(response) {
+        const reqId = response.echo_req?.req_id;
+        const request = this.pendingRequests.get(reqId);
+        if (!request) return;
+
+        if (response.proposal) {
+            log('TRADE', `Proposal received for ${request.symbol}, executing buy...`);
+            this.send({
+                buy: response.proposal.id,
+                price: request.stake
+            });
+            this.pendingRequests.set(response.echo_req.req_id + 1, request);
+        }
+        this.pendingRequests.delete(reqId);
+    }
+
+    handleBuy(response) {
+        if (response.buy) {
+            const reqId = response.echo_req?.req_id;
+            const request = this.pendingRequests.get(reqId - 1) || {};
+
+            const position = {
+                contractId: response.buy.contract_id,
+                symbol: request.symbol,
+                signal: request.signal,
+                amount: request.stake,
+                entryTime: Date.now()
+            };
+
+            this.stateManager.addPosition(position);
+            this.state.assets[request.symbol].dailyTrades++;
+
+            log('SUCCESS', `Trade executed: ${request.symbol} ${request.signal}`, {
+                contractId: response.buy.contract_id,
+                stake: `$${request.stake.toFixed(2)}`,
+                positions: this.state.portfolio.activePositions.length
+            });
+
+            // Send trade email
+            this.emailManager.sendTradeEmail('OPEN', { ...request, contractId: response.buy.contract_id }, this.state);
+
+            this.send({
+                proposal_open_contract: 1,
+                contract_id: response.buy.contract_id,
+                subscribe: 1
+            });
+        }
+    }
+
+    handleContractUpdate(response) {
+        const contract = response.proposal_open_contract;
+        if (!contract || !contract.is_sold) return;
+
+        const profit = parseFloat(contract.profit);
+        const result = this.stateManager.closePosition(contract.contract_id, profit);
+
+        if (result) {
+            const { capitalChange, asset, isWin } = result;
+
+            log(isWin ? 'SUCCESS' : 'WARNING', `Contract closed: ${asset.symbol} ${isWin ? 'WON' : 'LOST'}`, {
+                profit: `$${capitalChange.toFixed(2)}`,
+                capital: `$${this.state.capital.toFixed(2)}`,
+                dailyPnL: `$${(this.state.portfolio.dailyProfit - this.state.portfolio.dailyLoss).toFixed(2)}`
+            });
+
+            // Send trade result email
+            this.emailManager.sendTradeEmail(isWin ? 'WIN' : 'LOSS', {
+                symbol: asset.symbol,
+                profit: capitalChange
+            }, this.state);
+
+            if (!isWin) {
+                this.emailManager.sendLossEmail(asset, this.state);
+            }
+
+            const limitHit = global.riskManager.checkLimits();
+            if (limitHit) {
+                this.emailManager.sendShutdownEmail(this.state, limitHit);
+            }
+        }
+    }
+
+    reconnect() {
+        log('INFO', 'Attempting reconnection in 5 seconds...');
+        this.emailManager.sendEmail('Reconnecting', 'Bot disconnected, attempting to reconnect...');
+        setTimeout(() => this.connect().catch(e => {
+            log('ERROR', `Reconnect failed: ${e.message}`);
+            this.emailManager.sendErrorEmail(e, 'Reconnection attempt');
+        }), 5000);
     }
 }
 
@@ -1144,154 +1175,106 @@ class DerivMultiAssetBot {
     constructor() {
         this.stateManager = new StateManager();
         this.state = this.stateManager.getState();
-        this.apiClient = new DerivAPI(this.stateManager);
+        this.emailManager = new EmailManager(CONFIG.email);
+        this.apiClient = new DerivAPI(this.stateManager, this.emailManager);
         this.aiEngine = new AIEngine(this.stateManager);
         this.portfolioManager = new PortfolioManager(this.stateManager, this.apiClient);
         this.riskManager = new RiskManager(this.stateManager);
 
-        // Make globally accessible
         global.portfolioManager = this.portfolioManager;
         global.riskManager = this.riskManager;
         global.aiEngine = this.aiEngine;
-        global.stateManager = this.stateManager;
-
-        this.scoringInterval = null;
-        this.rebalanceInterval = null;
-        this.dailyResetInterval = null;
     }
 
     async start() {
-        console.log('🚀 Starting Deriv Multi-Asset AI Trading Bot (Light Version)');
-        console.log(`Initial Capital: $${this.state.capital}`);
-        console.log(`Max Daily Loss: ${CONFIG.maxDailyLossPercent}%`);
-        console.log(`Daily Profit Target: ${CONFIG.dailyProfitTargetPercent}%`);
+        console.log(`
+╔════════════════════════════════════════════════════════════╗
+║   🚀 MULTI-ASSET TRADING BOT (Light Version)              ║
+╟────────────────────────────────────────────────────────────╢
+║ Capital: $${this.state.capital.toFixed(2).padEnd(47)}║
+║ Assets: ${Object.keys(CONFIG.assets).length} configured                                   ║
+║ Strategy: EMA Crossover + RSI + AI Confidence Filter      ║
+║ Max Daily Loss: ${CONFIG.maxDailyLossPercent}% | Profit Target: ${CONFIG.dailyProfitTargetPercent}%            ║
+║ Email Notifications: ENABLED                              ║
+╚════════════════════════════════════════════════════════════╝
+        `);
 
         try {
-            // Connect to Deriv API
             await this.apiClient.connect();
-
-            // Initial scoring
             this.portfolioManager.scoreAssets();
 
-            // Start intervals
-            this.startIntervals();
+            // Send startup email
+            await this.emailManager.sendStartupEmail(this.state);
+
+            // Asset scoring interval
+            setInterval(() => {
+                if (this.state.isRunning) {
+                    this.portfolioManager.scoreAssets();
+                    this.logStatus();
+                }
+            }, CONFIG.assetScoringInterval);
+
+            // Email summary interval
+            setInterval(() => {
+                if (this.state.isRunning) {
+                    this.emailManager.sendSummaryEmail(this.state);
+                }
+            }, CONFIG.email.summaryInterval);
+
+            // Daily reset check
+            setInterval(() => this.stateManager.resetDailyStats(), 3600000);
 
             this.state.isRunning = true;
-            console.log('✅ Bot is running');
+            log('SUCCESS', 'Bot is now running and monitoring for signals');
 
-            // Handle graceful shutdown
-            process.on('SIGINT', () => {
-                console.log('\n🛑 Shutting down bot...');
-                this.stop();
+            process.on('SIGINT', async () => {
+                log('INFO', 'Shutdown signal received...');
+                await this.stop('User requested shutdown');
                 process.exit(0);
             });
 
         } catch (error) {
-            console.error('❌ Failed to start bot:', error.message);
+            log('ERROR', `Failed to start: ${error.message}`);
+            await this.emailManager.sendErrorEmail(error, 'Bot startup');
             process.exit(1);
         }
     }
 
-    startIntervals() {
-        // Asset scoring every 5 minutes
-        this.scoringInterval = setInterval(() => {
-            if (this.state.isRunning) {
-                this.portfolioManager.scoreAssets();
-            }
-        }, CONFIG.assetScoringInterval);
+    logStatus() {
+        const activeAssets = Object.values(this.state.assets).filter(a => a.isSubscribed).length;
+        const uptime = this.stateManager.getUptimeString();
 
-        // Portfolio rebalancing every 4 hours
-        this.rebalanceInterval = setInterval(() => {
-            if (this.state.isRunning) {
-                this.portfolioManager.rebalancePortfolio();
-            }
-        }, CONFIG.portfolioRebalanceInterval);
-
-        // Daily reset check every hour
-        this.dailyResetInterval = setInterval(() => {
-            this.stateManager.resetDailyStats();
-        }, 3600000);
-
-        // Initial daily reset check
-        this.stateManager.resetDailyStats();
+        log('INFO', 'Status update', {
+            uptime,
+            capital: `$${this.state.capital.toFixed(2)}`,
+            dailyPnL: `$${(this.state.portfolio.dailyProfit - this.state.portfolio.dailyLoss).toFixed(2)}`,
+            trades: this.state.portfolio.dailyTrades,
+            signals: this.state.signalsDetected,
+            positions: this.state.portfolio.activePositions.length,
+            activeAssets,
+            topAssets: this.state.currentTopAssets.join(', ')
+        });
     }
 
-    stop() {
+    async stop(reason = 'Unknown') {
+        log('INFO', `Stopping bot: ${reason}`);
         this.state.isRunning = false;
 
-        if (this.scoringInterval) {
-            clearInterval(this.scoringInterval);
-        }
+        await this.emailManager.sendShutdownEmail(this.state, reason);
 
-        if (this.rebalanceInterval) {
-            clearInterval(this.rebalanceInterval);
-        }
-
-        if (this.dailyResetInterval) {
-            clearInterval(this.dailyResetInterval);
-        }
-
-        // Close WebSocket connection
-        if (this.apiClient.ws) {
-            this.apiClient.ws.close();
-        }
-
-        // Persist final state
+        if (this.apiClient.ws) this.apiClient.ws.close();
         this.stateManager.persistState();
 
-        console.log('Bot stopped');
-    }
-
-    getStatus() {
-        return {
-            capital: this.state.capital,
-            dailyProfit: this.state.portfolio.dailyProfit,
-            dailyLoss: this.state.portfolio.dailyLoss,
-            activePositions: this.state.portfolio.activePositions.length,
-            topAssets: this.state.currentTopAssets,
-            isRunning: this.state.isRunning
-        };
+        log('SUCCESS', 'Bot stopped successfully');
     }
 }
 
-// ==================== MAIN EXECUTION ====================
+// ==================== START ====================
 
-if (require.main === module) {
-    // Check for required dependencies
-    const requiredDeps = ['ws', 'mathjs'];
-    const missingDeps = [];
+const bot = new DerivMultiAssetBot();
+bot.start().catch(async error => {
+    log('ERROR', `Fatal error: ${error.message}`);
+    process.exit(1);
+});
 
-    requiredDeps.forEach(dep => {
-        try {
-            require.resolve(dep);
-        } catch (e) {
-            missingDeps.push(dep);
-        }
-    });
-
-    if (missingDeps.length > 0) {
-        console.error('❌ Missing dependencies. Please install:');
-        console.error(`npm install ${missingDeps.join(' ')}`);
-        process.exit(1);
-    }
-
-    // Check for API token
-    // if (!process.env.DERIV_TOKEN && CONFIG.apiToken === '0P94g4WdSrSrzir') {
-    //     console.error('❌ No API token provided. Set DERIV_TOKEN environment variable or update CONFIG.apiToken');
-    //     process.exit(1);
-    // }
-
-    // Start the bot
-    const bot = new DerivMultiAssetBot();
-
-    bot.start().catch(error => {
-        console.error('Fatal error:', error);
-        process.exit(1);
-    });
-
-    // Expose bot instance for monitoring
-    module.exports = bot;
-}
-
-// Also export for module usage
 module.exports = DerivMultiAssetBot;
