@@ -947,14 +947,13 @@
                     // Capture!
                     enemies.forEach(e => sentHome(e));
                     notify("Capture! Bonus Roll!");
-                    state.doublesCount = 0; // Reset double penalty tracker? 
-                    // Actually usually capture gives input back to same player.
+                    state.doublesCount = 0; // Reset double penalty tracker
                     playSound('kill');
-                    state.phase = 'IDLE'; // Allow rolling again immediately (Bonus)
-                    // We don't call nextTurn().
-
-                    // Note: Need to verify if 'Six' bonus stacks with 'Capture' bonus. 
-                    // Simplified: It's just player's turn continues.
+                    state.phase = 'IDLE';
+                    // AI Bonus Roll
+                    if (!state.humanPlayers.includes(state.turn)) {
+                        setTimeout(rollDice, 1000);
+                    }
                     return;
                 }
             }
@@ -980,6 +979,10 @@
             if (state.dice === 6) {
                 notify("Rolled 6! Roll Again.");
                 state.phase = 'IDLE';
+                // AI Bonus Roll
+                if (!state.humanPlayers.includes(state.turn)) {
+                    setTimeout(rollDice, 1000);
+                }
             } else {
                 nextTurn();
             }
@@ -1054,6 +1057,11 @@
             else state.humanPlayers = []; // All bots
 
             updateUI();
+
+            // If first player is bot, start loop
+            if (!state.humanPlayers.includes(state.turn)) {
+                setTimeout(rollDice, 1000);
+            }
         };
 
         document.getElementById('dice-btn').onclick = rollDice;
