@@ -257,7 +257,7 @@ class EmailManager {
         const mailOptions = {
             from: CONFIG.EMAIL_CONFIG.auth.user,
             to: CONFIG.EMAIL_RECIPIENT,
-            subject: `Deriv Multi-Asset Bot - ${subject}`,
+            subject: `ClaudeINV Deriv Multi-Asset Bot - ${subject}`,
             text: text
         };
 
@@ -1275,7 +1275,7 @@ class DerivMultiAssetBot {
     }
 
     async start() {
-        console.log('\n🤖 Deriv Multi-Asset Bot Starting...');
+        console.log('\n🤖 ClaudeINV Deriv Multi-Asset Bot Starting...');
         console.log('=====================================');
         console.log(`💰 Initial Capital: $${state.capital}`);
         console.log(`📊 Tracking ${Object.keys(ASSET_CONFIGS).length} assets`);
@@ -1557,7 +1557,7 @@ process.on('SIGTERM', () => {
 // Validate API token
 if (CONFIG.API_TOKEN === 'YOUR_API_TOKEN_HERE') {
     console.log('═══════════════════════════════════════════════════════════════');
-    console.log('                    DERIV MULTI-ASSET BOT                       ');
+    console.log('                    ClaudeINV DERIV MULTI-ASSET BOT              ');
     console.log('═══════════════════════════════════════════════════════════════');
     console.log('\n⚠️  API Token not configured!\n');
     console.log('To run this bot, you need to:');
@@ -1573,7 +1573,7 @@ if (CONFIG.API_TOKEN === 'YOUR_API_TOKEN_HERE') {
 
 // Start the bot
 console.log('═══════════════════════════════════════════════════════════════');
-console.log('                    DERIV MULTI-ASSET BOT                       ');
+console.log('                    ClaudeINV DERIV MULTI-ASSET BOT              ');
 console.log('═══════════════════════════════════════════════════════════════');
 console.log('\n🚀 Initializing bot...\n');
 

@@ -198,3 +198,23 @@
 {"timestamp":"2025-12-18T23:35:30.393Z","level":"INFO","message":"Authorized successfully"}
 {"timestamp":"2025-12-18T23:37:30.288Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
 {"timestamp":"2025-12-18T23:37:32.690Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-18T23:37:34.575Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-18T23:39:33.851Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-18T23:39:35.630Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-18T23:39:36.017Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-18T23:41:36.005Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-18T23:41:38.274Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-18T23:41:38.592Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-18T23:43:38.602Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-18T23:43:40.562Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-18T23:43:40.909Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-18T23:45:41.401Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-18T23:45:43.243Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-18T23:45:43.586Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-18T23:47:44.235Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-18T23:47:47.611Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-18T23:48:23.106Z","level":"ERROR","message":"API error","error":{"code":"WrongResponse","message":"Sorry, an error occurred while processing your request."}}
+{"timestamp":"2025-12-18T23:50:22.281Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-18T23:50:25.843Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-18T23:50:27.143Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-18T23:52:26.243Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
