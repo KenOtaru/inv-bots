@@ -10,6 +10,7 @@
 const WebSocket = require('ws');
 const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 const math = require('mathjs');
+const nodemailer = require('nodemailer');
 
 // ============================================
 // CONFIGURATION
@@ -38,7 +39,17 @@ const CONFIG = {
     // AI Settings
     MIN_CONFIDENCE_SCORE: 0.6,
     MIN_WIN_RATE_THRESHOLD: 0.5,
-    WIN_RATE_LOOKBACK: 20
+    WIN_RATE_LOOKBACK: 20,
+
+    // Email Settings
+    EMAIL_CONFIG: {
+        service: 'gmail',
+        auth: {
+            user: 'kenzkdp2@gmail.com',
+            pass: 'jfjhtmussgfpbgpk'
+        }
+    },
+    EMAIL_RECIPIENT: 'kenotaru@gmail.com'
 };
 
 // ============================================
@@ -232,6 +243,101 @@ Object.keys(ASSET_CONFIGS).forEach(symbol => {
         spreadCost: 0
     };
 });
+
+// ============================================
+// EMAIL MANAGER
+// ============================================
+
+class EmailManager {
+    constructor() {
+        this.transporter = nodemailer.createTransport(CONFIG.EMAIL_CONFIG);
+    }
+
+    async sendEmail(subject, text) {
+        const mailOptions = {
+            from: CONFIG.EMAIL_CONFIG.auth.user,
+            to: CONFIG.EMAIL_RECIPIENT,
+            subject: `Deriv Multi-Asset Bot - ${subject}`,
+            text: text
+        };
+
+        try {
+            await this.transporter.sendMail(mailOptions);
+            console.log(`📧 Email sent: ${subject}`);
+        } catch (error) {
+            console.error('❌ Email error:', error.message);
+        }
+    }
+
+    async sendSummary(isFinal = false) {
+        const winRate = (state.portfolio.dailyProfit + state.portfolio.dailyLoss) > 0
+            ? ((state.portfolio.dailyProfit / (state.portfolio.dailyProfit + state.portfolio.dailyLoss)) * 100).toFixed(2)
+            : 0;
+
+        const assetBreakdown = Object.entries(state.assets)
+            .map(([symbol, data]) =>
+                `${symbol}: WinRate: ${(data.winRate * 100).toFixed(1)}% | Trades: ${data.dailyTrades}`
+            ).join('\n');
+
+        const summaryText = `
+            ${isFinal ? 'FINAL REPORT' : 'PERIODIC SUMMARY'}
+            ========================================
+            Time: ${new Date().toLocaleString()}
+
+            Portfolio Performance:
+            ---------------------
+            Current Capital: $${state.capital.toFixed(2)}
+            Daily Profit: $${state.portfolio.dailyProfit.toFixed(2)}
+            Daily Loss: $${state.portfolio.dailyLoss.toFixed(2)}
+            Locked Profit: $${state.lockedProfit.toFixed(2)}
+
+            Active Positions: ${state.portfolio.activePositions.length}/${CONFIG.MAX_OPEN_POSITIONS}
+            Top Ranked: ${state.portfolio.topRankedAssets.join(', ')}
+
+            Per-Asset Breakdown:
+            -------------------
+            ${assetBreakdown}
+        `;
+
+        await this.sendEmail(isFinal ? 'Final Report' : 'Summary Update', summaryText);
+    }
+
+    async sendLossAlert(symbol, consecutiveLosses) {
+        const asset = state.assets[symbol];
+        const text = `
+            LOSS ALERT - ${symbol}
+            ====================
+            Asset: ${symbol}
+            Consecutive Losses: ${consecutiveLosses}
+            Asset Win Rate: ${(asset.winRate * 100).toFixed(1)}%
+            Daily Trades: ${asset.dailyTrades}
+
+            Portfolio Status:
+            ----------------
+            Capital: $${state.capital.toFixed(2)}
+            Daily Loss: $${state.portfolio.dailyLoss.toFixed(2)}
+
+            ${consecutiveLosses >= 3 ? '⚠️ Asset entering 4-hour cooldown' : ''}
+        `;
+
+        await this.sendEmail(`Loss Alert: ${symbol}`, text);
+    }
+
+    async sendStatusUpdate(status) {
+        const text = `
+            BOT STATUS UPDATE
+            =================
+            Time: ${new Date().toLocaleString()}
+            Status: ${status}
+
+            Capital: $${state.capital.toFixed(2)}
+            Total Daily Profit: $${state.portfolio.dailyProfit.toFixed(2)}
+            Total Daily Loss: $${state.portfolio.dailyLoss.toFixed(2)}
+        `;
+
+        await this.sendEmail('Status Update', text);
+    }
+}
 
 // ============================================
 // TECHNICAL INDICATORS (Worker Thread Compatible)
@@ -753,6 +859,9 @@ class RiskManager {
                 assetState.cooldownUntil = Date.now() + CONFIG.COOLDOWN_PERIOD;
                 console.log(`⏸️  ${symbol} entering cooldown after 3 consecutive losses`);
             }
+
+            // Send loss alert email
+            bot.emailManager.sendLossAlert(symbol, assetState.consecutiveLosses);
         }
 
         // Update trade history
@@ -1119,6 +1228,7 @@ class ConnectionManager {
             setTimeout(() => this.connect(), this.reconnectDelay);
         } else {
             console.error('❌ Max reconnection attempts reached. Exiting.');
+            bot.emailManager.sendStatusUpdate('Disconnected - Max reconnection attempts reached');
             process.exit(1);
         }
     }
@@ -1157,9 +1267,11 @@ class ConnectionManager {
 class DerivMultiAssetBot {
     constructor() {
         this.connection = new ConnectionManager();
+        this.emailManager = new EmailManager();
         this.scoringInterval = null;
         this.rebalanceInterval = null;
         this.dailyResetInterval = null;
+        this.summaryInterval = null;
     }
 
     async start() {
@@ -1198,6 +1310,12 @@ class DerivMultiAssetBot {
         // Daily reset at midnight UTC
         this.scheduleDailyReset();
 
+        // Start 30-minute email summary timer
+        this.summaryInterval = setInterval(() => {
+            this.emailManager.sendSummary();
+        }, 1800000);
+
+        this.emailManager.sendStatusUpdate('Bot Started Successfully');
         console.log('✅ Bot started successfully!\n');
     }
 
@@ -1335,6 +1453,9 @@ class DerivMultiAssetBot {
 
         if (this.scoringInterval) clearInterval(this.scoringInterval);
         if (this.rebalanceInterval) clearInterval(this.rebalanceInterval);
+        if (this.summaryInterval) clearInterval(this.summaryInterval);
+
+        this.emailManager.sendSummary(true);
 
         if (this.connection.ws) {
             this.connection.ws.close();
