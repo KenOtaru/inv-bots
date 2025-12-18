@@ -1181,7 +1181,7 @@ class EnhancedDigitDifferTradingBot {
         console.log('🚀 Starting kInspired3 Accumulator Trading Bot with Learning System');
         console.log('Features: Adaptive filters, pattern recognition, volatility analysis');
         this.connect();
-        // this.checkTimeForDisconnectReconnect(); // Automatically handles disconnect/reconnect at specified times
+        this.checkTimeForDisconnectReconnect(); // Automatically handles disconnect/reconnect at specified times
     }
 }
 
@@ -1190,9 +1190,9 @@ const bot = new EnhancedDigitDifferTradingBot('hsj0tA0XJoIzJG5', {
     // 'DMylfkyce6VyZt7', '0P94g4WdSrSrzir', rgNedekYXvCaPeP, hsj0tA0XJoIzJG5, Dz2V2KvRf4Uukt3
     initialStake: 1,
     multiplier: 21,
-    maxConsecutiveLosses: 3,
+    maxConsecutiveLosses: 2,
     stopLoss: 400,
-    takeProfit: 5000,
+    takeProfit: 1,
     growthRate: 0.05,
     accuTakeProfit: 0.5,
     requiredHistoryLength: 1000,

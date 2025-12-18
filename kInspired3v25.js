@@ -10,8 +10,8 @@ class EnhancedDigitDifferTradingBot {
         this.wsReady = false;
 
         this.assets = config.assets || [
-            'R_10', 'R_25', 'R_50', 'R_75', 'R_100'
-            // 'R_50',
+            // 'R_10', 'R_25', 'R_50', 'R_75', 'R_100'
+            'R_25',
         ];
 
         this.config = {
@@ -631,16 +631,14 @@ class EnhancedDigitDifferTradingBot {
         const lastDigit = last10[last10.length - 1]; // The digit we're betting continues
 
         // for (let times = 3; times >= 2; times--) {
-        if (appeared[2].length > 0) {
-            // if (appeared[2].includes(currentCount) && appeared[2].length > 1 !== lastDigit + 1) {
-            if (appeared[2].includes(currentCount) && appeared[2].length > 1 && last10[9] >= 2 && last10[0] !== lastDigit + 1 && last10[1] !== lastDigit + 1) {
-                console.log(`TRADE SIGNAL! Betting digit ${lastDigit + 1} appears 2 times (currently 2x)`);
-                console.log(`TRADE SIGNAL! Betting digit ${last10[0]} ${last10[1]}`);
+        if (appeared[3].length > 0) {
+            if (appeared[3].includes(currentCount) && appeared[3].length > 1 && last10[9] >= 2) {
+                console.log(`TRADE SIGNAL! Betting digit ${lastDigit + 1} appears 3 times (currently 3x)`);
 
                 assetState.tradedDigitArray.push(currentCount);
-                assetState.filteredArray = appeared[2];
-                assetState.lastFilterUsed = 2;
-                assetState.tradeFrequency = 2;
+                assetState.filteredArray = appeared[3];
+                assetState.lastFilterUsed = 3;
+                assetState.tradeFrequency = 3;
 
                 this.placeTrade(asset);
             }
@@ -820,12 +818,7 @@ class EnhancedDigitDifferTradingBot {
 
         const waitTimeMinutes = Math.round(randomWaitTime / 60000);
         this.waitTime = waitTimeMinutes;
-        if (this.consecutiveLosses > 0) {
-            this.waitSeconds = randomWaitTime + 138000;
-        }
-        else {
-            this.waitSeconds = randomWaitTime;
-        }
+        this.waitSeconds = randomWaitTime;
 
         if (!this.endOfDay) {
             this.logTradingSummary(asset);
@@ -1046,7 +1039,7 @@ class EnhancedDigitDifferTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: 'kInspired Accumulator Bot - Performance Summary',
+            subject: 'kInspired3v25 Accumulator Bot - Performance Summary',
             text: summaryText
         };
 
@@ -1102,7 +1095,7 @@ class EnhancedDigitDifferTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: `kInspired Accumulator Bot - Loss Alert [${asset}]`,
+            subject: `kInspired3v25 Accumulator Bot - Loss Alert [${asset}]`,
             text: summaryText
         };
 
@@ -1157,7 +1150,7 @@ class EnhancedDigitDifferTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: 'kInspired Accumulator Bot - Performance Summary',
+            subject: 'kInspired3v25 Accumulator Bot - Performance Summary',
             text: summaryText
         };
 
@@ -1173,7 +1166,7 @@ class EnhancedDigitDifferTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: 'kInspired Accumulator Bot - Error Report',
+            subject: 'kInspired3v25 Accumulator Bot - Error Report',
             text: `An error occurred: ${errorMessage}`
         };
 
@@ -1185,7 +1178,7 @@ class EnhancedDigitDifferTradingBot {
     }
 
     start() {
-        console.log('🚀 Starting kInspired Accumulator Trading Bot with Learning System');
+        console.log('🚀 Starting kInspired3v25 Accumulator Trading Bot with Learning System');
         console.log('Features: Adaptive filters, pattern recognition, volatility analysis');
         this.connect();
         this.checkTimeForDisconnectReconnect(); // Automatically handles disconnect/reconnect at specified times
@@ -1193,7 +1186,7 @@ class EnhancedDigitDifferTradingBot {
 }
 
 // Usage
-const bot = new EnhancedDigitDifferTradingBot('hsj0tA0XJoIzJG5', {
+const bot = new EnhancedDigitDifferTradingBot('rgNedekYXvCaPeP', {
     // 'DMylfkyce6VyZt7', '0P94g4WdSrSrzir', rgNedekYXvCaPeP, hsj0tA0XJoIzJG5, Dz2V2KvRf4Uukt3
     initialStake: 1,
     multiplier: 21,

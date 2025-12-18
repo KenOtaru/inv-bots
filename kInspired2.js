@@ -1186,13 +1186,13 @@ class EnhancedDigitDifferTradingBot {
 }
 
 // Usage
-const bot = new EnhancedDigitDifferTradingBot('hsj0tA0XJoIzJG5', {
+const bot = new EnhancedDigitDifferTradingBot('DMylfkyce6VyZt7', {
     // 'DMylfkyce6VyZt7', '0P94g4WdSrSrzir', rgNedekYXvCaPeP, hsj0tA0XJoIzJG5, Dz2V2KvRf4Uukt3
     initialStake: 1,
     multiplier: 21,
-    maxConsecutiveLosses: 3,
+    maxConsecutiveLosses: 2,
     stopLoss: 400,
-    takeProfit: 5000,
+    takeProfit: 1,
     growthRate: 0.05,
     accuTakeProfit: 0.5,
     requiredHistoryLength: 1000,

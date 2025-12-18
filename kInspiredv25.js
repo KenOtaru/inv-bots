@@ -10,8 +10,8 @@ class EnhancedDigitDifferTradingBot {
         this.wsReady = false;
 
         this.assets = config.assets || [
-            'R_10', 'R_25', 'R_50', 'R_75', 'R_100'
-            // 'R_50',
+            // 'R_10', 'R_25', 'R_50', 'R_75', 'R_100'
+            'R_25',
         ];
 
         this.config = {
@@ -1046,7 +1046,7 @@ class EnhancedDigitDifferTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: 'kInspired Accumulator Bot - Performance Summary',
+            subject: 'kInspired v25 Accumulator Bot - Performance Summary',
             text: summaryText
         };
 
@@ -1102,7 +1102,7 @@ class EnhancedDigitDifferTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: `kInspired Accumulator Bot - Loss Alert [${asset}]`,
+            subject: `kInspired v25 Accumulator Bot - Loss Alert [${asset}]`,
             text: summaryText
         };
 
@@ -1157,7 +1157,7 @@ class EnhancedDigitDifferTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: 'kInspired Accumulator Bot - Performance Summary',
+            subject: 'kInspired v25 Accumulator Bot - Performance Summary',
             text: summaryText
         };
 
@@ -1173,7 +1173,7 @@ class EnhancedDigitDifferTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: 'kInspired Accumulator Bot - Error Report',
+            subject: 'kInspired v25 Accumulator Bot - Error Report',
             text: `An error occurred: ${errorMessage}`
         };
 
@@ -1185,7 +1185,7 @@ class EnhancedDigitDifferTradingBot {
     }
 
     start() {
-        console.log('🚀 Starting kInspired Accumulator Trading Bot with Learning System');
+        console.log('🚀 Starting kInspired v25 Accumulator Trading Bot with Learning System');
         console.log('Features: Adaptive filters, pattern recognition, volatility analysis');
         this.connect();
         this.checkTimeForDisconnectReconnect(); // Automatically handles disconnect/reconnect at specified times
