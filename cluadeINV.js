@@ -1179,43 +1179,43 @@ class ConnectionManager {
         const direction = crossover === 'bullish' ? 'CALL' : 'PUT';
 
         // Check RSI confirmation
-        // let rsiConfirmed = false;
-        // if (direction === 'CALL' && assetState.rsi < config.rsiThreshold) {
-        //     rsiConfirmed = true;
-        // } else if (direction === 'PUT' && assetState.rsi > (100 - config.rsiThreshold)) {
-        //     rsiConfirmed = true;
+        let rsiConfirmed = false;
+        if (direction === 'CALL' && assetState.rsi < config.rsiThreshold) {
+            rsiConfirmed = true;
+        } else if (direction === 'PUT' && assetState.rsi > (100 - config.rsiThreshold)) {
+            rsiConfirmed = true;
+        }
+
+        if (!rsiConfirmed) {
+            console.log(`⚠️  ${symbol} ${direction} signal rejected: RSI not confirmed (${assetState.rsi.toFixed(1)})`);
+            return;
+        }
+
+        //Check for ADX confirmation
+        // let adxConfirmed = false;
+        // if (direction === 'CALL' && assetState.adx > config.adxThreshold) {
+        //     adxConfirmed = true;
+        // } else if (direction === 'PUT' && assetState.adx < (100 - config.adxThreshold)) {
+        //     adxConfirmed = true;
         // }
 
-        // if (!rsiConfirmed) {
-        //     console.log(`⚠️  ${symbol} ${direction} signal rejected: RSI not confirmed (${assetState.rsi.toFixed(1)})`);
+        // if (!adxConfirmed) {
+        //     console.log(`⚠️  ${symbol} ${direction} signal rejected: ADX not confirmed (${assetState.adx.toFixed(1)})`);
         //     return;
         // }
 
-        //Check for ADX confirmation
-        let adxConfirmed = false;
-        if (direction === 'CALL' && assetState.adx > config.adxThreshold) {
-            adxConfirmed = true;
-        } else if (direction === 'PUT' && assetState.adx < (100 - config.adxThreshold)) {
-            adxConfirmed = true;
-        }
-
-        if (!adxConfirmed) {
-            console.log(`⚠️  ${symbol} ${direction} signal rejected: ADX not confirmed (${assetState.adx.toFixed(1)})`);
-            return;
-        }
-
         //Check for ATR confirmation
-        let atrConfirmed = false;
-        if (direction === 'CALL' && assetState.atr < config.atrThreshold) {
-            atrConfirmed = true;
-        } else if (direction === 'PUT' && assetState.atr > (100 - config.atrThreshold)) {
-            atrConfirmed = true;
-        }
+        // let atrConfirmed = false;
+        // if (direction === 'CALL' && assetState.atr < config.atrThreshold) {
+        //     atrConfirmed = true;
+        // } else if (direction === 'PUT' && assetState.atr > (100 - config.atrThreshold)) {
+        //     atrConfirmed = true;
+        // }
 
-        if (!atrConfirmed) {
-            console.log(`⚠️  ${symbol} ${direction} signal rejected: ATR not confirmed (${assetState.atr.toFixed(1)})`);
-            return;
-        }
+        // if (!atrConfirmed) {
+        //     console.log(`⚠️  ${symbol} ${direction} signal rejected: ATR not confirmed (${assetState.atr.toFixed(1)})`);
+        //     return;
+        // }
 
         // Calculate AI confidence
         const confidence = AIConfidenceModel.calculateConfidence(symbol, direction);

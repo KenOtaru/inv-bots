@@ -30,7 +30,7 @@ const LOGGER = {
 // ============================================
 
 const CONFIG = {
-    API_TOKEN: '0P94g4WdSrSrzir',
+    API_TOKEN: 'DMylfkyce6VyZt7',
     APP_ID: '1089',
     WS_URL: 'wss://ws.derivws.com/websockets/v3',
 
@@ -41,7 +41,7 @@ const CONFIG = {
     DAILY_PROFIT_TARGET: 0.25,          // 2.5% daily profit target
     PROFIT_LOCK_RATIO: 0.25,              // Lock 50% of gains
     MAX_OPEN_POSITIONS: 5,
-    TOP_ASSETS_TO_TRADE: 3, // Increased as requested earlier or implicitly by user preference
+    TOP_ASSETS_TO_TRADE: 2, // Increased as requested earlier or implicitly by user preference
 
     // Martingale Settings
     MARTINGALE_MULTIPLIER: 2.0,
@@ -1198,7 +1198,7 @@ class ConnectionManager {
         }
         // Sell: Cross below -80 from above
         else if (wprPrev >= -80 && wprCurr < -80) {
-            signal = 'PUT';
+            signal = 'CALL';
         }
 
         if (signal !== 'none') {
