@@ -218,3 +218,303 @@
 {"timestamp":"2025-12-18T23:50:25.843Z","level":"INFO","message":"WebSocket connected"}
 {"timestamp":"2025-12-18T23:50:27.143Z","level":"INFO","message":"Authorized successfully"}
 {"timestamp":"2025-12-18T23:52:26.243Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-18T23:52:28.314Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-18T23:52:28.757Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-18T23:54:28.707Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-18T23:54:31.439Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-18T23:54:31.805Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-18T23:56:31.844Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-18T23:56:33.961Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-18T23:57:08.241Z","level":"ERROR","message":"API error","error":{"code":"WrongResponse","message":"Sorry, an error occurred while processing your request."}}
+{"timestamp":"2025-12-18T23:59:08.285Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-18T23:59:13.205Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-18T23:59:13.543Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-19T00:01:13.542Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T00:01:16.126Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-19T00:01:16.484Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-19T00:03:16.491Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T00:03:19.248Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-19T00:03:19.624Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-19T00:05:19.857Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T00:05:21.910Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-19T00:05:22.362Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-19T00:07:22.777Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T00:07:24.830Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-19T00:07:25.924Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-19T00:09:26.245Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T00:09:28.299Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-19T00:09:28.624Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-19T00:11:28.628Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T00:11:30.957Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-19T00:11:31.335Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-19T00:13:31.678Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T00:13:33.505Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-19T00:13:33.843Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-19T00:15:33.968Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T00:15:39.024Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-19T00:15:39.489Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-19T00:17:40.455Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T00:17:42.729Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-19T00:17:43.229Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-19T00:18:00.597Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T00:18:02.400Z","level":"ERROR","message":"WebSocket error","error":"getaddrinfo ENOTFOUND ws.binaryws.com"}
+{"timestamp":"2025-12-19T00:18:02.489Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T00:18:03.697Z","level":"ERROR","message":"WebSocket error","error":"getaddrinfo ENOTFOUND ws.binaryws.com"}
+{"timestamp":"2025-12-19T00:18:03.697Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T00:18:05.729Z","level":"ERROR","message":"WebSocket error","error":"getaddrinfo ENOTFOUND ws.binaryws.com"}
+{"timestamp":"2025-12-19T00:18:05.729Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T00:18:10.577Z","level":"ERROR","message":"WebSocket error","error":"getaddrinfo ENOTFOUND ws.binaryws.com"}
+{"timestamp":"2025-12-19T00:18:10.578Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T00:18:20.163Z","level":"ERROR","message":"WebSocket error","error":"getaddrinfo ENOTFOUND ws.binaryws.com"}
+{"timestamp":"2025-12-19T00:18:20.163Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T00:18:36.168Z","level":"ERROR","message":"WebSocket error","error":"getaddrinfo ENOTFOUND ws.binaryws.com"}
+{"timestamp":"2025-12-19T00:18:36.170Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T00:19:08.198Z","level":"ERROR","message":"WebSocket error","error":"getaddrinfo ENOTFOUND ws.binaryws.com"}
+{"timestamp":"2025-12-19T00:19:08.199Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T12:37:49.275Z","level":"ERROR","message":"WebSocket error","error":"getaddrinfo ENOTFOUND ws.binaryws.com"}
+{"timestamp":"2025-12-19T12:37:49.276Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T12:38:52.306Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-19T12:38:52.710Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-19T12:40:52.714Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T12:40:54.549Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-19T12:41:28.919Z","level":"ERROR","message":"API error","error":{"code":"WrongResponse","message":"Sorry, an error occurred while processing your request."}}
+{"timestamp":"2025-12-19T12:43:29.025Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T12:43:32.058Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-19T12:44:06.429Z","level":"ERROR","message":"API error","error":{"code":"WrongResponse","message":"Sorry, an error occurred while processing your request."}}
+{"timestamp":"2025-12-19T12:46:06.378Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T12:46:10.675Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-19T12:46:11.058Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-19T12:48:11.071Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T12:48:14.052Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-19T12:48:15.279Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-19T12:50:15.280Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T12:50:17.302Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-19T12:50:17.668Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-19T12:52:18.464Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T12:52:21.294Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-19T12:52:21.762Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-19T12:54:21.673Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T12:54:24.962Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-19T12:54:26.498Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-19T12:56:25.804Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T12:56:29.686Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-19T12:56:31.514Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-19T12:58:30.724Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T12:58:35.434Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-19T12:58:37.031Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-19T13:00:36.476Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T13:00:39.335Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-19T13:00:40.782Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-19T13:02:40.159Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T13:02:42.218Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-19T13:02:43.491Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-19T13:04:43.051Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T13:04:46.195Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-19T13:04:46.632Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-19T13:06:46.560Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T13:06:48.488Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-19T13:06:48.899Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-19T13:08:49.017Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T13:08:51.063Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-19T13:08:52.067Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-19T13:10:51.975Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T13:10:57.201Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-19T13:11:32.727Z","level":"ERROR","message":"API error","error":{"code":"WrongResponse","message":"Sorry, an error occurred while processing your request."}}
+{"timestamp":"2025-12-19T13:13:32.282Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T13:13:36.032Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-19T13:13:36.500Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-19T13:15:36.568Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T13:15:40.458Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-19T13:15:41.024Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-19T13:17:40.887Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T13:17:46.153Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-19T13:17:46.477Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-19T13:19:47.120Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T13:19:49.190Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-19T13:20:24.109Z","level":"ERROR","message":"API error","error":{"code":"WrongResponse","message":"Sorry, an error occurred while processing your request."}}
+{"timestamp":"2025-12-19T13:22:26.293Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T13:22:30.142Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-19T13:23:21.485Z","level":"ERROR","message":"API error","error":{"code":"WrongResponse","message":"Sorry, an error occurred while processing your request."}}
+{"timestamp":"2025-12-19T13:25:04.511Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T13:25:10.787Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-19T13:25:54.783Z","level":"ERROR","message":"API error","error":{"code":"WrongResponse","message":"Sorry, an error occurred while processing your request."}}
+{"timestamp":"2025-12-19T13:27:45.070Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T13:27:49.357Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-19T13:27:49.718Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-19T13:29:52.132Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T13:29:58.102Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-19T13:29:58.477Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-19T13:31:58.481Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T13:32:01.964Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-19T13:32:04.119Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-19T14:01:05.044Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T14:01:06.403Z","level":"ERROR","message":"WebSocket error","error":"getaddrinfo ENOTFOUND ws.binaryws.com"}
+{"timestamp":"2025-12-19T14:01:06.403Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T14:01:07.452Z","level":"ERROR","message":"WebSocket error","error":"getaddrinfo ENOTFOUND ws.binaryws.com"}
+{"timestamp":"2025-12-19T14:01:07.453Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T14:01:09.460Z","level":"ERROR","message":"WebSocket error","error":"getaddrinfo ENOTFOUND ws.binaryws.com"}
+{"timestamp":"2025-12-19T14:01:09.461Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T14:01:13.785Z","level":"ERROR","message":"WebSocket error","error":"getaddrinfo ENOTFOUND ws.binaryws.com"}
+{"timestamp":"2025-12-19T14:01:13.785Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T14:01:21.796Z","level":"ERROR","message":"WebSocket error","error":"getaddrinfo ENOTFOUND ws.binaryws.com"}
+{"timestamp":"2025-12-19T14:01:21.796Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T14:01:38.182Z","level":"ERROR","message":"WebSocket error","error":"getaddrinfo ENOTFOUND ws.binaryws.com"}
+{"timestamp":"2025-12-19T14:01:38.182Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T14:02:10.625Z","level":"ERROR","message":"WebSocket error","error":"getaddrinfo ENOTFOUND ws.binaryws.com"}
+{"timestamp":"2025-12-19T14:02:10.625Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T14:03:11.115Z","level":"ERROR","message":"WebSocket error","error":"getaddrinfo ENOTFOUND ws.binaryws.com"}
+{"timestamp":"2025-12-19T14:03:11.115Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T14:04:11.229Z","level":"ERROR","message":"WebSocket error","error":"getaddrinfo ENOTFOUND ws.binaryws.com"}
+{"timestamp":"2025-12-19T14:04:11.232Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T14:05:11.548Z","level":"ERROR","message":"WebSocket error","error":"getaddrinfo ENOTFOUND ws.binaryws.com"}
+{"timestamp":"2025-12-19T14:05:11.548Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T14:06:11.812Z","level":"ERROR","message":"WebSocket error","error":"getaddrinfo ENOTFOUND ws.binaryws.com"}
+{"timestamp":"2025-12-19T14:06:11.812Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T14:07:11.820Z","level":"ERROR","message":"WebSocket error","error":"getaddrinfo ENOTFOUND ws.binaryws.com"}
+{"timestamp":"2025-12-19T14:07:11.820Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T14:08:12.606Z","level":"ERROR","message":"WebSocket error","error":"getaddrinfo ENOTFOUND ws.binaryws.com"}
+{"timestamp":"2025-12-19T14:08:12.606Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T14:09:12.616Z","level":"ERROR","message":"WebSocket error","error":"getaddrinfo ENOTFOUND ws.binaryws.com"}
+{"timestamp":"2025-12-19T14:09:12.616Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-19T14:10:12.865Z","level":"ERROR","message":"WebSocket error","error":"getaddrinfo ENOTFOUND ws.binaryws.com"}
+{"timestamp":"2025-12-19T14:10:12.865Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T05:40:20.049Z","level":"ERROR","message":"WebSocket error","error":"getaddrinfo ENOTFOUND ws.binaryws.com"}
+{"timestamp":"2025-12-20T05:40:20.049Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T05:41:22.391Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T05:41:23.082Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T05:43:22.881Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T05:43:26.388Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T05:43:27.298Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T05:45:26.749Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T05:45:29.685Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T05:45:30.144Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T05:47:30.254Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T05:47:33.067Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T05:47:33.545Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T05:49:33.532Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T05:49:35.556Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T05:49:36.331Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T05:51:36.340Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T05:51:39.108Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T05:51:39.750Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T05:53:39.817Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T05:53:42.745Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T05:53:43.098Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T05:55:43.104Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T05:55:44.934Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T05:55:45.271Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T05:57:45.274Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T05:57:47.224Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T05:57:47.577Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T05:59:47.798Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T05:59:50.692Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T05:59:51.086Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T06:01:51.243Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T06:01:53.163Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T06:01:53.499Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T06:03:53.507Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T06:03:56.001Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T06:03:56.335Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T06:05:56.338Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T06:05:59.658Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T06:06:00.035Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T06:08:00.892Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T06:08:02.820Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T06:08:03.727Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T06:10:03.166Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T06:10:05.650Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T06:10:06.399Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T06:12:06.048Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T06:12:09.056Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T06:12:09.440Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T06:14:09.512Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T06:14:11.727Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T06:14:12.401Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T06:16:12.129Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T06:16:14.064Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T06:16:14.394Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T06:18:14.394Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T06:18:17.371Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T06:18:17.883Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T06:20:17.893Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T06:20:19.872Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T06:20:54.122Z","level":"ERROR","message":"API error","error":{"code":"WrongResponse","message":"Sorry, an error occurred while processing your request."}}
+{"timestamp":"2025-12-20T06:22:54.123Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T06:22:56.972Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T06:22:57.307Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T06:24:57.314Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T06:25:00.533Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T06:25:01.104Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T06:27:01.112Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T06:27:03.550Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T06:27:04.095Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T06:29:04.235Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T06:29:06.079Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T06:29:40.627Z","level":"ERROR","message":"API error","error":{"code":"WrongResponse","message":"Sorry, an error occurred while processing your request."}}
+{"timestamp":"2025-12-20T06:31:40.514Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T06:31:44.817Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T06:31:45.141Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T06:33:45.145Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T06:33:49.052Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T06:34:23.288Z","level":"ERROR","message":"API error","error":{"code":"WrongResponse","message":"Sorry, an error occurred while processing your request."}}
+{"timestamp":"2025-12-20T06:36:23.295Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T06:36:26.135Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T06:37:00.388Z","level":"ERROR","message":"API error","error":{"code":"WrongResponse","message":"Sorry, an error occurred while processing your request."}}
+{"timestamp":"2025-12-20T06:39:00.403Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T06:39:04.878Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T06:39:05.261Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T06:41:06.187Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T06:41:09.867Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T06:41:10.252Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T06:43:10.259Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T06:43:12.081Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T06:43:12.402Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T06:45:12.409Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T06:45:14.452Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T06:45:14.773Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T06:47:14.786Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T06:47:16.665Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T06:47:16.997Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T06:49:17.030Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T06:49:19.115Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T06:49:19.510Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T06:51:19.488Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T06:51:22.501Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T06:51:22.861Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T06:53:22.988Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T06:53:24.893Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T06:53:25.252Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T06:55:25.303Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T06:55:27.174Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T06:56:01.712Z","level":"ERROR","message":"API error","error":{"code":"WrongResponse","message":"Sorry, an error occurred while processing your request."}}
+{"timestamp":"2025-12-20T06:58:01.904Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T06:58:08.879Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T06:58:11.587Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T07:00:13.320Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T07:00:20.778Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T07:00:21.214Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T07:02:25.226Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T07:02:38.355Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T07:02:38.730Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T07:04:38.820Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T07:04:41.096Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T07:04:41.524Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T07:06:41.680Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T07:06:43.835Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T07:07:18.188Z","level":"ERROR","message":"API error","error":{"code":"WrongResponse","message":"Sorry, an error occurred while processing your request."}}
+{"timestamp":"2025-12-20T07:09:18.237Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T07:09:21.351Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T07:09:21.677Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T07:11:22.505Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T07:11:32.690Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T07:12:07.159Z","level":"ERROR","message":"API error","error":{"code":"WrongResponse","message":"Sorry, an error occurred while processing your request."}}
+{"timestamp":"2025-12-20T07:14:07.481Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T07:14:11.610Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T07:14:11.985Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T07:16:11.988Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T07:16:14.014Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T07:16:14.481Z","level":"INFO","message":"Authorized successfully"}
+{"timestamp":"2025-12-20T07:18:14.459Z","level":"WARN","message":"WebSocket closed, reconnecting..."}
+{"timestamp":"2025-12-20T07:18:16.883Z","level":"INFO","message":"WebSocket connected"}
+{"timestamp":"2025-12-20T07:18:51.193Z","level":"ERROR","message":"API error","error":{"code":"WrongResponse","message":"Sorry, an error occurred while processing your request."}}
+{"timestamp":"2025-12-20T07:20:51.250Z","level":"WARN","message":"WebSocket closed, reconnecting..."}

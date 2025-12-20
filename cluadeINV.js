@@ -1101,6 +1101,8 @@ class ConnectionManager {
                 assetState.emaShort, assetState.emaLong
             );
 
+            console.log('Cross-Over Indicator', crossover)
+
             if (crossover !== 'none') {
                 this.processSignal(symbol, crossover);
             }
