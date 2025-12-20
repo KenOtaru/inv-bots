@@ -40,7 +40,7 @@ const CONFIG = {
     DAILY_LOSS_LIMIT: 0.25,              // 5% daily loss limit
     DAILY_PROFIT_TARGET: 0.25,          // 2.5% daily profit target
     PROFIT_LOCK_RATIO: 0.25,              // Lock 50% of gains
-    MAX_OPEN_POSITIONS: 5,
+    MAX_OPEN_POSITIONS: 50,
     TOP_ASSETS_TO_TRADE: 2, // Increased as requested earlier or implicitly by user preference
 
     // Martingale Settings
@@ -87,7 +87,7 @@ const ASSET_CONFIGS = {
         atrThreshold: 0.6,
         duration: 15,
         durationUnit: 'm',
-        maxTradesPerDay: 5,
+        maxTradesPerDay: 10,
         volatilityClass: 'low',
         tickSubscription: 'R_10',
         multiplier: 400
@@ -104,7 +104,7 @@ const ASSET_CONFIGS = {
         atrThreshold: 0.6,
         duration: 20,
         durationUnit: 'm',
-        maxTradesPerDay: 5,
+        maxTradesPerDay: 10,
         volatilityClass: 'medium-low',
         tickSubscription: 'R_25',
         multiplier: 400
@@ -121,7 +121,7 @@ const ASSET_CONFIGS = {
     //     atrThreshold: 0.6,
     //     duration: 20,
     //     durationUnit: 'm',
-    //     maxTradesPerDay: 5,
+    //     maxTradesPerDay: 10,
     //     volatilityClass: 'medium-low',
     //     tickSubscription: 'R_50',
     //     multiplier: 400
@@ -135,7 +135,7 @@ const ASSET_CONFIGS = {
     //     rsiThreshold: 35,
     //     duration: 30,
     //     durationUnit: 'm',
-    //     maxTradesPerDay: 5,
+    //     maxTradesPerDay: 10,
     //     volatilityClass: 'high',
     //     tickSubscription: 'R_75',
     //     multiplier: 400
@@ -152,7 +152,7 @@ const ASSET_CONFIGS = {
         atrThreshold: 0.6,
         duration: 30,
         durationUnit: 'm',
-        maxTradesPerDay: 5,
+        maxTradesPerDay: 10,
         volatilityClass: 'high',
         tickSubscription: 'R_100',
         multiplier: 400
@@ -169,7 +169,7 @@ const ASSET_CONFIGS = {
         atrThreshold: 0.6,
         duration: 5,
         durationUnit: 'm',
-        maxTradesPerDay: 5,
+        maxTradesPerDay: 10,
         volatilityClass: 'extreme',
         tickSubscription: 'BOOM1000',
         multiplier: 200
@@ -186,7 +186,7 @@ const ASSET_CONFIGS = {
         atrThreshold: 0.6,
         duration: 5,
         durationUnit: 'm',
-        maxTradesPerDay: 5,
+        maxTradesPerDay: 10,
         volatilityClass: 'extreme',
         tickSubscription: 'CRASH1000',
         multiplier: 200
@@ -328,7 +328,7 @@ class EmailManager {
         const mailOptions = {
             from: CONFIG.EMAIL_CONFIG.auth.user,
             to: CONFIG.EMAIL_RECIPIENT,
-            subject: `ClaudeINV Deriv Multi-Asset Bot - ${subject}`,
+            subject: `ClaudeWill Deriv Multi-Asset Bot - ${subject}`,
             text: text
         };
 
@@ -1198,7 +1198,7 @@ class ConnectionManager {
         }
         // Sell: Cross below -80 from above
         else if (wprPrev >= -80 && wprCurr < -80) {
-            signal = 'CALL';
+            signal = 'PUT';
         }
 
         if (signal !== 'none') {
@@ -1208,26 +1208,6 @@ class ConnectionManager {
 
     processSignal(symbol, direction) {
         const assetState = state.assets[symbol];
-
-        // REVERSE LOGIC: Close opposite positions
-        const oppositeDir = direction === 'CALL' ? 'PUT' : 'CALL';
-
-        const activeOpposite = state.portfolio.activePositions.filter(p => p.symbol === symbol && p.direction === oppositeDir);
-
-        if (activeOpposite.length > 0) {
-            console.log(`🔄 Reversing trade for ${symbol}: Closing ${activeOpposite.length} ${oppositeDir} positions`);
-
-            // Closing logic for Multipliers (Sell the contract)
-            activeOpposite.forEach(position => {
-                if (position.contractId) {
-                    bot.connection.send({
-                        sell: position.contractId,
-                        price: 0 // Sell at market price
-                    });
-                    LOGGER.trade(`Selling opposite position ${position.contractId} on ${symbol}`);
-                }
-            });
-        }
 
         // Check RSI confirmation
         const config = ASSET_CONFIGS[symbol];
@@ -1287,6 +1267,25 @@ class ConnectionManager {
 
         console.log(`\n📈 WPR Signal: ${symbol} ${direction}`);
         console.log(`   WPR Prev: ${assetState.wprHistory[assetState.wprHistory.length - 2].toFixed(2)} -> Curr: ${assetState.wprHistory[assetState.wprHistory.length - 1].toFixed(2)}`);
+
+        // REVERSE LOGIC: Close opposite positions
+        const oppositeDir = direction === 'CALL' ? 'PUT' : 'CALL';
+        const activeOpposite = state.portfolio.activePositions.filter(p => p.symbol === symbol && p.direction === oppositeDir);
+
+        if (activeOpposite.length > 0) {
+            console.log(`🔄 Reversing trade for ${symbol}: Closing ${activeOpposite.length} ${oppositeDir} positions`);
+
+            // Closing logic for Multipliers (Sell the contract)
+            activeOpposite.forEach(position => {
+                if (position.contractId) {
+                    bot.connection.send({
+                        sell: position.contractId,
+                        price: 0 // Sell at market price
+                    });
+                    LOGGER.trade(`Selling opposite position ${position.contractId} on ${symbol}`);
+                }
+            });
+        }
 
         // Try to execute trade
         LOGGER.signal(`${symbol} ${direction} WPR Breakout (Confidence: 100%)`);
