@@ -191,6 +191,41 @@ const ASSET_CONFIGS = {
         tickSubscription: 'CRASH1000',
         multiplier: 200
     },
+    // Cryptocurrencies
+    'cryBTCUSD': {
+        name: 'Bitcoin',
+        category: 'crypto',
+        emaShort: 10,
+        emaLong: 25,
+        rsiPeriod: 14,
+        rsiThreshold: 30,
+        adxPeriod: 14,
+        adxThreshold: 25,
+        atrThreshold: 0.6,
+        duration: 1,
+        durationUnit: 'h',
+        maxTradesPerDay: 10,
+        volatilityClass: 'high',
+        tickSubscription: 'cryBTCUSD',
+        multiplier: 100
+    },
+    'cryETHUSD': {
+        name: 'Ethereum',
+        category: 'crypto',
+        emaShort: 10,
+        emaLong: 25,
+        rsiPeriod: 14,
+        rsiThreshold: 30,
+        adxPeriod: 14,
+        adxThreshold: 25,
+        atrThreshold: 0.6,
+        duration: 1,
+        durationUnit: 'h',
+        maxTradesPerDay: 10,
+        volatilityClass: 'high',
+        tickSubscription: 'cryETHUSD',
+        multiplier: 100
+    },
     // Major Forex
     // 'frxEURUSD': {
     //     name: 'EUR/USD',
@@ -1215,11 +1250,11 @@ class ConnectionManager {
 
         // Buy: Cross above -20 from below
         if (wprPrev <= -20 && wprCurr > -20) {
-            signal = 'CALL';
+            signal = 'PUT';
         }
         // Sell: Cross below -80 from above
         else if (wprPrev >= -80 && wprCurr < -80) {
-            signal = 'PUT';
+            signal = 'CALL';
         }
 
         if (signal !== 'none') {
