@@ -78,6 +78,9 @@ const ASSET_CONFIGS = {
         emaLong: 21,
         rsiPeriod: 14,
         rsiThreshold: 30,
+        adxPeriod: 14,
+        adxThreshold: 25,
+        atrThreshold: 0.6,
         duration: 15,
         durationUnit: 'm',
         maxTradesPerDay: 5,
@@ -91,25 +94,28 @@ const ASSET_CONFIGS = {
         emaLong: 24,
         rsiPeriod: 14,
         rsiThreshold: 32,
+        adxPeriod: 14,
+        adxThreshold: 25,
+        atrThreshold: 0.6,
         duration: 20,
         durationUnit: 'm',
         maxTradesPerDay: 5,
         volatilityClass: 'medium-low',
         tickSubscription: 'R_25'
     },
-    'R_50': {
-        name: 'Volatility 50 Index',
-        category: 'synthetic',
-        emaShort: 10,
-        emaLong: 24,
-        rsiPeriod: 14,
-        rsiThreshold: 32,
-        duration: 20,
-        durationUnit: 'm',
-        maxTradesPerDay: 5,
-        volatilityClass: 'medium-low',
-        tickSubscription: 'R_50'
-    },
+    // 'R_50': {
+    //     name: 'Volatility 50 Index',
+    //     category: 'synthetic',
+    //     emaShort: 10,
+    //     emaLong: 24,
+    //     rsiPeriod: 14,
+    //     rsiThreshold: 32,
+    //     duration: 20,
+    //     durationUnit: 'm',
+    //     maxTradesPerDay: 5,
+    //     volatilityClass: 'medium-low',
+    //     tickSubscription: 'R_50'
+    // },
     'R_75': {
         name: 'Volatility 75 Index',
         category: 'synthetic',
@@ -117,6 +123,9 @@ const ASSET_CONFIGS = {
         emaLong: 30,
         rsiPeriod: 21,
         rsiThreshold: 35,
+        adxPeriod: 14,
+        adxThreshold: 25,
+        atrThreshold: 0.6,
         duration: 30,
         durationUnit: 'm',
         maxTradesPerDay: 5,
@@ -130,6 +139,9 @@ const ASSET_CONFIGS = {
         emaLong: 30,
         rsiPeriod: 21,
         rsiThreshold: 35,
+        adxPeriod: 14,
+        adxThreshold: 25,
+        atrThreshold: 0.6,
         duration: 30,
         durationUnit: 'm',
         maxTradesPerDay: 5,
@@ -143,6 +155,9 @@ const ASSET_CONFIGS = {
         emaLong: 15,
         rsiPeriod: 7,
         rsiThreshold: 25,
+        adxPeriod: 14,
+        adxThreshold: 25,
+        atrThreshold: 0.6,
         duration: 5,
         durationUnit: 'm',
         maxTradesPerDay: 5,
@@ -156,6 +171,9 @@ const ASSET_CONFIGS = {
         emaLong: 15,
         rsiPeriod: 7,
         rsiThreshold: 25,
+        adxPeriod: 14,
+        adxThreshold: 25,
+        atrThreshold: 0.6,
         duration: 5,
         durationUnit: 'm',
         maxTradesPerDay: 5,
@@ -297,7 +315,7 @@ class EmailManager {
         const mailOptions = {
             from: CONFIG.EMAIL_CONFIG.auth.user,
             to: CONFIG.EMAIL_RECIPIENT,
-            subject: `ClaudeINV Deriv Multi-Asset Bot - ${subject}`,
+            subject: `ClaudeWill Deriv Multi-Asset Bot - ${subject}`,
             text: text
         };
 
@@ -1161,15 +1179,41 @@ class ConnectionManager {
         const direction = crossover === 'bullish' ? 'CALL' : 'PUT';
 
         // Check RSI confirmation
-        let rsiConfirmed = false;
-        if (direction === 'CALL' && assetState.rsi < config.rsiThreshold) {
-            rsiConfirmed = true;
-        } else if (direction === 'PUT' && assetState.rsi > (100 - config.rsiThreshold)) {
-            rsiConfirmed = true;
+        // let rsiConfirmed = false;
+        // if (direction === 'CALL' && assetState.rsi < config.rsiThreshold) {
+        //     rsiConfirmed = true;
+        // } else if (direction === 'PUT' && assetState.rsi > (100 - config.rsiThreshold)) {
+        //     rsiConfirmed = true;
+        // }
+
+        // if (!rsiConfirmed) {
+        //     console.log(`⚠️  ${symbol} ${direction} signal rejected: RSI not confirmed (${assetState.rsi.toFixed(1)})`);
+        //     return;
+        // }
+
+        //Check for ADX confirmation
+        let adxConfirmed = false;
+        if (direction === 'CALL' && assetState.adx > config.adxThreshold) {
+            adxConfirmed = true;
+        } else if (direction === 'PUT' && assetState.adx < (100 - config.adxThreshold)) {
+            adxConfirmed = true;
         }
 
-        if (!rsiConfirmed) {
-            console.log(`⚠️  ${symbol} ${direction} signal rejected: RSI not confirmed (${assetState.rsi.toFixed(1)})`);
+        if (!adxConfirmed) {
+            console.log(`⚠️  ${symbol} ${direction} signal rejected: ADX not confirmed (${assetState.adx.toFixed(1)})`);
+            return;
+        }
+
+        //Check for ATR confirmation
+        let atrConfirmed = false;
+        if (direction === 'CALL' && assetState.atr < config.atrThreshold) {
+            atrConfirmed = true;
+        } else if (direction === 'PUT' && assetState.atr > (100 - config.atrThreshold)) {
+            atrConfirmed = true;
+        }
+
+        if (!atrConfirmed) {
+            console.log(`⚠️  ${symbol} ${direction} signal rejected: ATR not confirmed (${assetState.atr.toFixed(1)})`);
             return;
         }
 
@@ -1449,6 +1493,15 @@ class DerivMultiAssetBot {
             return;
         }
 
+        // Check for existing same-direction trade
+        const hasExisting = state.portfolio.activePositions.some(
+            p => p.symbol === symbol && p.direction === direction
+        );
+        if (hasExisting) {
+            console.log(`⚠️  Trade blocked: Already have an active ${direction} on ${symbol}`);
+            return;
+        }
+
         // Calculate stake
         const stake = PortfolioManager.calculateStake(symbol, rank);
 
@@ -1570,9 +1623,9 @@ class DerivMultiAssetBot {
 
 class Dashboard {
     static display() {
-        console.clear();
+        // console.clear();
         console.log('╔══════════════════════════════════════════════════════════════╗');
-        console.log('║         ClaudeINV DERIV MULTI-ASSET BOT - LIVE DASHBOARD      ║');
+        console.log('║         ClaudeWill DERIV MULTI-ASSET BOT - LIVE DASHBOARD      ║');
         console.log('╠══════════════════════════════════════════════════════════════╣');
 
         const status = bot.getStatus();
@@ -1651,7 +1704,7 @@ process.on('SIGTERM', () => {
 // Validate API token
 if (CONFIG.API_TOKEN === 'YOUR_API_TOKEN_HERE') {
     console.log('═══════════════════════════════════════════════════════════════');
-    console.log('                    ClaudeINV DERIV MULTI-ASSET BOT              ');
+    console.log('                    ClaudeWill DERIV MULTI-ASSET BOT              ');
     console.log('═══════════════════════════════════════════════════════════════');
     console.log('\n⚠️  API Token not configured!\n');
     console.log('To run this bot, you need to:');
@@ -1667,7 +1720,7 @@ if (CONFIG.API_TOKEN === 'YOUR_API_TOKEN_HERE') {
 
 // Start the bot
 console.log('═══════════════════════════════════════════════════════════════');
-console.log('                    ClaudeINV DERIV MULTI-ASSET BOT              ');
+console.log('                    ClaudeWill DERIV MULTI-ASSET BOT              ');
 console.log('═══════════════════════════════════════════════════════════════');
 console.log('\n🚀 Initializing bot...\n');
 

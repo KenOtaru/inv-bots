@@ -36,21 +36,25 @@ const CONFIG = {
 
     // Portfolio Settings
     INITIAL_CAPITAL: 500,
-    MAX_RISK_PER_TRADE: 0.025,           // 2.5% per trade
-    DAILY_LOSS_LIMIT: 0.05,              // 5% daily loss limit
-    DAILY_PROFIT_TARGET: 0.025,          // 2.5% daily profit target
-    PROFIT_LOCK_RATIO: 0.5,              // Lock 50% of gains
+    MAX_RISK_PER_TRADE: 0.25,           // 2.5% per trade
+    DAILY_LOSS_LIMIT: 0.25,              // 5% daily loss limit
+    DAILY_PROFIT_TARGET: 0.25,          // 2.5% daily profit target
+    PROFIT_LOCK_RATIO: 0.25,              // Lock 50% of gains
     MAX_OPEN_POSITIONS: 5,
-    TOP_ASSETS_TO_TRADE: 2,
+    TOP_ASSETS_TO_TRADE: 3, // Increased as requested earlier or implicitly by user preference
+
+    // Martingale Settings
+    MARTINGALE_MULTIPLIER: 2.0,
+    LOSSES_BEFORE_MARTINGALE: 1,
 
     // Timing
-    ASSET_SCORING_INTERVAL: 5 * 60 * 1000,    // 5 minutes
-    REBALANCE_INTERVAL: 4 * 60 * 60 * 1000,   // 4 hours
-    COOLDOWN_PERIOD: 4 * 60 * 60 * 1000,      // 4 hours after 3 losses
-    BLACKLIST_PERIOD: 48 * 60 * 60 * 1000,    // 48 hours
+    ASSET_SCORING_INTERVAL: 3 * 60 * 1000,    // 3 minutes
+    REBALANCE_INTERVAL: 2 * 60 * 60 * 1000,   // 2 hours
+    COOLDOWN_PERIOD: 2 * 60 * 60 * 1000,      // 2 hours after 3 losses
+    BLACKLIST_PERIOD: 24 * 60 * 60 * 1000,    // 24 hours
 
     // AI Settings
-    MIN_CONFIDENCE_SCORE: 0.6,
+    MIN_CONFIDENCE_SCORE: 0.7,
     MIN_WIN_RATE_THRESHOLD: 0.5,
     WIN_RATE_LOOKBACK: 20,
 
@@ -78,11 +82,15 @@ const ASSET_CONFIGS = {
         emaLong: 21,
         rsiPeriod: 14,
         rsiThreshold: 30,
+        adxPeriod: 14,
+        adxThreshold: 25,
+        atrThreshold: 0.6,
         duration: 15,
         durationUnit: 'm',
         maxTradesPerDay: 5,
         volatilityClass: 'low',
-        tickSubscription: 'R_10'
+        tickSubscription: 'R_10',
+        multiplier: 400
     },
     'R_25': {
         name: 'Volatility 25 Index',
@@ -91,38 +99,47 @@ const ASSET_CONFIGS = {
         emaLong: 24,
         rsiPeriod: 14,
         rsiThreshold: 32,
+        adxPeriod: 14,
+        adxThreshold: 25,
+        atrThreshold: 0.6,
         duration: 20,
         durationUnit: 'm',
         maxTradesPerDay: 5,
         volatilityClass: 'medium-low',
-        tickSubscription: 'R_25'
+        tickSubscription: 'R_25',
+        multiplier: 400
     },
-    'R_50': {
-        name: 'Volatility 50 Index',
-        category: 'synthetic',
-        emaShort: 10,
-        emaLong: 24,
-        rsiPeriod: 14,
-        rsiThreshold: 32,
-        duration: 20,
-        durationUnit: 'm',
-        maxTradesPerDay: 5,
-        volatilityClass: 'medium-low',
-        tickSubscription: 'R_50'
-    },
-    'R_75': {
-        name: 'Volatility 75 Index',
-        category: 'synthetic',
-        emaShort: 12,
-        emaLong: 30,
-        rsiPeriod: 21,
-        rsiThreshold: 35,
-        duration: 30,
-        durationUnit: 'm',
-        maxTradesPerDay: 5,
-        volatilityClass: 'high',
-        tickSubscription: 'R_75'
-    },
+    // 'R_50': {
+    //     name: 'Volatility 50 Index',
+    //     category: 'synthetic',
+    //     emaShort: 10,
+    //     emaLong: 24,
+    //     rsiPeriod: 14,
+    //     rsiThreshold: 32,
+    //     adxPeriod: 14,
+    //     adxThreshold: 25,
+    //     atrThreshold: 0.6,
+    //     duration: 20,
+    //     durationUnit: 'm',
+    //     maxTradesPerDay: 5,
+    //     volatilityClass: 'medium-low',
+    //     tickSubscription: 'R_50',
+    //     multiplier: 400
+    // },
+    // 'R_75': {
+    //     name: 'Volatility 75 Index',
+    //     category: 'synthetic',
+    //     emaShort: 12,
+    //     emaLong: 30,
+    //     rsiPeriod: 21,
+    //     rsiThreshold: 35,
+    //     duration: 30,
+    //     durationUnit: 'm',
+    //     maxTradesPerDay: 5,
+    //     volatilityClass: 'high',
+    //     tickSubscription: 'R_75',
+    //     multiplier: 400
+    // },
     'R_100': {
         name: 'Volatility 100 Index',
         category: 'synthetic',
@@ -130,11 +147,15 @@ const ASSET_CONFIGS = {
         emaLong: 30,
         rsiPeriod: 21,
         rsiThreshold: 35,
+        adxPeriod: 14,
+        adxThreshold: 25,
+        atrThreshold: 0.6,
         duration: 30,
         durationUnit: 'm',
         maxTradesPerDay: 5,
         volatilityClass: 'high',
-        tickSubscription: 'R_100'
+        tickSubscription: 'R_100',
+        multiplier: 400
     },
     'BOOM1000': {
         name: 'Boom 1000 Index',
@@ -143,11 +164,15 @@ const ASSET_CONFIGS = {
         emaLong: 15,
         rsiPeriod: 7,
         rsiThreshold: 25,
+        adxPeriod: 14,
+        adxThreshold: 25,
+        atrThreshold: 0.6,
         duration: 5,
         durationUnit: 'm',
         maxTradesPerDay: 5,
         volatilityClass: 'extreme',
-        tickSubscription: 'BOOM1000'
+        tickSubscription: 'BOOM1000',
+        multiplier: 200
     },
     'CRASH1000': {
         name: 'Crash 1000 Index',
@@ -156,11 +181,15 @@ const ASSET_CONFIGS = {
         emaLong: 15,
         rsiPeriod: 7,
         rsiThreshold: 25,
+        adxPeriod: 14,
+        adxThreshold: 25,
+        atrThreshold: 0.6,
         duration: 5,
         durationUnit: 'm',
         maxTradesPerDay: 5,
         volatilityClass: 'extreme',
-        tickSubscription: 'CRASH1000'
+        tickSubscription: 'CRASH1000',
+        multiplier: 200
     },
     // Major Forex
     // 'frxEURUSD': {
@@ -280,7 +309,9 @@ Object.keys(ASSET_CONFIGS).forEach(symbol => {
         score: 0,
         lastSignal: null,
         predictability: 0.5,
-        spreadCost: 0
+        spreadCost: 0,
+        wpr: -50,
+        wprHistory: []
     };
 });
 
@@ -517,21 +548,22 @@ class TechnicalIndicators {
     }
 
     /**
-     * Detect EMA crossover
+     * Calculate Williams %R
      */
-    static detectCrossover(prevEmaShort, prevEmaLong, currEmaShort, currEmaLong) {
-        if (prevEmaShort === null || prevEmaLong === null) return 'none';
+    static calculateWPR(highs, lows, closes, period = 80) {
+        if (closes.length < period) return -50;
 
-        const wasBelowOrEqual = prevEmaShort <= prevEmaLong;
-        const isAbove = currEmaShort > currEmaLong;
+        const currentClose = closes[closes.length - 1];
+        const recentHighs = highs.slice(-period);
+        const recentLows = lows.slice(-period);
 
-        const wasAboveOrEqual = prevEmaShort >= prevEmaLong;
-        const isBelow = currEmaShort < currEmaLong;
+        const highestHigh = Math.max(...recentHighs);
+        const lowestLow = Math.min(...recentLows);
 
-        if (wasBelowOrEqual && isAbove) return 'bullish';
-        if (wasAboveOrEqual && isBelow) return 'bearish';
+        if (highestHigh === lowestLow) return -50;
 
-        return 'none';
+        const wpr = ((highestHigh - currentClose) / (highestHigh - lowestLow)) * -100;
+        return wpr;
     }
 }
 
@@ -689,28 +721,27 @@ class PortfolioManager {
         const assetState = state.assets[symbol];
         const availableCapital = state.capital - state.lockedProfit;
 
-        // Total risk per cycle
+        // Base Stake Calculation
         const totalRisk = availableCapital * CONFIG.MAX_RISK_PER_TRADE;
+        let stake = totalRisk;
+        // Simple allocation strategy for now, can be sophisticated later
+        // const allocationRatio = rank === 0 ? 0.6 : 0.4;
+        // stake = totalRisk * allocationRatio;
 
-        // Split based on ranking (60/40 for top 2)
-        const allocationRatio = rank === 0 ? 0.6 : 0.4;
+        // Use simpler fixed allocation for stability with Martingale
+        stake = Math.max(1, totalRisk * 0.5);
 
-        // Kelly Criterion adjustment
-        const winProb = assetState.winRate;
-        const lossProb = 1 - winProb;
-        const winLossRatio = 1.8; // Typical payout ratio
-
-        let kellyFraction = (winProb * winLossRatio - lossProb) / winLossRatio;
-        kellyFraction = Math.max(0, Math.min(kellyFraction, 0.25)); // Cap at 25%
-
-        // Apply Kelly to allocated amount
-        let stake = totalRisk * allocationRatio * (1 + kellyFraction);
+        // Apply Martingale
+        if (assetState.consecutiveLosses >= CONFIG.LOSSES_BEFORE_MARTINGALE) {
+            stake = stake * Math.pow(CONFIG.MARTINGALE_MULTIPLIER, assetState.consecutiveLosses);
+            console.log(`🔥 Martingale Applied for ${symbol}: ${assetState.consecutiveLosses} losses -> Stake $${stake.toFixed(2)}`);
+        }
 
         // Ensure minimum stake
         stake = Math.max(stake, 1);
 
-        // Cap at 5% of capital for safety
-        stake = Math.min(stake, availableCapital * 0.05);
+        // Cap at 20% of capital for safety (Martingale protection)
+        stake = Math.min(stake, availableCapital * 0.20);
 
         return parseFloat(stake.toFixed(2));
     }
@@ -733,10 +764,9 @@ class PortfolioManager {
      */
     static checkSyntheticCorrelation(symbol) {
         const syntheticPairs = [
-            ['R_10', 'R_25'],
-            ['R_25', 'R_50'],
-            ['R_50', 'R_75'],
-            ['R_75', 'R_100'],
+            ['R_10', 'R_100'],
+            ['R_25', 'R_75'],
+            ['R_75', 'R_25'],
             ['R_100', 'R_10'],
         ];
 
@@ -1133,43 +1163,110 @@ class ConnectionManager {
         const prevEmaLong = assetState.emaLong;
 
         // Calculate indicators
-        assetState.emaShort = TechnicalIndicators.calculateEMA(closes, config.emaShort);
-        assetState.emaLong = TechnicalIndicators.calculateEMA(closes, config.emaLong);
-        assetState.rsi = TechnicalIndicators.calculateRSI(closes, config.rsiPeriod);
+        assetState.wpr = TechnicalIndicators.calculateWPR(highs, lows, closes, 80); // WPR Period 80
+        assetState.rsi = TechnicalIndicators.calculateRSI(closes, config.rsiPeriod);//RSI Period 14
         assetState.adx = TechnicalIndicators.calculateADX(highs, lows, closes);
         assetState.atr = TechnicalIndicators.calculateATR(highs, lows, closes);
 
-        // Check for signals
-        if (prevEmaShort && prevEmaLong) {
-            const crossover = TechnicalIndicators.detectCrossover(
-                prevEmaShort, prevEmaLong,
-                assetState.emaShort, assetState.emaLong
-            );
+        // Update WPR History
+        assetState.wprHistory.push(assetState.wpr);
+        if (assetState.wprHistory.length > 3) {
+            assetState.wprHistory.shift();
+        }
 
-            // console.log('Cross-Over Indicator', crossover)
+        // Need at least 3 data points for breakout detection
+        if (assetState.wprHistory.length < 3) return;
 
-            if (crossover !== 'none') {
-                this.processSignal(symbol, crossover);
-            }
+        const wprPrev = assetState.wprHistory[assetState.wprHistory.length - 2];   // Index 1 (previous)
+        const wprCurr = assetState.wprHistory[assetState.wprHistory.length - 1];   // Index 2 (current)
+
+        let signal = 'none';
+
+        // Buy Signal: Breakout upward through -20 (Prev <= -20, Current > -20)
+        // Note: kWilliamEA uses: (wprValues[1] > -20 && wprValues[2] <= -20) which interprets index 1 as current and 2 as previous?
+        // Let's stick to standard chronological: Prev was below -20, Current is above -20.
+        // Wait, kWilliamEA `ArraySetAsSeries(true)` means index 0 is newest.
+        // EA: buySignal = (wprValues[1] > -20 && wprValues[2] <= -20);
+        // wprValues[0] is current (forming), [1] is last closed bar, [2] is bar before that.
+        // So checking if the *previous completed bar* broke out relative to the one before it.
+        // We are processing on every tick/candle update. Let's use the last two *closed* values if possible, or just current live values.
+        // Since we update using `closes` array which includes the latest candle, let's treat the latest calc as "current".
+
+        // Buy: Cross above -20 from below
+        if (wprPrev <= -20 && wprCurr > -20) {
+            signal = 'CALL';
+        }
+        // Sell: Cross below -80 from above
+        else if (wprPrev >= -80 && wprCurr < -80) {
+            signal = 'PUT';
+        }
+
+        if (signal !== 'none') {
+            this.processSignal(symbol, signal);
         }
     }
 
-    processSignal(symbol, crossover) {
+    processSignal(symbol, direction) {
         const assetState = state.assets[symbol];
-        const config = ASSET_CONFIGS[symbol];
 
-        const direction = crossover === 'bullish' ? 'CALL' : 'PUT';
+        // REVERSE LOGIC: Close opposite positions
+        const oppositeDir = direction === 'CALL' ? 'PUT' : 'CALL';
 
-        // Check RSI confirmation
-        let rsiConfirmed = false;
-        if (direction === 'CALL' && assetState.rsi < config.rsiThreshold) {
-            rsiConfirmed = true;
-        } else if (direction === 'PUT' && assetState.rsi > (100 - config.rsiThreshold)) {
-            rsiConfirmed = true;
+        const activeOpposite = state.portfolio.activePositions.filter(p => p.symbol === symbol && p.direction === oppositeDir);
+
+        if (activeOpposite.length > 0) {
+            console.log(`🔄 Reversing trade for ${symbol}: Closing ${activeOpposite.length} ${oppositeDir} positions`);
+
+            // Closing logic for Multipliers (Sell the contract)
+            activeOpposite.forEach(position => {
+                if (position.contractId) {
+                    bot.connection.send({
+                        sell: position.contractId,
+                        price: 0 // Sell at market price
+                    });
+                    LOGGER.trade(`Selling opposite position ${position.contractId} on ${symbol}`);
+                }
+            });
         }
 
-        if (!rsiConfirmed) {
-            console.log(`⚠️  ${symbol} ${direction} signal rejected: RSI not confirmed (${assetState.rsi.toFixed(1)})`);
+        // Check RSI confirmation
+        const config = ASSET_CONFIGS[symbol];
+        let rsiConfirmed = false;
+        // if (direction === 'CALL' && assetState.rsi < config.rsiThreshold) {
+        //     rsiConfirmed = true;
+        // } else if (direction === 'PUT' && assetState.rsi > (100 - config.rsiThreshold)) {
+        //     rsiConfirmed = true;
+        // }
+
+        // if (!rsiConfirmed) {
+        //     console.log(`⚠️  ${symbol} ${direction} signal rejected: RSI not confirmed (${assetState.rsi.toFixed(1)}|${config.rsiThreshold})`);
+        //     return;
+        // }
+
+
+        //Check for ADX confirmation
+        let adxConfirmed = false;
+        if (direction === 'CALL' && assetState.adx > config.adxThreshold) {
+            adxConfirmed = true;
+        } else if (direction === 'PUT' && assetState.adx < (100 - config.adxThreshold)) {
+            adxConfirmed = true;
+        }
+
+        if (!adxConfirmed) {
+            console.log(`⚠️  ${symbol} ${direction} signal rejected: ADX not confirmed (${assetState.adx.toFixed(1)})`);
+            return;
+        }
+
+        //Check for ATR confirmation
+        let atrConfirmed = false;
+        if (direction === 'CALL' && assetState.atr < config.atrThreshold) {
+            atrConfirmed = true;
+        } else if (direction === 'PUT' && assetState.atr > (100 - config.atrThreshold)) {
+            atrConfirmed = true;
+        }
+
+        if (!atrConfirmed) {
+            console.log(`⚠️  ${symbol} ${direction} signal rejected: ATR not confirmed (${assetState.atr.toFixed(1)})`);
             return;
         }
 
@@ -1177,7 +1274,7 @@ class ConnectionManager {
         const confidence = AIConfidenceModel.calculateConfidence(symbol, direction);
 
         if (confidence < CONFIG.MIN_CONFIDENCE_SCORE) {
-            console.log(`⚠️  ${symbol} ${direction} signal rejected: Low confidence (${(confidence * 100).toFixed(1)}%)`);
+            console.log(`⚠️  ${symbol} ${direction} signal rejected: Low confidence (${(confidence * 100).toFixed(1)}% | ${CONFIG.MIN_CONFIDENCE_SCORE})`);
             return;
         }
 
@@ -1188,11 +1285,11 @@ class ConnectionManager {
             timestamp: Date.now()
         };
 
-        console.log(`\n📈 Signal: ${symbol} ${direction}`);
-        console.log(`   RSI: ${assetState.rsi.toFixed(1)}, ADX: ${assetState.adx.toFixed(1)}, Confidence: ${(confidence * 100).toFixed(1)}%`);
+        console.log(`\n📈 WPR Signal: ${symbol} ${direction}`);
+        console.log(`   WPR Prev: ${assetState.wprHistory[assetState.wprHistory.length - 2].toFixed(2)} -> Curr: ${assetState.wprHistory[assetState.wprHistory.length - 1].toFixed(2)}`);
 
         // Try to execute trade
-        LOGGER.signal(`${symbol} ${direction} signal detected (Confidence: ${(confidence * 100).toFixed(1)}%)`);
+        LOGGER.signal(`${symbol} ${direction} WPR Breakout (Confidence: 100%)`);
         bot.executeTrade(symbol, direction, confidence);
     }
 
@@ -1208,7 +1305,7 @@ class ConnectionManager {
 
         // Find position by req_id
         const reqId = response.echo_req.req_id;
-        const position = state.portfolio.activePositions.find(p => p.reqId === reqId);
+        const position = state.portfolio.activePositions.find(p => p.reqId == reqId);
 
         if (position) {
             position.contractId = contract.contract_id;
@@ -1243,9 +1340,14 @@ class ConnectionManager {
 
         const contract = response.proposal_open_contract;
 
-        // Find the position
+        // Debug: Log contract updates for R_75
+        if (contract.underlying === 'R_75') {
+            // console.log(`[DEBUG] R_75 Update: ID=${contract.contract_id} Profit=${contract.profit} Sold=${contract.is_sold}`);
+        }
+
+        // Find the position (using loose equality for IDs)
         const posIndex = state.portfolio.activePositions.findIndex(
-            p => p.contractId === contract.contract_id
+            p => p.contractId == contract.contract_id
         );
 
         if (contract.is_sold || contract.is_expired) {
@@ -1439,6 +1541,15 @@ class DerivMultiAssetBot {
             return;
         }
 
+        // Check for existing same-direction trade
+        const hasExisting = state.portfolio.activePositions.some(
+            p => p.symbol === symbol && p.direction === direction
+        );
+        if (hasExisting) {
+            console.log(`⚠️  Trade blocked: Already have an active ${direction} on ${symbol}`);
+            return;
+        }
+
         const config = ASSET_CONFIGS[symbol];
         const assetState = state.assets[symbol];
 
@@ -1461,7 +1572,7 @@ class DerivMultiAssetBot {
         console.log(`   Ranking: #${rank + 1}`);
 
         // Send trade request
-        const contractType = direction === 'CALL' ? 'CALL' : 'PUT';
+        const contractType = direction === 'CALL' ? 'MULTUP' : 'MULTDOWN';
 
         const reqId = this.connection.send({
             buy: 1,
@@ -1472,8 +1583,10 @@ class DerivMultiAssetBot {
                 symbol: symbol,
                 currency: 'USD',
                 amount: stake,
-                duration: config.duration,
-                duration_unit: config.durationUnit,
+                multiplier: config.multiplier || 100, // Use Configured Multiplier
+                // Multipliers do not have 'duration'. They run until closed or stop-out.
+                // duration: config.duration,
+                // duration_unit: config.durationUnit,
                 basis: 'stake'
             }
         });
@@ -1570,7 +1683,7 @@ class DerivMultiAssetBot {
 
 class Dashboard {
     static display() {
-        console.clear();
+        // console.clear();
         console.log('╔══════════════════════════════════════════════════════════════╗');
         console.log('║         ClaudeINV DERIV MULTI-ASSET BOT - LIVE DASHBOARD      ║');
         console.log('╠══════════════════════════════════════════════════════════════╣');
@@ -1588,9 +1701,10 @@ class Dashboard {
             console.log('║ Symbol      | Dir  | Stake  | Profit | Time                 ║');
             console.log('║-------------|------|--------|--------|----------------------║');
             status.activePositions.forEach(pos => {
-                const profitColor = pos.profit >= 0 ? '\x1b[32m' : '\x1b[31m';
+                const profit = pos.profit || 0;
+                const profitColor = profit >= 0 ? '\x1b[32m' : '\x1b[31m';
                 const resetColor = '\x1b[0m';
-                const line = `║ ${pos.symbol.padEnd(11)} | ${pos.direction.padEnd(4)} | $${pos.stake.toFixed(2).padEnd(6)} | ${profitColor}${pos.profit.toFixed(2).padEnd(6)}${resetColor} | ${pos.duration}s`.padEnd(73) + '║';
+                const line = `║ ${pos.symbol.padEnd(11)} | ${pos.direction.padEnd(4)} | $${pos.stake.toFixed(2).padEnd(6)} | ${profitColor}${profit.toFixed(2).padEnd(6)}${resetColor} | ${pos.duration}s`.padEnd(73) + '║';
                 console.log(line);
             });
             console.log('╠══════════════════════════════════════════════════════════════╣');
