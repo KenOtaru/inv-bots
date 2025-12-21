@@ -1623,10 +1623,10 @@ class DerivMultiAssetBot {
 
         // Check asset-specific limits
         const assetCheck = RiskManager.canAssetTrade(symbol, direction);
-        if (!assetCheck.allowed) {
-            console.log(`⚠️  Trade blocked: ${assetCheck.reason}`);
-            return;
-        }
+        // if (!assetCheck.allowed) {
+        //     console.log(`⚠️  Trade blocked: ${assetCheck.reason}`);
+        //     return;
+        // }
 
         // Check synthetic correlation
         if (PortfolioManager.checkSyntheticCorrelation(symbol)) {

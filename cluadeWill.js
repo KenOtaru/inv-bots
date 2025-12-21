@@ -1,14 +1,31 @@
 #!/usr/bin/env node
 /**
- * Deriv Multi-Asset Trading Bot
- * Advanced AI-powered portfolio trading with dynamic asset selection
+ * Deriv Multi-Asset Trading Bot v4.1
+ * Uses MULTIPLIERS for instant close/reverse (MT5-style trading)
  * 
- * Dependencies: npm install ws mathjs @tensorflow/tfjs-node
- * Usage: API_TOKEN=your_token node deriv-multi-asset-bot.js
+ * MULTIPLIERS ADVANTAGES:
+ * - Can be closed anytime (no fixed expiry)
+ * - Position flipping supported (close & reverse)
+ * - Profit/loss based on price movement × multiplier
+ * - Stop Loss and Take Profit built-in
+ * 
+ * SUPPORTED ASSETS:
+ * - Synthetic Indices: Volatility 10-100, Boom/Crash 1000, Step Index, Jump Indices
+ * - Forex Pairs: EUR/USD, GBP/USD, AUD/USD, USD/JPY (CFD-style multipliers)
+ * - Crypto: BTC/USD, ETH/USD
+ * - Commodities: Gold, Silver, Oil
+ * 
+ * STRATEGY: WPR Breakout (from MT5 kWilliam EA)
+ * - BUY: WPR crosses above -20
+ * - SELL: WPR crosses below -80
+ * - Martingale stake management
+ * - Accumulated loss recovery
+ * 
+ * Dependencies: npm install ws mathjs nodemailer
+ * Usage: API_TOKEN=your_token node deriv-multiplier-bot.js
  */
 
 const WebSocket = require('ws');
-const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 const math = require('mathjs');
 const nodemailer = require('nodemailer');
 
@@ -22,6 +39,7 @@ const LOGGER = {
     signal: (msg) => console.log(`\x1b[36m[SIGNAL] ${new Date().toLocaleTimeString()} - ${msg}\x1b[0m`),
     warn: (msg) => console.warn(`\x1b[33m[WARN] ${new Date().toLocaleTimeString()} - ${msg}\x1b[0m`),
     error: (msg) => console.error(`\x1b[31m[ERROR] ${new Date().toLocaleTimeString()} - ${msg}\x1b[0m`),
+    debug: (msg) => { if (CONFIG.DEBUG_MODE) console.log(`\x1b[90m[DEBUG] ${new Date().toLocaleTimeString()} - ${msg}\x1b[0m`); },
     dashboard: (msg) => console.log(msg)
 };
 
@@ -30,643 +48,1153 @@ const LOGGER = {
 // ============================================
 
 const CONFIG = {
-    API_TOKEN: 'DMylfkyce6VyZt7',
-    APP_ID: '1089',
+    // API Settings
+    API_TOKEN: process.env.API_TOKEN || 'DMylfkyce6VyZt7',
+    APP_ID: process.env.APP_ID || '1089',
     WS_URL: 'wss://ws.derivws.com/websockets/v3',
 
-    // Portfolio Settings
-    INITIAL_CAPITAL: 500,
-    MAX_RISK_PER_TRADE: 0.01,           // 2.5% per trade
-    DAILY_LOSS_LIMIT: 0.25,              // 5% daily loss limit
-    DAILY_PROFIT_TARGET: 0.25,          // 2.5% daily profit target
-    PROFIT_LOCK_RATIO: 0.05,              // Lock 50% of gains
-    MAX_OPEN_POSITIONS: 5,
-    TOP_ASSETS_TO_TRADE: 2, // Increased as requested earlier or implicitly by user preference
+    // Capital Settings
+    INITIAL_CAPITAL: parseFloat(process.env.CAPITAL) || 500,
+    // Note: Initial stake should be >= highest minStake of active assets
+    // Synthetics: $0.35-$1.00, Forex/Crypto/Commodities: $5.00
+    INITIAL_STAKE: parseFloat(process.env.STAKE) || 1.00,
+
+    // Session Targets
+    SESSION_PROFIT_TARGET: parseFloat(process.env.PROFIT_TARGET) || 50,
+    SESSION_STOP_LOSS: parseFloat(process.env.STOP_LOSS) || -50,
 
     // Martingale Settings
-    MARTINGALE_MULTIPLIER: 2.0,
-    LOSSES_BEFORE_MARTINGALE: 1,
+    MARTINGALE_MULTIPLIER: parseFloat(process.env.MARTINGALE) || 2.0,
+    LOSSES_BEFORE_MARTINGALE: parseInt(process.env.N_LOSSES) || 1,
+    MAX_MARTINGALE_LEVEL: 5,
+
+    // Multiplier Settings
+    USE_STOP_LOSS: true,
+    USE_TAKE_PROFIT: true,
+    STOP_LOSS_PERCENT: 5,                 // 5% stop loss on stake
+    TAKE_PROFIT_PERCENT: 10,              // 10% take profit on stake
+
+    // Trade Settings
+    MAX_TRADES_PER_ASSET: 200,
+    MAX_OPEN_POSITIONS: 10,
+    TOP_ASSETS_TO_TRADE: 3,
+
+    // WPR Settings
+    WPR_PERIOD: 80,
+    WPR_OVERBOUGHT: -20,
+    WPR_OVERSOLD: -80,
 
     // Timing
-    ASSET_SCORING_INTERVAL: 1 * 60 * 1000,    // 1 minutes
-    REBALANCE_INTERVAL: 2 * 60 * 60 * 1000,   // 2 hours
-    COOLDOWN_PERIOD: 2 * 60 * 60 * 1000,      // 2 hours after 3 losses
-    BLACKLIST_PERIOD: 24 * 60 * 60 * 1000,    // 24 hours
+    ASSET_SCORING_INTERVAL: 5 * 60 * 1000,
+    COOLDOWN_AFTER_SESSION_END: 30 * 60 * 1000,
 
-    // AI Settings
-    MIN_CONFIDENCE_SCORE: 0.8,
-    MIN_WIN_RATE_THRESHOLD: 0.5,
+    // Risk Settings
+    DAILY_LOSS_LIMIT: 0.20,
+    MIN_WIN_RATE_THRESHOLD: 0.40,
     WIN_RATE_LOOKBACK: 20,
+    BLACKLIST_PERIOD: 24 * 60 * 60 * 1000,
+
+    // Performance
+    MAX_TICKS_STORED: 100,
+    MAX_CANDLES_STORED: 150,
+    DASHBOARD_UPDATE_INTERVAL: 10000,
+
+    // Debug
+    DEBUG_MODE: process.env.DEBUG === 'true' || false,
 
     // Email Settings
+    EMAIL_ENABLED: process.env.EMAIL_ENABLED === 'true' || false,
     EMAIL_CONFIG: {
         service: 'gmail',
         auth: {
-            user: 'kenzkdp2@gmail.com',
-            pass: 'jfjhtmussgfpbgpk'
+            user: process.env.EMAIL_USER || '',
+            pass: process.env.EMAIL_PASS || ''
         }
     },
-    EMAIL_RECIPIENT: 'kenotaru@gmail.com'
+    EMAIL_RECIPIENT: process.env.EMAIL_RECIPIENT || ''
 };
 
 // ============================================
-// ASSET UNIVERSE CONFIGURATION
+// COMPREHENSIVE ASSET CONFIGURATION
 // ============================================
 
+/**
+ * MULTIPLIER AVAILABILITY BY ASSET TYPE:
+ * 
+ * Synthetic Indices:
+ * - Volatility Indices (R_10, R_25, R_50, R_75, R_100): x10-x1000
+ * - 1-Second Volatility (1HZ10V, etc.): x10-x1000
+ * - Jump Indices (JD10, JD25, etc.): x10-x200
+ * - Boom/Crash 1000: x10-x300
+ * - Step Index: x10-x500
+ * 
+ * Forex (Deriv MT5/Multipliers):
+ * - Major Pairs: x10-x1000 (varies by pair)
+ * 
+ * Crypto:
+ * - BTC, ETH, LTC: x10-x100
+ * 
+ * Commodities:
+ * - Gold, Silver: x10-x500
+ * - Oil: x10-x100
+ */
+
+/**
+ * CORRECTED MULTIPLIER VALUES FROM DERIV API
+ * 
+ * Based on actual API responses:
+ * - R_10: [20, 40, 60, 80, 100] - min stake varies
+ * - R_25: [20, 40, 60, 80, 100] - min stake varies
+ * - R_50: [80, 200, 400, 600, 800] - min stake $0.50+
+ * - R_75: [20, 40, 60, 80, 100, 200, 300, 400, 500] - min stake $1+
+ * - R_100: [20, 40, 60, 80, 100, 200, 300, 400, 500] - min stake $1+
+ * - 1HZ Series: Similar to R_ series
+ * - Crypto: [50, 100, 150, 200, 250, 300] - min stake $5+
+ * - Forex: Various - min stake $1+
+ * 
+ * IMPORTANT: Minimum stake varies by multiplier level!
+ * Higher multiplier = Higher minimum stake typically
+ */
+
 const ASSET_CONFIGS = {
-    // Synthetic Indices
+    // ==========================================
+    // SYNTHETIC INDICES - Volatility (Standard)
+    // ==========================================
     'R_10': {
         name: 'Volatility 10 Index',
         category: 'synthetic',
-        emaShort: 8,
-        emaLong: 21,
-        rsiPeriod: 14,
-        rsiThreshold: 30,
-        adxPeriod: 14,
-        adxThreshold: 25,
-        atrThreshold: 0.6,
-        duration: 15,
-        durationUnit: 'm',
-        maxTradesPerDay: 10,
+        subcategory: 'volatility',
+        contractType: 'multiplier',
+        multipliers: [400, 1000, 2000, 3000, 4000],
+        defaultMultiplier: 400,           // Use lowest for minimum stake
+        wprPeriod: 80,
+        maxTradesPerDay: 12,
         volatilityClass: 'low',
-        tickSubscription: 'R_10'
+        minStake: 1.00,                  // Actual minimum
+        maxStake: 2000,
+        tickSubscription: 'R_10',
+        tradingHours: '24/7'
     },
     'R_25': {
         name: 'Volatility 25 Index',
         category: 'synthetic',
-        emaShort: 10,
-        emaLong: 24,
-        rsiPeriod: 14,
-        rsiThreshold: 32,
-        adxPeriod: 14,
-        adxThreshold: 25,
-        atrThreshold: 0.6,
-        duration: 20,
-        durationUnit: 'm',
-        maxTradesPerDay: 10,
+        subcategory: 'volatility',
+        contractType: 'multiplier',
+        multipliers: [160, 400, 800, 1200, 1600],
+        defaultMultiplier: 160,
+        wprPeriod: 80,
+        maxTradesPerDay: 12,
         volatilityClass: 'medium-low',
+        minStake: 1.00,
+        maxStake: 2000,
         tickSubscription: 'R_25',
-        multiplier: 400
+        tradingHours: '24/7'
     },
     'R_50': {
         name: 'Volatility 50 Index',
         category: 'synthetic',
-        emaShort: 10,
-        emaLong: 24,
-        rsiPeriod: 14,
-        rsiThreshold: 32,
-        adxPeriod: 14,
-        adxThreshold: 25,
-        atrThreshold: 0.6,
-        duration: 20,
-        durationUnit: 'm',
-        maxTradesPerDay: 10,
-        volatilityClass: 'medium-low',
-        tickSubscription: 'R_50'
+        subcategory: 'volatility',
+        contractType: 'multiplier',
+        multipliers: [80, 200, 400, 600, 800],  // CORRECTED from API error
+        defaultMultiplier: 80,                   // Use lowest
+        wprPeriod: 80,
+        maxTradesPerDay: 12,
+        volatilityClass: 'medium',
+        minStake: 1.00,
+        maxStake: 2000,
+        tickSubscription: 'R_50',
+        tradingHours: '24/7'
     },
     'R_75': {
         name: 'Volatility 75 Index',
         category: 'synthetic',
-        emaShort: 12,
-        emaLong: 30,
-        rsiPeriod: 21,
-        rsiThreshold: 35,
-        duration: 30,
-        durationUnit: 'm',
-        maxTradesPerDay: 10,
+        subcategory: 'volatility',
+        contractType: 'multiplier',
+        multipliers: [50, 100, 200, 300, 500],
+        defaultMultiplier: 50,                   // Lowest for min stake
+        wprPeriod: 80,
+        maxTradesPerDay: 12,
         volatilityClass: 'high',
-        tickSubscription: 'R_75'
+        minStake: 1.00,                          // Higher min for R_75
+        maxStake: 3000,
+        tickSubscription: 'R_75',
+        tradingHours: '24/7'
     },
     'R_100': {
         name: 'Volatility 100 Index',
         category: 'synthetic',
-        emaShort: 12,
-        emaLong: 30,
-        rsiPeriod: 21,
-        rsiThreshold: 35,
-        adxPeriod: 14,
-        adxThreshold: 25,
-        atrThreshold: 0.6,
-        duration: 30,
-        durationUnit: 'm',
+        subcategory: 'volatility',
+        contractType: 'multiplier',
+        multipliers: [40, 100, 200, 300, 400],
+        defaultMultiplier: 40,
+        wprPeriod: 80,
+        maxTradesPerDay: 12,
+        volatilityClass: 'high',
+        minStake: 1.00,
+        maxStake: 3000,
+        tickSubscription: 'R_100',
+        tradingHours: '24/7'
+    },
+
+    // ==========================================
+    // SYNTHETIC INDICES - 1-Second Volatility
+    // ==========================================
+    '1HZ10V': {
+        name: 'Volatility 10 (1s) Index',
+        category: 'synthetic',
+        subcategory: 'volatility_1s',
+        contractType: 'multiplier',
+        multipliers: [20, 40, 60, 80, 100, 200, 300],
+        defaultMultiplier: 20,
+        wprPeriod: 10,
+        maxTradesPerDay: 15,
+        volatilityClass: 'low',
+        minStake: 0.35,
+        maxStake: 1000,
+        tickSubscription: '1HZ10V',
+        tradingHours: '24/7'
+    },
+    '1HZ25V': {
+        name: 'Volatility 25 (1s) Index',
+        category: 'synthetic',
+        subcategory: 'volatility_1s',
+        contractType: 'multiplier',
+        multipliers: [20, 40, 60, 80, 100, 200, 300],
+        defaultMultiplier: 20,
+        wprPeriod: 10,
+        maxTradesPerDay: 15,
+        volatilityClass: 'medium-low',
+        minStake: 0.35,
+        maxStake: 1000,
+        tickSubscription: '1HZ25V',
+        tradingHours: '24/7'
+    },
+    '1HZ50V': {
+        name: 'Volatility 50 (1s) Index',
+        category: 'synthetic',
+        subcategory: 'volatility_1s',
+        contractType: 'multiplier',
+        multipliers: [100, 200, 300, 400, 500, 600, 800, 1000],
+        defaultMultiplier: 100,
+        wprPeriod: 10,
+        maxTradesPerDay: 12,
+        volatilityClass: 'medium',
+        minStake: 0.50,
+        maxStake: 1000,
+        tickSubscription: '1HZ50V',
+        tradingHours: '24/7'
+    },
+    '1HZ75V': {
+        name: 'Volatility 75 (1s) Index',
+        category: 'synthetic',
+        subcategory: 'volatility_1s',
+        contractType: 'multiplier',
+        multipliers: [20, 40, 60, 80, 100, 200, 300, 400, 500, 1000],
+        defaultMultiplier: 20,
+        wprPeriod: 80,
         maxTradesPerDay: 10,
         volatilityClass: 'high',
-        tickSubscription: 'R_100'
+        minStake: 0.50,
+        maxStake: 1500,
+        tickSubscription: '1HZ75V',
+        tradingHours: '24/7'
     },
-    // 'BOOM1000': {
-    //     name: 'Boom 1000 Index',
-    //     category: 'synthetic',
-    //     emaShort: 5,
-    //     emaLong: 15,
-    //     rsiPeriod: 7,
-    //     rsiThreshold: 25,
-    //     adxPeriod: 14,
-    //     adxThreshold: 25,
-    //     atrThreshold: 0.6,
-    //     duration: 5,
-    //     durationUnit: 'm',
-    //     maxTradesPerDay: 10,
-    //     volatilityClass: 'extreme',
-    //     tickSubscription: 'BOOM1000'
-    // },
-    // 'CRASH1000': {
-    //     name: 'Crash 1000 Index',
-    //     category: 'synthetic',
-    //     emaShort: 5,
-    //     emaLong: 15,
-    //     rsiPeriod: 7,
-    //     rsiThreshold: 25,
-    //     adxPeriod: 14,
-    //     adxThreshold: 25,
-    //     atrThreshold: 0.6,
-    //     duration: 5,
-    //     durationUnit: 'm',
-    //     maxTradesPerDay: 10,
-    //     volatilityClass: 'extreme',
-    //     tickSubscription: 'CRASH1000'
-    // },
-    // Cryptocurrencies
-    // 'cryBTCUSD': {
-    //     name: 'Bitcoin',
-    //     category: 'crypto',
-    //     emaShort: 10,
-    //     emaLong: 25,
-    //     rsiPeriod: 14,
-    //     rsiThreshold: 30,
-    //     adxPeriod: 14,
-    //     adxThreshold: 25,
-    //     atrThreshold: 0.6,
-    //     duration: 1,
-    //     durationUnit: 'h',
-    //     maxTradesPerDay: 10,
-    //     volatilityClass: 'high',
-    //     tickSubscription: 'cryBTCUSD'
-    // },
-    // 'cryETHUSD': {
-    //     name: 'Ethereum',
-    //     category: 'crypto',
-    //     emaShort: 10,
-    //     emaLong: 25,
-    //     rsiPeriod: 14,
-    //     rsiThreshold: 30,
-    //     adxPeriod: 14,
-    //     adxThreshold: 25,
-    //     atrThreshold: 0.6,
-    //     duration: 1,
-    //     durationUnit: 'h',
-    //     maxTradesPerDay: 10,
-    //     volatilityClass: 'high',
-    //     tickSubscription: 'cryETHUSD'
-    // },
-    // Major Forex
-    // 'frxEURUSD': {
-    //     name: 'EUR/USD',
-    //     category: 'forex',
-    //     emaShort: 10,
-    //     emaLong: 25,
-    //     rsiPeriod: 14,
-    //     rsiThreshold: 30,
-    //     duration: 4,
-    //     durationUnit: 'h',
-    //     maxTradesPerDay: 1,
-    //     volatilityClass: 'medium',
-    //     tickSubscription: 'frxEURUSD',
-    //     correlatedWith: ['frxGBPUSD']
-    // },
-    // 'frxGBPUSD': {
-    //     name: 'GBP/USD',
-    //     category: 'forex',
-    //     emaShort: 10,
-    //     emaLong: 25,
-    //     rsiPeriod: 14,
-    //     rsiThreshold: 30,
-    //     duration: 4,
-    //     durationUnit: 'h',
-    //     maxTradesPerDay: 1,
-    //     volatilityClass: 'medium',
-    //     tickSubscription: 'frxGBPUSD',
-    //     correlatedWith: ['frxEURUSD']
-    // },
-    // 'frxUSDJPY': {
-    //     name: 'USD/JPY',
-    //     category: 'forex',
-    //     emaShort: 10,
-    //     emaLong: 25,
-    //     rsiPeriod: 14,
-    //     rsiThreshold: 30,
-    //     duration: 4,
-    //     durationUnit: 'h',
-    //     maxTradesPerDay: 1,
-    //     volatilityClass: 'medium',
-    //     tickSubscription: 'frxUSDJPY'
-    // },
-    // Commodities
-    // 'WLDOIL': {
-    //     name: 'Oil/USD',
-    //     category: 'commodity',
-    //     emaShort: 15,
-    //     emaLong: 35,
-    //     rsiPeriod: 14,
-    //     rsiThreshold: 30,
-    //     duration: 1,
-    //     durationUnit: 'h',
-    //     maxTradesPerDay: 2,
-    //     volatilityClass: 'high',
-    //     tickSubscription: 'WLDOIL'
-    // },
-    // 'frxXAUUSD': {
-    //     name: 'Gold/USD',
-    //     category: 'commodity',
-    //     emaShort: 15,
-    //     emaLong: 35,
-    //     rsiPeriod: 14,
-    //     rsiThreshold: 30,
-    //     duration: 1,
-    //     durationUnit: 'h',
-    //     maxTradesPerDay: 2,
-    //     volatilityClass: 'high',
-    //     tickSubscription: 'frxXAUUSD'
-    // }
+    '1HZ100V': {
+        name: 'Volatility 100 (1s) Index',
+        category: 'synthetic',
+        subcategory: 'volatility_1s',
+        contractType: 'multiplier',
+        multipliers: [20, 40, 60, 80, 100, 200, 300, 400, 500, 1000],
+        defaultMultiplier: 20,
+        wprPeriod: 80,
+        maxTradesPerDay: 10,
+        volatilityClass: 'high',
+        minStake: 0.50,
+        maxStake: 1500,
+        tickSubscription: '1HZ100V',
+        tradingHours: '24/7'
+    },
+
+    // ==========================================
+    // SYNTHETIC INDICES - Boom/Crash 1000
+    // ==========================================
+    'BOOM1000': {
+        name: 'Boom 1000 Index',
+        category: 'synthetic',
+        subcategory: 'boom_crash',
+        contractType: 'multiplier',
+        multipliers: [20, 40, 60, 80, 100, 150, 200, 250, 300],
+        defaultMultiplier: 20,
+        wprPeriod: 7,
+        maxTradesPerDay: 15,
+        volatilityClass: 'extreme',
+        minStake: 0.35,
+        maxStake: 500,
+        tickSubscription: 'BOOM1000',
+        onlyDirection: 'UP',
+        tradingHours: '24/7'
+    },
+    'CRASH1000': {
+        name: 'Crash 1000 Index',
+        category: 'synthetic',
+        subcategory: 'boom_crash',
+        contractType: 'multiplier',
+        multipliers: [20, 40, 60, 80, 100, 150, 200, 250, 300],
+        defaultMultiplier: 20,
+        wprPeriod: 7,
+        maxTradesPerDay: 15,
+        volatilityClass: 'extreme',
+        minStake: 0.35,
+        maxStake: 500,
+        tickSubscription: 'CRASH1000',
+        onlyDirection: 'DOWN',
+        tradingHours: '24/7'
+    },
+
+    // ==========================================
+    // SYNTHETIC INDICES - Jump Indices
+    // ==========================================
+    'JD10': {
+        name: 'Jump 10 Index',
+        category: 'synthetic',
+        subcategory: 'jump',
+        contractType: 'multiplier',
+        multipliers: [20, 40, 60, 80, 100, 200],
+        defaultMultiplier: 20,
+        wprPeriod: 80,
+        maxTradesPerDay: 10,
+        volatilityClass: 'low',
+        minStake: 0.35,
+        maxStake: 1000,
+        tickSubscription: 'JD10',
+        tradingHours: '24/7'
+    },
+    'JD25': {
+        name: 'Jump 25 Index',
+        category: 'synthetic',
+        subcategory: 'jump',
+        contractType: 'multiplier',
+        multipliers: [20, 40, 60, 80, 100, 200],
+        defaultMultiplier: 20,
+        wprPeriod: 80,
+        maxTradesPerDay: 10,
+        volatilityClass: 'medium-low',
+        minStake: 0.35,
+        maxStake: 1000,
+        tickSubscription: 'JD25',
+        tradingHours: '24/7'
+    },
+    'JD50': {
+        name: 'Jump 50 Index',
+        category: 'synthetic',
+        subcategory: 'jump',
+        contractType: 'multiplier',
+        multipliers: [20, 40, 60, 80, 100, 200],
+        defaultMultiplier: 20,
+        wprPeriod: 80,
+        maxTradesPerDay: 8,
+        volatilityClass: 'medium',
+        minStake: 0.50,
+        maxStake: 1000,
+        tickSubscription: 'JD50',
+        tradingHours: '24/7'
+    },
+    'JD75': {
+        name: 'Jump 75 Index',
+        category: 'synthetic',
+        subcategory: 'jump',
+        contractType: 'multiplier',
+        multipliers: [20, 40, 60, 80, 100, 200],
+        defaultMultiplier: 20,
+        wprPeriod: 21,
+        maxTradesPerDay: 6,
+        volatilityClass: 'high',
+        minStake: 0.50,
+        maxStake: 1500,
+        tickSubscription: 'JD75',
+        tradingHours: '24/7'
+    },
+    'JD100': {
+        name: 'Jump 100 Index',
+        category: 'synthetic',
+        subcategory: 'jump',
+        contractType: 'multiplier',
+        multipliers: [20, 40, 60, 80, 100, 200],
+        defaultMultiplier: 20,
+        wprPeriod: 21,
+        maxTradesPerDay: 5,
+        volatilityClass: 'high',
+        minStake: 0.50,
+        maxStake: 1500,
+        tickSubscription: 'JD100',
+        tradingHours: '24/7'
+    },
+
+    // ==========================================
+    // SYNTHETIC INDICES - Step Index
+    // ==========================================
+    'stpRNG': {
+        name: 'Step Index',
+        category: 'synthetic',
+        subcategory: 'step',
+        contractType: 'multiplier',
+        multipliers: [10, 25, 50, 100, 200, 300, 500],
+        defaultMultiplier: 10,
+        wprPeriod: 80,
+        maxTradesPerDay: 10,
+        volatilityClass: 'low',
+        minStake: 0.10,
+        maxStake: 500,
+        tickSubscription: 'stpRNG',
+        tradingHours: '24/7'
+    },
+
+    // ==========================================
+    // FOREX - Major Pairs (Multipliers)
+    // Note: Forex multipliers may have different ranges
+    // ==========================================
+    'frxEURUSD': {
+        name: 'EUR/USD',
+        category: 'forex',
+        subcategory: 'major',
+        contractType: 'multiplier',
+        multipliers: [50, 100, 200, 300, 400, 500, 1000],
+        defaultMultiplier: 50,
+        wprPeriod: 80,
+        maxTradesPerDay: 5,
+        volatilityClass: 'medium',
+        minStake: 5,                         // Higher min for forex
+        maxStake: 5000,
+        tickSubscription: 'frxEURUSD',
+        correlatedWith: ['frxGBPUSD'],
+        tradingHours: 'Sun 22:05 - Fri 21:55 GMT'
+    },
+    'frxGBPUSD': {
+        name: 'GBP/USD',
+        category: 'forex',
+        subcategory: 'major',
+        contractType: 'multiplier',
+        multipliers: [50, 100, 200, 300, 400, 500, 1000],
+        defaultMultiplier: 50,
+        wprPeriod: 80,
+        maxTradesPerDay: 5,
+        volatilityClass: 'medium-high',
+        minStake: 5,
+        maxStake: 5000,
+        tickSubscription: 'frxGBPUSD',
+        correlatedWith: ['frxEURUSD'],
+        tradingHours: 'Sun 22:05 - Fri 21:55 GMT'
+    },
+    'frxUSDJPY': {
+        name: 'USD/JPY',
+        category: 'forex',
+        subcategory: 'major',
+        contractType: 'multiplier',
+        multipliers: [50, 100, 200, 300, 400, 500, 1000],
+        defaultMultiplier: 50,
+        wprPeriod: 80,
+        maxTradesPerDay: 5,
+        volatilityClass: 'medium',
+        minStake: 5,
+        maxStake: 5000,
+        tickSubscription: 'frxUSDJPY',
+        tradingHours: 'Sun 22:05 - Fri 21:55 GMT'
+    },
+    'frxAUDUSD': {
+        name: 'AUD/USD',
+        category: 'forex',
+        subcategory: 'major',
+        contractType: 'multiplier',
+        multipliers: [50, 100, 200, 300, 400, 500],
+        defaultMultiplier: 50,
+        wprPeriod: 80,
+        maxTradesPerDay: 5,
+        volatilityClass: 'medium',
+        minStake: 5,
+        maxStake: 4000,
+        tickSubscription: 'frxAUDUSD',
+        tradingHours: 'Sun 22:05 - Fri 21:55 GMT'
+    },
+    'frxUSDCAD': {
+        name: 'USD/CAD',
+        category: 'forex',
+        subcategory: 'major',
+        contractType: 'multiplier',
+        multipliers: [50, 100, 200, 300, 400, 500],
+        defaultMultiplier: 50,
+        wprPeriod: 80,
+        maxTradesPerDay: 5,
+        volatilityClass: 'medium',
+        minStake: 5,
+        maxStake: 4000,
+        tickSubscription: 'frxUSDCAD',
+        tradingHours: 'Sun 22:05 - Fri 21:55 GMT'
+    },
+    'frxEURGBP': {
+        name: 'EUR/GBP',
+        category: 'forex',
+        subcategory: 'minor',
+        contractType: 'multiplier',
+        multipliers: [50, 100, 200, 300],
+        defaultMultiplier: 50,
+        wprPeriod: 80,
+        maxTradesPerDay: 5,
+        volatilityClass: 'low',
+        minStake: 5,
+        maxStake: 3000,
+        tickSubscription: 'frxEURGBP',
+        tradingHours: 'Sun 22:05 - Fri 21:55 GMT'
+    },
+    'frxNZDUSD': {
+        name: 'NZD/USD',
+        category: 'forex',
+        subcategory: 'major',
+        contractType: 'multiplier',
+        multipliers: [50, 100, 200, 300],
+        defaultMultiplier: 50,
+        wprPeriod: 80,
+        maxTradesPerDay: 5,
+        volatilityClass: 'medium',
+        minStake: 5,
+        maxStake: 3000,
+        tickSubscription: 'frxNZDUSD',
+        tradingHours: 'Sun 22:05 - Fri 21:55 GMT'
+    },
+
+    // ==========================================
+    // CRYPTOCURRENCIES (Higher min stakes)
+    // ==========================================
+    'cryBTCUSD': {
+        name: 'Bitcoin/USD',
+        category: 'crypto',
+        subcategory: 'major',
+        contractType: 'multiplier',
+        multipliers: [50, 100, 150, 200, 250, 300],
+        defaultMultiplier: 50,
+        wprPeriod: 80,
+        maxTradesPerDay: 8,
+        volatilityClass: 'high',
+        minStake: 5,                         // Crypto needs higher min
+        maxStake: 3000,
+        tickSubscription: 'cryBTCUSD',
+        tradingHours: '24/7'
+    },
+    'cryETHUSD': {
+        name: 'Ethereum/USD',
+        category: 'crypto',
+        subcategory: 'major',
+        contractType: 'multiplier',
+        multipliers: [50, 100, 150, 200, 250, 300],
+        defaultMultiplier: 50,
+        wprPeriod: 80,
+        maxTradesPerDay: 8,
+        volatilityClass: 'high',
+        minStake: 5,
+        maxStake: 3000,
+        tickSubscription: 'cryETHUSD',
+        tradingHours: '24/7'
+    },
+    'cryLTCUSD': {
+        name: 'Litecoin/USD',
+        category: 'crypto',
+        subcategory: 'altcoin',
+        contractType: 'multiplier',
+        multipliers: [50, 100, 150, 200],
+        defaultMultiplier: 50,
+        wprPeriod: 80,
+        maxTradesPerDay: 6,
+        volatilityClass: 'high',
+        minStake: 5,
+        maxStake: 2000,
+        tickSubscription: 'cryLTCUSD',
+        tradingHours: '24/7'
+    },
+    'cryBNBUSD': {
+        name: 'Binance Coin/USD',
+        category: 'crypto',
+        subcategory: 'altcoin',
+        contractType: 'multiplier',
+        multipliers: [50, 100, 150, 200],
+        defaultMultiplier: 50,
+        wprPeriod: 80,
+        maxTradesPerDay: 6,
+        volatilityClass: 'high',
+        minStake: 5,
+        maxStake: 2000,
+        tickSubscription: 'cryBNBUSD',
+        tradingHours: '24/7'
+    },
+
+    // ==========================================
+    // COMMODITIES
+    // ==========================================
+    'frxXAUUSD': {
+        name: 'Gold/USD',
+        category: 'commodity',
+        subcategory: 'metals',
+        contractType: 'multiplier',
+        multipliers: [50, 100, 200, 300, 400, 500],
+        defaultMultiplier: 50,
+        wprPeriod: 80,
+        maxTradesPerDay: 5,
+        volatilityClass: 'medium-high',
+        minStake: 5,
+        maxStake: 5000,
+        tickSubscription: 'frxXAUUSD',
+        tradingHours: 'Sun 23:00 - Fri 21:55 GMT (1h break daily)'
+    },
+    'frxXAGUSD': {
+        name: 'Silver/USD',
+        category: 'commodity',
+        subcategory: 'metals',
+        contractType: 'multiplier',
+        multipliers: [50, 100, 200, 300],
+        defaultMultiplier: 50,
+        wprPeriod: 80,
+        maxTradesPerDay: 5,
+        volatilityClass: 'high',
+        minStake: 5,
+        maxStake: 3000,
+        tickSubscription: 'frxXAGUSD',
+        tradingHours: 'Sun 23:00 - Fri 21:55 GMT (1h break daily)'
+    },
+    'frxXPTUSD': {
+        name: 'Platinum/USD',
+        category: 'commodity',
+        subcategory: 'metals',
+        contractType: 'multiplier',
+        multipliers: [50, 100, 150],
+        defaultMultiplier: 50,
+        wprPeriod: 80,
+        maxTradesPerDay: 4,
+        volatilityClass: 'high',
+        minStake: 5,
+        maxStake: 2000,
+        tickSubscription: 'frxXPTUSD',
+        tradingHours: 'Sun 23:00 - Fri 21:55 GMT'
+    },
+    'frxXPDUSD': {
+        name: 'Palladium/USD',
+        category: 'commodity',
+        subcategory: 'metals',
+        contractType: 'multiplier',
+        multipliers: [50, 100],
+        defaultMultiplier: 50,
+        wprPeriod: 80,
+        maxTradesPerDay: 4,
+        volatilityClass: 'extreme',
+        minStake: 5,
+        maxStake: 2000,
+        tickSubscription: 'frxXPDUSD',
+        tradingHours: 'Sun 23:00 - Fri 21:55 GMT'
+    },
+    'WLDOIL': {
+        name: 'Oil/USD (WTI)',
+        category: 'commodity',
+        subcategory: 'energy',
+        contractType: 'multiplier',
+        multipliers: [50, 100],
+        defaultMultiplier: 50,
+        wprPeriod: 80,
+        maxTradesPerDay: 5,
+        volatilityClass: 'high',
+        minStake: 5,
+        maxStake: 2000,
+        tickSubscription: 'WLDOIL',
+        tradingHours: 'Sun 23:00 - Fri 21:55 GMT (1h break daily)'
+    },
+    'frxBROUSD': {
+        name: 'Brent Crude Oil',
+        category: 'commodity',
+        subcategory: 'energy',
+        contractType: 'multiplier',
+        multipliers: [50, 100],
+        defaultMultiplier: 50,
+        wprPeriod: 80,
+        maxTradesPerDay: 5,
+        volatilityClass: 'high',
+        minStake: 5,
+        maxStake: 2000,
+        tickSubscription: 'frxBROUSD',
+        tradingHours: 'Mon 01:00 - Fri 21:55 GMT'
+    }
 };
+
+// ============================================
+// ASSET GROUPS FOR FILTERING
+// ============================================
+
+const ASSET_GROUPS = {
+    synthetic_volatility: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
+    synthetic_volatility_1s: ['1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V'],
+    synthetic_boom_crash: ['BOOM1000', 'CRASH1000'],
+    synthetic_jump: ['JD10', 'JD25', 'JD50', 'JD75', 'JD100'],
+    synthetic_step: ['stpRNG'],
+    forex_major: ['frxEURUSD', 'frxGBPUSD', 'frxUSDJPY', 'frxAUDUSD', 'frxUSDCAD', 'frxNZDUSD'],
+    forex_minor: ['frxEURGBP'],
+    crypto: ['cryBTCUSD', 'cryETHUSD', 'cryLTCUSD', 'cryBNBUSD'],
+    commodity_metals: ['frxXAUUSD', 'frxXAGUSD', 'frxXPTUSD', 'frxXPDUSD'],
+    commodity_energy: ['WLDOIL', 'frxBROUSD']
+};
+
+// Active assets (can be modified at runtime)
+// Note: Default to synthetics which have lower min stakes and more flexibility
+let ACTIVE_ASSETS = process.env.ASSETS
+    ? process.env.ASSETS.split(',')
+    : [
+        // Default: Synthetic indices with confirmed working multipliers
+        'R_10', 'R_25',           // Low volatility - min stake $0.35
+        'R_75', 'R_100',          // High volatility - min stake $1.00
+        'BOOM1000', 'CRASH1000',  // Boom/Crash - min stake $0.35
+        // Uncomment below if you have higher capital (min $5 stake):
+        // 'frxEURUSD', 'frxXAUUSD', 'cryBTCUSD'
+    ];
 
 // ============================================
 // STATE MANAGEMENT
 // ============================================
 
 const state = {
+    // Capital
     capital: CONFIG.INITIAL_CAPITAL,
-    accountBalance: 0, // Store actual account balance separately
-    lockedProfit: 0,
+    accountBalance: 0,
+
+    // Session (MT5 style)
+    session: {
+        profit: 0,
+        loss: 0,
+        netPL: 0,
+        tradesCount: 0,
+        winsCount: 0,
+        lossesCount: 0,
+        accumulatedLoss: 0,
+        currentProfitTarget: CONFIG.SESSION_PROFIT_TARGET,
+        isActive: true,
+        pausedUntil: 0,
+        startTime: Date.now(),
+        startCapital: CONFIG.INITIAL_CAPITAL
+    },
+
+    // Martingale
+    martingale: {
+        currentStake: CONFIG.INITIAL_STAKE,
+        consecutiveLosses: 0,
+        level: 0
+    },
+
+    // Connection
     isConnected: false,
     isAuthorized: false,
+    lastDashboardHash: '',
 
+    // Per-asset state
     assets: {},
 
+    // Portfolio
     portfolio: {
-        dailyLoss: 0,
         dailyProfit: 0,
+        dailyLoss: 0,
         dailyWins: 0,
         dailyLosses: 0,
         activePositions: [],
         topRankedAssets: [],
-        lastRebalance: Date.now(),
         lastScoring: Date.now()
     },
 
     subscriptions: new Map(),
     pendingRequests: new Map(),
-    requestId: 1
+    requestId: 1,
+    lastEmailTime: {}
 };
 
-// Initialize asset states
-Object.keys(ASSET_CONFIGS).forEach(symbol => {
-    state.assets[symbol] = {
-        candles: [],
-        ticks: [],
-        emaShort: 0,
-        emaLong: 0,
-        rsi: 50,
-        adx: 0,
-        atr: 0,
-        dailyTrades: 0,
-        dailyWins: 0,
-        dailyLosses: 0,
-        dailyTradesPerDirection: { CALL: 0, PUT: 0 },
-        consecutiveLosses: 0,
-        cooldownUntil: 0,
-        blacklistedUntil: 0,
-        tradeHistory: [],
-        winRate: 0.5,
-        score: 0,
-        lastSignal: null,
-        predictability: 0.5,
-        spreadCost: 0,
-        wpr: -50,
-        wprHistory: []
-    };
-});
+// Initialize asset states for active assets only
+function initializeAssetStates() {
+    let highestMinStake = 0;
+    const stakeWarnings = [];
 
-// ============================================
-// EMAIL MANAGER
-// ============================================
+    ACTIVE_ASSETS.forEach(symbol => {
+        if (ASSET_CONFIGS[symbol]) {
+            const config = ASSET_CONFIGS[symbol];
 
-class EmailManager {
-    constructor() {
-        this.transporter = nodemailer.createTransport(CONFIG.EMAIL_CONFIG);
-    }
+            state.assets[symbol] = {
+                candles: [],
+                ticks: [],
+                wpr: -50,
+                prevWpr: -50,
+                dailyTrades: 0,
+                dailyWins: 0,
+                dailyLosses: 0,
+                consecutiveLosses: 0,
+                blacklistedUntil: 0,
+                tradeHistory: [],
+                winRate: 0.5,
+                score: 0,
+                lastSignal: null,
+                lastBarTime: 0,
+                activePosition: null,
+                currentDirection: null
+            };
 
-    async sendEmail(subject, text) {
-        const mailOptions = {
-            from: CONFIG.EMAIL_CONFIG.auth.user,
-            to: CONFIG.EMAIL_RECIPIENT,
-            subject: `ClaudeWillv Deriv Multi-Asset Bot - ${subject}`,
-            text: text
-        };
+            // Track minimum stake requirements
+            if (config.minStake > highestMinStake) {
+                highestMinStake = config.minStake;
+            }
 
-        try {
-            await this.transporter.sendMail(mailOptions);
-            console.log(`📧 Email sent: ${subject}`);
-        } catch (error) {
-            console.error('❌ Email error:', error.message);
+            // Warn if initial stake is below asset minimum
+            if (CONFIG.INITIAL_STAKE < config.minStake) {
+                stakeWarnings.push(`${symbol} requires min $${config.minStake}`);
+            }
+        } else {
+            LOGGER.warn(`Asset ${symbol} not found in ASSET_CONFIGS`);
         }
+    });
+
+    LOGGER.info(`Initialized ${Object.keys(state.assets).length} assets for trading`);
+
+    // Display stake warnings
+    if (stakeWarnings.length > 0) {
+        LOGGER.warn('⚠️  STAKE WARNINGS:');
+        stakeWarnings.forEach(w => LOGGER.warn(`   - ${w}`));
+        LOGGER.warn(`   Your INITIAL_STAKE ($${CONFIG.INITIAL_STAKE}) should be >= $${highestMinStake}`);
+        LOGGER.warn(`   Run with: STAKE=${highestMinStake} or higher`);
     }
 
-    async sendSummary(isFinal = false) {
-        const totalTrades = state.portfolio.dailyWins + state.portfolio.dailyLosses;
-        const winRate = totalTrades > 0
-            ? ((state.portfolio.dailyWins / totalTrades) * 100).toFixed(2)
-            : 0;
-
-        const assetBreakdown = Object.entries(state.assets)
-            .filter(([_, data]) => data.dailyTrades > 0)
-            .map(([symbol, data]) =>
-                `${symbol}: Wins: ${data.dailyWins} | Losses: ${data.dailyLosses} | WR: ${(data.winRate * 100).toFixed(1)}% | Trades: ${data.dailyTrades}`
-            ).join('\n');
-
-        const summaryText = `
-            ${isFinal ? 'FINAL REPORT' : 'PERIODIC SUMMARY'}
-            ========================================
-            Time: ${new Date().toLocaleString()}
-
-            Portfolio Performance:
-            ---------------------
-            Total Trades: ${totalTrades}
-            Total Wins: ${state.portfolio.dailyWins}
-            Total Losses: ${state.portfolio.dailyLosses}
-            Win Rate: ${winRate}%
-
-            Financial Status:
-            ----------------
-            Current Capital: $${state.capital.toFixed(2)}
-            Daily Profit: $${state.portfolio.dailyProfit.toFixed(2)}
-            Daily Loss: $${state.portfolio.dailyLoss.toFixed(2)}
-            Locked Profit: $${state.lockedProfit.toFixed(2)}
-
-            Active Positions: ${state.portfolio.activePositions.length}/${CONFIG.MAX_OPEN_POSITIONS}
-            Top Ranked: ${state.portfolio.topRankedAssets.join(', ')}
-            
-            Per-Asset Breakdown:
-            -------------------
-            ${assetBreakdown || 'No trades yet today.'}
-        `;
-
-        await this.sendEmail(isFinal ? 'Final Report' : 'Summary Update', summaryText);
-    }
-
-    async sendLossAlert(symbol, consecutiveLosses) {
-        const asset = state.assets[symbol];
-        const text = `
-            LOSS ALERT - ${symbol}
-            ====================
-            Asset: ${symbol}
-            Wins/Losses Today: ${asset.dailyWins}/${asset.dailyLosses}
-            Consecutive Losses: ${consecutiveLosses}
-            Asset Win Rate: ${(asset.winRate * 100).toFixed(1)}%
-            Daily Trades: ${asset.dailyTrades}
-
-            Portfolio Status:
-            ----------------
-            Capital: $${state.capital.toFixed(2)}
-            Total Portfolio Loss: $${state.portfolio.dailyLoss.toFixed(2)}
-
-            ${consecutiveLosses >= 3 ? '⚠️ Asset entering 4-hour cooldown' : ''}
-        `;
-
-        await this.sendEmail(`Loss Alert: ${symbol}`, text);
-    }
-
-    async sendStatusUpdate(status) {
-        const text = `
-            BOT STATUS UPDATE
-            =================
-            Time: ${new Date().toLocaleString()}
-            Status: ${status}
-
-            Capital: $${state.capital.toFixed(2)}
-            Total Daily Profit: $${state.portfolio.dailyProfit.toFixed(2)}
-            Total Daily Loss: $${state.portfolio.dailyLoss.toFixed(2)}
-        `;
-
-        await this.sendEmail('Status Update', text);
-    }
+    // Display multiplier info
+    LOGGER.info('📊 Asset Multiplier Configuration:');
+    Object.keys(state.assets).forEach(symbol => {
+        const config = ASSET_CONFIGS[symbol];
+        LOGGER.info(`   ${symbol}: x${config.defaultMultiplier} (options: ${config.multipliers.join(',')} | min stake: $${config.minStake})`);
+    });
 }
 
+initializeAssetStates();
+
 // ============================================
-// TECHNICAL INDICATORS (Worker Thread Compatible)
+// TECHNICAL INDICATORS
 // ============================================
 
 class TechnicalIndicators {
     /**
-     * Calculate Exponential Moving Average
+     * Calculate Williams Percent Range (WPR)
+     * WPR = (Highest High - Close) / (Highest High - Lowest Low) * -100
+     * Range: -100 to 0
      */
-    static calculateEMA(prices, period) {
-        if (prices.length < period) return null;
-
-        const multiplier = 2 / (period + 1);
-        let ema = prices.slice(0, period).reduce((a, b) => a + b, 0) / period;
-
-        for (let i = period; i < prices.length; i++) {
-            ema = (prices[i] - ema) * multiplier + ema;
+    static calculateWPR(highs, lows, closes, period = 14) {
+        if (!closes || closes.length < period) {
+            return -50;
         }
 
-        return ema;
-    }
-
-    /**
-     * Calculate RSI
-     */
-    static calculateRSI(prices, period = 14) {
-        if (prices.length < period + 1) return 50;
-
-        const changes = [];
-        for (let i = 1; i < prices.length; i++) {
-            changes.push(prices[i] - prices[i - 1]);
-        }
-
-        const recentChanges = changes.slice(-period);
-        let gains = 0, losses = 0;
-
-        recentChanges.forEach(change => {
-            if (change > 0) gains += change;
-            else losses += Math.abs(change);
-        });
-
-        const avgGain = gains / period;
-        const avgLoss = losses / period;
-
-        if (avgLoss === 0) return 100;
-
-        const rs = avgGain / avgLoss;
-        return 100 - (100 / (1 + rs));
-    }
-
-    /**
-     * Calculate ADX (Average Directional Index) for trend strength
-     */
-    static calculateADX(highs, lows, closes, period = 14) {
-        if (closes.length < period * 2) return 25;
-
-        const trueRanges = [];
-        const plusDM = [];
-        const minusDM = [];
-
-        for (let i = 1; i < closes.length; i++) {
-            const high = highs[i];
-            const low = lows[i];
-            const prevHigh = highs[i - 1];
-            const prevLow = lows[i - 1];
-            const prevClose = closes[i - 1];
-
-            // True Range
-            const tr = Math.max(
-                high - low,
-                Math.abs(high - prevClose),
-                Math.abs(low - prevClose)
-            );
-            trueRanges.push(tr);
-
-            // Directional Movement
-            const upMove = high - prevHigh;
-            const downMove = prevLow - low;
-
-            plusDM.push(upMove > downMove && upMove > 0 ? upMove : 0);
-            minusDM.push(downMove > upMove && downMove > 0 ? downMove : 0);
-        }
-
-        // Smoothed averages
-        const smoothedTR = this.smoothedAverage(trueRanges, period);
-        const smoothedPlusDM = this.smoothedAverage(plusDM, period);
-        const smoothedMinusDM = this.smoothedAverage(minusDM, period);
-
-        if (smoothedTR === 0) return 25;
-
-        const plusDI = (smoothedPlusDM / smoothedTR) * 100;
-        const minusDI = (smoothedMinusDM / smoothedTR) * 100;
-
-        const diSum = plusDI + minusDI;
-        if (diSum === 0) return 25;
-
-        const dx = Math.abs(plusDI - minusDI) / diSum * 100;
-
-        return dx;
-    }
-
-    /**
-     * Calculate ATR (Average True Range)
-     */
-    static calculateATR(highs, lows, closes, period = 14) {
-        if (closes.length < period + 1) return 0;
-
-        const trueRanges = [];
-
-        for (let i = 1; i < closes.length; i++) {
-            const tr = Math.max(
-                highs[i] - lows[i],
-                Math.abs(highs[i] - closes[i - 1]),
-                Math.abs(lows[i] - closes[i - 1])
-            );
-            trueRanges.push(tr);
-        }
-
-        return this.smoothedAverage(trueRanges.slice(-period), period);
-    }
-
-    /**
-     * Smoothed average for ADX calculation
-     */
-    static smoothedAverage(values, period) {
-        if (values.length < period) return 0;
-
-        let sum = values.slice(0, period).reduce((a, b) => a + b, 0);
-        let smoothed = sum / period;
-
-        for (let i = period; i < values.length; i++) {
-            smoothed = (smoothed * (period - 1) + values[i]) / period;
-        }
-
-        return smoothed;
-    }
-
-    /**
-     * Calculate Williams %R
-     */
-    static calculateWPR(highs, lows, closes, period = 80) {
-        if (closes.length < period) return -50;
-
-        const currentClose = closes[closes.length - 1];
         const recentHighs = highs.slice(-period);
         const recentLows = lows.slice(-period);
+        const currentClose = closes[closes.length - 1];
 
         const highestHigh = Math.max(...recentHighs);
         const lowestLow = Math.min(...recentLows);
+        const range = highestHigh - lowestLow;
 
-        if (highestHigh === lowestLow) return -50;
+        if (range === 0) return -50;
 
-        const wpr = ((highestHigh - currentClose) / (highestHigh - lowestLow)) * -100;
+        const wpr = ((highestHigh - currentClose) / range) * -100;
         return wpr;
+    }
+
+    /**
+     * Detect WPR crossover signals
+     */
+    static detectWPRSignal(prevWpr, currWpr) {
+        // BUY signal: WPR crosses above -20
+        if (prevWpr <= CONFIG.WPR_OVERBOUGHT && currWpr > CONFIG.WPR_OVERBOUGHT) {
+            return 'UP';
+        }
+
+        // SELL signal: WPR crosses below -80
+        if (prevWpr >= CONFIG.WPR_OVERSOLD && currWpr < CONFIG.WPR_OVERSOLD) {
+            return 'DOWN';
+        }
+
+        return null;
+    }
+
+    /**
+     * Calculate volatility
+     */
+    static calculateVolatility(closes, period = 14) {
+        if (closes.length < period + 1) return 0;
+
+        const returns = [];
+        for (let i = closes.length - period; i < closes.length; i++) {
+            if (closes[i - 1] !== 0) {
+                returns.push((closes[i] - closes[i - 1]) / closes[i - 1]);
+            }
+        }
+
+        if (returns.length === 0) return 0;
+        return math.std(returns) * 100;
     }
 }
 
 // ============================================
-// AI PORTFOLIO MANAGER
+// MARTINGALE MANAGER
+// ============================================
+
+class MartingaleManager {
+    static getCurrentStake() {
+        return state.martingale.currentStake;
+    }
+
+    static recordWin(profit) {
+        state.session.winsCount++;
+        state.session.profit += profit;
+        state.session.netPL += profit;
+
+        if (state.session.netPL > 0 && state.session.accumulatedLoss > 0) {
+            if (profit >= state.session.accumulatedLoss) {
+                this.resetMartingale();
+                state.session.accumulatedLoss = 0;
+                state.session.currentProfitTarget = CONFIG.SESSION_PROFIT_TARGET;
+                LOGGER.trade('🎉 Accumulated losses recovered! Resetting martingale.');
+            } else {
+                state.session.accumulatedLoss -= profit;
+                LOGGER.info(`📉 Remaining accumulated loss: $${state.session.accumulatedLoss.toFixed(2)}`);
+            }
+        } else {
+            this.resetMartingale();
+        }
+
+        state.capital += profit;
+    }
+
+    static recordLoss(loss) {
+        const absLoss = Math.abs(loss);
+
+        state.session.lossesCount++;
+        state.session.loss += absLoss;
+        state.session.netPL -= absLoss;
+        state.martingale.consecutiveLosses++;
+
+        state.session.accumulatedLoss += absLoss;
+        state.session.currentProfitTarget = CONFIG.SESSION_PROFIT_TARGET + state.session.accumulatedLoss;
+
+        if (state.martingale.consecutiveLosses >= CONFIG.LOSSES_BEFORE_MARTINGALE) {
+            if (state.martingale.level < CONFIG.MAX_MARTINGALE_LEVEL) {
+                state.martingale.currentStake *= CONFIG.MARTINGALE_MULTIPLIER;
+                state.martingale.level++;
+                state.martingale.consecutiveLosses = 0;
+
+                LOGGER.warn(`📈 Martingale Level ${state.martingale.level}: Stake increased to $${state.martingale.currentStake.toFixed(2)}`);
+            } else {
+                LOGGER.error(`🛑 Max martingale level reached!`);
+            }
+        }
+
+        state.capital -= absLoss;
+
+        LOGGER.info(`📊 Accumulated Loss: $${state.session.accumulatedLoss.toFixed(2)} | New Target: $${state.session.currentProfitTarget.toFixed(2)}`);
+    }
+
+    static resetMartingale() {
+        state.martingale.currentStake = CONFIG.INITIAL_STAKE;
+        state.martingale.consecutiveLosses = 0;
+        state.martingale.level = 0;
+        LOGGER.info('🔄 Martingale reset to initial stake');
+    }
+
+    static getSafeStake(symbol) {
+        const config = ASSET_CONFIGS[symbol];
+        if (!config) return CONFIG.INITIAL_STAKE;
+
+        let stake = this.getCurrentStake();
+
+        // Ensure stake meets minimum for this asset
+        stake = Math.max(stake, config.minStake);
+
+        // Cap at asset max
+        stake = Math.min(stake, config.maxStake);
+
+        // Cap at 10% of capital
+        const maxCapitalStake = state.capital * 0.1;
+        stake = Math.min(stake, maxCapitalStake);
+
+        // Ensure we don't go below minimum after caps
+        if (stake < config.minStake) {
+            LOGGER.warn(`⚠️ Capital too low for ${symbol}. Min stake: $${config.minStake}, Available: $${stake.toFixed(2)}`);
+            return 0; // Return 0 to signal can't trade
+        }
+
+        return parseFloat(stake.toFixed(2));
+    }
+
+    /**
+     * Get valid multiplier for asset
+     */
+    static getValidMultiplier(symbol) {
+        const config = ASSET_CONFIGS[symbol];
+        if (!config || !config.multipliers || config.multipliers.length === 0) {
+            return 20; // Default fallback
+        }
+
+        // Return the lowest valid multiplier (safest for minimum stake)
+        return config.defaultMultiplier || config.multipliers[0];
+    }
+}
+
+// ============================================
+// SESSION MANAGER
+// ============================================
+
+class SessionManager {
+    static isSessionActive() {
+        if (Date.now() < state.session.pausedUntil) {
+            return false;
+        }
+        return state.session.isActive;
+    }
+
+    static checkSessionTargets() {
+        const netPL = state.session.netPL;
+
+        if (netPL >= state.session.currentProfitTarget) {
+            LOGGER.trade(`🎯 SESSION PROFIT TARGET REACHED! Net P/L: $${netPL.toFixed(2)}`);
+            this.endSession('PROFIT_TARGET');
+            return true;
+        }
+
+        if (netPL <= CONFIG.SESSION_STOP_LOSS) {
+            LOGGER.error(`🛑 SESSION STOP LOSS REACHED! Net P/L: $${netPL.toFixed(2)}`);
+            this.endSession('STOP_LOSS');
+            return true;
+        }
+
+        return false;
+    }
+
+    static async endSession(reason) {
+        state.session.isActive = false;
+
+        await bot.closeAllPositions();
+
+        if (CONFIG.EMAIL_ENABLED) {
+            bot.emailManager.sendSessionReport(reason);
+        }
+
+        state.session.pausedUntil = Date.now() + CONFIG.COOLDOWN_AFTER_SESSION_END;
+
+        LOGGER.info(`⏸️ Session ended (${reason}). Paused for ${CONFIG.COOLDOWN_AFTER_SESSION_END / 60000} minutes.`);
+        LOGGER.info(`📊 Session: Trades: ${state.session.tradesCount} | Wins: ${state.session.winsCount} | Losses: ${state.session.lossesCount}`);
+        LOGGER.info(`💰 Net P/L: $${state.session.netPL.toFixed(2)} | Capital: $${state.capital.toFixed(2)}`);
+
+        setTimeout(() => {
+            this.startNewSession();
+        }, CONFIG.COOLDOWN_AFTER_SESSION_END);
+    }
+
+    static startNewSession() {
+        state.session = {
+            profit: 0,
+            loss: 0,
+            netPL: 0,
+            tradesCount: 0,
+            winsCount: 0,
+            lossesCount: 0,
+            accumulatedLoss: 0,
+            currentProfitTarget: CONFIG.SESSION_PROFIT_TARGET,
+            isActive: true,
+            pausedUntil: 0,
+            startTime: Date.now(),
+            startCapital: state.capital
+        };
+
+        MartingaleManager.resetMartingale();
+
+        Object.keys(state.assets).forEach(symbol => {
+            state.assets[symbol].activePosition = null;
+            state.assets[symbol].currentDirection = null;
+        });
+
+        LOGGER.info('🚀 NEW SESSION STARTED');
+        LOGGER.info(`💰 Starting Capital: $${state.capital.toFixed(2)}`);
+        LOGGER.info(`🎯 Profit Target: $${CONFIG.SESSION_PROFIT_TARGET} | Stop Loss: $${CONFIG.SESSION_STOP_LOSS}`);
+    }
+
+    static getSessionStats() {
+        const duration = Date.now() - state.session.startTime;
+        const hours = Math.floor(duration / 3600000);
+        const minutes = Math.floor((duration % 3600000) / 60000);
+
+        return {
+            duration: `${hours}h ${minutes}m`,
+            trades: state.session.tradesCount,
+            wins: state.session.winsCount,
+            losses: state.session.lossesCount,
+            winRate: state.session.tradesCount > 0
+                ? ((state.session.winsCount / state.session.tradesCount) * 100).toFixed(1) + '%'
+                : '0%',
+            netPL: state.session.netPL,
+            profitTarget: state.session.currentProfitTarget,
+            accumulatedLoss: state.session.accumulatedLoss,
+            martingaleLevel: state.martingale.level,
+            currentStake: state.martingale.currentStake
+        };
+    }
+}
+
+// ============================================
+// PORTFOLIO MANAGER
 // ============================================
 
 class PortfolioManager {
-    /**
-     * Calculate asset score for ranking
-     */
     static calculateAssetScore(symbol) {
         const assetState = state.assets[symbol];
         const config = ASSET_CONFIGS[symbol];
 
-        // Recent win rate (30% weight)
+        if (!assetState || !config) return 0;
+
         const recentTrades = assetState.tradeHistory.slice(-CONFIG.WIN_RATE_LOOKBACK);
         const winRate = recentTrades.length > 0
             ? recentTrades.filter(t => t.profit > 0).length / recentTrades.length
             : 0.5;
 
-        // Trend strength (25% weight) - based on ADX
-        const trendStrength = Math.min(assetState.adx / 50, 1);
+        const wpr = assetState.wpr;
+        let signalQuality = 0.5;
+        if (wpr <= -70 && wpr >= -90) signalQuality = 0.9;
+        else if (wpr >= -30 && wpr <= -10) signalQuality = 0.9;
+        else if (wpr > -70 && wpr < -30) signalQuality = 0.6;
 
-        // Volatility fit (20% weight) - how well current volatility matches asset class
         const volatilityFit = this.calculateVolatilityFit(symbol);
+        const capacityScore = 1 - (assetState.dailyTrades / config.maxTradesPerDay);
 
-        // Predictability (25% weight) - based on consistent patterns
-        const predictability = this.calculatePredictability(symbol);
-
-        const score = (winRate * 0.3) +
-            (trendStrength * 0.25) +
-            (volatilityFit * 0.2) +
-            (predictability * 0.25);
+        const score = (winRate * 0.35) +
+            (signalQuality * 0.25) +
+            (volatilityFit * 0.20) +
+            (Math.max(0, capacityScore) * 0.20);
 
         return Math.min(Math.max(score, 0), 1);
     }
 
-    /**
-     * Calculate how well current volatility matches the asset's expected volatility
-     */
     static calculateVolatilityFit(symbol) {
         const assetState = state.assets[symbol];
         const config = ASSET_CONFIGS[symbol];
 
-        if (assetState.ticks.length < 20) return 0.5;
+        if (!assetState || assetState.ticks.length < 20) return 0.5;
 
-        // Calculate recent volatility
         const recentTicks = assetState.ticks.slice(-20);
         const returns = [];
         for (let i = 1; i < recentTicks.length; i++) {
-            returns.push((recentTicks[i] - recentTicks[i - 1]) / recentTicks[i - 1]);
+            if (recentTicks[i - 1] !== 0) {
+                returns.push((recentTicks[i] - recentTicks[i - 1]) / recentTicks[i - 1]);
+            }
         }
 
+        if (returns.length === 0) return 0.5;
         const volatility = math.std(returns) * 100;
 
-        // Expected volatility ranges by class
         const expectedRanges = {
-            'low': { min: 0, max: 0.5 },
-            'medium-low': { min: 0.3, max: 0.8 },
-            'medium': { min: 0.5, max: 1.2 },
-            'high': { min: 1, max: 2.5 },
-            'extreme': { min: 2, max: 5 }
+            'low': { min: 0, max: 0.3 },
+            'medium-low': { min: 0.2, max: 0.5 },
+            'medium': { min: 0.4, max: 0.8 },
+            'medium-high': { min: 0.6, max: 1.2 },
+            'high': { min: 0.8, max: 2.0 },
+            'extreme': { min: 1.5, max: 4.0 }
         };
 
         const range = expectedRanges[config.volatilityClass] || expectedRanges['medium'];
@@ -674,61 +1202,20 @@ class PortfolioManager {
         if (volatility >= range.min && volatility <= range.max) {
             return 1;
         } else if (volatility < range.min) {
-            return Math.max(0.3, 1 - (range.min - volatility) / range.min);
+            return Math.max(0.3, 1 - (range.min - volatility) / (range.min || 0.1));
         } else {
-            return Math.max(0.3, 1 - (volatility - range.max) / range.max);
+            return Math.max(0.3, 1 - (volatility - range.max) / (range.max || 1));
         }
     }
 
-    /**
-     * Calculate predictability based on signal consistency
-     */
-    static calculatePredictability(symbol) {
-        const assetState = state.assets[symbol];
-
-        if (assetState.tradeHistory.length < 5) return 0.5;
-
-        // Check for consistent directional accuracy
-        const recentTrades = assetState.tradeHistory.slice(-10);
-        const directions = { CALL: { wins: 0, total: 0 }, PUT: { wins: 0, total: 0 } };
-
-        recentTrades.forEach(trade => {
-            directions[trade.direction].total++;
-            if (trade.profit > 0) {
-                directions[trade.direction].wins++;
-            }
-        });
-
-        // Calculate directional accuracy
-        let totalAccuracy = 0;
-        let count = 0;
-
-        ['CALL', 'PUT'].forEach(dir => {
-            if (directions[dir].total >= 2) {
-                totalAccuracy += directions[dir].wins / directions[dir].total;
-                count++;
-            }
-        });
-
-        return count > 0 ? totalAccuracy / count : 0.5;
-    }
-
-    /**
-     * Rank all assets and select top performers
-     */
     static rankAssets() {
         const rankings = [];
 
-        Object.keys(ASSET_CONFIGS).forEach(symbol => {
+        Object.keys(state.assets).forEach(symbol => {
             const assetState = state.assets[symbol];
 
-            // Skip blacklisted or cooling down assets
             if (Date.now() < assetState.blacklistedUntil) {
-                console.log(`⏸️  ${symbol} is blacklisted until ${new Date(assetState.blacklistedUntil).toLocaleTimeString()}`);
-                return;
-            }
-            if (Date.now() < assetState.cooldownUntil) {
-                console.log(`⏸️  ${symbol} is cooling down until ${new Date(assetState.cooldownUntil).toLocaleTimeString()}`);
+                LOGGER.debug(`⏸️ ${symbol} is blacklisted`);
                 return;
             }
 
@@ -738,143 +1225,28 @@ class PortfolioManager {
             rankings.push({ symbol, score });
         });
 
-        // Sort by score descending
         rankings.sort((a, b) => b.score - a.score);
 
-        // Select top assets
         const topAssets = rankings.slice(0, CONFIG.TOP_ASSETS_TO_TRADE);
         state.portfolio.topRankedAssets = topAssets.map(a => a.symbol);
 
-        console.log('\n📊 Asset Rankings:');
-        rankings.forEach((asset, index) => {
+        LOGGER.info('📊 Asset Rankings:');
+        rankings.slice(0, 10).forEach((asset, index) => {
             const marker = index < CONFIG.TOP_ASSETS_TO_TRADE ? '🏆' : '  ';
-            console.log(`${marker} ${index + 1}. ${asset.symbol}: ${(asset.score * 100).toFixed(1)}%`);
+            const config = ASSET_CONFIGS[asset.symbol];
+            LOGGER.info(`${marker} ${index + 1}. ${asset.symbol} (${config?.category}): ${(asset.score * 100).toFixed(1)}%`);
         });
 
         return topAssets;
     }
 
-    /**
-     * Calculate stake using Kelly Criterion with portfolio allocation
-     */
-    static calculateStake(symbol, rank) {
-        const assetState = state.assets[symbol];
-        const availableCapital = state.capital - state.lockedProfit;
-
-        // Base Stake Calculation
-        const totalRisk = availableCapital * CONFIG.MAX_RISK_PER_TRADE;
-        let stake = totalRisk;
-        // Simple allocation strategy for now, can be sophisticated later
-        // const allocationRatio = rank === 0 ? 0.6 : 0.4;
-        // stake = totalRisk * allocationRatio;
-
-        // Use simpler fixed allocation for stability with Martingale
-        stake = Math.max(1, totalRisk * 0.5);
-
-        // Apply Martingale
-        if (assetState.consecutiveLosses >= CONFIG.LOSSES_BEFORE_MARTINGALE) {
-            stake = stake * Math.pow(CONFIG.MARTINGALE_MULTIPLIER, assetState.consecutiveLosses);
-            console.log(`🔥 Martingale Applied for ${symbol}: ${assetState.consecutiveLosses} losses -> Stake $${stake.toFixed(2)}`);
-        }
-
-        // Ensure minimum stake
-        stake = Math.max(stake, 1);
-
-        // Cap at 20% of capital for safety (Martingale protection)
-        stake = Math.min(stake, availableCapital * 0.50);
-
-        return parseFloat(stake.toFixed(2));
-    }
-
-    /**
-     * Check correlation conflicts
-     */
-    static hasCorrelationConflict(symbol) {
+    static hasCorrelationConflict(symbol, direction) {
         const config = ASSET_CONFIGS[symbol];
-        if (!config.correlatedWith) return false;
+        if (!config || !config.correlatedWith) return false;
 
-        // Check if any correlated asset has an active position
         return state.portfolio.activePositions.some(pos =>
             config.correlatedWith.includes(pos.symbol)
         );
-    }
-
-    /**
-     * Check synthetic index correlation (R_75 and R_100 signals)
-     */
-    static checkSyntheticCorrelation(symbol) {
-        const syntheticPairs = [
-            ['R_10', 'R_100'],
-            ['R_25', 'R_75'],
-            ['R_75', 'R_25'],
-            ['R_100', 'R_10'],
-        ];
-
-        for (const pair of syntheticPairs) {
-            if (pair.includes(symbol)) {
-                const other = pair.find(s => s !== symbol);
-                if (state.assets[other]?.lastSignal) {
-                    // Compare scores, return true if this symbol has lower score
-                    return state.assets[symbol].score < state.assets[other].score;
-                }
-            }
-        }
-        return false;
-    }
-}
-
-// ============================================
-// AI CONFIDENCE MODEL
-// ============================================
-
-class AIConfidenceModel {
-    /**
-     * Calculate trade confidence score
-     */
-    static calculateConfidence(symbol, direction) {
-        const assetState = state.assets[symbol];
-        const config = ASSET_CONFIGS[symbol];
-
-        let confidence = 0.5; // Base confidence
-
-        // 1. RSI confirmation (20% weight)
-        const rsi = assetState.rsi;
-        if (direction === 'CALL') {
-            if (rsi < config.rsiThreshold) confidence += 0.2;
-            else if (rsi < 50) confidence += 0.1;
-        } else {
-            if (rsi > (100 - config.rsiThreshold)) confidence += 0.2;
-            else if (rsi > 50) confidence += 0.1;
-        }
-
-        // 2. Trend strength (20% weight)
-        if (assetState.adx > 25) {
-            confidence += Math.min(assetState.adx / 100, 0.2);
-        }
-
-        // 3. Recent performance (20% weight)
-        const recentWins = assetState.tradeHistory
-            .slice(-5)
-            .filter(t => t.profit > 0).length;
-        confidence += (recentWins / 5) * 0.2;
-
-        // 4. Volatility regime match (20% weight)
-        const volFit = PortfolioManager.calculateVolatilityFit(symbol);
-        confidence += volFit * 0.2;
-
-        // 5. Time-of-day factor (20% weight)
-        const hour = new Date().getUTCHours();
-        if (config.category === 'forex') {
-            // Forex best during London/NY sessions
-            if ((hour >= 7 && hour <= 16) || (hour >= 13 && hour <= 21)) {
-                confidence += 0.15;
-            }
-        } else if (config.category === 'synthetic') {
-            // Synthetics trade 24/7 with consistent patterns
-            confidence += 0.1;
-        }
-
-        return Math.min(confidence, 1);
     }
 }
 
@@ -883,150 +1255,214 @@ class AIConfidenceModel {
 // ============================================
 
 class RiskManager {
-    /**
-     * Check if trading is allowed based on portfolio limits
-     */
     static canTrade() {
-        const { dailyLoss, dailyProfit, activePositions } = state.portfolio;
-        const availableCapital = state.capital - state.lockedProfit;
-
-        // Check daily loss limit
-        if (dailyLoss >= availableCapital * CONFIG.DAILY_LOSS_LIMIT) {
-            console.log('🛑 Daily loss limit reached. Trading paused.');
+        if (!SessionManager.isSessionActive()) {
+            LOGGER.debug('Session not active');
             return false;
         }
 
-        // Check max positions
-        if (activePositions.length >= CONFIG.MAX_OPEN_POSITIONS) {
-            console.log('🛑 Maximum open positions reached.');
+        if (SessionManager.checkSessionTargets()) {
             return false;
         }
 
-        // Check profit target (lock 50% of gains)
-        if (dailyProfit >= availableCapital * CONFIG.DAILY_PROFIT_TARGET) {
-            const profitToLock = dailyProfit * CONFIG.PROFIT_LOCK_RATIO;
-            if (state.lockedProfit < profitToLock) {
-                state.lockedProfit = profitToLock;
-                console.log(`🔒 Locked ${profitToLock.toFixed(2)} in profits`);
+        if (state.portfolio.activePositions.length >= CONFIG.MAX_OPEN_POSITIONS) {
+            LOGGER.debug('Max positions reached');
+            return false;
+        }
+
+        if (state.capital < CONFIG.INITIAL_STAKE * 2) {
+            LOGGER.error('Insufficient capital');
+            return false;
+        }
+
+        return true;
+    }
+
+    static canAssetTrade(symbol, direction) {
+        const assetState = state.assets[symbol];
+        const config = ASSET_CONFIGS[symbol];
+
+        if (!assetState || !config) {
+            return { allowed: false, reason: 'Asset not configured' };
+        }
+
+        if (!state.portfolio.topRankedAssets.includes(symbol)) {
+            return { allowed: false, reason: 'Not in top ranked assets' };
+        }
+
+        if (assetState.dailyTrades >= config.maxTradesPerDay) {
+            return { allowed: false, reason: 'Daily trade limit reached' };
+        }
+
+        if (config.onlyDirection && config.onlyDirection !== direction) {
+            return { allowed: false, reason: `Asset only allows ${config.onlyDirection}` };
+        }
+
+        if (Date.now() < assetState.blacklistedUntil) {
+            return { allowed: false, reason: 'Asset blacklisted' };
+        }
+
+        if (PortfolioManager.hasCorrelationConflict(symbol, direction)) {
+            return { allowed: false, reason: 'Correlation conflict' };
+        }
+
+        // Check trading hours for non-synthetic assets
+        if (config.category !== 'synthetic' && !this.isWithinTradingHours(config)) {
+            return { allowed: false, reason: 'Outside trading hours' };
+        }
+
+        return { allowed: true };
+    }
+
+    static isWithinTradingHours(config) {
+        if (config.tradingHours === '24/7') return true;
+
+        // For now, allow trading - implement proper hour check if needed
+        const now = new Date();
+        const hour = now.getUTCHours();
+        const day = now.getUTCDay();
+
+        // Basic forex check: closed on weekends
+        if (config.category === 'forex' || config.category === 'commodity') {
+            if (day === 0 || day === 6) {
+                // Allow limited weekend hours based on typical forex times
+                if (day === 0 && hour < 22) return false; // Sunday before 22:00
+                if (day === 6) return false; // Saturday
             }
         }
 
         return true;
     }
 
-    /**
-     * Check if specific asset can trade
-     */
-    static canAssetTrade(symbol, direction) {
-        const assetState = state.assets[symbol];
-        const config = ASSET_CONFIGS[symbol];
-
-        // Check if asset is in top ranked
-        if (!state.portfolio.topRankedAssets.includes(symbol)) {
-            return { allowed: false, reason: 'Asset not in top ranked' };
-        }
-
-        // Check daily trade limit
-        if (assetState.dailyTrades >= config.maxTradesPerDay) {
-            return { allowed: false, reason: 'Daily trade limit reached' };
-        }
-
-        // Check direction limit
-        if (assetState.dailyTradesPerDirection[direction] >= 3) {
-            return { allowed: false, reason: `Max ${direction} trades reached` };
-        }
-
-        // Check cooldown
-        if (Date.now() < assetState.cooldownUntil) {
-            return { allowed: false, reason: 'Asset in cooldown' };
-        }
-
-        // Check blacklist
-        if (Date.now() < assetState.blacklistedUntil) {
-            return { allowed: false, reason: 'Asset blacklisted' };
-        }
-
-        // Check correlation conflict
-        if (PortfolioManager.hasCorrelationConflict(symbol)) {
-            return { allowed: false, reason: 'Correlation conflict' };
-        }
-
-        return { allowed: true };
-    }
-
-    /**
-     * Record trade result and update risk metrics
-     */
     static recordTradeResult(symbol, profit, direction) {
         const assetState = state.assets[symbol];
+        if (!assetState) return;
 
-        // Update daily stats
+        state.session.tradesCount++;
+
         if (profit > 0) {
+            MartingaleManager.recordWin(profit);
             state.portfolio.dailyProfit += profit;
             state.portfolio.dailyWins++;
             assetState.dailyWins++;
             assetState.consecutiveLosses = 0;
+
+            LOGGER.trade(`✅ WIN on ${symbol}: +$${profit.toFixed(2)}`);
         } else {
+            MartingaleManager.recordLoss(profit);
             state.portfolio.dailyLoss += Math.abs(profit);
             state.portfolio.dailyLosses++;
             assetState.dailyLosses++;
             assetState.consecutiveLosses++;
 
-            // Apply cooldown after 3 consecutive losses
-            if (assetState.consecutiveLosses >= 3) {
-                assetState.cooldownUntil = Date.now() + CONFIG.COOLDOWN_PERIOD;
-                console.log(`⏸️  ${symbol} entering cooldown after 3 consecutive losses`);
-            }
+            LOGGER.trade(`❌ LOSS on ${symbol}: -$${Math.abs(profit).toFixed(2)}`);
 
-            // Send loss alert email
-            bot.emailManager.sendLossAlert(symbol, assetState.consecutiveLosses);
+            if (assetState.tradeHistory.length >= CONFIG.WIN_RATE_LOOKBACK) {
+                const recentWinRate = assetState.tradeHistory
+                    .slice(-CONFIG.WIN_RATE_LOOKBACK)
+                    .filter(t => t.profit > 0).length / CONFIG.WIN_RATE_LOOKBACK;
+
+                if (recentWinRate < CONFIG.MIN_WIN_RATE_THRESHOLD) {
+                    assetState.blacklistedUntil = Date.now() + CONFIG.BLACKLIST_PERIOD;
+                    LOGGER.warn(`🚫 ${symbol} blacklisted for 24h (win rate: ${(recentWinRate * 100).toFixed(1)}%)`);
+                }
+            }
         }
 
-        // Update trade history
         assetState.tradeHistory.push({
             timestamp: Date.now(),
             direction,
             profit
         });
 
-        // Update win rate
-        const recentTrades = assetState.tradeHistory.slice(-CONFIG.WIN_RATE_LOOKBACK);
-        assetState.winRate = recentTrades.filter(t => t.profit > 0).length / recentTrades.length;
-
-        // Check for blacklist condition
-        if (recentTrades.length >= CONFIG.WIN_RATE_LOOKBACK &&
-            assetState.winRate < CONFIG.MIN_WIN_RATE_THRESHOLD) {
-            assetState.blacklistedUntil = Date.now() + CONFIG.BLACKLIST_PERIOD;
-            console.log(`🚫 ${symbol} blacklisted for 48h due to low win rate (${(assetState.winRate * 100).toFixed(1)}%)`);
+        if (assetState.tradeHistory.length > 100) {
+            assetState.tradeHistory = assetState.tradeHistory.slice(-100);
         }
 
-        // Update capital
-        state.capital += profit;
+        const recentTrades = assetState.tradeHistory.slice(-CONFIG.WIN_RATE_LOOKBACK);
+        assetState.winRate = recentTrades.length > 0
+            ? recentTrades.filter(t => t.profit > 0).length / recentTrades.length
+            : 0.5;
+
+        assetState.activePosition = null;
+        assetState.currentDirection = null;
     }
 
-    /**
-     * Reset daily counters
-     */
     static resetDailyCounters() {
-        state.portfolio.dailyLoss = 0;
         state.portfolio.dailyProfit = 0;
+        state.portfolio.dailyLoss = 0;
         state.portfolio.dailyWins = 0;
         state.portfolio.dailyLosses = 0;
-        state.lockedProfit = 0;
 
         Object.keys(state.assets).forEach(symbol => {
             state.assets[symbol].dailyTrades = 0;
             state.assets[symbol].dailyWins = 0;
             state.assets[symbol].dailyLosses = 0;
-            state.assets[symbol].dailyTradesPerDirection = { CALL: 0, PUT: 0 };
         });
 
-        console.log('📅 Daily counters reset');
+        LOGGER.info('📅 Daily counters reset');
     }
 }
 
 // ============================================
-// WEBSOCKET CONNECTION MANAGER
+// EMAIL MANAGER
+// ============================================
+
+class EmailManager {
+    constructor() {
+        if (CONFIG.EMAIL_ENABLED) {
+            this.transporter = nodemailer.createTransport(CONFIG.EMAIL_CONFIG);
+        }
+    }
+
+    async sendEmail(subject, text) {
+        if (!CONFIG.EMAIL_ENABLED || !this.transporter) return;
+
+        try {
+            await this.transporter.sendMail({
+                from: CONFIG.EMAIL_CONFIG.auth.user,
+                to: CONFIG.EMAIL_RECIPIENT,
+                subject: `Deriv Multiplier Bot - ${subject}`,
+                text: text
+            });
+            LOGGER.info(`📧 Email sent: ${subject}`);
+        } catch (error) {
+            LOGGER.error(`Email error: ${error.message}`);
+        }
+    }
+
+    async sendSessionReport(reason) {
+        const stats = SessionManager.getSessionStats();
+
+        const text = `
+SESSION ${reason === 'PROFIT_TARGET' ? 'COMPLETED ✅' : 'STOPPED ⛔'}
+========================================
+Reason: ${reason}
+Duration: ${stats.duration}
+
+Performance:
+-----------
+Trades: ${stats.trades}
+Wins: ${stats.wins} | Losses: ${stats.losses}
+Win Rate: ${stats.winRate}
+
+Financials:
+----------
+Net P/L: $${stats.netPL.toFixed(2)}
+Capital: $${state.capital.toFixed(2)}
+Martingale Level: ${stats.martingaleLevel}
+
+Assets Traded: ${Object.keys(state.assets).filter(s => state.assets[s].dailyTrades > 0).join(', ')}
+
+Time: ${new Date().toLocaleString()}
+        `;
+
+        await this.sendEmail(`Session ${reason}`, text);
+    }
+}
+
+// ============================================
+// CONNECTION MANAGER
 // ============================================
 
 class ConnectionManager {
@@ -1038,7 +1474,7 @@ class ConnectionManager {
     }
 
     connect() {
-        console.log('🔌 Connecting to Deriv API...');
+        LOGGER.info('🔌 Connecting to Deriv API...');
 
         this.ws = new WebSocket(`${CONFIG.WS_URL}?app_id=${CONFIG.APP_ID}`);
 
@@ -1051,14 +1487,11 @@ class ConnectionManager {
     }
 
     onOpen() {
-        console.log('✅ Connected to Deriv API');
+        LOGGER.info('✅ Connected to Deriv API');
         state.isConnected = true;
         this.reconnectAttempts = 0;
 
-        // Authorize
-        this.send({
-            authorize: CONFIG.API_TOKEN
-        });
+        this.send({ authorize: CONFIG.API_TOKEN });
     }
 
     onMessage(data) {
@@ -1066,65 +1499,54 @@ class ConnectionManager {
             const response = JSON.parse(data);
             this.handleResponse(response);
         } catch (error) {
-            console.error('❌ Error parsing message:', error);
+            LOGGER.error(`Error parsing message: ${error.message}`);
         }
     }
 
     handleResponse(response) {
-        // Handle authorization
         if (response.msg_type === 'authorize') {
             if (response.error) {
-                console.error('❌ Authorization failed:', response.error.message);
+                LOGGER.error(`Authorization failed: ${response.error.message}`);
                 return;
             }
-            console.log('🔐 Authorized successfully');
-            console.log(`👤 Account: ${response.authorize.loginid}`);
-            console.log(`💰 Balance: ${response.authorize.balance} ${response.authorize.currency}`);
+            LOGGER.info('🔐 Authorized successfully');
+            LOGGER.info(`👤 Account: ${response.authorize.loginid}`);
+            LOGGER.info(`💰 Balance: ${response.authorize.balance} ${response.authorize.currency}`);
             state.isAuthorized = true;
             state.accountBalance = response.authorize.balance;
-            // state.capital = response.authorize.balance; // REMOVED: Don't overwrite bot capital
 
-            // Start the bot
             bot.start();
         }
 
-        // Handle tick data
         if (response.msg_type === 'tick') {
             this.handleTick(response.tick);
         }
 
-        // Handle OHLC data
         if (response.msg_type === 'ohlc') {
             this.handleOHLC(response.ohlc);
         }
 
-        // Handle candles history
         if (response.msg_type === 'candles') {
             this.handleCandlesHistory(response);
         }
 
-        // Handle buy response
         if (response.msg_type === 'buy') {
             this.handleBuyResponse(response);
         }
 
-        // Handle proposal
-        if (response.msg_type === 'proposal') {
-            this.handleProposal(response);
+        if (response.msg_type === 'sell') {
+            this.handleSellResponse(response);
         }
 
-        // Handle proposal_open_contract
         if (response.msg_type === 'proposal_open_contract') {
             this.handleOpenContract(response);
         }
 
-        // Handle balance updates
         if (response.msg_type === 'balance') {
             state.accountBalance = response.balance.balance;
-            console.log(`💰 Real account balance updated: ${state.accountBalance}`);
+            LOGGER.debug(`💰 Balance: $${state.accountBalance.toFixed(2)}`);
         }
 
-        // Resolve pending requests
         if (response.req_id && state.pendingRequests.has(response.req_id)) {
             const { resolve } = state.pendingRequests.get(response.req_id);
             state.pendingRequests.delete(response.req_id);
@@ -1138,9 +1560,8 @@ class ConnectionManager {
 
         state.assets[symbol].ticks.push(tick.quote);
 
-        // Keep only last 500 ticks
-        if (state.assets[symbol].ticks.length > 500) {
-            state.assets[symbol].ticks = state.assets[symbol].ticks.slice(-500);
+        if (state.assets[symbol].ticks.length > CONFIG.MAX_TICKS_STORED) {
+            state.assets[symbol].ticks = state.assets[symbol].ticks.slice(-CONFIG.MAX_TICKS_STORED);
         }
     }
 
@@ -1157,26 +1578,31 @@ class ConnectionManager {
         };
 
         const candles = state.assets[symbol].candles;
+        const assetState = state.assets[symbol];
 
-        // Update or add candle
-        if (candles.length > 0 && candles[candles.length - 1].epoch === candle.epoch) {
-            candles[candles.length - 1] = candle;
-        } else {
+        const isNewBar = candles.length === 0 || candles[candles.length - 1].epoch !== candle.epoch;
+
+        if (isNewBar) {
             candles.push(candle);
+            assetState.lastBarTime = candle.epoch;
+        } else {
+            candles[candles.length - 1] = candle;
         }
 
-        // Keep only last 200 candles
-        if (candles.length > 200) {
-            state.assets[symbol].candles = candles.slice(-200);
+        if (candles.length > CONFIG.MAX_CANDLES_STORED) {
+            state.assets[symbol].candles = candles.slice(-CONFIG.MAX_CANDLES_STORED);
         }
 
-        // Update indicators
         this.updateIndicators(symbol);
+
+        if (isNewBar && candles.length > 2) {
+            this.processSignals(symbol);
+        }
     }
 
     handleCandlesHistory(response) {
         if (response.error) {
-            console.error('❌ Error fetching candles:', response.error.message);
+            LOGGER.error(`Error fetching candles: ${response.error.message}`);
             return;
         }
 
@@ -1191,216 +1617,118 @@ class ConnectionManager {
             epoch: c.epoch
         }));
 
-        console.log(`📊 Loaded ${response.candles.length} candles for ${symbol}`);
+        LOGGER.info(`📊 Loaded ${response.candles.length} candles for ${symbol}`);
         this.updateIndicators(symbol);
     }
 
     updateIndicators(symbol) {
         const assetState = state.assets[symbol];
         const config = ASSET_CONFIGS[symbol];
+
+        if (!assetState || !config) return;
+
         const candles = assetState.candles;
 
-        if (candles.length < config.emaLong + 10) return;
+        if (candles.length < config.wprPeriod + 2) return;
 
         const closes = candles.map(c => c.close);
         const highs = candles.map(c => c.high);
         const lows = candles.map(c => c.low);
 
-        // Store previous EMA values for crossover detection
-        const prevEmaShort = assetState.emaShort;
-        const prevEmaLong = assetState.emaLong;
-
-        // Calculate indicators
-        assetState.wpr = TechnicalIndicators.calculateWPR(highs, lows, closes, 80); // WPR Period 80
-        assetState.rsi = TechnicalIndicators.calculateRSI(closes, config.rsiPeriod);//RSI Period 14
-        assetState.adx = TechnicalIndicators.calculateADX(highs, lows, closes);
-        assetState.atr = TechnicalIndicators.calculateATR(highs, lows, closes);
-
-        // Update WPR History
-        assetState.wprHistory.push(assetState.wpr);
-        if (assetState.wprHistory.length > 3) {
-            assetState.wprHistory.shift();
-        }
-
-        // Need at least 3 data points for breakout detection
-        if (assetState.wprHistory.length < 3) return;
-
-        const wprPrev = assetState.wprHistory[assetState.wprHistory.length - 2];   // Index 1 (previous)
-        const wprCurr = assetState.wprHistory[assetState.wprHistory.length - 1];   // Index 2 (current)
-
-        let signal = 'none';
-
-        // Buy Signal: Breakout upward through -20 (Prev <= -20, Current > -20)
-        // Note: kWilliamEA uses: (wprValues[1] > -20 && wprValues[2] <= -20) which interprets index 1 as current and 2 as previous?
-        // Let's stick to standard chronological: Prev was below -20, Current is above -20.
-        // Wait, kWilliamEA `ArraySetAsSeries(true)` means index 0 is newest.
-        // EA: buySignal = (wprValues[1] > -20 && wprValues[2] <= -20);
-        // wprValues[0] is current (forming), [1] is last closed bar, [2] is bar before that.
-        // So checking if the *previous completed bar* broke out relative to the one before it.
-        // We are processing on every tick/candle update. Let's use the last two *closed* values if possible, or just current live values.
-        // Since we update using `closes` array which includes the latest candle, let's treat the latest calc as "current".
-
-        // Buy: Cross above -20 from below
-        if (wprPrev < -20 && wprCurr > -20) {
-            signal = 'PUT';
-        }
-        // Sell: Cross below -80 from above
-        else if (wprPrev > -80 && wprCurr < -80) {
-            signal = 'CALL';
-        }
-
-        if (signal !== 'none') {
-            this.processSignal(symbol, signal);
-        }
+        assetState.prevWpr = assetState.wpr;
+        assetState.wpr = TechnicalIndicators.calculateWPR(highs, lows, closes, config.wprPeriod);
     }
 
-    processSignal(symbol, direction) {
+    processSignals(symbol) {
         const assetState = state.assets[symbol];
-
-        // Check RSI confirmation
         const config = ASSET_CONFIGS[symbol];
-        let rsiConfirmed = false;
-        // if (direction === 'CALL' && assetState.rsi < config.rsiThreshold) {
-        //     rsiConfirmed = true;
-        // } else if (direction === 'PUT' && assetState.rsi > (100 - config.rsiThreshold)) {
-        //     rsiConfirmed = true;
-        // }
 
-        // if (!rsiConfirmed) {
-        //     console.log(`⚠️  ${symbol} ${direction} signal rejected: RSI not confirmed (${assetState.rsi.toFixed(1)}|${config.rsiThreshold})`);
-        //     return;
-        // }
+        if (!assetState || !config) return;
 
+        const signal = TechnicalIndicators.detectWPRSignal(assetState.prevWpr, assetState.wpr);
 
-        //Check for ADX confirmation
-        // let adxConfirmed = false;
-        // if (direction === 'CALL' && assetState.adx > config.adxThreshold) {
-        //     adxConfirmed = true;
-        // } else if (direction === 'PUT' && assetState.adx < (100 - config.adxThreshold)) {
-        //     adxConfirmed = true;
-        // }
+        if (!signal) return;
 
-        // if (!adxConfirmed) {
-        //     console.log(`⚠️  ${symbol} ${direction} signal rejected: ADX not confirmed (${assetState.adx.toFixed(1)})`);
-        //     return;
-        // }
+        LOGGER.signal(`${symbol} WPR Signal: ${signal} (WPR: ${assetState.wpr.toFixed(2)} from ${assetState.prevWpr.toFixed(2)})`);
 
-        //Check for ATR confirmation
-        // let atrConfirmed = false;
-        // if (direction === 'CALL' && assetState.atr < config.atrThreshold) {
-        //     atrConfirmed = true;
-        // } else if (direction === 'PUT' && assetState.atr > (100 - config.atrThreshold)) {
-        //     atrConfirmed = true;
-        // }
-
-        // if (!atrConfirmed) {
-        //     console.log(`⚠️  ${symbol} ${direction} signal rejected: ATR not confirmed (${assetState.atr.toFixed(1)})`);
-        //     return;
-        // }
-
-        // Calculate AI confidence
-        const confidence = AIConfidenceModel.calculateConfidence(symbol, direction);
-
-        if (confidence < CONFIG.MIN_CONFIDENCE_SCORE) {
-            console.log(`⚠️  ${symbol} ${direction} signal rejected: Low confidence (${(confidence * 100).toFixed(1)}% | ${CONFIG.MIN_CONFIDENCE_SCORE})`);
+        // Check if we need to flip position
+        if (assetState.activePosition) {
+            if (assetState.currentDirection !== signal) {
+                LOGGER.info(`🔄 ${symbol}: Signal flip detected - closing ${assetState.currentDirection}, opening ${signal}`);
+                bot.flipPosition(symbol, signal);
+            }
             return;
         }
 
-        // Store the signal
         assetState.lastSignal = {
-            direction,
-            confidence,
+            direction: signal,
+            wpr: assetState.wpr,
             timestamp: Date.now()
         };
 
-        console.log(`\n📈 WPR Signal: ${symbol} ${direction}`);
-        console.log(`   WPR Prev: ${assetState.wprHistory[assetState.wprHistory.length - 2].toFixed(2)} -> Curr: ${assetState.wprHistory[assetState.wprHistory.length - 1].toFixed(2)}`);
-
-        // REVERSE LOGIC: Close opposite positions
-        const oppositeDir = direction === 'CALL' ? 'PUT' : 'CALL';
-        const activeOpposite = state.portfolio.activePositions.filter(p => p.symbol === symbol && p.direction === oppositeDir);
-
-        if (activeOpposite.length > 0) {
-            console.log(`🔄 Reversing trade for ${symbol}: Closing ${activeOpposite.length} ${oppositeDir} positions`);
-
-            // Closing logic for Multipliers (Sell the contract)
-            activeOpposite.forEach(position => {
-                if (position.contractId) {
-                    bot.connection.send({
-                        sell: position.contractId,
-                        price: 0 // Sell at market price
-                    });
-                    LOGGER.trade(`Selling opposite position ${position.contractId} on ${symbol}`);
-                }
-            });
-        }
-
-        // Try to execute trade
-        LOGGER.signal(`${symbol} ${direction} WPR Breakout (Confidence: 100%)`);
-        bot.executeTrade(symbol, direction, confidence);
+        bot.executeTrade(symbol, signal);
     }
 
     handleBuyResponse(response) {
-        const reqId = response.echo_req.req_id;
-        const posIndex = state.portfolio.activePositions.findIndex(p => p.reqId == reqId);
-        const position = posIndex >= 0 ? state.portfolio.activePositions[posIndex] : null;
-
         if (response.error) {
-            console.error('❌ Trade error:', response.error.message);
+            LOGGER.error(`Trade error: ${response.error.message}`);
 
-            // Cleanup ghost position
-            if (posIndex >= 0) {
-                console.log(`🧹 Cleaning up ghost position for ${position.symbol}`);
-                state.portfolio.activePositions.splice(posIndex, 1);
+            // Parse error for useful info
+            const errorMsg = response.error.message || '';
+
+            // Extract valid multipliers from error message if present
+            const multiplierMatch = errorMsg.match(/Accepts\s+([\d,\s]+)/);
+            if (multiplierMatch) {
+                const validMultipliers = multiplierMatch[1].split(',').map(m => parseInt(m.trim()));
+                const symbol = response.echo_req?.parameters?.symbol;
+                if (symbol && ASSET_CONFIGS[symbol]) {
+                    LOGGER.warn(`📋 Updating ${symbol} multipliers to: [${validMultipliers.join(', ')}]`);
+                    ASSET_CONFIGS[symbol].multipliers = validMultipliers;
+                    ASSET_CONFIGS[symbol].defaultMultiplier = validMultipliers[0];
+                }
             }
 
-            // Retry with alternate barrier if provided
-            const barrierErrorMatch = response.error.message.match(/Barriers available are (.*)/);
-            if (barrierErrorMatch && position && !position.isRetry) {
-                const availableBarriers = barrierErrorMatch[1].split(', ').map(b => b.trim());
-                let bestBarrier = availableBarriers.reduce((prev, curr) =>
-                    Math.abs(parseFloat(curr)) < Math.abs(parseFloat(prev)) ? curr : prev
-                );
+            // Extract minimum stake from error if present
+            const stakeMatch = errorMsg.match(/equal to or higher than\s+([\d.]+)/);
+            if (stakeMatch) {
+                const minStake = parseFloat(stakeMatch[1]);
+                const symbol = response.echo_req?.parameters?.symbol;
+                if (symbol && ASSET_CONFIGS[symbol]) {
+                    LOGGER.warn(`📋 Updating ${symbol} minStake to: $${minStake}`);
+                    ASSET_CONFIGS[symbol].minStake = minStake;
+                }
+            }
 
-                console.log(`🔄 Retrying ${position.symbol} with barrier: ${bestBarrier}`);
-                const config = ASSET_CONFIGS[position.symbol];
-                const newReqId = this.send({
-                    buy: 1, subscribe: 1, price: position.stake,
-                    parameters: {
-                        contract_type: position.direction === 'CALL' ? 'VANILLALONGCALL' : 'VANILLALONGPUT',
-                        symbol: position.symbol, currency: 'USD', amount: position.stake,
-                        barrier: bestBarrier, duration: config.duration,
-                        duration_unit: config.durationUnit, basis: 'stake'
+            const reqId = response.echo_req?.req_id;
+            if (reqId) {
+                const posIndex = state.portfolio.activePositions.findIndex(p => p.reqId === reqId);
+                if (posIndex >= 0) {
+                    const pos = state.portfolio.activePositions[posIndex];
+                    if (state.assets[pos.symbol]) {
+                        state.assets[pos.symbol].activePosition = null;
+                        state.assets[pos.symbol].currentDirection = null;
                     }
-                });
-                state.portfolio.activePositions.push({ ...position, reqId: newReqId, isRetry: true });
+                    state.portfolio.activePositions.splice(posIndex, 1);
+                }
             }
             return;
         }
 
         const contract = response.buy;
-        console.log(`✅ Trade executed: Contract ID ${contract.contract_id}`);
-        console.log(`   Buy Price: ${contract.buy_price}`);
+        LOGGER.trade(`✅ Position opened: Contract ${contract.contract_id}, Buy Price: $${contract.buy_price}`);
+
+        const reqId = response.echo_req.req_id;
+        const position = state.portfolio.activePositions.find(p => p.reqId === reqId);
 
         if (position) {
             position.contractId = contract.contract_id;
             position.buyPrice = contract.buy_price;
 
-            // Increment trade counters ON SUCCESS
-            const assetState = state.assets[position.symbol];
-            if (assetState) {
-                assetState.dailyTrades++;
-                assetState.dailyTradesPerDirection[position.direction]++;
+            if (state.assets[position.symbol]) {
+                state.assets[position.symbol].activePosition = position;
             }
-
-            console.log(`[DEBUG] Linked contract ${contract.contract_id} to position ${position.symbol}`);
-            LOGGER.info(`Linked contract ${contract.contract_id} to position ${position.symbol}`);
-        } else {
-            console.log(`[DEBUG] No position found for reqId ${reqId}`);
-            LOGGER.warn(`Could not find position for reqId ${reqId}`);
         }
 
-        // Subscribe to contract updates
         this.send({
             proposal_open_contract: 1,
             contract_id: contract.contract_id,
@@ -1408,16 +1736,35 @@ class ConnectionManager {
         });
     }
 
-    handleProposal(response) {
+    handleSellResponse(response) {
         if (response.error) {
-            console.error('❌ Proposal error:', response.error.message);
+            LOGGER.error(`Sell error: ${response.error.message}`);
             return;
         }
 
-        // Store proposal for potential execution
-        const proposal = response.proposal;
-        console.log(`📋 Proposal: ${proposal.longcode}`);
-        console.log(`   Payout: ${proposal.payout}, Ask: ${proposal.ask_price}`);
+        const sold = response.sell;
+        LOGGER.trade(`✅ Position closed: Contract ${sold.contract_id}, Sold at: $${sold.sold_for}`);
+
+        const posIndex = state.portfolio.activePositions.findIndex(
+            p => p.contractId === sold.contract_id
+        );
+
+        if (posIndex >= 0) {
+            const position = state.portfolio.activePositions[posIndex];
+            const profit = sold.sold_for - position.buyPrice;
+
+            RiskManager.recordTradeResult(position.symbol, profit, position.direction);
+            state.portfolio.activePositions.splice(posIndex, 1);
+
+            if (state.assets[position.symbol]) {
+                state.assets[position.symbol].activePosition = null;
+                state.assets[position.symbol].currentDirection = null;
+            }
+
+            if (position.pendingFlipTo) {
+                bot.executeTrade(position.symbol, position.pendingFlipTo);
+            }
+        }
     }
 
     handleOpenContract(response) {
@@ -1425,73 +1772,61 @@ class ConnectionManager {
 
         const contract = response.proposal_open_contract;
 
-        // Debug: Log contract updates for R_75
-        if (contract.underlying === 'R_75') {
-            // console.log(`[DEBUG] R_75 Update: ID=${contract.contract_id} Profit=${contract.profit} Sold=${contract.is_sold}`);
-        }
-
-        // Find the position (using loose equality for IDs)
         const posIndex = state.portfolio.activePositions.findIndex(
-            p => p.contractId == contract.contract_id
+            p => p.contractId === contract.contract_id
         );
 
-        if (contract.is_sold || contract.is_expired) {
+        if (contract.is_sold || contract.is_expired || contract.status === 'sold') {
             const profit = contract.profit;
             const symbol = contract.underlying;
 
-            console.log(`\n🏁 Contract ${contract.contract_id} closed`);
-            console.log(`   Result: ${profit >= 0 ? '✅ WIN' : '❌ LOSS'} ${profit.toFixed(2)}`);
+            LOGGER.trade(`Contract ${contract.contract_id} closed: ${profit >= 0 ? 'WIN' : 'LOSS'} $${profit.toFixed(2)}`);
 
-            // Record result
             if (posIndex >= 0) {
                 const position = state.portfolio.activePositions[posIndex];
-                LOGGER.trade(`Contract ${contract.contract_id} closed: ${profit >= 0 ? 'WIN' : 'LOSS'} ($${profit.toFixed(2)})`);
                 RiskManager.recordTradeResult(symbol, profit, position.direction);
                 state.portfolio.activePositions.splice(posIndex, 1);
+
+                if (state.assets[symbol]) {
+                    state.assets[symbol].activePosition = null;
+                    state.assets[symbol].currentDirection = null;
+                }
             }
 
-            // Unsubscribe from contract
-            this.send({
-                forget: response.subscription?.id
-            });
+            SessionManager.checkSessionTargets();
+
+            if (response.subscription?.id) {
+                this.send({ forget: response.subscription.id });
+            }
         } else if (posIndex >= 0) {
-            // Update position with current profit/loss
-            const profitValue = contract.profit !== undefined ? contract.profit : (contract.bid_price - contract.buy_price);
-            state.portfolio.activePositions[posIndex].currentProfit = profitValue || 0;
-            if (Math.random() < 0.05) console.log(`[DEBUG] ${contract.underlying} P/L Update: Profit=${contract.profit}, Bid=${contract.bid_price}`);
-
-            // Log every 10th update for debugging
-            if (Math.random() < 0.1) {
-                console.log(`[DEBUG] Update ${contract.underlying}: Profit=${contract.profit}, Bid=${contract.bid_price}, Calculated=${contract.bid_price - contract.buy_price}`);
-            }
+            state.portfolio.activePositions[posIndex].currentProfit = contract.profit;
+            state.portfolio.activePositions[posIndex].currentPrice = contract.current_spot;
         }
     }
 
     onError(error) {
-        console.error('❌ WebSocket error:', error.message);
+        LOGGER.error(`WebSocket error: ${error.message}`);
     }
 
     onClose() {
-        console.log('🔌 Disconnected from Deriv API');
+        LOGGER.warn('🔌 Disconnected from Deriv API');
         state.isConnected = false;
         state.isAuthorized = false;
 
-        // Attempt reconnection
         if (this.reconnectAttempts < this.maxReconnectAttempts) {
             this.reconnectAttempts++;
-            console.log(`🔄 Reconnecting in ${this.reconnectDelay / 1000}s (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+            LOGGER.info(`🔄 Reconnecting in ${this.reconnectDelay / 1000}s (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
             setTimeout(() => this.connect(), this.reconnectDelay);
         } else {
-            console.error('❌ Max reconnection attempts reached. Exiting.');
-            // bot.emailManager.sendStatusUpdate('Disconnected - Max reconnection attempts reached');
+            LOGGER.error('Max reconnection attempts reached. Exiting.');
             process.exit(1);
         }
     }
 
     send(data) {
         if (!state.isConnected) {
-            console.error('❌ Cannot send: Not connected');
-            return;
+            LOGGER.error('Cannot send: Not connected');
+            return null;
         }
 
         data.req_id = state.requestId++;
@@ -1502,9 +1837,13 @@ class ConnectionManager {
     sendAsync(data) {
         return new Promise((resolve, reject) => {
             const reqId = this.send(data);
+            if (!reqId) {
+                reject(new Error('Not connected'));
+                return;
+            }
+
             state.pendingRequests.set(reqId, { resolve, reject });
 
-            // Timeout after 30 seconds
             setTimeout(() => {
                 if (state.pendingRequests.has(reqId)) {
                     state.pendingRequests.delete(reqId);
@@ -1519,68 +1858,50 @@ class ConnectionManager {
 // MAIN BOT CLASS
 // ============================================
 
-class DerivMultiAssetBot {
+class DerivMultiplierBot {
     constructor() {
         this.connection = new ConnectionManager();
         this.emailManager = new EmailManager();
         this.scoringInterval = null;
-        this.rebalanceInterval = null;
         this.dailyResetInterval = null;
-        this.summaryInterval = null;
     }
 
     async start() {
-        console.log('\n🤖 ClaudeWillv Deriv Multi-Asset Bot Starting...');
-        console.log('=====================================');
+        console.log('\n' + '═'.repeat(70));
+        console.log('         DERIV MULTIPLIER BOT v4.1');
+        console.log('         Multi-Asset MT5-Style Trading');
+        console.log('═'.repeat(70));
         console.log(`💰 Initial Capital: $${state.capital}`);
-        console.log(`📊 Tracking ${Object.keys(ASSET_CONFIGS).length} assets`);
-        console.log(`🎯 Trading top ${CONFIG.TOP_ASSETS_TO_TRADE} ranked assets`);
-        console.log('=====================================\n');
+        console.log(`📊 Active Assets: ${ACTIVE_ASSETS.length} (${ACTIVE_ASSETS.join(', ')})`);
+        console.log(`🎯 Session Target: $${CONFIG.SESSION_PROFIT_TARGET} | Stop Loss: $${CONFIG.SESSION_STOP_LOSS}`);
+        console.log(`📈 Martingale: ${CONFIG.MARTINGALE_MULTIPLIER}x after ${CONFIG.LOSSES_BEFORE_MARTINGALE} loss(es)`);
+        console.log('═'.repeat(70) + '\n');
 
-        // Subscribe to balance updates
-        this.connection.send({
-            balance: 1,
-            subscribe: 1
-        });
+        this.connection.send({ balance: 1, subscribe: 1 });
 
-        // Subscribe to assets (max 5 at a time for efficiency)
         await this.subscribeToAssets();
 
-        // Initial asset ranking
         PortfolioManager.rankAssets();
 
-        // Start periodic scoring
         this.scoringInterval = setInterval(() => {
-            console.log('\n🔄 Recalculating asset scores...');
+            LOGGER.info('🔄 Recalculating asset scores...');
             PortfolioManager.rankAssets();
         }, CONFIG.ASSET_SCORING_INTERVAL);
 
-        // Start rebalance interval
-        this.rebalanceInterval = setInterval(() => {
-            console.log('\n⚖️  Rebalancing portfolio allocations...');
-            state.portfolio.lastRebalance = Date.now();
-            PortfolioManager.rankAssets();
-        }, CONFIG.REBALANCE_INTERVAL);
-
-        // Daily reset at midnight UTC
         this.scheduleDailyReset();
 
-        // Start 30-minute email summary timer
-        this.summaryInterval = setInterval(() => {
-            this.emailManager.sendSummary();
-        }, 1800000);
+        SessionManager.startNewSession();
 
-        // this.emailManager.sendStatusUpdate('Bot Started Successfully');
-        console.log('✅ Bot started successfully!\n');
+        LOGGER.info('✅ Bot started successfully!');
     }
 
     async subscribeToAssets() {
-        const symbols = Object.keys(ASSET_CONFIGS);
+        const symbols = Object.keys(state.assets);
 
         for (const symbol of symbols) {
             const config = ASSET_CONFIGS[symbol];
+            if (!config) continue;
 
-            // Get candle history first
             this.connection.send({
                 ticks_history: symbol,
                 adjust_start_time: 1,
@@ -1590,7 +1911,6 @@ class DerivMultiAssetBot {
                 style: 'candles'
             });
 
-            // Subscribe to OHLC updates
             this.connection.send({
                 ticks_history: symbol,
                 adjust_start_time: 1,
@@ -1601,72 +1921,78 @@ class DerivMultiAssetBot {
                 subscribe: 1
             });
 
-            // Subscribe to ticks for real-time price
             this.connection.send({
                 ticks: symbol,
                 subscribe: 1
             });
 
-            console.log(`📡 Subscribed to ${config.name} (${symbol})`);
+            LOGGER.info(`📡 Subscribed to ${config.name} (${symbol}) [${config.category}]`);
 
-            // Small delay to avoid rate limiting
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise(resolve => setTimeout(resolve, 300));
         }
     }
 
-    executeTrade(symbol, direction, confidence) {
-        // Check portfolio-wide limits
+    executeTrade(symbol, direction) {
         if (!RiskManager.canTrade()) {
             return;
         }
 
-        // Check asset-specific limits
         const assetCheck = RiskManager.canAssetTrade(symbol, direction);
         if (!assetCheck.allowed) {
-            console.log(`⚠️  Trade blocked: ${assetCheck.reason}`);
-            return;
-        }
-
-        // Check synthetic correlation
-        if (PortfolioManager.checkSyntheticCorrelation(symbol)) {
-            console.log(`⚠️  Trade blocked: Lower ranked in correlated pair`);
-            return;
-        }
-
-        // Check for existing same-direction trade
-        const hasExisting = state.portfolio.activePositions.some(
-            p => p.symbol === symbol && p.direction === direction
-        );
-        if (hasExisting) {
-            console.log(`⚠️  Trade blocked: Already have an active ${direction} on ${symbol}`);
+            LOGGER.debug(`Trade blocked: ${assetCheck.reason}`);
             return;
         }
 
         const config = ASSET_CONFIGS[symbol];
         const assetState = state.assets[symbol];
 
-        // Get asset ranking
-        const rank = state.portfolio.topRankedAssets.indexOf(symbol);
-        if (rank === -1) {
-            console.log(`⚠️  Trade blocked: Asset not in top ranked`);
+        if (!config || !assetState) return;
+
+        const stake = MartingaleManager.getSafeStake(symbol);
+
+        if (stake <= 0) {
+            LOGGER.error(`Cannot trade ${symbol}: Stake below minimum ($${config.minStake} required)`);
             return;
         }
 
-        // Calculate stake
-        const stake = PortfolioManager.calculateStake(symbol, rank);
+        // Validate stake meets minimum
+        if (stake < config.minStake) {
+            LOGGER.error(`Cannot trade ${symbol}: Stake $${stake} below minimum $${config.minStake}`);
+            return;
+        }
 
-        console.log(`\n🎯 Executing Trade:`);
-        console.log(`   Asset: ${config.name} (${symbol})`);
-        console.log(`   Direction: ${direction}`);
-        console.log(`   Stake: $${stake}`);
-        console.log(`   Duration: ${config.duration}${config.durationUnit}`);
-        console.log(`   Confidence: ${(confidence * 100).toFixed(1)}%`);
-        console.log(`   Ranking: #${rank + 1}`);
+        const contractType = direction === 'UP' ? 'MULTUP' : 'MULTDOWN';
 
-        // Send trade request
-        const contractType = direction === 'CALL' ? 'VANILLALONGCALL' : 'VANILLALONGPUT';
+        // Get valid multiplier for this asset
+        const multiplier = MartingaleManager.getValidMultiplier(symbol);
 
-        const reqId = this.connection.send({
+        // Validate multiplier is in allowed list
+        if (!config.multipliers.includes(multiplier)) {
+            LOGGER.error(`Invalid multiplier ${multiplier} for ${symbol}. Allowed: ${config.multipliers.join(', ')}`);
+            return;
+        }
+
+        LOGGER.trade(`🎯 Opening ${direction} on ${config.name} (${symbol})`);
+        LOGGER.trade(`   Type: ${contractType} | Stake: $${stake.toFixed(2)} | Multiplier: x${multiplier}`);
+        LOGGER.trade(`   Min Stake: $${config.minStake} | Valid Multis: [${config.multipliers.join(',')}]`);
+        LOGGER.trade(`   Category: ${config.category} | Martingale Level: ${state.martingale.level}`);
+
+        const position = {
+            symbol,
+            direction,
+            stake,
+            multiplier,
+            entryTime: Date.now(),
+            contractId: null,
+            reqId: null,
+            currentProfit: 0,
+            buyPrice: 0,
+            pendingFlipTo: null
+        };
+
+        state.portfolio.activePositions.push(position);
+
+        const tradeRequest = {
             buy: 1,
             subscribe: 1,
             price: stake,
@@ -1675,29 +2001,84 @@ class DerivMultiAssetBot {
                 symbol: symbol,
                 currency: 'USD',
                 amount: stake,
-                barrier: "+0.000",
-                duration: config.duration,
-                duration_unit: config.durationUnit,
+                multiplier: multiplier,
                 basis: 'stake'
             }
-        });
+        };
 
-        // Track position (contract ID will be updated in buy response)
-        state.portfolio.activePositions.push({
-            symbol,
-            direction,
-            stake,
-            confidence,
-            entryTime: Date.now(),
-            contractId: null,
-            reqId: reqId, // Store reqId to match with response
-            currentProfit: 0,
-            buyPrice: 0
-        });
+        if (CONFIG.USE_STOP_LOSS) {
+            tradeRequest.parameters.limit_order = tradeRequest.parameters.limit_order || {};
+            tradeRequest.parameters.limit_order.stop_loss = stake * (CONFIG.STOP_LOSS_PERCENT / 100);
+        }
 
-        LOGGER.trade(`Placing ${direction} trade on ${symbol} with stake $${stake}`);
+        if (CONFIG.USE_TAKE_PROFIT) {
+            tradeRequest.parameters.limit_order = tradeRequest.parameters.limit_order || {};
+            tradeRequest.parameters.limit_order.take_profit = stake * (CONFIG.TAKE_PROFIT_PERCENT / 100);
+        }
+
+        const reqId = this.connection.send(tradeRequest);
+        position.reqId = reqId;
+
+        assetState.dailyTrades++;
+        assetState.currentDirection = direction;
+
+        LOGGER.trade(`📤 Trade request sent (reqId: ${reqId})`);
     }
 
+    async flipPosition(symbol, newDirection) {
+        const assetState = state.assets[symbol];
+        if (!assetState) return;
+
+        const position = assetState.activePosition;
+
+        if (!position || !position.contractId) {
+            LOGGER.warn(`No active position to flip on ${symbol}`);
+            this.executeTrade(symbol, newDirection);
+            return;
+        }
+
+        LOGGER.trade(`🔄 Flipping position on ${symbol}: ${position.direction} → ${newDirection}`);
+
+        position.pendingFlipTo = newDirection;
+
+        this.connection.send({
+            sell: position.contractId,
+            price: 0
+        });
+    }
+
+    async closeAllPositions() {
+        LOGGER.info('🔒 Closing all positions...');
+
+        for (const position of state.portfolio.activePositions) {
+            if (position.contractId) {
+                this.connection.send({
+                    sell: position.contractId,
+                    price: 0
+                });
+                LOGGER.info(`Closing position: ${position.symbol} ${position.direction}`);
+            }
+        }
+    }
+
+    closePosition(symbol) {
+        const assetState = state.assets[symbol];
+        if (!assetState) return;
+
+        const position = assetState.activePosition;
+
+        if (!position || !position.contractId) {
+            LOGGER.warn(`No active position on ${symbol}`);
+            return;
+        }
+
+        LOGGER.trade(`🔒 Manually closing position on ${symbol}`);
+
+        this.connection.send({
+            sell: position.contractId,
+            price: 0
+        });
+    }
 
     scheduleDailyReset() {
         const now = new Date();
@@ -1708,56 +2089,91 @@ class DerivMultiAssetBot {
 
         setTimeout(() => {
             RiskManager.resetDailyCounters();
-            this.scheduleDailyReset(); // Schedule next reset
+            this.scheduleDailyReset();
         }, msUntilMidnight);
 
-        console.log(`📅 Daily reset scheduled in ${(msUntilMidnight / 3600000).toFixed(1)} hours`);
+        LOGGER.info(`📅 Daily reset in ${(msUntilMidnight / 3600000).toFixed(1)} hours`);
     }
 
     stop() {
-        console.log('\n🛑 Stopping bot...');
+        LOGGER.info('🛑 Stopping bot...');
 
         if (this.scoringInterval) clearInterval(this.scoringInterval);
-        if (this.rebalanceInterval) clearInterval(this.rebalanceInterval);
-        if (this.summaryInterval) clearInterval(this.summaryInterval);
 
-        this.emailManager.sendSummary(true);
+        this.closeAllPositions();
 
-        if (this.connection.ws) {
-            this.connection.ws.close();
-        }
-
-        console.log('👋 Bot stopped');
+        setTimeout(() => {
+            if (this.connection.ws) {
+                this.connection.ws.close();
+            }
+            LOGGER.info('👋 Bot stopped');
+        }, 2000);
     }
 
     getStatus() {
+        const sessionStats = SessionManager.getSessionStats();
+
+        // Group assets by category
+        const assetsByCategory = {};
+        Object.entries(state.assets).forEach(([symbol, data]) => {
+            const config = ASSET_CONFIGS[symbol];
+            if (!config) return;
+
+            const category = config.category;
+            if (!assetsByCategory[category]) {
+                assetsByCategory[category] = [];
+            }
+            assetsByCategory[category].push({
+                symbol,
+                name: config.name,
+                score: (data.score * 100).toFixed(1) + '%',
+                winRate: (data.winRate * 100).toFixed(1) + '%',
+                wpr: data.wpr.toFixed(1),
+                dailyTrades: data.dailyTrades,
+                direction: data.currentDirection || '-',
+                multiplier: config.defaultMultiplier
+            });
+        });
+
         return {
             connected: state.isConnected,
             authorized: state.isAuthorized,
             capital: state.capital,
             accountBalance: state.accountBalance,
-            lockedProfit: state.lockedProfit,
-            dailyProfit: state.portfolio.dailyProfit,
-            dailyLoss: state.portfolio.dailyLoss,
+            session: sessionStats,
+            martingale: {
+                level: state.martingale.level,
+                stake: state.martingale.currentStake,
+                consecutiveLosses: state.martingale.consecutiveLosses
+            },
             activePositionsCount: state.portfolio.activePositions.length,
-            activePositions: state.portfolio.activePositions.map(pos => ({
-                symbol: pos.symbol,
-                direction: pos.direction,
-                stake: pos.stake,
-                profit: pos.currentProfit,
-                duration: Math.floor((Date.now() - pos.entryTime) / 1000)
-            })),
+            activePositions: state.portfolio.activePositions.map(pos => {
+                const config = ASSET_CONFIGS[pos.symbol];
+                return {
+                    symbol: pos.symbol,
+                    name: config?.name || pos.symbol,
+                    category: config?.category || 'unknown',
+                    direction: pos.direction,
+                    stake: pos.stake,
+                    multiplier: pos.multiplier,
+                    profit: pos.currentProfit,
+                    contractId: pos.contractId,
+                    duration: Math.floor((Date.now() - pos.entryTime) / 1000)
+                };
+            }),
             topAssets: state.portfolio.topRankedAssets,
+            assetsByCategory,
             assetStats: Object.entries(state.assets).map(([symbol, data]) => {
-                const assetProfit = data.tradeHistory.reduce((sum, t) => sum + t.profit, 0);
+                const config = ASSET_CONFIGS[symbol];
                 return {
                     symbol,
+                    name: config?.name || symbol,
+                    category: config?.category || 'unknown',
                     score: (data.score * 100).toFixed(1) + '%',
                     winRate: (data.winRate * 100).toFixed(1) + '%',
+                    wpr: data.wpr.toFixed(1),
                     dailyTrades: data.dailyTrades,
-                    rsi: data.rsi.toFixed(1),
-                    adx: data.adx.toFixed(1),
-                    profit: assetProfit.toFixed(2)
+                    direction: data.currentDirection || '-'
                 };
             })
         };
@@ -1770,56 +2186,63 @@ class DerivMultiAssetBot {
 
 class Dashboard {
     static display() {
-        // console.clear();
-        console.log('╔══════════════════════════════════════════════════════════════╗');
-        console.log('║         ClaudeWillv DERIV MULTI-ASSET BOT - LIVE DASHBOARD      ║');
-        console.log('╠══════════════════════════════════════════════════════════════╣');
-
         const status = bot.getStatus();
+        const session = status.session;
 
-        console.log(`║ 💰 Bot Capital: $${status.capital.toFixed(2).padEnd(10)} 🔒 Locked: $${status.lockedProfit.toFixed(2).padEnd(8)}║`);
-        console.log(`║ 🏦 Real Balance: $${status.accountBalance.toFixed(2).padEnd(46)}║`);
-        console.log(`║ 📈 Daily P/L: +$${status.dailyProfit.toFixed(2)} / -$${status.dailyLoss.toFixed(2)}`.padEnd(64) + '║');
-        console.log(`║ 📊 Positions: ${status.activePositionsCount}/${CONFIG.MAX_OPEN_POSITIONS}`.padEnd(64) + '║');
-        console.log('╠══════════════════════════════════════════════════════════════╣');
+        console.log('\n' + '╔' + '═'.repeat(78) + '╗');
+        console.log('║' + '     DERIV MULTIPLIER BOT v4.1 - MULTI-ASSET MT5 STYLE'.padEnd(78) + '║');
+        console.log('╠' + '═'.repeat(78) + '╣');
 
-        if (status.activePositions.length > 0) {
-            console.log('║ 🚀 ACTIVE POSITIONS:                                         ║');
-            console.log('║ Symbol      | Dir  | Stake  | Profit | Time                 ║');
-            console.log('║-------------|------|--------|--------|----------------------║');
-            status.activePositions.forEach(pos => {
-                const profit = pos.profit || 0;
-                const profitColor = profit >= 0 ? '\x1b[32m' : '\x1b[31m';
-                const resetColor = '\x1b[0m';
-                const line = `║ ${pos.symbol.padEnd(11)} | ${pos.direction.padEnd(4)} | $${pos.stake.toFixed(2).padEnd(6)} | ${profitColor}${profit.toFixed(2).padEnd(6)}${resetColor} | ${pos.duration}s`.padEnd(73) + '║';
-                console.log(line);
-            });
-            console.log('╠══════════════════════════════════════════════════════════════╣');
+        const netPLColor = session.netPL >= 0 ? '\x1b[32m' : '\x1b[31m';
+        const resetColor = '\x1b[0m';
+
+        console.log(`║ 💰 Capital: $${status.capital.toFixed(2).padEnd(12)} 🏦 Account: $${status.accountBalance.toFixed(2).padEnd(12)}              ║`);
+        console.log(`║ 📊 Session: ${session.duration.padEnd(10)} Trades: ${session.trades.toString().padEnd(5)} WR: ${session.winRate.padEnd(8)}                ║`);
+        console.log(`║ 💹 Net P/L: ${netPLColor}$${session.netPL.toFixed(2).padEnd(10)}${resetColor} Target: $${session.profitTarget.toFixed(2).padEnd(10)}                       ║`);
+
+        const mgColor = status.martingale.level > 0 ? '\x1b[33m' : '\x1b[32m';
+        console.log(`║ 📈 Martingale: ${mgColor}Lvl ${status.martingale.level}${resetColor} | Stake: $${status.martingale.stake.toFixed(2)} | Consec Losses: ${status.martingale.consecutiveLosses}`.padEnd(87) + '║');
+
+        if (session.accumulatedLoss > 0) {
+            console.log(`║ ⚠️  Accumulated Loss: $${session.accumulatedLoss.toFixed(2)} (recovering...)`.padEnd(79) + '║');
         }
 
-        console.log('║ 🏆 TOP RANKED ASSETS:                                        ║');
+        console.log('╠' + '═'.repeat(78) + '╣');
 
-        status.topAssets.forEach((symbol, idx) => {
-            const stat = status.assetStats.find(s => s.symbol === symbol);
-            if (stat) {
-                console.log(`║   ${idx + 1}. ${symbol.padEnd(12)} Score: ${stat.score.padEnd(7)} WR: ${stat.winRate.padEnd(7)}║`);
+        // Active Positions
+        if (status.activePositions.length > 0) {
+            console.log('║ 🚀 ACTIVE POSITIONS:'.padEnd(79) + '║');
+            console.log('║ Symbol       | Category  | Dir  | Stake   | Multi | Profit  | Duration'.padEnd(79) + '║');
+            console.log('║' + '-'.repeat(78) + '║');
+
+            status.activePositions.forEach(pos => {
+                const profitColor = pos.profit >= 0 ? '\x1b[32m' : '\x1b[31m';
+                const profitStr = pos.profit >= 0 ? `+${pos.profit.toFixed(2)}` : pos.profit.toFixed(2);
+                console.log(`║ ${pos.symbol.padEnd(12)} | ${pos.category.padEnd(9)} | ${pos.direction.padEnd(4)} | $${pos.stake.toFixed(2).padEnd(6)} | x${pos.multiplier.toString().padEnd(3)} | ${profitColor}${profitStr.padEnd(7)}${resetColor} | ${pos.duration}s`.padEnd(87) + '║');
+            });
+            console.log('╠' + '═'.repeat(78) + '╣');
+        }
+
+        // Top Assets
+        console.log('║ 🏆 TOP ASSETS: ' + status.topAssets.slice(0, 5).join(', ').padEnd(63) + '║');
+        console.log('╠' + '═'.repeat(78) + '╣');
+
+        // Asset Stats by Category
+        const categories = ['synthetic', 'forex', 'crypto', 'commodity'];
+        categories.forEach(cat => {
+            const assets = status.assetStats.filter(a => a.category === cat);
+            if (assets.length > 0) {
+                console.log(`║ 📁 ${cat.toUpperCase()}:`.padEnd(79) + '║');
+                assets.slice(0, 4).forEach(stat => {
+                    const isTop = status.topAssets.includes(stat.symbol);
+                    const marker = isTop ? '🏆' : '  ';
+                    console.log(`║${marker}${stat.symbol.padEnd(12)} | Scr:${stat.score.padEnd(6)} | WR:${stat.winRate.padEnd(6)} | WPR:${stat.wpr.padEnd(6)} | Trd:${stat.dailyTrades} | ${stat.direction.padEnd(4)} ║`);
+                });
             }
         });
 
-        console.log('╠══════════════════════════════════════════════════════════════╣');
-        console.log('║ 📊 ASSET PERFORMANCE:                                        ║');
-        console.log('║ Symbol      | Score  | WinRate | Trades | RSI   | P/L       ║');
-        console.log('║-------------|--------|---------|--------|-------|-----------║');
-
-        status.assetStats.slice(0, 10).forEach(stat => {
-            const profitColor = parseFloat(stat.profit) >= 0 ? '\x1b[32m' : '\x1b[31m';
-            const resetColor = '\x1b[0m';
-            const line = `║ ${stat.symbol.padEnd(11)} | ${stat.score.padEnd(6)} | ${stat.winRate.padEnd(7)} | ${String(stat.dailyTrades).padEnd(6)} | ${stat.rsi.padEnd(5)} | ${profitColor}${stat.profit.padEnd(9)}${resetColor} ║`;
-            console.log(line);
-        });
-
-        console.log('╚══════════════════════════════════════════════════════════════╝');
-        console.log(`⏰ Last update: ${new Date().toLocaleTimeString()} | Press Ctrl+C to stop`);
+        console.log('╚' + '═'.repeat(78) + '╝');
+        console.log(`⏰ ${new Date().toLocaleTimeString()} | Active: ${ACTIVE_ASSETS.length} assets | Ctrl+C to stop\n`);
     }
 
     static startLiveUpdates() {
@@ -1827,7 +2250,7 @@ class Dashboard {
             if (state.isAuthorized) {
                 Dashboard.display();
             }
-        }, 5000);
+        }, CONFIG.DASHBOARD_UPDATE_INTERVAL);
     }
 }
 
@@ -1835,58 +2258,73 @@ class Dashboard {
 // INITIALIZATION
 // ============================================
 
-const bot = new DerivMultiAssetBot();
+const bot = new DerivMultiplierBot();
 
-// Handle graceful shutdown
+// Graceful shutdown
 process.on('SIGINT', () => {
-    console.log('\n\n⚠️  Received shutdown signal...');
+    console.log('\n\n⚠️  Shutdown signal received...');
     bot.stop();
-    process.exit(0);
+    setTimeout(() => process.exit(0), 3000);
 });
 
 process.on('SIGTERM', () => {
     bot.stop();
-    process.exit(0);
+    setTimeout(() => process.exit(0), 3000);
 });
 
 // Validate API token
 if (CONFIG.API_TOKEN === 'YOUR_API_TOKEN_HERE') {
-    console.log('═══════════════════════════════════════════════════════════════');
-    console.log('                    ClaudeWillv DERIV MULTI-ASSET BOT              ');
-    console.log('═══════════════════════════════════════════════════════════════');
+    console.log('═'.repeat(78));
+    console.log('         DERIV MULTIPLIER BOT v4.1');
+    console.log('         Multi-Asset MT5-Style Trading');
+    console.log('═'.repeat(78));
     console.log('\n⚠️  API Token not configured!\n');
-    console.log('To run this bot, you need to:');
-    console.log('1. Get your API token from https://app.deriv.com/account/api-token');
-    console.log('2. Run with: API_TOKEN=your_token node deriv-multi-asset-bot.js');
-    console.log('   Or set it in the CONFIG object\n');
-    console.log('Optional environment variables:');
-    console.log('  - CAPITAL: Initial capital (default: 500)');
-    console.log('  - APP_ID: Deriv App ID (default: 1089)\n');
-    console.log('═══════════════════════════════════════════════════════════════');
+    console.log('To run this bot:');
+    console.log('  API_TOKEN=your_token node deriv-multiplier-bot.js');
+    console.log('\nEnvironment variables:');
+    console.log('  CAPITAL        - Initial capital (default: 500)');
+    console.log('  STAKE          - Initial stake (default: 1)');
+    console.log('  PROFIT_TARGET  - Session profit target (default: 50)');
+    console.log('  STOP_LOSS      - Session stop loss (default: -25)');
+    console.log('  MARTINGALE     - Martingale multiplier (default: 2)');
+    console.log('  N_LOSSES       - Losses before martingale (default: 1)');
+    console.log('  ASSETS         - Comma-separated asset list (default: R_50,R_75,...)');
+    console.log('  DEBUG          - Enable debug mode (default: false)');
+    console.log('\nExample:');
+    console.log('  API_TOKEN=xxx ASSETS=R_75,R_100,frxEURUSD,cryBTCUSD node deriv-multiplier-bot.js\n');
+    console.log('\nAvailable Assets:');
+    console.log('  Synthetic: R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V');
+    console.log('            BOOM1000,CRASH1000,JD10,JD25,JD50,JD75,JD100,stpRNG');
+    console.log('  Forex:    frxEURUSD,frxGBPUSD,frxUSDJPY,frxAUDUSD,frxUSDCAD,frxEURGBP,frxNZDUSD');
+    console.log('  Crypto:   cryBTCUSD,cryETHUSD,cryLTCUSD,cryBNBUSD');
+    console.log('  Commodity:frxXAUUSD,frxXAGUSD,frxXPTUSD,frxXPDUSD,WLDOIL,frxBROUSD');
+    console.log('═'.repeat(78));
     process.exit(1);
 }
 
-// Start the bot
-console.log('═══════════════════════════════════════════════════════════════');
-console.log('                    ClaudeWillv DERIV MULTI-ASSET BOT              ');
-console.log('═══════════════════════════════════════════════════════════════');
-console.log('\n🚀 Initializing bot...\n');
+// Start
+console.log('═'.repeat(78));
+console.log('         DERIV MULTIPLIER BOT v4.1');
+console.log('═'.repeat(78));
+console.log('\n🚀 Initializing...\n');
 
 bot.connection.connect();
 
-// Start dashboard updates after connection
 setTimeout(() => {
     Dashboard.startLiveUpdates();
 }, 3000);
 
-// Export for testing
+// Export
 module.exports = {
-    DerivMultiAssetBot,
+    DerivMultiplierBot,
     TechnicalIndicators,
+    MartingaleManager,
+    SessionManager,
     PortfolioManager,
     RiskManager,
-    AIConfidenceModel,
     CONFIG,
     ASSET_CONFIGS,
+    ASSET_GROUPS,
+    ACTIVE_ASSETS,
     state
 };
