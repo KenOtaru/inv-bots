@@ -89,108 +89,102 @@ const ASSET_CONFIGS = {
         durationUnit: 'm',
         maxTradesPerDay: 10,
         volatilityClass: 'low',
-        tickSubscription: 'R_10',
+        tickSubscription: 'R_10'
+    },
+    'R_25': {
+        name: 'Volatility 25 Index',
+        category: 'synthetic',
+        emaShort: 10,
+        emaLong: 24,
+        rsiPeriod: 14,
+        rsiThreshold: 32,
+        adxPeriod: 14,
+        adxThreshold: 25,
+        atrThreshold: 0.6,
+        duration: 20,
+        durationUnit: 'm',
+        maxTradesPerDay: 10,
+        volatilityClass: 'medium-low',
+        tickSubscription: 'R_25',
         multiplier: 400
     },
-    // 'R_25': {
-    //     name: 'Volatility 25 Index',
-    //     category: 'synthetic',
-    //     emaShort: 10,
-    //     emaLong: 24,
-    //     rsiPeriod: 14,
-    //     rsiThreshold: 32,
-    //     adxPeriod: 14,
-    //     adxThreshold: 25,
-    //     atrThreshold: 0.6,
-    //     duration: 20,
-    //     durationUnit: 'm',
-    //     maxTradesPerDay: 10,
-    //     volatilityClass: 'medium-low',
-    //     tickSubscription: 'R_25',
-    //     multiplier: 400
-    // },
-    // 'R_50': {
-    //     name: 'Volatility 50 Index',
-    //     category: 'synthetic',
-    //     emaShort: 10,
-    //     emaLong: 24,
-    //     rsiPeriod: 14,
-    //     rsiThreshold: 32,
-    //     adxPeriod: 14,
-    //     adxThreshold: 25,
-    //     atrThreshold: 0.6,
-    //     duration: 20,
-    //     durationUnit: 'm',
-    //     maxTradesPerDay: 10,
-    //     volatilityClass: 'medium-low',
-    //     tickSubscription: 'R_50',
-    //     multiplier: 400
-    // },
-    // 'R_75': {
-    //     name: 'Volatility 75 Index',
-    //     category: 'synthetic',
-    //     emaShort: 12,
-    //     emaLong: 30,
-    //     rsiPeriod: 21,
-    //     rsiThreshold: 35,
-    //     duration: 30,
-    //     durationUnit: 'm',
-    //     maxTradesPerDay: 10,
-    //     volatilityClass: 'high',
-    //     tickSubscription: 'R_75',
-    //     multiplier: 400
-    // },
-    // 'R_100': {
-    //     name: 'Volatility 100 Index',
-    //     category: 'synthetic',
-    //     emaShort: 12,
-    //     emaLong: 30,
-    //     rsiPeriod: 21,
-    //     rsiThreshold: 35,
-    //     adxPeriod: 14,
-    //     adxThreshold: 25,
-    //     atrThreshold: 0.6,
-    //     duration: 30,
-    //     durationUnit: 'm',
-    //     maxTradesPerDay: 10,
-    //     volatilityClass: 'high',
-    //     tickSubscription: 'R_100',
-    //     multiplier: 400
-    // },
-    'BOOM1000': {
-        name: 'Boom 1000 Index',
+    'R_50': {
+        name: 'Volatility 50 Index',
         category: 'synthetic',
-        emaShort: 5,
-        emaLong: 15,
-        rsiPeriod: 7,
-        rsiThreshold: 25,
+        emaShort: 10,
+        emaLong: 24,
+        rsiPeriod: 14,
+        rsiThreshold: 32,
         adxPeriod: 14,
         adxThreshold: 25,
         atrThreshold: 0.6,
-        duration: 5,
+        duration: 20,
         durationUnit: 'm',
         maxTradesPerDay: 10,
-        volatilityClass: 'extreme',
-        tickSubscription: 'BOOM1000',
-        multiplier: 200
+        volatilityClass: 'medium-low',
+        tickSubscription: 'R_50'
     },
-    'CRASH1000': {
-        name: 'Crash 1000 Index',
+    'R_75': {
+        name: 'Volatility 75 Index',
         category: 'synthetic',
-        emaShort: 5,
-        emaLong: 15,
-        rsiPeriod: 7,
-        rsiThreshold: 25,
+        emaShort: 12,
+        emaLong: 30,
+        rsiPeriod: 21,
+        rsiThreshold: 35,
+        duration: 30,
+        durationUnit: 'm',
+        maxTradesPerDay: 10,
+        volatilityClass: 'high',
+        tickSubscription: 'R_75'
+    },
+    'R_100': {
+        name: 'Volatility 100 Index',
+        category: 'synthetic',
+        emaShort: 12,
+        emaLong: 30,
+        rsiPeriod: 21,
+        rsiThreshold: 35,
         adxPeriod: 14,
         adxThreshold: 25,
         atrThreshold: 0.6,
-        duration: 5,
+        duration: 30,
         durationUnit: 'm',
         maxTradesPerDay: 10,
-        volatilityClass: 'extreme',
-        tickSubscription: 'CRASH1000',
-        multiplier: 200
+        volatilityClass: 'high',
+        tickSubscription: 'R_100'
     },
+    // 'BOOM1000': {
+    //     name: 'Boom 1000 Index',
+    //     category: 'synthetic',
+    //     emaShort: 5,
+    //     emaLong: 15,
+    //     rsiPeriod: 7,
+    //     rsiThreshold: 25,
+    //     adxPeriod: 14,
+    //     adxThreshold: 25,
+    //     atrThreshold: 0.6,
+    //     duration: 5,
+    //     durationUnit: 'm',
+    //     maxTradesPerDay: 10,
+    //     volatilityClass: 'extreme',
+    //     tickSubscription: 'BOOM1000'
+    // },
+    // 'CRASH1000': {
+    //     name: 'Crash 1000 Index',
+    //     category: 'synthetic',
+    //     emaShort: 5,
+    //     emaLong: 15,
+    //     rsiPeriod: 7,
+    //     rsiThreshold: 25,
+    //     adxPeriod: 14,
+    //     adxThreshold: 25,
+    //     atrThreshold: 0.6,
+    //     duration: 5,
+    //     durationUnit: 'm',
+    //     maxTradesPerDay: 10,
+    //     volatilityClass: 'extreme',
+    //     tickSubscription: 'CRASH1000'
+    // },
     // Cryptocurrencies
     // 'cryBTCUSD': {
     //     name: 'Bitcoin',
@@ -206,8 +200,7 @@ const ASSET_CONFIGS = {
     //     durationUnit: 'h',
     //     maxTradesPerDay: 10,
     //     volatilityClass: 'high',
-    //     tickSubscription: 'cryBTCUSD',
-    //     multiplier: 100
+    //     tickSubscription: 'cryBTCUSD'
     // },
     // 'cryETHUSD': {
     //     name: 'Ethereum',
@@ -223,8 +216,7 @@ const ASSET_CONFIGS = {
     //     durationUnit: 'h',
     //     maxTradesPerDay: 10,
     //     volatilityClass: 'high',
-    //     tickSubscription: 'cryETHUSD',
-    //     multiplier: 100
+    //     tickSubscription: 'cryETHUSD'
     // },
     // Major Forex
     // 'frxEURUSD': {
@@ -367,7 +359,7 @@ class EmailManager {
         const mailOptions = {
             from: CONFIG.EMAIL_CONFIG.auth.user,
             to: CONFIG.EMAIL_RECIPIENT,
-            subject: `ClaudeWill Deriv Multi-Asset Bot - ${subject}`,
+            subject: `ClaudeWillv Deriv Multi-Asset Bot - ${subject}`,
             text: text
         };
 
@@ -1349,8 +1341,40 @@ class ConnectionManager {
     }
 
     handleBuyResponse(response) {
+        const reqId = response.echo_req.req_id;
+        const posIndex = state.portfolio.activePositions.findIndex(p => p.reqId == reqId);
+        const position = posIndex >= 0 ? state.portfolio.activePositions[posIndex] : null;
+
         if (response.error) {
             console.error('❌ Trade error:', response.error.message);
+
+            // Cleanup ghost position
+            if (posIndex >= 0) {
+                console.log(`🧹 Cleaning up ghost position for ${position.symbol}`);
+                state.portfolio.activePositions.splice(posIndex, 1);
+            }
+
+            // Retry with alternate barrier if provided
+            const barrierErrorMatch = response.error.message.match(/Barriers available are (.*)/);
+            if (barrierErrorMatch && position && !position.isRetry) {
+                const availableBarriers = barrierErrorMatch[1].split(', ').map(b => b.trim());
+                let bestBarrier = availableBarriers.reduce((prev, curr) =>
+                    Math.abs(parseFloat(curr)) < Math.abs(parseFloat(prev)) ? curr : prev
+                );
+
+                console.log(`🔄 Retrying ${position.symbol} with barrier: ${bestBarrier}`);
+                const config = ASSET_CONFIGS[position.symbol];
+                const newReqId = this.send({
+                    buy: 1, subscribe: 1, price: position.stake,
+                    parameters: {
+                        contract_type: position.direction === 'CALL' ? 'VANILLALONGCALL' : 'VANILLALONGPUT',
+                        symbol: position.symbol, currency: 'USD', amount: position.stake,
+                        barrier: bestBarrier, duration: config.duration,
+                        duration_unit: config.durationUnit, basis: 'stake'
+                    }
+                });
+                state.portfolio.activePositions.push({ ...position, reqId: newReqId, isRetry: true });
+            }
             return;
         }
 
@@ -1358,15 +1382,21 @@ class ConnectionManager {
         console.log(`✅ Trade executed: Contract ID ${contract.contract_id}`);
         console.log(`   Buy Price: ${contract.buy_price}`);
 
-        // Find position by req_id
-        const reqId = response.echo_req.req_id;
-        const position = state.portfolio.activePositions.find(p => p.reqId == reqId);
-
         if (position) {
             position.contractId = contract.contract_id;
             position.buyPrice = contract.buy_price;
-            LOGGER.info(`Linked contract ${contract.contract_id} to position ${position.symbol} ${position.direction}`);
+
+            // Increment trade counters ON SUCCESS
+            const assetState = state.assets[position.symbol];
+            if (assetState) {
+                assetState.dailyTrades++;
+                assetState.dailyTradesPerDirection[position.direction]++;
+            }
+
+            console.log(`[DEBUG] Linked contract ${contract.contract_id} to position ${position.symbol}`);
+            LOGGER.info(`Linked contract ${contract.contract_id} to position ${position.symbol}`);
         } else {
+            console.log(`[DEBUG] No position found for reqId ${reqId}`);
             LOGGER.warn(`Could not find position for reqId ${reqId}`);
         }
 
@@ -1426,7 +1456,14 @@ class ConnectionManager {
             });
         } else if (posIndex >= 0) {
             // Update position with current profit/loss
-            state.portfolio.activePositions[posIndex].currentProfit = contract.profit;
+            const profitValue = contract.profit !== undefined ? contract.profit : (contract.bid_price - contract.buy_price);
+            state.portfolio.activePositions[posIndex].currentProfit = profitValue || 0;
+            if (Math.random() < 0.05) console.log(`[DEBUG] ${contract.underlying} P/L Update: Profit=${contract.profit}, Bid=${contract.bid_price}`);
+
+            // Log every 10th update for debugging
+            if (Math.random() < 0.1) {
+                console.log(`[DEBUG] Update ${contract.underlying}: Profit=${contract.profit}, Bid=${contract.bid_price}, Calculated=${contract.bid_price - contract.buy_price}`);
+            }
         }
     }
 
@@ -1493,7 +1530,7 @@ class DerivMultiAssetBot {
     }
 
     async start() {
-        console.log('\n🤖 ClaudeWill Deriv Multi-Asset Bot Starting...');
+        console.log('\n🤖 ClaudeWillv Deriv Multi-Asset Bot Starting...');
         console.log('=====================================');
         console.log(`💰 Initial Capital: $${state.capital}`);
         console.log(`📊 Tracking ${Object.keys(ASSET_CONFIGS).length} assets`);
@@ -1627,7 +1664,7 @@ class DerivMultiAssetBot {
         console.log(`   Ranking: #${rank + 1}`);
 
         // Send trade request
-        const contractType = direction === 'CALL' ? 'MULTUP' : 'MULTDOWN';
+        const contractType = direction === 'CALL' ? 'VANILLALONGCALL' : 'VANILLALONGPUT';
 
         const reqId = this.connection.send({
             buy: 1,
@@ -1638,17 +1675,12 @@ class DerivMultiAssetBot {
                 symbol: symbol,
                 currency: 'USD',
                 amount: stake,
-                multiplier: config.multiplier || 100, // Use Configured Multiplier
-                // Multipliers do not have 'duration'. They run until closed or stop-out.
-                // duration: config.duration,
-                // duration_unit: config.durationUnit,
+                barrier: "+0.000",
+                duration: config.duration,
+                duration_unit: config.durationUnit,
                 basis: 'stake'
             }
         });
-
-        // Update state
-        assetState.dailyTrades++;
-        assetState.dailyTradesPerDirection[direction]++;
 
         // Track position (contract ID will be updated in buy response)
         state.portfolio.activePositions.push({
@@ -1740,7 +1772,7 @@ class Dashboard {
     static display() {
         // console.clear();
         console.log('╔══════════════════════════════════════════════════════════════╗');
-        console.log('║         ClaudeWill DERIV MULTI-ASSET BOT - LIVE DASHBOARD      ║');
+        console.log('║         ClaudeWillv DERIV MULTI-ASSET BOT - LIVE DASHBOARD      ║');
         console.log('╠══════════════════════════════════════════════════════════════╣');
 
         const status = bot.getStatus();
@@ -1820,7 +1852,7 @@ process.on('SIGTERM', () => {
 // Validate API token
 if (CONFIG.API_TOKEN === 'YOUR_API_TOKEN_HERE') {
     console.log('═══════════════════════════════════════════════════════════════');
-    console.log('                    ClaudeWill DERIV MULTI-ASSET BOT              ');
+    console.log('                    ClaudeWillv DERIV MULTI-ASSET BOT              ');
     console.log('═══════════════════════════════════════════════════════════════');
     console.log('\n⚠️  API Token not configured!\n');
     console.log('To run this bot, you need to:');
@@ -1836,7 +1868,7 @@ if (CONFIG.API_TOKEN === 'YOUR_API_TOKEN_HERE') {
 
 // Start the bot
 console.log('═══════════════════════════════════════════════════════════════');
-console.log('                    ClaudeWill DERIV MULTI-ASSET BOT              ');
+console.log('                    ClaudeWillv DERIV MULTI-ASSET BOT              ');
 console.log('═══════════════════════════════════════════════════════════════');
 console.log('\n🚀 Initializing bot...\n');
 
