@@ -724,14 +724,14 @@ class PortfolioManager {
             const assetState = state.assets[symbol];
 
             // Skip blacklisted or cooling down assets
-            if (Date.now() < assetState.blacklistedUntil) {
-                console.log(`⏸️  ${symbol} is blacklisted until ${new Date(assetState.blacklistedUntil).toLocaleTimeString()}`);
-                return;
-            }
-            if (Date.now() < assetState.cooldownUntil) {
-                console.log(`⏸️  ${symbol} is cooling down until ${new Date(assetState.cooldownUntil).toLocaleTimeString()}`);
-                return;
-            }
+            // if (Date.now() < assetState.blacklistedUntil) {
+            //     console.log(`⏸️  ${symbol} is blacklisted until ${new Date(assetState.blacklistedUntil).toLocaleTimeString()}`);
+            //     return;
+            // }
+            // if (Date.now() < assetState.cooldownUntil) {
+            //     console.log(`⏸️  ${symbol} is cooling down until ${new Date(assetState.cooldownUntil).toLocaleTimeString()}`);
+            //     return;
+            // }
 
             const score = this.calculateAssetScore(symbol);
             assetState.score = score;
