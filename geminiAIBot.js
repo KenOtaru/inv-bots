@@ -17,8 +17,8 @@ class EnhancedDerivTradingBot {
         this.wsReady = false;
 
         this.assets = config.assets || [
-            // 'R_10', 'RDBULL', 'R_25', 'R_50', 'RDBEAR', 'R_75', 'R_100'
-            'RDBULL'
+            'R_10', 'RDBULL', 'R_25', 'R_50', 'RDBEAR', 'R_75', 'R_100'
+            // 'RDBULL'
         ];
 
         this.config = {
@@ -106,12 +106,9 @@ class EnhancedDerivTradingBot {
     setGeminiModel() {
         this.geminiApiKey = this.geminiApiKeys[this.currentApiKeyIndex];
         this.genAI = new GoogleGenerativeAI(this.geminiApiKey);
-        // this.model = this.genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-        // this.model = this.genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
-        // this.model = this.genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-        // this.model = this.genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite-preview-06-17" });
         this.model = this.genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
-        // this.model = this.genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+        // this.model = this.genAI.getGenerativeModel({ model: "gemini-2.5-flash-preview-09-2025" });
+        // this.model = this.genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
     }
 
     connect() {
@@ -334,16 +331,17 @@ class EnhancedDerivTradingBot {
         if (!this.tradeInProgress && !this.predictionInProgress) {
             this.lastDigit2 = this.tickHistory.slice(-1)[0];
             console.log(`Last Digit: ${this.tickHistory.slice(-1)[0]}`);
-            if (this.ktotalTrades >= 1) {
-                this.refreshTime++;
-                console.log(`Refresh Time: ${this.refreshTime}`);
-                if (this.refreshTime >= 3) {
-                    this.refreshTime = 0;
-                    this.analyzeTicks();
-                }
-            } else {
-                this.analyzeTicks();
-            }
+            // if (this.ktotalTrades >= 1) {
+            //     this.refreshTime++;
+            //     console.log(`Refresh Time: ${this.refreshTime}`);
+            //     if (this.refreshTime >= 3) {
+            //         this.refreshTime = 0;
+            //         this.analyzeTicks();
+            //     }
+            // } 
+            // else {
+            this.analyzeTicks();
+            // }
         }
     }
 
@@ -500,25 +498,6 @@ class EnhancedDerivTradingBot {
 
             this.predictionInProgress = true;
 
-            const tickHistory2 = this.tickHistory.slice(-50);
-
-            const digitCounts = Array(10).fill(0);
-            tickHistory2.forEach(digit => digitCounts[digit]++);
-
-            let leastOccurringDigit = 0;
-            let minCount = Infinity;
-            digitCounts.forEach((count, digit) => {
-                if (count < minCount) {
-                    minCount = count;
-                    leastOccurringDigit = digit;
-                }
-            });
-
-            const leastPercentage = ((minCount / this.requiredHistoryLength) * 100).toFixed(2)
-            console.log(`Digit counts:`, digitCounts);
-            console.log('Least occurring digit:', leastOccurringDigit);
-
-
             //Measure AI processing time
             const startTime = Date.now();
             const prediction = await this.predictBestDigit(this.tickHistory);
@@ -527,13 +506,13 @@ class EnhancedDerivTradingBot {
 
             console.log(`AI processing time: ${processingTime} seconds`);
 
-            // if (processingTime > 2) {
-            //     console.error('AI processing time exceeded 2 seconds, skipping trade.');
-            //     this.predictionInProgress = false;
-            //     this.RestartTrading = true;
-            //     this.disconnect();
-            //     return;
-            // }
+            if (processingTime > 12) {
+                console.error('AI processing time exceeded 12 seconds, skipping trade.');
+                this.predictionInProgress = false;
+                this.RestartTrading = true;
+                this.disconnect();
+                return;
+            }
 
             if (!prediction || prediction.skipTrade) {
                 console.log('AI recommends skipping this trade.');
@@ -554,17 +533,17 @@ class EnhancedDerivTradingBot {
             this.predictedDigit = predictedDigitNumber;
             this.winProbNumber2 = winProbNumber;
 
-            if (winProbNumber > 60 && this.riskLevel !== 'high' && this.riskLevel !== 'medium') {
-                this.lastPrediction = this.predictedDigit;
-                this.riskLevel = prediction.riskAssessment;
-                this.tradeMethod.push(this.predictionStrategy);
-                this.placeTrade(this.predictedDigit, this.winProbNumber2);
-            } else {
-                console.error('Confidence too low, restarting Bot!');
-                this.predictionInProgress = false;
-                this.RestartTrading = true;
-                this.disconnect();
-            }
+            // if (winProbNumber > 60 && this.riskLevel !== 'high' && this.riskLevel !== 'medium') {
+            this.lastPrediction = this.predictedDigit;
+            this.riskLevel = prediction.riskAssessment;
+            this.tradeMethod.push(this.predictionStrategy);
+            this.placeTrade(this.predictedDigit, this.winProbNumber2);
+            // } else {
+            //     console.error('Confidence too low, restarting Bot!');
+            //     this.predictionInProgress = false;
+            //     this.RestartTrading = true;
+            //     this.disconnect();
+            // }
         } catch (error) {
             console.error('Error in analyzeTicks:', error.message);
             this.Pause = true;
