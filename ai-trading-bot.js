@@ -10,7 +10,6 @@
  * - OpenRouter (multiple free models)
  * - Mistral AI (free tier)
  * - Cerebras (fast inference, free)
- * - DeepSeek (free tier)
  * - SambaNova (free tier)
  * 
  * ============================================================
@@ -65,12 +64,6 @@ class AIDigitDifferBot {
                 enabled: false,
                 name: 'Cerebras',
                 weight: 1.1
-            },
-            deepseek: {
-                key: (process.env.DEEPSEEK_API_KEY || '').trim(),
-                enabled: false,
-                name: 'DeepSeek',
-                weight: 1.0
             },
             sambanova: {
                 key: (process.env.SAMBANOVA_API_KEY || '').trim(),
@@ -179,21 +172,20 @@ class AIDigitDifferBot {
     parseGeminiKeys(keysString) {
         if (!keysString || typeof keysString !== 'string') return [];
 
-        // Trim the string first
-        const trimmed = keysString.trim();
-        if (!trimmed) return [];
+        // Remove quotes, newlines, and extra whitespace
+        const cleaned = keysString.replace(/["'\r\n]/g, ' ').trim();
+        if (!cleaned) return [];
 
         // Check if it contains commas (multiple keys)
-        if (trimmed.includes(',')) {
-            return trimmed.split(',').map(k => k.trim()).filter(k => k.length > 10);
+        if (cleaned.includes(',')) {
+            return cleaned.split(',')
+                .map(k => k.trim())
+                .filter(k => k.length > 20); // API keys are typically long
         }
 
-        // Single key - return as array with one element
-        if (trimmed.length > 10) {
-            return [trimmed];
-        }
-
-        return [];
+        // Single key or space-separated
+        const parts = cleaned.split(/\s+/).filter(k => k.length > 20);
+        return parts;
     }
 
     initializeAIModels() {
@@ -203,7 +195,7 @@ class AIDigitDifferBot {
         }
 
         // Check and enable other models
-        for (const key of ['groq', 'openrouter', 'mistral', 'cerebras', 'deepseek', 'sambanova']) {
+        for (const key of ['groq', 'openrouter', 'mistral', 'cerebras', 'sambanova']) {
             const apiKey = this.aiModels[key].key;
             if (apiKey && apiKey.length > 10) {
                 this.aiModels[key].enabled = true;
@@ -682,13 +674,6 @@ class AIDigitDifferBot {
                     .catch(e => ({ error: e.message, model: 'cerebras' }))
             );
         }
-        if (this.aiModels.deepseek.enabled) {
-            promises.push(
-                this.predictWithDeepSeek()
-                    .then(r => { r.model = 'deepseek'; return r; })
-                    .catch(e => ({ error: e.message, model: 'deepseek' }))
-            );
-        }
         if (this.aiModels.sambanova.enabled) {
             promises.push(
                 this.predictWithSambaNova()
@@ -814,61 +799,76 @@ class AIDigitDifferBot {
 
         return `You are an expert AI for Deriv Digit Differ trading. Your task is to predict the digit (0-9) that will NOT appear in the next tick.
 
-CURRENT MARKET DATA:
-- Asset: ${this.currentAsset}
-- Last 50 digits: [${last50.join(',')}]
-- Last 20 digits: [${last20.join(',')}]
-- Digit frequency (last 50): ${counts.map((c, i) => `${i}:${c}`).join(',')}
-- Digits not in last 15 ticks: [${gaps.join(',')}]
-- Recent predictions: ${previousOutcomes || 'None'}
-- Recent methods: ${recentMethods || 'None'}
-- Consecutive losses: ${this.consecutiveLosses}
+        CURRENT MARKET DATA:
+        - Asset: ${this.currentAsset}
+        - Last 50 digits: [${last50.join(',')}]
+        - Last 20 digits: [${last20.join(',')}]
+        - Digit frequency (last 50): ${counts.map((c, i) => `${i}:${c}`).join(',')}
+        - Digits not in last 15 ticks: [${gaps.join(',')}]
+        - Recent predictions: ${previousOutcomes || 'None'}
+        - Recent methods: ${recentMethods || 'None'}
+        - Consecutive losses: ${this.consecutiveLosses}
 
-ANALYSIS METHODS TO USE:
-1. FREQUENCY ANALYSIS - Identify over/under-represented digits
-2. GAP ANALYSIS - Find digits due to appear (avoid these)
-3. PATTERN RECOGNITION - Detect repeating sequences
-4. TRANSITION PROBABILITY - P(next digit | current digit)
-5. MOMENTUM ANALYSIS - Trending digit patterns
-6. MEAN REVERSION - Digits deviating from expected 10% frequency
+        ANALYSIS METHODS TO USE:
+        1. FREQUENCY ANALYSIS - Identify over/under-represented digits
+        2. GAP ANALYSIS - Find digits due to appear (avoid these)
+        3. PATTERN RECOGNITION - Detect repeating sequences
+        4. TRANSITION PROBABILITY - P(next digit | current digit)
+        5. MOMENTUM ANALYSIS - Trending digit patterns
+        6. MEAN REVERSION - Digits deviating from expected 10% frequency
 
-CRITICAL CONSIDERATIONS:
-- There is a 3-6 tick delay from your analysis to trade execution
-- Your prediction should account for this delay
-- Predict the digit LEAST likely to appear, not the most likely
-- Base predictions on quantitative analysis only
+        CRITICAL CONSIDERATIONS:
+        - There is a 3-6 tick delay from your analysis to trade execution
+        - Your prediction should account for this delay
+        - Predict the digit LEAST likely to appear, not the most likely
+        - Base predictions on quantitative analysis only
 
-OUTPUT FORMAT (JSON only):
-{
-    "predictedDigit": X,
-    "confidence": XX,
-    "primaryStrategy": "Method-Name",
-    "marketRegime": "trending/ranging/volatile",
-    "riskAssessment": "low/medium/high"
-}`;
+        OUTPUT FORMAT (JSON only):
+        {
+            "predictedDigit": X,
+            "confidence": XX,
+            "primaryStrategy": "Method-Name",
+            "marketRegime": "trending/ranging/volatile",
+            "riskAssessment": "low/medium/high"
+        }`;
     }
 
-    parseAIResponse(text) {
+    parseAIResponse(text, modelName = 'unknown') {
         if (!text) throw new Error('Empty response');
 
-        // Try to find JSON in the response
-        const jsonMatch = text.match(/\{[\s\S]*?\}/);
-        if (!jsonMatch) throw new Error('No JSON found in response');
+        try {
+            // Try to find JSON in the response - more robust greedy matching
+            const firstBrace = text.indexOf('{');
+            const lastBrace = text.lastIndexOf('}');
 
-        const prediction = JSON.parse(jsonMatch[0]);
+            if (firstBrace === -1 || lastBrace === -1 || lastBrace < firstBrace) {
+                // Log the first 100 chars of failed response to help debug
+                console.log(`   ⚠️ ${modelName} raw response (first 100 chars): ${text.substring(0, 100).replace(/\n/g, ' ')}...`);
+                throw new Error('No JSON found in response');
+            }
 
-        // Validate
-        if (typeof prediction.predictedDigit !== 'number' ||
-            prediction.predictedDigit < 0 ||
-            prediction.predictedDigit > 9) {
-            throw new Error('Invalid predictedDigit');
+            const jsonStr = text.substring(firstBrace, lastBrace + 1);
+            const prediction = JSON.parse(jsonStr);
+
+            // Validate
+            if (typeof prediction.predictedDigit !== 'number' ||
+                prediction.predictedDigit < 0 ||
+                prediction.predictedDigit > 9) {
+                throw new Error(`Invalid predictedDigit: ${prediction.predictedDigit}`);
+            }
+
+            if (typeof prediction.confidence !== 'number') {
+                prediction.confidence = 60;
+            }
+
+            return prediction;
+        } catch (e) {
+            if (e.message.includes('JSON')) {
+                console.log(`   ⚠️ ${modelName} JSON Parse Error: ${e.message}`);
+                console.log(`   ⚠️ ${modelName} offending text: ${text.substring(0, 150)}...`);
+            }
+            throw e;
         }
-
-        if (typeof prediction.confidence !== 'number') {
-            prediction.confidence = 60;
-        }
-
-        return prediction;
     }
 
     // ==================== AI MODEL INTEGRATIONS (FIXED) ====================
@@ -881,13 +881,14 @@ OUTPUT FORMAT (JSON only):
         this.aiModels.gemini.currentIndex++;
 
         const response = await axios.post(
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${key}`,
             {
                 contents: [{ parts: [{ text: this.getPrompt() }] }],
                 generationConfig: {
-                    temperature: 0.3,
+                    temperature: 0.1, // Lower temperature for more consistent JSON
                     maxOutputTokens: 256,
-                    candidateCount: 1
+                    candidateCount: 1,
+                    response_mime_type: "application/json" // Force JSON output for Gemini
                 }
             },
             {
@@ -897,7 +898,7 @@ OUTPUT FORMAT (JSON only):
         );
 
         const text = response.data.candidates?.[0]?.content?.parts?.[0]?.text;
-        return this.parseAIResponse(text);
+        return this.parseAIResponse(text, 'gemini');
     }
 
     async predictWithGroq() {
@@ -908,9 +909,13 @@ OUTPUT FORMAT (JSON only):
             'https://api.groq.com/openai/v1/chat/completions',
             {
                 model: 'llama-3.3-70b-versatile',
-                messages: [{ role: 'user', content: this.getPrompt() }],
-                temperature: 0.3,
-                max_tokens: 256
+                messages: [
+                    { role: 'system', content: 'You are a trading bot that ONLY outputs JSON.' },
+                    { role: 'user', content: this.getPrompt() }
+                ],
+                temperature: 0.1,
+                max_tokens: 256,
+                response_format: { type: "json_object" }
             },
             {
                 headers: {
@@ -922,7 +927,7 @@ OUTPUT FORMAT (JSON only):
         );
 
         const text = response.data.choices?.[0]?.message?.content;
-        return this.parseAIResponse(text);
+        return this.parseAIResponse(text, 'groq');
     }
 
     async predictWithOpenRouter() {
@@ -933,9 +938,13 @@ OUTPUT FORMAT (JSON only):
             'https://openrouter.ai/api/v1/chat/completions',
             {
                 model: 'meta-llama/llama-3.2-3b-instruct:free',
-                messages: [{ role: 'user', content: this.getPrompt() }],
-                temperature: 0.3,
-                max_tokens: 256
+                messages: [
+                    { role: 'system', content: 'You are a trading bot that ONLY outputs JSON.' },
+                    { role: 'user', content: this.getPrompt() }
+                ],
+                temperature: 0.1,
+                max_tokens: 256,
+                response_format: { type: "json_object" }
             },
             {
                 headers: {
@@ -949,7 +958,7 @@ OUTPUT FORMAT (JSON only):
         );
 
         const text = response.data.choices?.[0]?.message?.content;
-        return this.parseAIResponse(text);
+        return this.parseAIResponse(text, 'openrouter');
     }
 
     async predictWithMistral() {
@@ -960,8 +969,11 @@ OUTPUT FORMAT (JSON only):
             'https://api.mistral.ai/v1/chat/completions',
             {
                 model: 'mistral-small-latest',
-                messages: [{ role: 'user', content: this.getPrompt() }],
-                temperature: 0.3,
+                messages: [
+                    { role: 'system', content: 'You are a trading bot that ONLY outputs JSON.' },
+                    { role: 'user', content: this.getPrompt() }
+                ],
+                temperature: 0.1,
                 max_tokens: 256
             },
             {
@@ -974,7 +986,7 @@ OUTPUT FORMAT (JSON only):
         );
 
         const text = response.data.choices?.[0]?.message?.content;
-        return this.parseAIResponse(text);
+        return this.parseAIResponse(text, 'mistral');
     }
 
     // NEW: Cerebras (very fast, free)
@@ -986,8 +998,11 @@ OUTPUT FORMAT (JSON only):
             'https://api.cerebras.ai/v1/chat/completions',
             {
                 model: 'llama3.1-8b',
-                messages: [{ role: 'user', content: this.getPrompt() }],
-                temperature: 0.3,
+                messages: [
+                    { role: 'system', content: 'You are a trading bot that ONLY outputs JSON.' },
+                    { role: 'user', content: this.getPrompt() }
+                ],
+                temperature: 0.1,
                 max_tokens: 256
             },
             {
@@ -1000,33 +1015,7 @@ OUTPUT FORMAT (JSON only):
         );
 
         const text = response.data.choices?.[0]?.message?.content;
-        return this.parseAIResponse(text);
-    }
-
-    // NEW: DeepSeek (free tier available)
-    async predictWithDeepSeek() {
-        const key = this.aiModels.deepseek.key;
-        if (!key) throw new Error('No DeepSeek API key');
-
-        const response = await axios.post(
-            'https://api.deepseek.com/chat/completions',
-            {
-                model: 'deepseek-chat',
-                messages: [{ role: 'user', content: this.getPrompt() }],
-                temperature: 0.3,
-                max_tokens: 256
-            },
-            {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${key}`
-                },
-                timeout: 30000
-            }
-        );
-
-        const text = response.data.choices?.[0]?.message?.content;
-        return this.parseAIResponse(text);
+        return this.parseAIResponse(text, 'cerebras');
     }
 
     // NEW: SambaNova (free tier)
@@ -1038,8 +1027,11 @@ OUTPUT FORMAT (JSON only):
             'https://api.sambanova.ai/v1/chat/completions',
             {
                 model: 'Meta-Llama-3.1-8B-Instruct',
-                messages: [{ role: 'user', content: this.getPrompt() }],
-                temperature: 0.3,
+                messages: [
+                    { role: 'system', content: 'You are a trading bot that ONLY outputs JSON.' },
+                    { role: 'user', content: this.getPrompt() }
+                ],
+                temperature: 0.1,
                 max_tokens: 256
             },
             {
@@ -1052,7 +1044,7 @@ OUTPUT FORMAT (JSON only):
         );
 
         const text = response.data.choices?.[0]?.message?.content;
-        return this.parseAIResponse(text);
+        return this.parseAIResponse(text, 'sambanova');
     }
 
     // ==================== STATISTICAL PREDICTION (FALLBACK) ====================
