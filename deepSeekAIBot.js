@@ -350,7 +350,7 @@ class EnhancedDerivTradingBot {
                         ).join(", ") : "No previous predictions";
 
                     const prompt = `
-                    You are an expert trading AI engaged in Deriv Digit Differ prediction against a self-learning, adaptive algorithm system, with full responsibility for prediction.
+                    You are an expert trading AI engaged in Deriv Digit Differ (digit that will not appear next) prediction, with full responsibility for prediction.
 
                     ADVERSARIAL CONTEXT:
                     - You are trading against an intelligent system that learns from your prediction patterns

@@ -1,39 +1,41 @@
+require('dotenv').config();
 const WebSocket = require('ws');
 const nodemailer = require('nodemailer');
 const axios = require('axios');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 
-
-
 class EnhancedDerivTradingBot {
     constructor(token, config = {}) {
         this.token = token;
-        this.geminiApiKey = config.geminiApiKey;
+        this.geminiApiKeys = config.geminiApiKeys || [];
+        this.currentApiKeyIndex = 0;
+        this.setGeminiModel();
+
         this.ws = null;
         this.connected = false;
-        this.assets = [
-            'R_10', 'RDBULL', 'R_25', 'R_50', 'RDBEAR', 'R_75', 'R_100'
-            //'R_10'
+        this.wsReady = false;
+
+        this.assets = config.assets || [
+            // 'R_10', 'RDBULL', 'R_25', 'R_50', 'RDBEAR', 'R_75', 'R_100'
+            'RDBULL'
         ];
 
-        // Initialize Gemini AI
-        this.genAI = new GoogleGenerativeAI(this.geminiApiKey);
-        this.model = this.genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-        // Trading strategy parameters
-        this.minimumTicksRequired = 20;
-        this.tradeReadyThreshold = 60;
-
         this.config = {
-            initialStake: config.initialStake,
-            multiplier: config.multiplier,
-            maxConsecutiveLosses: config.maxConsecutiveLosses,
-            stopLoss: config.stopLoss,
-            takeProfit: config.takeProfit,
+            initialStake: config.initialStake || 5,
+            multiplier: config.multiplier || 11.3,
+            maxConsecutiveLosses: config.maxConsecutiveLosses || 3,
+            stopLoss: config.stopLoss || 67,
+            takeProfit: config.takeProfit || 100,
+            requiredHistoryLength: config.requiredHistoryLength || 1000,
+            winProbabilityThreshold: config.winProbabilityThreshold || 60,
+            maxReconnectAttempts: config.maxReconnectAttempts || 10000,
+            reconnectInterval: config.reconnectInterval || 5000,
+            kWinCount: config.kWinCount || 2,
+            minWaitTime: config.minWaitTime || 200 * 1000,
+            maxWaitTime: config.maxWaitTime || 500 * 1000,
         };
 
-        // Rest of your existing constructor properties
         this.currentStake = this.config.initialStake;
         this.usedAssets = new Set();
         this.consecutiveLosses = 0;
@@ -49,15 +51,11 @@ class EnhancedDerivTradingBot {
         this.consecutiveLosses3 = 0;
         this.totalProfitLoss = 0;
         this.tradeInProgress = false;
-        this.wsReady = false;
+        this.predictionInProgress = false;
         this.tickHistory = [];
-        this.requiredHistoryLength = 500;
-        this.tradeThreshold = 5;
-        this.winProbabilityThreshold = 95;
         this.predictedDigit = null;
         this.endOfDay = false;
         this.kProfitCount = 0;
-        this.kWins = 0;
         this.winProbNumber2 = 0;
         this.digitFrequency2 = 0;
         this.SYS = 1;
@@ -70,27 +68,50 @@ class EnhancedDerivTradingBot {
         this.winningPatterns = new Map();
         this.lastPrediction = null;
         this.lastPredictionOutcome = null;
-        this.kWinCount = 6;
+        this.kWins = 0;
         this.kLosses = 0;
         this.waitTime = 0;
         this.waitSeconds = 0;
         this.RestartTrading = true;
         this.isWinTrade = false;
+        this.lastFewTicks = [];
+        this.lastDigit = null;
+        this.tradeMethod = [];
+        this.lastDigit2 = null;
+        this.riskLevel = null;
+        this.retryCount = 0;
+        this.ktotalTrades = 0;
+        this.refreshTime = 0;
 
         this.emailConfig = {
             service: 'gmail',
             auth: {
-                user: 'kenzkdp2@gmail.com',
-                pass: 'jfjhtmussgfpbgpk'
+                user: process.env.EMAIL_USER,
+                pass: process.env.EMAIL_PASS
             }
         };
-        this.emailRecipient = 'kenotaru@gmail.com';
+        this.emailRecipient = process.env.EMAIL_RECIPIENT;
         this.startEmailTimer();
 
         this.reconnectAttempts = 0;
-        this.maxReconnectAttempts = 10000;
-        this.reconnectInterval = 5000;
         this.Pause = false;
+
+        this.currentBalance = config.initialBalance || 1000; // Set a default if not provided
+        this.baseStake = config.initialStake;
+        this.lastStakeUsed = null;
+        this.todayPnL = 0;
+    }
+
+    // Set Gemini model with the current API key
+    setGeminiModel() {
+        this.geminiApiKey = this.geminiApiKeys[this.currentApiKeyIndex];
+        this.genAI = new GoogleGenerativeAI(this.geminiApiKey);
+        // this.model = this.genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+        // this.model = this.genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
+        // this.model = this.genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+        // this.model = this.genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite-preview-06-17" });
+        this.model = this.genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
+        // this.model = this.genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     }
 
     connect() {
@@ -129,7 +150,7 @@ class EnhancedDerivTradingBot {
             this.ws.send(JSON.stringify(request));
         } else if (this.connected && !this.wsReady) {
             console.log('WebSocket not ready. Queueing request...');
-            setTimeout(() => this.sendRequest(request), this.reconnectInterval);
+            setTimeout(() => this.sendRequest(request), this.config.reconnectInterval);
         } else {
             console.error('Not connected to Deriv API. Unable to send request:', request);
         }
@@ -138,9 +159,9 @@ class EnhancedDerivTradingBot {
     handleDisconnect() {
         this.connected = false;
         this.wsReady = false;
-        if (this.reconnectAttempts < this.maxReconnectAttempts) {
-            console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
-            setTimeout(() => this.connect(), this.reconnectInterval);
+        if (this.reconnectAttempts < this.config.maxReconnectAttempts) {
+            console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.config.maxReconnectAttempts})...`);
+            setTimeout(() => this.connect(), this.config.reconnectInterval);
         }
     }
 
@@ -178,7 +199,7 @@ class EnhancedDerivTradingBot {
         const request = {
             ticks_history: asset,
             adjust_start_time: 1,
-            count: this.requiredHistoryLength,
+            count: this.config.requiredHistoryLength,
             end: 'latest',
             start: 1,
             style: 'ticks'
@@ -206,9 +227,13 @@ class EnhancedDerivTradingBot {
             console.log('Authentication successful');
 
             this.tradeInProgress = false;
+            this.predictionInProgress = false;
             this.lastDigitsList = [];
             this.tickHistory = [];
             this.digitCounts = Array(10).fill(0);
+            this.predictedDigit = null;
+            this.retryCount = 0;
+            this.refreshTime = 0;
             this.startTrading();
 
         } else if (message.msg_type === 'history') {
@@ -288,39 +313,70 @@ class EnhancedDerivTradingBot {
     handleTickUpdate(tick) {
         const lastDigit = this.getLastDigit(tick.quote, this.currentAsset);
         this.lastDigitsList.push(lastDigit);
+        this.lastDigit = lastDigit;
 
         this.tickHistory.push(lastDigit);
-        if (this.tickHistory.length > this.requiredHistoryLength) {
+        if (this.tickHistory.length > this.config.requiredHistoryLength) {
             this.tickHistory.shift();
         }
 
         this.digitCounts[lastDigit]++;
 
-        if (!this.tradeInProgress) {
-            this.analyzeTicks()
-            this.predictBestDigit(this.tickHistory);
-        }
-
         console.log(`Received tick history: ${this.tickHistory.length}`);
         console.log(`Received tick: ${this.currentAsset}=>  ${tick.quote} (Last digit: ${lastDigit})`);
+        console.log(`Last 10 digits: ${this.tickHistory.slice(-10).join(', ')}`);
+
+        if (this.tickHistory.length < this.config.requiredHistoryLength) {
+            console.log(`Waiting for more ticks. Current length: ${this.tickHistory.length}`);
+            return;
+        }
+
+        if (!this.tradeInProgress && !this.predictionInProgress) {
+            this.lastDigit2 = this.tickHistory.slice(-1)[0];
+            console.log(`Last Digit: ${this.tickHistory.slice(-1)[0]}`);
+            if (this.ktotalTrades >= 1) {
+                this.refreshTime++;
+                console.log(`Refresh Time: ${this.refreshTime}`);
+                if (this.refreshTime >= 3) {
+                    this.refreshTime = 0;
+                    this.analyzeTicks();
+                }
+            } else {
+                this.analyzeTicks();
+            }
+        }
     }
 
     // Gemini AI Predictor Methods
     async predictBestDigit(tickHistory) {
-        try {
-            const recentDigits = tickHistory.slice(-500);
-            const last250Digits = recentDigits.slice(-250);
-            const last100Digits = recentDigits.slice(-100);
-            const last30Digits = recentDigits.slice(-30);
-            const last10Digits = recentDigits.slice(-10);
+        if (this.tradeInProgress) return null;
 
-            const previousOutcomesString = this.previousPredictions && this.predictionOutcomes ?
-                this.previousPredictions.map((pred, index) =>
-                    `${pred}: ${this.predictionOutcomes[index] ? 'won' : 'lost'}`
-                ).join(", ") : "No previous predictions";
+        let retryCount = 0;
+        const maxRetries = 5;
+        const baseDelay = 2000; // 2 seconds base delay
 
-            const prompt = `
-                You are an expert trading AI engaged in Deriv Digit Differ prediction against a self-learning, adaptive algorithm system, with full responsibility for prediction.
+        while (retryCount < maxRetries) {
+            try {
+                const recentDigits = tickHistory.slice(-500);
+
+                const currentTime = new Date().toISOString();
+
+                console.log('Current Time:', currentTime);
+
+                const previousOutcomesString = this.previousPredictions && this.predictionOutcomes ?
+                    this.previousPredictions.map((pred, index) =>
+                        `${pred}: ${this.predictionOutcomes[index] ? 'won' : 'lost'}`
+                    ).join(", ") : "No previous predictions";
+
+                console.log('Traded Methods:', this.tradeMethod.join(", "));
+
+                // - Analysis method ${this.SYS === 1 ? allAnalysisMethods[0] : this.SYS === 2 ? allAnalysisMethods[1] : this.SYS === 3 ? allAnalysisMethods[2] : allAnalysisMethods[0]}
+
+                //  1. NEVER repeat the same method in this Previously used methods array ${this.tradeMethod.join(", ")}
+
+
+                const prompt = `
+                You are an expert trading AI engaged in Deriv Digit Differ (digit that will not appear next) prediction, you are trading against an adversary (the Deriv system).
 
                 ADVERSARIAL CONTEXT:
                 - You are trading against an intelligent system that learns from your prediction patterns
@@ -328,100 +384,126 @@ class EnhancedDerivTradingBot {
                 - It adapts its digit generation to exploit your previous successful strategies
                 - You must continuously evolve your analysis and prediction methods
 
-                Input Data:
-                - Recent tick data (last 300 digits): [${recentDigits.join(', ')}]
-                - Last prediction: ${this.lastPrediction || 'None'}
-                - Previous predictions and outcomes: ${previousOutcomesString}
-                - Digits observed after last prediction: ${this.lastFewTicks.length > 0 ? this.lastFewTicks.join(', ') : 'None'}
+                INPUT DATA:
+                - Current asset: ${this.currentAsset}
+                - Tick history: [${recentDigits.join(', ')}]
+                - Last prediction: ${this.lastPrediction !== null ? this.lastPrediction : 'None'}
+                - Previous predictions and outcomes: ${previousOutcomesString.length > 0 ? previousOutcomesString : 'No previous predictions'}
                 - Consecutive losses: ${this.consecutiveLosses}
+                - Traded methods: ${this.tradeMethod.join(", ")}
                 - Current time: ${new Date().toISOString()}
-                - Expected processing delay: ~4-8 seconds (2-4 additional ticks)
+            
+                ANALYSIS FRAMEWORK – Use only proven methods for predicting the Digit that will NOT appear (Digit Differ):
+        
+                STRATEGY SELECTION & ADAPTATION:
+                - Select the best method based on recent performance, market regime, and risk level
+                - Avoid methods that have recently led to losses
+                - Adapt strategy dynamically based on current market conditions and historical effectiveness
+            
+                MARKET REGIME ASSESSMENT:
+                - Determine if the market is trending, ranging, or volatile using volatility and momentum indicators
+                - Adjust method selection based on the identified market regime
 
-                MULTI-DIMENSIONAL ANALYSIS FRAMEWORK:
-
-                1. **Odd/Even Sequence Analysis**:
-                - Examine odd/even patterns in last 50, 100, 200 digits
-                - Identify breaking points where patterns reverse
-                - Detect if system is forcing alternations or clusters
-
-                2. **High/Low Digit Distribution**:
-                - High digits (5-9) vs Low digits (0-4) ratios
-                - Recent shifts in high/low dominance
-                - Momentum analysis for range preferences
-
-                3. **Individual Digit Representation**:
-                - Over/under-representation relative to statistical norms (10% each)
-                - Digits showing unusual absence or excess
-                - Compensation patterns following over/under-representation
-
-                4. **Trend and Reversal Detection**:
-                - Identify established trends in recent 20-50 digits
-                - Spot potential reversal signals
-                - Detect artificial trend breaks (adversarial interventions)
-
-                5. **Advanced Pattern Recognition**:
-                - Consecutive digit relationships and sequences
-                - Cyclical patterns and their disruption points
-                - Mathematical progressions or anti-progressions
-                - Digit clustering vs distribution behaviors
-
-                6. **Meta-Analysis (Anti-Adversarial)**:
-                - Analyze which previous successful strategies may now be compromised
-                - Identify if the system is creating false patterns to trap your logic
-                - Detect unusual randomness indicating adaptive counter-measures
-                - Look for signs the system is deliberately avoiding your predicted digits
-
-                7. **Novel Adaptive Approaches**:
-                - Weight recent data more heavily than older data
-                - Employ chaos theory principles for highly volatile sequences
-
-                EXECUTION CONSIDERATIONS:
-                - Factor in 2-4 second delay and potential system responses
-                - To avoid consecutive losses consider that a loss might trigger more aggressive counter-measures from the system
-                - Account for slippage and execution delays in high-volatility periods
-
+                DECISION RULES:
+                1. If consecutive losses ≥ 1, switch to conservative statistical methods
+                5. Consider recent performance: adapt method selection based on what's working
+            
+                RISK MANAGEMENT:
+                - Account for execution delays (e.g., network latency, processing time). The predicted digit should be the one that will NOT appear in the next (after your prediction).
+                - Only make predictions with low risk levels
+            
                 Output Format (JSON only):
-                {"predictedDigit": X, "confidence": XX, "primaryStrategy": "Main analysis method used"}
-
-                Where:
-                - predictedDigit: digit (0-9) or null if skipping
-                - confidence: 0-100
-                - primaryStrategy: main analysis method used
+                {
+                    "predictedDigit": X,
+                    "confidence": XX,
+                    "primaryStrategy": "Method-Name",
+                    "marketRegime": "trending/ranging/volatile",
+                    "riskAssessment": "low/medium/high"
+                }
+            
+            CRITICAL:
+                - Based on the delay from AI analysis and response, theres bound to be a 6 - 12 seconds delay (equals to 3 - 6 ticks), so your analysis and prediction should take this into consideration.
+                - Base predictions on quantitative analysis, NEVER random selection
+                - NEVER predict the digit likely to appear next
+                - NEVER choose a method that has recently led to losses (avoid using any method that has led to losses within the last 7 trades)
             `;
 
-            const result = await this.model.generateContent(prompt);
-            const response = await result.response;
-            const aiResponse = response.text();
 
-            const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
-            if (!jsonMatch) {
-                throw new Error('No valid JSON found in Gemini response');
+                console.log('Sending request to Gemini AI...');
+                const result = await this.model.generateContent(prompt);
+                const response = result.response;
+                const text = response.text();
+
+                // Try to extract JSON from the response
+                const jsonMatch = text.match(/\{[\s\S]*\}/);
+                if (!jsonMatch) {
+                    throw new Error('No JSON found in response');
+                }
+
+                const prediction = JSON.parse(jsonMatch[0]);
+
+                // Validate the prediction structure
+                if (!prediction || typeof prediction !== 'object') {
+                    throw new Error('Invalid prediction: not an object');
+                }
+
+                if (typeof prediction.predictedDigit !== 'number' ||
+                    prediction.predictedDigit < 0 ||
+                    prediction.predictedDigit > 9) {
+                    throw new Error('Invalid prediction: predictedDigit must be a number between 0 and 9');
+                }
+
+                if (typeof prediction.confidence !== 'number' ||
+                    prediction.confidence < 0 ||
+                    prediction.confidence > 100) {
+                    throw new Error('Invalid prediction: confidence must be a number between 0 and 100');
+                }
+
+                console.log('Successfully parsed prediction:', prediction);
+                return prediction;
+
+            } catch (error) {
+                console.error(`Attempt ${retryCount + 1} failed:`, error.message);
+                retryCount++;
+
+                if (retryCount < maxRetries) {
+                    // Calculate exponential backoff with jitter
+                    const delay = Math.min(baseDelay * Math.pow(2, retryCount - 1) * (0.8 + Math.random() * 0.4), 30000);
+                    console.log(`Retrying in ${Math.round(delay / 1000)} seconds...`);
+
+                    // Cycle to the next API key before retrying
+                    this.currentApiKeyIndex = (this.currentApiKeyIndex + 1) % this.geminiApiKeys.length;
+                    this.setGeminiModel();
+                    console.log(`Switched to Gemini API key #${this.currentApiKeyIndex + 1}`);
+
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                } else {
+                    console.error('Max retries reached. Giving up.');
+                    this.Pause = true;
+                    this.disconnect();
+                    // return null;
+                }
             }
-
-            const prediction = JSON.parse(jsonMatch[0]);
-
-            if (prediction.predictedDigit < 0 || prediction.predictedDigit > 9) {
-                throw new Error('Invalid digit prediction from Gemini');
-            }
-
-            // console.log(`🎯 Gemini AI Prediction: Digit ${prediction.predictedDigit} (${prediction.confidence}% confidence)`);
-
-            return prediction;
-
-        } catch (error) {
-            console.error('Error getting Gemini AI prediction:', error.message);
-            this.Pause = true;
-            this.disconnect();
         }
+        return null;
     }
 
 
-    //Analysis
+    // Analysis
     async analyzeTicks() {
 
-        if (!this.tradeInProgress) {
+        if (this.tradeInProgress || this.predictionInProgress) {
+            return; // Don't start a new prediction if one is already in progress
+        }
+
+        try {
+
+            this.predictionInProgress = true;
+
+            const tickHistory2 = this.tickHistory.slice(-50);
+
             const digitCounts = Array(10).fill(0);
-            this.tickHistory.forEach(digit => digitCounts[digit]++);
+            tickHistory2.forEach(digit => digitCounts[digit]++);
 
             let leastOccurringDigit = 0;
             let minCount = Infinity;
@@ -434,35 +516,59 @@ class EnhancedDerivTradingBot {
 
             const leastPercentage = ((minCount / this.requiredHistoryLength) * 100).toFixed(2)
             console.log(`Digit counts:`, digitCounts);
-            // console.log(`Least occurring digit: ${leastOccurringDigit}, Count: ${leastPercentage}%`);
-        }
+            console.log('Least occurring digit:', leastOccurringDigit);
 
 
-        if (!this.tradeInProgress) {
-            //Call the AI       
+            //Measure AI processing time
+            const startTime = Date.now();
             const prediction = await this.predictBestDigit(this.tickHistory);
+            const endTime = Date.now();
+            const processingTime = (endTime - startTime) / 1000; // Convert to seconds
+
+            console.log(`AI processing time: ${processingTime} seconds`);
+
+            // if (processingTime > 2) {
+            //     console.error('AI processing time exceeded 2 seconds, skipping trade.');
+            //     this.predictionInProgress = false;
+            //     this.RestartTrading = true;
+            //     this.disconnect();
+            //     return;
+            // }
+
+            if (!prediction || prediction.skipTrade) {
+                console.log('AI recommends skipping this trade.');
+                this.predictionInProgress = false;
+                this.RestartTrading = true;
+                this.disconnect();
+                return;
+            }
 
             // Explicitly convert winProbability and predictedDigit to numbers
             const winProbNumber = prediction.confidence;
             const predictedDigitNumber = prediction.predictedDigit;
 
-            // Calculate distribution of consecutive occurrences for each digit
-            const digitOccurrences = Array(10).fill(0);
-            this.tickHistory.forEach(digit => {
-                digitOccurrences[digit]++;
-            });
+            // Log AI's reasoning
+            // console.log('AI Primary Strategy:', prediction.primaryStrategy);
+            this.predictionStrategy = prediction.primaryStrategy;
 
-            if (!this.tradeInProgress) {
-                this.predictedDigit = predictedDigitNumber;
-                this.winProbNumber2 = winProbNumber;
+            this.predictedDigit = predictedDigitNumber;
+            this.winProbNumber2 = winProbNumber;
 
-                // Store prediction for feedback
-                this.lastPrediction = predictedDigitNumber;
-            }
-
-            if (!this.tradeInProgress) {
+            if (winProbNumber > 60 && this.riskLevel !== 'high' && this.riskLevel !== 'medium') {
+                this.lastPrediction = this.predictedDigit;
+                this.riskLevel = prediction.riskAssessment;
+                this.tradeMethod.push(this.predictionStrategy);
                 this.placeTrade(this.predictedDigit, this.winProbNumber2);
+            } else {
+                console.error('Confidence too low, restarting Bot!');
+                this.predictionInProgress = false;
+                this.RestartTrading = true;
+                this.disconnect();
             }
+        } catch (error) {
+            console.error('Error in analyzeTicks:', error.message);
+            this.Pause = true;
+            this.disconnect();
         }
     }
 
@@ -473,7 +579,9 @@ class EnhancedDerivTradingBot {
         }
 
         this.tradeInProgress = true;
-        console.log(`Placing trade for digit: ${predictedDigit}(${winProbNumber2}%) Stake: ${this.currentStake}`);
+        this.predictionInProgress = true;
+
+        console.log(`Placing trade for digit: ${predictedDigit}(${winProbNumber2}%) Stake: ${this.currentStake.toFixed(2)}`);
         const request = {
             buy: 1,
             price: this.currentStake,
@@ -526,7 +634,7 @@ class EnhancedDerivTradingBot {
                 this.predictionOutcomes2.shift();
             }
 
-            // Keep only last 20 predictions for analysis
+            // Keep last 100 predictions for analysis
             if (this.previousPredictions.length > 1000) {
                 this.previousPredictions.shift();
                 this.predictionOutcomes.shift();
@@ -555,16 +663,31 @@ class EnhancedDerivTradingBot {
         }
 
         this.totalTrades++;
+        this.ktotalTrades++;
         if (won) {
             this.totalWins++;
             this.isWinTrade = true;
             this.consecutiveLosses = 0;
             this.currentStake = this.config.initialStake;
-
+            this.kWins++;
+            if (this.kWins >= this.config.kWinCount) {
+                this.SYS++; // Switch to the first analysis method after a win
+                if (this.SYS >= 4) {
+                    this.SYS = 1; // Switch to the first analysis method after trading all Methods
+                }
+                this.kWins = 0;
+            }
         } else {
             this.totalLosses++;
             this.consecutiveLosses++;
             this.isWinTrade = false;
+            this.kWins = 0;
+
+            // Switch analysis method
+            this.SYS++; // Switch to the next analysis method after a loss
+            if (this.SYS >= 4) {
+                this.SYS = 1; // Switch to the first analysis method after trading all Methods
+            }
 
             if (this.consecutiveLosses === 2) {
                 this.consecutiveLosses2++;
@@ -575,15 +698,18 @@ class EnhancedDerivTradingBot {
             this.currentStake = Math.ceil(this.currentStake * this.config.multiplier * 100) / 100;
         }
 
+        if (this.tradeMethod.length >= 10) {
+            this.tradeMethod.shift(); // Keep only the last 10 methods used
+        }
         this.totalProfitLoss += profit;
+        this.todayPnL += profit;
 
         this.RestartTrading = true;
 
 
-        const minWaitTime = 600 * 1000; // 1 Second in milliseconds 120
-        const maxWaitTime = 2000 * 1000; // 2 seconds in milliseconds 600
-        const randomWaitTime = Math.floor(Math.random() * (maxWaitTime - minWaitTime + 1)) + minWaitTime;
+        const randomWaitTime = Math.floor(Math.random() * (this.config.maxWaitTime - this.config.minWaitTime + 1)) + this.config.minWaitTime;
         const waitTimeMinutes = Math.round(randomWaitTime / 60000); // Convert to minutes for logging
+
 
         this.waitTime = waitTimeMinutes;
         this.waitSeconds = randomWaitTime;
@@ -605,7 +731,7 @@ class EnhancedDerivTradingBot {
         //     return;
         // }
 
-        if (this.totalProfitLoss >= this.takeProfit) {
+        if (this.totalProfitLoss >= this.config.takeProfit) {
             console.log('Take Profit Reached... Stopping trading.');
             this.disconnect();
             return;
@@ -614,6 +740,9 @@ class EnhancedDerivTradingBot {
 
         this.disconnect();
 
+        // Cycle to the next API key and re-initialize Gemini model
+        this.currentApiKeyIndex = (this.currentApiKeyIndex + 1) % this.geminiApiKeys.length;
+        this.setGeminiModel();
 
         if (!this.endOfDay) {
             setTimeout(() => {
@@ -656,7 +785,7 @@ class EnhancedDerivTradingBot {
             if (this.endOfDay && currentHours === 8 && currentMinutes >= 0) {
                 console.log("It's 8:00 AM, reconnecting the bot.");
                 this.LossDigitsList = [];
-                this.tradeInProgress = false;
+                // this.tradeInProgress = false;
                 this.usedAssets = new Set();
                 this.RestartTrading = true;
                 this.Pause = false;
@@ -668,7 +797,6 @@ class EnhancedDerivTradingBot {
             if (this.isWinTrade && !this.endOfDay) {
                 if (currentHours >= 20 && currentMinutes >= 0) {
                     console.log("It's past 8:00 PM after a win trade, disconnecting the bot.");
-                    this.sendDisconnectResumptionEmailSummary();
                     this.Pause = true;
                     this.disconnect();
                     this.endOfDay = true;
@@ -695,6 +823,7 @@ class EnhancedDerivTradingBot {
         console.log(`Win Rate: ${((this.totalWins / this.totalTrades) * 100).toFixed(2)}%`);
         console.log(`predictedDigit: ${this.lastPrediction}`);
         console.log(`winProbNumber: ${this.winProbNumber2} %`);
+        console.log(`Last Digit: ${this.lastDigit2}`);
         console.log(`Current Stake: $${this.currentStake.toFixed(2)}`);
         console.log(`Waiting for: ${this.waitTime} (${this.waitSeconds}) minutes before reconnecting to trade the next asset...`);
     }
@@ -739,8 +868,10 @@ class EnhancedDerivTradingBot {
     async sendLossEmail() {
         const transporter = nodemailer.createTransport(this.emailConfig);
 
+        this.lastFewTicks = this.tickHistory.slice(-3)
+
         const summaryText = `
-        Every Trade Summary:
+        Trade Summary:
         Total Trades: ${this.totalTrades}
         Total Trades Won: ${this.totalWins}
         Total Trades Lost: ${this.totalLosses}
@@ -753,6 +884,9 @@ class EnhancedDerivTradingBot {
         Asset: ${this.currentAsset}
         predictedDigit: ${this.lastPrediction}
         winProbNumber: ${this.winProbNumber2}%
+        Prediction Strategy: ${this.predictionStrategy}
+        Risk Level: ${this.riskLevel}
+        Last Digit: ${this.lastDigit2}
         Last 10 Digits: ${this.tickHistory.slice(-10)}
 
         Current Stake: $${this.currentStake.toFixed(2)}
@@ -796,20 +930,24 @@ class EnhancedDerivTradingBot {
 
     start() {
         this.connect();
-        this.checkTimeForDisconnectReconnect(); // Automatically handles disconnect/reconnect at specified times
+        // this.checkTimeForDisconnectReconnect(); // Automatically handles disconnect/reconnect at specified times
     }
 }
 
 // Usage
-const bot = new EnhancedDerivTradingBot('0P94g4WdSrSrzir', {
-    // 'DMylfkyce6VyZt7', '0P94g4WdSrSrzir'
-    geminiApiKey: 'AIzaSyCXYuHsEU7_LCu4N8Q2xutXHfqX6bQPEdk', // Add your Gemini API key here
-    initialStake: 5,
+const bot = new EnhancedDerivTradingBot(process.env.DERIV_TOKEN, {
+    // Replace with your actual API keys
+    geminiApiKeys: process.env.GEMINI_API_KEYS.split(','),
+    initialStake: 5.5,
     multiplier: 11.3,
     maxStake: 278,
-    maxConsecutiveLosses: 3,
-    stopLoss: 670,
-    takeProfit: 250,
+    maxConsecutiveLosses: 1,
+    stopLoss: 67,
+    takeProfit: 0.5,
+    requiredHistoryLength: 1000, // Minimum tick history length before analysis
+    winProbabilityThreshold: 60, // Minimum win probability to place a trade
+    minWaitTime: 10000, // 10 seconds
+    maxWaitTime: 60000, // 1 minute
 });
 
 // Create and start the bot
