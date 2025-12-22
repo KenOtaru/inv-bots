@@ -95,7 +95,7 @@ const CONFIG = {
     SESSION_STOP_LOSS: parseFloat(process.env.STOP_LOSS) || -500,
 
     // Breakout & Reversal Settings
-    REVERSAL_STAKE_MULTIPLIER: 1.5,      // 2x stake on reversal
+    REVERSAL_STAKE_MULTIPLIER: 2,      // 2x stake on reversal
     MAX_REVERSAL_LEVEL: 10,               // Max consecutive reversals
     AUTO_CLOSE_ON_RECOVERY: true,        // Auto-close when profit >= accumulated loss
 
@@ -137,11 +137,11 @@ const CONFIG = {
     EMAIL_CONFIG: {
         service: 'gmail',
         auth: {
-            user: process.env.EMAIL_USER || '',
-            pass: process.env.EMAIL_PASS || ''
+            user: process.env.EMAIL_USER || 'kenzkdp2@gmail.com',
+            pass: process.env.EMAIL_PASS || 'jfjhtmussgfpbgpk'
         }
     },
-    EMAIL_RECIPIENT: process.env.EMAIL_RECIPIENT || ''
+    EMAIL_RECIPIENT: process.env.EMAIL_RECIPIENT || 'kenotaru@gmail.com'
 };
 
 // ============================================
