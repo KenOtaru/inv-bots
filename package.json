@@ -18,6 +18,11 @@
     "prompt-sync": "^4.2.0",
     "technicalindicators": "^3.1.0",
     "winston": "^3.8.0",
+    "@google/generative-ai": "^0.24.1",
+    "@huggingface/hub": "^0.18.2",
+    "@huggingface/inference": "^2.8.1",
+    "axios": "^1.9.0",
+    "openai": "^5.3.0",
     "ws": "^8.18.3"
   },
   "devDependencies": {
