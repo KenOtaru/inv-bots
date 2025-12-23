@@ -88,7 +88,7 @@ const CONFIG = {
     // Capital Settings
     INITIAL_CAPITAL: parseFloat(process.env.CAPITAL) || 500,
     INITIAL_STAKE: parseFloat(process.env.STAKE) || 1.00,
-    TAKE_PROFIT: parseFloat(process.env.TAKE_PROFIT) || 0.06,
+    TAKE_PROFIT: parseFloat(process.env.TAKE_PROFITs) || 0.06,
 
     // Session Targets
     SESSION_PROFIT_TARGET: parseFloat(process.env.PROFIT_TARGET) || 150,
@@ -97,7 +97,7 @@ const CONFIG = {
     // Breakout & Reversal Settings
     REVERSAL_STAKE_MULTIPLIER: 2,      // 2x stake on reversal
     MAX_REVERSAL_LEVEL: 10,               // Max consecutive reversals
-    AUTO_CLOSE_ON_RECOVERY: true,        // Auto-close when profit >= accumulated loss
+    AUTO_CLOSE_ON_RECOVERY: false,        // Auto-close when profit >= accumulated loss
 
     // Timeframe Settings
     TIMEFRAME: SELECTED_TIMEFRAME,
@@ -186,18 +186,18 @@ const ASSET_CONFIGS = {
     //     maxStake: 2000,
     //     tradingHours: '24/7'
     // },
-    'R_75': {
-        name: 'Volatility 75 Index',
-        category: 'synthetic',
-        contractType: 'multiplier',
-        multipliers: [50, 100, 200, 300, 500],
-        defaultMultiplier: 50,
-        wprPeriod: 80,
-        maxTradesPerDay: 500000,
-        minStake: 1.00,
-        maxStake: 3000,
-        tradingHours: '24/7'
-    },
+    // 'R_75': {
+    //     name: 'Volatility 75 Index',
+    //     category: 'synthetic',
+    //     contractType: 'multiplier',
+    //     multipliers: [50, 100, 200, 300, 500],
+    //     defaultMultiplier: 50,
+    //     wprPeriod: 80,
+    //     maxTradesPerDay: 500000,
+    //     minStake: 1.00,
+    //     maxStake: 3000,
+    //     tradingHours: '24/7'
+    // },
     // 'R_100': {
     //     name: 'Volatility 100 Index',
     //     category: 'synthetic',
@@ -235,18 +235,18 @@ const ASSET_CONFIGS = {
     //     maxStake: 1000,
     //     tradingHours: '24/7'
     // },
-    // '1HZ50V': {
-    //     name: 'Volatility 50 (1s) Index',
-    //     category: 'synthetic',
-    //     contractType: 'multiplier',
-    //     multipliers: [80, 200, 400, 600, 800],
-    //     defaultMultiplier: 80,
-    //     wprPeriod: 80,
-    //     maxTradesPerDay: 120,
-    //     minStake: 1.00,
-    //     maxStake: 1000,
-    //     tradingHours: '24/7'
-    // },
+    '1HZ50V': {
+        name: 'Volatility 50 (1s) Index',
+        category: 'synthetic',
+        contractType: 'multiplier',
+        multipliers: [80, 200, 400, 600, 800],
+        defaultMultiplier: 80,
+        wprPeriod: 80,
+        maxTradesPerDay: 120,
+        minStake: 1.00,
+        maxStake: 1000,
+        tradingHours: '24/7'
+    },
     // '1HZ75V': {
     //     name: 'Volatility 75 (1s) Index',
     //     category: 'synthetic',
@@ -812,7 +812,7 @@ class StakeManager {
         LOGGER.trade(`${symbol} Reversal stake: $${assetState.currentStake.toFixed(2)} (Level ${assetState.reversalLevel})`);
         LOGGER.trade(`${symbol} Accumulated loss: $${assetState.accumulatedLoss.toFixed(2)}, Dynamic TP: $${assetState.takeProfitAmount.toFixed(2)}`);
 
-        return this.validateStake(symbol, assetState.currentStake);
+        return this.validateStake(symbol, assetState.currentStake.toFixed(2));
     }
 
     /**
@@ -829,6 +829,9 @@ class StakeManager {
         assetState.takeProfitAmount = 0;
         assetState.activePosition = null;
         assetState.currentDirection = null;
+
+        // Reset Stake and Take Profit
+        this.getInitialStake(symbol);
 
         // Clear breakout and wait for new signal
         BreakoutManager.clearBreakout(symbol);
@@ -1563,6 +1566,13 @@ class DerivBreakoutBot {
         const config = ASSET_CONFIGS[symbol];
         const assetState = state.assets[symbol];
 
+        const hasExisting = state.portfolio.activePositions.some(
+            p => p.symbol === symbol);
+        if (hasExisting) {
+            LOGGER.warn(`Trade blocked: Already have active ${direction} on ${symbol}`);
+            return;
+        }
+
         // Get stake based on whether this is a reversal
         let stake;
         if (isReversal) {
@@ -1653,7 +1663,7 @@ class DerivBreakoutBot {
         position.pendingReversal = newDirection;
 
         // Update breakout levels for the reversal
-        BreakoutManager.updateBreakoutForReversal(symbol, newDirection);
+        // BreakoutManager.updateBreakoutForReversal(symbol, newDirection);
 
         // Close current position at market
         this.connection.send({

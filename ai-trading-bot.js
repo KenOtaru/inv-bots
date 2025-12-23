@@ -619,7 +619,9 @@ class AIDigitDifferBot {
             // Check if we should trade
             if (ensemble.confidence >= this.config.minConfidence &&
                 ensemble.agreement >= Math.min(this.config.minModelsAgreement, predictions.length) &&
-                ensemble.risk !== 'high') {
+                ensemble.risk !== 'high' &&
+                processingTime.toFixed(2) < 3
+            ) {
                 this.placeTrade(ensemble.digit, ensemble.confidence);
             } else {
                 console.log(`⏭️  Skipping trade: conf=${ensemble.confidence}%, agree=${ensemble.agreement}, risk=${ensemble.risk}`);
@@ -801,6 +803,7 @@ class AIDigitDifferBot {
 
         CURRENT MARKET DATA:
         - Asset: ${this.currentAsset}
+        - Last 300 digits: [${recentDigits.join(',')}] 
         - Last 50 digits: [${last50.join(',')}]
         - Last 20 digits: [${last20.join(',')}]
         - Digit frequency (last 50): ${counts.map((c, i) => `${i}:${c}`).join(',')}
