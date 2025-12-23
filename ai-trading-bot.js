@@ -96,7 +96,7 @@ class AIDigitDifferBot {
             requiredHistoryLength: config.requiredHistoryLength || 500,
             minConfidence: config.minConfidence || 60,
             minModelsAgreement: config.minModelsAgreement || 2,
-            maxReconnectAttempts: config.maxReconnectAttempts || 100,
+            maxReconnectAttempts: config.maxReconnectAttempts || 10000,
             reconnectInterval: config.reconnectInterval || 5000,
             tradeCooldown: config.tradeCooldown || 3000,
             minWaitTime: config.minWaitTime || 10000,
@@ -1381,14 +1381,14 @@ class AIDigitDifferBot {
             : 0;
 
         return `
-Trading Session Summary
-========================
-Total Trades: ${this.totalTrades}
-Wins: ${this.totalWins}
-Losses: ${this.totalLosses}
-Win Rate: ${winRate}%
-Total P/L: $${this.totalPnL.toFixed(2)}
-Final Balance: $${this.balance.toFixed(2)}
+            Trading Session Summary
+            ========================
+            Total Trades: ${this.totalTrades}
+            Wins: ${this.totalWins}
+            Losses: ${this.totalLosses}
+            Win Rate: ${winRate}%
+            Total P/L: $${this.totalPnL.toFixed(2)}
+            Final Balance: $${this.balance.toFixed(2)}
         `;
     }
 
@@ -1425,15 +1425,15 @@ Final Balance: $${this.balance.toFixed(2)}
         }
 
         // Handle graceful shutdown
-        process.on('SIGINT', () => {
-            console.log('\n\n⚠️  Received SIGINT. Shutting down gracefully...');
-            this.shutdown();
-        });
+        // process.on('SIGINT', () => {
+        //     console.log('\n\n⚠️  Received SIGINT. Shutting down gracefully...');
+        //     this.shutdown();
+        // });
 
-        process.on('SIGTERM', () => {
-            console.log('\n\n⚠️  Received SIGTERM. Shutting down gracefully...');
-            this.shutdown();
-        });
+        // process.on('SIGTERM', () => {
+        //     console.log('\n\n⚠️  Received SIGTERM. Shutting down gracefully...');
+        //     this.shutdown();
+        // });
 
         process.on('uncaughtException', (error) => {
             console.error('Uncaught Exception:', error.message);
