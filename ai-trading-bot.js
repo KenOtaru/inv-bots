@@ -71,23 +71,23 @@ class AIDigitDifferBot {
                 name: 'SambaNova',
                 weight: 1.0
             },
-            huggingface: {
-                key: (process.env.HUGGINGFACE_API_KEY || '').trim(),
+            qwen: {
+                key: (process.env.DASHSCOPE_API_KEY || '').trim(),
                 enabled: false,
-                name: 'HuggingFace',
-                weight: 1.0
-            },
-            cohere: {
-                key: (process.env.COHERE_API_KEY || '').trim(),
-                enabled: false,
-                name: 'Cohere',
+                name: 'Qwen',
                 weight: 1.1
             },
-            deepseek: {
-                key: (process.env.DEEPSEEK_API_KEY || '').trim(),
+            kimi: {
+                key: (process.env.MOONSHOT_API_KEY || '').trim(),
                 enabled: false,
-                name: 'DeepSeek',
+                name: 'Kimi',
                 weight: 1.1
+            },
+            siliconflow: {
+                key: (process.env.SILICONFLOW_API_KEY || '').trim(),
+                enabled: false,
+                name: 'SiliconFlow',
+                weight: 1.2
             }
         };
 
@@ -218,7 +218,7 @@ class AIDigitDifferBot {
         }
 
         // Check and enable other models
-        for (const key of ['groq', 'openrouter', 'mistral', 'cerebras', 'sambanova', 'huggingface', 'cohere', 'deepseek']) {
+        for (const key of ['groq', 'openrouter', 'mistral', 'cerebras', 'sambanova', 'qwen', 'kimi', 'siliconflow']) {
             const apiKey = this.aiModels[key].key;
             if (apiKey && apiKey.length > 10) {
                 this.aiModels[key].enabled = true;
@@ -706,25 +706,25 @@ class AIDigitDifferBot {
                     .catch(e => ({ error: e.message, model: 'sambanova' }))
             );
         }
-        if (this.aiModels.huggingface.enabled) {
+        if (this.aiModels.qwen.enabled) {
             promises.push(
-                this.predictWithHuggingFace()
-                    .then(r => { r.model = 'huggingface'; return r; })
-                    .catch(e => ({ error: e.message, model: 'huggingface' }))
+                this.predictWithQwen()
+                    .then(r => { r.model = 'qwen'; return r; })
+                    .catch(e => ({ error: e.message, model: 'qwen' }))
             );
         }
-        if (this.aiModels.cohere.enabled) {
+        if (this.aiModels.kimi.enabled) {
             promises.push(
-                this.predictWithCohere()
-                    .then(r => { r.model = 'cohere'; return r; })
-                    .catch(e => ({ error: e.message, model: 'cohere' }))
+                this.predictWithKimi()
+                    .then(r => { r.model = 'kimi'; return r; })
+                    .catch(e => ({ error: e.message, model: 'kimi' }))
             );
         }
-        if (this.aiModels.deepseek.enabled) {
+        if (this.aiModels.siliconflow.enabled) {
             promises.push(
-                this.predictWithDeepSeek()
-                    .then(r => { r.model = 'deepseek'; return r; })
-                    .catch(e => ({ error: e.message, model: 'deepseek' }))
+                this.predictWithSiliconFlow()
+                    .then(r => { r.model = 'siliconflow'; return r; })
+                    .catch(e => ({ error: e.message, model: 'siliconflow' }))
             );
         }
 
@@ -1175,17 +1175,20 @@ class AIDigitDifferBot {
         return this.parseAIResponse(text, 'huggingface');
     }
 
-    // NEW: Cohere (Free trial keys available)
-    async predictWithCohere() {
-        const key = this.aiModels.cohere.key;
-        if (!key) throw new Error('No Cohere API key');
+    // NEW: Qwen (Alibaba DashScope)
+    async predictWithQwen() {
+        const key = this.aiModels.qwen.key;
+        if (!key) throw new Error('No DashScope API key');
 
+        // Use compatible-mode endpoint
         const response = await axios.post(
-            'https://api.cohere.com/v1/chat',
+            'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions',
             {
-                message: this.getPrompt(),
-                model: 'command-r',
-                preamble: 'You are a trading bot that ONLY outputs JSON.',
+                model: 'qwen-turbo',
+                messages: [
+                    { role: 'system', content: 'You are a trading bot that ONLY outputs JSON.' },
+                    { role: 'user', content: this.getPrompt() }
+                ],
                 temperature: 0.1
             },
             {
@@ -1197,19 +1200,47 @@ class AIDigitDifferBot {
             }
         );
 
-        const text = response.data.text;
-        return this.parseAIResponse(text, 'cohere');
+        const text = response.data.choices?.[0]?.message?.content;
+        return this.parseAIResponse(text, 'qwen');
     }
 
-    // NEW: DeepSeek (Fast & Cheap)
-    async predictWithDeepSeek() {
-        const key = this.aiModels.deepseek.key;
-        if (!key) throw new Error('No DeepSeek API key');
+    // NEW: Kimi (Moonshot AI)
+    async predictWithKimi() {
+        const key = this.aiModels.kimi.key;
+        if (!key) throw new Error('No Moonshot API key');
 
         const response = await axios.post(
-            'https://api.deepseek.com/chat/completions',
+            'https://api.moonshot.cn/v1/chat/completions',
             {
-                model: 'deepseek-chat',
+                model: 'moonshot-v1-8k',
+                messages: [
+                    { role: 'system', content: 'You are a trading bot that ONLY outputs JSON.' },
+                    { role: 'user', content: this.getPrompt() }
+                ],
+                temperature: 0.1
+            },
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${key}`
+                },
+                timeout: 30000
+            }
+        );
+
+        const text = response.data.choices?.[0]?.message?.content;
+        return this.parseAIResponse(text, 'kimi');
+    }
+
+    // NEW: SiliconFlow (Fast Alternative)
+    async predictWithSiliconFlow() {
+        const key = this.aiModels.siliconflow.key;
+        if (!key) throw new Error('No SiliconFlow API key');
+
+        const response = await axios.post(
+            'https://api.siliconflow.cn/v1/chat/completions',
+            {
+                model: 'Qwen/Qwen2.5-7B-Instruct', // Free & Fast model
                 messages: [
                     { role: 'system', content: 'You are a trading bot that ONLY outputs JSON.' },
                     { role: 'user', content: this.getPrompt() }
@@ -1228,7 +1259,7 @@ class AIDigitDifferBot {
         );
 
         const text = response.data.choices?.[0]?.message?.content;
-        return this.parseAIResponse(text, 'deepseek');
+        return this.parseAIResponse(text, 'siliconflow');
     }
 
     // ==================== STATISTICAL PREDICTION (FALLBACK) ====================
