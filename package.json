@@ -38,9 +38,10 @@
     "nodemon": "^2.0.0"
   },
   "scripts": {
-    "start": "npx -y serve .",
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
     "test": "jest",
-    "dev": "npx -y live-server . --no-browser"
+    "build": "echo 'No build step required for Node.js project'"
   },
   "keywords": [],
   "author": "",
