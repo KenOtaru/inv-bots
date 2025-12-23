@@ -63,8 +63,8 @@ const TIMEFRAMES = {
     '4h': { granularity: 14400, label: '4 Hours' }
 };
 
-const SELECTED_TIMEFRAME = process.env.TIMEFRAME || '1m';
-const TIMEFRAME_CONFIG = TIMEFRAMES[SELECTED_TIMEFRAME] || TIMEFRAMES['1m'];
+const SELECTED_TIMEFRAME = process.env.TIMEFRAME || '5m';
+const TIMEFRAME_CONFIG = TIMEFRAMES[SELECTED_TIMEFRAME] || TIMEFRAMES['5m'];
 
 // ============================================
 // CONFIGURATION
@@ -101,7 +101,7 @@ const CONFIG = {
 
     // Martingale Settings
     STAKE_MULTIPLIER: parseFloat(process.env.STAKE_MULT) || 2.0,
-    LOSSES_BEFORE_MULTIPLIER: parseInt(process.env.LOSSES_BEFORE) || 2,
+    LOSSES_BEFORE_MULTIPLIER: parseInt(process.env.LOSSES_BEFORE) || 1,
     MAX_MULTIPLIER_LEVEL: parseInt(process.env.MAX_LEVEL) || 6,
 
     // Timeframe Settings
