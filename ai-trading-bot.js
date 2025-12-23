@@ -70,6 +70,24 @@ class AIDigitDifferBot {
                 enabled: false,
                 name: 'SambaNova',
                 weight: 1.0
+            },
+            huggingface: {
+                key: (process.env.HUGGINGFACE_API_KEY || '').trim(),
+                enabled: false,
+                name: 'HuggingFace',
+                weight: 1.0
+            },
+            cohere: {
+                key: (process.env.COHERE_API_KEY || '').trim(),
+                enabled: false,
+                name: 'Cohere',
+                weight: 1.1
+            },
+            deepseek: {
+                key: (process.env.DEEPSEEK_API_KEY || '').trim(),
+                enabled: false,
+                name: 'DeepSeek',
+                weight: 1.1
             }
         };
 
@@ -164,6 +182,11 @@ class AIDigitDifferBot {
         console.log('🤖 AI DIGIT DIFFER TRADING BOT v3.0');
         console.log('='.repeat(60));
         this.logActiveModels();
+
+        // Start email timer
+        if (this.emailConfig.enabled) {
+            this.startEmailTimer();
+        }
     }
 
     // ==================== INITIALIZATION ====================
@@ -195,7 +218,7 @@ class AIDigitDifferBot {
         }
 
         // Check and enable other models
-        for (const key of ['groq', 'openrouter', 'mistral', 'cerebras', 'sambanova']) {
+        for (const key of ['groq', 'openrouter', 'mistral', 'cerebras', 'sambanova', 'huggingface', 'cohere', 'deepseek']) {
             const apiKey = this.aiModels[key].key;
             if (apiKey && apiKey.length > 10) {
                 this.aiModels[key].enabled = true;
@@ -683,6 +706,27 @@ class AIDigitDifferBot {
                     .catch(e => ({ error: e.message, model: 'sambanova' }))
             );
         }
+        if (this.aiModels.huggingface.enabled) {
+            promises.push(
+                this.predictWithHuggingFace()
+                    .then(r => { r.model = 'huggingface'; return r; })
+                    .catch(e => ({ error: e.message, model: 'huggingface' }))
+            );
+        }
+        if (this.aiModels.cohere.enabled) {
+            promises.push(
+                this.predictWithCohere()
+                    .then(r => { r.model = 'cohere'; return r; })
+                    .catch(e => ({ error: e.message, model: 'cohere' }))
+            );
+        }
+        if (this.aiModels.deepseek.enabled) {
+            promises.push(
+                this.predictWithDeepSeek()
+                    .then(r => { r.model = 'deepseek'; return r; })
+                    .catch(e => ({ error: e.message, model: 'deepseek' }))
+            );
+        }
 
         // Wait for all predictions with timeout
         const results = await Promise.race([
@@ -706,7 +750,7 @@ class AIDigitDifferBot {
         // Always add statistical prediction as baseline
         const statPrediction = this.statisticalPrediction();
         predictions.push(statPrediction);
-        console.log(`   📈 Statistical: digit=${statPrediction.predictedDigit}, conf=${statPrediction.confidence}%`);
+        console.log(`   📈 Statistical: digit=${statPrediction.predictedDigit}, conf = ${statPrediction.confidence}% `);
 
         return predictions;
     }
@@ -793,13 +837,13 @@ class AIDigitDifferBot {
 
         // Previous outcomes
         const previousOutcomes = this.previousPredictions.slice(-10).map((pred, i) =>
-            `${pred}:${this.predictionOutcomes[i] ? 'W' : 'L'}`
+            `${pred}:${this.predictionOutcomes[i] ? 'W' : 'L'} `
         ).join(',');
 
         // Recent methods used
         const recentMethods = this.tradeMethod.slice(-5).join(', ');
 
-        // return `You are an expert AI for Deriv Digit Differ trading. Your task is to predict the digit (0-9) that will NOT appear in the next tick.
+        // return `You are an expert AI for Deriv Digit Differ trading.Your task is to predict the digit(0 - 9) that will NOT appear in the next tick.
 
         // CURRENT MARKET DATA:
         // - Asset: ${this.currentAsset}
@@ -1097,6 +1141,96 @@ class AIDigitDifferBot {
         return this.parseAIResponse(text, 'sambanova');
     }
 
+    // NEW: Hugging Face Inference API (Free tier)
+    async predictWithHuggingFace() {
+        const key = this.aiModels.huggingface.key;
+        if (!key) throw new Error('No HuggingFace API key');
+
+        const response = await axios.post(
+            'https://api-inference.huggingface.co/models/meta-llama/Meta-Llama-3-8B-Instruct',
+            {
+                inputs: `[INST] You are a trading bot that ONLY outputs JSON. ${this.getPrompt()} [/INST]`,
+                parameters: {
+                    temperature: 0.1,
+                    max_new_tokens: 256,
+                    return_full_text: false
+                }
+            },
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${key}`
+                },
+                timeout: 30000
+            }
+        );
+
+        let text = '';
+        if (Array.isArray(response.data)) {
+            text = response.data[0]?.generated_text;
+        } else {
+            text = response.data?.generated_text;
+        }
+
+        return this.parseAIResponse(text, 'huggingface');
+    }
+
+    // NEW: Cohere (Free trial keys available)
+    async predictWithCohere() {
+        const key = this.aiModels.cohere.key;
+        if (!key) throw new Error('No Cohere API key');
+
+        const response = await axios.post(
+            'https://api.cohere.com/v1/chat',
+            {
+                message: this.getPrompt(),
+                model: 'command-r',
+                preamble: 'You are a trading bot that ONLY outputs JSON.',
+                temperature: 0.1
+            },
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${key}`
+                },
+                timeout: 30000
+            }
+        );
+
+        const text = response.data.text;
+        return this.parseAIResponse(text, 'cohere');
+    }
+
+    // NEW: DeepSeek (Fast & Cheap)
+    async predictWithDeepSeek() {
+        const key = this.aiModels.deepseek.key;
+        if (!key) throw new Error('No DeepSeek API key');
+
+        const response = await axios.post(
+            'https://api.deepseek.com/chat/completions',
+            {
+                model: 'deepseek-chat',
+                messages: [
+                    { role: 'system', content: 'You are a trading bot that ONLY outputs JSON.' },
+                    { role: 'user', content: this.getPrompt() }
+                ],
+                temperature: 0.1,
+                max_tokens: 256,
+                response_format: { type: 'json_object' }
+            },
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${key}`
+                },
+                timeout: 30000
+            }
+        );
+
+        const text = response.data.choices?.[0]?.message?.content;
+        return this.parseAIResponse(text, 'deepseek');
+    }
+
     // ==================== STATISTICAL PREDICTION (FALLBACK) ====================
 
     statisticalPrediction() {
@@ -1242,6 +1376,11 @@ class AIDigitDifferBot {
                 Math.ceil(this.currentStake * this.config.multiplier * 100) / 100,
                 this.balance * 0.5
             );
+        }
+
+        // Send email notification for loss
+        if (!won && this.emailConfig.enabled) {
+            this.sendLossEmail(actualDigit, profit);
         }
 
         // Log summary
@@ -1412,6 +1551,37 @@ class AIDigitDifferBot {
         } catch (error) {
             console.error('❌ Failed to send email:', error.message);
         }
+    }
+
+    startEmailTimer() {
+        // Send summary every 30 minutes
+        setInterval(() => {
+            if (this.totalTrades > 0 && !this.isShuttingDown) {
+                this.sendEmailNotification('Regular Performance Summary', this.getEmailSummary());
+            }
+        }, 30 * 60 * 1000);
+    }
+
+    async sendLossEmail(actualDigit, profit) {
+        const subject = `Loss Alert: -$${Math.abs(profit).toFixed(2)}`;
+        const body = `
+            TRADE LOSS ALERT
+            ================
+            Asset: ${this.currentAsset}
+            Prediction: ${this.lastPrediction}
+            Actual: ${actualDigit}
+            Loss: $${Math.abs(profit).toFixed(2)}
+            
+            Current Balance: $${this.balance.toFixed(2)}
+            Consecutive Losses: ${this.consecutiveLosses}
+            
+            Session Stats:
+            Wins: ${this.totalWins}
+            Losses: ${this.totalLosses}
+            P/L: $${this.totalPnL.toFixed(2)}
+        `;
+
+        await this.sendEmailNotification(subject, body);
     }
 
     // ==================== START BOT ====================
