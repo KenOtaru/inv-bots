@@ -843,6 +843,42 @@ class AIDigitDifferBot {
         // Recent methods used
         const recentMethods = this.tradeMethod.slice(-5).join(', ');
 
+        // return `You are an expert AI for Deriv Digit Differ trading.Your task is to predict the digit(0 - 9) that will NOT appear in the next tick.
+
+        // CURRENT MARKET DATA:
+        // - Asset: ${this.currentAsset}
+        // - Last 300 digits: [${recentDigits.join(',')}] 
+        // - Last 50 digits: [${last50.join(',')}]
+        // - Last 20 digits: [${last20.join(',')}]
+        // - Digit frequency (last 50): ${counts.map((c, i) => `${i}:${c}`).join(',')}
+        // - Digits not in last 15 ticks: [${gaps.join(',')}]
+        // - Recent predictions: ${previousOutcomes || 'None'}
+        // - Recent methods: ${recentMethods || 'None'}
+        // - Consecutive losses: ${this.consecutiveLosses}
+
+        // ANALYSIS METHODS TO USE:
+        // 1. FREQUENCY ANALYSIS - Identify over/under-represented digits
+        // 2. GAP ANALYSIS - Find digits due to appear (avoid these)
+        // 3. PATTERN RECOGNITION - Detect repeating sequences
+        // 4. TRANSITION PROBABILITY - P(next digit | current digit)
+        // 5. MOMENTUM ANALYSIS - Trending digit patterns
+        // 6. MEAN REVERSION - Digits deviating from expected 10% frequency
+
+        // CRITICAL CONSIDERATIONS:
+        // - There is a 3-6 tick delay from your analysis to trade execution
+        // - Your prediction should account for this delay
+        // - Predict the digit LEAST likely to appear, not the most likely
+        // - Base predictions on quantitative analysis only
+
+        // OUTPUT FORMAT (JSON only):
+        // {
+        //     "predictedDigit": X,
+        //     "confidence": XX,
+        //     "primaryStrategy": "Method-Name",
+        //     "marketRegime": "trending/ranging/volatile",
+        //     "riskAssessment": "low/medium/high"
+        // }`;
+
         return `You are an expert trading AI engaged in Deriv Digit Differ (digit that will not appear next) prediction, you are trading against an adversary (the Deriv system).
             ADVERSARIAL CONTEXT:
             - You are trading against an intelligent system that learns from your prediction patterns
@@ -1193,7 +1229,7 @@ class AIDigitDifferBot {
     // ==================== STATISTICAL PREDICTION (FALLBACK) ====================
 
     statisticalPrediction() {
-        const last100 = this.tickHistory.slice(-300);
+        const last100 = this.tickHistory.slice(-100);
         const last50 = this.tickHistory.slice(-50);
         const last20 = this.tickHistory.slice(-20);
 
@@ -1226,7 +1262,7 @@ class AIDigitDifferBot {
 
             // If digit is in gaps, it might appear soon (bad for differ)
             if (gaps.includes(i)) {
-                scores[i] -= 7;
+                scores[i] -= 3;
             }
 
             // Higher transition probability = more likely to appear = bad

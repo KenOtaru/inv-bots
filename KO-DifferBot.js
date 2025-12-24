@@ -320,7 +320,7 @@ class KODerivDifferBot {
         const quoteString = quote.toString();
         const [, fractionalPart = ''] = quoteString.split('.');
 
-        if (['R_75', 'R_50'].includes(asset)) {
+        if (['RDBULL', 'RDBEAR', 'R_75', 'R_50'].includes(asset)) {
             return fractionalPart.length >= 4 ? parseInt(fractionalPart[3]) : 0;
         } else if (['R_10', 'R_25'].includes(asset)) {
             return fractionalPart.length >= 3 ? parseInt(fractionalPart[2]) : 0;
@@ -372,9 +372,9 @@ class KODerivDifferBot {
         };
 
         // Log every 100 ticks
-        if (total % 100 === 0) {
-            console.log(`[${asset}] Rep Prob: ${probability.toFixed(2)}% | Current Digit: ${currentDigit} | ${canTrade ? '✓ Can Trade' : '✗ Cannot Trade'}`);
-        }
+        // if (total % 5 === 0) {
+        console.log(`[${asset}] Rep Prob: ${probability.toFixed(2)}% | Current Digit: ${currentDigit}`);
+        // }
     }
 
     // ========================================================================
@@ -648,7 +648,7 @@ class KODerivDifferBot {
             await transporter.sendMail(mailOptions);
             console.log('Email summary sent');
         } catch (error) {
-            console.error('Error sending email:', error);
+            // console.error('Error sending email:', error);
         }
     }
 
@@ -663,30 +663,30 @@ class KODerivDifferBot {
         const repData = this.currentRepetitionProb[asset] || {};
 
         const summaryText = `
-    ==================== LOSS ALERT ====================
-    
-    TRADE DETAILS:
-    Asset: ${asset}
-    Predicted digit (current): ${predictedDigit}
-    Actual digit: ${actualDigit}
-    
-    PATTERN ANALYSIS:
-    Repetition Probability: ${(repData.probability || 0).toFixed(2)}%
-    Threshold: ${this.config.repetitionThreshold}%
-    Historical Samples: ${repData.total || 0}
-    
-    CURRENT STATUS:
-    Total Trades: ${this.totalTrades}
-    Wins: ${this.totalWins} | Losses: ${this.totalLosses}
-    Consecutive Losses: ${this.consecutiveLosses}
-    Martingale Step: ${this.martingaleStep}/${this.config.martingaleSteps}
-    Current Stake: $${this.currentStake.toFixed(2)}
-    Total P/L: $${this.totalPnL.toFixed(2)}
-    
-    RECENT TRADES:
-        ${recentAnalysis}
-    
-    ====================================================
+            ==================== LOSS ALERT ====================
+            
+            TRADE DETAILS:
+            Asset: ${asset}
+            Predicted digit (current): ${predictedDigit}
+            Actual digit: ${actualDigit}
+            
+            PATTERN ANALYSIS:
+            Repetition Probability: ${(repData.probability || 0).toFixed(2)}%
+            Threshold: ${this.config.repetitionThreshold}%
+            Historical Samples: ${repData.total || 0}
+            
+            CURRENT STATUS:
+            Total Trades: ${this.totalTrades}
+            Wins: ${this.totalWins} | Losses: ${this.totalLosses}
+            Consecutive Losses: ${this.consecutiveLosses}
+            Martingale Step: ${this.martingaleStep}/${this.config.martingaleSteps}
+            Current Stake: $${this.currentStake.toFixed(2)}
+            Total P/L: $${this.totalPnL.toFixed(2)}
+            
+            RECENT TRADES:
+                ${recentAnalysis}
+            
+            ====================================================
         `;
 
         const mailOptions = {
@@ -699,7 +699,7 @@ class KODerivDifferBot {
         try {
             await transporter.sendMail(mailOptions);
         } catch (error) {
-            console.error('Error sending loss email:', error);
+            // console.error('Error sending loss email:', error);
         }
     }
 
@@ -760,7 +760,7 @@ class KODerivDifferBot {
         console.log('');
 
         this.connect();
-        this.checkTimeForDisconnectReconnect();
+        // this.checkTimeForDisconnectReconnect();
     }
 }
 
@@ -772,23 +772,23 @@ const token = process.env.DERIV_TOKEN || 'YOUR_DERIV_API_TOKEN';
 
 const bot = new KODerivDifferBot(token, {
     // Trading Parameters
-    initialStake: 1,
+    initialStake: 0.61,
     tickDuration: 1,
     stopLoss: 10,
-    takeProfit: 5,
+    takeProfit: 1,
 
     // Repetition Pattern Strategy
     historyLength: 5000,
-    repetitionThreshold: 10,
+    repetitionThreshold: 9.65,
 
     // Martingale
-    martingaleMultiplier: 2.2,
-    martingaleSteps: 5,
-    resetAfterMax: 'reset', // 'reset', 'stop', 'continue'
+    martingaleMultiplier: 11.3,
+    martingaleSteps: 3,
+    resetAfterMax: 'stop', // 'reset', 'stop', 'continue'
 
     // Multi-Asset Trading
-    multiAssetEnabled: false,
-    assets: ['R_50'], // Use single asset or ['R_10', 'R_25', 'R_50', 'R_75', 'R_100']
+    multiAssetEnabled: true,
+    assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'RDBULL', 'RDBEAR'], // Use single asset or ['R_10', 'R_25', 'R_50', 'R_75', 'R_100','RDBULL', 'RDBEAR',]
     parallelTrading: false,
     suspendOnLoss: true,
 });
