@@ -347,18 +347,13 @@ class AIDigitDifferBot {
 
         this.reconnectAttempts++;
 
-        if (this.reconnectAttempts <= this.config.maxReconnectAttempts) {
-            const delay = Math.min(this.config.reconnectInterval * this.reconnectAttempts, 30000);
-            console.log(`🔄 Reconnecting in ${delay / 1000}s (attempt ${this.reconnectAttempts}/${this.config.maxReconnectAttempts})...`);
+        const delay = Math.min(this.config.reconnectInterval * (this.reconnectAttempts + 1), 30000);
+        console.log(`🔄 Reconnecting in ${delay / 1000}s (attempt ${this.reconnectAttempts + 1})...`);
 
-            setTimeout(() => {
-                this.isReconnecting = false;
-                this.connect();
-            }, delay);
-        } else {
-            console.error('❌ Max reconnection attempts reached. Stopping bot.');
-            this.shutdown();
-        }
+        setTimeout(() => {
+            this.isReconnecting = false;
+            this.connect();
+        }, delay);
     }
 
     authenticate() {
@@ -432,7 +427,8 @@ class AIDigitDifferBot {
     handleAuthorize(message) {
         if (message.error) {
             console.error('❌ Authentication failed:', message.error.message);
-            this.shutdown();
+            console.log('🔄 Retrying in 5 seconds...');
+            this.scheduleReconnect(5000);
             return;
         }
 
@@ -1360,19 +1356,19 @@ class AIDigitDifferBot {
         if (this.consecutiveLosses >= this.config.maxConsecutiveLosses) {
             console.log('\n🛑 Max consecutive losses reached. Stopping.');
             this.shutdown();
-            // return true;
+            return true;
         }
 
         if (this.totalPnL <= -this.config.stopLoss) {
             console.log('\n🛑 Stop loss reached. Stopping.');
             this.shutdown();
-            // return true;
+            return true;
         }
 
         if (this.totalPnL >= this.config.takeProfit) {
             console.log('\n🎉 Take profit reached! Stopping.');
             this.shutdown();
-            // return true;
+            return true;
         }
 
         return false;
