@@ -1182,9 +1182,9 @@ class AIDigitDifferBot {
 
         // Use compatible-mode endpoint
         const response = await axios.post(
-            'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions',
+            'https://openrouter.ai/api/v1/chat/completions',//'https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions',
             {
-                model: 'qwen-turbo',
+                model: 'qwen/qwen3-coder:free',//'qwen-turbo',
                 messages: [
                     { role: 'system', content: 'You are a trading bot that ONLY outputs JSON.' },
                     { role: 'user', content: this.getPrompt() }
@@ -1210,9 +1210,9 @@ class AIDigitDifferBot {
         if (!key) throw new Error('No Moonshot API key');
 
         const response = await axios.post(
-            'https://api.moonshot.cn/v1/chat/completions',
+            'https://openrouter.ai/api/v1/chat/completions',//'https://api.moonshot.cn/v1/chat/completions',
             {
-                model: 'moonshot-v1-8k',
+                model: 'kwaipilot/kat-coder-pro:free',//'moonshot-v1-8k',
                 messages: [
                     { role: 'system', content: 'You are a trading bot that ONLY outputs JSON.' },
                     { role: 'user', content: this.getPrompt() }
@@ -1238,9 +1238,9 @@ class AIDigitDifferBot {
         if (!key) throw new Error('No SiliconFlow API key');
 
         const response = await axios.post(
-            'https://api.siliconflow.cn/v1/chat/completions',
+            'https://openrouter.ai/api/v1/chat/completions',//'https://api.siliconflow.cn/v1/chat/completions',
             {
-                model: 'Qwen/Qwen2.5-7B-Instruct', // Free & Fast model
+                model: 'xiaomi/mimo-v2-flash:free',//'Qwen/Qwen2.5-7B-Instruct', // Free & Fast model
                 messages: [
                     { role: 'system', content: 'You are a trading bot that ONLY outputs JSON.' },
                     { role: 'user', content: this.getPrompt() }

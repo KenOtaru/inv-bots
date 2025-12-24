@@ -46,7 +46,7 @@ const CONFIG = {
     // Market Timing (GMT/UTC)
     // For synthetics, we can use any time as they run 24/7
     // Format: "HH:MM" in UTC
-    MARKET_OPEN_TIME: process.env.MARKET_OPEN || '23:00',
+    MARKET_OPEN_TIME: process.env.MARKET_OPEN || '00:00',
 
     // Strategy Settings
     ATR_PERIOD: 14,                      // Daily ATR period
