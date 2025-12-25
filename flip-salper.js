@@ -32,7 +32,7 @@ const CONFIG = {
     WS_URL: 'wss://ws.derivws.com/websockets/v3',
 
     // Trading Assets (Multi-Asset Support)
-    ASSETS: (process.env.ASSETS || 'R_75', 'R_100', '1HZ50V', 'frxGBPUSD', 'frxUSDJPY', 'frxXAUUSD').split(','),
+    ASSETS: (process.env.ASSETS || 'R_75', 'R_100', 'frxGBPUSD', 'frxUSDJPY', 'frxXAUUSD').split(','),
 
     // Capital & Risk 
     INITIAL_CAPITAL: parseFloat(process.env.CAPITAL) || 500,
@@ -46,7 +46,7 @@ const CONFIG = {
     // Market Timing (GMT/UTC)
     // For synthetics, we can use any time as they run 24/7
     // Format: "HH:MM" in UTC
-    MARKET_OPEN_TIME: process.env.MARKET_OPEN || '00:00',
+    MARKET_OPEN_TIME: process.env.MARKET_OPEN || '08:00',
 
     // Strategy Settings
     ATR_PERIOD: 14,                      // Daily ATR period
