@@ -379,15 +379,17 @@ class AIDigitDifferBot {
     }
 
     shutdown() {
-        console.log('\n🛑 Shutting down bot...');
+        console.log('\n🛑 Bot task completed. Entering SUSPEND mode...');
         this.isShuttingDown = true;
         this.isPaused = true;
         this.logFinalSummary();
         this.disconnect();
 
-        setTimeout(() => {
-            process.exit(0);
-        }, 1000);
+        console.log('💤 Bot is now sleeping to prevent auto-restart on VPS.');
+        console.log('👉 Press Ctrl+C or use your process manager to stop it manually.');
+
+        // Keep process alive indefinitely to prevent PM2/VPS restart
+        setInterval(() => { }, 1000 * 60 * 60);
     }
 
     // ==================== MESSAGE HANDLING ====================
