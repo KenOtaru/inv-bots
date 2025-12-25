@@ -112,15 +112,17 @@ class EmailService {
 // LOGGER UTILITY
 // ============================================
 
+const getGMTTime = () => new Date().toISOString().split('T')[1].split('.')[0] + ' GMT';
+
 const LOGGER = {
-    info: (msg) => console.log(`[INFO] ${new Date().toLocaleTimeString()} - ${msg}`),
-    trade: (msg) => console.log(`\x1b[32m[TRADE] ${new Date().toLocaleTimeString()} - ${msg}\x1b[0m`),
-    signal: (msg) => console.log(`\x1b[36m[SIGNAL] ${new Date().toLocaleTimeString()} - ${msg}\x1b[0m`),
-    breakout: (msg) => console.log(`\x1b[35m[BREAKOUT] ${new Date().toLocaleTimeString()} - ${msg}\x1b[0m`),
-    recovery: (msg) => console.log(`\x1b[33m[RECOVERY] ${new Date().toLocaleTimeString()} - ${msg}\x1b[0m`),
-    warn: (msg) => console.warn(`\x1b[33m[WARN] ${new Date().toLocaleTimeString()} - ${msg}\x1b[0m`),
-    error: (msg) => console.error(`\x1b[31m[ERROR] ${new Date().toLocaleTimeString()} - ${msg}\x1b[0m`),
-    debug: (msg) => { if (CONFIG.DEBUG_MODE) console.log(`\x1b[90m[DEBUG] ${new Date().toLocaleTimeString()} - ${msg}\x1b[0m`); }
+    info: (msg) => console.log(`[INFO] ${getGMTTime()} - ${msg}`),
+    trade: (msg) => console.log(`\x1b[32m[TRADE] ${getGMTTime()} - ${msg}\x1b[0m`),
+    signal: (msg) => console.log(`\x1b[36m[SIGNAL] ${getGMTTime()} - ${msg}\x1b[0m`),
+    breakout: (msg) => console.log(`\x1b[35m[BREAKOUT] ${getGMTTime()} - ${msg}\x1b[0m`),
+    recovery: (msg) => console.log(`\x1b[33m[RECOVERY] ${getGMTTime()} - ${msg}\x1b[0m`),
+    warn: (msg) => console.warn(`\x1b[33m[WARN] ${getGMTTime()} - ${msg}\x1b[0m`),
+    error: (msg) => console.error(`\x1b[31m[ERROR] ${getGMTTime()} - ${msg}\x1b[0m`),
+    debug: (msg) => { if (CONFIG.DEBUG_MODE) console.log(`\x1b[90m[DEBUG] ${getGMTTime()} - ${msg}\x1b[0m`); }
 };
 
 // ============================================
@@ -1942,7 +1944,7 @@ class Dashboard {
         });
 
         console.log('╚' + '═'.repeat(90) + '╝');
-        console.log(`⏰ ${new Date().toLocaleTimeString()} | TF: ${CONFIG.TIMEFRAME} | Auto-Recovery: ${CONFIG.AUTO_CLOSE_ON_RECOVERY ? 'ON' : 'OFF'} | Ctrl+C to stop\n`);
+        console.log(`⏰ ${getGMTTime()} | TF: ${CONFIG.TIMEFRAME} | Auto-Recovery: ${CONFIG.AUTO_CLOSE_ON_RECOVERY ? 'ON' : 'OFF'} | Ctrl+C to stop\n`);
     }
 
     static startLiveUpdates() {
