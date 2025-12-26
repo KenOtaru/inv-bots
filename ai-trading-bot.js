@@ -642,7 +642,7 @@ class AIDigitDifferBot {
             if (ensemble.confidence >= this.config.minConfidence &&
                 ensemble.agreement >= Math.min(this.config.minModelsAgreement, predictions.length) &&
                 ensemble.risk !== 'high' &&
-                processingTime.toFixed(2) < 1.5 &&
+                processingTime.toFixed(2) < 2 &&
                 this.lastPrediction !== this.xDigit
                 && ensemble.digit !== this.tickHistory[this.tickHistory.length - 1]
             ) {
@@ -854,7 +854,7 @@ class AIDigitDifferBot {
 
             CURRENT MARKET DATA:
             - Asset: ${this.currentAsset}
-            - Last 300 digits: [${recentDigits}] 
+            - Last 300 digits: [${recentDigits.join(', ')}] 
             - Recent predictions: ${previousOutcomes || 'None'}
             - Recent methods: ${recentMethods || 'None'}
             - Consecutive losses: ${this.consecutiveLosses}
@@ -862,7 +862,7 @@ class AIDigitDifferBot {
             ANALYSIS FRAMEWORK – Use only proven methods for predicting the Digit that will NOT appear (Digit Differ):
         
             STRATEGY SELECTION & ADAPTATION:
-            - Select the best method based on recent performance, market regime, and risk level
+            - Use the best Digit Differ prediction method based on recent performance, market regime, and risk level
             - Avoid methods that have recently led to losses
             - Adapt strategy dynamically based on current market conditions and historical effectiveness
         
@@ -871,11 +871,11 @@ class AIDigitDifferBot {
             - Adjust method selection based on the identified market regime
 
             CRITICAL CONSIDERATIONS:
+            - Use only Statistically proven methods for predicting the Digit that will NOT appear (Digit Differ)
             - Predict the Digit that will NOT appear (Digit Differ), not the most likely
             - Base predictions on quantitative analysis only
-
-            DECISION RULES:
-            - If consecutive losses ≥ 1, switch to conservative statistical methods
+            - never repeat the same method consecutively
+            - Switch to conservative statistical methods if consecutive losses ≥ 1 (never repeat the same method that lost)
             - Consider recent performance: adapt method selection based on what's working
 
             OUTPUT FORMAT (JSON only):
@@ -964,7 +964,7 @@ class AIDigitDifferBot {
         const response = await axios.post(
             'https://api.groq.com/openai/v1/chat/completions',//'https://gen.pollinations.ai/v1/chat/completions',//'https://api.groq.com/openai/v1/chat/completions',
             {
-                model: 'groq/compound',//'llama-3.3-70b-versatile',
+                model: 'groq/compound-mini',//'llama-3.3-70b-versatile',
                 messages: [
                     { role: 'system', content: 'You are a trading bot that ONLY outputs JSON.' },
                     { role: 'user', content: this.getPrompt() }
