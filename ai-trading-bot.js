@@ -865,23 +865,48 @@ class AIDigitDifferBot {
         // Recent methods used
         const recentMethods = this.tradeMethod.slice(-5).join(', ');
 
-        return `Task: Predict the digit (0-9) LEAST likely to be the next last digit (Digit Differ).
-            Context: Trading against dynamic market. Adapt strategy to avoid losses.
-            
-            Data (Asset: ${this.currentAsset}):
-            - Last 300: [${recentDigits.join('')}]
-            - Predictions (Last 10): ${previousOutcomes || 'None'}
-            - YOUR LAST: Pred:${lastPred}|Act:${this.actualDigit || 'None'}(${lastOutcome})
-            - Recent Methods: ${recentMethods || 'None'}
-            - Cons. Losses: ${this.consecutiveLosses}
-            
-            Instructions:
-            1. Analyze frequency, patterns, and gaps.
-            2. Avoid methods that recently lost.
-            3. If Cons. Losses >= 1, use conservative stats.
-            
-            Output JSON:
-            {"predictedDigit": X, "confidence": XX, "primaryStrategy": "Name", "marketRegime": "trending/ranging/volatile", "riskAssessment": "low/medium/high"}
+        return `You are an expert trading AI engaged in Deriv Digit Differ (digit that will not appear next) prediction, you are trading against an adversary (the Deriv system).
+            ADVERSARIAL CONTEXT:
+            - You are trading against an intelligent system that learns from your prediction patterns
+            - The opposing system actively tries to break your models and cause losses
+            - It adapts its digit generation to exploit your previous successful strategies
+            - You must continuously evolve your analysis and prediction methods
+
+            CURRENT MARKET DATA:
+            - Asset: ${this.currentAsset}
+            - Last 300 digits: [${recentDigits.join(', ')}] 
+            - Recent predictions: ${previousOutcomes || 'None'}
+            - YOUR LAST PREDICTION: Predicted: ${lastPred} | Actual: ${this.actualDigit || 'None'} (${lastOutcome})
+            - Recent methods: ${recentMethods || 'None'}
+            - Consecutive losses: ${this.consecutiveLosses} 
+
+            ANALYSIS FRAMEWORK – Use only proven methods for predicting the Digit that will NOT appear (Digit Differ):
+        
+            STRATEGY SELECTION & ADAPTATION:
+            - Use the best Digit Differ prediction method based on recent performance, market regime, and risk level
+            - Avoid methods that have recently led to losses
+            - Adapt strategy dynamically based on current market conditions and historical effectiveness
+        
+            MARKET REGIME ASSESSMENT:
+            - Determine if the market is trending, ranging, or volatile using volatility and momentum indicators
+            - Adjust method selection based on the identified market regime
+
+            CRITICAL CONSIDERATIONS:
+            - Use only Statistically proven methods for predicting the Digit that will NOT appear (Digit Differ)
+            - Predict the Digit that will NOT appear (Digit Differ), not the most likely
+            - Base predictions on quantitative analysis only
+            - never repeat the same method consecutively
+            - Switch to conservative statistical methods if consecutive losses ≥ 1 (never repeat the same method that lost)
+            - Consider recent performance: adapt method selection based on what's working
+
+            OUTPUT FORMAT (JSON only):
+            {
+                "predictedDigit": X,
+                "confidence": XX,
+                "primaryStrategy": "Method-Name",
+                "marketRegime": "trending/ranging/volatile",
+                "riskAssessment": "low/medium/high"
+            }
         `;
     }
 
