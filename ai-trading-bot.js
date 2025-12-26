@@ -592,6 +592,7 @@ class AIDigitDifferBot {
         this.digitCounts[lastDigit]++;
 
         console.log(`📍 Tick: ${tick.quote} | Digit: ${lastDigit} | History: ${this.tickHistory.length}`);
+        console.log(`Last 5 digits: ${this.tickHistory.slice(-5).join(', ')}`);
 
         // Check if ready to analyze
         if (this.tickHistory.length >= this.config.requiredHistoryLength &&
@@ -641,8 +642,11 @@ class AIDigitDifferBot {
             if (ensemble.confidence >= this.config.minConfidence &&
                 ensemble.agreement >= Math.min(this.config.minModelsAgreement, predictions.length) &&
                 ensemble.risk !== 'high' &&
-                processingTime.toFixed(2) < 10
+                processingTime.toFixed(2) < 1.5 &&
+                this.lastPrediction !== this.xDigit
+                && ensemble.digit !== this.tickHistory[this.tickHistory.length - 1]
             ) {
+                this.xDigit = ensemble.digit;
                 this.placeTrade(ensemble.digit, ensemble.confidence);
             } else {
                 console.log(`⏭️  Skipping trade: conf=${ensemble.confidence}%, agree=${ensemble.agreement}, risk=${ensemble.risk}`);
@@ -850,9 +854,7 @@ class AIDigitDifferBot {
 
             CURRENT MARKET DATA:
             - Asset: ${this.currentAsset}
-            - Last 300 digits: [${recentDigits.join(',')}] 
-            - Digit frequency (last 50): ${counts.map((c, i) => `${i}:${c}`).join(',')}
-            - Digits not in last 15 ticks: [${gaps.join(',')}]
+            - Last 300 digits: [${recentDigits}] 
             - Recent predictions: ${previousOutcomes || 'None'}
             - Recent methods: ${recentMethods || 'None'}
             - Consecutive losses: ${this.consecutiveLosses}
@@ -869,8 +871,6 @@ class AIDigitDifferBot {
             - Adjust method selection based on the identified market regime
 
             CRITICAL CONSIDERATIONS:
-            - There is a 1-3 tick delay from your analysis to trade execution
-            - Your prediction should account for this delay
             - Predict the Digit that will NOT appear (Digit Differ), not the most likely
             - Base predictions on quantitative analysis only
 
@@ -1082,7 +1082,7 @@ class AIDigitDifferBot {
         const response = await axios.post(
             'https://api.groq.com/openai/v1/chat/completions',//'https://gen.pollinations.ai/v1/chat/completions',//'https://api.sambanova.ai/v1/chat/completions',
             {
-                model: 'moonshotai/kimi-k2-instruct-0905',//'perplexity-fast',//'Meta-Llama-3.1-8B-Instruct',
+                model: 'llama-3.3-70b-versatile',//'perplexity-fast',//'Meta-Llama-3.1-8B-Instruct',
                 messages: [
                     { role: 'system', content: 'You are a trading bot that ONLY outputs JSON.' },
                     { role: 'user', content: this.getPrompt() }
@@ -1143,7 +1143,7 @@ class AIDigitDifferBot {
         const response = await axios.post(
             'https://api.groq.com/openai/v1/chat/completions',//'https://gen.pollinations.ai/v1/chat/completions',//'https://openrouter.ai/api/v1/chat/completions',//'https://api.moonshot.cn/v1/chat/completions',
             {
-                model: 'llama-3.3-70b-versatile',//'gemini-fast',//'kwaipilot/kat-coder-pro:free',//'moonshot-v1-8k',
+                model: 'moonshotai/kimi-k2-instruct-0905',//'gemini-fast',//'kwaipilot/kat-coder-pro:free',//'moonshot-v1-8k',
                 messages: [
                     { role: 'system', content: 'You are a trading bot that ONLY outputs JSON.' },
                     { role: 'user', content: this.getPrompt() }
