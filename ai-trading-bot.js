@@ -151,6 +151,7 @@ class AIDigitDifferBot {
         this.winningPatterns = new Map();
         this.tradeMethod = [];
         this.currentPrediction = null;
+        this.RestartTrading = true;
 
         // Model Performance Tracking
         this.modelPerformance = {};
@@ -529,9 +530,13 @@ class AIDigitDifferBot {
         }
 
         // Select random unused asset
-        const availableAssets = this.assets.filter(a => !this.usedAssets.has(a));
-        this.currentAsset = availableAssets[Math.floor(Math.random() * availableAssets.length)];
-        this.usedAssets.add(this.currentAsset);
+        if (this.RestartTrading) {
+            const availableAssets = this.assets.filter(a => !this.usedAssets.has(a));
+            this.currentAsset = availableAssets[Math.floor(Math.random() * availableAssets.length)];
+            this.usedAssets.add(this.currentAsset);
+        }
+
+        this.RestartTrading = false;
 
         console.log(`\n🎯 Selected asset: ${this.currentAsset}`);
 
@@ -1381,6 +1386,8 @@ class AIDigitDifferBot {
             );
         }
 
+        // this.RestartTrading = false;
+
         // Send email notification for loss
         if (!won && this.emailConfig.enabled) {
             this.sendLossEmail(this.actualDigit, profit);
@@ -1552,7 +1559,7 @@ class AIDigitDifferBot {
 
             console.log('📧 Email notification sent');
         } catch (error) {
-            console.error('❌ Failed to send email:', error.message);
+            // console.error('❌ Failed to send email:', error.message);
         }
     }
 
