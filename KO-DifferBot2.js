@@ -39,6 +39,9 @@ class KODerivDifferBot {
             // Repetition Pattern Strategy
             historyLength: config.historyLength || 5000,
             repetitionThreshold: config.repetitionThreshold || 10, // percentage
+            repetitionThreshold2: config.repetitionThreshold2 || 10, // percentage
+            sequenceLength: config.sequenceLength || 5,
+            sequenceThreshold: config.sequenceThreshold || 10,
 
             // Martingale
             martingaleMultiplier: config.martingaleMultiplier || 2.2,
@@ -339,10 +342,12 @@ class KODerivDifferBot {
             this.currentRepetitionProb[asset] = {
                 globalProbability: 0,
                 specificProbability: 0,
+                sequenceProbability: 0,
                 currentDigit: '--',
                 canTrade: false,
                 globalTotal: 0,
-                specificTotal: 0
+                specificTotal: 0,
+                sequenceTotal: 0
             };
             return;
         }
@@ -350,54 +355,85 @@ class KODerivDifferBot {
         const history = data.tickHistory;
         const currentDigit = history[history.length - 1];
 
-        // Global counters
+        // 1. Global Analysis
         let globalRepetitions = 0;
         let globalTotal = 0;
 
-        // Specific counters (for currentDigit)
+        // 2. Specific Analysis (Last digit repeating)
         let specificRepetitions = 0;
         let specificTotal = 0;
 
-        // Analyze specific history
         for (let i = 1; i < history.length; i++) {
             const prev = history[i - 1];
             const curr = history[i];
 
-            // Global Repetition Analysis
             globalTotal++;
-            if (curr === prev) {
-                globalRepetitions++;
-            }
+            if (curr === prev) globalRepetitions++;
 
-            // Specific Repetition Analysis (Last digit repeating)
             if (prev === currentDigit) {
                 specificTotal++;
-                if (curr === currentDigit) {
-                    specificRepetitions++;
+                if (curr === currentDigit) specificRepetitions++;
+            }
+        }
+
+        // 3. Sequence Analysis
+        const seqLength = this.config.sequenceLength;
+        let sequenceRepetitions = 0;
+        let sequenceTotal = 0;
+        let currentSequence = [];
+
+        if (history.length >= seqLength + 1) {
+            currentSequence = history.slice(-seqLength);
+
+            // Scan history for this sequence (excluding the current live instance)
+            // matching against windows: history[i] ... history[i + seqLength - 1]
+            // check next digit: history[i + seqLength]
+            for (let i = 0; i < history.length - seqLength; i++) {
+                // Check if window matches sequence
+                let match = true;
+                for (let j = 0; j < seqLength; j++) {
+                    if (history[i + j] !== currentSequence[j]) {
+                        match = false;
+                        break;
+                    }
+                }
+
+                if (match) {
+                    sequenceTotal++;
+                    const nextDigit = history[i + seqLength];
+                    // Check if the next digit was a repetition of the sequence's last digit
+                    if (nextDigit === currentSequence[seqLength - 1]) {
+                        sequenceRepetitions++;
+                    }
                 }
             }
         }
 
         const globalProbability = globalTotal > 0 ? (globalRepetitions / globalTotal) * 100 : 0;
-        const specificProbability = specificTotal > 0 ? (specificRepetitions / specificTotal) * 100 : 0; // Default 0 if no samples
+        const specificProbability = specificTotal > 0 ? (specificRepetitions / specificTotal) * 100 : 0;
+        const sequenceProbability = sequenceTotal > 0 ? (sequenceRepetitions / sequenceTotal) * 100 : 0;
 
         // Log analysis
         console.log(`[${asset}] Repetition Analysis (Last: ${currentDigit})`);
         console.log(`    Global:   ${globalProbability.toFixed(2)}% (${globalRepetitions}/${globalTotal})`);
         console.log(`    Specific: ${specificProbability.toFixed(2)}% (${specificRepetitions}/${specificTotal})`);
+        console.log(`    Sequence: ${sequenceProbability.toFixed(2)}% (${sequenceRepetitions}/${sequenceTotal}) [Pattern: ${currentSequence.join('')}]`);
 
-        // Check conditions (BOTH must be met)
+        // Check conditions (ALL 3 must be met)
         const canTrade = globalProbability < this.config.repetitionThreshold &&
-            specificProbability < this.config.repetitionThreshold &&
-            specificTotal >= 10; // Minimum samples for specific
+            specificProbability < this.config.repetitionThreshold2 &&
+            sequenceProbability < this.config.sequenceThreshold &&
+            specificTotal >= 10; // Minimum samples
 
         // Store the data
         this.currentRepetitionProb[asset] = {
             globalProbability,
             specificProbability,
+            sequenceProbability,
             currentDigit,
             canTrade,
-            total: globalTotal, // Legacy support
+            total: globalTotal,
+            sequenceTotal,
             threshold: this.config.repetitionThreshold
         };
     }
@@ -426,7 +462,8 @@ class KODerivDifferBot {
 
         console.log(`[${asset}] 🎯 TRADE SIGNAL MATCHED!`);
         console.log(`    Global Prob: ${repData.globalProbability.toFixed(2)}% < ${this.config.repetitionThreshold}%`);
-        console.log(`    Specific Prob (Digit ${currentDigit}): ${repData.specificProbability.toFixed(2)}% < ${this.config.repetitionThreshold}%`);
+        console.log(`    Specific Prob: ${repData.specificProbability.toFixed(2)}% < ${this.config.repetitionThreshold2}%`);
+        console.log(`    Sequence Prob: ${repData.sequenceProbability.toFixed(2)}% < ${this.config.sequenceThreshold}%`);
         console.log(`    Action: Betting NEXT DIGIT will NOT be ${currentDigit}`);
 
         this.assetSelectedDigits[asset] = currentDigit;
@@ -656,6 +693,7 @@ class KODerivDifferBot {
     STRATEGY:
     History Length: ${this.config.historyLength} ticks
     Repetition Threshold: ${this.config.repetitionThreshold}%
+    Repetition Threshold 2: ${this.config.repetitionThreshold2}%
     Martingale: ${this.config.martingaleMultiplier}x (${this.config.martingaleSteps} steps)
     
     ASSET STATUS:
@@ -700,6 +738,7 @@ class KODerivDifferBot {
             PATTERN ANALYSIS:
             Repetition Probability: ${(repData.probability || 0).toFixed(2)}%
             Threshold: ${this.config.repetitionThreshold}%
+            Threshold 2: ${this.config.repetitionThreshold2}%
             Historical Samples: ${repData.total || 0}
             
             CURRENT STATUS:
@@ -778,6 +817,9 @@ class KODerivDifferBot {
         console.log(`    • Parallel Trading: ${this.config.parallelTrading ? 'Enabled' : 'Disabled'}`);
         console.log(`    • History Length: ${this.config.historyLength} ticks`);
         console.log(`    • Repetition Threshold: ${this.config.repetitionThreshold}%`);
+        console.log(`    • Repetition Threshold 2: ${this.config.repetitionThreshold2}%`);
+        console.log(`    • Sequence Length: ${this.config.sequenceLength}`);
+        console.log(`    • Sequence Threshold: ${this.config.sequenceThreshold}%`);
         console.log(`    • Initial Stake: $${this.config.initialStake}`);
         console.log(`    • Martingale: ${this.config.martingaleMultiplier}x (${this.config.martingaleSteps} steps)`);
         console.log(`    • Stop Loss: $${this.config.stopLoss}`);
@@ -807,6 +849,9 @@ const bot = new KODerivDifferBot(token, {
     // Repetition Pattern Strategy
     historyLength: 5000,
     repetitionThreshold: 9.65,
+    repetitionThreshold2: 8,
+    sequenceLength: 3,
+    sequenceThreshold: 6,
 
     // Martingale
     martingaleMultiplier: 11.3,

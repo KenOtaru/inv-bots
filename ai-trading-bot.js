@@ -856,8 +856,9 @@ class AIDigitDifferBot {
             - Asset: ${this.currentAsset}
             - Last 300 digits: [${recentDigits.join(', ')}] 
             - Recent predictions: ${previousOutcomes || 'None'}
+            - Prediction Outcome: Predicted: ${this.xDigit} | Actual: ${this.actualDigit}
             - Recent methods: ${recentMethods || 'None'}
-            - Consecutive losses: ${this.consecutiveLosses}
+            - Consecutive losses: ${this.consecutiveLosses} 
 
             ANALYSIS FRAMEWORK – Use only proven methods for predicting the Digit that will NOT appear (Digit Differ):
         
@@ -964,7 +965,7 @@ class AIDigitDifferBot {
         const response = await axios.post(
             'https://api.groq.com/openai/v1/chat/completions',//'https://gen.pollinations.ai/v1/chat/completions',//'https://api.groq.com/openai/v1/chat/completions',
             {
-                model: 'groq/compound-mini',//'llama-3.3-70b-versatile',
+                model: 'groq/compound',//'groq/compound-mini',
                 messages: [
                     { role: 'system', content: 'You are a trading bot that ONLY outputs JSON.' },
                     { role: 'user', content: this.getPrompt() }
@@ -1053,13 +1054,14 @@ class AIDigitDifferBot {
         const response = await axios.post(
             'https://api.cerebras.ai/v1/chat/completions',
             {
-                model: 'llama3.1-8b',
+                model: 'zai-glm-4.6',
                 messages: [
                     { role: 'system', content: 'You are a trading bot that ONLY outputs JSON.' },
                     { role: 'user', content: this.getPrompt() }
                 ],
                 temperature: 0.1,
-                max_tokens: 256
+                max_tokens: 256,
+                response_format: { type: "json_object" }
             },
             {
                 headers: {
@@ -1301,11 +1303,11 @@ class AIDigitDifferBot {
     handleTradeResult(contract) {
         const won = contract.status === 'won';
         const profit = parseFloat(contract.profit);
-        const actualDigit = this.tickHistory[this.tickHistory.length - 1];
+        this.actualDigit = contract.barrier;
 
         console.log('\n' + '='.repeat(40));
         console.log(won ? '🎉 TRADE WON!' : '😔 TRADE LOST');
-        console.log(`   Predicted: ${this.lastPrediction} | Actual: ${actualDigit}`);
+        console.log(`   Predicted: ${this.lastPrediction} | Actual: ${this.actualDigit}`);
         console.log(`   Profit: ${won ? '+' : ''}$${profit.toFixed(2)}`);
         console.log('='.repeat(40));
 
