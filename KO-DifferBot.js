@@ -14,7 +14,7 @@
 
 require('dotenv').config();
 const WebSocket = require('ws');
-const nodemailer = require('nodemailer');
+const TelegramBot = require('node-telegram-bot-api');
 
 class KODerivDifferBot {
     constructor(token, config = {}) {
@@ -42,6 +42,11 @@ class KODerivDifferBot {
             repetitionThreshold2: config.repetitionThreshold2 || 10, // percentage
             sequenceLength: config.sequenceLength || 5,
             sequenceThreshold: config.sequenceThreshold || 10,
+            repetitionThresholdB: config.repetitionThresholdB || 10, // percentage
+            repetitionThresholdB2: config.repetitionThresholdB2 || 10, // percentage
+            sequenceLengthB: config.sequenceLengthB || 5,
+            sequenceThresholdB: config.sequenceThresholdB || 10,
+            TradeSys: config.TradeSys || 1,
 
             // Martingale
             martingaleMultiplier: config.martingaleMultiplier || 2.2,
@@ -95,20 +100,20 @@ class KODerivDifferBot {
             this.currentRepetitionProb[asset] = { probability: 0, currentDigit: '--', canTrade: false, total: 0 };
         });
 
-        // Email Configuration
-        this.emailConfig = {
-            service: 'gmail',
-            auth: {
-                user: 'kenzkdp2@gmail.com',
-                pass: 'jfjhtmussgfpbgpk'
-            }
-        };
-        this.emailRecipient = 'kenotaru@gmail.com';
+        // Telegram Configuration
+        this.telegramToken = process.env.TELEGRAM_BOT_TOKEN;
+        this.telegramChatId = process.env.TELEGRAM_CHAT_ID;
+
+        if (this.telegramToken && this.telegramChatId) {
+            this.telegramBot = new TelegramBot(this.telegramToken, { polling: false });
+        } else {
+            console.warn('Telegram tokens not found in .env');
+        }
 
         this.reconnectAttempts = 0;
 
-        // Start email timer
-        this.startEmailTimer();
+        // Start telegram timer
+        this.startTelegramTimer();
     }
 
     // ========================================================================
@@ -585,7 +590,7 @@ class KODerivDifferBot {
             }
 
             console.log(`[${asset}] ❌ LOST: -$${Math.abs(profit).toFixed(2)} (Predicted: ${selectedDigit}, Actual: ${actualDigit}) | Step ${this.martingaleStep}/${this.config.martingaleSteps}`);
-            this.sendLossEmail(asset, actualDigit, selectedDigit);
+            this.sendTelegramLossAlert(asset, actualDigit, selectedDigit);
             this.isWinTrade = false;
         }
 
@@ -596,7 +601,7 @@ class KODerivDifferBot {
         if (this.totalPnL <= -this.config.stopLoss) {
             console.log('Stop loss reached. Stopping bot.');
             this.endOfDay = true;
-            this.sendEmailSummary();
+            this.sendTelegramSummary();
             this.disconnect();
             return;
         }
@@ -604,7 +609,7 @@ class KODerivDifferBot {
         if (this.totalPnL >= this.config.takeProfit) {
             console.log('Take profit reached. Stopping bot.');
             this.endOfDay = true;
-            this.sendEmailSummary();
+            this.sendTelegramSummary();
             this.disconnect();
             return;
         }
@@ -655,117 +660,97 @@ class KODerivDifferBot {
     }
 
     // ========================================================================
-    // EMAIL METHODS
+    // TELEGRAM NOTIFICATION METHODS
     // ========================================================================
 
-    startEmailTimer() {
+    startTelegramTimer() {
         setInterval(() => {
             if (!this.endOfDay) {
-                this.sendEmailSummary();
+                this.sendTelegramSummary();
             }
         }, 1800000); // 30 minutes
     }
 
-    async sendEmailSummary() {
-        const transporter = nodemailer.createTransport(this.emailConfig);
+    async sendTelegramSummary() {
+        if (!this.telegramBot) return;
 
         const assetStats = this.activeAssets.map(a => {
             const repData = this.currentRepetitionProb[a] || {};
-            return `${a}: Rep Prob=${(repData.probability || 0).toFixed(2)}%, Current Digit=${repData.currentDigit || '--'}`;
-        }).join('\n    ');
+            return `*${a}*: Rep Prob=${(repData.probability || 0).toFixed(2)}%, Digit=${repData.currentDigit || '--'}`;
+        }).join('\n');
+
+        const winRate = this.totalTrades > 0 ? ((this.totalWins / this.totalTrades) * 100).toFixed(2) : 0;
 
         const summaryText = `
-    ==================== KO Deriv Differ Bot Summary ====================
-    
-    TRADING PERFORMANCE:
-    Total Trades: ${this.totalTrades}
-    Wins: ${this.totalWins} | Losses: ${this.totalLosses}
-    Win Rate: ${this.totalTrades > 0 ? ((this.totalWins / this.totalTrades) * 100).toFixed(2) : 0}%
-    
-    Consecutive Losses:
-    x2: ${this.x2Losses} | x3: ${this.x3Losses} | x4: ${this.x4Losses}
-    
-    FINANCIAL:
-    Current Stake: $${this.currentStake.toFixed(2)}
-    Total P/L: $${this.totalPnL.toFixed(2)}
-    Balance: $${this.balance.toFixed(2)}
-    
-    STRATEGY:
-    History Length: ${this.config.historyLength} ticks
-    Repetition Threshold: ${this.config.repetitionThreshold}%
-    Repetition Threshold 2: ${this.config.repetitionThreshold2}%
-    Martingale: ${this.config.martingaleMultiplier}x (${this.config.martingaleSteps} steps)
-    
-    ASSET STATUS:
-    ${assetStats}
-    
-    =====================================================================
+📊 *KO Deriv Differ Bot Summary*
+
+*TRADING PERFORMANCE*
+Total Trades: ${this.totalTrades}
+Wins: ${this.totalWins} | Losses: ${this.totalLosses}
+Win Rate: ${winRate}%
+
+*Consecutive Losses*
+x2: ${this.x2Losses} | x3: ${this.x3Losses} | x4: ${this.x4Losses}
+
+*FINANCIAL*
+Current Stake: $${this.currentStake.toFixed(2)}
+Total P/L: *$${this.totalPnL.toFixed(2)}*
+Balance: $${this.balance.toFixed(2)}
+
+*STRATEGY*
+Rep Threshold: ${this.config.repetitionThreshold}%
+Martingale: ${this.config.martingaleMultiplier}x (${this.config.martingaleSteps} steps)
+
+*ASSET STATUS*
+${assetStats}
         `;
 
-        const mailOptions = {
-            from: this.emailConfig.auth.user,
-            to: this.emailRecipient,
-            subject: 'KO Deriv Differ Bot - Performance Summary',
-            text: summaryText
-        };
-
         try {
-            await transporter.sendMail(mailOptions);
-            console.log('Email summary sent');
+            await this.telegramBot.sendMessage(this.telegramChatId, summaryText, { parse_mode: 'Markdown' });
+            console.log('Telegram summary sent');
         } catch (error) {
-            // console.error('Error sending email:', error);
+            console.error('Telegram Error (Summary):', error.message);
         }
     }
 
-    async sendLossEmail(asset, actualDigit, predictedDigit) {
-        const transporter = nodemailer.createTransport(this.emailConfig);
+    async sendTelegramLossAlert(asset, actualDigit, predictedDigit) {
+        if (!this.telegramBot) return;
 
-        const recentTrades = this.tradeHistory.slice(0, 10);
+        const recentTrades = this.tradeHistory.slice(0, 5);
         const recentAnalysis = recentTrades.map(t =>
-            `${t.won ? '✅' : '❌'} [${t.asset}] Predicted: ${t.predicted}, Actual: ${t.actual}`
-        ).join('\n        ');
+            `${t.won ? '✅' : '❌'} [${t.asset}] Pred: ${t.predicted}, Act: ${t.actual}`
+        ).join('\n');
 
         const repData = this.currentRepetitionProb[asset] || {};
 
         const summaryText = `
-            ==================== LOSS ALERT ====================
-            
-            TRADE DETAILS:
-            Asset: ${asset}
-            Predicted digit (current): ${predictedDigit}
-            Actual digit: ${actualDigit}
-            
-            PATTERN ANALYSIS:
-            Repetition Probability: ${(repData.probability || 0).toFixed(2)}%
-            Threshold: ${this.config.repetitionThreshold}%
-            Threshold 2: ${this.config.repetitionThreshold2}%
-            Historical Samples: ${repData.total || 0}
-            
-            CURRENT STATUS:
-            Total Trades: ${this.totalTrades}
-            Wins: ${this.totalWins} | Losses: ${this.totalLosses}
-            Consecutive Losses: ${this.consecutiveLosses}
-            Martingale Step: ${this.martingaleStep}/${this.config.martingaleSteps}
-            Current Stake: $${this.currentStake.toFixed(2)}
-            Total P/L: $${this.totalPnL.toFixed(2)}
-            
-            RECENT TRADES:
-                ${recentAnalysis}
-            
-            ====================================================
+🚨 *LOSS ALERT [${asset}]*
+
+*TRADE DETAILS*
+Asset: ${asset}
+Predicted (Betting NOT): ${predictedDigit}
+Actual Digit: ${actualDigit}
+
+*PATTERN ANALYSIS*
+Rep Probability: ${(repData.probability || 0).toFixed(2)}%
+Threshold: ${this.config.repetitionThreshold}% / ${this.config.repetitionThreshold2}%
+Historical Samples: ${repData.total || 0}
+
+*CURRENT STATUS*
+Wins: ${this.totalWins} | Losses: ${this.totalLosses}
+Martingale Step: ${this.martingaleStep}/${this.config.martingaleSteps}
+Current Stake: $${this.currentStake.toFixed(2)}
+Total P/L: *$${this.totalPnL.toFixed(2)}*
+
+*RECENT TRADES*
+${recentAnalysis}
         `;
 
-        const mailOptions = {
-            from: this.emailConfig.auth.user,
-            to: this.emailRecipient,
-            subject: `KO Deriv Differ Bot - Loss Alert [${asset}]`,
-            text: summaryText
-        };
-
         try {
-            await transporter.sendMail(mailOptions);
+            await this.telegramBot.sendMessage(this.telegramChatId, summaryText, { parse_mode: 'Markdown' });
+            console.log('Telegram loss alert sent');
         } catch (error) {
-            // console.error('Error sending loss email:', error);
+            console.error('Telegram Error (Loss Alert):', error.message);
         }
     }
 
@@ -793,7 +778,7 @@ class KODerivDifferBot {
                     console.log("It's past 5:00 PM GMT+1 after a win trade, disconnecting the bot.");
                     this.disconnect();
                     this.endOfDay = true;
-                    this.sendEmailSummary();
+                    this.sendTelegramSummary();
                 }
             }
         }, 20000); // Check every 20 seconds
@@ -850,8 +835,12 @@ const bot = new KODerivDifferBot(token, {
     historyLength: 5000,
     repetitionThreshold: 9.65,
     repetitionThreshold2: 8,
-    sequenceLength: 3,
-    sequenceThreshold: 6,
+    sequenceLength: 2,
+    sequenceThreshold: 2,
+    repetitionThresholdB: 10,
+    repetitionThresholdB2: 11,
+    sequenceLengthB: 2,
+    sequenceThresholdB: 33,
 
     // Martingale
     martingaleMultiplier: 11.3,
@@ -863,6 +852,7 @@ const bot = new KODerivDifferBot(token, {
     assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'RDBULL', 'RDBEAR'], // Use single asset or ['R_10', 'R_25', 'R_50', 'R_75', 'R_100','RDBULL', 'RDBEAR',]
     parallelTrading: false,
     suspendOnLoss: true,
+    TradeSys: 1,
 });
 
 bot.start();
