@@ -97,7 +97,7 @@ class KODerivDifferBot {
         this.activeAssets.forEach(asset => {
             this.assetData[asset] = { tickHistory: [] };
             this.assetTradesInProgress[asset] = false;
-            this.currentRepetitionProb[asset] = { probability: 0, currentDigit: '--', canTrade: false, total: 0 };
+            this.currentRepetitionProb[asset] = { probability: 0, currentDigit: '--', canTrade: false, canTradeB: false, total: 0 };
         });
 
         // Telegram Configuration
@@ -350,6 +350,7 @@ class KODerivDifferBot {
                 sequenceProbability: 0,
                 currentDigit: '--',
                 canTrade: false,
+                canTradeB: false,
                 globalTotal: 0,
                 specificTotal: 0,
                 sequenceTotal: 0
@@ -430,6 +431,11 @@ class KODerivDifferBot {
             sequenceProbability < this.config.sequenceThreshold &&
             specificTotal >= 10; // Minimum samples
 
+        const canTradeB = globalProbability > this.config.repetitionThresholdB &&
+            specificProbability > this.config.repetitionThresholdB2 &&
+            sequenceProbability > this.config.sequenceThresholdB &&
+            specificTotal >= 10; // Minimum samples
+
         // Store the data
         this.currentRepetitionProb[asset] = {
             globalProbability,
@@ -437,6 +443,7 @@ class KODerivDifferBot {
             sequenceProbability,
             currentDigit,
             canTrade,
+            canTradeB,
             total: globalTotal,
             sequenceTotal,
             threshold: this.config.repetitionThreshold
@@ -455,20 +462,31 @@ class KODerivDifferBot {
         if (!this.config.parallelTrading && Object.values(this.assetTradesInProgress).some(v => v)) return;
 
         const repData = this.currentRepetitionProb[asset];
-        if (!repData || !repData.canTrade) {
-            if (repData && repData.total >= 100) {
-                // Too high - don't log every tick to avoid spam
-            }
-            return;
+        if (!repData) return;
+
+        // Trade selection based on TradeSys
+        let triggerTrade = false;
+        if (this.config.TradeSys === 2) {
+            triggerTrade = repData.canTradeB;
+        } else {
+            triggerTrade = repData.canTrade;
         }
+
+        if (!triggerTrade) return;
 
         // Trade: Bet DIFFER from current digit (predicted digit = current digit)
         const currentDigit = repData.currentDigit;
 
-        console.log(`[${asset}] 🎯 TRADE SIGNAL MATCHED!`);
-        console.log(`    Global Prob: ${repData.globalProbability.toFixed(2)}% < ${this.config.repetitionThreshold}%`);
-        console.log(`    Specific Prob: ${repData.specificProbability.toFixed(2)}% < ${this.config.repetitionThreshold2}%`);
-        console.log(`    Sequence Prob: ${repData.sequenceProbability.toFixed(2)}% < ${this.config.sequenceThreshold}%`);
+        console.log(`[${asset}] 🎯 TRADE SIGNAL MATCHED (System ${this.config.TradeSys})!`);
+        if (this.config.TradeSys === 2) {
+            console.log(`    Global Prob: ${repData.globalProbability.toFixed(2)}% > ${this.config.repetitionThresholdB}%`);
+            console.log(`    Specific Prob: ${repData.specificProbability.toFixed(2)}% > ${this.config.repetitionThresholdB2}%`);
+            console.log(`    Sequence Prob: ${repData.sequenceProbability.toFixed(2)}% > ${this.config.sequenceThresholdB}%`);
+        } else {
+            console.log(`    Global Prob: ${repData.globalProbability.toFixed(2)}% < ${this.config.repetitionThreshold}%`);
+            console.log(`    Specific Prob: ${repData.specificProbability.toFixed(2)}% < ${this.config.repetitionThreshold2}%`);
+            console.log(`    Sequence Prob: ${repData.sequenceProbability.toFixed(2)}% < ${this.config.sequenceThreshold}%`);
+        }
         console.log(`    Action: Betting NEXT DIGIT will NOT be ${currentDigit}`);
 
         this.assetSelectedDigits[asset] = currentDigit;
@@ -801,10 +819,18 @@ ${recentAnalysis}
         console.log(`    • Multi-Asset: ${this.config.multiAssetEnabled ? 'Enabled' : 'Disabled'}`);
         console.log(`    • Parallel Trading: ${this.config.parallelTrading ? 'Enabled' : 'Disabled'}`);
         console.log(`    • History Length: ${this.config.historyLength} ticks`);
-        console.log(`    • Repetition Threshold: ${this.config.repetitionThreshold}%`);
-        console.log(`    • Repetition Threshold 2: ${this.config.repetitionThreshold2}%`);
-        console.log(`    • Sequence Length: ${this.config.sequenceLength}`);
-        console.log(`    • Sequence Threshold: ${this.config.sequenceThreshold}%`);
+        console.log(`    • Trade System: ${this.config.TradeSys}`);
+        if (this.config.TradeSys === 2) {
+            console.log(`    • Repetition Threshold B: ${this.config.repetitionThresholdB}%`);
+            console.log(`    • Repetition Threshold B2: ${this.config.repetitionThresholdB2}%`);
+            console.log(`    • Sequence Length B: ${this.config.sequenceLengthB}`);
+            console.log(`    • Sequence Threshold B: ${this.config.sequenceThresholdB}%`);
+        } else {
+            console.log(`    • Repetition Threshold: ${this.config.repetitionThreshold}%`);
+            console.log(`    • Repetition Threshold 2: ${this.config.repetitionThreshold2}%`);
+            console.log(`    • Sequence Length: ${this.config.sequenceLength}`);
+            console.log(`    • Sequence Threshold: ${this.config.sequenceThreshold}%`);
+        }
         console.log(`    • Initial Stake: $${this.config.initialStake}`);
         console.log(`    • Martingale: ${this.config.martingaleMultiplier}x (${this.config.martingaleSteps} steps)`);
         console.log(`    • Stop Loss: $${this.config.stopLoss}`);
@@ -840,7 +866,7 @@ const bot = new KODerivDifferBot(token, {
     repetitionThresholdB: 10,
     repetitionThresholdB2: 11,
     sequenceLengthB: 2,
-    sequenceThresholdB: 33,
+    sequenceThresholdB: 15,
 
     // Martingale
     martingaleMultiplier: 11.3,
@@ -852,7 +878,7 @@ const bot = new KODerivDifferBot(token, {
     assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'RDBULL', 'RDBEAR'], // Use single asset or ['R_10', 'R_25', 'R_50', 'R_75', 'R_100','RDBULL', 'RDBEAR',]
     parallelTrading: false,
     suspendOnLoss: true,
-    TradeSys: 1,
+    TradeSys: 2,
 });
 
 bot.start();
