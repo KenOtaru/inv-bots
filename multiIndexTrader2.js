@@ -1,12 +1,17 @@
-// Deriv Trading Bot - Multi-Asset 1s Index Price Action Strategy
-// DISCLAIMER: This bot is for educational purposes. Trading involves risk. Test thoroughly on demo before live use.
+/**
+ * Deriv Trading Bot - Multi-Asset 1s Index Price Action Strategy
+ * Manual WebSocket Implementation (Refactored)
+ */
 
-const DerivAPI = require('@deriv/deriv-api/dist/DerivAPI');
+const WebSocket = require('ws');
+const fs = require('fs');
+require('dotenv').config();
 
 // ========== CONFIGURATION ==========
 const CONFIG = {
-    app_id: '1089', // Replace with your Deriv app_id (get from api.deriv.com)
-    token: 'Dz2V2KvRf4Uukt3',   // Replace with your API token (demo account recommended)
+    app_id: '1089',
+    token: process.env.DERIV_API_TOKEN || 'Dz2V2KvRf4Uukt3',
+    ws_url: 'wss://ws.derivws.com/websockets/v3',
 
     // MULTI-ASSET CONFIGURATION
     symbols: [
@@ -22,26 +27,32 @@ const CONFIG = {
     stop_loss: 5,          // $5 stop loss
     currency: 'USD',
 
-    // Strategy parameters (applied to all symbols)
-    dailyOpenThreshold: 0.5,  // Pips threshold for daily open proximity
-    h4CandlesForTrend: 7,     // Number of H4 candles to analyze for trend
-    h4CandlesForTP: 10,       // Number of H4 candles to find TP zone
-    h1CandlesForConfirm: 6,   // Number of H1 candles for trend confirmation
-    smaPeriod: 20,            // SMA period for H4 trend filter
+    // Investment Management
+    INVESTMENT_CAPITAL: process.env.INITIAL_CAPITAL ? parseFloat(process.env.INITIAL_CAPITAL) : 100,
+    RISK_PERCENT: 5, // 5% risk per trade if using capital
 
-    // Polling intervals (milliseconds)
-    checkInterval: 15000,     // Check for entry signals every 15 seconds
-    maxTradesPerSymbol: 1,    // Maximum trades per symbol
-    maxTotalTrades: 5,        // Maximum total trades across all symbols
+    // Strategy parameters
+    dailyOpenThreshold: 0.5,
+    h4CandlesForTrend: 7,
+    h4CandlesForTP: 10,
+    h1CandlesForConfirm: 6,
+    smaPeriod: 20,
+
+    checkInterval: 15000,
+    maxTradesPerSymbol: 1,
+    maxTotalTrades: 5,
 };
 
 // ========== GLOBAL STATE ==========
-let api;
-let currentTrades = {}; // Track open trades by contract_id { contractId: { symbol, entryPrice, ... } }
-let strategyStates = {}; // Track strategy state per symbol { symbolName: { dailyOpen, tpZone, ... } }
+let ws = null;
+let isConnected = false;
+let isAuthorized = false;
+let requestId = 1;
+let currentTrades = {};
+let strategyStates = {};
 let isRunning = true;
-let contractSubscriptions = {}; // Track subscriptions
-let activeSymbols = []; // Enabled symbols to trade
+let activeSymbols = [];
+let pendingPromises = new Map();
 
 // ========== UTILITY FUNCTIONS ==========
 
@@ -51,7 +62,7 @@ function log(message, level = 'INFO') {
 }
 
 function calculateSMA(candles, period) {
-    if (candles.length < period) return null;
+    if (!candles || candles.length < period) return null;
     const closes = candles.slice(-period).map(c => parseFloat(c.close));
     return closes.reduce((a, b) => a + b, 0) / period;
 }
@@ -72,33 +83,109 @@ function getLowestLow(candles) {
     return Math.min(...candles.map(c => parseFloat(c.low)));
 }
 
-// ========== API FUNCTIONS ==========
+// ========== CONNECTION MANAGEMENT ==========
 
-async function initializeAPI() {
-    try {
-        log('Connecting to Deriv API...');
+function connect() {
+    log('Connecting to Deriv API...');
+    ws = new WebSocket(`${CONFIG.ws_url}?app_id=${CONFIG.app_id}`);
 
-        // Test connection
-        const pingResponse = await api.ping();
-        log('Connected to Deriv API');
+    ws.on('open', () => {
+        isConnected = true;
+        log('WebSocket connected');
+        authorize();
+    });
 
-        // Authorize
-        const authResponse = await api.authorize(CONFIG.token);
-        log(`Authorized as: ${authResponse.authorize.email} (Balance: ${authResponse.authorize.balance} ${authResponse.authorize.currency})`);
+    ws.on('message', (data) => {
+        const response = JSON.parse(data);
+        handleMessage(response);
+    });
 
-        // Update currency from account
-        CONFIG.currency = authResponse.authorize.currency;
+    ws.on('close', () => {
+        isConnected = false;
+        isAuthorized = false;
+        log('WebSocket disconnected. Reconnecting in 5s...');
+        setTimeout(connect, 5000);
+    });
 
-        return true;
-    } catch (error) {
-        log(`API initialization failed: ${error.message}`, 'ERROR');
-        return false;
+    ws.on('error', (err) => {
+        log(`WebSocket error: ${err.message}`, 'ERROR');
+    });
+}
+
+function sendRequest(request) {
+    if (!isConnected) return null;
+    const reqId = requestId++;
+    request.req_id = reqId;
+    ws.send(JSON.stringify(request));
+    return reqId;
+}
+
+function sendRequestWithPromise(request) {
+    return new Promise((resolve, reject) => {
+        if (!isConnected) {
+            return reject(new Error('Not connected'));
+        }
+        const reqId = requestId++;
+        request.req_id = reqId;
+
+        pendingPromises.set(reqId, {
+            resolve, reject, timeout: setTimeout(() => {
+                if (pendingPromises.has(reqId)) {
+                    pendingPromises.delete(reqId);
+                    reject(new Error(`Request ${reqId} timed out`));
+                }
+            }, 30000)
+        });
+
+        ws.send(JSON.stringify(request));
+    });
+}
+
+function handleMessage(msg) {
+    // Handle promises
+    if (msg.req_id && pendingPromises.has(msg.req_id)) {
+        const { resolve, reject, timeout } = pendingPromises.get(msg.req_id);
+        clearTimeout(timeout);
+        pendingPromises.delete(msg.req_id);
+        if (msg.error) reject(msg.error);
+        else resolve(msg);
+        return;
+    }
+
+    if (msg.error) {
+        log(`API Error: ${msg.error.message}`, 'ERROR');
+        return;
+    }
+
+    switch (msg.msg_type) {
+        case 'authorize':
+            isAuthorized = true;
+            log(`Authorized: ${msg.authorize.email} (Balance: ${msg.authorize.balance} ${msg.authorize.currency})`);
+            CONFIG.currency = msg.authorize.currency;
+            // Start the main strategy loop once authorized
+            startStrategyLoop();
+            break;
+        case 'buy':
+            handleBuyResponse(msg);
+            break;
+        case 'proposal_open_contract':
+            handleContractUpdate(msg.proposal_open_contract);
+            break;
+        case 'sell':
+            handleSellResponse(msg);
+            break;
     }
 }
 
+function authorize() {
+    sendRequest({ authorize: CONFIG.token });
+}
+
+// ========== API FUNCTIONS ==========
+
 async function fetchCandles(symbol, granularity, count = 20) {
     try {
-        const response = await api.ticksHistory({
+        const response = await sendRequestWithPromise({
             ticks_history: symbol,
             adjust_start_time: 1,
             count: count,
@@ -106,14 +193,9 @@ async function fetchCandles(symbol, granularity, count = 20) {
             granularity: granularity,
             style: 'candles'
         });
-
-        if (response.error) {
-            throw new Error(response.error.message);
-        }
-
         return response.candles;
     } catch (error) {
-        log(`[${symbol}] Error fetching candles (granularity ${granularity}): ${error.message}`, 'ERROR');
+        log(`[${symbol}] Error fetching candles: ${error.message}`, 'ERROR');
         return null;
     }
 }
@@ -122,10 +204,15 @@ async function buyMultiplierContract(symbol) {
     try {
         const symbolState = strategyStates[symbol];
 
-        // Get proposal first
-        const proposalResponse = await api.proposal({
+        // Calculate stake based on capital
+        const baseCapital = CONFIG.INVESTMENT_CAPITAL || CONFIG.stake;
+        const stake = Math.max(baseCapital * (CONFIG.RISK_PERCENT / 100), 0.35).toFixed(2);
+
+        log(`[${symbol}] Requesting proposal for stake: ${stake}...`);
+
+        const proposalResponse = await sendRequestWithPromise({
             proposal: 1,
-            amount: CONFIG.stake,
+            amount: parseFloat(stake),
             basis: 'stake',
             contract_type: 'MULTUP',
             currency: CONFIG.currency,
@@ -136,26 +223,18 @@ async function buyMultiplierContract(symbol) {
             }
         });
 
-        if (proposalResponse.error) {
-            throw new Error(proposalResponse.error.message);
-        }
+        log(`[${symbol}] Buying contract: ${proposalResponse.proposal.id}...`);
 
-        // Buy the contract
-        const buyResponse = await api.buy({
+        const buyResponse = await sendRequestWithPromise({
             buy: proposalResponse.proposal.id,
-            price: CONFIG.stake
+            price: parseFloat(stake)
         });
-
-        if (buyResponse.error) {
-            throw new Error(buyResponse.error.message);
-        }
 
         const contractId = buyResponse.buy.contract_id;
         const buyPrice = parseFloat(buyResponse.buy.buy_price);
 
-        log(`✅ [${symbol}] BUY TRADE OPENED - Contract ID: ${contractId}, Entry: ${buyPrice.toFixed(2)} ${CONFIG.currency}`, 'TRADE');
+        log(`✅ [${symbol}] BUY TRADE OPENED - ID: ${contractId}, Entry: ${buyPrice.toFixed(2)}`, 'TRADE');
 
-        // Store trade info
         currentTrades[contractId] = {
             id: contractId,
             symbol: symbol,
@@ -164,140 +243,76 @@ async function buyMultiplierContract(symbol) {
             tpZone: symbolState.tpZone
         };
 
-        // Subscribe to contract updates
-        subscribeToContract(contractId);
+        // Subscribe to contract
+        sendRequest({
+            proposal_open_contract: 1,
+            contract_id: contractId,
+            subscribe: 1
+        });
 
-        return contractId;
     } catch (error) {
         log(`[${symbol}] Error buying contract: ${error.message}`, 'ERROR');
-        return null;
+    }
+}
+
+function handleContractUpdate(contract) {
+    if (!contract) return;
+    const contractId = contract.contract_id;
+    if (!currentTrades[contractId]) return;
+
+    const trade = currentTrades[contractId];
+    const symbol = trade.symbol;
+    const currentSpot = parseFloat(contract.current_spot);
+    const profit = parseFloat(contract.profit || 0);
+
+    // Periodic log
+    if (!trade.lastLogTime || Date.now() - trade.lastLogTime > 30000) {
+        log(`📊 [${symbol}] Contract ${contractId} - Spot: ${currentSpot.toFixed(5)}, Profit: ${profit.toFixed(2)}`, 'INFO');
+        trade.lastLogTime = Date.now();
+    }
+
+    // Check TP zone
+    if (trade.tpZone && currentSpot >= trade.tpZone) {
+        log(`🎯 [${symbol}] TP ZONE REACHED - Current: ${currentSpot.toFixed(5)}, TP: ${trade.tpZone.toFixed(5)}`, 'TRADE');
+        sellContract(contractId);
+    }
+
+    // Handle closure
+    if (contract.is_sold) {
+        log(`ℹ️ [${symbol}] Contract ${contractId} closed. Profit: ${profit.toFixed(2)}`, 'TRADE');
+        delete currentTrades[contractId];
     }
 }
 
 async function sellContract(contractId) {
     try {
-        const trade = currentTrades[contractId];
-        const symbol = trade?.symbol || 'UNKNOWN';
-
-        const sellResponse = await api.sell({
+        await sendRequestWithPromise({
             sell: contractId,
-            price: 0 // Sell at market price
+            price: 0
         });
-
-        if (sellResponse.error) {
-            throw new Error(sellResponse.error.message);
-        }
-
-        const soldFor = parseFloat(sellResponse.sell.sold_for);
-        const entryPrice = trade?.entryPrice || 0;
-        const profit = soldFor - entryPrice;
-
-        log(`✅ [${symbol}] TRADE CLOSED - Contract ID: ${contractId}, Sold for: ${soldFor.toFixed(2)}, Profit: ${profit.toFixed(2)} ${CONFIG.currency}`, 'TRADE');
-
-        // Unsubscribe from contract updates
-        if (contractSubscriptions[contractId]) {
-            contractSubscriptions[contractId].unsubscribe();
-            delete contractSubscriptions[contractId];
-        }
-
-        delete currentTrades[contractId];
-        return true;
     } catch (error) {
         log(`Error selling contract ${contractId}: ${error.message}`, 'ERROR');
-        return false;
     }
 }
 
-function subscribeToContract(contractId) {
-    try {
-        const subscription = api.subscribeProposalOpenContract(contractId, (response) => {
-            if (response.error) {
-                log(`Contract subscription error: ${response.error.message}`, 'ERROR');
-                return;
-            }
+function handleBuyResponse(msg) { /* Not strictly needed if using promises */ }
+function handleSellResponse(msg) { /* Not strictly needed if using promises */ }
 
-            const contract = response.proposal_open_contract;
-            if (!contract) return;
-
-            const currentSpot = parseFloat(contract.current_spot);
-            const profit = parseFloat(contract.profit || 0);
-            const trade = currentTrades[contractId];
-            const symbol = trade?.symbol || 'UNKNOWN';
-
-            // Log current status periodically (every 30 seconds)
-            if (trade && (!trade.lastLogTime || Date.now() - trade.lastLogTime > 30000)) {
-                log(`📊 [${symbol}] Contract ${contractId} - Spot: ${currentSpot.toFixed(5)}, Profit: ${profit.toFixed(2)} ${CONFIG.currency}`, 'INFO');
-                trade.lastLogTime = Date.now();
-            }
-
-            // Check if TP zone reached
-            if (trade && trade.tpZone) {
-                if (currentSpot >= trade.tpZone) {
-                    log(`🎯 [${symbol}] TP ZONE REACHED - Current: ${currentSpot.toFixed(5)}, TP: ${trade.tpZone.toFixed(5)}`, 'TRADE');
-                    sellContract(contractId);
-                }
-            }
-
-            // Check if contract is closed (e.g., stop loss hit)
-            if (contract.status === 'sold' || contract.status === 'cancelled') {
-                if (currentTrades[contractId]) {
-                    log(`ℹ️ [${symbol}] Contract ${contractId} closed automatically. Status: ${contract.status}, Profit: ${profit.toFixed(2)} ${CONFIG.currency}`, 'TRADE');
-
-                    // Unsubscribe
-                    if (contractSubscriptions[contractId]) {
-                        contractSubscriptions[contractId].unsubscribe();
-                        delete contractSubscriptions[contractId];
-                    }
-
-                    delete currentTrades[contractId];
-                }
-            }
-        });
-
-        contractSubscriptions[contractId] = subscription;
-        if (currentTrades[contractId]) {
-            currentTrades[contractId].lastLogTime = Date.now();
-        }
-
-    } catch (error) {
-        log(`Error subscribing to contract ${contractId}: ${error.message}`, 'ERROR');
-    }
-}
-
-// ========== STRATEGY LOGIC (PER SYMBOL) ==========
+// ========== STRATEGY LOGIC ==========
 
 async function analyzeDailyCandles(symbol) {
-    log(`[${symbol}] 📊 Analyzing Daily (D1) candles...`);
     const d1Candles = await fetchCandles(symbol, 86400, 2);
+    if (!d1Candles || d1Candles.length < 2) return false;
 
-    if (!d1Candles || d1Candles.length < 2) {
-        log(`[${symbol}] Insufficient D1 candles`, 'WARNING');
-        return false;
-    }
-
-    const previousCandle = d1Candles[0];
     const currentCandle = d1Candles[1];
-
     strategyStates[symbol].dailyOpen = parseFloat(currentCandle.open);
-    strategyStates[symbol].previousDailyCandle = previousCandle;
-
-    const isBullish = isBullishCandle(previousCandle);
-    log(`[${symbol}] Previous Daily Candle: ${isBullish ? 'BULLISH' : 'BEARISH'} | Close: ${previousCandle.close}`);
-    log(`[${symbol}] Current Daily Open: ${strategyStates[symbol].dailyOpen.toFixed(5)}`);
-
     return true;
 }
 
 async function analyzeH4Trend(symbol) {
-    log(`[${symbol}] 📈 Analyzing H4 trend...`);
     const h4Candles = await fetchCandles(symbol, 14400, CONFIG.h4CandlesForTrend + 5);
+    if (!h4Candles || h4Candles.length < CONFIG.h4CandlesForTrend) return false;
 
-    if (!h4Candles || h4Candles.length < CONFIG.h4CandlesForTrend) {
-        log(`[${symbol}] Insufficient H4 candles`, 'WARNING');
-        return false;
-    }
-
-    // Check for uptrend: increasing closes over last 4 candles
     const recentCandles = h4Candles.slice(-4);
     let isUptrend = true;
     for (let i = 1; i < recentCandles.length; i++) {
@@ -307,268 +322,102 @@ async function analyzeH4Trend(symbol) {
         }
     }
 
-    // Check if price is above 20 SMA
     const sma20 = calculateSMA(h4Candles, CONFIG.smaPeriod);
     const currentPrice = parseFloat(h4Candles[h4Candles.length - 1].close);
     const aboveSMA = sma20 ? currentPrice > sma20 : true;
 
-    // Check for higher swing lows
-    const last5Lows = h4Candles.slice(-5).map(c => parseFloat(c.low));
-    let hasHigherLows = true;
-    for (let i = 1; i < last5Lows.length - 1; i++) {
-        if (last5Lows[i] < last5Lows[i - 1] - 0.5) {
-            hasHigherLows = false;
-        }
-    }
+    const trendConfirmed = isUptrend && aboveSMA;
 
-    const trendConfirmed = isUptrend && aboveSMA && hasHigherLows;
-
-    log(`[${symbol}] H4 Trend: Uptrend=${isUptrend}, Above SMA20=${aboveSMA}, Higher Lows=${hasHigherLows} => ${trendConfirmed ? '✅ BULLISH' : '❌ NO TREND'}`);
-
-    // Calculate TP zone
+    // TP zone
     const tpCandles = h4Candles.slice(-CONFIG.h4CandlesForTP);
     strategyStates[symbol].tpZone = getHighestHigh(tpCandles);
-    log(`[${symbol}] TP Zone identified at: ${strategyStates[symbol].tpZone.toFixed(5)}`);
 
     return trendConfirmed;
 }
 
 async function confirmH1Trend(symbol) {
-    log(`[${symbol}] 🔍 Confirming H1 trend...`);
     const h1Candles = await fetchCandles(symbol, 3600, CONFIG.h1CandlesForConfirm);
-
-    if (!h1Candles || h1Candles.length < CONFIG.h1CandlesForConfirm) {
-        log(`[${symbol}] Insufficient H1 candles`, 'WARNING');
-        return false;
-    }
+    if (!h1Candles || h1Candles.length < CONFIG.h1CandlesForConfirm) return false;
 
     const recentCandles = h1Candles.slice(-4);
-    let isUptrend = true;
-    for (let i = 1; i < recentCandles.length; i++) {
-        if (parseFloat(recentCandles[i].close) < parseFloat(recentCandles[i - 1].close) - 0.3) {
-            isUptrend = false;
-            break;
-        }
-    }
-
-    log(`[${symbol}] H1 Trend Confirmation: ${isUptrend ? '✅ CONFIRMED' : '❌ NOT CONFIRMED'}`);
-    return isUptrend;
+    return recentCandles.every((c, i) => i === 0 || parseFloat(c.close) >= parseFloat(recentCandles[i - 1].close) - 0.3);
 }
 
 async function checkM15Entry(symbol) {
     const m15Candles = await fetchCandles(symbol, 900, 5);
-
-    if (!m15Candles || m15Candles.length < 2) {
-        return false;
-    }
+    if (!m15Candles || m15Candles.length < 2) return false;
 
     const latestCandle = m15Candles[m15Candles.length - 1];
     const currentPrice = parseFloat(latestCandle.close);
     const candleLow = parseFloat(latestCandle.low);
-
     const dailyOpen = strategyStates[symbol].dailyOpen;
-    const distanceFromDailyOpen = Math.abs(currentPrice - dailyOpen);
-    const nearDailyOpen = distanceFromDailyOpen <= CONFIG.dailyOpenThreshold;
 
+    const nearDailyOpen = Math.abs(currentPrice - dailyOpen) <= CONFIG.dailyOpenThreshold;
     const touchedDailyOpen = Math.abs(candleLow - dailyOpen) <= CONFIG.dailyOpenThreshold;
-    const isBullishRejection = isBullishCandle(latestCandle) && touchedDailyOpen;
 
-    if (nearDailyOpen && isBullishRejection) {
-        log(`🚀 [${symbol}] ENTRY SIGNAL DETECTED - M15 bullish rejection at daily open (${dailyOpen.toFixed(5)})`, 'SIGNAL');
-        return true;
-    }
-
-    return false;
+    return nearDailyOpen && isBullishCandle(latestCandle) && touchedDailyOpen;
 }
-
-// Helper to count trades for a specific symbol
-function countTradesForSymbol(symbol) {
-    return Object.values(currentTrades).filter(trade => trade.symbol === symbol).length;
-}
-
-// ========== MAIN STRATEGY LOOP (MULTI-ASSET) ==========
 
 async function runStrategyCheckForSymbol(symbol) {
-    if (!isRunning) return;
+    if (!isRunning || !isAuthorized) return;
 
     try {
         const symbolState = strategyStates[symbol];
-        const now = Date.now();
-
-        // Prevent too frequent checks per symbol
-        if (now - symbolState.lastCheckTime < CONFIG.checkInterval) {
-            return;
-        }
-        symbolState.lastCheckTime = now;
-
         const totalTrades = Object.keys(currentTrades).length;
-        const symbolTrades = countTradesForSymbol(symbol);
+        const symbolTrades = Object.values(currentTrades).filter(t => t.symbol === symbol).length;
 
-        log(`[${symbol}] ========== STRATEGY CHECK ==========`);
-        log(`[${symbol}] Symbol Trades: ${symbolTrades}/${CONFIG.maxTradesPerSymbol} | Total: ${totalTrades}/${CONFIG.maxTotalTrades}`);
+        if (totalTrades >= CONFIG.maxTotalTrades || symbolTrades >= CONFIG.maxTradesPerSymbol) return;
 
-        // Step 1: Analyze daily candles
-        const dailySuccess = await analyzeDailyCandles(symbol);
-        if (!dailySuccess) {
-            log(`[${symbol}] ======================================`);
-            return;
-        }
-
-        // Step 2: Check H4 trend
-        const h4Bullish = await analyzeH4Trend(symbol);
-        if (!h4Bullish) {
-            log(`[${symbol}] ⚠️ H4 trend not bullish. Skipping entry.`, 'WARNING');
-            symbolState.isBullishTrend = false;
-            log(`[${symbol}] ======================================`);
-            return;
-        }
-
-        // Step 3: Confirm on H1
-        const h1Confirmed = await confirmH1Trend(symbol);
-        if (!h1Confirmed) {
-            log(`[${symbol}] ⚠️ H1 trend not confirmed. Skipping entry.`, 'WARNING');
-            symbolState.isBullishTrend = false;
-            log(`[${symbol}] ======================================`);
-            return;
-        }
-
-        symbolState.isBullishTrend = true;
-        log(`[${symbol}] ✅ BULLISH TREND CONFIRMED on H4 and H1`);
-
-        // Step 4: Check for M15 entry signal
-        const entrySignal = await checkM15Entry(symbol);
-
-        if (entrySignal) {
-            // Check trade limits
-            if (totalTrades >= CONFIG.maxTotalTrades) {
-                log(`[${symbol}] ⚠️ Max total trades (${CONFIG.maxTotalTrades}) reached. Skipping.`, 'WARNING');
-            } else if (symbolTrades >= CONFIG.maxTradesPerSymbol) {
-                log(`[${symbol}] ⚠️ Max trades per symbol (${CONFIG.maxTradesPerSymbol}) reached. Skipping.`, 'WARNING');
-            } else {
+        if (await analyzeDailyCandles(symbol) && await analyzeH4Trend(symbol) && await confirmH1Trend(symbol)) {
+            if (await checkM15Entry(symbol)) {
                 await buyMultiplierContract(symbol);
             }
-        } else {
-            log(`[${symbol}] No entry signal on M15. Waiting...`, 'INFO');
         }
-
-        log(`[${symbol}] ======================================`);
-
     } catch (error) {
-        log(`[${symbol}] Strategy check error: ${error.message}`, 'ERROR');
-        console.error(error);
+        log(`[${symbol}] Strategy error: ${error.message}`, 'ERROR');
     }
 }
 
-async function runAllSymbolChecks() {
-    if (!isRunning) return;
+async function startStrategyLoop() {
+    log('🤖 Strategy loop started');
 
-    log('');
-    log('🔍 Running multi-asset strategy checks...');
+    const loop = async () => {
+        if (!isRunning) return;
 
-    // Run checks for all active symbols in parallel
-    const checkPromises = activeSymbols.map(symbol => runStrategyCheckForSymbol(symbol));
-    await Promise.all(checkPromises);
+        log('🔍 Scanning symbols...');
+        for (const symbol of activeSymbols) {
+            await runStrategyCheckForSymbol(symbol);
+        }
+        log(`✅ Scan complete. Active trades: ${Object.keys(currentTrades).length}`);
 
-    log(`✅ Completed checks for ${activeSymbols.length} symbols. Total open trades: ${Object.keys(currentTrades).length}`);
-    log('');
+        setTimeout(loop, CONFIG.checkInterval);
+    };
+
+    loop();
 }
 
-// ========== BOT INITIALIZATION AND MAIN LOOP ==========
+// ========== MAIN ==========
 
 async function startBot() {
     log('=================================================');
-    log('  DERIV MULTI-ASSET TRADING BOT');
-    log('  1-Second Index Price Action Strategy (MULTUP)');
-    log('=================================================');
-    log('⚠️  WARNING: Test on DEMO account first!');
+    log('  DERIV MULTI-ASSET TRADING BOT (REF)          ');
     log('=================================================');
 
-    // Validate configuration
-    if (!CONFIG.token || CONFIG.token === 'YOUR_API_TOKEN_HERE') {
-        log('❌ Please set your API token in CONFIG.token', 'ERROR');
-        log('Get your token from: https://app.deriv.com/account/api-token', 'ERROR');
-        process.exit(1);
-    }
-
-    // Initialize active symbols
     activeSymbols = CONFIG.symbols.filter(s => s.enabled).map(s => s.name);
-
-    if (activeSymbols.length === 0) {
-        log('❌ No symbols enabled in configuration!', 'ERROR');
-        process.exit(1);
-    }
-
-    log(`Active Symbols: ${activeSymbols.join(', ')}`);
-
-    // Initialize strategy state for each symbol
     activeSymbols.forEach(symbol => {
-        strategyStates[symbol] = {
-            dailyOpen: null,
-            previousDailyCandle: null,
-            tpZone: null,
-            isBullishTrend: false,
-            lastCheckTime: 0
-        };
+        strategyStates[symbol] = { lastCheckTime: 0 };
     });
 
-    // Initialize API connection
-    api = new DerivAPI({ app_id: CONFIG.app_id });
+    log(`Active Symbols: ${activeSymbols.join(', ')}`);
+    log(`Capital: $${CONFIG.INVESTMENT_CAPITAL} | Risk: ${CONFIG.RISK_PERCENT}%`);
 
-    const initialized = await initializeAPI();
-    if (!initialized) {
-        log('Failed to initialize. Exiting.', 'ERROR');
-        process.exit(1);
-    }
+    connect();
 
-    log('🤖 Bot started successfully. Monitoring markets...');
-    log(`Stake: ${CONFIG.stake} ${CONFIG.currency} per trade`);
-    log(`Multiplier: ${CONFIG.multiplier}x | Stop Loss: ${CONFIG.stop_loss} ${CONFIG.currency}`);
-    log(`Max Trades Per Symbol: ${CONFIG.maxTradesPerSymbol} | Max Total: ${CONFIG.maxTotalTrades}`);
-    log(`Check Interval: ${CONFIG.checkInterval / 1000} seconds`);
-    log('=================================================');
-
-    // Run initial strategy checks for all symbols
-    await runAllSymbolChecks();
-
-    // Set up recurring strategy checks
-    const checkIntervalId = setInterval(async () => {
-        await runAllSymbolChecks();
-    }, CONFIG.checkInterval);
-
-    // Handle graceful shutdown
-    process.on('SIGINT', async () => {
-        log('\n🛑 Shutting down bot...');
+    process.on('SIGINT', () => {
+        log('\n🛑 Shutting down...');
         isRunning = false;
-
-        // Stop the interval
-        clearInterval(checkIntervalId);
-
-        // Close any open trades
-        const openTradeIds = Object.keys(currentTrades);
-        if (openTradeIds.length > 0) {
-            log(`Closing ${openTradeIds.length} open trade(s)...`);
-            for (const tradeId of openTradeIds) {
-                await sellContract(parseInt(tradeId));
-            }
-        }
-
-        // Unsubscribe from all contracts
-        Object.values(contractSubscriptions).forEach(sub => {
-            try {
-                sub.unsubscribe();
-            } catch (e) {
-                // Ignore errors during cleanup
-            }
-        });
-
-        log('Bot stopped. Goodbye!');
-        process.exit(0);
+        setTimeout(() => process.exit(0), 1000);
     });
 }
 
-// Start the bot
-startBot().catch(error => {
-    log(`Fatal error: ${error.message}`, 'ERROR');
-    console.error(error);
-    process.exit(1);
-});
+startBot();
