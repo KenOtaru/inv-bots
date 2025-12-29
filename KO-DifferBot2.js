@@ -859,14 +859,14 @@ const bot = new KODerivDifferBot(token, {
 
     // Repetition Pattern Strategy
     historyLength: 5000,
-    repetitionThreshold: 9.9,
+    repetitionThreshold: 9.88,
     repetitionThreshold2: 9,
     sequenceLength: 2,
     sequenceThreshold: 5,
-    repetitionThresholdB: 10.8,
-    repetitionThresholdB2: 12,
+    repetitionThresholdB: 9,
+    repetitionThresholdB2: 9,
     sequenceLengthB: 2,
-    sequenceThresholdB: 14,
+    sequenceThresholdB: 25,
 
     // Martingale
     martingaleMultiplier: 11.3,
