@@ -178,7 +178,7 @@ class DerivBot {
 
         // Telegram Configuration
         this.telegramToken = process.env.TELEGRAM_BOT_TOKEN3;
-        this.telegramChatId = process.env.TELEGRAM_CHAT_ID2;
+        this.telegramChatId = process.env.TELEGRAM_CHAT_ID;
         this.telegramEnabled = !!(this.telegramToken && this.telegramChatId);
 
         if (this.telegramEnabled) {
@@ -213,7 +213,7 @@ class DerivBot {
         console.log(logMessage);
 
         const fileMessage = `[${timestamp}] [${type}] ${message}\n`;
-        fs.appendFileSync('trading_bot.log', fileMessage, { flag: 'a' });
+        // fs.appendFileSync('trading_bot.log', fileMessage, { flag: 'a' });
     }
 
     logSeparator() {
@@ -224,7 +224,7 @@ class DerivBot {
     async sendTelegramMessage(message) {
         if (!this.telegramEnabled || !this.telegramBot) return;
         try {
-            await this.telegramBot.sendMessage(this.telegramChatId, message, { parse_mode: 'Markdown' });
+            await this.telegramBot.sendMessage(this.telegramChatId, message, { parse_mode: 'HTML' });
             this.log('📱 Telegram notification sent', 'INFO');
         } catch (error) {
             this.log(`❌ Failed to send Telegram message: ${error.message}`, 'ERROR');
@@ -238,15 +238,15 @@ class DerivBot {
         const dailyProfit = (this.balance - this.startingBalance).toFixed(2);
 
         return `
-📊 *Trading Session Summary*
+📊 <b>Trading Session Summary</b>
 ========================
-📈 *Asset:* ${CONFIG.SYMBOL}
-📊 *Total Trades:* ${this.totalTrades}
-✅ *Wins:* ${this.winningTrades}
-❌ *Losses:* ${this.losingTrades}
-🔥 *Win Rate:* ${winRate}%
-💰 *Net P/L:* $${dailyProfit}
-🏦 *Current Balance:* $${this.balance.toFixed(2)}
+📈 <b>Asset:</b> ${CONFIG.SYMBOL}
+📊 <b>Total Trades:</b> ${this.totalTrades}
+✅ <b>Wins:</b> ${this.winningTrades}
+❌ <b>Losses:</b> ${this.losingTrades}
+🔥 <b>Win Rate:</b> ${winRate}%
+💰 <b>Net P/L:</b> $${dailyProfit}
+🏦 <b>Current Balance:</b> $${this.balance.toFixed(2)}
         `;
     }
 
@@ -601,12 +601,12 @@ class DerivBot {
         if (longCondition) {
             this.logSeparator();
             this.log('🎯 LONG SIGNAL!', 'SIGNAL');
-            this.sendTelegramMessage(`🎯 *LONG SIGNAL DETECTED!*\n*Price:* ${currentPrice.toFixed(4)}\n*kNN:* ${knnPrediction}\n*RSI:* ${this.indicators.rsi.toFixed(2)}`);
+            this.sendTelegramMessage(`🎯 <b>LONG SIGNAL DETECTED!</b>\n<b>Price:</b> ${currentPrice.toFixed(4)}\n<b>kNN:</b> ${knnPrediction}\n<b>RSI:</b> ${this.indicators.rsi.toFixed(2)}`);
             this.executeTrade('CALL');
         } else if (shortCondition) {
             this.logSeparator();
             this.log('🎯 SHORT SIGNAL!', 'SIGNAL');
-            this.sendTelegramMessage(`🎯 *SHORT SIGNAL DETECTED!*\n*Price:* ${currentPrice.toFixed(4)}\n*kNN:* ${knnPrediction}\n*RSI:* ${this.indicators.rsi.toFixed(2)}`);
+            this.sendTelegramMessage(`🎯 <b>SHORT SIGNAL DETECTED!</b>\n<b>Price:</b> ${currentPrice.toFixed(4)}\n<b>kNN:</b> ${knnPrediction}\n<b>RSI:</b> ${this.indicators.rsi.toFixed(2)}`);
             this.executeTrade('PUT');
         }
 
@@ -629,7 +629,7 @@ class DerivBot {
         this.log(`   Entry: ${currentPrice.toFixed(4)}`, 'TRADE');
         this.log(`   Balance: ${this.currency} ${this.balance.toFixed(2)}`, 'TRADE');
 
-        this.sendTelegramMessage(`💰 *EXECUTING ${type}*\n*Stake:* ${this.currency} ${stake}\n*Entry:* ${currentPrice.toFixed(4)}`);
+        this.sendTelegramMessage(`💰 <b>EXECUTING ${type}</b>\n<b>Stake:</b> ${this.currency} ${stake}\n<b>Entry:</b> ${currentPrice.toFixed(4)}`);
 
         // For Rise/Fall contracts on Volatility indices
         const tradeRequest = {
@@ -664,7 +664,7 @@ class DerivBot {
         this.log(`   Time: ${new Date().toLocaleTimeString()}`, 'TRADE');
         this.logSeparator();
 
-        this.sendTelegramMessage(`✅ *TRADE OPENED*\n*ID:* ${buyData.contract_id}\n*Type:* ${buyData.contract_type}\n*Stake:* $${buyData.buy_price}`);
+        this.sendTelegramMessage(`✅ <b>TRADE OPENED</b>\n<b>ID:</b> ${buyData.contract_id}\n<b>Type:</b> ${buyData.contract_type}\n<b>Stake:</b> $${buyData.buy_price}`);
 
         this.openTrades.set(buyData.contract_id, {
             contractId: buyData.contract_id,
@@ -718,7 +718,7 @@ class DerivBot {
                 }
                 this.log(`   💰 PROFIT: +$${profit.toFixed(2)} ✅`, 'SUCCESS');
                 this.log(`   🔥 Win Streak: ${this.consecutiveWins}`, 'SUCCESS');
-                this.sendTelegramMessage(`🎉 *TRADE WON!*\n*Profit:* +$${profit.toFixed(2)}\n*Balance:* $${this.balance.toFixed(2)}`);
+                this.sendTelegramMessage(`🎉 <b>TRADE WON!</b>\n<b>Profit:</b> +$${profit.toFixed(2)}\n<b>Balance:</b> $${this.balance.toFixed(2)}`);
             } else {
                 this.losingTrades++;
                 this.totalLoss += Math.abs(profit);
@@ -732,7 +732,7 @@ class DerivBot {
                 }
                 this.log(`   💸 LOSS: $${profit.toFixed(2)} ❌`, 'ERROR');
                 this.log(`   📉 Loss Streak: ${this.consecutiveLosses}`, 'WARNING');
-                this.sendTelegramMessage(`😔 *TRADE LOST*\n*Loss:* $${profit.toFixed(2)}\n*Balance:* $${this.balance.toFixed(2)}\n*Streak:* ${this.consecutiveLosses}`);
+                this.sendTelegramMessage(`😔 <b>TRADE LOST</b>\n<b>Loss:</b> $${profit.toFixed(2)}\n<b>Balance:</b> $${this.balance.toFixed(2)}\n<b>Streak:</b> ${this.consecutiveLosses}`);
             }
 
             const winRate = ((this.winningTrades / this.totalTrades) * 100).toFixed(1);
@@ -760,7 +760,7 @@ class DerivBot {
     // ============================================
     async start() {
         try {
-            fs.writeFileSync('trading_bot.log', `=== Bot Started: ${new Date().toISOString()} ===\n`, { flag: 'w' });
+            // fs.writeFileSync('trading_bot.log', `=== Bot Started: ${new Date().toISOString()} ===\n`, { flag: 'w' });
 
             console.clear();
             this.logSeparator();
@@ -777,7 +777,7 @@ class DerivBot {
                 this.log('🚀 TRADING STARTED!', 'SUCCESS');
                 this.logSeparator();
 
-                this.sendTelegramMessage(`🚀 *BOT STARTED & TRADING*\n*Asset:* ${CONFIG.SYMBOL}\n*Balance:* $${this.balance.toFixed(2)}`);
+                this.sendTelegramMessage(`🚀 <b>BOT STARTED & TRADING</b>\n<b>Asset:</b> ${CONFIG.SYMBOL}\n<b>Balance:</b> $${this.balance.toFixed(2)}`);
             }, 3000);
 
         } catch (error) {
@@ -795,7 +795,7 @@ const bot = new DerivBot();
 process.on('SIGINT', async () => {
     console.log('\n\nShutting down...');
     if (bot.telegramEnabled) {
-        await bot.sendTelegramMessage(`⏹ *Bot Stopped Manually*\n${bot.getTelegramSummary()}`);
+        await bot.sendTelegramMessage(`⏹ <b>Bot Stopped Manually</b>\n${bot.getTelegramSummary()}`);
     }
     if (bot.ws) bot.ws.close();
     process.exit(0);

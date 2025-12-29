@@ -1,4 +1,6 @@
 const WebSocket = require('ws');
+require('dotenv').config();
+const TelegramBot = require('node-telegram-bot-api');
 
 // ================= CONFIGURATION =================
 const CONFIG = {
@@ -29,6 +31,20 @@ class QuickFlipBot {
         this.isConnected = false;
         this.tradeLog = [];
         this.entryCandle = null;
+
+        // Telegram Configuration
+        this.telegramToken = process.env.TELEGRAM_BOT_TOKEN4;
+        this.telegramChatId = process.env.TELEGRAM_CHAT_ID;
+        this.telegramEnabled = !!(this.telegramToken && this.telegramChatId);
+
+        if (this.telegramEnabled) {
+            this.telegramBot = new TelegramBot(this.telegramToken, { polling: false });
+            this.startTelegramTimer();
+        } else {
+            this.log('📱 Telegram notifications disabled (missing API keys).', 'SYSTEM');
+        }
+
+        this.sessionStartTime = new Date();
     }
 
     start() {
@@ -104,6 +120,52 @@ class QuickFlipBot {
         const color = categoryColors[category] || categoryColors['INFO'];
 
         console.log(`${color}[${timestamp}] [${category}] ${message}${reset}`);
+    }
+
+    async sendTelegramMessage(message) {
+        if (!this.telegramEnabled || !this.telegramBot) return;
+        try {
+            await this.telegramBot.sendMessage(this.telegramChatId, message, { parse_mode: 'HTML' });
+            this.log('📱 Telegram notification sent', 'SYSTEM');
+        } catch (error) {
+            this.log(`❌ Failed to send Telegram message: ${error.message}`, 'ERROR');
+        }
+    }
+
+    getTelegramSummary() {
+        let totalProfit = 0;
+        let wins = 0;
+        let losses = 0;
+
+        this.tradeLog.forEach(trade => {
+            if (trade.profit !== undefined) {
+                totalProfit += trade.profit;
+                if (trade.result === 'WIN') wins++;
+                else losses++;
+            }
+        });
+
+        const winRate = (wins + losses) > 0 ? (wins / (wins + losses) * 100).toFixed(1) : 0;
+
+        return `
+📊 <b>Flip Scalper Session Summary</b>
+========================
+📈 <b>Asset:</b> ${CONFIG.symbol}
+📊 <b>Total Trades:</b> ${this.tradeLog.length}
+✅ <b>Wins:</b> ${wins}
+❌ <b>Losses:</b> ${losses}
+🔥 <b>Win Rate:</b> ${winRate}%
+💰 <b>Total P/L:</b> $${totalProfit.toFixed(2)}
+        `;
+    }
+
+    startTelegramTimer() {
+        // Send summary every 30 minutes
+        setInterval(() => {
+            if (this.tradeLog.length > 0) {
+                this.sendTelegramMessage(`📊 *Periodic Performance Summary*\n${this.getTelegramSummary()}`);
+            }
+        }, 30 * 60 * 1000);
     }
 
     authorize() {
@@ -196,6 +258,9 @@ class QuickFlipBot {
             this.log('🔔 MARKET OPEN DETECTED!', 'STRATEGY');
             this.log(`⏱️  Waiting ${CONFIG.candle_timeframe} minutes for opening candle to close...`, 'STRATEGY');
             this.log('='.repeat(60), 'STRATEGY');
+
+            this.sendTelegramMessage(`🔔 <b>MARKET OPEN DETECTED!</b>\n<b>Asset:</b> ${CONFIG.symbol}\n<b>Time:</b> ${nowString} GMT\nWaiting for 15-min opening candle...`);
+
             this.openTimeEpoch = Math.floor(now.getTime() / 1000);
             this.state = 'WAITING_CANDLE_CLOSE';
         }
@@ -348,12 +413,17 @@ class QuickFlipBot {
             this.log(`   Time Window: ${CONFIG.market_open_duration} minutes`, 'INFO');
             this.log('='.repeat(60), 'STRATEGY');
 
+            this.sendTelegramMessage(`✅ <b>LIQUIDITY CONFIRMED!</b>\n<b>Box Range:</b> ${range.toFixed(4)}\n<b>ATR (25%):</b> ${liquidityThreshold.toFixed(4)}\n<b>Setup:</b> ${setupType}\nHunting reversal at ${targetLevel.toFixed(4)}`);
+
             this.startHunting();
         } else {
             this.log('❌ LIQUIDITY CHECK FAILED!', 'ERROR');
             this.log(`   Range (${rangePercent}% of ATR) is below 25% threshold`, 'ERROR');
             this.log('   No trade setup today. Resetting...', 'ERROR');
             this.log('='.repeat(60), 'STRATEGY');
+
+            this.sendTelegramMessage(`❌ <b>LIQUIDITY CHECK FAILED</b>\nRange is ONLY ${rangePercent}% of ATR. No setup today.`);
+
             this.state = 'WAITING_FOR_OPEN';
             this.resetSetup();
         }
@@ -416,6 +486,8 @@ class QuickFlipBot {
                 this.log(`   Upper Wick: ${upperWick.toFixed(4)}`, 'INFO');
                 this.log('='.repeat(60), 'TRADE');
 
+                this.sendTelegramMessage(`🔥 <b>HAMMER PATTERN DETECTED!</b>\n<b>Reversal Pattern at:</b> ${candle.close.toFixed(4)}\nExecuting LONG.`);
+
                 this.entryCandle = candle;
                 this.executeTrade('MULTUP'); // Multiplier UP (Long)
             }
@@ -442,6 +514,8 @@ class QuickFlipBot {
                 this.log(`   Lower Wick: ${lowerWick.toFixed(4)}`, 'INFO');
                 this.log('='.repeat(60), 'TRADE');
 
+                this.sendTelegramMessage(`🔥 <b>SHOOTING STAR PATTERN DETECTED!</b>\n<b>Reversal Pattern at:</b> ${candle.close.toFixed(4)}\nExecuting SHORT.`);
+
                 this.entryCandle = candle;
                 this.executeTrade('MULTDOWN'); // Multiplier DOWN (Short)
             }
@@ -463,6 +537,8 @@ class QuickFlipBot {
         this.log(`   Entry Price: ${this.entryCandle.close.toFixed(4)}`, 'INFO');
         this.log(`   Target:      ${target.toFixed(4)}`, 'INFO');
         this.log('='.repeat(60), 'TRADE');
+
+        this.sendTelegramMessage(`🚀 <b>EXECUTING TRADE</b>\n<b>Direction:</b> ${direction}\n<b>Stake:</b> $${CONFIG.trade_amount}\n<b>Entry:</b> ${this.entryCandle.close.toFixed(4)}\n<b>Target:</b> ${target.toFixed(4)}`);
 
         // Unsubscribe from candles to stop double entry
         this.ws.send(JSON.stringify({ forget_all: 'candles' }));
@@ -599,6 +675,12 @@ class QuickFlipBot {
             this.tradeLog[tradeIndex].result = isWin ? 'WIN' : 'LOSS';
         }
 
+        if (isWin) {
+            this.sendTelegramMessage(`🎉 <b>TARGET HIT - TRADE WON!</b>\n<b>Profit:</b> +$${profit.toFixed(2)}\n<b>Exit Price:</b> ${exitPrice.toFixed(4)}`);
+        } else {
+            this.sendTelegramMessage(`❌ <b>TRADE CLOSED</b>\n<b>Profit/Loss:</b> $${profit.toFixed(2)}\n<b>Exit Price:</b> ${exitPrice.toFixed(4)}`);
+        }
+
         this.printTradeLog();
 
         this.state = 'WAITING_FOR_OPEN';
@@ -665,9 +747,14 @@ class QuickFlipBot {
 const bot = new QuickFlipBot();
 bot.start();
 
+bot.sendTelegramMessage(`🚀 <b>QUICK FLIP SCALPER STARTED</b>\n<b>Symbol:</b> ${CONFIG.symbol}\n<b>Stake:</b> $${CONFIG.trade_amount}\nx${CONFIG.multiplier} Multiplier`);
+
 // Handle graceful shutdown
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
     console.log('\n🛑 Shutting down bot...');
+    if (bot.telegramEnabled) {
+        await bot.sendTelegramMessage(`⏹ <b>Bot Stopped Manually</b>\n${bot.getTelegramSummary()}`);
+    }
     bot.printTradeLog();
     bot.cleanup();
     process.exit(0);
