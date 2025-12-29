@@ -75,7 +75,7 @@ const CONFIG = {
     // Bot Settings
     WEBSOCKET_URL: 'wss://ws.derivws.com/websockets/v3',
     RECONNECT_DELAY: 5000, // Milliseconds
-    ENABLE_FILE_LOGGING: true,
+    ENABLE_FILE_LOGGING: false,
     LOG_FILE: 'trading_log.txt',
     ENABLE_COLORS: true
 };
