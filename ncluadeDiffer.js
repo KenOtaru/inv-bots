@@ -1139,7 +1139,7 @@ class EnhancedDigitDifferTradingBot {
 
 
         //Telegram Configuration
-        this.telegramToken = process.env.TELEGRAM_BOT_TOKEN_MULTI || process.env.TELEGRAM_BOT_TOKEN3;
+        this.telegramToken = process.env.TELEGRAM_BOT_TOKEN5;
         this.telegramChatId = process.env.TELEGRAM_CHAT_ID;
         this.telegramBot = null;
 

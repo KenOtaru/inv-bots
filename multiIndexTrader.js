@@ -86,7 +86,7 @@ const CONFIG = {
     RISK_PERCENT: 1, // 1% risk per trade
 
     // Telegram Configuration
-    TELEGRAM_TOKEN: process.env.TELEGRAM_BOT_TOKEN_MULTI || process.env.TELEGRAM_BOT_TOKEN3,
+    TELEGRAM_TOKEN: process.env.TELEGRAM_BOT_TOKEN6,
     TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID,
 };
 

@@ -44,7 +44,7 @@ const CONFIG = {
     maxTotalTrades: 5,
 
     // Telegram Configuration
-    telegramToken: process.env.TELEGRAM_BOT_TOKEN_MULTI || process.env.TELEGRAM_BOT_TOKEN3,
+    telegramToken: process.env.TELEGRAM_BOT_TOKEN7,
     telegramChatId: process.env.TELEGRAM_CHAT_ID,
 };
 
