@@ -18,8 +18,8 @@ const CONFIG = {
         { name: '1HZ10V', label: 'Volatility 10 (1s)', enabled: true },
         { name: '1HZ25V', label: 'Volatility 25 (1s)', enabled: true },
         { name: '1HZ50V', label: 'Volatility 50 (1s)', enabled: true },
-        { name: '1HZ75V', label: 'Volatility 75 (1s)', enabled: false },
-        { name: '1HZ100V', label: 'Volatility 100 (1s)', enabled: false }
+        { name: '1HZ75V', label: 'Volatility 75 (1s)', enabled: true },
+        { name: '1HZ100V', label: 'Volatility 100 (1s)', enabled: true }
     ],
 
     stake: 5,              // $5 per trade per symbol
