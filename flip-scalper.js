@@ -7,7 +7,7 @@ const CONFIG = {
     app_id: 1089, // Replace with your App ID if you have one, or keep 1089 (Deriv generic)
     token: 'hsj0tA0XJoIzJG5', // REPLACE THIS with your actual API Token
     symbol: 'R_100', // Volatility 100 Index (Or use 'R_50', 'R_75', etc.)
-    market_open_time: '02:00', // Time to start the "Day" (HH:MM in GMT/UTC)
+    market_open_time: '07:00', // Time to start the "Day" (HH:MM in GMT/UTC)
     trade_amount: 10, // Stake amount in USD
     multiplier: 100, // Multiplier value (e.g., 100, 200)
     market_open_duration: 90, // Minutes to look for trade after open (Strategy: 90 mins)
