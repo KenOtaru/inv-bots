@@ -15,6 +15,10 @@ const CONFIG = {
     entry_timeframe: 5,   // Reversal Pattern Timeframe (Minutes)
     reconnect_delay: 5000, // Milliseconds before reconnection attempt
     ping_interval: 25000, // Keep-alive ping every 25 seconds
+
+    // Investment Management
+    INVESTMENT_CAPITAL: process.env.INITIAL_CAPITAL ? parseFloat(process.env.INITIAL_CAPITAL) : 100,
+    RISK_PERCENT: 1, // 1% risk per trade
 };
 // =================================================
 
@@ -192,6 +196,14 @@ class QuickFlipBot {
         if (msg.msg_type === 'authorize') {
             this.log(`✅ Authorized as: ${msg.authorize.email}`, 'SUCCESS');
             this.log(`💵 Balance: ${msg.authorize.balance} ${msg.authorize.currency}`, 'INFO');
+
+            // Log Investment Capital info
+            const baseCapital = CONFIG.INVESTMENT_CAPITAL;
+            const dailyLossLimit = baseCapital * 0.5; // Example 50% limit like kNN.js user set
+
+            this.log(`🏢 Investment Capital: $${baseCapital.toFixed(2)}`, 'INFO');
+            this.log(`🚨 Daily Loss Limit: $${dailyLossLimit.toFixed(2)} (50%)`, 'INFO');
+
             this.log('-'.repeat(60), 'SYSTEM');
             this.log('📈 Strategy: Quick Flip Scalper', 'STRATEGY');
             this.log(`⏳ Waiting for market open at ${CONFIG.market_open_time} GMT...`, 'STRATEGY');
@@ -199,9 +211,9 @@ class QuickFlipBot {
         }
 
         if (msg.msg_type === 'history') {
-            if (msg.echo_req && msg.echo_req.custom_id === 'daily_atr') {
+            if (msg.req_id === 1) { // daily_atr
                 this.calculateATR(msg.history, msg.candles);
-            } else if (msg.echo_req && msg.echo_req.custom_id === 'opening_candle') {
+            } else if (msg.req_id === 2) { // opening_candle
                 this.analyzeOpeningCandle(msg.candles);
             }
         }
@@ -311,7 +323,7 @@ class QuickFlipBot {
             start: 1,
             style: 'candles',
             granularity: 86400, // 1 Day
-            custom_id: 'daily_atr'
+            req_id: 1 // Replacement for custom_id: 'daily_atr'
         }));
     }
 
@@ -354,7 +366,7 @@ class QuickFlipBot {
             start: 1,
             style: 'candles',
             granularity: CONFIG.candle_timeframe * 60,
-            custom_id: 'opening_candle'
+            req_id: 2 // Replacement for custom_id: 'opening_candle'
         }));
     }
 
@@ -525,27 +537,31 @@ class QuickFlipBot {
     executeTrade(contractType) {
         this.state = 'EXECUTING';
 
+        const baseCapital = CONFIG.INVESTMENT_CAPITAL || this.trade_amount;
+        const stake = Math.max(baseCapital * (CONFIG.RISK_PERCENT / 100), 0.35).toFixed(2);
+
         const direction = contractType === 'MULTUP' ? '🔼 LONG' : '🔻 SHORT';
         const target = contractType === 'MULTUP' ? this.box.high : this.box.low;
 
         this.log('='.repeat(60), 'TRADE');
         this.log('🚀 EXECUTING TRADE', 'TRADE');
+        this.log(`   Capital:     $${baseCapital.toFixed(2)}`, 'INFO');
         this.log(`   Direction:   ${direction}`, 'INFO');
         this.log(`   Symbol:      ${CONFIG.symbol}`, 'INFO');
-        this.log(`   Stake:       $${CONFIG.trade_amount}`, 'INFO');
+        this.log(`   Stake:       $${stake} (${CONFIG.RISK_PERCENT}% of capital)`, 'INFO');
         this.log(`   Multiplier:  x${CONFIG.multiplier}`, 'INFO');
         this.log(`   Entry Price: ${this.entryCandle.close.toFixed(4)}`, 'INFO');
         this.log(`   Target:      ${target.toFixed(4)}`, 'INFO');
         this.log('='.repeat(60), 'TRADE');
 
-        this.sendTelegramMessage(`🚀 <b>EXECUTING TRADE</b>\n<b>Direction:</b> ${direction}\n<b>Stake:</b> $${CONFIG.trade_amount}\n<b>Entry:</b> ${this.entryCandle.close.toFixed(4)}\n<b>Target:</b> ${target.toFixed(4)}`);
-
         // Unsubscribe from candles to stop double entry
         this.ws.send(JSON.stringify({ forget_all: 'candles' }));
 
+        this.sendTelegramMessage(`🚀 <b>EXECUTING TRADE</b>\n<b>Capital:</b> $${baseCapital.toFixed(2)}\n<b>Direction:</b> ${direction}\n<b>Stake:</b> $${stake}\n<b>Entry:</b> ${this.entryCandle.close.toFixed(4)}\n<b>Target:</b> ${target.toFixed(4)}`);
+
         this.ws.send(JSON.stringify({
             buy: 1,
-            price: CONFIG.trade_amount,
+            price: stake,
             parameters: {
                 contract_type: contractType,
                 symbol: CONFIG.symbol,
@@ -747,7 +763,8 @@ class QuickFlipBot {
 const bot = new QuickFlipBot();
 bot.start();
 
-bot.sendTelegramMessage(`🚀 <b>QUICK FLIP SCALPER STARTED</b>\n<b>Symbol:</b> ${CONFIG.symbol}\n<b>Stake:</b> $${CONFIG.trade_amount}\nx${CONFIG.multiplier} Multiplier`);
+const initialStake = (CONFIG.INVESTMENT_CAPITAL * (CONFIG.RISK_PERCENT / 100)).toFixed(2);
+bot.sendTelegramMessage(`🚀 <b>QUICK FLIP SCALPER STARTED</b>\n<b>Symbol:</b> ${CONFIG.symbol}\n<b>Capital:</b> $${CONFIG.INVESTMENT_CAPITAL.toFixed(2)}\n<b>Target Stake:</b> $${initialStake}\nx${CONFIG.multiplier} Multiplier`);
 
 // Handle graceful shutdown
 process.on('SIGINT', async () => {
