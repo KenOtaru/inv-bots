@@ -23,6 +23,8 @@
 const WebSocket = require('ws');
 const fs = require('fs');
 const readline = require('readline');
+const TelegramBot = require('node-telegram-bot-api');
+require('dotenv').config();
 
 // ================================================================
 // CONFIGURATION SECTION
@@ -77,7 +79,15 @@ const CONFIG = {
     RECONNECT_DELAY: 5000, // Milliseconds
     ENABLE_FILE_LOGGING: false,
     LOG_FILE: 'trading_log.txt',
-    ENABLE_COLORS: true
+    ENABLE_COLORS: true,
+
+    // Investment Management
+    INVESTMENT_CAPITAL: process.env.INITIAL_CAPITAL ? parseFloat(process.env.INITIAL_CAPITAL) : 100,
+    RISK_PERCENT: 1, // 1% risk per trade
+
+    // Telegram Configuration
+    TELEGRAM_TOKEN: process.env.TELEGRAM_BOT_TOKEN_MULTI || process.env.TELEGRAM_BOT_TOKEN3,
+    TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID,
 };
 
 // ================================================================
@@ -89,6 +99,7 @@ let isConnected = false;
 let isAuthorized = false;
 let isBotRunning = true;
 let requestId = 1;
+let telegramBot = null;
 
 // Per-asset trading state
 const assetStates = new Map();
@@ -110,9 +121,47 @@ const activePositions = new Map();
 // Pending proposals
 const pendingProposals = new Map();
 
-// ================================================================
+// = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+// TELEGRAM UTILITIES
+// = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
+
+function initTelegram() {
+    if (CONFIG.TELEGRAM_TOKEN && CONFIG.TELEGRAM_CHAT_ID) {
+        telegramBot = new TelegramBot(CONFIG.TELEGRAM_TOKEN, { polling: false });
+        log('📱 Telegram notifications enabled', 'INFO');
+    } else {
+        log('📱 Telegram notifications disabled (missing API keys)', 'WARNING');
+    }
+}
+
+async function sendTelegramMessage(message) {
+    if (!telegramBot) return;
+    try {
+        await telegramBot.sendMessage(CONFIG.TELEGRAM_CHAT_ID, message, { parse_mode: 'HTML' });
+    } catch (error) {
+        log(`Failed to send Telegram message: ${error.message}`, 'ERROR');
+    }
+}
+
+function getTelegramSummary() {
+    const runtime = Math.floor((new Date() - sessionStats.startTime) / 1000 / 60);
+    const winRate = sessionStats.totalTrades > 0 ? ((sessionStats.wins / sessionStats.totalTrades) * 100).toFixed(1) : 0;
+
+    return `
+📊 <b>Session Summary</b>
+━━━━━━━━━━━━━━━━━
+⏱ <b>Runtime:</b> ${runtime} mins
+📈 <b>Total Trades:</b> ${sessionStats.totalTrades}
+✅ <b>Wins:</b> ${sessionStats.wins}
+❌ <b>Losses:</b> ${sessionStats.losses}
+🔥 <b>Win Rate:</b> ${winRate}%
+💰 <b>Daily P/L:</b> $${formatNumber(dailyPnL)}
+    `;
+}
+
+// = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 // UTILITY FUNCTIONS
-// ================================================================
+// = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = = =
 
 /**
  * Sleep function for async delays
@@ -568,6 +617,8 @@ function handleAuthorize(response) {
         subscribeBalance();
         initializeAssetStates();
         initializeStrategies();
+
+        sendTelegramMessage(`🚀 <b>Bot Connected & Authorized</b>\n<b>Account:</b> ${response.authorize.email}\n<b>Balance:</b> $${formatNumber(currentBalance)}\n<b>Capital:</b> $${CONFIG.INVESTMENT_CAPITAL}`);
     }
 }
 
@@ -680,6 +731,8 @@ function handleBuy(response) {
 
         log(`Trade OPENED | Type: ${contract.contract_type} | Stake: $${formatNumber(contract.buy_price)} | Payout: $${formatNumber(contract.payout)}`, 'SUCCESS', symbol);
 
+        sendTelegramMessage(`🚀 <b>TRADE OPENED</b> [${symbol}]\n━━━━━━━━━━━━━━━━━\n<b>Type:</b> ${contract.contract_type}\n<b>Stake:</b> $${formatNumber(contract.buy_price)}\n<b>Payout:</b> $${formatNumber(contract.payout)}`);
+
         // Subscribe to contract updates
         sendRequest({
             proposal_open_contract: 1,
@@ -737,6 +790,8 @@ function handleContractUpdate(response) {
 
         log(`❌ TRADE LOST | Loss: -$${formatNumber(Math.abs(profit))}`, 'ERROR', position.symbol);
     }
+
+    sendTelegramMessage(`${profit >= 0 ? '🎉' : '😔'} <b>TRADE ${isWin ? 'WON' : 'LOST'}</b> [${position.symbol}]\n━━━━━━━━━━━━━━━━━\n<b>P/L:</b> $${formatNumber(profit)}\n<b>Daily P/L:</b> $${formatNumber(dailyPnL)}\n${getTelegramSummary()}`);
 
     // Clean up
     if (state) {
@@ -1051,6 +1106,15 @@ function startBot() {
 
     logSeparator();
     log('Connecting to Deriv API...', 'SYSTEM');
+
+    initTelegram();
+
+    // Summary timer every 1 hour
+    setInterval(() => {
+        if (sessionStats.totalTrades > 0) {
+            sendTelegramMessage(`📢 <b>Hourly Performance Update</b>\n${getTelegramSummary()}`);
+        }
+    }, 60 * 60 * 1000);
 
     // Connect to Deriv API
     connect();
