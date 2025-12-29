@@ -1,20 +1,222 @@
-[1:17:31 AM] [DATA] 🕯️  Candle: 675.44 | O:674.87 H:675.72 L:674.26
-[1:17:32 AM] [DATA] 🕯️  Candle: 675.24 | O:674.87 H:675.72 L:674.26
-[1:17:34 AM] [DATA] 🕯️  Candle: 675.20 | O:674.87 H:675.72 L:674.26
-[1:17:36 AM] [DATA] 🕯️  Candle: 675.19 | O:674.87 H:675.72 L:674.26
-[1:17:38 AM] [DATA] 🕯️  Candle: 675.10 | O:674.87 H:675.72 L:674.26
-[1:17:40 AM] [DATA] 🕯️  Candle: 675.09 | O:674.87 H:675.72 L:674.26
-[1:17:42 AM] [DATA] 🕯️  Candle: 675.00 | O:674.87 H:675.72 L:674.26
-[1:17:44 AM] [DATA] 🕯️  Candle: 675.10 | O:674.87 H:675.72 L:674.26
-[1:17:46 AM] [DATA] 🕯️  Candle: 674.69 | O:674.87 H:675.72 L:674.26
-[1:17:48 AM] [DATA] 🕯️  Candle: 674.77 | O:674.87 H:675.72 L:674.26
-[1:17:50 AM] [DATA] 🕯️  Candle: 674.84 | O:674.87 H:675.72 L:674.26
-[1:17:52 AM] [DATA] 🕯️  Candle: 674.82 | O:674.87 H:675.72 L:674.26
-[1:17:54 AM] [DATA] 🕯️  Candle: 675.15 | O:674.87 H:675.72 L:674.26
-[1:17:56 AM] [DATA] 🕯️  Candle: 675.26 | O:674.87 H:675.72 L:674.26
-[1:17:58 AM] [DATA] 🕯️  Candle: 674.99 | O:674.87 H:675.72 L:674.26
-[1:18:00 AM] [DATA] 🕯️  Candle: 674.92 | O:674.92 H:674.92 L:674.92
-[1:18:02 AM] [DATA] 🕯️  Candle: 675.19 | O:674.92 H:675.19 L:674.92
-[1:18:04 AM] [DATA] 🕯️  Candle: 675.13 | O:674.92 H:675.19 L:674.92
-[1:18:06 AM] [DATA] 🕯️  Candle: 674.89 | O:674.92 H:675.19 L:674.89
-[1:18:08 AM] [DATA] 🕯️  Candle: 675.15 | O:674.92 H:675.19 L:674.89
+=== Bot Started: 2025-12-29T00:31:37.195Z ===
+[1:31:37 AM] [SUCCESS] 🤖 DERIV ML TRADING BOT v3.1 - FIXED
+[1:31:37 AM] [INFO] 🔌 Connecting to Deriv WebSocket...
+[1:31:38 AM] [SUCCESS] ✅ WebSocket connected successfully!
+[1:31:38 AM] [INFO] 🔐 Authenticating with Deriv API...
+[1:31:38 AM] [SUCCESS] ✅ AUTHORIZATION SUCCESSFUL
+[1:31:38 AM] [SUCCESS] 👤 Account: kenotaru@gmail.com
+[1:31:38 AM] [SUCCESS] 💰 Balance: USD 6604.80
+[1:31:38 AM] [INFO] 💵 Currency: USD
+[1:31:38 AM] [INFO] 🚨 Daily Loss Limit: USD 660.48
+[1:31:38 AM] [DATA] 📊 Loading 1000 historical candles...
+[1:31:39 AM] [SUCCESS] ✅ Loaded 1000 candles
+[1:31:39 AM] [SUCCESS] ✅ kNN trained with 500 patterns
+[1:31:39 AM] [INFO] 📡 Subscribing to live candles...
+[1:31:39 AM] [SUCCESS] ✅ Ready to trade!
+[1:31:42 AM] [SUCCESS] 🚀 TRADING STARTED!
+[1:31:52 AM] [SIGNAL] 🎯 SHORT SIGNAL!
+[1:31:52 AM] [TRADE] 💰 EXECUTING PUT
+[1:31:52 AM] [TRADE]    Stake: USD 66.05 (1% of balance)
+[1:31:52 AM] [TRADE]    Entry: 676.4300
+[1:31:52 AM] [TRADE]    Balance: USD 6604.80
+[1:31:52 AM] [TRADE] 📤 Sending trade request...
+[1:31:52 AM] [DATA]    Request: {"buy":1,"subscribe":1,"price":"66.05","parameters":{"contract_type":"PUT","symbol":"R_100","duration":3,"duration_unit":"m","basis":"stake","amount":"66.05","currency":"USD"}}
+[1:31:53 AM] [WARNING] 💵 Balance: USD 6538.75 (-66.05) | Daily P/L: -66.05
+[1:31:53 AM] [SUCCESS] ✅ TRADE OPENED SUCCESSFULLY!
+[1:31:53 AM] [TRADE] 📝 Contract ID: 302687980388
+[1:31:53 AM] [TRADE]    Type: undefined
+[1:31:53 AM] [TRADE]    Cost: $66.05
+[1:31:53 AM] [TRADE]    Time: 1:31:53 AM
+[1:31:53 AM] [INFO] 📡 Monitoring contract...
+[1:31:53 AM] [ERROR] API Error: You are already subscribed to proposal_open_contract.
+[1:32:07 AM] [SUCCESS] 💵 Balance: USD 6681.25 (+142.50) | Daily P/L: +76.45
+[1:32:09 AM] [SUCCESS] 💵 Balance: USD 6822.33 (+141.08) | Daily P/L: +217.53
+[1:32:13 AM] [SUCCESS] 💵 Balance: USD 6962.00 (+139.67) | Daily P/L: +357.20
+[1:32:39 AM] [SUCCESS] 💵 Balance: USD 7100.27 (+138.27) | Daily P/L: +495.47
+[1:32:45 AM] [SUCCESS] 💵 Balance: USD 7237.15 (+136.88) | Daily P/L: +632.35
+[1:33:57 AM] [SUCCESS] 💵 Balance: USD 7372.67 (+135.52) | Daily P/L: +767.87
+[1:33:59 AM] [SUCCESS] 💵 Balance: USD 7506.84 (+134.17) | Daily P/L: +902.04
+[1:34:01 AM] [SUCCESS] 💵 Balance: USD 7639.67 (+132.83) | Daily P/L: +1034.87
+[1:34:05 AM] [SUCCESS] 💵 Balance: USD 7771.17 (+131.50) | Daily P/L: +1166.37
+[1:34:11 AM] [SUCCESS] 💵 Balance: USD 7901.36 (+130.19) | Daily P/L: +1296.56
+[1:34:55 AM] [SUCCESS] 💵 Balance: USD 8030.24 (+128.88) | Daily P/L: +1425.44
+[1:34:56 AM] [SUCCESS] 📊 TRADE CLOSED
+[1:34:57 AM] [INFO]    Contract: 302687980388
+[1:34:57 AM] [INFO]    Entry: $66.05
+[1:34:57 AM] [INFO]    Exit: $128.88
+[1:34:57 AM] [INFO]    Duration: 184s
+[1:34:57 AM] [SUCCESS]    💰 PROFIT: +$62.83 ✅
+[1:34:57 AM] [SUCCESS]    🔥 Win Streak: 1
+[1:34:57 AM] [INFO]    📊 Win Rate: 100.0% (1/1)
+[1:34:57 AM] [SUCCESS]    💵 Net P/L: +$1425.44
+[1:37:02 AM] [SIGNAL] 🎯 SHORT SIGNAL!
+[1:37:02 AM] [TRADE] 💰 EXECUTING PUT
+[1:37:02 AM] [TRADE]    Stake: USD 80.30 (1% of balance)
+[1:37:02 AM] [TRADE]    Entry: 673.2400
+[1:37:02 AM] [TRADE]    Balance: USD 8030.24
+[1:37:02 AM] [TRADE] 📤 Sending trade request...
+[1:37:02 AM] [DATA]    Request: {"buy":1,"subscribe":1,"price":"80.30","parameters":{"contract_type":"PUT","symbol":"R_100","duration":3,"duration_unit":"m","basis":"stake","amount":"80.30","currency":"USD"}}
+[1:37:03 AM] [WARNING] 💵 Balance: USD 7949.94 (-80.30) | Daily P/L: +1345.14
+[1:37:03 AM] [SUCCESS] ✅ TRADE OPENED SUCCESSFULLY!
+[1:37:03 AM] [TRADE] 📝 Contract ID: 302688168888
+[1:37:03 AM] [TRADE]    Type: undefined
+[1:37:03 AM] [TRADE]    Cost: $80.3
+[1:37:03 AM] [TRADE]    Time: 1:37:03 AM
+[1:37:03 AM] [INFO] 📡 Monitoring contract...
+[1:37:03 AM] [ERROR] API Error: You are already subscribed to proposal_open_contract.
+[1:40:06 AM] [ERROR] 📊 TRADE CLOSED
+[1:40:07 AM] [INFO]    Contract: 302688168888
+[1:40:07 AM] [INFO]    Entry: $80.30
+[1:40:07 AM] [INFO]    Exit: $0.00
+[1:40:07 AM] [INFO]    Duration: 184s
+[1:40:07 AM] [ERROR]    💸 LOSS: $-80.30 ❌
+[1:40:07 AM] [WARNING]    📉 Loss Streak: 1
+[1:40:07 AM] [INFO]    📊 Win Rate: 50.0% (1/2)
+[1:40:07 AM] [SUCCESS]    💵 Net P/L: +$1345.14
+[1:40:16 AM] [SIGNAL] 🎯 LONG SIGNAL!
+[1:40:16 AM] [TRADE] 💰 EXECUTING CALL
+[1:40:16 AM] [TRADE]    Stake: USD 79.50 (1% of balance)
+[1:40:16 AM] [TRADE]    Entry: 675.6200
+[1:40:16 AM] [TRADE]    Balance: USD 7949.94
+[1:40:16 AM] [TRADE] 📤 Sending trade request...
+[1:40:16 AM] [DATA]    Request: {"buy":1,"subscribe":1,"price":"79.50","parameters":{"contract_type":"CALL","symbol":"R_100","duration":3,"duration_unit":"m","basis":"stake","amount":"79.50","currency":"USD"}}
+[1:40:17 AM] [WARNING] 💵 Balance: USD 7870.44 (-79.50) | Daily P/L: +1265.64
+[1:40:17 AM] [SUCCESS] ✅ TRADE OPENED SUCCESSFULLY!
+[1:40:17 AM] [TRADE] 📝 Contract ID: 302688284388
+[1:40:17 AM] [TRADE]    Type: undefined
+[1:40:17 AM] [TRADE]    Cost: $79.5
+[1:40:17 AM] [TRADE]    Time: 1:40:17 AM
+[1:40:17 AM] [INFO] 📡 Monitoring contract...
+[1:40:17 AM] [ERROR] API Error: You are already subscribed to proposal_open_contract.
+[1:43:21 AM] [ERROR] 📊 TRADE CLOSED
+[1:43:21 AM] [INFO]    Contract: 302688284388
+[1:43:21 AM] [INFO]    Entry: $79.50
+[1:43:21 AM] [INFO]    Exit: $0.00
+[1:43:21 AM] [INFO]    Duration: 184s
+[1:43:21 AM] [ERROR]    💸 LOSS: $-79.50 ❌
+[1:43:21 AM] [WARNING]    📉 Loss Streak: 2
+[1:43:21 AM] [INFO]    📊 Win Rate: 33.3% (1/3)
+[1:43:21 AM] [SUCCESS]    💵 Net P/L: +$1265.64
+[1:43:44 AM] [SIGNAL] 🎯 SHORT SIGNAL!
+[1:43:44 AM] [TRADE] 💰 EXECUTING PUT
+[1:43:44 AM] [TRADE]    Stake: USD 78.70 (1% of balance)
+[1:43:44 AM] [TRADE]    Entry: 674.7300
+[1:43:44 AM] [TRADE]    Balance: USD 7870.44
+[1:43:44 AM] [TRADE] 📤 Sending trade request...
+[1:43:44 AM] [DATA]    Request: {"buy":1,"subscribe":1,"price":"78.70","parameters":{"contract_type":"PUT","symbol":"R_100","duration":3,"duration_unit":"m","basis":"stake","amount":"78.70","currency":"USD"}}
+[1:43:45 AM] [WARNING] 💵 Balance: USD 7791.74 (-78.70) | Daily P/L: +1186.94
+[1:43:45 AM] [SUCCESS] ✅ TRADE OPENED SUCCESSFULLY!
+[1:43:45 AM] [TRADE] 📝 Contract ID: 302688411708
+[1:43:45 AM] [TRADE]    Type: undefined
+[1:43:45 AM] [TRADE]    Cost: $78.7
+[1:43:45 AM] [TRADE]    Time: 1:43:45 AM
+[1:43:45 AM] [INFO] 📡 Monitoring contract...
+[1:43:45 AM] [ERROR] API Error: You are already subscribed to proposal_open_contract.
+[1:46:46 AM] [SUCCESS] 💵 Balance: USD 7945.31 (+153.57) | Daily P/L: +1340.51
+[1:46:47 AM] [SUCCESS] 📊 TRADE CLOSED
+[1:46:47 AM] [INFO]    Contract: 302688411708
+[1:46:47 AM] [INFO]    Entry: $78.70
+[1:46:47 AM] [INFO]    Exit: $153.57
+[1:46:47 AM] [INFO]    Duration: 182s
+[1:46:47 AM] [SUCCESS]    💰 PROFIT: +$74.87 ✅
+[1:46:47 AM] [SUCCESS]    🔥 Win Streak: 1
+[1:46:47 AM] [INFO]    📊 Win Rate: 50.0% (2/4)
+[1:46:47 AM] [SUCCESS]    💵 Net P/L: +$1340.51
+[1:47:38 AM] [SIGNAL] 🎯 SHORT SIGNAL!
+[1:47:38 AM] [TRADE] 💰 EXECUTING PUT
+[1:47:38 AM] [TRADE]    Stake: USD 79.45 (1% of balance)
+[1:47:38 AM] [TRADE]    Entry: 673.6500
+[1:47:38 AM] [TRADE]    Balance: USD 7945.31
+[1:47:38 AM] [TRADE] 📤 Sending trade request...
+[1:47:38 AM] [DATA]    Request: {"buy":1,"subscribe":1,"price":"79.45","parameters":{"contract_type":"PUT","symbol":"R_100","duration":3,"duration_unit":"m","basis":"stake","amount":"79.45","currency":"USD"}}
+[1:47:39 AM] [WARNING] 💵 Balance: USD 7865.86 (-79.45) | Daily P/L: +1261.06
+[1:47:39 AM] [SUCCESS] ✅ TRADE OPENED SUCCESSFULLY!
+[1:47:39 AM] [TRADE] 📝 Contract ID: 302688557588
+[1:47:39 AM] [TRADE]    Type: undefined
+[1:47:39 AM] [TRADE]    Cost: $79.45
+[1:47:39 AM] [TRADE]    Time: 1:47:39 AM
+[1:47:39 AM] [INFO] 📡 Monitoring contract...
+[1:47:39 AM] [ERROR] API Error: You are already subscribed to proposal_open_contract.
+[1:50:41 AM] [SUCCESS] 💵 Balance: USD 8020.89 (+155.03) | Daily P/L: +1416.09
+[1:50:43 AM] [SUCCESS] 📊 TRADE CLOSED
+[1:50:43 AM] [INFO]    Contract: 302688557588
+[1:50:43 AM] [INFO]    Entry: $79.45
+[1:50:43 AM] [INFO]    Exit: $155.03
+[1:50:43 AM] [INFO]    Duration: 184s
+[1:50:43 AM] [SUCCESS]    💰 PROFIT: +$75.58 ✅
+[1:50:43 AM] [SUCCESS]    🔥 Win Streak: 2
+[1:50:43 AM] [INFO]    📊 Win Rate: 60.0% (3/5)
+[1:50:43 AM] [SUCCESS]    💵 Net P/L: +$1416.09
+[1:51:16 AM] [SIGNAL] 🎯 SHORT SIGNAL!
+[1:51:16 AM] [TRADE] 💰 EXECUTING PUT
+[1:51:16 AM] [TRADE]    Stake: USD 80.21 (1% of balance)
+[1:51:16 AM] [TRADE]    Entry: 672.3300
+[1:51:16 AM] [TRADE]    Balance: USD 8020.89
+[1:51:16 AM] [TRADE] 📤 Sending trade request...
+[1:51:16 AM] [DATA]    Request: {"buy":1,"subscribe":1,"price":"80.21","parameters":{"contract_type":"PUT","symbol":"R_100","duration":3,"duration_unit":"m","basis":"stake","amount":"80.21","currency":"USD"}}
+[1:51:17 AM] [SUCCESS] ✅ TRADE OPENED SUCCESSFULLY!
+[1:51:17 AM] [TRADE] 📝 Contract ID: 302688695788
+[1:51:17 AM] [TRADE]    Type: undefined
+[1:51:17 AM] [TRADE]    Cost: $80.21
+[1:51:17 AM] [TRADE]    Time: 1:51:17 AM
+[1:51:17 AM] [INFO] 📡 Monitoring contract...
+[1:51:17 AM] [WARNING] 💵 Balance: USD 7940.68 (-80.21) | Daily P/L: +1335.88
+[1:51:17 AM] [ERROR] API Error: You are already subscribed to proposal_open_contract.
+[1:54:19 AM] [ERROR] 📊 TRADE CLOSED
+[1:54:19 AM] [INFO]    Contract: 302688695788
+[1:54:19 AM] [INFO]    Entry: $80.21
+[1:54:19 AM] [INFO]    Exit: $0.00
+[1:54:19 AM] [INFO]    Duration: 182s
+[1:54:19 AM] [ERROR]    💸 LOSS: $-80.21 ❌
+[1:54:19 AM] [WARNING]    📉 Loss Streak: 1
+[1:54:19 AM] [INFO]    📊 Win Rate: 50.0% (3/6)
+[1:54:19 AM] [SUCCESS]    💵 Net P/L: +$1335.88
+[1:54:22 AM] [SIGNAL] 🎯 LONG SIGNAL!
+[1:54:22 AM] [TRADE] 💰 EXECUTING CALL
+[1:54:22 AM] [TRADE]    Stake: USD 79.41 (1% of balance)
+[1:54:22 AM] [TRADE]    Entry: 674.2500
+[1:54:22 AM] [TRADE]    Balance: USD 7940.68
+[1:54:22 AM] [TRADE] 📤 Sending trade request...
+[1:54:22 AM] [DATA]    Request: {"buy":1,"subscribe":1,"price":"79.41","parameters":{"contract_type":"CALL","symbol":"R_100","duration":3,"duration_unit":"m","basis":"stake","amount":"79.41","currency":"USD"}}
+[1:54:23 AM] [WARNING] 💵 Balance: USD 7861.27 (-79.41) | Daily P/L: +1256.47
+[1:54:23 AM] [SUCCESS] ✅ TRADE OPENED SUCCESSFULLY!
+[1:54:23 AM] [TRADE] 📝 Contract ID: 302688819668
+[1:54:23 AM] [TRADE]    Type: undefined
+[1:54:23 AM] [TRADE]    Cost: $79.41
+[1:54:23 AM] [TRADE]    Time: 1:54:23 AM
+[1:54:23 AM] [INFO] 📡 Monitoring contract...
+[1:54:23 AM] [ERROR] API Error: You are already subscribed to proposal_open_contract.
+[1:57:25 AM] [SUCCESS] 💵 Balance: USD 8016.51 (+155.24) | Daily P/L: +1411.71
+[1:57:27 AM] [SUCCESS] 📊 TRADE CLOSED
+[1:57:27 AM] [INFO]    Contract: 302688819668
+[1:57:27 AM] [INFO]    Entry: $79.41
+[1:57:27 AM] [INFO]    Exit: $155.24
+[1:57:27 AM] [INFO]    Duration: 184s
+[1:57:27 AM] [SUCCESS]    💰 PROFIT: +$75.83 ✅
+[1:57:27 AM] [SUCCESS]    🔥 Win Streak: 1
+[1:57:27 AM] [INFO]    📊 Win Rate: 57.1% (4/7)
+[1:57:27 AM] [SUCCESS]    💵 Net P/L: +$1411.71
+[2:00:26 AM] [SIGNAL] 🎯 LONG SIGNAL!
+[2:00:26 AM] [TRADE] 💰 EXECUTING CALL
+[2:00:26 AM] [TRADE]    Stake: USD 80.17 (1% of balance)
+[2:00:26 AM] [TRADE]    Entry: 676.6400
+[2:00:26 AM] [TRADE]    Balance: USD 8016.51
+[2:00:26 AM] [TRADE] 📤 Sending trade request...
+[2:00:26 AM] [DATA]    Request: {"buy":1,"subscribe":1,"price":"80.17","parameters":{"contract_type":"CALL","symbol":"R_100","duration":3,"duration_unit":"m","basis":"stake","amount":"80.17","currency":"USD"}}
+[2:00:27 AM] [WARNING] 💵 Balance: USD 7936.34 (-80.17) | Daily P/L: +1331.54
+[2:00:27 AM] [SUCCESS] ✅ TRADE OPENED SUCCESSFULLY!
+[2:00:27 AM] [TRADE] 📝 Contract ID: 302689038368
+[2:00:27 AM] [TRADE]    Type: undefined
+[2:00:27 AM] [TRADE]    Cost: $80.17
+[2:00:27 AM] [TRADE]    Time: 2:00:27 AM
+[2:00:27 AM] [INFO] 📡 Monitoring contract...
+[2:00:27 AM] [ERROR] API Error: You are already subscribed to proposal_open_contract.
+[2:03:29 AM] [ERROR] 📊 TRADE CLOSED
+[2:03:29 AM] [INFO]    Contract: 302689038368
+[2:03:29 AM] [INFO]    Entry: $80.17
+[2:03:29 AM] [INFO]    Exit: $0.00
+[2:03:29 AM] [INFO]    Duration: 182s
+[2:03:29 AM] [ERROR]    💸 LOSS: $-80.17 ❌
+[2:03:29 AM] [WARNING]    📉 Loss Streak: 1
+[2:03:29 AM] [INFO]    📊 Win Rate: 50.0% (4/8)
+[2:03:29 AM] [SUCCESS]    💵 Net P/L: +$1331.54
