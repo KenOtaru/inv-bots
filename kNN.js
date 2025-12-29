@@ -22,7 +22,7 @@ const CONFIG = {
     TIMEFRAME: 180, // 3 minutes in seconds
     RISK_PERCENT: 1, // 1% risk per trade
     RISK_REWARD_RATIO: 2, // 1:2 RR ratio
-    MAX_DAILY_LOSS_PERCENT: 10, // 10% max daily loss
+    MAX_DAILY_LOSS_PERCENT: 50, // 50% max daily loss
     INITIAL_CANDLES: 1000, // Pre-load for training
     KNN_HISTORY_SIZE: 500, // kNN lookback window
     KNN_K: 5, // Number of neighbors
@@ -37,6 +37,9 @@ const CONFIG = {
 
     // Stop Loss Configuration
     SL_PERCENT: 0.5, // 0.5% price movement for SL
+
+    // Investment Management
+    INVESTMENT_CAPITAL: process.env.INITIAL_CAPITAL ? parseFloat(process.env.INITIAL_CAPITAL) : 100,
 };
 
 // ============================================
@@ -336,13 +339,17 @@ class DerivBot {
                         this.balance = parseFloat(msg.authorize.balance);
                         this.startingBalance = this.balance;
                         this.currency = msg.authorize.currency || 'USD';
-                        this.dailyLossLimit = this.startingBalance * (CONFIG.MAX_DAILY_LOSS_PERCENT / 100);
+
+                        // Use INVESTMENT_CAPITAL for daily loss limit calculation
+                        const baseCapital = CONFIG.INVESTMENT_CAPITAL || this.startingBalance;
+                        this.dailyLossLimit = baseCapital * (CONFIG.MAX_DAILY_LOSS_PERCENT / 100);
 
                         this.logSeparator();
                         this.log(`✅ AUTHORIZATION SUCCESSFUL`, 'SUCCESS');
                         this.log(`👤 Account: ${msg.authorize.email}`, 'SUCCESS');
                         this.log(`💰 Balance: ${this.currency} ${this.balance.toFixed(2)}`, 'SUCCESS');
                         this.log(`💵 Currency: ${this.currency}`, 'INFO');
+                        this.log(`🏢 Investment Capital: ${this.currency} ${baseCapital.toFixed(2)}`, 'INFO');
                         this.log(`🚨 Daily Loss Limit: ${this.currency} ${this.dailyLossLimit.toFixed(2)}`, 'INFO');
                         this.logSeparator();
 
@@ -621,11 +628,14 @@ class DerivBot {
     }
 
     executeTrade(type) {
-        const stake = Math.max(this.balance * (CONFIG.RISK_PERCENT / 100), 0.35).toFixed(2);
+        // Risk calculated based on INVESTMENT_CAPITAL instead of account balance
+        const baseCapital = CONFIG.INVESTMENT_CAPITAL || this.balance;
+        const stake = Math.max(baseCapital * (CONFIG.RISK_PERCENT / 100), 0.35).toFixed(2);
         const currentPrice = this.candles[this.candles.length - 1].close;
 
         this.log(`💰 EXECUTING ${type}`, 'TRADE');
-        this.log(`   Stake: ${this.currency} ${stake} (${CONFIG.RISK_PERCENT}% of balance)`, 'TRADE');
+        this.log(`   Capital: ${this.currency} ${baseCapital.toFixed(2)}`, 'TRADE');
+        this.log(`   Stake: ${this.currency} ${stake} (${CONFIG.RISK_PERCENT}% of capital)`, 'TRADE');
         this.log(`   Entry: ${currentPrice.toFixed(4)}`, 'TRADE');
         this.log(`   Balance: ${this.currency} ${this.balance.toFixed(2)}`, 'TRADE');
 
@@ -634,7 +644,7 @@ class DerivBot {
         // For Rise/Fall contracts on Volatility indices
         const tradeRequest = {
             buy: 1,
-            subscribe: 1,
+            // Removed duplicate subscribe: 1 to fix API error
             price: stake,
             parameters: {
                 contract_type: type, // CALL for Rise, PUT for Fall
