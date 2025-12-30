@@ -27,13 +27,37 @@ let balance = 0;
 let isTrading = false;
 
 // ================= LOGGING =================
+const COLORS = {
+    RESET: '\x1b[0m',
+    INFO: '\x1b[37m',     // White
+    SUCCESS: '\x1b[32m',  // Green
+    ERROR: '\x1b[31m',    // Red
+    WARNING: '\x1b[33m',  // Yellow
+    SIGNAL: '\x1b[35m',   // Magenta (Analysis/Signal)
+    TRADE: '\x1b[36m',    // Cyan (Trade Info)
+    DATA: '\x1b[90m'      // Gray (Debug/Data)
+};
+
 function log(message, type = 'INFO') {
     const time = new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '');
-    console.log(`[${time}] [${type}] ${message}`);
+    const color = COLORS[type] || COLORS.INFO;
+    console.log(`${color}[${time}] [${type}] ${message}${COLORS.RESET}`);
 }
+
+// ================= STATE & STATS =================
+let sessionStats = {
+    totalTrades: 0,
+    wins: 0,
+    losses: 0,
+    realizedPnL: 0,
+    startTime: Date.now()
+};
+
+let activeTrade = null; // Stores details of the currently running trade
 
 // ================= INDICATORS =================
 function calculateEMA(data, period) {
+    if (data.length < period) return null;
     const k = 2 / (period + 1);
     let ema = [data[0]];
     for (let i = 1; i < data.length; i++) {
@@ -43,11 +67,11 @@ function calculateEMA(data, period) {
 }
 
 function findFVG(c1, c2, c3) {
-    // Bullish FVG: Low of candle 3 is above high of candle 1
+    // Bullish FVG
     if (c3.low > c1.high) {
         return { type: 'BULLISH', top: c3.low, bottom: c1.high };
     }
-    // Bearish FVG: High of candle 3 is below low of candle 1
+    // Bearish FVG
     if (c3.high < c1.low) {
         return { type: 'BEARISH', top: c1.low, bottom: c3.high };
     }
@@ -56,7 +80,7 @@ function findFVG(c1, c2, c3) {
 
 // ================= WEBSOCKET HANDLERS =================
 ws.on('open', () => {
-    log('Connected to Deriv. Authorizing...');
+    log('Connected to Deriv. Authorizing...', 'INFO');
     ws.send(JSON.stringify({ authorize: CONFIG.TOKEN }));
 });
 
@@ -69,8 +93,8 @@ ws.on('message', (data) => {
     }
 
     if (msg.msg_type === 'authorize') {
-        balance = msg.authorize.balance;
-        log(`Authorized. Balance: ${balance} ${msg.authorize.currency}`);
+        balance = parseFloat(msg.authorize.balance);
+        log(`Authorized. Account: ${msg.authorize.loginid} | Balance: $${balance.toFixed(2)}`, 'SUCCESS');
         subscribeCandles();
     }
 
@@ -78,13 +102,39 @@ ws.on('message', (data) => {
         processUpdate(msg.ohlc);
     }
 
+    if (msg.msg_type === 'candles') {
+        processHistory(msg.candles);
+    }
+
     if (msg.msg_type === 'buy') {
-        log(`Trade opened! ID: ${msg.buy.contract_id}`, 'TRADE');
-        isTrading = true;
+        handleBuyResponse(msg.buy);
+    }
+
+    if (msg.msg_type === 'proposal_open_contract') {
+        handleactiveTrade(msg.proposal_open_contract);
     }
 });
 
+// Processing the initial history list
+function processHistory(historyList) {
+    candles = historyList.map(c => ({
+        time: c.epoch,
+        open: parseFloat(c.open),
+        high: parseFloat(c.high),
+        low: parseFloat(c.low),
+        close: parseFloat(c.close)
+    }));
+    log(`✅ History loaded: ${candles.length} candles.`, 'SUCCESS');
+
+    // Run initial analysis
+    if (candles.length > 0) {
+        const lastCandle = candles[candles.length - 1];
+        checkStrategy(lastCandle, true);
+    }
+}
+
 function subscribeCandles() {
+    log(`Subscribing to ${CONFIG.SYMBOL} candles (${CONFIG.GRANULARITY / 60}m)...`, 'INFO');
     ws.send(JSON.stringify({
         ticks_history: CONFIG.SYMBOL,
         adjust_start_time: 1,
@@ -106,59 +156,103 @@ function processUpdate(ohlc) {
     };
 
     // Update existing or push new
+    let isNewCandle = false;
     if (candles.length > 0 && candles[candles.length - 1].time === currentCandle.time) {
         candles[candles.length - 1] = currentCandle;
     } else {
         candles.push(currentCandle);
         if (candles.length > 100) candles.shift();
-        log(`New candle formed. Checking strategy...`, 'SYSTEM');
-        checkStrategy();
+        isNewCandle = true;
+    }
+
+    // Check strategy on every tick to catch moves into the zone
+    checkStrategy(currentCandle, isNewCandle);
+
+    // Heartbeat: Log every ~60 seconds (approx 240 ticks if tick stream is 4/sec, or use checking timestamp)
+    // Using timestamp for better accuracy
+    if (!global.lastHeartbeat || Date.now() - global.lastHeartbeat > 60000) {
+        log(`💓 Monitoring Market... Price: ${currentCandle.close} | Waiting for Pullback`, 'INFO');
+        global.lastHeartbeat = Date.now();
     }
 }
 
 // ================= STRATEGY EXECUTION =================
-function checkStrategy() {
+function checkStrategy(currentPriceCandle, isNewCandle) {
     if (isTrading || candles.length < 50) return;
 
-    const closes = candles.map(c => c.close);
-    const ema50 = calculateEMA(closes, CONFIG.EMA_PERIOD);
-    const last = candles[candles.length - 1];
+    // Analysis uses CLOSED candles
+    const closedCandles = candles.slice(0, -1);
+    if (closedCandles.length < 50) return;
 
-    // Get the last 3 candles to find a fresh FVG
-    const c1 = candles[candles.length - 4];
-    const c2 = candles[candles.length - 3];
-    const c3 = candles[candles.length - 2];
+    const closes = closedCandles.map(c => c.close);
+    const ema50 = calculateEMA(closes, CONFIG.EMA_PERIOD);
+    const lastClosed = closedCandles[closedCandles.length - 1];
+
+    const c1 = closedCandles[closedCandles.length - 4];
+    const c2 = closedCandles[closedCandles.length - 3];
+    const c3 = closedCandles[closedCandles.length - 2];
+
     const fvg = findFVG(c1, c2, c3);
 
-    if (!fvg) return;
+    // Only log analysis on new candle creation to avoid spam
+    if (isNewCandle) {
+        const currentPrice = currentPriceCandle.close;
+        const trend = lastClosed.close > ema50 ? 'BULLISH' : 'BEARISH';
 
-    // BULLISH SETUP: Price above EMA + Bullish FVG [00:04:34]
-    if (last.close > ema50 && fvg.type === 'BULLISH') {
-        // Entry when price pulls back into the gap [00:06:28]
-        if (last.low <= fvg.top && last.low >= fvg.bottom) {
-            log('Bullish Trend Pullback into FVG detected.', 'SIGNAL');
-            executeTrade('MULTUP', fvg.bottom);
+        if (fvg) {
+            if (trend === 'BULLISH' && fvg.type === 'BULLISH') {
+                log(`🔍 ANALYSIS: ${trend} Trend (Price > EMA) | FVG detected [${fvg.bottom} - ${fvg.top}]`, 'SIGNAL');
+            } else if (trend === 'BEARISH' && fvg.type === 'BEARISH') {
+                log(`🔍 ANALYSIS: ${trend} Trend (Price < EMA) | FVG detected [${fvg.bottom} - ${fvg.top}]`, 'SIGNAL');
+            } else {
+                log(`🔍 ANALYSIS: ${trend} Trend | FVG [${fvg.type}] ignored (Counter-trend)`, 'DATA');
+            }
+        } else {
+            log(`🔍 ANALYSIS: ${trend} Trend | Price: ${currentPrice} | EMA: ${ema50.toFixed(2)} | No FVG`, 'DATA');
         }
     }
 
-    // BEARISH SETUP: Price below EMA + Bearish FVG [00:07:15]
-    else if (last.close < ema50 && fvg.type === 'BEARISH') {
-        if (last.high >= fvg.bottom && last.high <= fvg.top) {
-            log('Bearish Trend Pullback into FVG detected.', 'SIGNAL');
-            executeTrade('MULTDOWN', fvg.top);
+    // Check for Entry (Always)
+    if (fvg) {
+        const currentPrice = currentPriceCandle.close;
+
+        if (lastClosed.close > ema50 && fvg.type === 'BULLISH') {
+            const inZone = currentPrice <= fvg.top && currentPrice >= fvg.bottom;
+            if (inZone) {
+                log(`⚡ PRICE IN ZONE [${fvg.bottom} - ${fvg.top}] - EXECUTING BULLISH TRADE`, 'SIGNAL');
+                executeTrade('MULTUP', fvg.bottom);
+            }
+        }
+        else if (lastClosed.close < ema50 && fvg.type === 'BEARISH') {
+            const inZone = currentPrice >= fvg.bottom && currentPrice <= fvg.top;
+            if (inZone) {
+                log(`⚡ PRICE IN ZONE [${fvg.bottom} - ${fvg.top}] - EXECUTING BEARISH TRADE`, 'SIGNAL');
+                executeTrade('MULTDOWN', fvg.top);
+            }
         }
     }
 }
 
 function executeTrade(type, stopLevel) {
+    if (isTrading) return; // double check
+
     const stake = (balance * CONFIG.RISK_PERCENT).toFixed(2);
     const currentPrice = candles[candles.length - 1].close;
 
     // Calculate Stop Loss distance in USD for Multipliers
     const slDistance = Math.abs(currentPrice - stopLevel);
+    // Minimum buffer to avoid immediate stop out? 
+    // Ensure SL is positive and reasonable
+    if (slDistance === 0) return;
+
     const tpDistance = slDistance * CONFIG.RR_RATIO;
 
-    log(`Placing ${type} trade. Stake: ${stake.toFixed(2)}`, 'EXECUTION');
+    log(`🚀 EXECUTING ${type} TRADE`, 'TRADE');
+    log(`   Stake: $${stake} | Price: ${currentPrice}`, 'TRADE');
+    log(`   Stop Loss Level: ${stopLevel} (Dist: ${slDistance.toFixed(2)})`, 'TRADE');
+    log(`   Target Profit: +$${(stake * CONFIG.RR_RATIO * 20).toFixed(2)} (approx based on Multiplier)`, 'TRADE'); // Rough est
+
+    isTrading = true; // Block new signals
 
     ws.send(JSON.stringify({
         buy: 1,
@@ -171,9 +265,75 @@ function executeTrade(type, stopLevel) {
             multiplier: 100, // Fixed multiplier
             symbol: CONFIG.SYMBOL,
             limit_order: {
-                stop_loss: slDistance,//Math.floor(stake * 0.8), // 80% of stake risk as buffer
-                take_profit: tpDistance//Math.floor(stake * 2.4) // 1:3 ratio
+                stop_loss: parseFloat(slDistance.toFixed(2)),
+                take_profit: parseFloat(tpDistance.toFixed(2))
             }
         }
     }));
+}
+
+function handleBuyResponse(buy) {
+    if (buy.contract_id) {
+        log(`✅ TRADE OPENED SUCCESSFULLY`, 'SUCCESS');
+        log(`   Contract ID: ${buy.contract_id}`, 'TRADE');
+        log(`   Buy Price: $${buy.buy_price}`, 'TRADE');
+
+        activeTrade = {
+            id: buy.contract_id,
+            entryPrice: buy.buy_price,
+            startTime: Date.now()
+        };
+
+        // Subscribe to this contract
+        ws.send(JSON.stringify({
+            proposal_open_contract: 1,
+            contract_id: buy.contract_id,
+            subscribe: 1
+        }));
+    } else {
+        isTrading = false; // Reset if failed
+    }
+}
+
+function handleactiveTrade(contract) {
+    if (contract.is_sold) {
+        // Trade Finished
+        const profit = parseFloat(contract.profit);
+        const result = profit >= 0 ? 'WIN' : 'LOSS';
+        const duration = contract.current_spot_time - contract.entry_tick_time;
+
+        sessionStats.totalTrades++;
+        if (profit >= 0) sessionStats.wins++; else sessionStats.losses++;
+        sessionStats.realizedPnL += profit;
+
+        const winRate = sessionStats.totalTrades > 0 ? ((sessionStats.wins / sessionStats.totalTrades) * 100).toFixed(1) : "0.0";
+
+        log(`==========================================`, result === 'WIN' ? 'SUCCESS' : 'ERROR');
+        log(`🏁 TRADE COMPLETED: ${result}`, result === 'WIN' ? 'SUCCESS' : 'ERROR');
+        log(`   Profit/Loss:   ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}`, result === 'WIN' ? 'SUCCESS' : 'ERROR');
+        log(`   Duration:      ${duration}s`, 'TRADE');
+        log(`   Recovery:      $${contract.sell_price}`, 'TRADE');
+        log(`------------------------------------------`, 'INFO');
+        log(`📊 SESSION STATS`, 'INFO');
+        log(`   Trades: ${sessionStats.totalTrades} | Win Rate: ${winRate}%`, 'INFO');
+        log(`   Total P/L: ${sessionStats.realizedPnL >= 0 ? '+' : ''}$${sessionStats.realizedPnL.toFixed(2)}`, 'INFO');
+        log(`==========================================`, result === 'WIN' ? 'SUCCESS' : 'ERROR');
+
+        isTrading = false;
+        activeTrade = null;
+
+    } else {
+        // Active Trade Update
+        const currentProfit = parseFloat(contract.profit);
+        const profitPercent = parseFloat(contract.profit_percentage).toFixed(2);
+
+        // Log periodically or on significant change? 
+        // For now, let's log every update but maybe throttle visually if it's too fast?
+        // Since granularity is 15m, updates might not be super crazy fast unless volatility is high.
+        // Actually Multipliers update every tick. 
+        // Let's log only if profit changes significantly or just use a heartbeat?
+        // User asked for "Active trade details".
+
+        log(`⏳ ACTIVE TRADE: P/L ${currentProfit >= 0 ? '+' : ''}$${currentProfit.toFixed(2)} (${profitPercent}%) | Spot: ${contract.current_spot}`, currentProfit >= 0 ? 'SUCCESS' : 'WARNING');
+    }
 }
