@@ -124,6 +124,9 @@ const CONFIG = {
     TRADE_COOLDOWN_MS: 10000,    // 10 seconds between trades
     HEARTBEAT_INTERVAL_MS: 30000,
 
+    // NEW: INVESTMENT CAPITAL CONTROL
+    INVESTMENT_CAPITAL: 500,     // Base all risk/stake on this amount
+
     // LOGGING
     LOG_LEVEL: 'info',
     LOG_FILE_ENABLED: false,
@@ -861,12 +864,15 @@ class RiskManager {
 
     // Calculate position size using Kelly Criterion
     calculatePositionSize(balance, avgWin, avgLoss, winRate) {
+        // Use Investment Capital if defined, otherwise fall back to account balance
+        const baseCapital = this.config.INVESTMENT_CAPITAL || balance;
+
         if (this.config.RISK.SIZING_METHOD === 'FIXED') {
             return this.config.RISK.FIXED_STAKE;
         }
 
         if (this.config.RISK.SIZING_METHOD === 'PERCENT') {
-            return balance * this.config.RISK.PERCENT_PER_TRADE;
+            return baseCapital * this.config.RISK.PERCENT_PER_TRADE;
         }
 
         // Kelly Criterion: f = (bp - q) / b
@@ -882,7 +888,7 @@ class RiskManager {
         const kellyFraction = (b * p - q) / b;
         const conservativeFraction = kellyFraction * this.config.RISK.KELLY_FRACTION;
 
-        const stake = balance * Math.max(0, conservativeFraction);
+        const stake = baseCapital * Math.max(0, conservativeFraction);
 
         return Math.max(this.config.RISK.MIN_STAKE, stake);
     }
@@ -910,11 +916,14 @@ class RiskManager {
         }
 
         // Check daily loss limit
-        const maxDailyLoss = balance * this.config.RISK.MAX_DAILY_LOSS_PERCENT;
+        const baseCapital = this.config.INVESTMENT_CAPITAL || balance;
+        const maxDailyLoss = baseCapital * this.config.RISK.MAX_DAILY_LOSS_PERCENT;
+
         if (this.dailyLoss <= -maxDailyLoss) {
             this.logger.error('☠️ DAILY LOSS LIMIT REACHED', {
                 dailyLoss: this.dailyLoss.toFixed(2),
                 limit: maxDailyLoss.toFixed(2),
+                basis: baseCapital === balance ? 'Account Balance' : `Investment Capital ($${baseCapital})`
             });
             return false;
         }
@@ -1002,9 +1011,14 @@ class DerivBot {
         logger.info('Configuration', {
             symbol: this.config.SYMBOL,
             sizingMethod: this.config.RISK.SIZING_METHOD,
-            dailyLossLimit: `${this.config.RISK.MAX_DAILY_LOSS_PERCENT * 100}%`,
+            investmentCapital: this.config.INVESTMENT_CAPITAL ? `$${this.config.INVESTMENT_CAPITAL}` : 'Total Balance',
+            dailyLossLimit: `${this.config.RISK.MAX_DAILY_LOSS_PERCENT * 100}% of Capital`,
             sessions: this.config.TRADING_SESSIONS,
         });
+
+        if (this.config.INVESTMENT_CAPITAL) {
+            this.client.logBox(`🏦 TRADING WITH ISOLATED CAPITAL: $${this.config.INVESTMENT_CAPITAL}\nRisk and sizing are decoupled from account balance.`, '\x1b[35m'); // Magenta
+        }
 
         // Validate configuration
         if (this.config.DERIV_TOKEN === 'your_deriv_api_token_here') {

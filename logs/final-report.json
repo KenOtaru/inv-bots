@@ -6,7 +6,7 @@
   "dailyLoss": "0.00",
   "consecutiveLosses": 0,
   "maxDrawdown": "0.00%",
-  "finalBalance": 9701.34,
+  "finalBalance": 9716.03,
   "symbol": "R_75",
   "config": {
     "DERIV_TOKEN": "rgNedekYXvCaPeP",
@@ -75,8 +75,9 @@
     ],
     "TRADE_COOLDOWN_MS": 10000,
     "HEARTBEAT_INTERVAL_MS": 30000,
+    "INVESTMENT_CAPITAL": 500,
     "LOG_LEVEL": "info",
     "LOG_FILE_ENABLED": false
   },
-  "timestamp": "2025-12-30T17:30:20.414Z"
+  "timestamp": "2025-12-30T17:37:59.244Z"
 }
