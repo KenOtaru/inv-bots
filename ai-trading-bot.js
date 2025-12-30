@@ -1505,7 +1505,7 @@ class AIDigitDifferBot {
 
         // Send telegram notification if configured
         if (this.telegramEnabled) {
-            this.sendTelegramMessage(`⏹ *Bot Stopped*\n\n${this.getTelegramSummary()}`);
+            this.sendTelegramMessage(`<b>⏹ Bot Stopped</b>\n\n${this.getTelegramSummary()}`);
         }
     }
 
@@ -1522,15 +1522,14 @@ class AIDigitDifferBot {
             ? ((this.totalWins / this.totalTrades) * 100).toFixed(1)
             : 0;
 
-        return `
-*Trading Session Summary*
-========================
-📊 *Total Trades:* ${this.totalTrades}
-✅ *Wins:* ${this.totalWins}
-❌ *Losses:* ${this.totalLosses}
-📈 *Win Rate:* ${winRate}%
-💰 *Total P/L:* $${this.totalPnL.toFixed(2)}
-🏦 *Final Balance:* $${this.balance.toFixed(2)}
+        return `<b>Trading Session Summary</b>
+            ━━━━━━━━━━━━━━━━━━━━━━━━
+            📊 <b>Total Trades:</b> ${this.totalTrades}
+            ✅ <b>Wins:</b> ${this.totalWins}
+            ❌ <b>Losses:</b> ${this.totalLosses}
+            📈 <b>Win Rate:</b> ${winRate}%
+            💰 <b>Total P/L:</b> $${this.totalPnL.toFixed(2)}
+            🏦 <b>Final Balance:</b> $${this.balance.toFixed(2)}
         `;
     }
 
@@ -1538,7 +1537,7 @@ class AIDigitDifferBot {
         if (!this.telegramEnabled || !this.telegramBot) return;
 
         try {
-            await this.telegramBot.sendMessage(this.telegramChatId, message, { parse_mode: 'Markdown' });
+            await this.telegramBot.sendMessage(this.telegramChatId, message, { parse_mode: 'HTML' });
             console.log('� Telegram notification sent');
         } catch (error) {
             console.error('❌ Failed to send Telegram message:', error.message);
@@ -1549,7 +1548,7 @@ class AIDigitDifferBot {
         // Send summary every 30 minutes
         setInterval(() => {
             if (this.totalTrades > 0 && !this.isShuttingDown) {
-                this.sendTelegramMessage(`📊 *Regular Performance Summary*\n\n${this.getTelegramSummary()}`);
+                this.sendTelegramMessage(`📊 <b>Regular Performance Summary</b>\n\n${this.getTelegramSummary()}`);
             }
         }, 30 * 60 * 1000);
     }
@@ -1557,25 +1556,23 @@ class AIDigitDifferBot {
     async sendTelegramLossAlert(actualDigit, profit) {
         let riskWarning = '';
         if (this.consecutiveLosses >= this.config.maxConsecutiveLosses - 1) {
-            riskWarning = `\n⚠️ *CRITICAL RISK:* ${this.consecutiveLosses} consecutive losses! Next loss will trigger STOP.`;
+            riskWarning = `\n⚠️ <b>CRITICAL RISK:</b> ${this.consecutiveLosses} consecutive losses! Next loss will trigger STOP.`;
         }
 
-        const body = `
-🚨 *TRADE LOSS ALERT*
-=====================
-*Asset:* ${this.currentAsset}
-*Prediction (Betting NOT):* ${this.lastPrediction}
-*Actual Digit:* ${actualDigit}
-*Loss:* -$${Math.abs(profit).toFixed(2)}
+        const body = `🚨 <b>TRADE LOSS ALERT</b>
+━━━━━━━━━━━━━━━━━━━━━━━━
+<b>Asset:</b> <code>${this.currentAsset}</code>
+<b>Prediction:</b> ${this.lastPrediction}
+<b>Actual Digit:</b> ${actualDigit}
+<b>Loss:</b> -$${Math.abs(profit).toFixed(2)}
 
-*Consecutive Losses:* ${this.consecutiveLosses} / ${this.config.maxConsecutiveLosses}${riskWarning}
+<b>Consecutive Losses:</b> ${this.consecutiveLosses} / ${this.config.maxConsecutiveLosses}${riskWarning}
 
-*Current Balance:* $${this.balance.toFixed(2)}
-*Total P/L:* $${this.totalPnL.toFixed(2)}
+<b>Current Balance:</b> $${this.balance.toFixed(2)}
+<b>Total P/L:</b> $${this.totalPnL.toFixed(2)}
 
-*Session Stats:*
-Wins: ${this.totalWins} | Losses: ${this.totalLosses}
-        `;
+<b>Session Stats:</b>
+Wins: ${this.totalWins} | Losses: ${this.totalLosses}`;
 
         await this.sendTelegramMessage(body);
     }
