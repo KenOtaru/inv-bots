@@ -248,45 +248,88 @@ class QuickFlipBot {
 
     startClock() {
         this.log('🔄 Starting market monitoring...', 'SYSTEM');
+
+        // Calculate open time for today
+        const now = new Date();
+        const [openHour, openMinute] = CONFIG.market_open_time.split(':').map(Number);
+        const openTime = new Date(now);
+        openTime.setUTCHours(openHour, openMinute, 0, 0);
+
+        // If it's already past open time for today, set epoch
+        if (now.getTime() >= openTime.getTime()) {
+            this.openTimeEpoch = Math.floor(openTime.getTime() / 1000);
+        }
+
         this.ws.send(JSON.stringify({ ticks: CONFIG.symbol }));
         this.getDailyHistory();
+        this.checkTime(); // Immediate check on startup
     }
 
     checkTime() {
         const now = new Date();
         const nowString = now.toISOString().substring(11, 16); // Extract HH:MM
-        const currentMinute = nowString.substring(14, 16);
+
+        // Calculate minutes since market open
+        let minutesSinceOpen = -1;
+        if (this.openTimeEpoch) {
+            minutesSinceOpen = (Date.now() / 1000 - this.openTimeEpoch) / 60;
+        }
 
         // Only log time check every 5 minutes to avoid spam
-        if (currentMinute === '00' || currentMinute === '15' || currentMinute === '30' || currentMinute === '45') {
+        const currentMinute = nowString.substring(14, 16);
+        if (currentMinute === '00' || currentMinute === '05' || currentMinute === '10' || currentMinute === '15' ||
+            currentMinute === '20' || currentMinute === '25' || currentMinute === '30' || currentMinute === '35' ||
+            currentMinute === '40' || currentMinute === '45' || currentMinute === '50' || currentMinute === '55') {
             if (this.state === 'WAITING_FOR_OPEN') {
-                this.log(`⏰ Current Time: ${nowString} GMT | State: ${this.state}`, 'INFO');
+                // Throttle log
+                if (!this.lastTimeLog || (Date.now() - this.lastTimeLog > 60000)) {
+                    this.log(`⏰ Current Time: ${nowString} GMT | State: ${this.state}`, 'INFO');
+                    this.lastTimeLog = Date.now();
+                }
             }
         }
 
-        // 1. Detect Market Open
-        if (this.state === 'WAITING_FOR_OPEN' && nowString === CONFIG.market_open_time) {
-            this.log('='.repeat(60), 'STRATEGY');
-            this.log('🔔 MARKET OPEN DETECTED!', 'STRATEGY');
-            this.log(`⏱️  Waiting ${CONFIG.candle_timeframe} minutes for opening candle to close...`, 'STRATEGY');
-            this.log('='.repeat(60), 'STRATEGY');
+        // 1. Detect Market Open (or Catch-up)
+        if (this.state === 'WAITING_FOR_OPEN') {
 
-            this.sendTelegramMessage(`🔔 <b>MARKET OPEN DETECTED!</b>\n<b>Asset:</b> ${CONFIG.symbol}\n<b>Time:</b> ${nowString} GMT\nWaiting for 15-min opening candle...`);
+            // Check if we are freshly starting INSIDE the window
+            if (minutesSinceOpen >= 0 && minutesSinceOpen < CONFIG.market_open_duration) {
+                this.log('='.repeat(60), 'STRATEGY');
+                this.log(`⚡ CATCH-UP MODE: Started ${minutesSinceOpen.toFixed(1)} mins after open`, 'STRATEGY');
 
-            this.openTimeEpoch = Math.floor(now.getTime() / 1000);
-            this.state = 'WAITING_CANDLE_CLOSE';
+                if (minutesSinceOpen < CONFIG.candle_timeframe) {
+                    this.log(`⏱️  Waiting for opening candle to close... (${(CONFIG.candle_timeframe - minutesSinceOpen).toFixed(1)} mins left)`, 'STRATEGY');
+                    this.state = 'WAITING_CANDLE_CLOSE';
+                } else {
+                    this.log('✅ Opening candle already closed. Fetching immediately...', 'STRATEGY');
+                    this.state = 'CALCULATING_LIQUIDITY';
+                    this.getOpeningCandle();
+                }
+                this.log('='.repeat(60), 'STRATEGY');
+                return; // State changed, exit for now
+            }
+
+            // Standard trigger
+            if (nowString === CONFIG.market_open_time) {
+                this.log('='.repeat(60), 'STRATEGY');
+                this.log('🔔 MARKET OPEN DETECTED!', 'STRATEGY');
+                this.log(`⏱️  Waiting ${CONFIG.candle_timeframe} minutes for opening candle to close...`, 'STRATEGY');
+                this.log('='.repeat(60), 'STRATEGY');
+
+                this.sendTelegramMessage(`🔔 <b>MARKET OPEN DETECTED!</b>\n<b>Asset:</b> ${CONFIG.symbol}\n<b>Time:</b> ${nowString} GMT\nWaiting for 15-min opening candle...`);
+
+                this.openTimeEpoch = Math.floor(now.getTime() / 1000);
+                this.state = 'WAITING_CANDLE_CLOSE';
+            }
         }
 
         // 2. Wait for 15-min Candle Close
         if (this.state === 'WAITING_CANDLE_CLOSE') {
-            const minutesPassed = (Date.now() / 1000 - this.openTimeEpoch) / 60;
-            const remainingMinutes = CONFIG.candle_timeframe - minutesPassed;
+            // Re-calc in case updated
+            minutesSinceOpen = (Date.now() / 1000 - this.openTimeEpoch) / 60;
+            const remainingMinutes = CONFIG.candle_timeframe - minutesSinceOpen;
 
-            if (Math.floor(remainingMinutes) !== Math.floor(remainingMinutes + 1 / 60)) {
-                this.log(`⏳ Opening candle in progress... ${Math.ceil(remainingMinutes)} minutes remaining`, 'STRATEGY');
-            }
-
-            if (minutesPassed >= CONFIG.candle_timeframe) {
+            if (remainingMinutes <= 0) {
                 this.log('✅ Opening candle closed. Fetching data...', 'STRATEGY');
                 this.getOpeningCandle();
                 this.state = 'CALCULATING_LIQUIDITY';
@@ -294,15 +337,19 @@ class QuickFlipBot {
         }
 
         // 3. Timeout check (90 mins)
-        if (this.state === 'HUNTING') {
-            const minutesPassed = (Date.now() / 1000 - this.openTimeEpoch) / 60;
-            const remainingMinutes = CONFIG.market_open_duration - minutesPassed;
+        if (this.state === 'HUNTING' || this.state === 'CALCULATING_LIQUIDITY') {
+            minutesSinceOpen = (Date.now() / 1000 - this.openTimeEpoch) / 60;
+            const remainingMinutes = CONFIG.market_open_duration - minutesSinceOpen;
 
             if (remainingMinutes > 0 && remainingMinutes < 5) {
-                this.log(`⚠️  Only ${Math.ceil(remainingMinutes)} minutes left in hunting window!`, 'STRATEGY');
+                // Throttle warning
+                if (!this.lastWarningLog || (Date.now() - this.lastWarningLog > 60000)) {
+                    this.log(`⚠️  Only ${Math.ceil(remainingMinutes)} minutes left in hunting window!`, 'STRATEGY');
+                    this.lastWarningLog = Date.now();
+                }
             }
 
-            if (minutesPassed > CONFIG.market_open_duration) {
+            if (minutesSinceOpen > CONFIG.market_open_duration) {
                 this.log('='.repeat(60), 'STRATEGY');
                 this.log('⏰ 90 Minutes passed. No trade taken.', 'STRATEGY');
                 this.log('🔄 Resetting for next market open...', 'STRATEGY');
@@ -356,6 +403,7 @@ class QuickFlipBot {
 
     getOpeningCandle() {
         this.log('🔍 Fetching opening candle data...', 'STRATEGY');
+        // Ensure we request the candle ending exactly 15 mins after open
         const endTime = this.openTimeEpoch + (CONFIG.candle_timeframe * 60);
 
         this.ws.send(JSON.stringify({
