@@ -1,0 +1,82 @@
+{
+  "totalTrades": 0,
+  "winningTrades": 0,
+  "losingTrades": 0,
+  "winRate": "0.0000",
+  "dailyLoss": "0.00",
+  "consecutiveLosses": 0,
+  "maxDrawdown": "0.00%",
+  "finalBalance": 9701.34,
+  "symbol": "R_75",
+  "config": {
+    "DERIV_TOKEN": "rgNedekYXvCaPeP",
+    "DERIV_WS_URL": "wss://ws.derivws.com/websockets/v3?app_id=1089",
+    "SYMBOL": "R_75",
+    "CONTRACT_TYPE": "MULTUP",
+    "STRATEGY": {
+      "RSI_PERIOD": 14,
+      "RSI_OVERSOLD": 35,
+      "RSI_OVERBOUGHT": 65,
+      "FAST_EMA_PERIOD": 8,
+      "SLOW_EMA_PERIOD": 21,
+      "ATR_PERIOD": 14,
+      "MIN_ATR_THRESHOLD": 0.002,
+      "MAX_ATR_THRESHOLD": 0.015,
+      "CONFIRMATION_TIMEFRAME": "5m",
+      "MIN_SIGNAL_STRENGTH": 3,
+      "MULTIPLIER_LOW_VOL": 100,
+      "MULTIPLIER_MED_VOL": 150,
+      "MULTIPLIER_HIGH_VOL": 80
+    },
+    "RISK": {
+      "SIZING_METHOD": "KELLY",
+      "KELLY_FRACTION": 0.25,
+      "FIXED_STAKE": 5,
+      "PERCENT_PER_TRADE": 0.02,
+      "MIN_STAKE": 1,
+      "MAX_STAKE": 50,
+      "MAX_DAILY_LOSS_PERCENT": 0.03,
+      "MAX_CONSECUTIVE_LOSSES": 4,
+      "TARGET_RISK_REWARD": 1.5,
+      "STOP_LOSS_PERCENT": 0.7,
+      "TP_LEVELS": [
+        {
+          "target": 0.25,
+          "closePercent": 0.5
+        },
+        {
+          "target": 0.75,
+          "closePercent": 0.3
+        },
+        {
+          "target": 1.5,
+          "closePercent": 0.2
+        }
+      ],
+      "TRAILING_STOP": {
+        "ENABLED": true,
+        "ACTIVATION_PERCENT": 1,
+        "TRAIL_PERCENT": 0.3
+      }
+    },
+    "TRADING_SESSIONS": [
+      {
+        "start": "06:00",
+        "end": "09:00"
+      },
+      {
+        "start": "13:00",
+        "end": "16:00"
+      },
+      {
+        "start": "22:00",
+        "end": "01:00"
+      }
+    ],
+    "TRADE_COOLDOWN_MS": 10000,
+    "HEARTBEAT_INTERVAL_MS": 30000,
+    "LOG_LEVEL": "info",
+    "LOG_FILE_ENABLED": false
+  },
+  "timestamp": "2025-12-30T17:30:20.414Z"
+}
