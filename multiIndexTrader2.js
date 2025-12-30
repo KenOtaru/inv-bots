@@ -16,11 +16,11 @@ const CONFIG = {
 
     // MULTI-ASSET CONFIGURATION
     symbols: [
-        { name: '1HZ10V', label: 'Volatility 10 (1s)', enabled: false },
-        { name: '1HZ25V', label: 'Volatility 25 (1s)', enabled: false },
-        { name: '1HZ50V', label: 'Volatility 50 (1s)', enabled: true },
-        { name: '1HZ75V', label: 'Volatility 75 (1s)', enabled: true },
-        { name: '1HZ100V', label: 'Volatility 100 (1s)', enabled: true }
+        { name: '1HZ10V', label: 'Volatility 10 (1s)', multiplier: 1000, enabled: true },
+        { name: '1HZ25V', label: 'Volatility 25 (1s)', multiplier: 400, enabled: true },
+        { name: '1HZ50V', label: 'Volatility 50 (1s)', multiplier: 200, enabled: true },
+        { name: '1HZ75V', label: 'Volatility 75 (1s)', multiplier: 100, enabled: true },
+        { name: '1HZ100V', label: 'Volatility 100 (1s)', multiplier: 60, enabled: true }
     ],
 
     stake: 1,              // $5 per trade per symbol
@@ -33,7 +33,7 @@ const CONFIG = {
     RISK_PERCENT: 5, // 5% risk per trade if using capital
 
     // Strategy parameters
-    dailyOpenThreshold: 0.5,
+    dailyOpenThreshold: 50,
     h4CandlesForTrend: 7,
     h4CandlesForTP: 10,
     h1CandlesForConfirm: 6,
@@ -255,7 +255,10 @@ async function buyMultiplierContract(symbol) {
         const baseCapital = CONFIG.INVESTMENT_CAPITAL || CONFIG.stake;
         const stake = Math.max(baseCapital * (CONFIG.RISK_PERCENT / 100), 0.35).toFixed(2);
 
-        log(`Requesting proposal...`, 'TRADE', symbol);
+        const symbolConfig = CONFIG.symbols.find(s => s.name === symbol);
+        const multiplier = symbolConfig ? symbolConfig.multiplier : CONFIG.multiplier;
+
+        log(`Requesting proposal with Multiplier: ${multiplier}...`, 'TRADE', symbol);
 
         const proposalResponse = await sendRequestWithPromise({
             proposal: 1,
@@ -264,7 +267,7 @@ async function buyMultiplierContract(symbol) {
             contract_type: 'MULTUP',
             currency: CONFIG.currency,
             symbol: symbol,
-            multiplier: CONFIG.multiplier,
+            multiplier: multiplier,
             limit_order: {
                 stop_loss: CONFIG.stop_loss
             }
@@ -367,7 +370,10 @@ async function buyMultiplierContractBearish(symbol) {
         const baseCapital = CONFIG.INVESTMENT_CAPITAL || CONFIG.stake;
         const stake = Math.max(baseCapital * (CONFIG.RISK_PERCENT / 100), 0.35).toFixed(2);
 
-        log(`Requesting BEARISH proposal...`, 'TRADE', symbol);
+        const symbolConfig = CONFIG.symbols.find(s => s.name === symbol);
+        const multiplier = symbolConfig ? symbolConfig.multiplier : CONFIG.multiplier;
+
+        log(`Requesting BEARISH proposal with Multiplier: ${multiplier}...`, 'TRADE', symbol);
 
         const proposalResponse = await sendRequestWithPromise({
             proposal: 1,
@@ -376,7 +382,7 @@ async function buyMultiplierContractBearish(symbol) {
             contract_type: 'MULTDOWN',
             currency: CONFIG.currency,
             symbol: symbol,
-            multiplier: CONFIG.multiplier,
+            multiplier: multiplier,
             limit_order: {
                 stop_loss: CONFIG.stop_loss
             }
@@ -498,7 +504,8 @@ async function checkM15Entry(symbol, direction = 'bullish') {
     if (direction === 'bullish') {
         const touchedDailyOpen = Math.abs(candleLow - dailyOpen) <= CONFIG.dailyOpenThreshold;
         const bullish = isBullishCandle(latest);
-        console.log(`[BULLISH] nearDailyOpen: ${currentPrice} | touchedDailyOpen: ${candleLow} | dailyOpen: ${dailyOpen} | bullish: ${bullish}`);
+        console.log(`nearDailyOpen: ${currentPrice} | dailyOpen: ${dailyOpen} (${Math.abs(currentPrice - dailyOpen)}) | threshold: ${CONFIG.dailyOpenThreshold}`);
+        console.log(`touchedDailyOpen: ${touchedDailyOpen} | dailyOpen: ${dailyOpen} (${Math.abs(candleLow - dailyOpen)}) | threshold: ${CONFIG.dailyOpenThreshold}`);
         log(`M15 Entry Check (BULLISH) | Near Open: ${nearDailyOpen} | Touched: ${touchedDailyOpen} | Bullish: ${bullish}`, 'STRATEGY', symbol);
         return nearDailyOpen && bullish && touchedDailyOpen;
     } else {
