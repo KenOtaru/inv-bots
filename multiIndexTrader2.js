@@ -65,7 +65,8 @@ let sessionStats = {
     totalTrades: 0,
     wins: 0,
     losses: 0,
-    totalPnL: 0
+    losses: 0,
+    realizedPnL: 0
 };
 
 // ========== UTILITY FUNCTIONS ==========
@@ -130,7 +131,8 @@ function getSessionSummary() {
 ✅ <b>Wins:</b> ${sessionStats.wins}
 ❌ <b>Losses:</b> ${sessionStats.losses}
 🔥 <b>Win Rate:</b> ${winRate}%
-💰 <b>Net P/L:</b> $${sessionStats.totalPnL.toFixed(2)}
+🔥 <b>Win Rate:</b> ${winRate}%
+💰 <b>Session P/L:</b> ${sessionStats.realizedPnL >= 0 ? '+' : ''}$${sessionStats.realizedPnL.toFixed(2)}
     `;
 }
 
@@ -212,7 +214,8 @@ function handleMessage(msg) {
     switch (msg.msg_type) {
         case 'authorize':
             isAuthorized = true;
-            log(`Authorized: ${msg.authorize.email} (Balance: $${msg.authorize.balance})`, 'SUCCESS');
+            log(`Authorized: ${msg.authorize.email}`, 'SUCCESS');
+            log(`Tracking isolated P/L from trades only.`, 'SYSTEM');
             CONFIG.currency = msg.authorize.currency;
 
             sendTelegramMessage(`🚀 <b>Bot Connected & Authorized</b>\n<b>Account:</b> ${msg.authorize.email}\n<b>Balance:</b> $${msg.authorize.balance}\n<b>Capital:</b> $${CONFIG.INVESTMENT_CAPITAL}`);
@@ -340,7 +343,7 @@ function handleContractUpdate(contract) {
 
         if (profit >= 0) sessionStats.wins++;
         else sessionStats.losses++;
-        sessionStats.totalPnL += profit;
+        sessionStats.realizedPnL += profit;
 
         completedTrades.push({
             id: contract.contract_id,
@@ -349,7 +352,7 @@ function handleContractUpdate(contract) {
             time: new Date()
         });
 
-        sendTelegramMessage(`${profit >= 0 ? '🎉' : '😔'} <b>TRADE ${result}</b> [${symbol}]\n━━━━━━━━━━━━━━━━━\n<b>P/L:</b> $${profit.toFixed(2)}\n<b>Net P/L:</b> $${sessionStats.totalPnL.toFixed(2)}\n${getSessionSummary()}`);
+        sendTelegramMessage(`${profit >= 0 ? '🎉' : '😔'} <b>TRADE ${result}</b> [${symbol}]\n━━━━━━━━━━━━━━━━━\n<b>P/L:</b> $${profit.toFixed(2)}\n<b>Session P/L:</b> $${sessionStats.realizedPnL.toFixed(2)}\n${getSessionSummary()}`);
 
         delete currentTrades[contract.contract_id];
     }
