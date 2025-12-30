@@ -86,8 +86,16 @@ function isBullishCandle(candle) {
     return parseFloat(candle.close) > parseFloat(candle.open);
 }
 
+function isBearishCandle(candle) {
+    return parseFloat(candle.close) < parseFloat(candle.open);
+}
+
 function getHighestHigh(candles) {
     return Math.max(...candles.map(c => parseFloat(c.high)));
+}
+
+function getLowestLow(candles) {
+    return Math.min(...candles.map(c => parseFloat(c.low)));
 }
 
 // ========== TELEGRAM HELPERS ==========
@@ -311,8 +319,15 @@ function handleContractUpdate(contract) {
         trade.lastLogTime = Date.now();
     }
 
-    if (trade.tpZone && currentSpot >= trade.tpZone) {
+    // TP check for bullish trades
+    if (trade.tpZone && !trade.direction && currentSpot >= trade.tpZone) {
         log(`🎯 TP ZONE REACHED | Current: ${currentSpot.toFixed(5)} | TP: ${trade.tpZone.toFixed(5)}`, 'TRADE', symbol);
+        sellContract(contract.contract_id);
+    }
+
+    // TP check for bearish trades (price goes DOWN to SL zone which is the target)
+    if (trade.slZone && trade.direction === 'BEARISH' && currentSpot <= trade.slZone) {
+        log(`🎯 BEARISH TP ZONE REACHED | Current: ${currentSpot.toFixed(5)} | Target: ${trade.slZone.toFixed(5)}`, 'TRADE', symbol);
         sellContract(contract.contract_id);
     }
 
@@ -345,6 +360,65 @@ async function sellContract(contractId) {
     }
 }
 
+async function buyMultiplierContractBearish(symbol) {
+    try {
+        const symbolState = strategyStates[symbol];
+
+        const baseCapital = CONFIG.INVESTMENT_CAPITAL || CONFIG.stake;
+        const stake = Math.max(baseCapital * (CONFIG.RISK_PERCENT / 100), 0.35).toFixed(2);
+
+        log(`Requesting BEARISH proposal...`, 'TRADE', symbol);
+
+        const proposalResponse = await sendRequestWithPromise({
+            proposal: 1,
+            amount: parseFloat(stake),
+            basis: 'stake',
+            contract_type: 'MULTDOWN',
+            currency: CONFIG.currency,
+            symbol: symbol,
+            multiplier: CONFIG.multiplier,
+            limit_order: {
+                stop_loss: CONFIG.stop_loss
+            }
+        });
+
+        log(`Buying BEARISH contract | Stake: $${stake}...`, 'TRADE', symbol);
+
+        const buyResponse = await sendRequestWithPromise({
+            buy: proposalResponse.proposal.id,
+            price: parseFloat(stake)
+        });
+
+        const contractId = buyResponse.buy.contract_id;
+        const buyPrice = parseFloat(buyResponse.buy.buy_price);
+
+        log(`✅ BEARISH TRADE OPENED - ID: ${contractId}, Entry: ${buyPrice.toFixed(2)}`, 'SUCCESS', symbol);
+
+        currentTrades[contractId] = {
+            id: contractId,
+            symbol: symbol,
+            entryPrice: buyPrice,
+            entryTime: new Date(),
+            direction: 'BEARISH',
+            slZone: symbolState.slZone,
+            lastLogTime: 0
+        };
+
+        sessionStats.totalTrades++;
+
+        sendTelegramMessage(`🐻 <b>BEARISH TRADE OPENED</b> [${symbol}]\n━━━━━━━━━━━━━━━━━\n<b>ID:</b> ${contractId}\n<b>Stake:</b> $${stake}\n<b>Entry:</b> ${buyPrice.toFixed(2)}\n<b>SL Zone:</b> ${symbolState.slZone.toFixed(2)}`);
+
+        sendRequest({
+            proposal_open_contract: 1,
+            contract_id: contractId,
+            subscribe: 1
+        });
+
+    } catch (error) {
+        log(`Error buying bearish contract: ${error.message}`, 'ERROR', symbol);
+    }
+}
+
 // ========== STRATEGY LOGIC ==========
 
 async function analyzeDailyCandles(symbol) {
@@ -359,52 +433,81 @@ async function analyzeDailyCandles(symbol) {
 }
 
 async function analyzeH4Trend(symbol) {
-    const h4Candles = await fetchCandles(symbol, 14400, CONFIG.h4CandlesForTrend + 5);
+    // Fetch enough candles for SMA calculation (need at least smaPeriod candles)
+    const candlesToFetch = Math.max(CONFIG.h4CandlesForTrend + 5, CONFIG.smaPeriod + 5);
+    const h4Candles = await fetchCandles(symbol, 14400, candlesToFetch);
     if (!h4Candles || h4Candles.length < CONFIG.h4CandlesForTrend) {
         log('Insufficient H4 data', 'WARNING', symbol);
-        return false;
+        return { bullish: false, bearish: false };
     }
 
     const recentCandles = h4Candles.slice(-4);
     const isUptrend = recentCandles.every((c, i) => i === 0 || parseFloat(c.close) > parseFloat(recentCandles[i - 1].close));
+    const isDowntrend = recentCandles.every((c, i) => i === 0 || parseFloat(c.close) < parseFloat(recentCandles[i - 1].close));
 
     const sma20 = calculateSMA(h4Candles, CONFIG.smaPeriod);
     const currentPrice = parseFloat(h4Candles[h4Candles.length - 1].close);
-    const aboveSMA = sma20 ? currentPrice > sma20 : true;
+
+    // If SMA couldn't be calculated, skip SMA check (allow both directions)
+    // Otherwise, they must be mutually exclusive
+    // let aboveSMA = true;
+    // let belowSMA = true;
+    if (sma20) {
+        aboveSMA = currentPrice > sma20;
+        belowSMA = currentPrice < sma20;
+    }
 
     const tpCandles = h4Candles.slice(-CONFIG.h4CandlesForTP);
     strategyStates[symbol].tpZone = getHighestHigh(tpCandles);
+    strategyStates[symbol].slZone = getLowestLow(tpCandles);
 
-    log(`H4 Analysis | Uptrend: ${isUptrend} | Above SMA: ${aboveSMA} | TP: ${strategyStates[symbol].tpZone.toFixed(2)}`, 'STRATEGY', symbol);
-    return isUptrend && aboveSMA;
+    const bullishSignal = isUptrend && aboveSMA;
+    const bearishSignal = isDowntrend && belowSMA;
+
+    log(`H4 Analysis | Uptrend: ${isUptrend} | Downtrend: ${isDowntrend} | Above SMA: ${aboveSMA} | Below SMA: ${belowSMA} | TP: ${strategyStates[symbol].tpZone.toFixed(2)} | SL: ${strategyStates[symbol].slZone.toFixed(2)}`, 'STRATEGY', symbol);
+    return { bullish: bullishSignal, bearish: bearishSignal };
 }
 
-async function confirmH1Trend(symbol) {
+async function confirmH1Trend(symbol, direction = 'bullish') {
     const h1Candles = await fetchCandles(symbol, 3600, CONFIG.h1CandlesForConfirm);
     if (!h1Candles || h1Candles.length < CONFIG.h1CandlesForConfirm) return false;
     const recentCandles = h1Candles.slice(-4);
-    const confirmed = recentCandles.every((c, i) => i === 0 || parseFloat(c.close) >= parseFloat(recentCandles[i - 1].close) - 0.3);
-    log(`H1 Confirmation: ${confirmed}`, 'STRATEGY', symbol);
+
+    let confirmed = false;
+    if (direction === 'bullish') {
+        confirmed = recentCandles.every((c, i) => i === 0 || parseFloat(c.close) >= parseFloat(recentCandles[i - 1].close) - 0.3);
+    } else {
+        confirmed = recentCandles.every((c, i) => i === 0 || parseFloat(c.close) <= parseFloat(recentCandles[i - 1].close) + 0.3);
+    }
+    log(`H1 Confirmation (${direction}): ${confirmed}`, 'STRATEGY', symbol);
     return confirmed;
 }
 
-async function checkM15Entry(symbol) {
+async function checkM15Entry(symbol, direction = 'bullish') {
     const m15Candles = await fetchCandles(symbol, 900, 5);
     if (!m15Candles || m15Candles.length < 2) return false;
 
     const latest = m15Candles[m15Candles.length - 1];
     const currentPrice = parseFloat(latest.close);
     const candleLow = parseFloat(latest.low);
+    const candleHigh = parseFloat(latest.high);
     const dailyOpen = strategyStates[symbol].dailyOpen;
 
     const nearDailyOpen = Math.abs(currentPrice - dailyOpen) <= CONFIG.dailyOpenThreshold;
-    const touchedDailyOpen = Math.abs(candleLow - dailyOpen) <= CONFIG.dailyOpenThreshold;
-    const bullish = isBullishCandle(latest);
 
-    console.log(`nearDailyOpen: ${currentPrice} | touchedDailyOpen: ${candleLow}  | dailyOpen: ${dailyOpen} | bullish: ${bullish}`);
-
-    log(`M15 Entry Check | Near Open: ${nearDailyOpen} | Touched: ${touchedDailyOpen} | Bullish: ${bullish}`, 'STRATEGY', symbol);
-    return nearDailyOpen && bullish && touchedDailyOpen;
+    if (direction === 'bullish') {
+        const touchedDailyOpen = Math.abs(candleLow - dailyOpen) <= CONFIG.dailyOpenThreshold;
+        const bullish = isBullishCandle(latest);
+        console.log(`[BULLISH] nearDailyOpen: ${currentPrice} | touchedDailyOpen: ${candleLow} | dailyOpen: ${dailyOpen} | bullish: ${bullish}`);
+        log(`M15 Entry Check (BULLISH) | Near Open: ${nearDailyOpen} | Touched: ${touchedDailyOpen} | Bullish: ${bullish}`, 'STRATEGY', symbol);
+        return nearDailyOpen && bullish && touchedDailyOpen;
+    } else {
+        const touchedDailyOpen = Math.abs(candleHigh - dailyOpen) <= CONFIG.dailyOpenThreshold;
+        const bearish = isBearishCandle(latest);
+        console.log(`[BEARISH] nearDailyOpen: ${currentPrice} | touchedDailyOpen: ${candleHigh} | dailyOpen: ${dailyOpen} | bearish: ${bearish}`);
+        log(`M15 Entry Check (BEARISH) | Near Open: ${nearDailyOpen} | Touched: ${touchedDailyOpen} | Bearish: ${bearish}`, 'STRATEGY', symbol);
+        return nearDailyOpen && bearish && touchedDailyOpen;
+    }
 }
 
 async function runStrategyCheckForSymbol(symbol) {
@@ -420,10 +523,24 @@ async function runStrategyCheckForSymbol(symbol) {
         log(`Analyzing market...`, 'INFO', symbol);
 
         if (await analyzeDailyCandles(symbol)) {
-            if (await analyzeH4Trend(symbol)) {
-                if (await confirmH1Trend(symbol)) {
-                    if (await checkM15Entry(symbol)) {
+            const h4Trend = await analyzeH4Trend(symbol);
+
+            // Check BULLISH entry
+            if (h4Trend.bullish) {
+                if (await confirmH1Trend(symbol, 'bullish')) {
+                    if (await checkM15Entry(symbol, 'bullish')) {
                         await buyMultiplierContract(symbol);
+                        return; // Exit after placing a trade
+                    }
+                }
+            }
+
+            // Check BEARISH entry
+            if (h4Trend.bearish) {
+                if (await confirmH1Trend(symbol, 'bearish')) {
+                    if (await checkM15Entry(symbol, 'bearish')) {
+                        await buyMultiplierContractBearish(symbol);
+                        return; // Exit after placing a trade
                     }
                 }
             }
