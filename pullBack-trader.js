@@ -4,6 +4,7 @@
  */
 
 const WebSocket = require('ws');
+const TelegramBot = require('node-telegram-bot-api');
 
 // ================= CONFIGURATION =================
 const CONFIG = {
@@ -17,10 +18,18 @@ const CONFIG = {
     RR_RATIO: 3,        // 1:3 Reward-to-Risk [00:01:16]
 
     // Indicator Settings
-    EMA_PERIOD: 50
+    EMA_PERIOD: 50,
+
+    // Telegram
+    TELEGRAM_TOKEN: '8132747567:AAFtaN1j9U5HgNiK_TVE7axWzFDifButwKk',
+    TELEGRAM_CHAT_ID: '752497117'
 };
 
 const ws = new WebSocket(`wss://ws.binaryws.com/websockets/v3?app_id=${CONFIG.APP_ID}`);
+let tgBot = null;
+if (CONFIG.TELEGRAM_TOKEN) {
+    tgBot = new TelegramBot(CONFIG.TELEGRAM_TOKEN, { polling: false });
+}
 
 let candles = [];
 let balance = 0;
@@ -42,6 +51,15 @@ function log(message, type = 'INFO') {
     const time = new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '');
     const color = COLORS[type] || COLORS.INFO;
     console.log(`${color}[${time}] [${type}] ${message}${COLORS.RESET}`);
+}
+
+async function sendTelegram(message) {
+    if (!tgBot) return;
+    try {
+        await tgBot.sendMessage(CONFIG.TELEGRAM_CHAT_ID, message, { parse_mode: 'HTML' });
+    } catch (error) {
+        log(`Telegram Error: ${error.message}`, 'ERROR');
+    }
 }
 
 // ================= STATE & STATS =================
@@ -95,6 +113,15 @@ ws.on('message', (data) => {
     if (msg.msg_type === 'authorize') {
         balance = parseFloat(msg.authorize.balance);
         log(`Authorized. Account: ${msg.authorize.loginid} | Balance: $${balance.toFixed(2)}`, 'SUCCESS');
+
+        sendTelegram(`
+🚀 <b>PullBack Bot Started</b> [${CONFIG.SYMBOL}]
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+<b>Strategy:</b> PullBack (FVG + 50 EMA)
+<b>Balance:</b> $${balance.toFixed(2)}
+<b>Risk:</b> ${(CONFIG.RISK_PERCENT * 100).toFixed(0)}%
+        `);
+
         subscribeCandles();
     }
 
@@ -284,6 +311,15 @@ function handleBuyResponse(buy) {
             startTime: Date.now()
         };
 
+        const stake = (balance * CONFIG.RISK_PERCENT).toFixed(2);
+        sendTelegram(`
+🎯 <b>TRADE OPENED</b> [${CONFIG.SYMBOL}]
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+<b>ID:</b> ${buy.contract_id}
+<b>Stake:</b> $${stake}
+<b>Price:</b> ${buy.buy_price}
+        `);
+
         // Subscribe to this contract
         ws.send(JSON.stringify({
             proposal_open_contract: 1,
@@ -318,6 +354,19 @@ function handleactiveTrade(contract) {
         log(`   Trades: ${sessionStats.totalTrades} | Win Rate: ${winRate}%`, 'INFO');
         log(`   Total P/L: ${sessionStats.realizedPnL >= 0 ? '+' : ''}$${sessionStats.realizedPnL.toFixed(2)}`, 'INFO');
         log(`==========================================`, result === 'WIN' ? 'SUCCESS' : 'ERROR');
+
+        const color = profit > 0 ? '✅' : '❌';
+        sendTelegram(`
+${color} <b>TRADE COMPLETED</b> [${CONFIG.SYMBOL}]
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+<b>Result:</b> ${result}
+<b>P/L:</b> $${profit.toFixed(2)}
+<b>Duration:</b> ${duration}s
+
+📊 <b>Session Stats:</b>
+<b>Trades:</b> ${sessionStats.totalTrades} (${winRate}%)
+<b>Realized P/L:</b> $${sessionStats.realizedPnL.toFixed(2)}
+        `);
 
         isTrading = false;
         activeTrade = null;
