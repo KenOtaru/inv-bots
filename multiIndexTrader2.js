@@ -401,6 +401,8 @@ async function checkM15Entry(symbol) {
     const touchedDailyOpen = Math.abs(candleLow - dailyOpen) <= CONFIG.dailyOpenThreshold;
     const bullish = isBullishCandle(latest);
 
+    console.log(`nearDailyOpen: ${currentPrice} | touchedDailyOpen: ${candleLow}  | dailyOpen: ${dailyOpen} | bullish: ${bullish}`);
+
     log(`M15 Entry Check | Near Open: ${nearDailyOpen} | Touched: ${touchedDailyOpen} | Bullish: ${bullish}`, 'STRATEGY', symbol);
     return nearDailyOpen && bullish && touchedDailyOpen;
 }
