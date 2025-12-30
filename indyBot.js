@@ -1333,25 +1333,25 @@ ${color} <b>TRADE COMPLETED</b> [${this.config.SYMBOL}]
         console.log('═'.repeat(60));
 
         // Save to file
-        fs.writeFileSync(
-            path.join(logDir, 'final-report.json'),
-            JSON.stringify({
-                ...stats,
-                finalBalance: this.client.balance,
-                symbol: this.config.SYMBOL,
-                config: this.config,
-                timestamp: new Date().toISOString(),
-            }, null, 2)
-        );
+        // fs.writeFileSync(
+        //     path.join(logDir, 'final-report.json'),
+        //     JSON.stringify({
+        //         ...stats,
+        //         finalBalance: this.client.balance,
+        //         symbol: this.config.SYMBOL,
+        //         config: this.config,
+        //         timestamp: new Date().toISOString(),
+        //     }, null, 2)
+        // );
 
         // Notify Telegram Shutdown
         await this.sendTelegram(`
-⚠️ <b>Bot Shutting Down</b> [${this.config.SYMBOL}]
-━━━━━━━━━━━━━━━━━━━━━━━━━━
-<b>Reason:</b> ${reason || 'Manual Stop'}
-<b>Total P/L:</b> $${stats.dailyLoss}
-<b>Trades:</b> ${stats.totalTrades} (${(stats.winRate * 100).toFixed(1)}% Win)
-<b>Final Balance:</b> $${this.client.balance.toFixed(2)}
+            ⚠️ <b>Bot Shutting Down</b> [${this.config.SYMBOL}]
+            ━━━━━━━━━━━━━━━━━━━━━━━━━━
+            <b>Reason:</b> ${reason || 'Manual Stop'}
+            <b>Total P/L:</b> $${stats.dailyLoss}
+            <b>Trades:</b> ${stats.totalTrades} (${(stats.winRate * 100).toFixed(1)}% Win)
+            <b>Final Balance:</b> $${this.client.balance.toFixed(2)}
         `);
     }
 
