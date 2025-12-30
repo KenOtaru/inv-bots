@@ -37,6 +37,7 @@
 const WebSocket = require('ws');
 const winston = require('winston');
 const { std, mean } = require('mathjs');
+const TelegramBot = require('node-telegram-bot-api');
 const fs = require('fs');
 const path = require('path');
 
@@ -126,6 +127,11 @@ const CONFIG = {
 
     // NEW: INVESTMENT CAPITAL CONTROL
     INVESTMENT_CAPITAL: 500,     // Base all risk/stake on this amount
+
+    // TELEGRAM (From ncluadeDiffer.js)
+    TELEGRAM_TOKEN: '8097728637:AAF7n7e6P9mG84lW9S6P9mG84lW9S6P9mG8',
+    TELEGRAM_CHAT_ID: '7520775535',
+    TELEGRAM_SUMMARY_INTERVAL_MS: 1800000, // 30 Minutes
 
     // LOGGING
     LOG_LEVEL: 'info',
@@ -423,7 +429,7 @@ class DerivAPIClient {
         }
     }
 
-    handleBuy(message) {
+    async handleBuy(message) {
         if (message.buy) {
             this.activeContract = {
                 contractId: message.buy.contract_id,
@@ -440,6 +446,18 @@ class DerivAPIClient {
                 stake: this.lastStake,
                 multiplier: this.lastMultiplier,
                 longcode: message.buy.longcode,
+            });
+
+            // Trigger callback for Telegram notification in DerivBot
+            if (this.onTradeOpened) {
+                this.onTradeOpened(this.activeContract);
+            }
+
+            // Subscribe to contract updates
+            this.send({
+                proposal_open_contract: 1,
+                contract_id: message.buy.contract_id,
+                subscribe: 1,
             });
 
             tradeLogger.info('TRADE_ENTRY', {
@@ -483,7 +501,7 @@ class DerivAPIClient {
         }
     }
 
-    handleContractClose(contract) {
+    async handleContractClose(contract) {
         const profit = parseFloat(contract.profit);
         const profitPercent = ((profit / this.activeContract.stake) * 100).toFixed(2);
         const isWin = profit > 0;
@@ -513,7 +531,7 @@ class DerivAPIClient {
         });
 
         if (this.onContractClosed) {
-            this.onContractClosed({ profit, profitPercent, isWin, duration });
+            this.onContractClosed({ profit, profitPercent, isWin, duration, exit_tick: contract.exit_tick });
         }
 
         this.activeContract = null;
@@ -991,11 +1009,18 @@ class DerivBot {
         this.tradeHistory = [];
         this.isRunning = false;
         this.lastTradeTime = 0;
+        this.lastConfidence = 0; // Added to store confidence for Telegram notification
+
+        // Telegram Bot
+        if (this.config.TELEGRAM_TOKEN && this.config.TELEGRAM_TOKEN !== 'your_token') {
+            this.tg = new TelegramBot(this.config.TELEGRAM_TOKEN, { polling: false });
+        }
 
         // Bind event handlers
         this.client.onTick = (tick) => this.onTick(tick);
         this.client.onContractClosed = (result) => this.onContractClosed(result);
         this.client.onContractUpdate = (contract) => this.onContractUpdate(contract);
+        this.client.onTradeOpened = (contract) => this.onTradeOpened(contract);
 
         // Graceful shutdown
         process.on('SIGINT', () => this.shutdown());
@@ -1020,6 +1045,20 @@ class DerivBot {
             this.client.logBox(`🏦 TRADING WITH ISOLATED CAPITAL: $${this.config.INVESTMENT_CAPITAL}\nRisk and sizing are decoupled from account balance.`, '\x1b[35m'); // Magenta
         }
 
+        // Send startup notification
+        await this.sendTelegram(`
+🚀 <b>IndyBot Started</b> [${this.config.SYMBOL}]
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+<b>Capital:</b> $${this.config.INVESTMENT_CAPITAL || 'Account Balance'}
+<b>Risk:</b> ${this.config.RISK.PERCENT_PER_TRADE * 100}% per trade
+<b>Daily Limit:</b> ${this.config.RISK.MAX_DAILY_LOSS_PERCENT * 100}% of Capital
+<b>Strategy:</b> Triple Confirmation (RSI+EMA+ATR)
+<b>Status:</b> Monitoring Market...
+        `);
+
+        // Start periodic summary timer
+        this.startSummaryTimer();
+
         // Validate configuration
         if (this.config.DERIV_TOKEN === 'your_deriv_api_token_here') {
             logger.error('❌ DERIV_TOKEN not configured');
@@ -1042,7 +1081,7 @@ class DerivBot {
         }
     }
 
-    shutdown() {
+    async shutdown() {
         logger.info('🛑 SHUTTING DOWN BOT...');
         this.isRunning = false;
 
@@ -1054,7 +1093,7 @@ class DerivBot {
         this.client.unsubscribeTicks();
         this.client.disconnect();
 
-        this.printFinalReport();
+        await this.printFinalReport(); // Await the report to ensure Telegram message is sent
 
         setTimeout(() => {
             logger.info('👋 Bot stopped safely');
@@ -1079,6 +1118,7 @@ class DerivBot {
 
         // Analyze market
         const { signal, metrics } = this.ta.analyze(this.client.ticks, this.client.candles);
+        this.lastConfidence = metrics.confidence; // Store confidence for Telegram notification
 
         // Visual analysis log
         if (Math.random() < 0.1 && metrics.rsi) {
@@ -1167,12 +1207,11 @@ class DerivBot {
         }
 
         // Check for partial profit taking
-        // This would require more complex contract modification logic
-        // For now, we log the opportunity
         this.checkPartialProfitLevels(contract);
     }
 
     checkPartialProfitLevels(contract) {
+        if (!this.client.activeContract) return;
         const profitPercent = (parseFloat(contract.profit) / this.client.activeContract.stake) * 100;
 
         for (const tp of this.config.RISK.TP_LEVELS) {
@@ -1185,7 +1224,21 @@ class DerivBot {
         }
     }
 
-    onContractClosed(result) {
+    async onTradeOpened(contract) {
+        // Notify Telegram
+        await this.sendTelegram(`
+🎯 <b>TRADE OPENED</b> [${this.config.SYMBOL}]
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+<b>Direction:</b> ${this.config.CONTRACT_TYPE === 'MULTUP' ? 'LONG 📈' : 'SHORT 📉'}
+<b>Stake:</b> $${contract.stake.toFixed(2)}
+<b>Multiplier:</b> x${contract.multiplier}
+<b>Entry:</b> ${contract.entryPrice.toFixed(2)}
+<b>Confidence:</b> ${this.lastConfidence?.toFixed(0)}%
+        `);
+    }
+
+    async onContractClosed(result) {
+        const activeContract = this.client.activeContract;
         // Update risk manager
         this.risk.checkLimits(this.client.balance, result.profit);
 
@@ -1214,6 +1267,25 @@ class DerivBot {
         this.trailingStopPrice = 0;
 
         this.ta.reset();
+
+        // Notify Telegram
+        const color = result.profit > 0 ? '✅' : '❌';
+        const entryPrice = activeContract ? activeContract.entryPrice.toFixed(2) : 'N/A';
+
+        await this.sendTelegram(`
+${color} <b>TRADE COMPLETED</b> [${this.config.SYMBOL}]
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+<b>Result:</b> ${result.profit > 0 ? 'WIN' : 'LOSS'}
+<b>P/L:</b> $${parseFloat(result.profit).toFixed(2)}
+<b>Entry:</b> ${entryPrice}
+<b>Exit:</b> ${parseFloat(result.exit_tick).toFixed(2)}
+<b>Duration:</b> ${result.duration.toFixed(1)}s
+
+📊 <b>SESSIONS STATS</b>
+<b>Total Trades:</b> ${stats.totalTrades}
+<b>Win Rate:</b> ${(stats.winRate * 100).toFixed(1)}%
+<b>Daily P/L:</b> $${stats.dailyLoss}
+        `);
     }
 
     getAverageWin() {
@@ -1245,7 +1317,7 @@ class DerivBot {
         }, 60000); // Every minute
     }
 
-    printFinalReport() {
+    async printFinalReport(reason = 'Manual Stop') {
         const stats = this.risk.getStats();
 
         console.log('\n' + '═'.repeat(60));
@@ -1271,6 +1343,44 @@ class DerivBot {
                 timestamp: new Date().toISOString(),
             }, null, 2)
         );
+
+        // Notify Telegram Shutdown
+        await this.sendTelegram(`
+⚠️ <b>Bot Shutting Down</b> [${this.config.SYMBOL}]
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+<b>Reason:</b> ${reason || 'Manual Stop'}
+<b>Total P/L:</b> $${stats.dailyLoss}
+<b>Trades:</b> ${stats.totalTrades} (${(stats.winRate * 100).toFixed(1)}% Win)
+<b>Final Balance:</b> $${this.client.balance.toFixed(2)}
+        `);
+    }
+
+    // ============================================================
+    // TELEGRAM HELPERS
+    // ============================================================
+    async sendTelegram(message) {
+        if (!this.tg) return;
+        try {
+            await this.tg.sendMessage(this.config.TELEGRAM_CHAT_ID, message, { parse_mode: 'HTML' });
+        } catch (error) {
+            this.logger.error('Telegram error', { error: error.message });
+        }
+    }
+
+    startSummaryTimer() {
+        setInterval(async () => {
+            if (!this.isRunning) return;
+            const stats = this.risk.getStats();
+            await this.sendTelegram(`
+📊 <b>PERIODIC SUMMARY</b> [${this.config.SYMBOL}]
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+<b>Daily P/L:</b> $${stats.dailyLoss}
+<b>Win Rate:</b> ${(stats.winRate * 100).toFixed(1)}%
+<b>Total Trades:</b> ${stats.totalTrades}
+<b>Drawdown:</b> ${stats.maxDrawdown}
+<b>Time:</b> ${new Date().toLocaleTimeString()}
+            `);
+        }, this.config.TELEGRAM_SUMMARY_INTERVAL_MS);
     }
 }
 
