@@ -381,10 +381,10 @@ class DerivAPIClient {
     handleContractsFor(message) {
         if (message.contracts_for) {
             this.contracts = message.contracts_for;
-            this.logger.info('✅ Contracts loaded', {
-                symbol: this.config.SYMBOL,
-                contractTypes: this.contracts.available,
-            });
+            // this.logger.info('✅ Contracts loaded', {
+            //     symbol: this.config.SYMBOL,
+            //     contractTypes: this.contracts.available,
+            // });
             this.subscribeTicks();
             this.getCandles();
         }
