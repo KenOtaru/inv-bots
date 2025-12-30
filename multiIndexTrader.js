@@ -111,6 +111,7 @@ let sessionStats = {
     totalTrades: 0,
     wins: 0,
     losses: 0,
+    realizedPnL: 0,
     startBalance: 0,
     startTime: new Date()
 };
@@ -155,7 +156,8 @@ function getTelegramSummary() {
 ✅ <b>Wins:</b> ${sessionStats.wins}
 ❌ <b>Losses:</b> ${sessionStats.losses}
 🔥 <b>Win Rate:</b> ${winRate}%
-💰 <b>Daily P/L:</b> $${formatNumber(dailyPnL)}
+� <b>Win Rate:</b> ${winRate}%
+💰 <b>Session P/L:</b> ${sessionStats.realizedPnL >= 0 ? '+' : ''}$${formatNumber(sessionStats.realizedPnL)}
     `;
 }
 
@@ -311,7 +313,7 @@ function logSessionStats() {
     const winRate = sessionStats.totalTrades > 0
         ? (sessionStats.wins / sessionStats.totalTrades * 100).toFixed(2)
         : 0;
-    const netPnL = currentBalance - sessionStats.startBalance;
+    const netPnL = sessionStats.realizedPnL;
     const runtime = Math.floor((Date.now() - sessionStats.startTime) / 1000 / 60);
 
     console.log();
@@ -319,8 +321,8 @@ function logSessionStats() {
     console.log(`${COLORS.bright}${COLORS.cyan}║                            SESSION STATISTICS                                ║${COLORS.reset}`);
     console.log(`${COLORS.bright}${COLORS.cyan}╠══════════════════════════════════════════════════════════════════════════════╣${COLORS.reset}`);
     console.log(`${COLORS.cyan}║${COLORS.reset}  Runtime: ${runtime} minutes                                                        ${COLORS.cyan}║${COLORS.reset}`);
-    console.log(`${COLORS.cyan}║${COLORS.reset}  Balance: $${formatNumber(currentBalance)} (Started: $${formatNumber(sessionStats.startBalance)})                         ${COLORS.cyan}║${COLORS.reset}`);
-    console.log(`${COLORS.cyan}║${COLORS.reset}  Net P&L: ${netPnL >= 0 ? COLORS.green + '+' : COLORS.red}$${formatNumber(Math.abs(netPnL))}${COLORS.reset}  |  Daily P&L: ${dailyPnL >= 0 ? COLORS.green + '+' : COLORS.red}$${formatNumber(Math.abs(dailyPnL))}${COLORS.reset}                              ${COLORS.cyan}║${COLORS.reset}`);
+    console.log(`${COLORS.cyan}║${COLORS.reset}  Balance: $${formatNumber(currentBalance)}                                                             ${COLORS.cyan}║${COLORS.reset}`);
+    console.log(`${COLORS.cyan}║${COLORS.reset}  Session P&L: ${netPnL >= 0 ? COLORS.green + '+' : COLORS.red}$${formatNumber(Math.abs(netPnL))}${COLORS.reset}                                                            ${COLORS.cyan}║${COLORS.reset}`);
     console.log(`${COLORS.cyan}║${COLORS.reset}  Trades: ${sessionStats.totalTrades}  |  Wins: ${COLORS.green}${sessionStats.wins}${COLORS.reset}  |  Losses: ${COLORS.red}${sessionStats.losses}${COLORS.reset}  |  Win Rate: ${winRate}%           ${COLORS.cyan}║${COLORS.reset}`);
     console.log(`${COLORS.cyan}║${COLORS.reset}  Active Positions: ${activePositions.size} / ${CONFIG.MAX_CONCURRENT_TRADES}                                            ${COLORS.cyan}║${COLORS.reset}`);
     console.log(`${COLORS.bright}${COLORS.cyan}╚══════════════════════════════════════════════════════════════════════════════╝${COLORS.reset}`);
@@ -631,10 +633,8 @@ function handleBalance(response) {
 
     if (oldBalance !== 0 && oldBalance !== currentBalance) {
         const change = currentBalance - oldBalance;
-        dailyPnL += change;
-
         const changeStr = change > 0 ? `+$${formatNumber(change)}` : `-$${formatNumber(Math.abs(change))}`;
-        log(`Balance: $${formatNumber(currentBalance)} (${changeStr}) | Daily P&L: $${formatNumber(dailyPnL)}`, 'INFO');
+        log(`Balance: $${formatNumber(currentBalance)} (${changeStr})`, 'INFO');
     }
 
     // Check daily loss limit
@@ -791,7 +791,11 @@ function handleContractUpdate(response) {
         log(`❌ TRADE LOST | Loss: -$${formatNumber(Math.abs(profit))}`, 'ERROR', position.symbol);
     }
 
-    sendTelegramMessage(`${profit >= 0 ? '🎉' : '😔'} <b>TRADE ${isWin ? 'WON' : 'LOST'}</b> [${position.symbol}]\n━━━━━━━━━━━━━━━━━\n<b>P/L:</b> $${formatNumber(profit)}\n<b>Daily P/L:</b> $${formatNumber(dailyPnL)}\n${getTelegramSummary()}`);
+    // Update global session stats
+    sessionStats.realizedPnL += profit;
+    dailyPnL = sessionStats.realizedPnL; // Sync dailyPnL with session PnL for risk checks
+
+    sendTelegramMessage(`${profit >= 0 ? '🎉' : '😔'} <b>TRADE ${isWin ? 'WON' : 'LOST'}</b> [${position.symbol}]\n━━━━━━━━━━━━━━━━━\n<b>P/L:</b> $${formatNumber(profit)}\n<b>Session P/L:</b> $${formatNumber(sessionStats.realizedPnL)}\n${getTelegramSummary()}`);
 
     // Clean up
     if (state) {
@@ -1001,8 +1005,7 @@ function shutdown() {
     logHeader('BOT SHUTDOWN');
 
     log(`Final Balance: $${formatNumber(currentBalance)}`, 'INFO');
-    log(`Session P&L: $${formatNumber(currentBalance - sessionStats.startBalance)}`, 'INFO');
-    log(`Daily P&L: $${formatNumber(dailyPnL)}`, 'INFO');
+    log(`Session P&L: $${formatNumber(sessionStats.realizedPnL)}`, 'INFO');
     log(`Total Trades: ${sessionStats.totalTrades}`, 'INFO');
     log(`Wins: ${sessionStats.wins} | Losses: ${sessionStats.losses}`, 'INFO');
 
