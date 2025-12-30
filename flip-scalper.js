@@ -204,14 +204,13 @@ class QuickFlipBot {
         });
 
         return `
-            📊 <b>Flip Scalper Session Summary</b>
-            ========================
-            <b>Total Trades:</b> ${wins + losses}
-            ✅ <b>Wins:</b> ${wins} | ❌ <b>Losses:</b> ${losses}
-            🔥 <b>Win Rate:</b> ${winRate}%
-            💰 <b>Total P/L:</b> $${totalProfit.toFixed(2)}
-            ${assetBreakdown ? `\n<b>Asset Breakdown:</b>${assetBreakdown}` : ''}
-        `;
+📊 <b>Flip Scalper Session Summary</b>
+========================
+<b>Total Trades:</b> ${wins + losses}
+✅ <b>Wins:</b> ${wins} | ❌ <b>Losses:</b> ${losses}
+🔥 <b>Win Rate:</b> ${winRate}%
+💰 <b>Total P/L:</b> $${totalProfit.toFixed(2)}
+${assetBreakdown ? `\n<b>Asset Breakdown:</b>${assetBreakdown}` : ''}`;
     }
 
     startTelegramTimer() {
@@ -231,7 +230,7 @@ class QuickFlipBot {
     handleMessage(msg) {
         // Handle pong
         if (msg.msg_type === 'ping') {
-            this.log('📡 Pong received', 'SYSTEM');
+            // this.log('📡 Pong received', 'SYSTEM');
             return;
         }
 
@@ -260,12 +259,12 @@ class QuickFlipBot {
             this.startClock();
         }
 
-        if (msg.msg_type === 'history') {
+        if (msg.msg_type === 'history' || msg.msg_type === 'candles') {
             const sym = msg.echo_req.ticks_history;
             if (msg.req_id === 1) { // daily_atr
-                this.calculateATR(sym, msg.history, msg.candles);
+                this.calculateATR(sym, msg.history || [], msg.candles || []);
             } else if (msg.req_id === 2) { // opening_candle
-                this.analyzeOpeningCandle(sym, msg.candles);
+                this.analyzeOpeningCandle(sym, msg.candles || []);
             }
         }
 
@@ -277,7 +276,7 @@ class QuickFlipBot {
             this.checkForReversal(msg.ohlc.symbol, msg.ohlc);
         }
 
-        if (msg.msg_type === 'candles') {
+        if (msg.msg_type === 'candles' && !msg.echo_req.req_id) {
             const sym = msg.echo_req.ticks_history;
             const asset = this.assets.get(sym);
             if (asset && msg.candles && msg.candles.length > 0) {
@@ -389,8 +388,9 @@ class QuickFlipBot {
             // Log periodic heartbeat
             const currentMinute = nowString.substring(14, 16);
             if (['00', '15', '30', '45'].includes(currentMinute)) {
-                if (Date.now() - asset.lastTimeLog > 600000) { // Every 10 mins
-                    this.log(`⏰ Current State: ${asset.state}`, 'INFO', symbol);
+                if (Date.now() - asset.lastTimeLog > 60000) { // Every minute during heartbeat check
+                    const atrStatus = this.dailyATR[symbol] ? '✅' : '❌';
+                    this.log(`💓 Heartbeat | State: ${asset.state} | ATR: ${atrStatus}`, 'INFO', symbol);
                     asset.lastTimeLog = Date.now();
                 }
             }
@@ -412,10 +412,22 @@ class QuickFlipBot {
     }
 
     calculateATR(symbol, history, candles) {
+        if (!candles || candles.length < 2) {
+            this.log('⚠️ Insufficient daily history for ATR calculation.', 'WARNING', symbol);
+            return;
+        }
+
         this.log('-'.repeat(60), 'STRATEGY', symbol);
-        this.log('📈 Calculating 14-Period Average True Range (ATR)...', 'STRATEGY', symbol);
+        this.log('📈 AVERAGE TRUE RANGE (ATR) REPORT', 'STRATEGY', symbol);
+
+        // Log the last few daily candles for transparency
+        const recentCandles = candles.slice(-3).map(c =>
+            `Day ${new Date(c.epoch * 1000).toISOString().split('T')[0]}: H:${c.high.toFixed(2)} L:${c.low.toFixed(2)} C:${c.close.toFixed(2)}`
+        ).join('\n');
+        this.log(`Recent Price History:\n${recentCandles}`, 'INFO', symbol);
 
         let trSum = 0;
+        let validIntervals = 0;
         for (let i = 1; i < candles.length; i++) {
             const current = candles[i];
             const prev = candles[i - 1];
@@ -424,24 +436,33 @@ class QuickFlipBot {
             const lc = Math.abs(current.low - prev.close);
             const tr = Math.max(hl, hc, lc);
             trSum += tr;
+            validIntervals++;
         }
 
-        this.dailyATR[symbol] = trSum / 14;
-        this.log(`✅ Daily ATR Calculated: ${this.dailyATR[symbol].toFixed(4)}`, 'SUCCESS', symbol);
-        this.log(`   Liquidity Threshold: ${(this.dailyATR[symbol] * 0.25).toFixed(4)}`, 'INFO', symbol);
+        this.dailyATR[symbol] = trSum / validIntervals;
+        const threshold = this.dailyATR[symbol] * 0.25;
+
+        const atrOutput =
+            `✅ Daily ATR Result: ${this.dailyATR[symbol].toFixed(4)}\n` +
+            `• Lookback: ${validIntervals} days\n` +
+            `• Required Box Range (25%): ≥ ${threshold.toFixed(4)}`;
+
+        this.log(atrOutput, 'SUCCESS', symbol, true);
     }
 
     getOpeningCandle(symbol) {
         const asset = this.assets.get(symbol);
-        this.log('🔍 Fetching opening candle data...', 'STRATEGY', symbol);
-        const endTime = asset.openTimeEpoch + (CONFIG.candle_timeframe * 60);
+        const startTime = asset.openTimeEpoch;
+        const endTime = startTime + (CONFIG.candle_timeframe * 60);
+
+        this.log(`🔍 Requesting candle [${new Date(startTime * 1000).toISOString()} to ${new Date(endTime * 1000).toISOString()}]`, 'STRATEGY', symbol);
 
         this.ws.send(JSON.stringify({
             ticks_history: symbol,
             adjust_start_time: 1,
             count: 1,
+            start: startTime,
             end: endTime,
-            start: 1,
             style: 'candles',
             granularity: CONFIG.candle_timeframe * 60,
             req_id: 2
@@ -451,11 +472,12 @@ class QuickFlipBot {
     analyzeOpeningCandle(symbol, candles) {
         const asset = this.assets.get(symbol);
         if (!candles || candles.length === 0) {
-            this.log('❌ No candle data received', 'ERROR', symbol);
+            this.log('❌ Opening candle data missing from API response', 'ERROR', symbol);
             return;
         }
 
-        const candle = candles[candles.length - 1];
+        const candle = candles[0]; // We requested count: 1
+        const candleTime = new Date(candle.epoch * 1000).toISOString();
         const range = candle.high - candle.low;
         const isGreen = candle.close > candle.open;
         const candleColor = isGreen ? '🟢 GREEN' : '🔴 RED';
@@ -465,12 +487,11 @@ class QuickFlipBot {
 
         const analysisOutput =
             `📊 OPENING CANDLE ANALYSIS: ${symbol}\n` +
+            `• Start Time: ${candleTime}\n` +
             `• Open:  ${candle.open.toFixed(4)} | Close: ${candle.close.toFixed(4)}\n` +
             `• High:  ${candle.high.toFixed(4)} | Low:   ${candle.low.toFixed(4)}\n` +
-            `• Color: ${isGreen ? 'BULLISH' : 'BEARISH'} ${candleColor}\n` +
-            `• Multiplier: x${asset.multiplier}\n` +
             `• Range: ${range.toFixed(4)} (${rangePercent}% of ATR)\n` +
-            `• Liquidity Target: ${liquidityThreshold.toFixed(4)}`;
+            `• Target: ≥ ${liquidityThreshold.toFixed(4)}`;
 
         this.log(analysisOutput, 'STRATEGY', symbol, true);
 
@@ -537,8 +558,6 @@ class QuickFlipBot {
         const body = Math.abs(candle.close - candle.open);
         const upperWick = candle.high - Math.max(candle.open, candle.close);
         const lowerWick = Math.min(candle.open, candle.close) - candle.low;
-
-        console.log('Hammer:', lowerWick >= (2 * body) && upperWick < body && body > 0);
 
         // Long (Hammer) below box
         if (asset.box.direction === 'DOWN' && candle.close < asset.box.low) {
@@ -657,8 +676,8 @@ class QuickFlipBot {
         const profitPercent = ((profit / contract.buy_price) * 100).toFixed(2);
 
         // Log update every few mins or significant profit changes
-        if (Math.random() < 0.1) {
-            this.log(`� Monitoring ${asset.symbol}: ${profitPercent}% | $${profit.toFixed(2)}`, 'TRADE', asset.symbol);
+        if (Math.random() < 0.3) {
+            this.log(`📈 Monitoring ${asset.symbol}: ${profitPercent}% | $${profit.toFixed(2)}`, 'TRADE', asset.symbol);
         }
     }
 
