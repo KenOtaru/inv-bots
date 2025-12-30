@@ -129,7 +129,7 @@ const CONFIG = {
     INVESTMENT_CAPITAL: 500,     // Base all risk/stake on this amount
 
     // TELEGRAM (From ncluadeDiffer.js)
-    TELEGRAM_TOKEN: '8288121368:AAHYRb0Stk5dWUWN1iTYbdO3fyIEwIuZQR8',
+    TELEGRAM_TOKEN: '8132747567:AAFtaN1j9U5HgNiK_TVE7axWzFDifButwKk',
     TELEGRAM_CHAT_ID: '752497117',
     TELEGRAM_SUMMARY_INTERVAL_MS: 1800000, // 30 Minutes
 
