@@ -1,0 +1,123 @@
+[2025-12-30 17:06:38.606] ERROR: API Error: Input validation failed: amount, symbol, limit_order/take_profit, limit_order/stop_loss | {
+  "code": "InputValidationFailed",
+  "details": {
+    "amount": "Expected number - got null.",
+    "limit_order/stop_loss": "Expected number - got null.",
+    "limit_order/take_profit": "Expected number - got null.",
+    "symbol": "Missing property."
+  }
+}
+[2025-12-30 17:06:40.602] ERROR: API Error: Input validation failed: symbol, amount, limit_order/stop_loss, limit_order/take_profit | {
+  "code": "InputValidationFailed",
+  "details": {
+    "amount": "Expected number - got null.",
+    "limit_order/stop_loss": "Expected number - got null.",
+    "limit_order/take_profit": "Expected number - got null.",
+    "symbol": "Missing property."
+  }
+}
+[2025-12-30 17:06:42.623] ERROR: API Error: Input validation failed: limit_order/stop_loss, limit_order/take_profit, symbol, amount | {
+  "code": "InputValidationFailed",
+  "details": {
+    "amount": "Expected number - got null.",
+    "limit_order/stop_loss": "Expected number - got null.",
+    "limit_order/take_profit": "Expected number - got null.",
+    "symbol": "Missing property."
+  }
+}
+[2025-12-30 17:06:44.639] ERROR: API Error: Input validation failed: limit_order/stop_loss, limit_order/take_profit, symbol, amount | {
+  "code": "InputValidationFailed",
+  "details": {
+    "amount": "Expected number - got null.",
+    "limit_order/stop_loss": "Expected number - got null.",
+    "limit_order/take_profit": "Expected number - got null.",
+    "symbol": "Missing property."
+  }
+}
+[2025-12-30 17:06:46.617] ERROR: API Error: Input validation failed: limit_order/stop_loss, limit_order/take_profit, amount, symbol | {
+  "code": "InputValidationFailed",
+  "details": {
+    "amount": "Expected number - got null.",
+    "limit_order/stop_loss": "Expected number - got null.",
+    "limit_order/take_profit": "Expected number - got null.",
+    "symbol": "Missing property."
+  }
+}
+[2025-12-30 17:06:48.708] ERROR: API Error: Input validation failed: limit_order/take_profit, limit_order/stop_loss, symbol, amount | {
+  "code": "InputValidationFailed",
+  "details": {
+    "amount": "Expected number - got null.",
+    "limit_order/stop_loss": "Expected number - got null.",
+    "limit_order/take_profit": "Expected number - got null.",
+    "symbol": "Missing property."
+  }
+}
+[2025-12-30 17:06:50.608] ERROR: API Error: Input validation failed: amount, symbol, limit_order/take_profit, limit_order/stop_loss | {
+  "code": "InputValidationFailed",
+  "details": {
+    "amount": "Expected number - got null.",
+    "limit_order/stop_loss": "Expected number - got null.",
+    "limit_order/take_profit": "Expected number - got null.",
+    "symbol": "Missing property."
+  }
+}
+[2025-12-30 17:07:14.658] ERROR: API Error: Input validation failed: symbol, amount, limit_order/take_profit, limit_order/stop_loss | {
+  "code": "InputValidationFailed",
+  "details": {
+    "amount": "Expected number - got null.",
+    "limit_order/stop_loss": "Expected number - got null.",
+    "limit_order/take_profit": "Expected number - got null.",
+    "symbol": "Missing property."
+  }
+}
+[2025-12-30 17:07:16.601] ERROR: API Error: Input validation failed: limit_order/take_profit, limit_order/stop_loss, amount, symbol | {
+  "code": "InputValidationFailed",
+  "details": {
+    "amount": "Expected number - got null.",
+    "limit_order/stop_loss": "Expected number - got null.",
+    "limit_order/take_profit": "Expected number - got null.",
+    "symbol": "Missing property."
+  }
+}
+[2025-12-30 17:07:18.603] ERROR: API Error: Input validation failed: limit_order/take_profit, limit_order/stop_loss, amount, symbol | {
+  "code": "InputValidationFailed",
+  "details": {
+    "amount": "Expected number - got null.",
+    "limit_order/stop_loss": "Expected number - got null.",
+    "limit_order/take_profit": "Expected number - got null.",
+    "symbol": "Missing property."
+  }
+}
+[2025-12-30 17:07:50.632] ERROR: API Error: Input validation failed: limit_order/take_profit, limit_order/stop_loss, symbol, amount | {
+  "code": "InputValidationFailed",
+  "details": {
+    "amount": "Expected number - got null.",
+    "limit_order/stop_loss": "Expected number - got null.",
+    "limit_order/take_profit": "Expected number - got null.",
+    "symbol": "Missing property."
+  }
+}
+[2025-12-30 17:18:30.650] ERROR: API Error: Invalid input (duration or date_expiry) for this contract type (MULTDOWN). | {
+  "code": "ContractCreationFailure",
+  "details": {
+    "field": "duration"
+  }
+}
+[2025-12-30 17:18:32.722] ERROR: API Error: Invalid input (duration or date_expiry) for this contract type (MULTDOWN). | {
+  "code": "ContractCreationFailure",
+  "details": {
+    "field": "duration"
+  }
+}
+[2025-12-30 17:18:34.733] ERROR: API Error: Invalid input (duration or date_expiry) for this contract type (MULTDOWN). | {
+  "code": "ContractCreationFailure",
+  "details": {
+    "field": "duration"
+  }
+}
+[2025-12-30 17:18:36.662] ERROR: API Error: Invalid input (duration or date_expiry) for this contract type (MULTDOWN). | {
+  "code": "ContractCreationFailure",
+  "details": {
+    "field": "duration"
+  }
+}
