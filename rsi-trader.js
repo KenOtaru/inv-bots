@@ -38,7 +38,7 @@ const CONFIG = {
     // RISK MANAGEMENT (CRITICAL - ADJUST CAREFULLY)
     RISK_PERCENT_PER_TRADE: 0.02, // 2% of account balance per trade (0.01 = 1%)
     MIN_STAKE: 1, // Minimum stake in USD
-    MAX_STAKE: 100, // Maximum stake in USD
+    MAX_STAKE: 10, // Maximum stake in USD
     MAX_DAILY_LOSS_PERCENT: 0.05, // 5% max daily loss (bot stops)
     MAX_CONSECUTIVE_LOSSES: 3, // Stop after consecutive losses
 
@@ -66,7 +66,7 @@ const CONFIG = {
 
     // LOGGING
     LOG_LEVEL: 'info', // error, warn, info, debug
-    LOG_FILE_ENABLED: true,
+    LOG_FILE_ENABLED: false,
     LOG_FILE_MAX_SIZE: '10m',
     LOG_FILE_MAX_FILES: '5',
 };
@@ -121,20 +121,20 @@ if (CONFIG.LOG_FILE_ENABLED) {
 }
 
 // Logger for trades specifically
-const tradeLogger = winston.createLogger({
-    level: 'info',
-    format: winston.format.combine(
-        winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss.SSS' }),
-        winston.format.json()
-    ),
-    transports: [
-        new winston.transports.File({
-            filename: path.join(__dirname, 'logs', 'trades.log'),
-            maxsize: CONFIG.LOG_FILE_MAX_SIZE,
-            maxFiles: CONFIG.LOG_FILE_MAX_FILES,
-        })
-    ]
-});
+// const tradeLogger = winston.createLogger({
+//     level: 'info',
+//     format: winston.format.combine(
+//         winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss.SSS' }),
+//         winston.format.json()
+//     ),
+//     transports: [
+//         new winston.transports.File({
+//             filename: path.join(__dirname, 'logs', 'trades.log'),
+//             maxsize: CONFIG.LOG_FILE_MAX_SIZE,
+//             maxFiles: CONFIG.LOG_FILE_MAX_FILES,
+//         })
+//     ]
+// });
 
 // ============================================================
 // DERIV API CLIENT
@@ -157,6 +157,17 @@ class DerivAPIClient {
         this.maxReconnectAttempts = 5;
         this.heartbeatInterval = null;
         this.messageQueue = [];
+    }
+
+    logBox(message, color = '\x1b[36m') { // Default Cyan
+        const reset = '\x1b[0m';
+        const lines = message.split('\n');
+        const width = 60;
+        console.log(`${color}┏${'━'.repeat(width)}┓${reset}`);
+        lines.forEach(line => {
+            console.log(`${color}┃ ${line.padEnd(width - 2)} ┃${reset}`);
+        });
+        console.log(`${color}┗${'━'.repeat(width)}┓${reset}`);
     }
 
     connect() {
@@ -326,16 +337,9 @@ class DerivAPIClient {
                 targetProfit: this.lastTargetProfit,
                 stopLoss: this.lastStopLoss
             };
-            tradeLogger.info('TRADE_BUY', {
-                contractId: message.buy.contract_id,
-                symbol: this.config.SYMBOL,
-                contractType: this.config.CONTRACT_TYPE,
-                stake: this.lastStake,
-                multiplier: this.config.MULTIPLIER,
-                takeProfit: this.lastTargetProfit,
-                stopLoss: this.lastStopLoss,
-                balance: this.balance
-            });
+
+            // Subscribe to contract updates for real-time monitoring
+            this.send({ proposal_open_contract: 1, contract_id: message.buy.contract_id, subscribe: 1 });
         }
     }
 
@@ -347,36 +351,46 @@ class DerivAPIClient {
             if (contract.is_sold) {
                 this.handleContractClose(contract);
             } else {
-                // Log contract progress periodically
+                // Log contract progress frequently
                 const profit = parseFloat(contract.profit);
-                const profitPercent = (profit / this.activeContract.stake * 100).toFixed(2);
-                this.logger.debug(`Contract ${contract.contract_id} progress: ${profitPercent}% (${profit.toFixed(2)} USD)`);
+                const profitPercent = ((profit / this.activeContract.stake) * 100).toFixed(2);
+                const color = profit >= 0 ? '\x1b[32m' : '\x1b[31m'; // Green / Red
+                const reset = '\x1b[0m';
+
+                // Log frequently for visibility
+                if (Math.random() < 0.5) {
+                    this.logger.info(`📈 Trade Monitoring: ${this.config.SYMBOL} | ${color}${profitPercent}% ($${profit.toFixed(2)})${reset}`);
+                }
             }
         }
     }
 
     handleContractClose(contract) {
         const profit = parseFloat(contract.profit);
-        const profitPercent = (profit / this.activeContract.stake * 100).toFixed(2);
+        const profitPercent = ((profit / this.activeContract.stake) * 100).toFixed(2);
         const isWin = profit > 0;
+        const color = isWin ? '\x1b[32m' : '\x1b[31m';
+        const reset = '\x1b[0m';
 
-        this.logger.info(`🏁 Contract closed: ${isWin ? 'WIN ✅' : 'LOSS ❌'}`, {
-            contractId: contract.contract_id,
-            profit: profit.toFixed(2),
-            profitPercent: `${profitPercent}%`,
-            finalPrice: contract.exit_tick,
-            duration: `${((Date.now() - this.activeContract.startTime) / 1000).toFixed(1)}s`
-        });
+        const summary =
+            `🏁 TRADE COMPLETED: ${this.config.SYMBOL}\n` +
+            `• Result:   ${isWin ? 'WIN ✅' : 'LOSS ❌'}\n` +
+            `• P/L:      ${color}$${profit.toFixed(2)} (${profitPercent}%)${reset}\n` +
+            `• Entry:    ${contract.buy_price.toFixed(2)} | Exit: ${contract.exit_tick.toFixed(2)}\n` +
+            `• ID:       ${contract.contract_id}\n` +
+            `• Duration: ${((Date.now() - this.activeContract.startTime) / 1000).toFixed(1)}s`;
 
-        tradeLogger.info('TRADE_SELL', {
-            contractId: contract.contract_id,
-            profit: profit,
-            profitPercent: profitPercent,
-            isWin: isWin,
-            finalPrice: contract.exit_tick,
-            duration: (Date.now() - this.activeContract.startTime) / 1000,
-            balance: this.balance
-        });
+        this.logBox(summary, color);
+
+        // tradeLogger.info('TRADE_SELL', {
+        //     contractId: contract.contract_id,
+        //     profit: profit,
+        //     profitPercent: profitPercent,
+        //     isWin: isWin,
+        //     finalPrice: contract.exit_tick,
+        //     duration: (Date.now() - this.activeContract.startTime) / 1000,
+        //     balance: this.balance
+        // });
 
         // Emit event for bot to handle
         if (this.onContractClosed) {
@@ -476,6 +490,13 @@ class DerivAPIClient {
     }
 
     subscribeTicks() {
+        const welcome =
+            `📡 MONITORING ACTIVE: ${this.config.SYMBOL}\n` +
+            `• Multiplier: x${this.config.MULTIPLIER}\n` +
+            `• Settings:   RSI ${this.config.STRATEGY.RSI_PERIOD} | ${this.config.STRATEGY.OVERSOLD}-${this.config.STRATEGY.OVERBOUGHT}\n` +
+            `• Status:     Waiting for signal...`;
+        this.logBox(welcome);
+
         this.logger.info(`📈 Subscribing to ticks: ${this.config.SYMBOL}`);
         this.send({ ticks: this.config.SYMBOL, subscribe: 1 });
         this.ticks = []; // Reset tick history
@@ -601,7 +622,11 @@ class RSIStrategy {
         const rsi = this.calculateRSI(this.config.STRATEGY.RSI_PERIOD);
         if (rsi === null) return null;
 
-        this.logger.debug(`RSI: ${rsi.toFixed(2)}`);
+        // Log analysis activity
+        if (Math.random() < 0.1) {
+            const bar = '█'.repeat(Math.round(rsi / 4)) + '░'.repeat(25 - Math.round(rsi / 4));
+            this.logger.info(`🔍 Analysis [${bar}] RSI: ${rsi.toFixed(2)} | Strength: ${this.signalStrength}`);
+        }
 
         // Generate signals
         let signal = null;
@@ -616,13 +641,15 @@ class RSIStrategy {
         if (signal === this.lastSignal) {
             this.signalStrength++;
         } else {
-            this.signalStrength = 1;
+            this.signalStrength = signal ? 1 : 0;
             this.lastSignal = signal;
         }
 
         // Return signal if strength is sufficient
         if (signal && this.signalStrength >= this.config.STRATEGY.MIN_SIGNAL_STRENGTH) {
-            this.logger.info(`🎯 Trade signal: ${signal} (RSI: ${rsi.toFixed(2)}, Strength: ${this.signalStrength})`);
+            const color = signal === 'MULTUP' ? '\x1b[32m' : '\x1b[31m';
+            const reset = '\x1b[0m';
+            this.logger.info(`🎯 Signal confirmed: ${color}${signal}${reset} (RSI: ${rsi.toFixed(2)}, Strength: ${this.signalStrength})`);
             return signal;
         }
 
