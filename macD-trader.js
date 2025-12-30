@@ -1,4 +1,5 @@
 const WebSocket = require('ws');
+const TelegramBot = require('node-telegram-bot-api');
 
 // ================= CONFIGURATION =================
 const CONFIG = {
@@ -24,7 +25,12 @@ const CONFIG = {
     // Video suggests 1:3 Risk:Reward. 
     // Example: If Stake is $10, and you want to risk $5 max, TP should be $15.
     STOP_LOSS_AMT: 5,   // Stop Loss in USD
-    TAKE_PROFIT_AMT: 15 // Take Profit in USD
+    TAKE_PROFIT_AMT: 15, // Take Profit in USD
+
+    // TELEGRAM (From indyBot.js)
+    TELEGRAM_TOKEN: '8288121368:AAHYRb0Stk5dWUWN1iTYbdO3fyIEwIuZQR8',
+    TELEGRAM_CHAT_ID: '752497117',
+    TELEGRAM_SUMMARY_INTERVAL_MS: 1800000 // 30 Minutes
 };
 
 // ================= GLOBAL VARIABLES =================
@@ -33,6 +39,21 @@ let candles = [];
 let currentStake = CONFIG.STAKE;
 let openContractId = null;
 let activeContractData = null; // Track start time and extra details
+
+// Session Stats
+let stats = {
+    totalTrades: 0,
+    totalWins: 0,
+    totalLosses: 0,
+    totalProfit: 0,
+    startTime: Date.now()
+};
+
+// Telegram Bot
+let tg = null;
+if (CONFIG.TELEGRAM_TOKEN) {
+    tg = new TelegramBot(CONFIG.TELEGRAM_TOKEN, { polling: false });
+}
 
 // ================= UTILS =================
 function logBox(message, color = '\x1b[36m') { // Default Cyan
@@ -50,6 +71,7 @@ function logBox(message, color = '\x1b[36m') { // Default Cyan
 ws.on('open', function open() {
     console.log(`[${new Date().toISOString()}] Connected to Deriv WS.`);
     authorize();
+    startSummaryTimer();
 });
 
 ws.on('message', function incoming(data) {
@@ -64,6 +86,17 @@ ws.on('message', function incoming(data) {
         console.log(`[AUTH] Logged in as ${msg.authorize.email}`);
         console.log(`[BALANCE] Current Balance: ${msg.authorize.balance} ${msg.authorize.currency}`);
         subscribeCandles();
+
+        // Notify Startup
+        sendTelegramMessage(`
+🚀 <b>MACD Bot Started</b> [${CONFIG.SYMBOL}]
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+<b>Timeframe:</b> ${CONFIG.TIMEFRAME / 60}m
+<b>Stake:</b> $${CONFIG.STAKE}
+<b>Multiplier:</b> x${CONFIG.MULTIPLIER}
+<b>Risk:</b> SL $${CONFIG.STOP_LOSS_AMT} | TP $${CONFIG.TAKE_PROFIT_AMT}
+<b>Status:</b> Analyzing Market...
+        `);
     }
 
     if (msg.msg_type === 'ohlc') {
@@ -75,6 +108,17 @@ ws.on('message', function incoming(data) {
         console.log(`[TRADE] Contract Bought! ID: ${msg.buy.contract_id}`);
         console.log(`[TRADE] Details: ${msg.buy.longcode}`);
         openContractId = msg.buy.contract_id;
+
+        // Notify Trade Entry
+        sendTelegramMessage(`
+🎯 <b>TRADE OPENED</b> [${CONFIG.SYMBOL}]
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+<b>Direction:</b> ${activeContractData.direction === 'UP' ? 'LONG 📈' : 'SHORT 📉'}
+<b>Stake:</b> $${currentStake.toFixed(2)}
+<b>Multiplier:</b> x${CONFIG.MULTIPLIER}
+<b>Entry Price:</b> ${msg.buy.buy_price.toFixed(2)}
+        `);
+
         // Subscribe to transaction updates to check for win/loss
         ws.send(JSON.stringify({ proposal_open_contract: 1, contract_id: openContractId }));
     }
@@ -209,11 +253,31 @@ function checkStrategy() {
     // BUY SIGNAL: Green crosses ABOVE Red && MACD > 0
     if (greenPrev <= redPrev && greenCurrent > redCurrent && macdValue > 0) {
         logBox("✅ BUY SIGNAL DETECTED\n• Strategy: MACD Divergence + LWMA Cross", '\x1b[32m');
+
+        sendTelegramMessage(`
+✳️ <b>BUY SIGNAL</b> [${CONFIG.SYMBOL}]
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+<b>MACD:</b> ${macdValue.toFixed(4)}
+<b>Green:</b> ${greenCurrent.toFixed(3)}
+<b>Red:</b> ${redCurrent.toFixed(3)}
+<b>Action:</b> Opening Long...
+        `);
+
         placeTrade('UP');
     }
     // SELL SIGNAL: Green crosses BELOW Red && MACD < 0
     else if (greenPrev >= redPrev && greenCurrent < redCurrent && macdValue < 0) {
         logBox("🔻 SELL SIGNAL DETECTED\n• Strategy: MACD Divergence + LWMA Cross", '\x1b[31m');
+
+        sendTelegramMessage(`
+🔻 <b>SELL SIGNAL</b> [${CONFIG.SYMBOL}]
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+<b>MACD:</b> ${macdValue.toFixed(4)}
+<b>Green:</b> ${greenCurrent.toFixed(3)}
+<b>Red:</b> ${redCurrent.toFixed(3)}
+<b>Action:</b> Opening Short...
+        `);
+
         placeTrade('DOWN');
     }
 }
@@ -222,7 +286,10 @@ function placeTrade(direction) {
     const contractType = direction === 'UP' ? 'MULTUP' : 'MULTDOWN';
     console.log(`[TRADE] Placing ${direction} order with stake $${currentStake}...`);
 
-    activeContractData = { startTime: Date.now() };
+    activeContractData = {
+        startTime: Date.now(),
+        direction: direction
+    };
 
     const request = {
         buy: 1,
@@ -264,6 +331,27 @@ function handleTradeResult(contract) {
         `• Duration: ${duration}`;
 
     logBox(summary, color);
+
+    // Update Stats
+    stats.totalTrades++;
+    if (isWin) stats.totalWins++;
+    else stats.totalLosses++;
+    stats.totalProfit += profit;
+
+    // Notify Telegram
+    sendTelegramMessage(`
+${isWin ? '✅' : '❌'} <b>TRADE COMPLETED</b> [${CONFIG.SYMBOL}]
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+<b>Result:</b> ${isWin ? 'WIN' : 'LOSS'}
+<b>P/L:</b> $${profit.toFixed(2)} (${profitPercent}%)
+<b>Entry:</b> ${contract.buy_price.toFixed(2)}
+<b>Exit:</b> ${contract.exit_tick.toFixed(2)}
+<b>Duration:</b> ${duration}
+
+📊 <b>SESSIONS STATS</b>
+<b>Win Rate:</b> ${((stats.totalWins / stats.totalTrades) * 100).toFixed(1)}%
+<b>Daily P/L:</b> $${stats.totalProfit.toFixed(2)} (Net)
+    `);
 
     if (CONFIG.USE_MARTINGALE) {
         if (profit < 0) {
@@ -336,4 +424,32 @@ function calculateEMA(data, period) {
         results.push((data[i] * k) + (results[i - 1] * (1 - k)));
     }
     return results;
+}
+
+// ================= TELEGRAM HELPERS =================
+
+async function sendTelegramMessage(message) {
+    if (!tg) return;
+    try {
+        await tg.sendMessage(CONFIG.TELEGRAM_CHAT_ID, message, { parse_mode: 'HTML' });
+    } catch (error) {
+        console.error(`[TELEGRAM ERROR] ${error.message}`);
+    }
+}
+
+function startSummaryTimer() {
+    setInterval(async () => {
+        const winRate = stats.totalTrades > 0 ? ((stats.totalWins / stats.totalTrades) * 100).toFixed(1) : "0.0";
+        const uptime = Math.floor((Date.now() - stats.startTime) / 3600000);
+
+        await sendTelegramMessage(`
+📊 <b>MACD PERIODIC SUMMARY</b> [${CONFIG.SYMBOL}]
+━━━━━━━━━━━━━━━━━━━━━━━━━━
+<b>Daily P/L:</b> $${stats.totalProfit.toFixed(2)}
+<b>Win Rate:</b> ${winRate}%
+<b>Total Trades:</b> ${stats.totalTrades} (W:${stats.totalWins} / L:${stats.totalLosses})
+<b>Uptime:</b> ${uptime} Hours
+<b>Time:</b> ${new Date().toLocaleTimeString()}
+        `);
+    }, CONFIG.TELEGRAM_SUMMARY_INTERVAL_MS);
 }
