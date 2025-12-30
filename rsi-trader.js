@@ -29,6 +29,7 @@ const CONFIG = {
     // DERIV API CREDENTIALS
     DERIV_TOKEN: 'rgNedekYXvCaPeP', // Get from: deriv.com > Account Settings > API Token
     DERIV_WS_URL: 'wss://ws.derivws.com/websockets/v3?app_id=1089',
+    INVESTMENT_CAPITAL: 500, // Fixed capital pool to base risk on (e.g., $500)
 
     // TRADING PARAMETERS
     SYMBOL: 'R_100', // Synthetic Index: R_100 (Volatility 100 Index)
@@ -167,7 +168,7 @@ class DerivAPIClient {
         lines.forEach(line => {
             console.log(`${color}┃ ${line.padEnd(width - 2)} ┃${reset}`);
         });
-        console.log(`${color}┗${'━'.repeat(width)}┓${reset}`);
+        console.log(`${color}┗${'━'.repeat(width)}┛${reset}`);
     }
 
     connect() {
@@ -511,7 +512,9 @@ class DerivAPIClient {
             return Math.min(this.config.BASE_STAKE, this.config.MAX_STAKE);
         }
 
-        const stake = this.balance * this.config.RISK_PERCENT_PER_TRADE;
+        // Base risk on Investment Capital rather than entire balance
+        const baseCapital = this.config.INVESTMENT_CAPITAL || this.balance;
+        const stake = baseCapital * this.config.RISK_PERCENT_PER_TRADE;
         return Math.max(this.config.MIN_STAKE, Math.min(stake, this.config.MAX_STAKE));
     }
 
@@ -694,6 +697,7 @@ class DerivBot {
         this.logger.info('Configuration', {
             symbol: this.config.SYMBOL,
             multiplier: this.config.MULTIPLIER,
+            investmentCapital: `$${this.config.INVESTMENT_CAPITAL.toFixed(2)}`,
             riskPerTrade: `${(this.config.RISK_PERCENT_PER_TRADE * 100).toFixed(2)}%`,
             maxDailyLoss: `${(this.config.MAX_DAILY_LOSS_PERCENT * 100).toFixed(2)}%`
         });
@@ -780,11 +784,12 @@ class DerivBot {
             this.logger.warn(`💸 Loss. Profit: ${result.profit.toFixed(2)} USD`);
         }
 
-        // Check daily loss limit
-        const maxDailyLoss = this.config.MAX_DAILY_LOSS_PERCENT * this.client.balance;
+        // Check daily loss limit based on Investment Capital
+        const baseCapital = this.config.INVESTMENT_CAPITAL || this.client.balance;
+        const maxDailyLoss = this.config.MAX_DAILY_LOSS_PERCENT * baseCapital;
         if (this.dailyLoss <= -maxDailyLoss) {
             this.logger.error(`☠️ Daily loss limit reached! Stopping trading.`);
-            this.logger.error(`Daily loss: ${this.dailyLoss.toFixed(2)} USD, Limit: ${maxDailyLoss.toFixed(2)} USD`);
+            this.logger.error(`Daily loss: $${Math.abs(this.dailyLoss).toFixed(2)}, Limit: $${maxDailyLoss.toFixed(2)}`);
             this.isRunning = false;
         }
 
@@ -805,11 +810,12 @@ class DerivBot {
             return false;
         }
 
-        // Check daily loss
-        const maxDailyLoss = this.config.MAX_DAILY_LOSS_PERCENT * this.client.balance;
+        // Check daily loss relative to Investment Capital
+        const baseCapital = this.config.INVESTMENT_CAPITAL || this.client.balance;
+        const maxDailyLoss = this.config.MAX_DAILY_LOSS_PERCENT * baseCapital;
         if (this.dailyLoss <= -maxDailyLoss) {
             if (this.isRunning) {
-                this.logger.error(`Daily loss limit exceeded. Trading stopped.`);
+                this.logger.error(`Daily loss limit exceeded ($${Math.abs(this.dailyLoss).toFixed(2)} / $${maxDailyLoss.toFixed(2)} limit). Trading stopped.`);
                 this.isRunning = false;
             }
             return false;
