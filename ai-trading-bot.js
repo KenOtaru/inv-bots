@@ -126,6 +126,10 @@ class AIDigitDifferBot {
         this.totalTrades = 0;
         this.totalWins = 0;
         this.totalLosses = 0;
+        this.consecutiveLosses2 = 0;
+        this.consecutiveLosses3 = 0;
+        this.consecutiveLosses4 = 0;
+        this.consecutiveLosses5 = 0;
         this.totalPnL = 0;
         this.balance = 0;
         this.sessionStartBalance = 0;
@@ -1372,6 +1376,11 @@ class AIDigitDifferBot {
             this.totalLosses++;
             this.consecutiveLosses++;
 
+            if (this.consecutiveLosses === 2) this.consecutiveLosses2++;
+            else if (this.consecutiveLosses === 3) this.consecutiveLosses3++;
+            else if (this.consecutiveLosses === 4) this.consecutiveLosses4++;
+            else if (this.consecutiveLosses === 5) this.consecutiveLosses5++;
+
             // Martingale stake increase
             this.currentStake = Math.min(
                 Math.ceil(this.currentStake * this.config.multiplier * 100) / 100,
@@ -1523,14 +1532,19 @@ class AIDigitDifferBot {
             : 0;
 
         return `<b>Trading Session Summary</b>
-            ━━━━━━━━━━━━━━━━━━━━━━━━
-            📊 <b>Total Trades:</b> ${this.totalTrades}
-            ✅ <b>Wins:</b> ${this.totalWins}
-            ❌ <b>Losses:</b> ${this.totalLosses}
-            📈 <b>Win Rate:</b> ${winRate}%
-            💰 <b>Total P/L:</b> $${this.totalPnL.toFixed(2)}
-            🏦 <b>Final Balance:</b> $${this.balance.toFixed(2)}
-        `;
+━━━━━━━━━━━━━━━━━━━━━━━━
+📊 <b>Total Trades:</b> ${this.totalTrades}
+✅ <b>Wins:</b> ${this.totalWins}
+❌ <b>Losses:</b> ${this.totalLosses}
+� <b>Win Rate:</b> ${winRate}%
+
+<b>x2 Losses:</b> ${this.consecutiveLosses2}
+<b>x3 Losses:</b> ${this.consecutiveLosses3}
+<b>x4 Losses:</b> ${this.consecutiveLosses4}
+<b>x5 Losses:</b> ${this.consecutiveLosses5}
+
+💰 <b>Total P/L:</b> $${this.totalPnL.toFixed(2)}
+🏦 <b>Final Balance:</b> $${this.balance.toFixed(2)}`;
     }
 
     async sendTelegramMessage(message) {
@@ -1567,6 +1581,11 @@ class AIDigitDifferBot {
 <b>Loss:</b> -$${Math.abs(profit).toFixed(2)}
 
 <b>Consecutive Losses:</b> ${this.consecutiveLosses} / ${this.config.maxConsecutiveLosses}${riskWarning}
+
+<b>x2 Losses:</b> ${this.consecutiveLosses2}
+<b>x3 Losses:</b> ${this.consecutiveLosses3}
+<b>x4 Losses:</b> ${this.consecutiveLosses4}
+<b>x5 Losses:</b> ${this.consecutiveLosses5}
 
 <b>Current Balance:</b> $${this.balance.toFixed(2)}
 <b>Total P/L:</b> $${this.totalPnL.toFixed(2)}
