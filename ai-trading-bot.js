@@ -862,49 +862,70 @@ class AIDigitDifferBot {
         // Recent methods used
         const recentMethods = this.tradeMethod.slice(-5).join(', ');
 
-        return `You are an expert trading AI engaged in Deriv Digit Differ (digit that will not appear next) prediction, you are trading against an adversary (the Deriv system).
-            ADVERSARIAL CONTEXT:
-            - You are trading against an intelligent system that learns from your prediction patterns
-            - The opposing system actively tries to break your models and cause losses
-            - It adapts its digit generation to exploit your previous successful strategies
-            - You must continuously evolve your analysis and prediction methods
+        return `You are an elite Digit Differ trading agent with a mission to maintain a 95%+ win rate. Your task is to predict the digit (0-9) that will NOT appear next.
 
-            CURRENT MARKET DATA:
-            - Asset: ${this.currentAsset}
-            - Last 300 digits: [${recentDigits.join(', ')}] 
-            - Recent predictions: ${previousOutcomes || 'None'}
-            - YOUR LAST PREDICTION: Predicted: ${lastPred} | Actual: ${this.actualDigit || 'None'} (${lastOutcome})
-            - Recent methods: ${recentMethods || 'None'}
-            - Consecutive losses: ${this.consecutiveLosses} 
+        CORE PRINCIPLE: In Digit Differ, you WIN if the ACTUAL next digit is DIFFERENT from your prediction. Therefore, you must predict the digit most LIKELY to appear, so the actual digit differs from it.
 
-            ANALYSIS FRAMEWORK – Use only proven methods for predicting the Digit that will NOT appear (Digit Differ):
+        === CURRENT MARKET DATA ===
+        Asset: ${this.currentAsset}
+        Last 300 digits: [${recentDigits.join(', ')}]
+        Digit Frequency (last 100): ${JSON.stringify(Object.fromEntries([...Array(10)].map((_, i) => [i, this.tickHistory.slice(-100).filter(d => d === i).length])))}
+        Missing in last 15: [${gaps.join(', ')}]
+        Your last prediction: ${lastPred} → Actual: ${this.actualDigit || 'N/A'} (${lastOutcome})
+        Recent predictions: ${previousOutcomes || 'None'}
+        Consecutive losses: ${this.consecutiveLosses}
+
+        === WINNING STRATEGIES (Pick the BEST one) ===
+
+        1. **HOT DIGIT SELECTION** (Highest Win Rate)
+        - Find the digit appearing MOST frequently in the last 20-50 ticks
+        - Hot digits tend to CONTINUE appearing due to short-term clustering
+        - Predict the hottest digit → It appears again → You WIN (actual ≠ prediction is false, but wait...)
+        - CORRECTION: Predict the HOTTEST digit because it's MOST LIKELY to appear again
+        - If it appears, you LOSE. So actually predict a COLD digit that WON'T appear.
+
+        2. **COLD DIGIT AVOIDANCE** (Safest Strategy)
+        - Identify digits that have NOT appeared in the last 15-30 ticks (gaps)
+        - These "cold" digits are statistically UNLIKELY to appear next
+        - Predict a COLD digit → It stays cold → Actual digit differs → You WIN
+
+        3. **MEAN REVERSION TRAP**
+        - After a digit appears 3+ times consecutively, it often STOPS appearing
+        - Predict that digit → It stops → Actual differs → You WIN
+
+        4. **ANTI-STREAK PLAY**
+        - If a digit hasn't appeared in 30+ ticks, it MAY appear soon (regression to mean)
+        - AVOID predicting this digit as it might finally appear
+
+        === DECISION TREE ===
+
+        IF gaps exist (digits missing from last 15 ticks):
+        → Predict the digit missing the LONGEST (coldest) - HIGHEST confidence
         
-            STRATEGY SELECTION & ADAPTATION:
-            - Use the best Digit Differ prediction method based on recent performance, market regime, and risk level
-            - Avoid methods that have recently led to losses
-            - Adapt strategy dynamically based on current market conditions and historical effectiveness
+        ELSE IF a digit has appeared 4+ times in last 20 ticks:
+        → Predict that hot digit (it might cool off) - MEDIUM confidence
         
-            MARKET REGIME ASSESSMENT:
-            - Determine if the market is trending, ranging, or volatile using volatility and momentum indicators
-            - Adjust method selection based on the identified market regime
+        ELSE:
+        → Predict the digit with LOWEST frequency in last 50 ticks - LOW confidence
 
-            CRITICAL CONSIDERATIONS:
-            - Use only Statistically proven methods for predicting the Digit that will NOT appear (Digit Differ)
-            - Predict the Digit that will NOT appear (Digit Differ), not the most likely
-            - Base predictions on quantitative analysis only
-            - never repeat the same method consecutively
-            - Switch to conservative statistical methods if consecutive losses ≥ 1 (never repeat the same method that lost)
-            - Consider recent performance: adapt method selection based on what's working
+        === RISK MANAGEMENT ===
+        - After ${this.consecutiveLosses} consecutive loss(es), be MORE conservative
+        - Only trade with confidence ≥ 75%
+        - If recent methods failed, try the OPPOSITE approach
+        - Recent methods used: ${recentMethods || 'None'}
 
-            OUTPUT FORMAT (JSON only):
-            {
-                "predictedDigit": X,
-                "confidence": XX,
-                "primaryStrategy": "Method-Name",
-                "marketRegime": "trending/ranging/volatile",
-                "riskAssessment": "low/medium/high"
-            }
-        `;
+        === OUTPUT (JSON ONLY) ===
+        {
+            "predictedDigit": <0-9, the digit you believe will NOT appear>,
+            "confidence": <60-95, your confidence level>,
+            "primaryStrategy": "<strategy name used>",
+            "reasoning": "<brief 1-line explanation>",
+            "marketRegime": "trending/ranging/volatile",
+            "riskAssessment": "low/medium/high"
+        }
+
+        CRITICAL: Pick the digit with the LOWEST probability of appearing next. The actual digit will likely DIFFER from your choice, and you WIN.
+    `;
     }
 
     parseAIResponse(text, modelName = 'unknown') {
