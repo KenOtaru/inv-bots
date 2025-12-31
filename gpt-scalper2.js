@@ -56,7 +56,7 @@ function safeErr(e) { return { name: e?.name, message: e?.message, stack: e?.sta
 
 const CFG = {
     appId: String(process.env.DERIV_APP_ID || '1089'),
-    token: String(process.env.DERIV_TOKEN || 'DMylfkyce6VyZt7'),
+    token: String(process.env.DERIV_TOKEN || ''),
     wsUrl: (process.env.DERIV_WS_URL || '').trim() || null,
 
     symbol: String(process.env.SYMBOL || 'R_100'),
