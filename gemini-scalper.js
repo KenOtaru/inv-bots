@@ -16,8 +16,8 @@ const CONFIG = {
     stake: 10,                // Stake amount in USD
     multiplier: 100,          // Multiplier value
     gridStep: 2.5,            // Price movement required to trigger next trade
-    takeProfitAmt: 2.0,       // Take profit in USD
-    stopLossAmt: 5.0,         // Stop loss in USD
+    takeProfitAmt: 5.0,       // Take profit in USD
+    stopLossAmt: 2.0,         // Stop loss in USD
     maxActiveTrades: 3,       // Safety limit
     tradingEnabled: true      // Master switch
 };
@@ -170,10 +170,10 @@ class DerivBot {
             if (diff > 0) {
                 // Price went UP, we assume it might pull back slightly -> SELL (Put)
                 // Note: For Multipliers, "Down" is the contract type for shorting.
-                this.placeTrade('PUT', currentPrice);
+                this.placeTrade('CALL', currentPrice);
             } else {
                 // Price went DOWN, we assume a bounce -> BUY (Call)
-                this.placeTrade('CALL', currentPrice);
+                this.placeTrade('PUT', currentPrice);
             }
 
             // Reset reference price to current to create the new grid baseline

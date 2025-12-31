@@ -31,8 +31,8 @@ const crypto = require('crypto');
 const CONFIG = {
     // API Configuration
     API: {
-        APP_ID: process.env.DERIV_APP_ID || 'YOUR_APP_ID',
-        API_TOKEN: process.env.DERIV_API_TOKEN || 'YOUR_API_TOKEN',
+        APP_ID: process.env.DERIV_APP_ID || '1089',
+        API_TOKEN: process.env.DERIV_API_TOKEN || 'rgNedekYXvCaPeP',
         ENDPOINT: 'wss://ws.derivws.com/websockets/v3?app_id=',
         RECONNECT_DELAY: 5000,
         MAX_RECONNECT_ATTEMPTS: 10,
