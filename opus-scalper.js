@@ -38,7 +38,7 @@ const CONFIG = {
         SYMBOL: 'R_100',                    // Volatility 100 Index
         MULTIPLIER: 100,                    // Multiplier value (20, 40, 60, 100, 200)
         BASE_STAKE: 2,                      // Base stake in USD
-        MAX_STAKE: 50,                      // Maximum stake per trade
+        MAX_STAKE: 3,                      // Maximum stake per trade
         MIN_STAKE: 1,                    // Minimum stake for R_100
     },
 

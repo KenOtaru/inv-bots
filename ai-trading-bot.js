@@ -1134,6 +1134,41 @@ class AIDigitDifferBot {
         };
     }
 
+    // Add comprehensive statistical analysis
+    performComprehensiveAnalysis(tickHistory, minSampleSize = 100) {
+        if (tickHistory.length < minSampleSize) {
+            return { error: 'Insufficient data for statistical analysis' };
+        }
+
+        const sample = tickHistory.slice(-minSampleSize);
+
+        return {
+            frequencyAnalysis: this.analyzeDigitFrequency(sample),
+            gapAnalysis: this.analyzeDigitGaps(sample),
+            serialCorrelation: this.calculateSerialCorrelation(sample),
+            entropy: this.calculateEntropy(sample),
+            uniformityTest: this.performChiSquareTest(sample),
+            volatility: this.calculateVolatility(sample),
+            regime: this.detectMarketRegime(sample)
+        };
+    }
+
+    // Add frequency analysis
+    analyzeDigitFrequency(digits) {
+        const counts = Array(10).fill(0);
+        digits.forEach(d => counts[d]++);
+
+        const total = digits.length;
+        return counts.map((count, digit) => ({
+            digit,
+            count,
+            frequency: count / total,
+            deviation: (count / total - 0.1) * 100,
+            zScore: (count / total - 0.1) / Math.sqrt(0.1 * 0.9 / total)
+        }));
+    }
+
+
     getPrompt(modelName = 'unknown') {
         const recentDigits = this.tickHistory.slice(-300);
         const last50 = this.tickHistory.slice(-50);
