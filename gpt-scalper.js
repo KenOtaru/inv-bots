@@ -30,12 +30,7 @@ let pino;
 try { pino = require('pino'); } catch { pino = null; }
 
 const log = pino
-    ? pino({
-        level: process.env.LOG_LEVEL || 'info',
-        transport: process.env.NODE_ENV !== 'production'
-            ? { target: 'pino-pretty', options: { colorize: true, translateTime: 'SYS:standard' } }
-            : undefined,
-    })
+    ? pino({ level: process.env.LOG_LEVEL || 'info' })
     : console;
 
 // -------------------- Config --------------------
