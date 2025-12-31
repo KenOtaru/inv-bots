@@ -159,3 +159,4 @@
 {"ts":"2025-12-31T21:31:31.332Z","event":"OPEN","contractId":302893040848,"direction":"DOWN","contract_type":"MULTDOWN","stake":1,"multiplier":40,"refEntryPrice":660.23}
 {"ts":"2025-12-31T21:35:35.026Z","event":"CLOSE","contractId":302893040848,"realized":-0.01,"realizedPnlTotal":-0.01}
 {"ts":"2025-12-31T21:35:51.359Z","event":"OPEN","contractId":302893213428,"direction":"DOWN","contract_type":"MULTDOWN","stake":1,"multiplier":40,"refEntryPrice":660.34}
+{"ts":"2025-12-31T21:39:55.082Z","event":"CLOSE","contractId":302893213428,"realized":0.12,"realizedPnlTotal":0.11}

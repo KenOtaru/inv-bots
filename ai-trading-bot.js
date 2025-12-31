@@ -20,6 +20,306 @@ const WebSocket = require('ws');
 const axios = require('axios');
 const TelegramBot = require('node-telegram-bot-api');
 
+// Production-Grade Adversarial-Aware Prediction System
+
+class EnhancedAIPrompt {
+
+    static generatePrompt(marketData, modelPerformance, regimeData) {
+        const {
+            currentAsset,
+            tickHistory,
+            lastPrediction,
+            lastOutcome,
+            consecutiveLosses,
+            recentMethods,
+            volatility,
+            marketRegime
+        } = marketData;
+
+        const recentDigits = tickHistory.slice(-100);
+        const last50 = tickHistory.slice(-50);
+        const last20 = tickHistory.slice(-20);
+        const last500 = tickHistory.slice(-500);
+
+        // Calculate frequency statistics
+        const freqStats = this.calculateFrequencyStats(last500);
+        const gapAnalysis = this.analyzeGaps(tickHistory);
+        const volatilityAssessment = this.assessVolatility(tickHistory);
+        const serialCorrelation = this.calculateSerialCorrelation(tickHistory);
+
+        return `You are an elite statistical arbitrage AI specializing in Deriv Digit Differ prediction. You operate in a highly adversarial environment where the platform actively learns from and counters successful strategies. Your predictability is your greatest vulnerability.
+
+            === ADVERSARIAL REALITY ===
+            The Deriv platform is not passive - it is an intelligent opponent that:
+            - Observes and adapts to successful prediction patterns
+            - Actively counters strategies that show consistent profitability  
+            - May adjust digit generation to neutralize your historical advantages
+            - Exploites predictable behavioral patterns
+
+            Your survival depends on:
+            1. Continuous strategy evolution and randomization
+            2. Statistical rigor over pattern chasing
+            3. Regime-aware adaptation
+            4. Never repeating the same approach consecutively
+
+            === CURRENT MARKET CONTEXT ===
+            Asset: ${currentAsset}
+            Market Regime: ${marketRegime || 'Detecting...'}
+            Volatility Level: ${volatilityAssessment.level} (${volatilityAssessment.value.toFixed(3)})
+            Last Prediction: ${lastPrediction || 'None'} → ${lastOutcome || 'N/A'}
+            Consecutive Losses: ${consecutiveLosses}
+            Recent Methods: ${recentMethods || 'None'}
+
+            === STATISTICAL ANALYSIS (Last 500 Ticks) ===
+            ${this.formatFrequencyStats(freqStats)}
+
+            Gap Analysis (Digits absent in last 25 ticks): ${gapAnalysis.join(', ')}
+            Serial Correlation: ${serialCorrelation.toFixed(4)} (${Math.abs(serialCorrelation) > 0.1 ? 'Significant' : 'Negligible'})
+
+            === MANDATORY PREDICTION PRINCIPLES ===
+            You MUST predict the digit that will NOT appear in the next tick (Digit Differ).
+
+            APPROVED STATISTICAL METHODS ONLY:
+            1. FREQUENCY DEVIATION ANALYSIS
+            - Target digits appearing significantly below 10% frequency
+            - Require statistical significance (p < 0.05)
+            - Apply chi-square test for uniformity
+
+            2. ENTROPY AND DISTRIBUTION ANALYSIS  
+            - Calculate information entropy of recent digits
+            - Identify digits with maximum divergence from uniform distribution
+            - Use KL-divergence for distribution comparison
+
+            3. REGIME-AWARE PATTERN DETECTION
+            - Adjust methods based on current market regime
+            - Use different strategies for trending vs ranging markets
+            - Apply volatility-adjusted confidence intervals
+
+            4. VOLATILITY-ADJUSTED FORECASTING
+            - Reduce confidence during high volatility periods
+            - Increase sample size requirements during uncertainty
+            - Use GARCH models for volatility prediction
+
+            FORBIDDEN APPROACHES:
+            - Pattern matching without statistical validation
+            - Numerology or superstitious reasoning
+            - Chasing recent streaks without statistical basis
+            - Copying previous successful predictions
+
+            === ADAPTIVE STRATEGY PROTOCOL ===
+            After ANY loss (consecutiveLosses ≥ 1):
+            1. Immediately switch to conservative statistical method
+            2. Blacklist the losing method for next 3 decisions
+            3. Increase sample size requirements by 50%
+            4. Reduce confidence threshold by 20%
+
+            Performance Tracking:
+            - Maintain ledger of method effectiveness by regime
+            - Favor methods with recent wins in current regime
+            - Trigger complete strategy reset after 3 losses in 5 trades
+
+            === CONFIDENCE REQUIREMENTS ===
+            Confidence MUST reflect true statistical certainty:
+            - 95%+: Strong statistical evidence, multiple methods agree
+            - 85-94%: Moderate evidence, single strong method
+            - 70-84%: Weak evidence, trade not recommended
+            - <70%: Insufficient evidence, mandatory skip
+
+            Statistical Validation Requirements:
+            - Minimum 100 observations for frequency analysis
+            - P-value < 0.05 for significance claims
+            - Confidence intervals for all probability estimates
+            - Bayesian updating for model weights
+
+            === MARKET REGIME ADAPTATION ===
+            Current Regime: ${marketRegime || 'Unknown'}
+
+            Regime-Specific Guidelines:
+            - TRENDING: Focus on momentum-resistant digits, reduce position size
+            - RANGING: Emphasize mean reversion, standard confidence
+            - VOLATILE: Conservative approach, require higher confidence threshold
+            - STABLE: Normal operation, standard statistical methods
+
+            === OUTPUT FORMAT (STRICT JSON) ===
+            {
+            "predictedDigit": X,
+            "confidence": XX,
+            "primaryStrategy": "Statistical-Method-Name",
+            "marketRegime": "trending/ranging/volatile/stable",
+            "riskAssessment": "low/medium/high",
+            "statisticalEvidence": {
+                "frequencyAnalysis": {
+                "digitFrequency": X.X%,
+                "expectedFrequency": 10.0%,
+                "deviation": X.X%,
+                "significance": "p=X.XXX"
+                },
+                "gapAnalysis": {
+                "absentForTicks": X,
+                "maxHistoricalGap": X,
+                "gapPercentile": XX%
+                },
+                "volatilityAdjusted": true/false,
+                "serialCorrelation": X.XXXX,
+                "sampleSize": XXX
+            },
+            "methodRationale": "Detailed explanation of statistical reasoning",
+            "alternativeCandidates": [X, Y, Z],
+            "skipRecommendation": "reason or null"
+            }
+
+            === CRITICAL REMINDERS ===
+            - You are not just predicting - you are strategically selecting only high-certainty battles
+            - The platform adapts to your patterns - maintain unpredictability
+            - Statistical rigor is your only defense against market randomness
+            - When in doubt, reduce confidence or skip the trade entirely
+            - Your goal is long-term survival, not short-term gains
+
+            Generate your prediction based on the statistical evidence provided. Remember: predict the digit that will NOT appear in the next tick.
+        `;
+    }
+
+    static calculateFrequencyStats(digits) {
+        const counts = Array(10).fill(0);
+        digits.forEach(d => counts[d]++);
+
+        const total = digits.length;
+        return counts.map((count, digit) => ({
+            digit,
+            count,
+            frequency: (count / total * 100).toFixed(1),
+            deviation: ((count / total - 0.1) * 100).toFixed(1)
+        }));
+    }
+
+    static analyzeGaps(tickHistory) {
+        const last25 = new Set(tickHistory.slice(-25));
+        const gaps = [];
+        for (let i = 0; i < 10; i++) {
+            if (!last25.has(i)) gaps.push(i);
+        }
+        return gaps;
+    }
+
+    static assessVolatility(tickHistory) {
+        if (tickHistory.length < 50) {
+            return { level: 'Unknown', value: 0 };
+        }
+
+        // Calculate rolling standard deviation
+        const recent = tickHistory.slice(-50);
+        const mean = recent.reduce((a, b) => a + b, 0) / recent.length;
+        const variance = recent.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / recent.length;
+        const stdDev = Math.sqrt(variance);
+
+        let level = 'Low';
+        if (stdDev > 3) level = 'High';
+        else if (stdDev > 2) level = 'Medium';
+
+        return { level, value: stdDev };
+    }
+
+    static calculateSerialCorrelation(tickHistory) {
+        if (tickHistory.length < 50) return 0;
+
+        const recent = tickHistory.slice(-50);
+        const mean = recent.reduce((a, b) => a + b, 0) / recent.length;
+
+        let numerator = 0;
+        let denominator = 0;
+
+        for (let i = 0; i < recent.length - 1; i++) {
+            numerator += (recent[i] - mean) * (recent[i + 1] - mean);
+            denominator += Math.pow(recent[i] - mean, 2);
+        }
+
+        return denominator > 0 ? numerator / denominator : 0;
+    }
+
+    static formatFrequencyStats(stats) {
+        return stats
+            .sort((a, b) => parseFloat(a.frequency) - parseFloat(b.frequency))
+            .map(s => `Digit ${s.digit}: ${s.frequency}% (${s.count}/500) | Deviation: ${s.deviation}%`)
+            .join('\n');
+    }
+}
+
+// Enhanced AI Response Parser
+class AIResponseParser {
+
+    static parseResponse(text, modelName = 'unknown') {
+        if (!text) throw new Error('Empty AI response');
+
+        try {
+            // Extract JSON from response
+            const jsonMatch = text.match(/\{[\s\S]*\}/);
+            if (!jsonMatch) {
+                throw new Error('No JSON found in response');
+            }
+
+            const response = JSON.parse(jsonMatch[0]);
+
+            // Validate required fields
+            this.validateResponse(response);
+
+            // Enrich with additional analysis
+            return this.enrichResponse(response);
+
+        } catch (error) {
+            console.error(`AI Response Parse Error (${modelName}):`, error.message);
+            console.error('Raw response:', text.substring(0, 200));
+            throw error;
+        }
+    }
+
+    static validateResponse(response) {
+        const required = ['predictedDigit', 'confidence', 'primaryStrategy', 'marketRegime', 'riskAssessment'];
+
+        for (const field of required) {
+            if (response[field] === undefined) {
+                throw new Error(`Missing required field: ${field}`);
+            }
+        }
+
+        if (response.predictedDigit < 0 || response.predictedDigit > 9) {
+            throw new Error(`Invalid predictedDigit: ${response.predictedDigit}`);
+        }
+
+        if (response.confidence < 0 || response.confidence > 100) {
+            throw new Error(`Invalid confidence: ${response.confidence}`);
+        }
+
+        const validRegimes = ['trending', 'ranging', 'volatile', 'stable'];
+        if (!validRegimes.includes(response.marketRegime)) {
+            throw new Error(`Invalid marketRegime: ${response.marketRegime}`);
+        }
+
+        const validRisks = ['low', 'medium', 'high'];
+        if (!validRisks.includes(response.riskAssessment)) {
+            throw new Error(`Invalid riskAssessment: ${response.riskAssessment}`);
+        }
+    }
+
+    static enrichResponse(response) {
+        // Add confidence adjustment based on risk assessment
+        if (response.riskAssessment === 'high') {
+            response.confidence = Math.max(0, response.confidence - 20);
+        }
+
+        // Add trade recommendation
+        if (response.confidence >= 85 && response.riskAssessment !== 'high') {
+            response.tradeRecommendation = 'EXECUTE';
+        } else if (response.confidence >= 70) {
+            response.tradeRecommendation = 'CAUTIOUS';
+        } else {
+            response.tradeRecommendation = 'SKIP';
+        }
+
+        return response;
+    }
+}
+
+
 class AIDigitDifferBot {
     constructor(config = {}) {
         // Deriv Configuration
