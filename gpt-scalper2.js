@@ -312,6 +312,8 @@ class MultiplierBot {
 
         this.realizedPnl = 0;
         this.consecLosses = 0;
+        this.wins = 0;
+        this.losses = 0;
         this.tradingEnabled = true;
 
         this.lastTradeAt = 0;
@@ -551,17 +553,27 @@ class MultiplierBot {
         const rsi = this.rsi.update(price);
 
         if (!isWarmup && this.tickCount % 25 === 0) {
+            const activeDetails = Array.from(this.positions.values()).map(p => ({
+                id: p.contractId,
+                dir: p.direction,
+                stake: p.stake,
+                profit: round2(p.currentProfit || 0),
+                age: Math.round((now() - p.openedAt) / 1000) + 's'
+            }));
+
             log.info({
                 price,
                 emaF: round2(emaF),
                 emaS: round2(emaS),
                 rsi: round2(rsi),
-                openPositions: this.positions.size,
+                active: activeDetails,
                 realizedPnl: round2(this.realizedPnl),
-                consecLosses: this.consecLosses,
+                wins: this.wins,
+                losses: this.losses,
+                consecLoss: this.consecLosses,
                 tradingEnabled: this.tradingEnabled,
                 campaign: this.currentCampaign ? { ...this.currentCampaign } : null,
-            }, 'Market snapshot');
+            }, 'Market Snapshot');
         }
 
         if (isWarmup || !this.warmed) return;
@@ -764,6 +776,9 @@ class MultiplierBot {
         const profit = Number(c.profit);
         const isSold = Boolean(c.is_sold);
 
+        // Update current profit for real-time monitoring
+        pos.currentProfit = profit;
+
         // Manual TP/SL sells if still open
         if (!isSold && !pos.isSold && Number.isFinite(profit)) {
             // Optional trailing stop logic (simple):
@@ -797,17 +812,27 @@ class MultiplierBot {
             const realized = Number.isFinite(profit) ? profit : 0;
             this.realizedPnl += realized;
 
-            if (realized < 0) this.consecLosses += 1;
-            else this.consecLosses = 0;
+            const result = realized < 0 ? 'LOSS' : 'WIN';
+            if (result === 'LOSS') {
+                this.consecLosses += 1;
+                this.losses += 1;
+            } else {
+                this.consecLosses = 0;
+                this.wins += 1;
+            }
 
             log.info(
                 {
                     contractId,
+                    dir: pos.direction,
+                    result,
                     realized: round2(realized),
                     realizedPnlTotal: round2(this.realizedPnl),
-                    consecLosses: this.consecLosses,
+                    wins: this.wins,
+                    losses: this.losses,
+                    consecLoss: this.consecLosses,
                 },
-                'Position closed'
+                'Position Closed'
             );
 
             journalWrite({ event: 'CLOSE', contractId, realized: round2(realized), realizedPnlTotal: round2(this.realizedPnl) });
