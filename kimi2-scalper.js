@@ -1,10 +1,9 @@
 /**
- * Deriv Grid Scalping Bot
+ * Deriv Grid Scalping Bot - FIXED VERSION
  * Production-ready automated trading bot for Deriv Multiplier
  * Implements grid trading strategy with comprehensive risk management
  * 
- * @author AI Assistant
- * @version 1.0.0
+ * @version 2.0.0 (Fixed)
  * @date 2025-01-01
  */
 
@@ -15,58 +14,56 @@ const path = require('path');
 
 /**
  * Configuration Object
- * Modify these parameters based on your trading preferences and risk tolerance
  */
 const CONFIG = {
     // Trading Parameters
-    symbol: 'R_100',           // Trading symbol (forex, crypto, synthetic indices)
-    stake: 1.00,                   // Stake per trade in account currency
-    multiplier: 40,                // Multiplier (up to 2000x, recommended: 10-100x)
-    gridLevels: 5,                 // Number of grid levels (buy + sell orders)
-    gridSpacing: 0.001,           // Grid spacing in price units (0.001 = 10 pips for EUR/USD)
+    symbol: 'R_100',
+    stake: 1.00,
+    multiplier: 100,
+    gridLevels: 5,
+    gridSpacing: 0.5,              // Grid spacing in price units
 
     // Risk Management
-    maxDailyLoss: 50.00,          // Maximum daily loss before stopping
-    maxTradesPerHour: 10,         // Maximum trades per hour
-    stopLossPercentage: 50,        // Stop loss as percentage of stake
-    takeProfitPercentage: 100,     // Take profit as percentage of stake
-    maxOpenPositions: 3,          // Maximum simultaneous open positions
+    maxDailyLoss: 50.00,
+    maxTradesPerHour: 10,
+    stopLossPercentage: 50,        // 50% of stake
+    takeProfitPercentage: 100,     // 100% of stake
+    maxOpenPositions: 3,
 
     // Time-based Settings
-    tradeDuration: 60,             // Trade duration in seconds
-    dealCancellation: '15m',       // Deal cancellation period
-    tradingHours: {               // Trading hours (24-hour format)
-        start: 0,                    // Start hour (0 = midnight)
-        end: 23,                     // End hour (23 = 11 PM)
-        days: [1, 2, 3, 4, 5]        // Trading days (1=Monday, 5=Friday)
+    tradingHours: {
+        start: 0,
+        end: 23,
+        days: [0, 1, 2, 3, 4, 5, 6]  // All days for synthetic indices
     },
 
     // Technical Analysis
-    rsiPeriod: 14,                 // RSI calculation period
-    rsiOverbought: 70,            // RSI overbought level
-    rsiOversold: 30,              // RSI oversold level
-    atrPeriod: 14,                // ATR calculation period
+    rsiPeriod: 14,
+    rsiOverbought: 70,
+    rsiOversold: 30,
+    atrPeriod: 14,
 
     // API and Connection
-    apiUrl: 'wss://ws.derivws.com/websockets/v3',
-    appId: 1089,                   // Your Deriv app ID
-    reconnectDelay: 5000,          // Reconnection delay in milliseconds
-    maxReconnectAttempts: 5,       // Maximum reconnection attempts
+    apiUrl: 'wss://ws.derivws.com/websockets/v3?app_id=',
+    appId: '1089',
+    apiToken: 'Dz2V2KvRf4Uukt3',
+    reconnectDelay: 5000,
+    maxReconnectAttempts: 5,
 
     // Logging and Monitoring
-    logLevel: 'INFO',              // DEBUG, INFO, WARN, ERROR
-    logFile: './logs/bot.log',     // Log file path
-    performanceTracking: true,     // Enable performance metrics
+    logLevel: 'INFO',
+    logFile: './logs/bot.log',
+    performanceTracking: true,
 
     // Safety Features
-    enableTrendFilter: true,       // Enable trend detection
-    enableVolatilityFilter: true,  // Enable volatility-based adjustments
-    enableNewsFilter: false,       // Enable news event filtering (requires external API)
-    paperTrading: true             // Start in paper trading mode
+    enableTrendFilter: true,
+    enableVolatilityFilter: true,
+    minConfidenceScore: 0.6,
+    tradeCooldownMs: 30000         // 30 seconds between trades
 };
 
 /**
- * Logger Class - Comprehensive logging with file output and levels
+ * Logger Class
  */
 class Logger {
     constructor(config) {
@@ -81,26 +78,27 @@ class Logger {
             const logDir = path.dirname(this.config.logFile);
             await fs.mkdir(logDir, { recursive: true });
         } catch (error) {
-            console.error('Failed to create log directory:', error.message);
+            // Ignore if directory exists
         }
     }
 
     log(level, message, data = {}) {
         const timestamp = new Date().toISOString();
-        const logEntry = {
-            timestamp,
-            level,
-            message,
-            data,
-            pid: process.pid
+        const dataStr = Object.keys(data).length > 0 ? ` ${JSON.stringify(data)}` : '';
+        const formattedMessage = `[${timestamp}] [${level}] ${message}${dataStr}`;
+
+        // Color coding for console
+        const colors = {
+            DEBUG: '\x1b[36m',
+            INFO: '\x1b[32m',
+            WARN: '\x1b[33m',
+            ERROR: '\x1b[31m',
+            RESET: '\x1b[0m'
         };
 
-        const formattedMessage = `[${timestamp}] ${level} - ${message} ${JSON.stringify(data)}`;
+        console.log(`${colors[level] || ''}${formattedMessage}${colors.RESET}`);
 
-        // Console output
-        console.log(formattedMessage);
-
-        // File output (async)
+        // Queue for file writing
         this.logQueue.push(formattedMessage);
         this.flushLogs();
     }
@@ -115,7 +113,7 @@ class Logger {
         try {
             await fs.appendFile(this.config.logFile, logContent);
         } catch (error) {
-            console.error('Failed to write to log file:', error.message);
+            // Silently fail file logging
         } finally {
             this.isWriting = false;
             if (this.logQueue.length > 0) {
@@ -136,7 +134,7 @@ class Logger {
 }
 
 /**
- * Risk Manager - Handles all risk-related calculations and limits
+ * Risk Manager
  */
 class RiskManager {
     constructor(config, logger) {
@@ -148,27 +146,40 @@ class RiskManager {
         this.openPositions = new Map();
         this.accountBalance = 0;
         this.initialBalance = 0;
+        this.lastTradeTime = 0;
     }
 
     updateAccountBalance(balance) {
         if (this.initialBalance === 0) {
             this.initialBalance = balance;
         }
+        const previousBalance = this.accountBalance;
         this.accountBalance = balance;
-        this.dailyLoss = this.initialBalance - balance;
+
+        // Track daily loss
+        if (balance < previousBalance) {
+            this.dailyLoss += (previousBalance - balance);
+        }
     }
 
     canOpenPosition() {
         const now = Date.now();
-        const hourElapsed = now - this.hourStartTime;
 
         // Reset hourly counter
-        if (hourElapsed >= 3600000) { // 1 hour in milliseconds
+        if (now - this.hourStartTime >= 3600000) {
             this.tradesThisHour = 0;
             this.hourStartTime = now;
         }
 
-        // Check various risk limits
+        // Check cooldown
+        if (now - this.lastTradeTime < this.config.tradeCooldownMs) {
+            this.logger.debug('Trade cooldown active', {
+                remaining: Math.ceil((this.config.tradeCooldownMs - (now - this.lastTradeTime)) / 1000) + 's'
+            });
+            return false;
+        }
+
+        // Check position limit
         if (this.openPositions.size >= this.config.maxOpenPositions) {
             this.logger.warn('Maximum open positions reached', {
                 current: this.openPositions.size,
@@ -177,14 +188,16 @@ class RiskManager {
             return false;
         }
 
+        // Check daily loss limit
         if (this.dailyLoss >= this.config.maxDailyLoss) {
             this.logger.warn('Daily loss limit reached', {
-                current: this.dailyLoss,
+                current: this.dailyLoss.toFixed(2),
                 limit: this.config.maxDailyLoss
             });
             return false;
         }
 
+        // Check hourly trade limit
         if (this.tradesThisHour >= this.config.maxTradesPerHour) {
             this.logger.warn('Hourly trade limit reached', {
                 current: this.tradesThisHour,
@@ -193,8 +206,9 @@ class RiskManager {
             return false;
         }
 
+        // Check trading hours
         if (!this.isTradingHours()) {
-            this.logger.warn('Outside trading hours');
+            this.logger.debug('Outside trading hours');
             return false;
         }
 
@@ -211,17 +225,30 @@ class RiskManager {
             currentHour <= this.config.tradingHours.end;
     }
 
-    addPosition(contractId, positionData) {
-        this.openPositions.set(contractId, positionData);
+    recordTradeAttempt() {
+        this.lastTradeTime = Date.now();
         this.tradesThisHour++;
-        this.logger.info('Position added', { contractId, positionData });
+    }
+
+    addPosition(contractId, positionData) {
+        this.openPositions.set(contractId, {
+            ...positionData,
+            openTime: Date.now()
+        });
+        this.logger.info('Position opened', {
+            contractId,
+            openPositions: this.openPositions.size
+        });
     }
 
     removePosition(contractId) {
         const position = this.openPositions.get(contractId);
         if (position) {
             this.openPositions.delete(contractId);
-            this.logger.info('Position removed', { contractId, position });
+            this.logger.info('Position closed', {
+                contractId,
+                openPositions: this.openPositions.size
+            });
             return position;
         }
         return null;
@@ -233,20 +260,26 @@ class RiskManager {
 
     getRiskMetrics() {
         return {
-            dailyLoss: this.dailyLoss,
+            dailyLoss: this.dailyLoss.toFixed(2),
             dailyLossLimit: this.config.maxDailyLoss,
             openPositions: this.openPositions.size,
             maxOpenPositions: this.config.maxOpenPositions,
             tradesThisHour: this.tradesThisHour,
             maxTradesPerHour: this.config.maxTradesPerHour,
-            accountBalance: this.accountBalance,
-            initialBalance: this.initialBalance
+            accountBalance: this.accountBalance.toFixed(2),
+            initialBalance: this.initialBalance.toFixed(2)
         };
+    }
+
+    resetDailyStats() {
+        this.dailyLoss = 0;
+        this.initialBalance = this.accountBalance;
+        this.logger.info('Daily stats reset');
     }
 }
 
 /**
- * Technical Analysis Module - Calculates indicators and signals
+ * Technical Analysis Module
  */
 class TechnicalAnalysis {
     constructor(config, logger) {
@@ -263,45 +296,40 @@ class TechnicalAnalysis {
             symbol: tick.symbol
         });
 
-        // Keep only recent prices (last 1000 ticks)
+        // Keep only recent prices
         if (this.priceHistory.length > 1000) {
             this.priceHistory.shift();
         }
 
-        // Update indicators
         this.calculateIndicators();
     }
 
     calculateIndicators() {
-        if (this.priceHistory.length < this.config.rsiPeriod) return;
+        if (this.priceHistory.length < this.config.rsiPeriod + 1) return;
 
         const prices = this.priceHistory.map(p => p.price);
 
-        // Calculate RSI
         this.indicators.rsi = this.calculateRSI(prices);
-
-        // Calculate ATR (simplified)
         this.indicators.atr = this.calculateATR(prices);
-
-        // Calculate moving averages
         this.indicators.sma20 = this.calculateSMA(prices, 20);
         this.indicators.sma50 = this.calculateSMA(prices, 50);
+        this.indicators.currentPrice = prices[prices.length - 1];
     }
 
     calculateRSI(prices, period = this.config.rsiPeriod) {
         if (prices.length < period + 1) return 50;
 
-        const gains = [];
-        const losses = [];
+        let gains = 0;
+        let losses = 0;
 
-        for (let i = 1; i <= period; i++) {
-            const change = prices[prices.length - i] - prices[prices.length - i - 1];
-            gains.push(change > 0 ? change : 0);
-            losses.push(change < 0 ? Math.abs(change) : 0);
+        for (let i = prices.length - period; i < prices.length; i++) {
+            const change = prices[i] - prices[i - 1];
+            if (change > 0) gains += change;
+            else losses += Math.abs(change);
         }
 
-        const avgGain = gains.reduce((a, b) => a + b) / period;
-        const avgLoss = losses.reduce((a, b) => a + b) / period;
+        const avgGain = gains / period;
+        const avgLoss = losses / period;
 
         if (avgLoss === 0) return 100;
 
@@ -313,79 +341,99 @@ class TechnicalAnalysis {
         if (prices.length < period + 1) return 0;
 
         const trValues = [];
-
-        for (let i = 1; i < Math.min(period + 1, prices.length); i++) {
-            const high = Math.max(prices[prices.length - i], prices[prices.length - i - 1]);
-            const low = Math.min(prices[prices.length - i], prices[prices.length - i - 1]);
-            trValues.push(high - low);
+        for (let i = prices.length - period; i < prices.length; i++) {
+            const tr = Math.abs(prices[i] - prices[i - 1]);
+            trValues.push(tr);
         }
 
-        return trValues.reduce((a, b) => a + b) / trValues.length;
+        return trValues.reduce((a, b) => a + b, 0) / trValues.length;
     }
 
     calculateSMA(prices, period) {
-        if (prices.length < period) return prices[prices.length - 1];
-
-        const sum = prices.slice(-period).reduce((a, b) => a + b);
-        return sum / period;
+        if (prices.length < period) return prices[prices.length - 1] || 0;
+        const slice = prices.slice(-period);
+        return slice.reduce((a, b) => a + b, 0) / period;
     }
 
     getSignal() {
         const rsi = this.indicators.rsi || 50;
-        const currentPrice = this.priceHistory[this.priceHistory.length - 1]?.price || 0;
+        const currentPrice = this.indicators.currentPrice || 0;
         const sma20 = this.indicators.sma20 || currentPrice;
         const sma50 = this.indicators.sma50 || currentPrice;
 
         let signal = 'HOLD';
         let confidence = 0.5;
+        let reasons = [];
 
         // RSI-based signals
         if (rsi < this.config.rsiOversold) {
             signal = 'BUY';
-            confidence = (this.config.rsiOversold - rsi) / this.config.rsiOversold;
+            confidence = 0.5 + ((this.config.rsiOversold - rsi) / this.config.rsiOversold) * 0.3;
+            reasons.push(`RSI oversold (${rsi.toFixed(2)})`);
         } else if (rsi > this.config.rsiOverbought) {
             signal = 'SELL';
-            confidence = (rsi - this.config.rsiOverbought) / (100 - this.config.rsiOverbought);
+            confidence = 0.5 + ((rsi - this.config.rsiOverbought) / (100 - this.config.rsiOverbought)) * 0.3;
+            reasons.push(`RSI overbought (${rsi.toFixed(2)})`);
         }
 
         // Trend filter
-        if (this.config.enableTrendFilter) {
+        if (this.config.enableTrendFilter && signal !== 'HOLD') {
             const trend = sma20 > sma50 ? 'UP' : 'DOWN';
-            if ((signal === 'BUY' && trend === 'DOWN') || (signal === 'SELL' && trend === 'UP')) {
-                signal = 'HOLD';
-                confidence = 0.3;
+            if ((signal === 'BUY' && trend === 'UP') || (signal === 'SELL' && trend === 'DOWN')) {
+                confidence += 0.2;
+                reasons.push(`Trend aligned (${trend})`);
+            } else if ((signal === 'BUY' && trend === 'DOWN') || (signal === 'SELL' && trend === 'UP')) {
+                confidence -= 0.2;
+                reasons.push(`Trend opposing (${trend})`);
             }
         }
 
-        return { signal, confidence, rsi, currentPrice };
+        return {
+            signal,
+            confidence: Math.max(0, Math.min(1, confidence)),
+            rsi: rsi.toFixed(2),
+            currentPrice: currentPrice.toFixed(5),
+            trend: sma20 > sma50 ? 'UP' : 'DOWN',
+            reasons
+        };
+    }
+
+    getIndicators() {
+        return this.indicators;
     }
 }
 
 /**
- * Grid Manager - Handles grid trading logic
+ * Grid Manager - Extends EventEmitter for proper event handling
  */
-class GridManager {
+class GridManager extends EventEmitter {
     constructor(config, logger, riskManager) {
+        super();
         this.config = config;
         this.logger = logger;
         this.riskManager = riskManager;
         this.gridLevels = [];
         this.currentPrice = 0;
+        this.previousPrice = 0;
         this.isGridActive = false;
+        this.basePrice = 0;
     }
 
     updatePrice(price) {
+        this.previousPrice = this.currentPrice;
         this.currentPrice = price;
 
-        if (!this.isGridActive) {
+        if (!this.isGridActive && this.previousPrice > 0) {
             this.initializeGrid();
         }
 
-        this.checkGridTriggers();
+        if (this.isGridActive && this.previousPrice > 0) {
+            this.checkGridTriggers();
+        }
     }
 
     initializeGrid() {
-        const centerPrice = this.currentPrice;
+        this.basePrice = this.currentPrice;
         const levels = this.config.gridLevels;
         const spacing = this.config.gridSpacing;
 
@@ -395,75 +443,95 @@ class GridManager {
         for (let i = 1; i <= Math.floor(levels / 2); i++) {
             this.gridLevels.push({
                 type: 'BUY',
-                price: centerPrice - (spacing * i),
-                triggered: false,
-                orderId: null
+                level: i,
+                price: this.basePrice - (spacing * i),
+                triggered: false
             });
         }
 
         // Create sell levels above current price
-        for (let i = 1; i <= Math.floor(levels / 2); i++) {
+        for (let i = 1; i <= Math.ceil(levels / 2); i++) {
             this.gridLevels.push({
                 type: 'SELL',
-                price: centerPrice + (spacing * i),
-                triggered: false,
-                orderId: null
+                level: i,
+                price: this.basePrice + (spacing * i),
+                triggered: false
             });
         }
 
         this.isGridActive = true;
         this.logger.info('Grid initialized', {
-            centerPrice,
+            basePrice: this.basePrice.toFixed(5),
             levels: this.gridLevels.length,
-            spacing
+            spacing: spacing
         });
     }
 
     checkGridTriggers() {
         if (!this.riskManager.canOpenPosition()) return;
 
-        this.gridLevels.forEach(level => {
-            if (level.triggered) return;
+        for (const level of this.gridLevels) {
+            if (level.triggered) continue;
 
-            const shouldTrigger = level.type === 'BUY'
-                ? this.currentPrice <= level.price
-                : this.currentPrice >= level.price;
+            let shouldTrigger = false;
+
+            if (level.type === 'BUY') {
+                // Price crossed down through buy level
+                shouldTrigger = this.previousPrice > level.price && this.currentPrice <= level.price;
+            } else {
+                // Price crossed up through sell level
+                shouldTrigger = this.previousPrice < level.price && this.currentPrice >= level.price;
+            }
 
             if (shouldTrigger) {
-                this.triggerGridLevel(level);
+                level.triggered = true;
+                this.logger.info('Grid level triggered', {
+                    type: level.type,
+                    level: level.level,
+                    triggerPrice: level.price.toFixed(5),
+                    currentPrice: this.currentPrice.toFixed(5)
+                });
+
+                // Emit event for trade execution
+                this.emit('gridTrigger', {
+                    type: level.type,
+                    price: level.price,
+                    level: level.level,
+                    timestamp: Date.now()
+                });
             }
-        });
-    }
-
-    triggerGridLevel(level) {
-        level.triggered = true;
-        this.logger.info('Grid level triggered', level);
-
-        // Emit event for trade execution
-        this.emit('gridTrigger', {
-            type: level.type,
-            price: level.price,
-            timestamp: Date.now()
-        });
+        }
     }
 
     resetGrid() {
         this.gridLevels = [];
         this.isGridActive = false;
+        this.basePrice = 0;
         this.logger.info('Grid reset');
     }
 
-    emit(event, data) {
-        // Event emitter integration would go here
-        this.logger.debug(`Grid event: ${event}`, data);
+    getGridStatus() {
+        const buyLevels = this.gridLevels.filter(l => l.type === 'BUY');
+        const sellLevels = this.gridLevels.filter(l => l.type === 'SELL');
+
+        return {
+            isActive: this.isGridActive,
+            basePrice: this.basePrice,
+            currentPrice: this.currentPrice,
+            totalLevels: this.gridLevels.length,
+            buyLevelsTriggered: buyLevels.filter(l => l.triggered).length,
+            sellLevelsTriggered: sellLevels.filter(l => l.triggered).length,
+            buyLevelsAvailable: buyLevels.filter(l => !l.triggered).length,
+            sellLevelsAvailable: sellLevels.filter(l => !l.triggered).length
+        };
     }
 }
 
 /**
- * Main Trading Bot Class
+ * Main Trading Bot Class - FIXED
  */
 class DerivGridScalperBot extends EventEmitter {
-    constructor(config = CONFIG) {
+    constructor(config = {}) {
         super();
         this.config = { ...CONFIG, ...config };
         this.logger = new Logger(this.config);
@@ -477,6 +545,8 @@ class DerivGridScalperBot extends EventEmitter {
         this.reconnectAttempts = 0;
         this.contracts = new Map();
         this.lastTickTime = Date.now();
+        this.requestId = 0;
+        this.pendingRequests = new Map();
 
         // Performance tracking
         this.performance = {
@@ -488,20 +558,26 @@ class DerivGridScalperBot extends EventEmitter {
             startTime: Date.now()
         };
 
-        // Bind methods
-        this.connect = this.connect.bind(this);
-        this.disconnect = this.disconnect.bind(this);
-        this.placeTrade = this.placeTrade.bind(this);
+        // Bind methods that need binding
         this.handleMessage = this.handleMessage.bind(this);
         this.handleError = this.handleError.bind(this);
+        this.handleClose = this.handleClose.bind(this);
+        this.handleGridTrigger = this.handleGridTrigger.bind(this);
+
+        // Connect grid manager events
+        this.gridManager.on('gridTrigger', this.handleGridTrigger);
     }
 
+    /**
+     * Connect to Deriv WebSocket API
+     */
     async connect() {
         return new Promise((resolve, reject) => {
             try {
-                this.logger.info('Connecting to Deriv API', { url: this.config.apiUrl });
+                const url = `${this.config.apiUrl}${this.config.appId}`;
+                this.logger.info('Connecting to Deriv API', { url });
 
-                this.ws = new WebSocket(`${this.config.apiUrl}?app_id=${this.config.appId}`);
+                this.ws = new WebSocket(url);
 
                 this.ws.on('open', () => {
                     this.logger.info('WebSocket connected');
@@ -512,12 +588,7 @@ class DerivGridScalperBot extends EventEmitter {
 
                 this.ws.on('message', this.handleMessage);
                 this.ws.on('error', this.handleError);
-                this.ws.on('close', () => {
-                    this.logger.warn('WebSocket disconnected');
-                    this.isConnected = false;
-                    this.isAuthorized = false;
-                    this.handleDisconnect();
-                });
+                this.ws.on('close', this.handleClose);
 
             } catch (error) {
                 this.logger.error('Connection failed', { error: error.message });
@@ -526,24 +597,65 @@ class DerivGridScalperBot extends EventEmitter {
         });
     }
 
+    /**
+     * Authenticate with API
+     */
     async authenticate() {
-        if (!process.env.DERIV_API_TOKEN) {
-            throw new Error('DERIV_API_TOKEN environment variable not set');
+        const token = this.config.apiToken;
+
+        if (!token) {
+            throw new Error('DERIV_API_TOKEN not set');
         }
 
-        const authRequest = {
-            authorize: process.env.DERIV_API_TOKEN
-        };
+        this.logger.info('Authenticating...');
 
-        this.logger.info('Authenticating with Deriv API');
-        this.send(authRequest);
+        return new Promise((resolve, reject) => {
+            const reqId = this.send({ authorize: token });
+
+            this.pendingRequests.set(reqId, { resolve, reject, type: 'authorize' });
+
+            // Timeout after 30 seconds
+            setTimeout(() => {
+                if (this.pendingRequests.has(reqId)) {
+                    this.pendingRequests.delete(reqId);
+                    reject(new Error('Authentication timeout'));
+                }
+            }, 30000);
+        });
     }
 
+    /**
+     * Handle incoming WebSocket messages
+     */
     handleMessage(data) {
         try {
-            const message = JSON.parse(data);
-            this.logger.debug('Received message', { msg_type: message.msg_type });
+            const message = JSON.parse(data.toString());
+            const reqId = message.req_id;
 
+            // Handle errors
+            if (message.error) {
+                this.logger.error('API Error', {
+                    code: message.error.code,
+                    message: message.error.message,
+                    msgType: message.msg_type
+                });
+
+                if (this.pendingRequests.has(reqId)) {
+                    const { reject } = this.pendingRequests.get(reqId);
+                    this.pendingRequests.delete(reqId);
+                    reject(message.error);
+                }
+                return;
+            }
+
+            // Handle pending request responses
+            if (this.pendingRequests.has(reqId)) {
+                const { resolve } = this.pendingRequests.get(reqId);
+                this.pendingRequests.delete(reqId);
+                resolve(message);
+            }
+
+            // Route message by type
             switch (message.msg_type) {
                 case 'authorize':
                     this.handleAuthorization(message);
@@ -551,63 +663,63 @@ class DerivGridScalperBot extends EventEmitter {
                 case 'tick':
                     this.handleTick(message);
                     break;
-                case 'proposal':
-                    this.handleProposal(message);
-                    break;
                 case 'buy':
                     this.handleBuyResponse(message);
                     break;
                 case 'proposal_open_contract':
                     this.handleContractUpdate(message);
                     break;
-                case 'error':
-                    this.handleApiError(message);
+                case 'sell':
+                    this.handleSellResponse(message);
+                    break;
+                case 'balance':
+                    this.handleBalanceUpdate(message);
                     break;
                 default:
-                    this.logger.debug('Unhandled message type', { msg_type: message.msg_type });
+                    this.logger.debug('Message received', { type: message.msg_type });
             }
         } catch (error) {
-            this.logger.error('Failed to parse message', { error: error.message, data });
+            this.logger.error('Failed to parse message', { error: error.message });
         }
     }
 
+    /**
+     * Handle authorization response
+     */
     handleAuthorization(message) {
-        if (message.error) {
-            this.logger.error('Authorization failed', { error: message.error.message });
-            this.isAuthorized = false;
-            return;
+        if (message.authorize) {
+            this.isAuthorized = true;
+            this.riskManager.updateAccountBalance(parseFloat(message.authorize.balance));
+
+            this.logger.info('✅ Authorization successful', {
+                account: message.authorize.loginid,
+                balance: message.authorize.balance,
+                currency: message.authorize.currency
+            });
+
+            // Subscribe to balance updates
+            this.send({ balance: 1, subscribe: 1 });
+
+            // Subscribe to market data
+            this.subscribeToMarketData();
+
+            this.emit('ready');
         }
-
-        this.isAuthorized = true;
-        this.riskManager.updateAccountBalance(message.authorize.balance);
-
-        this.logger.info('Authorization successful', {
-            accountId: message.authorize.loginid,
-            balance: message.authorize.balance,
-            currency: message.authorize.currency
-        });
-
-        // Subscribe to market data
-        this.subscribeToMarketData();
-
-        // Start trading operations
-        this.emit('ready');
     }
 
+    /**
+     * Subscribe to market tick data
+     */
     subscribeToMarketData() {
-        const subscribeRequest = {
-            ticks: this.config.symbol
-        };
-
         this.logger.info('Subscribing to market data', { symbol: this.config.symbol });
-        this.send(subscribeRequest);
+        this.send({ ticks: this.config.symbol, subscribe: 1 });
     }
 
+    /**
+     * Handle tick data
+     */
     handleTick(message) {
-        if (message.error) {
-            this.logger.error('Tick data error', { error: message.error.message });
-            return;
-        }
+        if (!message.tick) return;
 
         const tick = message.tick;
         this.lastTickTime = Date.now();
@@ -618,125 +730,212 @@ class DerivGridScalperBot extends EventEmitter {
         // Update grid manager
         this.gridManager.updatePrice(parseFloat(tick.quote));
 
-        // Check for trading opportunities
+        // Check for signal-based trading opportunities
         this.evaluateTradingOpportunity();
 
         this.emit('tick', tick);
     }
 
+    /**
+     * Handle balance updates
+     */
+    handleBalanceUpdate(message) {
+        if (message.balance) {
+            const newBalance = parseFloat(message.balance.balance);
+            this.riskManager.updateAccountBalance(newBalance);
+            this.logger.debug('Balance updated', { balance: newBalance.toFixed(2) });
+        }
+    }
+
+    /**
+     * Handle grid trigger events - EXECUTE TRADES
+     */
+    handleGridTrigger(triggerData) {
+        this.logger.info('📊 Grid trigger received', triggerData);
+
+        if (!this.riskManager.canOpenPosition()) {
+            this.logger.warn('Cannot open position - risk limits');
+            return;
+        }
+
+        // Execute trade based on grid trigger
+        this.placeTrade(triggerData.type);
+    }
+
+    /**
+     * Evaluate trading opportunities based on technical analysis
+     */
     evaluateTradingOpportunity() {
         if (!this.riskManager.canOpenPosition()) return;
 
         const signal = this.technicalAnalysis.getSignal();
 
-        if (signal.signal !== 'HOLD' && signal.confidence > 0.6) {
-            this.logger.info('Trading signal detected', signal);
-            this.prepareTrade(signal);
+        if (signal.signal !== 'HOLD' && signal.confidence >= this.config.minConfidenceScore) {
+            this.logger.info('📈 Trading signal detected', signal);
+            this.placeTrade(signal.signal);
         }
     }
 
-    prepareTrade(signal) {
-        const contractType = signal.signal === 'BUY' ? 'MULTUP' : 'MULTDOWN';
-
-        const proposalRequest = {
-            proposal: 1,
-            amount: this.config.stake,
-            basis: 'stake',
-            contract_type: contractType,
-            currency: 'USD',
-            symbol: this.config.symbol,
-            multiplier: this.config.multiplier,
-            limit_order: {
-                take_profit: this.config.stake * (this.config.takeProfitPercentage / 100),
-                stop_loss: this.config.stake * (this.config.stopLossPercentage / 100)
-            },
-            cancellation: this.config.dealCancellation
-        };
-
-        this.logger.info('Requesting proposal', {
-            contractType,
-            stake: this.config.stake,
-            multiplier: this.config.multiplier
-        });
-
-        this.send(proposalRequest);
-    }
-
-    handleProposal(message) {
-        if (message.error) {
-            this.logger.error('Proposal error', { error: message.error.message });
+    /**
+     * Place a trade - THE MISSING METHOD THAT CAUSED THE ERROR
+     */
+    placeTrade(direction) {
+        if (!this.isAuthorized) {
+            this.logger.error('Cannot trade - not authorized');
             return;
         }
 
-        const proposal = message.proposal;
-        this.logger.info('Proposal received', {
-            ask_price: proposal.ask_price,
-            payout: proposal.payout,
-            spot: proposal.spot
-        });
+        if (!this.riskManager.canOpenPosition()) {
+            this.logger.warn('Cannot trade - risk limits reached');
+            return;
+        }
 
-        // Execute the trade
-        this.executeTrade(proposal.id);
-    }
+        const contractType = direction === 'BUY' ? 'MULTUP' : 'MULTDOWN';
+        const stake = this.config.stake;
+        const multiplier = this.config.multiplier;
 
-    executeTrade(proposalId) {
+        // Calculate SL/TP amounts
+        const stopLoss = Number((stake * this.config.stopLossPercentage / 100).toFixed(2));
+        const takeProfit = Number((stake * this.config.takeProfitPercentage / 100).toFixed(2));
+
+        // CORRECT API structure for multiplier contracts
         const buyRequest = {
-            buy: proposalId,
-            price: this.config.stake
+            buy: 1,
+            subscribe: 1,
+            price: stake,
+            parameters: {
+                contract_type: contractType,
+                symbol: this.config.symbol,
+                currency: 'USD',
+                amount: stake,
+                basis: 'stake',           // ← REQUIRED for multipliers
+                multiplier: multiplier
+            }
         };
 
-        this.logger.info('Executing trade', { proposalId, stake: this.config.stake });
+        this.logger.info(`🚀 Placing ${direction} trade`, {
+            contractType,
+            stake,
+            multiplier,
+            stopLoss,
+            takeProfit
+        });
+
+        // Record trade attempt
+        this.riskManager.recordTradeAttempt();
+
+        // Store pending SL/TP for after contract creation
+        this.pendingLimits = { stopLoss, takeProfit };
+
         this.send(buyRequest);
     }
 
-    handleBuyResponse(message) {
-        if (message.error) {
-            this.logger.error('Trade execution failed', { error: message.error.message });
-            return;
-        }
+    /**
+     * Handle buy response
+     */
+    async handleBuyResponse(message) {
+        if (!message.buy) return;
 
         const contract = message.buy;
-        this.contracts.set(contract.contract_id, {
+        const contractId = contract.contract_id;
+
+        this.logger.info('✅ Trade executed', {
+            contractId,
+            type: contract.longcode,
+            buyPrice: contract.buy_price
+        });
+
+        // Track contract
+        this.contracts.set(contractId, {
             ...contract,
             entryTime: Date.now(),
             status: 'open'
         });
 
-        this.riskManager.addPosition(contract.contract_id, contract);
+        // Add to risk manager
+        this.riskManager.addPosition(contractId, contract);
+
+        // Update performance
         this.performance.totalTrades++;
 
-        this.logger.info('Trade executed successfully', {
-            contractId: contract.contract_id,
-            longcode: contract.longcode,
-            buyPrice: contract.buy_price
+        // Set stop loss and take profit via contract_update
+        if (this.pendingLimits) {
+            try {
+                await this.setContractLimits(contractId, this.pendingLimits.stopLoss, this.pendingLimits.takeProfit);
+            } catch (error) {
+                this.logger.warn('Failed to set SL/TP', { error: error.message });
+            }
+            this.pendingLimits = null;
+        }
+
+        // Subscribe to contract updates
+        this.send({
+            proposal_open_contract: 1,
+            contract_id: contractId,
+            subscribe: 1
         });
 
         this.emit('tradeExecuted', contract);
     }
 
+    /**
+     * Set contract limits (SL/TP) after purchase
+     */
+    async setContractLimits(contractId, stopLoss, takeProfit) {
+        const request = {
+            contract_update: 1,
+            contract_id: contractId,
+            limit_order: {}
+        };
+
+        if (stopLoss > 0) {
+            request.limit_order.stop_loss = stopLoss;
+        }
+        if (takeProfit > 0) {
+            request.limit_order.take_profit = takeProfit;
+        }
+
+        this.logger.info('Setting contract limits', { contractId, stopLoss, takeProfit });
+        this.send(request);
+    }
+
+    /**
+     * Handle contract updates
+     */
     handleContractUpdate(message) {
+        if (!message.proposal_open_contract) return;
+
         const contract = message.proposal_open_contract;
         const contractId = contract.contract_id;
 
-        if (!this.contracts.has(contractId)) return;
-
-        const existingContract = this.contracts.get(contractId);
-        const updatedContract = { ...existingContract, ...contract };
-
         // Check if contract is settled
-        if (contract.status === 'sold' || contract.is_sold === 1) {
-            this.handleContractSettlement(contractId, updatedContract);
+        if (contract.is_sold === 1 || contract.status === 'sold') {
+            this.handleContractSettlement(contractId, contract);
         } else {
-            this.contracts.set(contractId, updatedContract);
-            this.emit('contractUpdate', updatedContract);
+            // Update contract in tracking
+            if (this.contracts.has(contractId)) {
+                const existingContract = this.contracts.get(contractId);
+                this.contracts.set(contractId, { ...existingContract, ...contract });
+            }
+
+            // Log current P&L
+            const profit = parseFloat(contract.profit || 0);
+            this.logger.debug('Contract update', {
+                contractId,
+                currentProfit: profit.toFixed(2),
+                currentSpot: contract.current_spot
+            });
         }
     }
 
+    /**
+     * Handle contract settlement
+     */
     handleContractSettlement(contractId, contract) {
-        const profit = parseFloat(contract.profit);
+        const profit = parseFloat(contract.profit || 0);
         const isWinning = profit > 0;
 
-        // Update performance metrics
+        // Update performance
         if (isWinning) {
             this.performance.winningTrades++;
             this.performance.totalProfit += profit;
@@ -745,160 +944,230 @@ class DerivGridScalperBot extends EventEmitter {
             this.performance.totalLoss += Math.abs(profit);
         }
 
-        // Update risk manager
+        // Remove from tracking
         this.riskManager.removePosition(contractId);
-
-        // Remove from active contracts
         this.contracts.delete(contractId);
 
-        this.logger.info('Contract settled', {
+        const emoji = isWinning ? '✅' : '❌';
+        this.logger.info(`${emoji} Contract settled`, {
             contractId,
-            profit,
-            isWinning,
+            profit: profit.toFixed(2),
+            result: isWinning ? 'WIN' : 'LOSS',
             sellPrice: contract.sell_price,
-            sellTime: contract.sell_time
+            totalTrades: this.performance.totalTrades,
+            winRate: this.getWinRate()
         });
 
         this.emit('contractSettled', { contract, profit, isWinning });
+    }
 
-        // Check if we should continue trading
-        if (!this.riskManager.canOpenPosition()) {
-            this.logger.warn('Trading paused due to risk limits');
+    /**
+     * Handle sell response
+     */
+    handleSellResponse(message) {
+        if (message.sell) {
+            this.logger.info('Contract sold', {
+                contractId: message.sell.contract_id,
+                soldFor: message.sell.sold_for
+            });
         }
     }
 
-    handleApiError(message) {
-        this.logger.error('API Error', {
-            code: message.error.code,
-            message: message.error.message
-        });
-    }
-
+    /**
+     * Handle WebSocket errors
+     */
     handleError(error) {
-        this.logger.error('WebSocket error', { error: error.message });
+        this.logger.error('WebSocket error', { message: error.message });
     }
 
-    handleDisconnect() {
-        if (this.reconnectAttempts < this.config.maxReconnectAttempts) {
-            this.reconnectAttempts++;
-            const delay = this.config.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
+    /**
+     * Handle WebSocket close
+     */
+    handleClose(code, reason) {
+        this.logger.warn('WebSocket disconnected', { code, reason: reason?.toString() });
+        this.isConnected = false;
+        this.isAuthorized = false;
+        this.handleReconnect();
+    }
 
-            this.logger.info(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts})`);
-
-            setTimeout(() => {
-                this.connect().catch(error => {
-                    this.logger.error('Reconnection failed', { error: error.message });
-                });
-            }, delay);
-        } else {
+    /**
+     * Handle reconnection
+     */
+    handleReconnect() {
+        if (this.reconnectAttempts >= this.config.maxReconnectAttempts) {
             this.logger.error('Max reconnection attempts reached');
             this.emit('maxReconnectAttemptsReached');
+            return;
         }
+
+        this.reconnectAttempts++;
+        const delay = this.config.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1);
+
+        this.logger.info(`Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.config.maxReconnectAttempts})`);
+
+        setTimeout(() => {
+            this.connect().catch(error => {
+                this.logger.error('Reconnection failed', { error: error.message });
+            });
+        }, delay);
     }
 
+    /**
+     * Send message to WebSocket
+     */
     send(data) {
         if (!this.isConnected || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
-            this.logger.error('Cannot send message - not connected');
-            return false;
+            this.logger.error('Cannot send - not connected');
+            return null;
         }
+
+        const reqId = ++this.requestId;
+        data.req_id = reqId;
 
         try {
-            const message = JSON.stringify(data);
-            this.ws.send(message);
-            this.logger.debug('Message sent', { data });
-            return true;
+            this.ws.send(JSON.stringify(data));
+            this.logger.debug('Message sent', { req_id: reqId, type: Object.keys(data)[0] });
+            return reqId;
         } catch (error) {
-            this.logger.error('Failed to send message', { error: error.message });
-            return false;
+            this.logger.error('Send failed', { error: error.message });
+            return null;
         }
     }
 
+    /**
+     * Disconnect from API
+     */
     async disconnect() {
+        this.logger.info('Disconnecting...');
+
         if (this.ws) {
-            this.logger.info('Disconnecting from Deriv API');
+            // Remove event listeners to prevent reconnection
+            this.ws.removeAllListeners('close');
             this.ws.close();
             this.ws = null;
-            this.isConnected = false;
-            this.isAuthorized = false;
         }
+
+        this.isConnected = false;
+        this.isAuthorized = false;
     }
 
+    /**
+     * Get win rate percentage
+     */
+    getWinRate() {
+        if (this.performance.totalTrades === 0) return '0.00%';
+        return ((this.performance.winningTrades / this.performance.totalTrades) * 100).toFixed(2) + '%';
+    }
+
+    /**
+     * Get performance metrics
+     */
     getPerformanceMetrics() {
-        const totalReturn = this.performance.totalProfit - this.performance.totalLoss;
-        const winRate = this.performance.totalTrades > 0
-            ? (this.performance.winningTrades / this.performance.totalTrades) * 100
-            : 0;
+        const netProfit = this.performance.totalProfit - this.performance.totalLoss;
         const profitFactor = this.performance.totalLoss > 0
-            ? this.performance.totalProfit / this.performance.totalLoss
-            : this.performance.totalProfit > 0 ? Infinity : 0;
+            ? (this.performance.totalProfit / this.performance.totalLoss).toFixed(2)
+            : this.performance.totalProfit > 0 ? '∞' : '0';
 
         return {
-            ...this.performance,
-            totalReturn,
-            winRate,
+            totalTrades: this.performance.totalTrades,
+            winningTrades: this.performance.winningTrades,
+            losingTrades: this.performance.losingTrades,
+            winRate: this.getWinRate(),
+            totalProfit: this.performance.totalProfit.toFixed(2),
+            totalLoss: this.performance.totalLoss.toFixed(2),
+            netProfit: netProfit.toFixed(2),
             profitFactor,
-            currentBalance: this.riskManager.accountBalance,
             riskMetrics: this.riskManager.getRiskMetrics(),
-            uptime: Date.now() - this.performance.startTime
+            gridStatus: this.gridManager.getGridStatus(),
+            uptime: Math.floor((Date.now() - this.performance.startTime) / 1000 / 60) + ' minutes'
         };
     }
 
+    /**
+     * Start the bot
+     */
     async start() {
-        this.logger.info('Starting Deriv Grid Scalper Bot', {
-            config: {
-                symbol: this.config.symbol,
-                stake: this.config.stake,
-                multiplier: this.config.multiplier,
-                paperTrading: this.config.paperTrading
-            }
+        console.log('\n');
+        console.log('═══════════════════════════════════════════════════════════════════════════');
+        console.log('  DERIV GRID SCALPING BOT v2.0.0');
+        console.log('═══════════════════════════════════════════════════════════════════════════');
+        console.log('\n');
+
+        this.logger.info('Starting bot', {
+            symbol: this.config.symbol,
+            stake: this.config.stake,
+            multiplier: this.config.multiplier,
+            gridLevels: this.config.gridLevels
         });
 
         // Set up event handlers
         this.on('ready', () => {
-            this.logger.info('Bot is ready for trading');
+            this.logger.info('🚀 Bot is ready for trading');
         });
 
         this.on('tradeExecuted', (contract) => {
-            this.logger.info('Trade executed event', { contractId: contract.contract_id });
+            this.logger.info('📈 Trade event', { contractId: contract.contract_id });
         });
 
-        this.on('contractSettled', ({ contract, profit, isWinning }) => {
-            this.logger.info('Contract settlement summary', {
-                profit,
-                isWinning,
-                totalTrades: this.performance.totalTrades,
-                winRate: ((this.performance.winningTrades / this.performance.totalTrades) * 100).toFixed(2) + '%'
+        this.on('contractSettled', ({ profit, isWinning }) => {
+            this.logger.info('💰 Settlement', {
+                profit: profit.toFixed(2),
+                result: isWinning ? 'WIN' : 'LOSS',
+                winRate: this.getWinRate()
             });
         });
 
-        // Start performance monitoring
-        setInterval(() => {
+        // Performance logging interval
+        this.performanceInterval = setInterval(() => {
             const metrics = this.getPerformanceMetrics();
-            this.logger.info('Performance metrics', metrics);
-        }, 60000); // Log every minute
+            this.logger.info('📊 Performance Report', metrics);
+        }, 300000); // Every 5 minutes
 
-        // Connect to Deriv
+        // Daily stats reset
+        this.dailyResetInterval = setInterval(() => {
+            const now = new Date();
+            if (now.getHours() === 0 && now.getMinutes() === 0) {
+                this.riskManager.resetDailyStats();
+                this.gridManager.resetGrid();
+            }
+        }, 60000); // Check every minute
+
+        // Connect
         await this.connect();
     }
 
+    /**
+     * Stop the bot
+     */
     async stop() {
-        this.logger.info('Stopping Deriv Grid Scalper Bot');
+        this.logger.info('Stopping bot...');
 
-        // Close all open positions
+        // Clear intervals
+        if (this.performanceInterval) clearInterval(this.performanceInterval);
+        if (this.dailyResetInterval) clearInterval(this.dailyResetInterval);
+
+        // Close open positions
         for (const [contractId] of this.contracts) {
             this.logger.info('Closing position', { contractId });
-            this.send({ sell: contractId });
+            this.send({ sell: contractId, price: 0 });
         }
 
         // Wait for positions to close
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        await new Promise(resolve => setTimeout(resolve, 3000));
 
         // Disconnect
         await this.disconnect();
 
-        // Final performance report
+        // Final report
         const metrics = this.getPerformanceMetrics();
-        this.logger.info('Final performance report', metrics);
+
+        console.log('\n');
+        console.log('═══════════════════════════════════════════════════════════════════════════');
+        console.log('  FINAL PERFORMANCE REPORT');
+        console.log('═══════════════════════════════════════════════════════════════════════════');
+        console.log(JSON.stringify(metrics, null, 2));
+        console.log('═══════════════════════════════════════════════════════════════════════════');
+        console.log('\n');
 
         this.emit('stopped');
     }
@@ -908,10 +1177,12 @@ class DerivGridScalperBot extends EventEmitter {
  * Main execution
  */
 async function main() {
-    // Check for required environment variables
+    // Check for API token
     if (!process.env.DERIV_API_TOKEN) {
-        console.error('ERROR: DERIV_API_TOKEN environment variable is required');
-        console.error('Please set your Deriv API token: export DERIV_API_TOKEN=your_token_here');
+        console.error('═══════════════════════════════════════════════════════════════════════════');
+        console.error('  ERROR: DERIV_API_TOKEN environment variable is required');
+        console.error('  Please set it: export DERIV_API_TOKEN=your_token_here');
+        console.error('═══════════════════════════════════════════════════════════════════════════');
         process.exit(1);
     }
 
@@ -919,17 +1190,14 @@ async function main() {
     const bot = new DerivGridScalperBot();
 
     // Graceful shutdown handlers
-    process.on('SIGINT', async () => {
-        console.log('\nReceived SIGINT, shutting down gracefully...');
+    const shutdown = async (signal) => {
+        console.log(`\nReceived ${signal}, shutting down gracefully...`);
         await bot.stop();
         process.exit(0);
-    });
+    };
 
-    process.on('SIGTERM', async () => {
-        console.log('\nReceived SIGTERM, shutting down gracefully...');
-        await bot.stop();
-        process.exit(0);
-    });
+    process.on('SIGINT', () => shutdown('SIGINT'));
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
 
     process.on('uncaughtException', async (error) => {
         console.error('Uncaught exception:', error);
@@ -937,28 +1205,23 @@ async function main() {
         process.exit(1);
     });
 
-    process.on('unhandledRejection', async (reason, promise) => {
-        console.error('Unhandled rejection at:', promise, 'reason:', reason);
+    process.on('unhandledRejection', async (reason) => {
+        console.error('Unhandled rejection:', reason);
         await bot.stop();
         process.exit(1);
     });
 
     try {
-        // Start the bot
         await bot.start();
-
-        // Keep the process running
-        await new Promise(() => { });
     } catch (error) {
         console.error('Failed to start bot:', error.message);
         process.exit(1);
     }
 }
 
-// Run the bot if this file is executed directly
+// Run if executed directly
 if (require.main === module) {
     main();
 }
 
-// Export for module usage
 module.exports = { DerivGridScalperBot, CONFIG };
