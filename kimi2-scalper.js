@@ -11,6 +11,7 @@ const WebSocket = require('ws');
 const EventEmitter = require('events');
 const fs = require('fs').promises;
 const path = require('path');
+const TelegramBot = require('node-telegram-bot-api');
 require('dotenv').config();
 
 /**
@@ -567,6 +568,18 @@ class DerivGridScalperBot extends EventEmitter {
 
         // Connect grid manager events
         this.gridManager.on('gridTrigger', this.handleGridTrigger);
+
+        // Telegram Configuration
+        this.telegramToken = process.env.TELEGRAM_BOT_TOKEN3;
+        this.telegramChatId = process.env.TELEGRAM_CHAT_ID2;
+        this.telegramEnabled = !!(this.telegramToken && this.telegramChatId);
+
+        if (this.telegramEnabled) {
+            this.telegramBot = new TelegramBot(this.telegramToken, { polling: false });
+            this.logger.info('📱 Telegram notifications enabled');
+        } else {
+            this.logger.warn('📱 Telegram notifications disabled (missing API keys)');
+        }
     }
 
     /**
@@ -871,6 +884,10 @@ class DerivGridScalperBot extends EventEmitter {
 
         // Subscription to contract updates is automatically started by 'subscribe: 1' in buyRequest
 
+        // Telegram Notification
+        const direction = contract.longcode.toLowerCase().includes('up') ? 'BUY' : 'SELL';
+        this.sendTelegramTradeExecution(contract, direction);
+
         this.emit('tradeExecuted', contract);
     }
 
@@ -975,6 +992,9 @@ class DerivGridScalperBot extends EventEmitter {
         console.log(`  Win Rate       : ${this.getWinRate()}`);
         console.log(`${separator}\n`);
 
+        // Telegram Notification
+        this.sendTelegramTradeSettlement(contract, profit, isWinning);
+
         this.emit('contractSettled', { contract, profit, isWinning });
     }
 
@@ -1049,6 +1069,87 @@ class DerivGridScalperBot extends EventEmitter {
             this.logger.error('Send failed', { error: error.message });
             return null;
         }
+    }
+
+    /**
+     * Send message to Telegram
+     */
+    async sendTelegramMessage(message) {
+        if (!this.telegramEnabled || !this.telegramBot) return;
+
+        try {
+            await this.telegramBot.sendMessage(this.telegramChatId, message, { parse_mode: 'HTML' });
+            this.logger.debug('📱 Telegram notification sent');
+        } catch (error) {
+            this.logger.error('❌ Failed to send Telegram message:', error.message);
+        }
+    }
+
+    /**
+     * Get detailed Telegram summary
+     */
+    getTelegramSummary() {
+        const metrics = this.getPerformanceMetrics();
+        const duration = Math.floor((Date.now() - this.performance.startTime) / 1000 / 60);
+
+        return `<b>📊 Scalper Performance Report</b>
+━━━━━━━━━━━━━━━━━━━━━━━━
+<b>Asset:</b> <code>${this.config.symbol}</code>
+<b>Duration:</b> ${duration} minutes
+<b>Total Trades:</b> ${this.performance.totalTrades}
+<b>Win Rate:</b> ${metrics.winRate}
+
+✅ <b>Wins:</b> ${this.performance.winningTrades}
+❌ <b>Losses:</b> ${this.performance.losingTrades}
+
+💰 <b>Total Profit:</b> $${this.performance.totalProfit.toFixed(2)}
+📉 <b>Total Loss:</b> $${this.performance.totalLoss.toFixed(2)}
+💵 <b>Net Profit:</b> $${metrics.netProfit}
+🏁 <b>Profit Factor:</b> ${metrics.profitFactor}
+
+🏦 <b>Current Balance:</b> $${this.riskManager.accountBalance.toFixed(2)}
+━━━━━━━━━━━━━━━━━━━━━━━━`;
+    }
+
+    /**
+     * Send Trade Execution Notification
+     */
+    async sendTelegramTradeExecution(contract, direction) {
+        const stake = this.config.stake;
+        const msg = `🚀 <b>TRADE OPENED</b>
+━━━━━━━━━━━━━━━━━━━━━━━━
+<b>Type:</b> ${direction === 'BUY' ? '⬆️ CALL (Up)' : '⬇️ PUT (Down)'}
+<b>Asset:</b> <code>${this.config.symbol}</code>
+<b>Contract ID:</b> <code>${contract.contract_id}</code>
+<b>Stake:</b> $${stake.toFixed(2)}
+<b>Multiplier:</b> x${this.config.multiplier}
+
+<b>Grid Level:</b> ${this.gridManager.getGridStatus().buyLevelsTriggered + this.gridManager.getGridStatus().sellLevelsTriggered}
+<b>Timestamp:</b> ${new Date().toLocaleTimeString()}
+━━━━━━━━━━━━━━━━━━━━━━━━`;
+        await this.sendTelegramMessage(msg);
+    }
+
+    /**
+     * Send Trade Settlement Notification
+     */
+    async sendTelegramTradeSettlement(contract, profit, isWinning) {
+        const emoji = isWinning ? '✅ WIN' : '❌ LOSS';
+        const profitPercent = (profit / parseFloat(contract.buy_price || this.config.stake) * 100).toFixed(2);
+
+        const msg = `${isWinning ? '💰' : '📉'} <b>TRADE CLOSED: ${emoji}</b>
+━━━━━━━━━━━━━━━━━━━━━━━━
+<b>Contract ID:</b> <code>${contract.contract_id}</code>
+<b>Asset:</b> <code>${this.config.symbol}</code>
+<b>Profit/Loss:</b> $${profit.toFixed(2)} (${profitPercent}%)
+<b>Entry Spot:</b> ${contract.entry_tick || 'N/A'}
+<b>Exit Spot:</b> ${contract.exit_tick || 'N/A'}
+
+<b>Total Trades:</b> ${this.performance.totalTrades}
+<b>Session P/L:</b> $${(this.performance.totalProfit - this.performance.totalLoss).toFixed(2)}
+<b>Current Balance:</b> $${this.riskManager.accountBalance.toFixed(2)}
+━━━━━━━━━━━━━━━━━━━━━━━━`;
+        await this.sendTelegramMessage(msg);
     }
 
     /**
@@ -1134,10 +1235,18 @@ class DerivGridScalperBot extends EventEmitter {
             });
         });
 
+        if (this.telegramEnabled) {
+            this.sendTelegramMessage(`🚀 <b>Bot Started: Grid Scalper v2.0.0</b>\n\n<b>Asset:</b> ${this.config.symbol}\n<b>Stake:</b> $${this.config.stake}\n<b>Balance:</b> $${this.riskManager.accountBalance.toFixed(2)}`);
+        }
+
         // Performance logging interval
         this.performanceInterval = setInterval(() => {
             const metrics = this.getPerformanceMetrics();
             this.logger.info('📊 Performance Report', metrics);
+
+            if (this.telegramEnabled && this.performance.totalTrades > 0) {
+                this.sendTelegramMessage(this.getTelegramSummary());
+            }
         }, 300000); // Every 5 minutes
 
         // Daily stats reset
@@ -1167,6 +1276,10 @@ class DerivGridScalperBot extends EventEmitter {
         for (const [contractId] of this.contracts) {
             this.logger.info('Closing position', { contractId });
             this.send({ sell: contractId, price: 0 });
+        }
+
+        if (this.telegramEnabled) {
+            await this.sendTelegramMessage(`⏹ <b>Bot Stopped Gracefully</b>\n\n${this.getTelegramSummary()}`);
         }
 
         // Wait for positions to close
