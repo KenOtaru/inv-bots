@@ -4,3 +4,76 @@
 2025-12-15T19:27:58.730Z [info]: Starting Deriv Advanced Bot... 
 2025-12-15T19:28:01.553Z [info]: Bot running. Monitoring R_75... 
 2025-12-15T19:28:06.187Z [info]: Received SIGINT, shutting down gracefully... 
+[2026-01-01T00:17:14.080Z] [INFO] Starting bot {"symbol":"R_100","stake":0.61,"multiplier":11,"gridLevels":5}
+[2026-01-01T00:17:14.122Z] [INFO] Connecting to Deriv API {"url":"wss://ws.derivws.com/websockets/v3?app_id=1089"}
+[2026-01-01T00:17:14.655Z] [INFO] Starting bot {"symbol":"R_100","stake":0.61,"multiplier":11,"gridLevels":5}
+[2026-01-01T00:17:14.658Z] [INFO] Connecting to Deriv API {"url":"wss://ws.derivws.com/websockets/v3?app_id=1089"}
+[2026-01-01T00:17:16.018Z] [INFO] WebSocket connected
+[2026-01-01T00:17:16.018Z] [INFO] Authenticating...
+[2026-01-01T00:17:16.212Z] [INFO] WebSocket connected
+[2026-01-01T00:17:16.213Z] [INFO] Authenticating...
+[2026-01-01T00:17:17.235Z] [INFO] ✅ Authorization successful {"account":"VRTC14614573","balance":8189.73,"currency":"USD"}
+[2026-01-01T00:17:17.233Z] [INFO] ✅ Authorization successful {"account":"VRTC14614573","balance":8189.73,"currency":"USD"}
+[2026-01-01T00:17:17.235Z] [INFO] Subscribing to market data {"symbol":"R_100"}
+[2026-01-01T00:17:17.235Z] [INFO] 🚀 Bot is ready for trading
+[2026-01-01T00:17:17.234Z] [INFO] Subscribing to market data {"symbol":"R_100"}
+[2026-01-01T00:17:17.234Z] [INFO] 🚀 Bot is ready for trading
+[2026-01-01T00:17:20.596Z] [INFO] Grid initialized {"basePrice":"680.01000","levels":5,"spacing":0.5}
+[2026-01-01T00:17:20.622Z] [INFO] Grid initialized {"basePrice":"680.01000","levels":5,"spacing":0.5}
+[2026-01-01T00:17:54.595Z] [INFO] Grid level triggered {"type":"BUY","level":1,"triggerPrice":"679.51000","currentPrice":"679.47000"}
+[2026-01-01T00:17:54.616Z] [INFO] Grid level triggered {"type":"BUY","level":1,"triggerPrice":"679.51000","currentPrice":"679.47000"}
+[2026-01-01T00:17:54.617Z] [INFO] 📊 Grid trigger received {"type":"BUY","price":679.51,"level":1,"timestamp":1767226674617}
+[2026-01-01T00:17:54.618Z] [INFO] 🚀 Placing BUY trade {"contractType":"MULTUP","stake":0.61,"multiplier":11,"stopLoss":0.3,"takeProfit":0.61}
+[2026-01-01T00:17:54.596Z] [INFO] 📊 Grid trigger received {"type":"BUY","price":679.51,"level":1,"timestamp":1767226674596}
+[2026-01-01T00:17:54.596Z] [INFO] 🚀 Placing BUY trade {"contractType":"MULTUP","stake":0.61,"multiplier":11,"stopLoss":0.3,"takeProfit":0.61}
+[2026-01-01T00:17:55.573Z] [ERROR] API Error {"code":"ContractCreationFailure","message":"Please enter a stake amount that's at least 1.00.","msgType":"buy"}
+[2026-01-01T00:17:55.587Z] [ERROR] API Error {"code":"ContractCreationFailure","message":"Please enter a stake amount that's at least 1.00.","msgType":"buy"}
+[2026-01-01T00:18:06.323Z] [INFO] Stopping bot...
+[2026-01-01T00:18:42.591Z] [INFO] 📈 Trading signal detected {"signal":"BUY","confidence":0.7635135135135191,"rsi":"23.65","currentPrice":"679.06000","trend":"UP","reasons":["RSI oversold (23.65)","Trend aligned (UP)"]}
+[2026-01-01T00:18:42.591Z] [INFO] 🚀 Placing BUY trade {"contractType":"MULTUP","stake":0.61,"multiplier":11,"stopLoss":0.3,"takeProfit":0.61}
+[2026-01-01T00:18:42.901Z] [ERROR] API Error {"code":"ContractCreationFailure","message":"Please enter a stake amount that's at least 1.00.","msgType":"buy"}
+[2026-01-01T00:19:58.082Z] [INFO] Starting bot {"symbol":"R_100","stake":1,"multiplier":100,"gridLevels":5}
+[2026-01-01T00:19:58.085Z] [INFO] Connecting to Deriv API {"url":"wss://ws.derivws.com/websockets/v3?app_id=1089"}
+[2026-01-01T00:19:58.973Z] [INFO] WebSocket connected
+[2026-01-01T00:19:58.974Z] [INFO] Authenticating...
+[2026-01-01T00:19:59.291Z] [INFO] ✅ Authorization successful {"account":"VRTC14614573","balance":8189.73,"currency":"USD"}
+[2026-01-01T00:19:59.292Z] [INFO] Subscribing to market data {"symbol":"R_100"}
+[2026-01-01T00:19:59.292Z] [INFO] 🚀 Bot is ready for trading
+[2026-01-01T00:20:02.628Z] [INFO] Grid initialized {"basePrice":"679.78000","levels":5,"spacing":0.5}
+[2026-01-01T00:20:06.625Z] [INFO] Grid level triggered {"type":"SELL","level":1,"triggerPrice":"680.28000","currentPrice":"680.32000"}
+[2026-01-01T00:20:06.626Z] [INFO] 📊 Grid trigger received {"type":"SELL","price":680.28,"level":1,"timestamp":1767226806626}
+[2026-01-01T00:20:06.626Z] [INFO] 🚀 Placing SELL trade {"contractType":"MULTDOWN","stake":1,"multiplier":100,"stopLoss":0.5,"takeProfit":1}
+[2026-01-01T00:20:06.985Z] [INFO] ✅ Trade executed {"contractId":302899469568,"type":"If you select 'Down', your total profit/loss will be the percentage decrease in Volatility 100 Index, multiplied by 100, minus commissions.","buyPrice":1}
+[2026-01-01T00:20:06.986Z] [INFO] Position opened {"contractId":302899469568,"openPositions":1}
+[2026-01-01T00:20:06.986Z] [INFO] Setting contract limits {"contractId":302899469568,"stopLoss":0.5,"takeProfit":1}
+[2026-01-01T00:20:06.987Z] [INFO] 📈 Trade event {"contractId":302899469568}
+[2026-01-01T00:20:07.334Z] [ERROR] API Error {"code":"AlreadySubscribed","message":"You are already subscribed to proposal_open_contract.","msgType":"proposal_open_contract"}
+[2026-01-01T00:20:20.675Z] [INFO] Grid level triggered {"type":"SELL","level":1,"triggerPrice":"680.51000","currentPrice":"680.52000"}
+[2026-01-01T00:20:20.676Z] [INFO] 📊 Grid trigger received {"type":"SELL","price":680.51,"level":1,"timestamp":1767226820676}
+[2026-01-01T00:20:20.676Z] [INFO] 🚀 Placing SELL trade {"contractType":"MULTDOWN","stake":0.61,"multiplier":11,"stopLoss":0.3,"takeProfit":0.61}
+[2026-01-01T00:20:20.968Z] [ERROR] API Error {"code":"ContractCreationFailure","message":"Please enter a stake amount that's at least 1.00.","msgType":"buy"}
+[2026-01-01T00:20:52.591Z] [INFO] 📈 Trading signal detected {"signal":"BUY","confidence":0.7246376811594,"rsi":"27.54","currentPrice":"679.94000","trend":"UP","reasons":["RSI oversold (27.54)","Trend aligned (UP)"]}
+[2026-01-01T00:20:52.592Z] [INFO] 🚀 Placing BUY trade {"contractType":"MULTUP","stake":0.61,"multiplier":11,"stopLoss":0.3,"takeProfit":0.61}
+[2026-01-01T00:20:52.625Z] [INFO] 📈 Trading signal detected {"signal":"BUY","confidence":0.7246376811594,"rsi":"27.54","currentPrice":"679.94000","trend":"UP","reasons":["RSI oversold (27.54)","Trend aligned (UP)"]}
+[2026-01-01T00:20:52.626Z] [INFO] 🚀 Placing BUY trade {"contractType":"MULTUP","stake":1,"multiplier":100,"stopLoss":0.5,"takeProfit":1}
+[2026-01-01T00:20:52.884Z] [ERROR] API Error {"code":"ContractCreationFailure","message":"Please enter a stake amount that's at least 1.00.","msgType":"buy"}
+[2026-01-01T00:20:52.968Z] [INFO] ✅ Trade executed {"contractId":302899503048,"type":"If you select 'Up', your total profit/loss will be the percentage increase in Volatility 100 Index, multiplied by 100, minus commissions.","buyPrice":1}
+[2026-01-01T00:20:52.968Z] [INFO] Position opened {"contractId":302899503048,"openPositions":2}
+[2026-01-01T00:20:52.968Z] [INFO] Setting contract limits {"contractId":302899503048,"stopLoss":0.5,"takeProfit":1}
+[2026-01-01T00:20:52.969Z] [INFO] 📈 Trade event {"contractId":302899503048}
+[2026-01-01T00:20:53.317Z] [ERROR] API Error {"code":"AlreadySubscribed","message":"You are already subscribed to proposal_open_contract.","msgType":"proposal_open_contract"}
+[2026-01-01T00:21:13.049Z] [INFO] Stopping bot...
+[2026-01-01T00:21:13.050Z] [INFO] Closing position {"contractId":302899469568}
+[2026-01-01T00:21:13.051Z] [INFO] Closing position {"contractId":302899503048}
+[2026-01-01T00:21:13.412Z] [INFO] Contract sold {"contractId":302899503048,"soldFor":1.03}
+[2026-01-01T00:21:13.412Z] [INFO] Contract sold {"contractId":302899469568,"soldFor":0.93}
+[2026-01-01T00:21:14.741Z] [INFO] Position closed {"contractId":302899503048,"openPositions":1}
+[2026-01-01T00:21:14.742Z] [INFO] ✅ Contract settled {"contractId":302899503048,"profit":"0.03","result":"WIN","sellPrice":1.03,"totalTrades":2,"winRate":"50.00%"}
+[2026-01-01T00:21:14.742Z] [INFO] 💰 Settlement {"profit":"0.03","result":"WIN","winRate":"50.00%"}
+[2026-01-01T00:21:14.743Z] [INFO] Position closed {"contractId":302899469568,"openPositions":0}
+[2026-01-01T00:21:14.744Z] [INFO] ❌ Contract settled {"contractId":302899469568,"profit":"-0.07","result":"LOSS","sellPrice":0.93,"totalTrades":2,"winRate":"50.00%"}
+[2026-01-01T00:21:14.744Z] [INFO] 💰 Settlement {"profit":"-0.07","result":"LOSS","winRate":"50.00%"}
+[2026-01-01T00:21:32.617Z] [INFO] Grid level triggered {"type":"SELL","level":2,"triggerPrice":"681.01000","currentPrice":"681.09000"}
+[2026-01-01T00:21:32.617Z] [INFO] 📊 Grid trigger received {"type":"SELL","price":681.01,"level":2,"timestamp":1767226892617}
+[2026-01-01T00:21:32.617Z] [INFO] 🚀 Placing SELL trade {"contractType":"MULTDOWN","stake":0.61,"multiplier":11,"stopLoss":0.3,"takeProfit":0.61}
+[2026-01-01T00:21:32.908Z] [ERROR] API Error {"code":"ContractCreationFailure","message":"Please enter a stake amount that's at least 1.00.","msgType":"buy"}

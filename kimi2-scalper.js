@@ -11,6 +11,7 @@ const WebSocket = require('ws');
 const EventEmitter = require('events');
 const fs = require('fs').promises;
 const path = require('path');
+require('dotenv').config();
 
 /**
  * Configuration Object
@@ -1178,10 +1179,11 @@ class DerivGridScalperBot extends EventEmitter {
  */
 async function main() {
     // Check for API token
-    if (!process.env.DERIV_API_TOKEN) {
+    const token = process.env.DERIV_API_TOKEN || process.env.DERIV_TOKEN || process.env.DERIV_TOKENs;
+    if (!token) {
         console.error('═══════════════════════════════════════════════════════════════════════════');
-        console.error('  ERROR: DERIV_API_TOKEN environment variable is required');
-        console.error('  Please set it: export DERIV_API_TOKEN=your_token_here');
+        console.error('  ERROR: DERIV_API_TOKEN or DERIV_TOKEN environment variable is required');
+        console.error('  Please set it in your .env file');
         console.error('═══════════════════════════════════════════════════════════════════════════');
         process.exit(1);
     }
