@@ -12,7 +12,7 @@ const SYMBOL = "R_75";
 const APP_ID = "1089";
 const STAKE = 1;
 const DURATION = 5;
-const MAX_LOSSES = 3;
+const MAX_LOSSES = 5;
 const ML_THRESHOLD = 0.9;
 
 // ================= COLORS =================
