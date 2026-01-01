@@ -869,12 +869,7 @@ class DerivGridScalperBot extends EventEmitter {
             this.pendingLimits = null;
         }
 
-        // Subscribe to contract updates
-        this.send({
-            proposal_open_contract: 1,
-            contract_id: contractId,
-            subscribe: 1
-        });
+        // Subscription to contract updates is automatically started by 'subscribe: 1' in buyRequest
 
         this.emit('tradeExecuted', contract);
     }
@@ -916,16 +911,27 @@ class DerivGridScalperBot extends EventEmitter {
             // Update contract in tracking
             if (this.contracts.has(contractId)) {
                 const existingContract = this.contracts.get(contractId);
-                this.contracts.set(contractId, { ...existingContract, ...contract });
-            }
+                const updatedContract = { ...existingContract, ...contract };
+                this.contracts.set(contractId, updatedContract);
 
-            // Log current P&L
-            const profit = parseFloat(contract.profit || 0);
-            this.logger.debug('Contract update', {
-                contractId,
-                currentProfit: profit.toFixed(2),
-                currentSpot: contract.current_spot
-            });
+                // Detailed active trade logging - Throttle to every 5 seconds to avoid spam
+                const now = Date.now();
+                if (!updatedContract.lastLogTime || now - updatedContract.lastLogTime >= 5000) {
+                    updatedContract.lastLogTime = now;
+
+                    const profit = parseFloat(contract.profit || 0);
+                    const stake = parseFloat(existingContract.buy_price || this.config.stake);
+                    const profitPercent = (profit / stake * 100).toFixed(2);
+                    const entryPrice = parseFloat(contract.entry_spot || existingContract.entry_spot || stake);
+                    const currentPrice = parseFloat(contract.current_spot);
+                    const direction = updatedContract.contract_type === 'MULTUP' ? '⬆️ CALL' : '⬇️ PUT';
+                    const symbol = updatedContract.display_name || this.config.symbol;
+
+                    console.log(`\n  [ACTIVE] ${symbol} | ${direction}`);
+                    console.log(`  ID: ${contractId} | Entry: ${entryPrice.toFixed(5)} | Current: ${currentPrice.toFixed(5)}`);
+                    console.log(`  Profit: $${profit.toFixed(2)} (${profitPercent}%) | Status: ${contract.status.toUpperCase()}`);
+                }
+            }
         }
     }
 
@@ -935,6 +941,8 @@ class DerivGridScalperBot extends EventEmitter {
     handleContractSettlement(contractId, contract) {
         const profit = parseFloat(contract.profit || 0);
         const isWinning = profit > 0;
+        const stake = parseFloat(contract.buy_price || this.config.stake);
+        const profitPercent = (profit / stake * 100).toFixed(2);
 
         // Update performance
         if (isWinning) {
@@ -949,15 +957,23 @@ class DerivGridScalperBot extends EventEmitter {
         this.riskManager.removePosition(contractId);
         this.contracts.delete(contractId);
 
-        const emoji = isWinning ? '✅' : '❌';
-        this.logger.info(`${emoji} Contract settled`, {
-            contractId,
-            profit: profit.toFixed(2),
-            result: isWinning ? 'WIN' : 'LOSS',
-            sellPrice: contract.sell_price,
-            totalTrades: this.performance.totalTrades,
-            winRate: this.getWinRate()
-        });
+        const emoji = isWinning ? '💰 WIN' : '📉 LOSS';
+        const separator = '═'.repeat(50);
+
+        console.log(`\n${separator}`);
+        console.log(`  ${emoji} - Trade Completed`);
+        console.log(`${separator}`);
+        console.log(`  Contract ID: ${contractId}`);
+        console.log(`  Type       : ${contract.contract_type === 'MULTUP' ? 'UP (Call)' : 'DOWN (Put)'}`);
+        console.log(`  Stake      : $${stake.toFixed(2)}`);
+        console.log(`  Profit/Loss: $${profit.toFixed(2)} (${profitPercent}%)`);
+        console.log(`  Entry Spot : ${contract.entry_tick}`);
+        console.log(`  Exit Spot  : ${contract.exit_tick}`);
+        console.log(`  Status     : ${contract.status.toUpperCase()}`);
+        console.log(`${separator}`);
+        console.log(`  Account Balance: $${this.riskManager.accountBalance.toFixed(2)}`);
+        console.log(`  Win Rate       : ${this.getWinRate()}`);
+        console.log(`${separator}\n`);
 
         this.emit('contractSettled', { contract, profit, isWinning });
     }

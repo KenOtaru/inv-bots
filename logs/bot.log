@@ -77,3 +77,228 @@
 [2026-01-01T00:21:32.617Z] [INFO] 📊 Grid trigger received {"type":"SELL","price":681.01,"level":2,"timestamp":1767226892617}
 [2026-01-01T00:21:32.617Z] [INFO] 🚀 Placing SELL trade {"contractType":"MULTDOWN","stake":0.61,"multiplier":11,"stopLoss":0.3,"takeProfit":0.61}
 [2026-01-01T00:21:32.908Z] [ERROR] API Error {"code":"ContractCreationFailure","message":"Please enter a stake amount that's at least 1.00.","msgType":"buy"}
+[2026-01-01T00:22:06.587Z] [INFO] Grid level triggered {"type":"SELL","level":3,"triggerPrice":"681.51000","currentPrice":"681.63000"}
+[2026-01-01T00:22:06.588Z] [INFO] 📊 Grid trigger received {"type":"SELL","price":681.51,"level":3,"timestamp":1767226926588}
+[2026-01-01T00:22:06.588Z] [INFO] 🚀 Placing SELL trade {"contractType":"MULTDOWN","stake":0.61,"multiplier":11,"stopLoss":0.3,"takeProfit":0.61}
+[2026-01-01T00:22:14.672Z] [INFO] 📊 Performance Report {"totalTrades":0,"winningTrades":0,"losingTrades":0,"winRate":"0.00%","totalProfit":"0.00","totalLoss":"0.00","netProfit":"0.00","profitFactor":"0","riskMetrics":{"dailyLoss":"2.00","dailyLossLimit":70,"openPositions":0,"maxOpenPositions":3,"tradesThisHour":6,"maxTradesPerHour":10,"accountBalance":"8189.69","initialBalance":"8189.73"},"gridStatus":{"isActive":true,"basePrice":680.01,"currentPrice":682.01,"totalLevels":5,"buyLevelsTriggered":1,"sellLevelsTriggered":3,"buyLevelsAvailable":1,"sellLevelsAvailable":0},"uptime":"5 minutes"}
+[2026-01-01T00:22:17.982Z] [ERROR] API Error {"code":"ContractCreationFailure","message":"Please enter a stake amount that's at least 1.00.","msgType":"buy"}
+[2026-01-01T00:26:52.596Z] [INFO] 📈 Trading signal detected {"signal":"SELL","confidence":0.803370786516812,"rsi":"80.34","currentPrice":"683.95000","trend":"DOWN","reasons":["RSI overbought (80.34)","Trend aligned (DOWN)"]}
+[2026-01-01T00:26:52.597Z] [INFO] 🚀 Placing SELL trade {"contractType":"MULTDOWN","stake":0.61,"multiplier":11,"stopLoss":0.3,"takeProfit":0.61}
+[2026-01-01T00:26:52.903Z] [ERROR] API Error {"code":"ContractCreationFailure","message":"Please enter a stake amount that's at least 1.00.","msgType":"buy"}
+[2026-01-01T00:26:54.616Z] [INFO] Starting bot {"symbol":"R_100","stake":1,"multiplier":100,"gridLevels":5}
+[2026-01-01T00:26:54.638Z] [INFO] Connecting to Deriv API {"url":"wss://ws.derivws.com/websockets/v3?app_id=1089"}
+[2026-01-01T00:26:59.497Z] [INFO] WebSocket connected
+[2026-01-01T00:26:59.498Z] [INFO] Authenticating...
+[2026-01-01T00:27:01.009Z] [INFO] ✅ Authorization successful {"account":"VRTC14614573","balance":8189.79,"currency":"USD"}
+[2026-01-01T00:27:01.010Z] [INFO] Subscribing to market data {"symbol":"R_100"}
+[2026-01-01T00:27:01.010Z] [INFO] 🚀 Bot is ready for trading
+[2026-01-01T00:27:04.679Z] [INFO] Grid initialized {"basePrice":"683.83000","levels":5,"spacing":0.5}
+[2026-01-01T00:27:13.529Z] [INFO] Starting bot {"symbol":"R_100","stake":1,"multiplier":100,"gridLevels":5}
+[2026-01-01T00:27:13.532Z] [INFO] Connecting to Deriv API {"url":"wss://ws.derivws.com/websockets/v3?app_id=1089"}
+[2026-01-01T00:27:14.482Z] [INFO] WebSocket connected
+[2026-01-01T00:27:14.483Z] [INFO] Authenticating...
+[2026-01-01T00:27:14.676Z] [INFO] 📊 Performance Report {"totalTrades":0,"winningTrades":0,"losingTrades":0,"winRate":"0.00%","totalProfit":"0.00","totalLoss":"0.00","netProfit":"0.00","profitFactor":"0","riskMetrics":{"dailyLoss":"3.22","dailyLossLimit":70,"openPositions":0,"maxOpenPositions":3,"tradesThisHour":7,"maxTradesPerHour":10,"accountBalance":"8189.79","initialBalance":"8189.73"},"gridStatus":{"isActive":true,"basePrice":680.01,"currentPrice":683.43,"totalLevels":5,"buyLevelsTriggered":1,"sellLevelsTriggered":3,"buyLevelsAvailable":1,"sellLevelsAvailable":0},"uptime":"10 minutes"}
+[2026-01-01T00:27:14.843Z] [INFO] ✅ Authorization successful {"account":"VRTC14614573","balance":8189.79,"currency":"USD"}
+[2026-01-01T00:27:14.844Z] [INFO] Subscribing to market data {"symbol":"R_100"}
+[2026-01-01T00:27:14.845Z] [INFO] 🚀 Bot is ready for trading
+[2026-01-01T00:27:18.605Z] [INFO] Grid initialized {"basePrice":"683.20000","levels":5,"spacing":0.5}
+[2026-01-01T00:27:18.645Z] [INFO] Grid level triggered {"type":"BUY","level":1,"triggerPrice":"683.33000","currentPrice":"683.20000"}
+[2026-01-01T00:27:18.646Z] [INFO] 📊 Grid trigger received {"type":"BUY","price":683.33,"level":1,"timestamp":1767227238645}
+[2026-01-01T00:27:18.646Z] [INFO] 🚀 Placing BUY trade {"contractType":"MULTUP","stake":1,"multiplier":100,"stopLoss":0.5,"takeProfit":1}
+[2026-01-01T00:27:19.003Z] [INFO] ✅ Trade executed {"contractId":302899729648,"type":"If you select 'Up', your total profit/loss will be the percentage increase in Volatility 100 Index, multiplied by 100, minus commissions.","buyPrice":1}
+[2026-01-01T00:27:19.004Z] [INFO] Position opened {"contractId":302899729648,"openPositions":1}
+[2026-01-01T00:27:19.004Z] [INFO] Setting contract limits {"contractId":302899729648,"stopLoss":0.5,"takeProfit":1}
+[2026-01-01T00:27:19.004Z] [INFO] 📈 Trade event {"contractId":302899729648}
+[2026-01-01T00:27:19.007Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"1.00000","current":"683.20000","profit":"-0.04 (-4.00%)","status":"open"}
+[2026-01-01T00:27:20.790Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"1.00000","current":"683.09000","profit":"-0.04 (-4.00%)","status":"open"}
+[2026-01-01T00:27:20.791Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.09000","profit":"-0.04 (-4.00%)","status":"open"}
+[2026-01-01T00:27:22.617Z] [INFO] 📈 Trading signal detected {"signal":"BUY","confidence":0.9007092198581634,"rsi":"9.93","currentPrice":"682.93000","trend":"UP","reasons":["RSI oversold (9.93)","Trend aligned (UP)"]}
+[2026-01-01T00:27:22.618Z] [INFO] 🚀 Placing BUY trade {"contractType":"MULTUP","stake":0.61,"multiplier":11,"stopLoss":0.3,"takeProfit":0.61}
+[2026-01-01T00:27:22.740Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"682.93000","profit":"-0.06 (-6.00%)","status":"open"}
+[2026-01-01T00:27:22.740Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"682.93000","profit":"-0.06 (-6.00%)","status":"open"}
+[2026-01-01T00:27:22.904Z] [ERROR] API Error {"code":"ContractCreationFailure","message":"Please enter a stake amount that's at least 1.00.","msgType":"buy"}
+[2026-01-01T00:27:24.742Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.06000","profit":"-0.04 (-4.00%)","status":"open"}
+[2026-01-01T00:27:24.746Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.06000","profit":"-0.04 (-4.00%)","status":"open"}
+[2026-01-01T00:27:26.697Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.30000","profit":"-0.01 (-1.00%)","status":"open"}
+[2026-01-01T00:27:26.716Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.30000","profit":"-0.01 (-1.00%)","status":"open"}
+[2026-01-01T00:27:28.716Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.03000","profit":"-0.05 (-5.00%)","status":"open"}
+[2026-01-01T00:27:28.721Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.03000","profit":"-0.05 (-5.00%)","status":"open"}
+[2026-01-01T00:27:30.811Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"682.97000","profit":"-0.05 (-5.00%)","status":"open"}
+[2026-01-01T00:27:30.823Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"682.97000","profit":"-0.05 (-5.00%)","status":"open"}
+[2026-01-01T00:27:32.713Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.28000","profit":"-0.01 (-1.00%)","status":"open"}
+[2026-01-01T00:27:32.715Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.28000","profit":"-0.01 (-1.00%)","status":"open"}
+[2026-01-01T00:27:34.735Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.27000","profit":"-0.01 (-1.00%)","status":"open"}
+[2026-01-01T00:27:34.740Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.27000","profit":"-0.01 (-1.00%)","status":"open"}
+[2026-01-01T00:27:36.743Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"682.97000","profit":"-0.05 (-5.00%)","status":"open"}
+[2026-01-01T00:27:36.743Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"682.97000","profit":"-0.05 (-5.00%)","status":"open"}
+[2026-01-01T00:27:38.723Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"682.96000","profit":"-0.06 (-6.00%)","status":"open"}
+[2026-01-01T00:27:38.745Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"682.96000","profit":"-0.06 (-6.00%)","status":"open"}
+[2026-01-01T00:27:40.804Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.06000","profit":"-0.04 (-4.00%)","status":"open"}
+[2026-01-01T00:27:40.809Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.06000","profit":"-0.04 (-4.00%)","status":"open"}
+[2026-01-01T00:27:42.797Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.10000","profit":"-0.03 (-3.00%)","status":"open"}
+[2026-01-01T00:27:42.798Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.10000","profit":"-0.03 (-3.00%)","status":"open"}
+[2026-01-01T00:27:44.730Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.19000","profit":"-0.02 (-2.00%)","status":"open"}
+[2026-01-01T00:27:44.749Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.19000","profit":"-0.02 (-2.00%)","status":"open"}
+[2026-01-01T00:27:46.712Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.20000","profit":"-0.02 (-2.00%)","status":"open"}
+[2026-01-01T00:27:46.723Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.20000","profit":"-0.02 (-2.00%)","status":"open"}
+[2026-01-01T00:27:48.704Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.33000","profit":"0.00 (0.00%)","status":"open"}
+[2026-01-01T00:27:48.722Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.33000","profit":"0.00 (0.00%)","status":"open"}
+[2026-01-01T00:27:50.812Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.56000","profit":"0.03 (3.00%)","status":"open"}
+[2026-01-01T00:27:50.813Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.56000","profit":"0.03 (3.00%)","status":"open"}
+[2026-01-01T00:27:51.491Z] [INFO] Stopping bot...
+[2026-01-01T00:27:52.721Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.38000","profit":"0.01 (1.00%)","status":"open"}
+[2026-01-01T00:27:52.771Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.38000","profit":"0.01 (1.00%)","status":"open"}
+[2026-01-01T00:27:54.705Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.26000","profit":"-0.01 (-1.00%)","status":"open"}
+[2026-01-01T00:27:54.716Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.26000","profit":"-0.01 (-1.00%)","status":"open"}
+[2026-01-01T00:27:56.705Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.35000","profit":"0.00 (0.00%)","status":"open"}
+[2026-01-01T00:27:56.707Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.35000","profit":"0.00 (0.00%)","status":"open"}
+[2026-01-01T00:27:58.718Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.21000","profit":"-0.02 (-2.00%)","status":"open"}
+[2026-01-01T00:27:58.718Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.21000","profit":"-0.02 (-2.00%)","status":"open"}
+[2026-01-01T00:28:00.809Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.22000","profit":"-0.02 (-2.00%)","status":"open"}
+[2026-01-01T00:28:00.811Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.22000","profit":"-0.02 (-2.00%)","status":"open"}
+[2026-01-01T00:28:02.787Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"682.95000","profit":"-0.06 (-6.00%)","status":"open"}
+[2026-01-01T00:28:02.788Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"682.95000","profit":"-0.06 (-6.00%)","status":"open"}
+[2026-01-01T00:28:04.733Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"682.86000","profit":"-0.07 (-7.00%)","status":"open"}
+[2026-01-01T00:28:04.735Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"682.86000","profit":"-0.07 (-7.00%)","status":"open"}
+[2026-01-01T00:28:06.666Z] [INFO] Grid level triggered {"type":"BUY","level":2,"triggerPrice":"682.83000","currentPrice":"682.71000"}
+[2026-01-01T00:28:06.667Z] [INFO] 📊 Grid trigger received {"type":"BUY","price":682.83,"level":2,"timestamp":1767227286667}
+[2026-01-01T00:28:06.667Z] [INFO] 🚀 Placing BUY trade {"contractType":"MULTUP","stake":1,"multiplier":100,"stopLoss":0.5,"takeProfit":1}
+[2026-01-01T00:28:06.733Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"682.71000","profit":"-0.09 (-9.00%)","status":"open"}
+[2026-01-01T00:28:06.735Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"682.71000","profit":"-0.09 (-9.00%)","status":"open"}
+[2026-01-01T00:28:07.018Z] [INFO] ✅ Trade executed {"contractId":302899756288,"type":"If you select 'Up', your total profit/loss will be the percentage increase in Volatility 100 Index, multiplied by 100, minus commissions.","buyPrice":1}
+[2026-01-01T00:28:07.019Z] [INFO] Position opened {"contractId":302899756288,"openPositions":2}
+[2026-01-01T00:28:07.019Z] [INFO] Setting contract limits {"contractId":302899756288,"stopLoss":0.5,"takeProfit":1}
+[2026-01-01T00:28:07.019Z] [INFO] 📈 Trade event {"contractId":302899756288}
+[2026-01-01T00:28:07.020Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"1.00000","current":"682.71000","profit":"-0.04 (-4.00%)","status":"open"}
+[2026-01-01T00:28:08.722Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"682.80000","profit":"-0.08 (-8.00%)","status":"open"}
+[2026-01-01T00:28:08.737Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"1.00000","current":"682.80000","profit":"-0.04 (-4.00%)","status":"open"}
+[2026-01-01T00:28:08.738Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"682.80000","profit":"-0.04 (-4.00%)","status":"open"}
+[2026-01-01T00:28:08.738Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"682.80000","profit":"-0.08 (-8.00%)","status":"open"}
+[2026-01-01T00:28:10.793Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.18000","profit":"-0.02 (-2.00%)","status":"open"}
+[2026-01-01T00:28:10.793Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.18000","profit":"0.02 (2.00%)","status":"open"}
+[2026-01-01T00:28:10.795Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.18000","profit":"-0.02 (-2.00%)","status":"open"}
+[2026-01-01T00:28:10.802Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.18000","profit":"0.02 (2.00%)","status":"open"}
+[2026-01-01T00:28:12.696Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"682.79000","profit":"-0.08 (-8.00%)","status":"open"}
+[2026-01-01T00:28:12.697Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"682.79000","profit":"-0.04 (-4.00%)","status":"open"}
+[2026-01-01T00:28:12.709Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"682.79000","profit":"-0.04 (-4.00%)","status":"open"}
+[2026-01-01T00:28:12.709Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"682.79000","profit":"-0.08 (-8.00%)","status":"open"}
+[2026-01-01T00:28:14.706Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"682.97000","profit":"-0.01 (-1.00%)","status":"open"}
+[2026-01-01T00:28:14.781Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"682.97000","profit":"-0.05 (-5.00%)","status":"open"}
+[2026-01-01T00:28:14.781Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"682.97000","profit":"-0.05 (-5.00%)","status":"open"}
+[2026-01-01T00:28:14.782Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"682.97000","profit":"-0.01 (-1.00%)","status":"open"}
+[2026-01-01T00:28:16.693Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.18000","profit":"-0.02 (-2.00%)","status":"open"}
+[2026-01-01T00:28:16.697Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.18000","profit":"0.02 (2.00%)","status":"open"}
+[2026-01-01T00:28:16.719Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.18000","profit":"0.02 (2.00%)","status":"open"}
+[2026-01-01T00:28:16.719Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.18000","profit":"-0.02 (-2.00%)","status":"open"}
+[2026-01-01T00:28:18.712Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"682.94000","profit":"-0.02 (-2.00%)","status":"open"}
+[2026-01-01T00:28:18.732Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"682.94000","profit":"-0.06 (-6.00%)","status":"open"}
+[2026-01-01T00:28:18.733Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"682.94000","profit":"-0.02 (-2.00%)","status":"open"}
+[2026-01-01T00:28:18.733Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"682.94000","profit":"-0.06 (-6.00%)","status":"open"}
+[2026-01-01T00:28:20.914Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"682.77000","profit":"-0.04 (-4.00%)","status":"open"}
+[2026-01-01T00:28:20.915Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"682.77000","profit":"-0.04 (-4.00%)","status":"open"}
+[2026-01-01T00:28:20.915Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"682.77000","profit":"-0.08 (-8.00%)","status":"open"}
+[2026-01-01T00:28:20.916Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"682.77000","profit":"-0.08 (-8.00%)","status":"open"}
+[2026-01-01T00:28:22.739Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.11000","profit":"-0.03 (-3.00%)","status":"open"}
+[2026-01-01T00:28:22.739Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.11000","profit":"0.01 (1.00%)","status":"open"}
+[2026-01-01T00:28:22.740Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.11000","profit":"-0.03 (-3.00%)","status":"open"}
+[2026-01-01T00:28:22.740Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.11000","profit":"0.01 (1.00%)","status":"open"}
+[2026-01-01T00:28:24.727Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.17000","profit":"0.02 (2.00%)","status":"open"}
+[2026-01-01T00:28:24.727Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.17000","profit":"-0.02 (-2.00%)","status":"open"}
+[2026-01-01T00:28:24.728Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.17000","profit":"-0.02 (-2.00%)","status":"open"}
+[2026-01-01T00:28:24.728Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.17000","profit":"0.02 (2.00%)","status":"open"}
+[2026-01-01T00:28:26.742Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.01000","profit":"-0.01 (-1.00%)","status":"open"}
+[2026-01-01T00:28:26.743Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.01000","profit":"-0.05 (-5.00%)","status":"open"}
+[2026-01-01T00:28:26.756Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.01000","profit":"-0.05 (-5.00%)","status":"open"}
+[2026-01-01T00:28:26.756Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.01000","profit":"-0.01 (-1.00%)","status":"open"}
+[2026-01-01T00:28:28.742Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.14000","profit":"0.01 (1.00%)","status":"open"}
+[2026-01-01T00:28:28.751Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.14000","profit":"-0.03 (-3.00%)","status":"open"}
+[2026-01-01T00:28:28.752Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.14000","profit":"-0.03 (-3.00%)","status":"open"}
+[2026-01-01T00:28:28.753Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.14000","profit":"0.01 (1.00%)","status":"open"}
+[2026-01-01T00:28:30.815Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.07000","profit":"0.00 (0.00%)","status":"open"}
+[2026-01-01T00:28:30.816Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.07000","profit":"-0.04 (-4.00%)","status":"open"}
+[2026-01-01T00:28:30.816Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.07000","profit":"0.00 (0.00%)","status":"open"}
+[2026-01-01T00:28:30.816Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.07000","profit":"-0.04 (-4.00%)","status":"open"}
+[2026-01-01T00:28:33.483Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.12000","profit":"-0.03 (-3.00%)","status":"open"}
+[2026-01-01T00:28:33.483Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.12000","profit":"0.01 (1.00%)","status":"open"}
+[2026-01-01T00:28:33.483Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.12000","profit":"-0.03 (-3.00%)","status":"open"}
+[2026-01-01T00:28:33.484Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.12000","profit":"0.01 (1.00%)","status":"open"}
+[2026-01-01T00:28:34.788Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.14000","profit":"0.01 (1.00%)","status":"open"}
+[2026-01-01T00:28:34.789Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.14000","profit":"-0.03 (-3.00%)","status":"open"}
+[2026-01-01T00:28:34.789Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.14000","profit":"0.01 (1.00%)","status":"open"}
+[2026-01-01T00:28:34.790Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.14000","profit":"-0.03 (-3.00%)","status":"open"}
+[2026-01-01T00:28:36.735Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.32000","profit":"0.04 (4.00%)","status":"open"}
+[2026-01-01T00:28:36.735Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.32000","profit":"0.00 (0.00%)","status":"open"}
+[2026-01-01T00:28:36.736Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.32000","profit":"0.00 (0.00%)","status":"open"}
+[2026-01-01T00:28:36.743Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.32000","profit":"0.04 (4.00%)","status":"open"}
+[2026-01-01T00:28:38.712Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.31000","profit":"0.04 (4.00%)","status":"open"}
+[2026-01-01T00:28:38.739Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.31000","profit":"0.04 (4.00%)","status":"open"}
+[2026-01-01T00:28:38.740Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.31000","profit":"0.00 (0.00%)","status":"open"}
+[2026-01-01T00:28:38.740Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.31000","profit":"0.00 (0.00%)","status":"open"}
+[2026-01-01T00:28:40.781Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.27000","profit":"0.03 (3.00%)","status":"open"}
+[2026-01-01T00:28:40.782Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.27000","profit":"-0.01 (-1.00%)","status":"open"}
+[2026-01-01T00:28:40.782Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.27000","profit":"-0.01 (-1.00%)","status":"open"}
+[2026-01-01T00:28:40.782Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.27000","profit":"0.03 (3.00%)","status":"open"}
+[2026-01-01T00:28:40.600Z] [INFO] Starting bot {"symbol":"R_100","stake":1,"multiplier":100,"gridLevels":5}
+[2026-01-01T00:28:40.615Z] [INFO] Connecting to Deriv API {"url":"wss://ws.derivws.com/websockets/v3?app_id=1089"}
+[2026-01-01T00:28:41.685Z] [INFO] WebSocket connected
+[2026-01-01T00:28:41.686Z] [INFO] Authenticating...
+[2026-01-01T00:28:42.016Z] [INFO] ✅ Authorization successful {"account":"VRTC14614573","balance":8187.79,"currency":"USD"}
+[2026-01-01T00:28:42.017Z] [INFO] Subscribing to market data {"symbol":"R_100"}
+[2026-01-01T00:28:42.017Z] [INFO] 🚀 Bot is ready for trading
+[2026-01-01T00:28:42.707Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.01000","profit":"-0.01 (-1.00%)","status":"open"}
+[2026-01-01T00:28:42.708Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.01000","profit":"-0.05 (-5.00%)","status":"open"}
+[2026-01-01T00:28:42.708Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.01000","profit":"-0.05 (-5.00%)","status":"open"}
+[2026-01-01T00:28:42.708Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.01000","profit":"-0.01 (-1.00%)","status":"open"}
+[2026-01-01T00:28:44.608Z] [INFO] Grid initialized {"basePrice":"683.17000","levels":5,"spacing":0.5}
+[2026-01-01T00:28:44.730Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.17000","profit":"0.02 (2.00%)","status":"open"}
+[2026-01-01T00:28:44.731Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.17000","profit":"-0.02 (-2.00%)","status":"open"}
+[2026-01-01T00:28:44.734Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.17000","profit":"-0.02 (-2.00%)","status":"open"}
+[2026-01-01T00:28:44.743Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.17000","profit":"0.02 (2.00%)","status":"open"}
+[2026-01-01T00:28:46.724Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.17000","profit":"0.02 (2.00%)","status":"open"}
+[2026-01-01T00:28:46.724Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.17000","profit":"-0.02 (-2.00%)","status":"open"}
+[2026-01-01T00:28:46.725Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.17000","profit":"0.02 (2.00%)","status":"open"}
+[2026-01-01T00:28:46.725Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.17000","profit":"-0.02 (-2.00%)","status":"open"}
+[2026-01-01T00:28:48.718Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.28000","profit":"-0.01 (-1.00%)","status":"open"}
+[2026-01-01T00:28:48.739Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.28000","profit":"0.03 (3.00%)","status":"open"}
+[2026-01-01T00:28:48.759Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.28000","profit":"-0.01 (-1.00%)","status":"open"}
+[2026-01-01T00:28:48.760Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.28000","profit":"0.03 (3.00%)","status":"open"}
+[2026-01-01T00:28:50.779Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.30000","profit":"0.04 (4.00%)","status":"open"}
+[2026-01-01T00:28:50.780Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.30000","profit":"-0.01 (-1.00%)","status":"open"}
+[2026-01-01T00:28:50.780Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.30000","profit":"0.04 (4.00%)","status":"open"}
+[2026-01-01T00:28:50.781Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.30000","profit":"-0.01 (-1.00%)","status":"open"}
+[2026-01-01T00:28:52.686Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.41000","profit":"0.05 (5.00%)","status":"open"}
+[2026-01-01T00:28:52.697Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.41000","profit":"0.01 (1.00%)","status":"open"}
+[2026-01-01T00:28:52.706Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.41000","profit":"0.05 (5.00%)","status":"open"}
+[2026-01-01T00:28:52.707Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.41000","profit":"0.01 (1.00%)","status":"open"}
+[2026-01-01T00:28:54.695Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.36000","profit":"0.05 (5.00%)","status":"open"}
+[2026-01-01T00:28:54.700Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.36000","profit":"0.00 (0.00%)","status":"open"}
+[2026-01-01T00:28:54.737Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.36000","profit":"0.00 (0.00%)","status":"open"}
+[2026-01-01T00:28:54.738Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.36000","profit":"0.05 (5.00%)","status":"open"}
+[2026-01-01T00:28:56.760Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.25000","profit":"0.03 (3.00%)","status":"open"}
+[2026-01-01T00:28:56.761Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.25000","profit":"-0.01 (-1.00%)","status":"open"}
+[2026-01-01T00:28:56.761Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.25000","profit":"0.03 (3.00%)","status":"open"}
+[2026-01-01T00:28:56.762Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.25000","profit":"-0.01 (-1.00%)","status":"open"}
+[2026-01-01T00:28:58.724Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.12000","profit":"-0.03 (-3.00%)","status":"open"}
+[2026-01-01T00:28:58.731Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.12000","profit":"0.01 (1.00%)","status":"open"}
+[2026-01-01T00:28:58.732Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.12000","profit":"-0.03 (-3.00%)","status":"open"}
+[2026-01-01T00:28:58.733Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.12000","profit":"0.01 (1.00%)","status":"open"}
+[2026-01-01T00:29:00.856Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.21000","profit":"0.02 (2.00%)","status":"open"}
+[2026-01-01T00:29:00.857Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.21000","profit":"-0.02 (-2.00%)","status":"open"}
+[2026-01-01T00:29:00.857Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.21000","profit":"0.02 (2.00%)","status":"open"}
+[2026-01-01T00:29:00.858Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.21000","profit":"-0.02 (-2.00%)","status":"open"}
+[2026-01-01T00:29:02.752Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.21000","profit":"-0.02 (-2.00%)","status":"open"}
+[2026-01-01T00:29:02.753Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.21000","profit":"-0.02 (-2.00%)","status":"open"}
+[2026-01-01T00:29:02.754Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.21000","profit":"0.02 (2.00%)","status":"open"}
+[2026-01-01T00:29:02.765Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.21000","profit":"0.02 (2.00%)","status":"open"}
+[2026-01-01T00:29:04.737Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.44000","profit":"0.06 (6.00%)","status":"open"}
+[2026-01-01T00:29:04.738Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.44000","profit":"0.01 (1.00%)","status":"open"}
+[2026-01-01T00:29:04.738Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.44000","profit":"0.06 (6.00%)","status":"open"}
+[2026-01-01T00:29:04.739Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.44000","profit":"0.01 (1.00%)","status":"open"}
+[2026-01-01T00:29:06.698Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.42000","profit":"0.05 (5.00%)","status":"open"}
+[2026-01-01T00:29:06.698Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.42000","profit":"0.01 (1.00%)","status":"open"}
+[2026-01-01T00:29:06.716Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.42000","profit":"0.05 (5.00%)","status":"open"}
+[2026-01-01T00:29:06.717Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.42000","profit":"0.01 (1.00%)","status":"open"}
+[2026-01-01T00:29:08.745Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.51000","profit":"0.07 (7.00%)","status":"open"}
+[2026-01-01T00:29:08.745Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.51000","profit":"0.03 (3.00%)","status":"open"}
+[2026-01-01T00:29:08.745Z] [INFO] 📝 Active Trade [302899729648] {"type":"⬆️ CALL","entry":"683.09000","current":"683.51000","profit":"0.03 (3.00%)","status":"open"}
+[2026-01-01T00:29:08.754Z] [INFO] 📝 Active Trade [302899756288] {"type":"⬆️ CALL","entry":"682.80000","current":"683.51000","profit":"0.07 (7.00%)","status":"open"}
