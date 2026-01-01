@@ -441,6 +441,13 @@ class MultiplierBot {
             },
             'Bot started'
         );
+
+        // Performance summary every 5 minutes
+        this.perfInterval = setInterval(() => {
+            if (this.telegramEnabled && this.stats.trades > 0) {
+                this.sendTelegram(this.getTelegramSummary());
+            }
+        }, 300000);
     }
 
     async _authorize() {
