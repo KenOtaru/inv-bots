@@ -1941,25 +1941,25 @@ class AIDigitDifferBot {
         // Apply volatility adjustment to stake if enough history
         let adjustedStake = parseFloat(this.currentStake.toFixed(2));
 
-        // if (this.tickHistory.length >= 100) {
-        //     const currentVolatility = this.calculateVolatility(this.tickHistory.slice(-50));
-        //     const averageVolatility = this.calculateVolatility(this.tickHistory.slice(-100));
+        if (this.tickHistory.length >= 100) {
+            const currentVolatility = this.calculateVolatility(this.tickHistory.slice(-50));
+            const averageVolatility = this.calculateVolatility(this.tickHistory.slice(-100));
 
-        //     if (currentVolatility > 0 && averageVolatility > 0) {
-        //         adjustedStake = this.calculateVolatilityAdjustedStake(
-        //             this.currentStake,
-        //             currentVolatility,
-        //             averageVolatility
-        //         );
+            if (currentVolatility > 0 && averageVolatility > 0) {
+                adjustedStake = this.calculateVolatilityAdjustedStake(
+                    this.currentStake,
+                    currentVolatility,
+                    averageVolatility
+                );
 
-        //         if (adjustedStake !== this.currentStake) {
-        //             console.log(`📊 Volatility Adjustment: $${this.currentStake.toFixed(2)} → $${adjustedStake.toFixed(2)}`);
-        //         }
-        //     }
-        // }
+                if (adjustedStake !== this.currentStake) {
+                    console.log(`📊 Volatility Adjustment: $${this.currentStake.toFixed(2)} → $${adjustedStake.toFixed(2)}`);
+                }
+            }
+        }
 
         // Ensure stake is within limits
-        // adjustedStake = Math.max(1, Math.min(adjustedStake, this.balance * 0.1));
+        adjustedStake = Math.max(1, Math.min(adjustedStake, this.balance * 0.1));
 
         console.log(`\n💰 Placing trade: DIFFER ${digit} @ $${adjustedStake.toFixed(2)} (${confidence}% confidence)`);
 
@@ -2037,12 +2037,12 @@ class AIDigitDifferBot {
             this.currentStake = this.config.initialStake;
 
             // Use Anti-Martingale: increase stake after wins (safer than Martingale)
-            // this.currentStake = this.calculateAntiMartingaleStake(
-            //     'won',
-            //     this.currentStake,
-            //     this.config.baseStake,
-            //     this.consecutiveWins
-            // );
+            this.currentStake = this.calculateAntiMartingaleStake(
+                'won',
+                this.currentStake,
+                this.config.baseStake,
+                this.consecutiveWins
+            );
 
             // Track winning pattern
             const pattern = this.tickHistory.slice(-5).join('');
@@ -2058,28 +2058,26 @@ class AIDigitDifferBot {
             else if (this.consecutiveLosses === 4) this.consecutiveLosses4++;
             else if (this.consecutiveLosses === 5) this.consecutiveLosses5++;
 
-            this.currentStake = Math.ceil(this.currentStake * this.config.multiplier * 100) / 100;
-
             // REPLACED DANGEROUS MARTINGALE WITH KELLY CRITERION
             // Calculate win rate from history
-            // const winRate = this.totalTrades > 0 ? this.totalWins / this.totalTrades : 0.5;
-            // const payout = 1.1; // Typical payout for digit differ
+            const winRate = this.totalTrades > 0 ? this.totalWins / this.totalTrades : 0.5;
+            const payout = 1.1; // Typical payout for digit differ
 
             // // Use Kelly Criterion for optimal position sizing
-            // this.currentStake = this.calculateKellyStake(
-            //     winRate,
-            //     payout,
-            //     this.balance,
-            //     this.config.maxStakePercent
-            // );
+            this.currentStake = this.calculateKellyStake(
+                winRate,
+                payout,
+                this.balance,
+                this.config.maxStakePercent
+            );
 
-            // // Ensure stake doesn't exceed balance limits
-            // this.currentStake = Math.min(
-            //     this.currentStake,
-            //     this.balance * (this.config.maxStakePercent / 100)
-            // );
+            // Ensure stake doesn't exceed balance limits
+            this.currentStake = Math.min(
+                this.currentStake,
+                this.balance * (this.config.maxStakePercent / 100)
+            );
 
-            // console.log(`📊 Kelly Criterion Stake: $${this.currentStake.toFixed(2)} (Win Rate: ${(winRate * 100).toFixed(1)}%)`);
+            console.log(`📊 Kelly Criterion Stake: $${this.currentStake.toFixed(2)} (Win Rate: ${(winRate * 100).toFixed(1)}%)`);
         }
 
         // Track trade in history
