@@ -162,3 +162,4 @@
 {"ts":"2025-12-31T21:39:55.082Z","event":"CLOSE","contractId":302893213428,"realized":0.12,"realizedPnlTotal":0.11}
 {"ts":"2026-01-01T01:04:51.286Z","event":"OPEN","contractId":302900866328,"direction":"UP","contract_type":"MULTUP","stake":1,"multiplier":40,"refEntryPrice":687.44}
 {"ts":"2026-01-01T01:16:23.469Z","event":"OPEN","contractId":302901180188,"direction":"UP","contract_type":"MULTUP","stake":1,"multiplier":40,"refEntryPrice":690.87}
+{"ts":"2026-01-01T01:22:29.250Z","event":"OPEN","contractId":302901358048,"direction":"DOWN","contract_type":"MULTDOWN","stake":1,"multiplier":40,"refEntryPrice":688.11}

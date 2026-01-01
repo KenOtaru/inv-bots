@@ -884,10 +884,6 @@ class DerivGridScalperBot extends EventEmitter {
 
         // Subscription to contract updates is automatically started by 'subscribe: 1' in buyRequest
 
-        // Telegram Notification
-        const direction = contract.longcode.toLowerCase().includes('up') ? 'BUY' : 'SELL';
-        this.sendTelegramTradeExecution(contract, direction);
-
         this.emit('tradeExecuted', contract);
     }
 
@@ -991,9 +987,6 @@ class DerivGridScalperBot extends EventEmitter {
         console.log(`  Account Balance: $${this.riskManager.accountBalance.toFixed(2)}`);
         console.log(`  Win Rate       : ${this.getWinRate()}`);
         console.log(`${separator}\n`);
-
-        // Telegram Notification
-        this.sendTelegramTradeSettlement(contract, profit, isWinning);
 
         this.emit('contractSettled', { contract, profit, isWinning });
     }
@@ -1244,10 +1237,10 @@ class DerivGridScalperBot extends EventEmitter {
             const metrics = this.getPerformanceMetrics();
             this.logger.info('📊 Performance Report', metrics);
 
-            if (this.telegramEnabled && this.performance.totalTrades > 0) {
+            if (this.telegramEnabled && (this.performance.totalTrades > 0 || metrics.netProfit !== "0.00")) {
                 this.sendTelegramMessage(this.getTelegramSummary());
             }
-        }, 300000); // Every 5 minutes
+        }, 1800000); // Every 30 minutes
 
         // Daily stats reset
         this.dailyResetInterval = setInterval(() => {

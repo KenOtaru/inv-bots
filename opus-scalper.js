@@ -95,7 +95,7 @@ const CONFIG = {
         LEVEL: 'DEBUG',
         SHOW_TICKS: false,
         SHOW_INDICATORS: true,
-        PERFORMANCE_INTERVAL: 3600000,
+        PERFORMANCE_INTERVAL: 1800000,
     }
 };
 
@@ -1147,10 +1147,6 @@ class GridScalpingBot {
                 openTime: Date.now()
             });
 
-            // Telegram Notification
-            const direction = contract.longcode.toLowerCase().includes('up') ? 'BUY' : 'SELL';
-            this.api.sendTelegramTradeExecution(contract, direction);
-
             // Set SL/TP via contract_update
             if (this.pendingLimitUpdates.has('pending') && this.config.RISK.ENABLE_LIMIT_ORDERS) {
                 const limits = this.pendingLimitUpdates.get('pending');
@@ -1193,9 +1189,6 @@ class GridScalpingBot {
                 profit: profit,
                 duration: Date.now() - (contract.date_start * 1000)
             });
-
-            // Telegram Notification
-            this.api.sendTelegramTradeSettlement(contract, profit, isWinning);
         }
     }
 
@@ -1351,7 +1344,7 @@ class GridScalpingBot {
         this.logPerformance();
         this.performanceInterval = setInterval(() => {
             this.logPerformance();
-            if (this.api.telegramEnabled && this.riskManager.getStatistics().totalTrades > 0) {
+            if (this.api.telegramEnabled && (this.riskManager.getStatistics().totalTrades > 0 || this.riskManager.dailyPnL !== 0)) {
                 // Assuming getTelegramSummary is a method of GridScalpingBot or can be adapted
                 // For now, let's create a simple summary for Telegram
                 const stats = this.riskManager.getStatistics();
