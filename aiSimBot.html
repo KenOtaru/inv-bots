@@ -419,6 +419,27 @@
                         <option value="RDBEAR">Bear Market Index</option>
                     </select>
                 </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Min Wait Time (sec)</label>
+                    <input type="number" id="minWaitTime" value="15" min="5" max="300"
+                        class="w-full px-4 py-2 rounded-lg bg-dark-700 border border-gray-700 focus:border-blue-500 focus:outline-none mono text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Max Wait Time (sec)</label>
+                    <input type="number" id="maxWaitTime" value="90" min="10" max="600"
+                        class="w-full px-4 py-2 rounded-lg bg-dark-700 border border-gray-700 focus:border-blue-500 focus:outline-none mono text-sm">
+                </div>
+            </div>
+
+            <!-- Wait Time Info -->
+            <div class="mt-4 p-3 rounded-lg bg-dark-700/50 border border-gray-700">
+                <div class="flex items-center gap-2 text-sm">
+                    <span class="text-blue-400">⏱️</span>
+                    <span class="text-gray-400">Wait between trades:</span>
+                    <span id="waitTimeDisplay" class="mono text-white">15s - 90s (random)</span>
+                    <span id="countdownDisplay" class="ml-auto mono text-yellow-400 hidden">Next trade in: <span
+                            id="countdownValue">--</span>s</span>
+                </div>
             </div>
         </div>
 
@@ -1474,10 +1495,14 @@
                 this.config = {
                     requiredHistoryLength: 500,
                     minConfidence: 70,
-                    minEnginesAgreement: 3
+                    minEnginesAgreement: 3,
+                    minWaitTime: 15,
+                    maxWaitTime: 90
                 };
 
                 this.isRunning = false;
+                this.waitTimeout = null;
+                this.countdownInterval = null;
             }
 
             log(message, type = 'info') {
@@ -1632,8 +1657,11 @@
 
                 this.config.minConfidence = parseInt(document.getElementById('minConfidence').value) || 70;
                 this.config.minEnginesAgreement = parseInt(document.getElementById('minEngines').value) || 3;
+                this.config.minWaitTime = parseInt(document.getElementById('minWaitTime').value) || 15;
+                this.config.maxWaitTime = parseInt(document.getElementById('maxWaitTime').value) || 90;
                 this.currentAsset = document.getElementById('selectedAsset').value;
 
+                this.log(`Wait time configured: ${this.config.minWaitTime}s - ${this.config.maxWaitTime}s`, 'info');
                 this.log('Connecting to Deriv API...', 'info');
 
                 try {
@@ -1745,9 +1773,9 @@
                 this.balance = this.kellyManager.investmentCapital; //message.authorize.balance;
                 this.sessionStartBalance = this.balance;
 
-                // this.kellyManager.currentCapital = this.balance;
-                // this.kellyManager.investmentCapital = this.balance;
-                // this.kellyManager.peakCapital = this.balance;
+                this.kellyManager.currentCapital = this.balance;
+                this.kellyManager.investmentCapital = this.balance;
+                this.kellyManager.peakCapital = this.balance;
 
                 this.updateUI();
 
@@ -2117,7 +2145,9 @@
                     maxDrawdown: 25,
                     minConfidence: 70,
                     minEngines: 3,
-                    selectedAsset: 'R_50'
+                    selectedAsset: 'R_50',
+                    minWaitTime: 15,
+                    maxWaitTime: 90
                 };
 
                 this.init();
@@ -2206,7 +2236,8 @@
             setupAutoSave() {
                 const inputs = [
                     'apiToken', 'investmentCapital', 'minStake', 'kellyFraction',
-                    'maxDrawdown', 'minConfidence', 'minEngines', 'selectedAsset'
+                    'maxDrawdown', 'minConfidence', 'minEngines', 'selectedAsset',
+                    'minWaitTime', 'maxWaitTime'
                 ];
 
                 inputs.forEach(id => {
@@ -2216,6 +2247,27 @@
                         element.addEventListener('change', () => this.triggerAutoSave());
                     }
                 });
+
+                // Update wait time display when values change
+                ['minWaitTime', 'maxWaitTime'].forEach(id => {
+                    const element = document.getElementById(id);
+                    if (element) {
+                        element.addEventListener('input', () => this.updateWaitTimeDisplay());
+                        element.addEventListener('change', () => this.updateWaitTimeDisplay());
+                    }
+                });
+
+                // Initial display update
+                this.updateWaitTimeDisplay();
+            }
+
+            updateWaitTimeDisplay() {
+                const minWait = parseInt(document.getElementById('minWaitTime')?.value) || 15;
+                const maxWait = parseInt(document.getElementById('maxWaitTime')?.value) || 90;
+                const display = document.getElementById('waitTimeDisplay');
+                if (display) {
+                    display.textContent = `${minWait}s - ${maxWait}s (random)`;
+                }
             }
 
             triggerAutoSave() {
@@ -2240,7 +2292,9 @@
                     maxDrawdown: parseInt(document.getElementById('maxDrawdown')?.value) || 25,
                     minConfidence: parseInt(document.getElementById('minConfidence')?.value) || 70,
                     minEngines: parseInt(document.getElementById('minEngines')?.value) || 3,
-                    selectedAsset: document.getElementById('selectedAsset')?.value || 'R_50'
+                    selectedAsset: document.getElementById('selectedAsset')?.value || 'R_50',
+                    minWaitTime: parseInt(document.getElementById('minWaitTime')?.value) || 15,
+                    maxWaitTime: parseInt(document.getElementById('maxWaitTime')?.value) || 90
                 };
             }
 
@@ -2255,7 +2309,9 @@
                     maxDrawdown: 'maxDrawdown',
                     minConfidence: 'minConfidence',
                     minEngines: 'minEngines',
-                    selectedAsset: 'selectedAsset'
+                    selectedAsset: 'selectedAsset',
+                    minWaitTime: 'minWaitTime',
+                    maxWaitTime: 'maxWaitTime'
                 };
 
                 for (const [key, elementId] of Object.entries(fields)) {
@@ -2264,6 +2320,9 @@
                         element.value = settings[key];
                     }
                 }
+
+                // Update wait time display after applying settings
+                this.updateWaitTimeDisplay();
             }
 
             saveCurrentSettings() {
