@@ -1505,6 +1505,79 @@
                 this.countdownInterval = null;
             }
 
+            startWaitTime() {
+                // Clear any existing wait timeout
+                if (this.waitTimeout) {
+                    clearTimeout(this.waitTimeout);
+                    this.waitTimeout = null;
+                }
+
+                if (this.countdownInterval) {
+                    clearInterval(this.countdownInterval);
+                    this.countdownInterval = null;
+                }
+
+                // Generate random wait time between min and max
+                const minWait = this.config.minWaitTime || 15;
+                const maxWait = this.config.maxWaitTime || 90;
+                const waitTime = Math.floor(Math.random() * (maxWait - minWait + 1)) + minWait;
+
+                this.log(`Waiting ${waitTime} seconds before next trade...`, 'info');
+
+                // Show countdown display
+                const countdownDisplay = document.getElementById('countdownDisplay');
+                const countdownValue = document.getElementById('countdownValue');
+
+                if (countdownDisplay && countdownValue) {
+                    countdownDisplay.classList.remove('hidden');
+                    countdownValue.textContent = waitTime;
+                }
+
+                // Update countdown every second
+                let remaining = waitTime;
+                this.countdownInterval = setInterval(() => {
+                    remaining--;
+                    if (countdownValue) {
+                        countdownValue.textContent = remaining;
+                    }
+
+                    if (remaining <= 0) {
+                        this.clearCountdown();
+                        if (this.isRunning && !this.tradeInProgress && !this.predictionInProgress) {
+                            this.log('Wait time complete. Resuming trading...', 'info');
+                            // Trigger analysis after wait time
+                            this.analyzeTicks();
+                        }
+                    }
+                }, 1000);
+
+                // Set timeout to trigger analysis after wait time
+                this.waitTimeout = setTimeout(() => {
+                    this.clearCountdown();
+                    if (this.isRunning && !this.tradeInProgress && !this.predictionInProgress) {
+                        this.log('Wait time complete. Resuming trading...', 'info');
+                        this.analyzeTicks();
+                    }
+                }, waitTime * 1000);
+            }
+
+            clearCountdown() {
+                if (this.countdownInterval) {
+                    clearInterval(this.countdownInterval);
+                    this.countdownInterval = null;
+                }
+
+                if (this.waitTimeout) {
+                    clearTimeout(this.waitTimeout);
+                    this.waitTimeout = null;
+                }
+
+                const countdownDisplay = document.getElementById('countdownDisplay');
+                if (countdownDisplay) {
+                    countdownDisplay.classList.add('hidden');
+                }
+            }
+
             log(message, type = 'info') {
                 const consoleLog = document.getElementById('consoleLog');
                 const time = new Date().toLocaleTimeString();
@@ -1849,8 +1922,9 @@
                 this.updateRecentTicks();
                 this.updateUI();
 
+                // Only analyze ticks if we're not waiting between trades
                 if (this.tickHistory.length >= this.config.requiredHistoryLength &&
-                    !this.tradeInProgress && !this.predictionInProgress) {
+                    !this.tradeInProgress && !this.predictionInProgress && !this.waitTimeout) {
                     this.analyzeTicks();
                 }
             }
@@ -2088,6 +2162,9 @@
 
                 this.tradeInProgress = false;
                 this.predictionInProgress = false;
+
+                // Start wait time before next trade
+                this.startWaitTime();
             }
 
             addTradeToHistory(trade) {
@@ -2126,6 +2203,9 @@
                 document.getElementById('toggleBot').textContent = 'Start Bot';
                 document.getElementById('toggleBot').className = 'px-6 py-2 rounded-lg bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 font-semibold transition-all';
                 this.log('Bot stopped', 'warning');
+
+                // Clear any active countdown
+                this.clearCountdown();
             }
         }
 
