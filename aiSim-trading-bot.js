@@ -2063,7 +2063,7 @@ class AILogicDigitDifferBot {
         this.isReconnecting = false;
 
         // Telegram Configuration
-        this.telegramToken = process.env.TELEGRAM_BOT_TOKEN;
+        this.telegramToken = process.env.TELEGRAM_BOT_TOKEN3;
         this.telegramChatId = process.env.TELEGRAM_CHAT_ID;
         this.telegramEnabled = !!(this.telegramToken && this.telegramChatId);
 
