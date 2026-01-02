@@ -429,6 +429,11 @@
                     <input type="number" id="maxWaitTime" value="90" min="10" max="600"
                         class="w-full px-4 py-2 rounded-lg bg-dark-700 border border-gray-700 focus:border-blue-500 focus:outline-none mono text-sm">
                 </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">History Length</label>
+                    <input type="number" id="requiredHistoryLength" value="500" min="100" max="1000"
+                        class="w-full px-4 py-2 rounded-lg bg-dark-700 border border-gray-700 focus:border-blue-500 focus:outline-none mono text-sm">
+                </div>
             </div>
 
             <!-- Wait Time Info -->
@@ -564,7 +569,8 @@
                         <span class="text-gray-500">Waiting for ticks...</span>
                     </div>
                     <div class="mt-4 text-sm text-gray-400">
-                        History: <span id="historyCount" class="mono">0</span> / 500 ticks
+                        History: <span id="historyCount" class="mono">0</span> / <span
+                            id="requiredHistoryCount">500</span> ticks
                     </div>
                 </div>
             </div>
@@ -1732,6 +1738,7 @@
                 this.config.minEnginesAgreement = parseInt(document.getElementById('minEngines').value) || 3;
                 this.config.minWaitTime = parseInt(document.getElementById('minWaitTime').value) || 15;
                 this.config.maxWaitTime = parseInt(document.getElementById('maxWaitTime').value) || 90;
+                this.config.requiredHistoryLength = parseInt(document.getElementById('requiredHistoryLength').value) || 500;
                 this.currentAsset = document.getElementById('selectedAsset').value;
 
                 this.log(`Wait time configured: ${this.config.minWaitTime}s - ${this.config.maxWaitTime}s`, 'info');
@@ -2229,7 +2236,8 @@
                     minEngines: 3,
                     selectedAsset: 'R_50',
                     minWaitTime: 15,
-                    maxWaitTime: 90
+                    maxWaitTime: 90,
+                    requiredHistoryLength: 500
                 };
 
                 this.init();
@@ -2319,7 +2327,7 @@
                 const inputs = [
                     'apiToken', 'investmentCapital', 'minStake', 'kellyFraction',
                     'maxDrawdown', 'minConfidence', 'minEngines', 'selectedAsset',
-                    'minWaitTime', 'maxWaitTime'
+                    'minWaitTime', 'maxWaitTime', 'requiredHistoryLength'
                 ];
 
                 inputs.forEach(id => {
@@ -2339,8 +2347,16 @@
                     }
                 });
 
-                // Initial display update
+                // Update required history display when value changes
+                const requiredHistoryElement = document.getElementById('requiredHistoryLength');
+                if (requiredHistoryElement) {
+                    requiredHistoryElement.addEventListener('input', () => this.updateRequiredHistoryDisplay());
+                    requiredHistoryElement.addEventListener('change', () => this.updateRequiredHistoryDisplay());
+                }
+
+                // Initial display updates
                 this.updateWaitTimeDisplay();
+                this.updateRequiredHistoryDisplay();
             }
 
             updateWaitTimeDisplay() {
@@ -2349,6 +2365,14 @@
                 const display = document.getElementById('waitTimeDisplay');
                 if (display) {
                     display.textContent = `${minWait}s - ${maxWait}s (random)`;
+                }
+            }
+
+            updateRequiredHistoryDisplay() {
+                const requiredHistoryLength = parseInt(document.getElementById('requiredHistoryLength')?.value) || 500;
+                const display = document.getElementById('requiredHistoryCount');
+                if (display) {
+                    display.textContent = requiredHistoryLength;
                 }
             }
 
@@ -2376,7 +2400,8 @@
                     minEngines: parseInt(document.getElementById('minEngines')?.value) || 3,
                     selectedAsset: document.getElementById('selectedAsset')?.value || 'R_50',
                     minWaitTime: parseInt(document.getElementById('minWaitTime')?.value) || 15,
-                    maxWaitTime: parseInt(document.getElementById('maxWaitTime')?.value) || 90
+                    maxWaitTime: parseInt(document.getElementById('maxWaitTime')?.value) || 90,
+                    requiredHistoryLength: parseInt(document.getElementById('requiredHistoryLength')?.value) || 500
                 };
             }
 
@@ -2393,7 +2418,8 @@
                     minEngines: 'minEngines',
                     selectedAsset: 'selectedAsset',
                     minWaitTime: 'minWaitTime',
-                    maxWaitTime: 'maxWaitTime'
+                    maxWaitTime: 'maxWaitTime',
+                    requiredHistoryLength: 'requiredHistoryLength'
                 };
 
                 for (const [key, elementId] of Object.entries(fields)) {
@@ -2403,8 +2429,9 @@
                     }
                 }
 
-                // Update wait time display after applying settings
+                // Update displays after applying settings
                 this.updateWaitTimeDisplay();
+                this.updateRequiredHistoryDisplay();
             }
 
             saveCurrentSettings() {

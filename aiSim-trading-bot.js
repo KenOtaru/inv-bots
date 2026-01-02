@@ -1729,7 +1729,7 @@ class KellyCriterionManager {
         this.minKellyFraction = 0.1;
         this.maxKellyFraction = 0.5;
 
-        this.minStake = config.minStake || 0.35;
+        this.minStake = config.minStake || 0.61;
         this.maxStakePercent = config.maxStakePercent || 5;
         this.absoluteMaxStake = config.absoluteMaxStake || 50;
 
@@ -2473,7 +2473,8 @@ class AILogicDigitDifferBot {
 
             if (tradeDecision.execute) {
                 this.placeTrade(ensemble.predictedDigit, ensemble.confidence, kellyResult.stake);
-            } else {
+            }
+            else {
                 console.log(`⏭️ Skipping trade: ${tradeDecision.reason}`);
                 this.predictionInProgress = false;
                 this.scheduleNextTrade();
@@ -2922,21 +2923,21 @@ if (!process.env.DERIV_TOKEN) {
 const bot = new AILogicDigitDifferBot({
     derivToken: process.env.DERIV_TOKEN,
 
-    investmentCapital: parseFloat(process.env.INVESTMENT_CAPITAL) || 500,
-    kellyFraction: parseFloat(process.env.KELLY_FRACTION) || 0.25,
-    minStake: parseFloat(process.env.MIN_STAKE) || 0.35,
-    maxStakePercent: parseFloat(process.env.MAX_STAKE_PERCENT) || 5,
+    investmentCapital: 100,
+    kellyFraction: 0.25,
+    minStake: 0.61,
+    maxStakePercent: 5,
 
-    maxDrawdownPercent: parseFloat(process.env.MAX_DRAWDOWN_PERCENT) || 25,
-    dailyLossLimit: parseFloat(process.env.DAILY_LOSS_LIMIT) || 50,
-    dailyProfitTarget: parseFloat(process.env.DAILY_PROFIT_TARGET) || 100,
-    maxConsecutiveLosses: parseInt(process.env.MAX_CONSECUTIVE_LOSSES) || 6,
+    maxDrawdownPercent: 25,
+    dailyLossLimit: 50,
+    dailyProfitTarget: 100,
+    maxConsecutiveLosses: 6,
 
-    minConfidence: parseInt(process.env.MIN_CONFIDENCE) || 70,
-    minEnginesAgreement: parseInt(process.env.MIN_ENGINES_AGREEMENT) || 3,
-    requiredHistoryLength: parseInt(process.env.REQUIRED_HISTORY_LENGTH) || 500,
-    minWaitTime: parseInt(process.env.MIN_WAIT_TIME) || 15000,
-    maxWaitTime: parseInt(process.env.MAX_WAIT_TIME) || 90000,
+    minConfidence: 80,
+    minEnginesAgreement: 5,
+    requiredHistoryLength: 200,
+    minWaitTime: 15000,
+    maxWaitTime: 50000,
 
     assets: process.env.ASSETS ? process.env.ASSETS.split(',').map(a => a.trim()) : undefined
 });
