@@ -221,18 +221,18 @@ const CONFIG = {
 
 const ASSET_CONFIGS = {
     // Volatility Indices
-    // 'R_10': {
-    //     name: 'Volatility 10 Index',
-    //     category: 'synthetic',
-    //     contractType: 'multiplier',
-    //     multipliers: [400, 1000, 2000, 3000, 4000],
-    //     defaultMultiplier: 400,
-    //     wprPeriod: 80,
-    //     maxTradesPerDay: 100,
-    //     minStake: 1.00,
-    //     maxStake: 2000,
-    //     tradingHours: '24/7'
-    // },
+    'R_10': {
+        name: 'Volatility 10 Index',
+        category: 'synthetic',
+        contractType: 'multiplier',
+        multipliers: [400, 1000, 2000, 3000, 4000],
+        defaultMultiplier: 400,
+        wprPeriod: 80,
+        maxTradesPerDay: 100,
+        minStake: 1.00,
+        maxStake: 2000,
+        tradingHours: '24/7'
+    },
     // 'R_25': {
     //     name: 'Volatility 25 Index',
     //     category: 'synthetic',
@@ -269,31 +269,31 @@ const ASSET_CONFIGS = {
         maxStake: 3000,
         tradingHours: '24/7'
     },
-    // 'R_100': {
-    //     name: 'Volatility 100 Index',
-    //     category: 'synthetic',
-    //     contractType: 'multiplier',
-    //     multipliers: [40, 100, 200, 300, 500],
-    //     defaultMultiplier: 40,
-    //     wprPeriod: 80,
-    //     maxTradesPerDay: 50,
-    //     minStake: 1.00,
-    //     maxStake: 3000,
-    //     tradingHours: '24/7'
-    // },
+    'R_100': {
+        name: 'Volatility 100 Index',
+        category: 'synthetic',
+        contractType: 'multiplier',
+        multipliers: [40, 100, 200, 300, 500],
+        defaultMultiplier: 40,
+        wprPeriod: 80,
+        maxTradesPerDay: 50,
+        minStake: 1.00,
+        maxStake: 3000,
+        tradingHours: '24/7'
+    },
     // 1-Second Volatility
-    // '1HZ10V': {
-    //     name: 'Volatility 10 (1s) Index',
-    //     category: 'synthetic',
-    //     contractType: 'multiplier',
-    //     multipliers: [400, 1000, 2000, 3000, 4000],
-    //     defaultMultiplier: 400,
-    //     wprPeriod: 80,
-    //     maxTradesPerDay: 150,
-    //     minStake: 1.00,
-    //     maxStake: 1000,
-    //     tradingHours: '24/7'
-    // },
+    '1HZ10V': {
+        name: 'Volatility 10 (1s) Index',
+        category: 'synthetic',
+        contractType: 'multiplier',
+        multipliers: [400, 1000, 2000, 3000, 4000],
+        defaultMultiplier: 400,
+        wprPeriod: 80,
+        maxTradesPerDay: 150,
+        minStake: 1.00,
+        maxStake: 1000,
+        tradingHours: '24/7'
+    },
     // '1HZ25V': {
     //     name: 'Volatility 25 (1s) Index',
     //     category: 'synthetic',
@@ -306,18 +306,18 @@ const ASSET_CONFIGS = {
     //     maxStake: 1000,
     //     tradingHours: '24/7'
     // },
-    // '1HZ50V': {
-    //     name: 'Volatility 50 (1s) Index',
-    //     category: 'synthetic',
-    //     contractType: 'multiplier',
-    //     multipliers: [80, 200, 400, 600, 800],
-    //     defaultMultiplier: 80,
-    //     wprPeriod: 80,
-    //     maxTradesPerDay: 120,
-    //     minStake: 1.00,
-    //     maxStake: 1000,
-    //     tradingHours: '24/7'
-    // },
+    '1HZ50V': {
+        name: 'Volatility 50 (1s) Index',
+        category: 'synthetic',
+        contractType: 'multiplier',
+        multipliers: [80, 200, 400, 600, 800],
+        defaultMultiplier: 80,
+        wprPeriod: 80,
+        maxTradesPerDay: 120,
+        minStake: 1.00,
+        maxStake: 1000,
+        tradingHours: '24/7'
+    },
     // '1HZ75V': {
     //     name: 'Volatility 75 (1s) Index',
     //     category: 'synthetic',
@@ -468,18 +468,18 @@ const ASSET_CONFIGS = {
     //     tradingHours: 'Sun 22:05 - Fri 21:55 GMT'
     // },
     // // Crypto
-    // 'cryBTCUSD': {
-    //     name: 'Bitcoin/USD',
-    //     category: 'crypto',
-    //     contractType: 'multiplier',
-    //     multipliers: [50, 100, 150, 200, 250, 300],
-    //     defaultMultiplier: 50,
-    //     wprPeriod: 80,
-    //     maxTradesPerDay: 8,
-    //     minStake: 5,
-    //     maxStake: 3000,
-    //     tradingHours: '24/7'
-    // },
+    'cryBTCUSD': {
+        name: 'Bitcoin/USD',
+        category: 'crypto',
+        contractType: 'multiplier',
+        multipliers: [50, 100, 150, 200, 250, 300],
+        defaultMultiplier: 50,
+        wprPeriod: 80,
+        maxTradesPerDay: 8,
+        minStake: 5,
+        maxStake: 3000,
+        tradingHours: '24/7'
+    },
     // 'cryETHUSD': {
     //     name: 'Ethereum/USD',
     //     category: 'crypto',
@@ -493,18 +493,18 @@ const ASSET_CONFIGS = {
     //     tradingHours: '24/7'
     // },
     // // Commodities
-    // 'frxXAUUSD': {
-    //     name: 'Gold/USD',
-    //     category: 'commodity',
-    //     contractType: 'multiplier',
-    //     multipliers: [50, 100, 200, 300, 400, 500],
-    //     defaultMultiplier: 50,
-    //     wprPeriod: 80,
-    //     maxTradesPerDay: 5,
-    //     minStake: 5,
-    //     maxStake: 5000,
-    //     tradingHours: 'Sun 23:00 - Fri 21:55 GMT'
-    // },
+    'frxXAUUSD': {
+        name: 'Gold/USD',
+        category: 'commodity',
+        contractType: 'multiplier',
+        multipliers: [50, 100, 200, 300, 400, 500],
+        defaultMultiplier: 50,
+        wprPeriod: 80,
+        maxTradesPerDay: 5,
+        minStake: 5,
+        maxStake: 5000,
+        tradingHours: 'Sun 23:00 - Fri 21:55 GMT'
+    },
     // 'frxXAGUSD': {
     //     name: 'Silver/USD',
     //     category: 'commodity',
@@ -520,9 +520,7 @@ const ASSET_CONFIGS = {
 };
 
 // Active assets
-let ACTIVE_ASSETS = process.env.ASSETS
-    ? process.env.ASSETS.split(',')
-    : ['R_75'];//['R_10', 'R_75', 'R_100', '1HZ10V', '1HZ50V'];
+let ACTIVE_ASSETS = ['R_10', 'R_75', 'R_100', '1HZ10V', '1HZ50V', 'cryBTCUSD', 'frxXAUUSD'];
 
 // ============================================
 // STATE MANAGEMENT
