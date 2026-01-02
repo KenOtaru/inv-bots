@@ -1,0 +1,2713 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI-Logic Digit Differ Trading Bot v5.0</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        dark: {
+                            900: '#0a0a0f',
+                            800: '#12121a',
+                            700: '#1a1a25',
+                            600: '#252533',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap');
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, #0a0a0f 0%, #12121a 50%, #0a0a0f 100%);
+        }
+
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .glass {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .glass-dark {
+            background: rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .glow-green {
+            box-shadow: 0 0 20px rgba(34, 197, 94, 0.3);
+        }
+
+        .glow-red {
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.3);
+        }
+
+        .glow-blue {
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.3);
+        }
+
+        .pulse-dot {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.5;
+            }
+        }
+
+        .scrollbar-thin::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .scrollbar-thin::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 3px;
+        }
+
+        .scrollbar-thin::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+        }
+
+        .digit-box {
+            transition: all 0.3s ease;
+        }
+
+        .digit-box:hover {
+            transform: scale(1.1);
+        }
+
+        .trade-row {
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        .engine-bar {
+            transition: width 0.5s ease;
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+        }
+
+        .status-connected {
+            background: #22c55e;
+            box-shadow: 0 0 10px #22c55e;
+        }
+
+        .status-disconnected {
+            background: #ef4444;
+            box-shadow: 0 0 10px #ef4444;
+        }
+
+        .status-trading {
+            background: #3b82f6;
+            box-shadow: 0 0 10px #3b82f6;
+            animation: pulse 1s infinite;
+        }
+
+        /* Notification animations */
+        .notification-enter {
+            animation: notificationEnter 0.3s ease forwards;
+        }
+
+        .notification-exit {
+            animation: notificationExit 0.3s ease forwards;
+        }
+
+        @keyframes notificationEnter {
+            from {
+                opacity: 0;
+                transform: translateX(100%);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateX(0);
+            }
+        }
+
+        @keyframes notificationExit {
+            from {
+                opacity: 1;
+                transform: translateX(0);
+            }
+
+            to {
+                opacity: 0;
+                transform: translateX(100%);
+            }
+        }
+
+        /* Profile dropdown styling */
+        #profileSelect option {
+            background: #1a1a25;
+            color: white;
+        }
+
+        /* Checkbox styling */
+        input[type="checkbox"] {
+            appearance: none;
+            -webkit-appearance: none;
+            width: 1rem;
+            height: 1rem;
+            border-radius: 0.25rem;
+            background: #1a1a25;
+            border: 1px solid #4b5563;
+            cursor: pointer;
+            position: relative;
+        }
+
+        input[type="checkbox"]:checked {
+            background: #3b82f6;
+            border-color: #3b82f6;
+        }
+
+        input[type="checkbox"]:checked::after {
+            content: '✓';
+            position: absolute;
+            color: white;
+            font-size: 0.7rem;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        input[type="checkbox"]:focus {
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+        }
+    </style>
+</head>
+
+<body class="min-h-screen text-white">
+    <div id="app" class="container mx-auto px-4 py-6 max-w-7xl">
+        <!-- Header -->
+        <header class="mb-6">
+            <div class="flex items-center justify-between flex-wrap gap-4">
+                <div class="flex items-center gap-4">
+                    <div
+                        class="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-2xl">
+                        🤖
+                    </div>
+                    <div>
+                        <h1
+                            class="text-2xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+                            AI-Logic Trading Bot
+                        </h1>
+                        <p class="text-gray-400 text-sm">Digit Differ v5.0 • Simulated AI Ensemble</p>
+                    </div>
+                </div>
+                <div class="flex items-center gap-4">
+                    <div id="connectionStatus" class="flex items-center gap-2 px-4 py-2 rounded-lg glass">
+                        <div class="status-indicator status-disconnected"></div>
+                        <span class="text-sm">Disconnected</span>
+                    </div>
+                    <button id="toggleBot"
+                        class="px-6 py-2 rounded-lg bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 font-semibold transition-all">
+                        Start Bot
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Configuration Panel -->
+        <div id="configPanel" class="glass rounded-2xl p-6 mb-6">
+            <div class="flex items-center justify-between mb-4 flex-wrap gap-4">
+                <h2 class="text-lg font-semibold flex items-center gap-2">
+                    <span>⚙️</span> Configuration
+                </h2>
+                <!-- Settings Management Buttons -->
+                <div class="flex items-center gap-2 flex-wrap">
+                    <div class="flex items-center gap-2">
+                        <select id="profileSelect"
+                            class="px-3 py-1.5 rounded-lg bg-dark-700 border border-gray-700 text-sm focus:border-blue-500 focus:outline-none">
+                            <option value="">-- Select Profile --</option>
+                        </select>
+                        <button id="loadProfileBtn"
+                            class="px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-sm font-medium transition-all"
+                            title="Load Profile">
+                            📂 Load
+                        </button>
+                    </div>
+                    <div class="h-6 w-px bg-gray-700 hidden sm:block"></div>
+                    <div class="flex items-center gap-2">
+                        <input type="text" id="profileName" placeholder="Profile name"
+                            class="px-3 py-1.5 rounded-lg bg-dark-700 border border-gray-700 text-sm w-32 focus:border-blue-500 focus:outline-none">
+                        <button id="saveProfileBtn"
+                            class="px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-700 text-sm font-medium transition-all"
+                            title="Save Profile">
+                            💾 Save
+                        </button>
+                        <button id="deleteProfileBtn"
+                            class="px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-sm font-medium transition-all"
+                            title="Delete Profile">
+                            🗑️
+                        </button>
+                    </div>
+                    <div class="h-6 w-px bg-gray-700 hidden sm:block"></div>
+                    <div class="flex items-center gap-2">
+                        <button id="exportSettingsBtn"
+                            class="px-3 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-sm font-medium transition-all"
+                            title="Export Settings (Ctrl+E)">
+                            📤 Export
+                        </button>
+                        <button id="importSettingsBtn"
+                            class="px-3 py-1.5 rounded-lg bg-orange-600 hover:bg-orange-700 text-sm font-medium transition-all"
+                            title="Import Settings">
+                            📥 Import
+                        </button>
+                        <input type="file" id="importFileInput" accept=".json" class="hidden">
+                    </div>
+                    <div class="h-6 w-px bg-gray-700 hidden sm:block"></div>
+                    <div class="flex items-center gap-2">
+                        <button id="resetSettingsBtn"
+                            class="px-3 py-1.5 rounded-lg bg-gray-600 hover:bg-gray-700 text-sm font-medium transition-all"
+                            title="Reset to Defaults">
+                            🔄 Reset
+                        </button>
+                        <button id="helpBtn"
+                            class="px-2 py-1.5 rounded-lg bg-gray-700 hover:bg-gray-600 text-sm font-medium transition-all"
+                            title="Help & Shortcuts">
+                            ❓
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Help Modal (hidden by default) -->
+            <div id="helpModal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+                <div class="glass rounded-2xl p-6 max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto">
+                    <div class="flex items-center justify-between mb-4">
+                        <h3 class="text-lg font-bold">⌨️ Settings Help</h3>
+                        <button id="closeHelpBtn" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+                    </div>
+
+                    <div class="space-y-4 text-sm">
+                        <div>
+                            <h4 class="font-semibold text-blue-400 mb-2">Keyboard Shortcuts</h4>
+                            <ul class="space-y-1 text-gray-300">
+                                <li><kbd class="px-2 py-0.5 bg-dark-700 rounded">Ctrl+S</kbd> Quick save current
+                                    settings</li>
+                                <li><kbd class="px-2 py-0.5 bg-dark-700 rounded">Ctrl+Shift+S</kbd> Save as new profile
+                                </li>
+                                <li><kbd class="px-2 py-0.5 bg-dark-700 rounded">Ctrl+E</kbd> Export settings to file
+                                </li>
+                            </ul>
+                        </div>
+
+                        <div>
+                            <h4 class="font-semibold text-green-400 mb-2">Profiles</h4>
+                            <p class="text-gray-300">Save multiple configurations as profiles for different trading
+                                strategies or market conditions. Profiles are stored locally in your browser.</p>
+                        </div>
+
+                        <div>
+                            <h4 class="font-semibold text-purple-400 mb-2">Export/Import</h4>
+                            <p class="text-gray-300">Export your settings and profiles to a JSON file for backup or to
+                                transfer to another device. API tokens are NOT included in exports for security.</p>
+                        </div>
+
+                        <div>
+                            <h4 class="font-semibold text-yellow-400 mb-2">Auto-Save</h4>
+                            <p class="text-gray-300">When enabled, your settings are automatically saved whenever you
+                                make changes. Settings persist across browser sessions.</p>
+                        </div>
+
+                        <div>
+                            <h4 class="font-semibold text-orange-400 mb-2">Security Note</h4>
+                            <p class="text-gray-300">Your API token is stored locally with basic encoding. Never share
+                                your exported settings files if they might contain sensitive data. Use read-only API
+                                tokens when possible.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Auto-save indicator -->
+            <div id="autoSaveIndicator" class="mb-4 flex items-center gap-2 text-sm">
+                <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" id="autoSaveEnabled" checked
+                        class="w-4 h-4 rounded bg-dark-700 border-gray-600 text-blue-600 focus:ring-blue-500">
+                    <span class="text-gray-400">Auto-save settings</span>
+                </label>
+                <span id="lastSavedTime" class="text-gray-500 text-xs ml-2"></span>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Deriv API Token</label>
+                    <input type="password" id="apiToken" placeholder="Enter your token"
+                        class="w-full px-4 py-2 rounded-lg bg-dark-700 border border-gray-700 focus:border-blue-500 focus:outline-none mono text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Investment Capital ($)</label>
+                    <input type="number" id="investmentCapital" value="500"
+                        class="w-full px-4 py-2 rounded-lg bg-dark-700 border border-gray-700 focus:border-blue-500 focus:outline-none mono text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Min Stake ($)</label>
+                    <input type="number" id="minStake" value="0.35" step="0.01"
+                        class="w-full px-4 py-2 rounded-lg bg-dark-700 border border-gray-700 focus:border-blue-500 focus:outline-none mono text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Kelly Fraction</label>
+                    <select id="kellyFraction"
+                        class="w-full px-4 py-2 rounded-lg bg-dark-700 border border-gray-700 focus:border-blue-500 focus:outline-none text-sm">
+                        <option value="0.1">10% (Very Safe)</option>
+                        <option value="0.25" selected>25% (Quarter Kelly)</option>
+                        <option value="0.5">50% (Half Kelly)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Max Drawdown (%)</label>
+                    <input type="number" id="maxDrawdown" value="25"
+                        class="w-full px-4 py-2 rounded-lg bg-dark-700 border border-gray-700 focus:border-blue-500 focus:outline-none mono text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Min Confidence (%)</label>
+                    <input type="number" id="minConfidence" value="70"
+                        class="w-full px-4 py-2 rounded-lg bg-dark-700 border border-gray-700 focus:border-blue-500 focus:outline-none mono text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Min Engines Agreement</label>
+                    <input type="number" id="minEngines" value="3" min="1" max="9"
+                        class="w-full px-4 py-2 rounded-lg bg-dark-700 border border-gray-700 focus:border-blue-500 focus:outline-none mono text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-400 mb-1">Asset</label>
+                    <select id="selectedAsset"
+                        class="w-full px-4 py-2 rounded-lg bg-dark-700 border border-gray-700 focus:border-blue-500 focus:outline-none text-sm">
+                        <option value="R_10">Volatility 10 Index</option>
+                        <option value="R_25">Volatility 25 Index</option>
+                        <option value="R_50" selected>Volatility 50 Index</option>
+                        <option value="R_75">Volatility 75 Index</option>
+                        <option value="R_100">Volatility 100 Index</option>
+                        <option value="RDBULL">Bull Market Index</option>
+                        <option value="RDBEAR">Bear Market Index</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Dashboard -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+            <!-- Left Column - Stats -->
+            <div class="space-y-6">
+                <!-- Balance Card -->
+                <div class="glass rounded-2xl p-6">
+                    <h3 class="text-gray-400 text-sm mb-2">Account Balance</h3>
+                    <div class="text-3xl font-bold mono" id="balance">$0.00</div>
+                    <div class="flex items-center gap-2 mt-2">
+                        <span class="text-sm text-gray-400">Session P/L:</span>
+                        <span id="sessionPnL" class="mono font-semibold text-green-400">$0.00</span>
+                    </div>
+                </div>
+
+                <!-- Kelly Stats -->
+                <div class="glass rounded-2xl p-6">
+                    <h3 class="text-gray-400 text-sm mb-4">Kelly Criterion Stats</h3>
+                    <div class="space-y-3">
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">Investment Capital</span>
+                            <span class="mono font-semibold" id="investmentCapitalDisplay">$500.00</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">Peak Capital</span>
+                            <span class="mono font-semibold" id="peakCapital">$500.00</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">Current Drawdown</span>
+                            <span class="mono font-semibold text-yellow-400" id="currentDrawdown">0.0%</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">Rolling Win Rate</span>
+                            <span class="mono font-semibold" id="rollingWinRate">50.0%</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span class="text-gray-400">Next Stake</span>
+                            <span class="mono font-semibold text-blue-400" id="nextStake">$0.35</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Trade Stats -->
+                <div class="glass rounded-2xl p-6">
+                    <h3 class="text-gray-400 text-sm mb-4">Trading Statistics</h3>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="text-center p-3 rounded-lg bg-dark-700">
+                            <div class="text-2xl font-bold mono" id="totalTrades">0</div>
+                            <div class="text-xs text-gray-400">Total Trades</div>
+                        </div>
+                        <div class="text-center p-3 rounded-lg bg-dark-700">
+                            <div class="text-2xl font-bold mono" id="winRate">0%</div>
+                            <div class="text-xs text-gray-400">Win Rate</div>
+                        </div>
+                        <div class="text-center p-3 rounded-lg bg-green-900/30">
+                            <div class="text-2xl font-bold mono text-green-400" id="totalWins">0</div>
+                            <div class="text-xs text-gray-400">Wins</div>
+                        </div>
+                        <div class="text-center p-3 rounded-lg bg-red-900/30">
+                            <div class="text-2xl font-bold mono text-red-400" id="totalLosses">0</div>
+                            <div class="text-xs text-gray-400">Losses</div>
+                        </div>
+                    </div>
+                    <div class="mt-4 flex items-center justify-between p-3 rounded-lg bg-dark-700">
+                        <span class="text-gray-400">Consecutive Losses</span>
+                        <span class="mono font-bold text-orange-400" id="consecutiveLosses">0</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Middle Column - Live Trading -->
+            <div class="space-y-6">
+                <!-- Current Prediction -->
+                <div class="glass rounded-2xl p-6">
+                    <h3 class="text-gray-400 text-sm mb-4">Current Analysis</h3>
+                    <div id="analysisStatus" class="text-center py-8 text-gray-500">
+                        Waiting for data...
+                    </div>
+                    <div id="predictionDisplay" class="hidden">
+                        <div class="text-center mb-4">
+                            <div class="text-sm text-gray-400 mb-2">Predicted Digit (Will NOT Appear)</div>
+                            <div class="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-blue-500 to-purple-600 text-4xl font-bold"
+                                id="predictedDigit">
+                                ?
+                            </div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-4 text-sm">
+                            <div class="p-3 rounded-lg bg-dark-700">
+                                <div class="text-gray-400">Confidence</div>
+                                <div class="font-bold text-lg" id="confidence">0%</div>
+                            </div>
+                            <div class="p-3 rounded-lg bg-dark-700">
+                                <div class="text-gray-400">Risk Level</div>
+                                <div class="font-bold text-lg" id="riskLevel">-</div>
+                            </div>
+                            <div class="p-3 rounded-lg bg-dark-700">
+                                <div class="text-gray-400">Market Regime</div>
+                                <div class="font-bold text-lg" id="marketRegime">-</div>
+                            </div>
+                            <div class="p-3 rounded-lg bg-dark-700">
+                                <div class="text-gray-400">Agreement</div>
+                                <div class="font-bold text-lg" id="agreement">0/10</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Digit Frequency -->
+                <div class="glass rounded-2xl p-6">
+                    <h3 class="text-gray-400 text-sm mb-4">Last 100 Digits Frequency</h3>
+                    <div class="grid grid-cols-5 gap-2" id="digitFrequency">
+                        <!-- Digits 0-9 will be populated -->
+                    </div>
+                </div>
+
+                <!-- Last Ticks -->
+                <div class="glass rounded-2xl p-6">
+                    <h3 class="text-gray-400 text-sm mb-4">Recent Ticks</h3>
+                    <div class="flex flex-wrap gap-2" id="recentTicks">
+                        <span class="text-gray-500">Waiting for ticks...</span>
+                    </div>
+                    <div class="mt-4 text-sm text-gray-400">
+                        History: <span id="historyCount" class="mono">0</span> / 500 ticks
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column - Engine Performance -->
+            <div class="space-y-6">
+                <!-- AI Engines -->
+                <div class="glass rounded-2xl p-6">
+                    <h3 class="text-gray-400 text-sm mb-4">🧠 AI Engine Performance</h3>
+                    <div class="space-y-3" id="enginePerformance">
+                        <!-- Will be populated dynamically -->
+                    </div>
+                </div>
+
+                <!-- Trade Decision -->
+                <div class="glass rounded-2xl p-6">
+                    <h3 class="text-gray-400 text-sm mb-4">Trade Decision</h3>
+                    <div id="tradeDecision" class="p-4 rounded-lg bg-dark-700 text-center text-gray-500">
+                        Waiting for analysis...
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Trade History -->
+        <div class="glass rounded-2xl p-6">
+            <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                <span>📜</span> Trade History
+            </h3>
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-gray-400 border-b border-gray-700">
+                            <th class="text-left py-3 px-4">Time</th>
+                            <th class="text-left py-3 px-4">Asset</th>
+                            <th class="text-center py-3 px-4">Predicted</th>
+                            <th class="text-center py-3 px-4">Actual</th>
+                            <th class="text-center py-3 px-4">Result</th>
+                            <th class="text-right py-3 px-4">Stake</th>
+                            <th class="text-right py-3 px-4">P/L</th>
+                            <th class="text-right py-3 px-4">Balance</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tradeHistory" class="divide-y divide-gray-800">
+                        <tr>
+                            <td colspan="8" class="text-center py-8 text-gray-500">No trades yet</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Console Log -->
+        <div class="glass rounded-2xl p-6 mt-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="text-lg font-semibold flex items-center gap-2">
+                    <span>📋</span> Console Log
+                </h3>
+                <button id="clearLog" class="text-sm text-gray-400 hover:text-white">Clear</button>
+            </div>
+            <div id="consoleLog"
+                class="h-48 overflow-y-auto scrollbar-thin bg-dark-900 rounded-lg p-4 mono text-xs space-y-1">
+                <div class="text-gray-500">Bot initialized. Configure and click Start Bot to begin.</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================================
+        // AI-LOGIC DERIV DIGIT DIFFER TRADING BOT v5.0 (Web Version)
+        // Simulated AI Ensemble with Advanced Statistical Methods
+        // ============================================================
+
+        // ==================== SIMULATED AI ENGINES ====================
+
+        class FrequencyDeviationAnalyzer {
+            constructor() {
+                this.name = 'FDA';
+                this.fullName = 'Frequency Deviation Analyzer';
+                this.weight = 1.2;
+                this.wins = 0;
+                this.losses = 0;
+                this.lastPrediction = null;
+            }
+
+            analyze(tickHistory) {
+                if (tickHistory.length < 100) return { error: 'Insufficient data' };
+
+                const sample = tickHistory.slice(-500);
+                const counts = Array(10).fill(0);
+                sample.forEach(d => counts[d]++);
+
+                const total = sample.length;
+                const expected = total / 10;
+
+                const analysis = counts.map((count, digit) => {
+                    const deviation = (count - expected) / expected * 100;
+                    const variance = expected * (1 - 1 / 10);
+                    const zScore = (count - expected) / Math.sqrt(variance);
+                    return { digit, count, frequency: count / total, deviation, zScore, isSignificant: Math.abs(zScore) > 1.96 };
+                });
+
+                let chiSquare = 0;
+                for (const count of counts) {
+                    chiSquare += Math.pow(count - expected, 2) / expected;
+                }
+                const isUniform = chiSquare < 16.919;
+
+                const last50 = tickHistory.slice(-50);
+                const recentCounts = Array(10).fill(0);
+                last50.forEach(d => recentCounts[d]++);
+
+                const combinedScores = analysis.map(a => {
+                    const recentFreq = recentCounts[a.digit] / 50;
+                    let score = a.deviation * 0.4;
+                    score += (recentFreq - 0.1) * 100 * 0.3;
+                    const lastDigit = tickHistory[tickHistory.length - 1];
+                    if (a.digit === lastDigit) score -= 20;
+                    if (a.isSignificant && a.deviation > 0) score += 15;
+                    return { digit: a.digit, score, ...a };
+                });
+
+                const sorted = combinedScores.sort((a, b) => b.score - a.score);
+                const predicted = sorted[0];
+
+                let confidence = 50;
+                if (predicted.isSignificant) confidence += 20;
+                if (Math.abs(predicted.zScore) > 2.5) confidence += 10;
+                if (!isUniform) confidence += 10;
+                confidence = Math.min(95, Math.max(50, confidence + predicted.score * 0.5));
+
+                return {
+                    predictedDigit: predicted.digit,
+                    confidence: Math.round(confidence),
+                    primaryStrategy: 'Frequency Deviation Analysis',
+                    riskAssessment: confidence >= 75 ? 'low' : confidence >= 60 ? 'medium' : 'high',
+                    marketRegime: isUniform ? 'random' : 'patterned',
+                    alternativeCandidates: [sorted[1].digit, sorted[2].digit]
+                };
+            }
+        }
+
+        class MarkovChainPredictor {
+            constructor() {
+                this.name = 'MCP';
+                this.fullName = 'Markov Chain Predictor';
+                this.weight = 1.3;
+                this.wins = 0;
+                this.losses = 0;
+                this.lastPrediction = null;
+            }
+
+            analyze(tickHistory) {
+                if (tickHistory.length < 200) return { error: 'Insufficient data' };
+
+                const transitionMatrix = Array(10).fill(null).map(() => Array(10).fill(0));
+                const transitionCounts = Array(10).fill(0);
+
+                for (let i = 0; i < tickHistory.length - 1; i++) {
+                    const current = tickHistory[i];
+                    const next = tickHistory[i + 1];
+                    transitionMatrix[current][next]++;
+                    transitionCounts[current]++;
+                }
+
+                for (let i = 0; i < 10; i++) {
+                    if (transitionCounts[i] > 0) {
+                        for (let j = 0; j < 10; j++) {
+                            transitionMatrix[i][j] /= transitionCounts[i];
+                        }
+                    }
+                }
+
+                const lastDigit = tickHistory[tickHistory.length - 1];
+                const firstOrderProbs = transitionMatrix[lastDigit];
+
+                const predictions = firstOrderProbs.map((prob, digit) => ({
+                    digit,
+                    probability: prob,
+                    differScore: (0.1 - prob) * 100
+                }));
+
+                const sorted = predictions.sort((a, b) => b.differScore - a.differScore);
+                const predicted = sorted[0];
+
+                const probDiff = sorted[0].differScore - sorted[1].differScore;
+                let confidence = 50 + probDiff * 2;
+                if (predicted.probability < 0.05) confidence += 15;
+                if (predicted.probability < 0.08) confidence += 10;
+                confidence = Math.min(95, Math.max(50, confidence));
+
+                let entropy = 0;
+                for (const p of firstOrderProbs) {
+                    if (p > 0) entropy -= p * Math.log2(p);
+                }
+                const normalizedEntropy = entropy / Math.log2(10);
+
+                return {
+                    predictedDigit: predicted.digit,
+                    confidence: Math.round(confidence),
+                    primaryStrategy: 'Markov Chain Analysis',
+                    riskAssessment: normalizedEntropy > 0.95 ? 'high' : normalizedEntropy > 0.85 ? 'medium' : 'low',
+                    marketRegime: normalizedEntropy > 0.95 ? 'random' : 'structured',
+                    alternativeCandidates: [sorted[1].digit, sorted[2].digit]
+                };
+            }
+        }
+
+        class EntropyInformationEngine {
+            constructor() {
+                this.name = 'EITE';
+                this.fullName = 'Entropy Information Engine';
+                this.weight = 1.1;
+                this.wins = 0;
+                this.losses = 0;
+                this.lastPrediction = null;
+            }
+
+            calculateEntropy(digits) {
+                const counts = Array(10).fill(0);
+                digits.forEach(d => counts[d]++);
+                const total = digits.length;
+                let entropy = 0;
+                for (const count of counts) {
+                    if (count > 0) {
+                        const p = count / total;
+                        entropy -= p * Math.log2(p);
+                    }
+                }
+                return entropy / Math.log2(10);
+            }
+
+            analyze(tickHistory) {
+                if (tickHistory.length < 100) return { error: 'Insufficient data' };
+
+                const sample = tickHistory.slice(-200);
+                const fullEntropy = this.calculateEntropy(sample);
+
+                const infoGains = [];
+                for (let d = 0; d < 10; d++) {
+                    const prob = sample.filter(x => x === d).length / sample.length;
+                    const surprise = prob > 0 ? -Math.log2(prob) : 10;
+                    infoGains.push({ digit: d, surprise, probability: prob });
+                }
+
+                const sorted = infoGains.sort((a, b) => (b.probability - 0.1) - (a.probability - 0.1));
+                let finalPrediction = sorted[0];
+                if (finalPrediction.digit === tickHistory[tickHistory.length - 1]) {
+                    finalPrediction = sorted[1];
+                }
+
+                let confidence = 50;
+                if (fullEntropy < 0.9) confidence += 20;
+                else if (fullEntropy < 0.95) confidence += 10;
+                if (Math.abs(finalPrediction.probability - 0.1) > 0.03) confidence += 10;
+                confidence = Math.min(95, Math.max(50, confidence));
+
+                return {
+                    predictedDigit: finalPrediction.digit,
+                    confidence: Math.round(confidence),
+                    primaryStrategy: 'Entropy Analysis',
+                    riskAssessment: fullEntropy > 0.97 ? 'high' : fullEntropy > 0.92 ? 'medium' : 'low',
+                    marketRegime: fullEntropy > 0.97 ? 'random' : fullEntropy > 0.9 ? 'semi-random' : 'patterned',
+                    alternativeCandidates: [sorted[1].digit, sorted[2].digit]
+                };
+            }
+        }
+
+        class PatternRecognitionEngine {
+            constructor() {
+                this.name = 'PRNN';
+                this.fullName = 'Pattern Recognition';
+                this.weight = 1.2;
+                this.wins = 0;
+                this.losses = 0;
+                this.lastPrediction = null;
+            }
+
+            analyze(tickHistory) {
+                if (tickHistory.length < 100) return { error: 'Insufficient data' };
+
+                const results = [];
+
+                // Analyze patterns of different lengths
+                for (let patternLength = 2; patternLength <= 4; patternLength++) {
+                    const patterns = new Map();
+                    const sample = tickHistory.slice(-300);
+
+                    for (let i = 0; i <= sample.length - patternLength - 1; i++) {
+                        const pattern = sample.slice(i, i + patternLength).join(',');
+                        const nextDigit = sample[i + patternLength];
+                        if (!patterns.has(pattern)) patterns.set(pattern, Array(10).fill(0));
+                        patterns.get(pattern)[nextDigit]++;
+                    }
+
+                    const currentPattern = tickHistory.slice(-patternLength).join(',');
+                    if (patterns.has(currentPattern)) {
+                        const nextProbs = patterns.get(currentPattern);
+                        const total = nextProbs.reduce((a, b) => a + b, 0);
+                        if (total >= 3) {
+                            const predictions = nextProbs.map((count, digit) => ({
+                                digit, probability: count / total
+                            }));
+                            const sorted = predictions.sort((a, b) => a.probability - b.probability);
+                            results.push({
+                                predictedDigit: sorted[0].digit,
+                                confidence: 50 + (total >= 10 ? 15 : 5),
+                                weight: 1.0 + (patternLength - 2) * 0.2,
+                                type: `${patternLength}-gram`
+                            });
+                        }
+                    }
+                }
+
+                if (results.length === 0) {
+                    const counts = Array(10).fill(0);
+                    tickHistory.slice(-100).forEach(d => counts[d]++);
+                    const maxCount = Math.max(...counts);
+                    return {
+                        predictedDigit: counts.indexOf(maxCount),
+                        confidence: 55,
+                        primaryStrategy: 'Pattern Recognition (Fallback)',
+                        riskAssessment: 'medium',
+                        marketRegime: 'unknown',
+                        alternativeCandidates: []
+                    };
+                }
+
+                const votes = Array(10).fill(0);
+                for (const result of results) {
+                    votes[result.predictedDigit] += result.weight;
+                }
+
+                let maxVotes = 0;
+                let predicted = 0;
+                for (let i = 0; i < 10; i++) {
+                    if (votes[i] > maxVotes) {
+                        maxVotes = votes[i];
+                        predicted = i;
+                    }
+                }
+
+                if (predicted === tickHistory[tickHistory.length - 1]) {
+                    votes[predicted] = -1;
+                    maxVotes = 0;
+                    for (let i = 0; i < 10; i++) {
+                        if (votes[i] > maxVotes) {
+                            maxVotes = votes[i];
+                            predicted = i;
+                        }
+                    }
+                }
+
+                const avgConf = results.reduce((a, r) => a + r.confidence, 0) / results.length;
+
+                return {
+                    predictedDigit: predicted,
+                    confidence: Math.round(avgConf),
+                    primaryStrategy: 'Pattern Recognition',
+                    riskAssessment: avgConf >= 70 ? 'low' : 'medium',
+                    marketRegime: results.length > 2 ? 'patterned' : 'semi-random',
+                    alternativeCandidates: votes.map((v, i) => ({ digit: i, votes: v }))
+                        .filter(x => x.digit !== predicted).sort((a, b) => b.votes - a.votes).slice(0, 2).map(x => x.digit)
+                };
+            }
+        }
+
+        class BayesianProbabilityEstimator {
+            constructor() {
+                this.name = 'BPE';
+                this.fullName = 'Bayesian Estimator';
+                this.weight = 1.15;
+                this.wins = 0;
+                this.losses = 0;
+                this.lastPrediction = null;
+                this.priorAlpha = Array(10).fill(1);
+            }
+
+            analyze(tickHistory) {
+                if (tickHistory.length < 50) return { error: 'Insufficient data' };
+
+                const counts = Array(10).fill(0);
+                tickHistory.forEach(d => counts[d]++);
+
+                const posteriorAlpha = this.priorAlpha.map((a, i) => a + counts[i]);
+                const totalAlpha = posteriorAlpha.reduce((a, b) => a + b, 0);
+                const posteriorMean = posteriorAlpha.map(a => a / totalAlpha);
+
+                const predictions = posteriorMean.map((prob, digit) => ({
+                    digit,
+                    posteriorProb: prob,
+                    excessProbability: prob - 0.1
+                }));
+
+                const sorted = predictions.sort((a, b) => b.excessProbability - a.excessProbability);
+                let predicted = sorted[0];
+                if (predicted.digit === tickHistory[tickHistory.length - 1]) {
+                    predicted = sorted[1];
+                }
+
+                let confidence = 50;
+                if (predicted.excessProbability > 0.02) confidence += 15;
+                if (predicted.excessProbability > 0.04) confidence += 10;
+                if (tickHistory.length > 300) confidence += 10;
+                confidence = Math.min(95, Math.max(50, confidence));
+
+                return {
+                    predictedDigit: predicted.digit,
+                    confidence: Math.round(confidence),
+                    primaryStrategy: 'Bayesian Estimation',
+                    riskAssessment: confidence >= 70 ? 'low' : 'medium',
+                    marketRegime: 'probabilistic',
+                    alternativeCandidates: [sorted[1].digit, sorted[2].digit]
+                };
+            }
+        }
+
+        class GapMeanReversionAnalyzer {
+            constructor() {
+                this.name = 'GAMR';
+                this.fullName = 'Gap Mean Reversion';
+                this.weight = 1.25;
+                this.wins = 0;
+                this.losses = 0;
+                this.lastPrediction = null;
+            }
+
+            analyze(tickHistory) {
+                if (tickHistory.length < 100) return { error: 'Insufficient data' };
+
+                const gaps = Array(10).fill(tickHistory.length);
+                for (let i = tickHistory.length - 1; i >= 0; i--) {
+                    const digit = tickHistory[i];
+                    if (gaps[digit] === tickHistory.length) {
+                        gaps[digit] = tickHistory.length - 1 - i;
+                    }
+                }
+
+                const recentCounts = Array(10).fill(0);
+                tickHistory.slice(-30).forEach(d => recentCounts[d]++);
+
+                const scores = gaps.map((gap, digit) => ({
+                    digit,
+                    currentGap: gap,
+                    recentCount: recentCounts[digit],
+                    score: -gap + (recentCounts[digit] > 4 ? 10 : 0)
+                }));
+
+                const sorted = scores.sort((a, b) => b.score - a.score);
+                let predicted = sorted[0];
+                if (predicted.currentGap === 0) predicted = sorted[1];
+
+                let confidence = 50;
+                if (predicted.currentGap <= 3) confidence += 15;
+                if (predicted.currentGap <= 1) confidence += 10;
+                if (predicted.recentCount >= 4) confidence += 10;
+                confidence = Math.min(95, Math.max(50, confidence));
+
+                return {
+                    predictedDigit: predicted.digit,
+                    confidence: Math.round(confidence),
+                    primaryStrategy: 'Gap Mean Reversion',
+                    riskAssessment: confidence >= 70 ? 'low' : 'medium',
+                    marketRegime: 'mean-reverting',
+                    alternativeCandidates: [sorted[1].digit, sorted[2].digit]
+                };
+            }
+        }
+
+        class MomentumTrendDetector {
+            constructor() {
+                this.name = 'MTD';
+                this.fullName = 'Momentum Detector';
+                this.weight = 1.1;
+                this.wins = 0;
+                this.losses = 0;
+                this.lastPrediction = null;
+            }
+
+            analyze(tickHistory) {
+                if (tickHistory.length < 100) return { error: 'Insufficient data' };
+
+                const short = tickHistory.slice(-20);
+                const long = tickHistory.slice(-100);
+
+                const shortCounts = Array(10).fill(0);
+                const longCounts = Array(10).fill(0);
+
+                short.forEach(d => shortCounts[d]++);
+                long.forEach(d => longCounts[d]++);
+
+                const momentum = Array(10).fill(0).map((_, d) => {
+                    const shortFreq = shortCounts[d] / 20;
+                    const longFreq = longCounts[d] / 100;
+                    return (shortFreq - longFreq) / (longFreq + 0.01);
+                });
+
+                const predictions = momentum.map((mom, digit) => ({
+                    digit,
+                    momentum: mom,
+                    isHot: mom > 0.5,
+                    score: mom > 0.5 ? mom * 20 : 0
+                }));
+
+                const sorted = predictions.sort((a, b) => b.score - a.score);
+                let predicted = sorted[0];
+                if (predicted.digit === tickHistory[tickHistory.length - 1]) {
+                    predicted = sorted[1];
+                }
+
+                let confidence = 50;
+                if (predicted.momentum > 0.8) confidence += 20;
+                else if (predicted.momentum > 0.5) confidence += 10;
+                confidence = Math.min(95, Math.max(50, confidence));
+
+                return {
+                    predictedDigit: predicted.digit,
+                    confidence: Math.round(confidence),
+                    primaryStrategy: 'Momentum Detection',
+                    riskAssessment: confidence >= 70 ? 'low' : 'medium',
+                    marketRegime: predicted.isHot ? 'trending' : 'stable',
+                    alternativeCandidates: [sorted[1].digit, sorted[2].digit]
+                };
+            }
+        }
+
+        class ChaosTheoryAnalyzer {
+            constructor() {
+                this.name = 'CTAF';
+                this.fullName = 'Chaos Theory Analyzer';
+                this.weight = 1.0;
+                this.wins = 0;
+                this.losses = 0;
+                this.lastPrediction = null;
+            }
+
+            analyze(tickHistory) {
+                if (tickHistory.length < 100) return { error: 'Insufficient data' };
+
+                const attractors = new Map();
+                for (let i = 2; i < tickHistory.length - 1; i++) {
+                    const state = tickHistory.slice(i - 2, i + 1).join(',');
+                    const nextDigit = tickHistory[i + 1];
+                    if (!attractors.has(state)) {
+                        attractors.set(state, { count: 0, transitions: [] });
+                    }
+                    attractors.get(state).count++;
+                    attractors.get(state).transitions.push(nextDigit);
+                }
+
+                const currentState = tickHistory.slice(-3).join(',');
+                const currentAttractor = attractors.get(currentState);
+
+                const predictions = [];
+                for (let d = 0; d < 10; d++) {
+                    const nextState = [...tickHistory.slice(-2), d].join(',');
+                    const nextAttractor = attractors.get(nextState) || { count: 0, transitions: [] };
+
+                    let score = 0;
+                    if (nextAttractor.count < 3) score += 20;
+                    if (nextAttractor.count === 0) score += 10;
+
+                    if (currentAttractor) {
+                        const transitionCount = currentAttractor.transitions.filter(t => t === d).length;
+                        const transitionProb = transitionCount / (currentAttractor.transitions.length + 1);
+                        score += (0.15 - transitionProb) * 100;
+                    }
+
+                    predictions.push({ digit: d, score });
+                }
+
+                const sorted = predictions.sort((a, b) => b.score - a.score);
+                let predicted = sorted[0];
+                if (predicted.digit === tickHistory[tickHistory.length - 1]) {
+                    predicted = sorted[1];
+                }
+
+                let confidence = 50;
+                if (predicted.score > 20) confidence += 15;
+                confidence = Math.min(90, Math.max(50, confidence));
+
+                return {
+                    predictedDigit: predicted.digit,
+                    confidence: Math.round(confidence),
+                    primaryStrategy: 'Chaos Theory Analysis',
+                    riskAssessment: confidence >= 65 ? 'medium' : 'high',
+                    marketRegime: attractors.size > 50 ? 'chaotic' : 'ordered',
+                    alternativeCandidates: [sorted[1].digit, sorted[2].digit]
+                };
+            }
+        }
+
+        class MonteCarloSimulator {
+            constructor() {
+                this.name = 'MCS';
+                this.fullName = 'Monte Carlo Simulator';
+                this.weight = 1.05;
+                this.wins = 0;
+                this.losses = 0;
+                this.lastPrediction = null;
+            }
+
+            analyze(tickHistory) {
+                if (tickHistory.length < 100) return { error: 'Insufficient data' };
+
+                const numSimulations = 500;
+                const digitProbabilities = Array(10).fill(0);
+
+                for (let sim = 0; sim < numSimulations; sim++) {
+                    const bootstrapSample = [];
+                    for (let i = 0; i < tickHistory.length; i++) {
+                        bootstrapSample.push(tickHistory[Math.floor(Math.random() * tickHistory.length)]);
+                    }
+
+                    const counts = Array(10).fill(0);
+                    bootstrapSample.forEach(d => counts[d]++);
+                    const maxCount = Math.max(...counts);
+                    digitProbabilities[counts.indexOf(maxCount)]++;
+                }
+
+                for (let d = 0; d < 10; d++) {
+                    digitProbabilities[d] /= numSimulations;
+                }
+
+                const sorted = digitProbabilities.map((prob, digit) => ({ digit, probability: prob }))
+                    .sort((a, b) => b.probability - a.probability);
+
+                let predicted = sorted[0];
+                if (predicted.digit === tickHistory[tickHistory.length - 1]) {
+                    predicted = sorted[1];
+                }
+
+                let confidence = 50;
+                if (predicted.probability > 0.15) confidence += 15;
+                if (predicted.probability > 0.20) confidence += 10;
+                confidence = Math.min(90, Math.max(50, confidence));
+
+                return {
+                    predictedDigit: predicted.digit,
+                    confidence: Math.round(confidence),
+                    primaryStrategy: 'Monte Carlo Simulation',
+                    riskAssessment: confidence >= 70 ? 'low' : 'medium',
+                    marketRegime: predicted.probability > 0.3 ? 'stable' : 'volatile',
+                    alternativeCandidates: [sorted[1].digit, sorted[2].digit]
+                };
+            }
+        }
+
+        class EnsembleMetaLearner {
+            constructor() {
+                this.name = 'EML';
+                this.fullName = 'Ensemble Meta-Learner';
+                this.weight = 1.4;
+                this.enginePerformance = {};
+            }
+
+            analyze(tickHistory, engineResults) {
+                if (!engineResults || engineResults.length === 0) {
+                    const counts = Array(10).fill(0);
+                    tickHistory.slice(-100).forEach(d => counts[d]++);
+                    return {
+                        predictedDigit: counts.indexOf(Math.max(...counts)),
+                        confidence: 55,
+                        primaryStrategy: 'Ensemble (Fallback)',
+                        riskAssessment: 'medium',
+                        marketRegime: 'unknown',
+                        agreement: 0,
+                        alternativeCandidates: []
+                    };
+                }
+
+                const votes = Array(10).fill(0);
+                const confidences = Array(10).fill().map(() => []);
+                const riskScores = [];
+                const regimeVotes = {};
+
+                for (const result of engineResults) {
+                    if (result.error) continue;
+
+                    const digit = result.predictedDigit;
+                    let weight = result.weight || 1.0;
+
+                    const perf = this.enginePerformance[result.name];
+                    if (perf && perf.total >= 10) {
+                        const winRate = perf.wins / perf.total;
+                        weight *= (0.5 + winRate);
+                    }
+
+                    weight *= (result.confidence / 70);
+
+                    votes[digit] += weight;
+                    confidences[digit].push(result.confidence);
+
+                    const riskValue = result.riskAssessment === 'high' ? 3 : result.riskAssessment === 'medium' ? 2 : 1;
+                    riskScores.push(riskValue);
+
+                    if (result.marketRegime) {
+                        regimeVotes[result.marketRegime] = (regimeVotes[result.marketRegime] || 0) + weight;
+                    }
+                }
+
+                let maxVotes = 0;
+                let predicted = 0;
+                for (let i = 0; i < 10; i++) {
+                    if (votes[i] > maxVotes) {
+                        maxVotes = votes[i];
+                        predicted = i;
+                    }
+                }
+
+                if (predicted === tickHistory[tickHistory.length - 1]) {
+                    votes[predicted] = -1;
+                    maxVotes = 0;
+                    for (let i = 0; i < 10; i++) {
+                        if (votes[i] > maxVotes) {
+                            maxVotes = votes[i];
+                            predicted = i;
+                        }
+                    }
+                }
+
+                const numEngines = engineResults.filter(r => !r.error).length;
+                const agreement = engineResults.filter(r => r.predictedDigit === predicted).length;
+                const avgConfidence = confidences[predicted].length > 0
+                    ? confidences[predicted].reduce((a, b) => a + b, 0) / confidences[predicted].length
+                    : 50;
+
+                let metaConfidence = avgConfidence;
+                if (agreement >= numEngines * 0.7) metaConfidence += 15;
+                else if (agreement >= numEngines * 0.5) metaConfidence += 10;
+                if (agreement < numEngines * 0.3) metaConfidence -= 15;
+                metaConfidence = Math.min(95, Math.max(50, metaConfidence));
+
+                const avgRisk = riskScores.length > 0 ? riskScores.reduce((a, b) => a + b, 0) / riskScores.length : 2;
+                const overallRisk = avgRisk >= 2.5 ? 'high' : avgRisk >= 1.5 ? 'medium' : 'low';
+
+                let consensusRegime = 'unknown';
+                let maxRegimeVotes = 0;
+                for (const [regime, count] of Object.entries(regimeVotes)) {
+                    if (count > maxRegimeVotes) {
+                        maxRegimeVotes = count;
+                        consensusRegime = regime;
+                    }
+                }
+
+                return {
+                    predictedDigit: predicted,
+                    confidence: Math.round(metaConfidence),
+                    primaryStrategy: 'Ensemble Meta-Learning',
+                    riskAssessment: overallRisk,
+                    marketRegime: consensusRegime,
+                    agreement: agreement,
+                    totalEngines: numEngines,
+                    alternativeCandidates: votes.map((v, i) => ({ digit: i, votes: v }))
+                        .filter(x => x.digit !== predicted && x.votes > 0)
+                        .sort((a, b) => b.votes - a.votes).slice(0, 2).map(x => x.digit)
+                };
+            }
+
+            updatePerformance(engineName, won) {
+                if (!this.enginePerformance[engineName]) {
+                    this.enginePerformance[engineName] = { wins: 0, losses: 0, total: 0 };
+                }
+                this.enginePerformance[engineName].total++;
+                if (won) this.enginePerformance[engineName].wins++;
+                else this.enginePerformance[engineName].losses++;
+            }
+        }
+
+        // ==================== KELLY CRITERION MANAGER ====================
+
+        class KellyCriterionManager {
+            constructor(config = {}) {
+                this.investmentCapital = config.investmentCapital || 500;
+                this.currentCapital = this.investmentCapital;
+                this.peakCapital = this.investmentCapital;
+                this.kellyFraction = config.kellyFraction || 0.25;
+                this.minStake = config.minStake || 0.35;
+                this.maxStakePercent = config.maxStakePercent || 5;
+                this.maxDrawdownPercent = config.maxDrawdownPercent || 25;
+                this.sessionPnL = 0;
+                this.currentDrawdown = 0;
+                this.rollingResults = [];
+                this.rollingWindowSize = 50;
+            }
+
+            calculateFullKelly(winProbability, decimalOdds) {
+                const p = Math.max(0.01, Math.min(0.99, winProbability));
+                const q = 1 - p;
+                const b = decimalOdds - 1;
+                if (b <= 0) return 0;
+                const kelly = (b * p - q) / b;
+                return Math.max(0, kelly);
+            }
+
+            calculateOptimalStake(params) {
+                const {
+                    winProbability = 0.5,
+                    payout = 1.85,
+                    confidence = 70,
+                    marketRegime = 'stable',
+                    consecutiveLosses = 0,
+                    consecutiveWins = 0
+                } = params;
+
+                const fullKelly = this.calculateFullKelly(winProbability, payout);
+                let adjustedKelly = fullKelly * this.kellyFraction;
+
+                // Confidence multiplier
+                if (confidence >= 90) adjustedKelly *= 1.0;
+                else if (confidence >= 80) adjustedKelly *= 0.8;
+                else if (confidence >= 70) adjustedKelly *= 0.5;
+                else adjustedKelly *= 0.25;
+
+                // Regime multiplier
+                const regimeMultipliers = {
+                    'stable': 1.0, 'ordered': 1.0, 'patterned': 0.9,
+                    'volatile': 0.5, 'chaotic': 0.4, 'random': 0.4
+                };
+                adjustedKelly *= regimeMultipliers[marketRegime] || 0.6;
+
+                // Loss adjustment
+                if (consecutiveLosses >= 4) adjustedKelly *= 0.2;
+                else if (consecutiveLosses >= 3) adjustedKelly *= 0.5;
+                else if (consecutiveLosses >= 2) adjustedKelly *= 0.7;
+                else if (consecutiveLosses >= 1) adjustedKelly *= 0.9;
+
+                // Win bonus
+                if (consecutiveWins >= 3) adjustedKelly *= 1.3;
+                else if (consecutiveWins >= 2) adjustedKelly *= 1.2;
+                else if (consecutiveWins >= 1) adjustedKelly *= 1.1;
+
+                // Drawdown protection
+                const drawdownPercent = this.calculateCurrentDrawdown();
+                if (drawdownPercent >= 20) adjustedKelly *= 0.2;
+                else if (drawdownPercent >= 15) adjustedKelly *= 0.4;
+                else if (drawdownPercent >= 10) adjustedKelly *= 0.6;
+                else if (drawdownPercent >= 5) adjustedKelly *= 0.8;
+
+                let stake = this.currentCapital * adjustedKelly;
+                stake = Math.max(this.minStake, stake);
+                stake = Math.min(stake, this.currentCapital * (this.maxStakePercent / 100));
+                stake = Math.min(stake, this.currentCapital * 0.1);
+                stake = Math.round(stake * 100) / 100;
+
+                return { stake, kellyFraction: adjustedKelly };
+            }
+
+            calculateCurrentDrawdown() {
+                if (this.peakCapital <= 0) return 0;
+                const drawdown = ((this.peakCapital - this.currentCapital) / this.peakCapital) * 100;
+                this.currentDrawdown = Math.max(0, drawdown);
+                return this.currentDrawdown;
+            }
+
+            shouldContinueTrading() {
+                const drawdown = this.calculateCurrentDrawdown();
+                return drawdown < this.maxDrawdownPercent && this.currentCapital > this.minStake * 2;
+            }
+
+            updateAfterTrade(profit, isWin) {
+                this.currentCapital += profit;
+                this.sessionPnL += profit;
+                if (this.currentCapital > this.peakCapital) {
+                    this.peakCapital = this.currentCapital;
+                }
+                this.rollingResults.push(isWin ? 1 : 0);
+                if (this.rollingResults.length > this.rollingWindowSize) {
+                    this.rollingResults.shift();
+                }
+            }
+
+            getRollingWinRate() {
+                if (this.rollingResults.length < 5) return 0.5;
+                return this.rollingResults.filter(r => r === 1).length / this.rollingResults.length;
+            }
+
+            getPayoutForAsset(asset) {
+                return 1.85; // Standard payout for digit differ
+            }
+        }
+
+        // ==================== MAIN BOT CLASS ====================
+
+        class AILogicDigitDifferBot {
+            constructor() {
+                this.ws = null;
+                this.connected = false;
+                this.token = '';
+                this.balance = 0;
+                this.sessionStartBalance = 0;
+
+                // AI Engines
+                this.aiEngines = {
+                    fda: new FrequencyDeviationAnalyzer(),
+                    mcp: new MarkovChainPredictor(),
+                    eite: new EntropyInformationEngine(),
+                    prnn: new PatternRecognitionEngine(),
+                    bpe: new BayesianProbabilityEstimator(),
+                    gamr: new GapMeanReversionAnalyzer(),
+                    mtd: new MomentumTrendDetector(),
+                    ctaf: new ChaosTheoryAnalyzer(),
+                    mcs: new MonteCarloSimulator(),
+                    eml: new EnsembleMetaLearner()
+                };
+
+                // Kelly Manager (will be initialized on start)
+                this.kellyManager = null;
+
+                // Trading State
+                this.currentAsset = 'R_50';
+                this.tickHistory = [];
+                this.tradeInProgress = false;
+                this.predictionInProgress = false;
+                this.lastPrediction = null;
+                this.lastConfidence = 0;
+                this.currentPrediction = null;
+
+                // Statistics
+                this.totalTrades = 0;
+                this.totalWins = 0;
+                this.totalLosses = 0;
+                this.consecutiveLosses = 0;
+                this.consecutiveWins = 0;
+                this.tradeHistory = [];
+
+                // Config
+                this.config = {
+                    requiredHistoryLength: 500,
+                    minConfidence: 70,
+                    minEnginesAgreement: 3
+                };
+
+                this.isRunning = false;
+            }
+
+            log(message, type = 'info') {
+                const consoleLog = document.getElementById('consoleLog');
+                const time = new Date().toLocaleTimeString();
+                const colors = {
+                    info: 'text-gray-300',
+                    success: 'text-green-400',
+                    error: 'text-red-400',
+                    warning: 'text-yellow-400',
+                    trade: 'text-blue-400'
+                };
+                const line = document.createElement('div');
+                line.className = colors[type] || colors.info;
+                line.textContent = `[${time}] ${message}`;
+                consoleLog.appendChild(line);
+                consoleLog.scrollTop = consoleLog.scrollHeight;
+            }
+
+            updateUI() {
+                // Balance
+                document.getElementById('balance').textContent = `$${this.balance.toFixed(2)}`;
+
+                // Session PnL
+                const pnl = this.kellyManager ? this.kellyManager.sessionPnL : 0;
+                const pnlEl = document.getElementById('sessionPnL');
+                pnlEl.textContent = `${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`;
+                pnlEl.className = `mono font-semibold ${pnl >= 0 ? 'text-green-400' : 'text-red-400'}`;
+
+                // Kelly Stats
+                if (this.kellyManager) {
+                    document.getElementById('investmentCapitalDisplay').textContent = `$${this.kellyManager.investmentCapital.toFixed(2)}`;
+                    document.getElementById('peakCapital').textContent = `$${this.kellyManager.peakCapital.toFixed(2)}`;
+                    document.getElementById('currentDrawdown').textContent = `${this.kellyManager.calculateCurrentDrawdown().toFixed(1)}%`;
+                    document.getElementById('rollingWinRate').textContent = `${(this.kellyManager.getRollingWinRate() * 100).toFixed(1)}%`;
+
+                    const nextStake = this.kellyManager.calculateOptimalStake({
+                        winProbability: this.kellyManager.getRollingWinRate() || 0.5,
+                        payout: 1.85,
+                        confidence: this.lastConfidence || 70,
+                        consecutiveLosses: this.consecutiveLosses,
+                        consecutiveWins: this.consecutiveWins
+                    });
+                    document.getElementById('nextStake').textContent = `$${nextStake.stake.toFixed(2)}`;
+                }
+
+                // Trade Stats
+                document.getElementById('totalTrades').textContent = this.totalTrades;
+                document.getElementById('totalWins').textContent = this.totalWins;
+                document.getElementById('totalLosses').textContent = this.totalLosses;
+                const winRate = this.totalTrades > 0 ? ((this.totalWins / this.totalTrades) * 100).toFixed(1) : '0';
+                document.getElementById('winRate').textContent = `${winRate}%`;
+                document.getElementById('consecutiveLosses').textContent = this.consecutiveLosses;
+
+                // Engine Performance
+                this.updateEnginePerformance();
+
+                // Digit Frequency
+                this.updateDigitFrequency();
+            }
+
+            updateEnginePerformance() {
+                const container = document.getElementById('enginePerformance');
+                let html = '';
+
+                for (const [key, engine] of Object.entries(this.aiEngines)) {
+                    if (key === 'eml') continue;
+                    const total = engine.wins + engine.losses;
+                    const winRate = total > 0 ? (engine.wins / total * 100).toFixed(0) : 50;
+                    const barColor = winRate >= 60 ? 'bg-green-500' : winRate >= 45 ? 'bg-yellow-500' : 'bg-red-500';
+
+                    html += `
+                    <div class="flex items-center gap-3">
+                        <div class="w-16 text-xs text-gray-400">${engine.name}</div>
+                        <div class="flex-1 h-2 bg-dark-700 rounded-full overflow-hidden">
+                            <div class="engine-bar h-full ${barColor}" style="width: ${winRate}%"></div>
+                        </div>
+                        <div class="w-20 text-xs text-right">
+                            <span class="text-green-400">${engine.wins}</span>/<span class="text-red-400">${engine.losses}</span>
+                            <span class="text-gray-400 ml-1">${winRate}%</span>
+                        </div>
+                    </div>
+                `;
+                }
+
+                container.innerHTML = html;
+            }
+
+            updateDigitFrequency() {
+                const container = document.getElementById('digitFrequency');
+                if (this.tickHistory.length < 10) {
+                    container.innerHTML = '<span class="col-span-5 text-center text-gray-500">Collecting data...</span>';
+                    return;
+                }
+
+                const last100 = this.tickHistory.slice(-100);
+                const counts = Array(10).fill(0);
+                last100.forEach(d => counts[d]++);
+
+                let html = '';
+                for (let i = 0; i < 10; i++) {
+                    const freq = (counts[i] / last100.length * 100).toFixed(0);
+                    const deviation = counts[i] - 10;
+                    let bgColor = 'bg-dark-700';
+                    if (deviation > 3) bgColor = 'bg-green-900/50';
+                    else if (deviation < -3) bgColor = 'bg-red-900/50';
+
+                    html += `
+                    <div class="digit-box ${bgColor} rounded-lg p-2 text-center">
+                        <div class="text-lg font-bold">${i}</div>
+                        <div class="text-xs text-gray-400">${freq}%</div>
+                    </div>
+                `;
+                }
+
+                container.innerHTML = html;
+            }
+
+            updateRecentTicks() {
+                const container = document.getElementById('recentTicks');
+                const recent = this.tickHistory.slice(-20);
+
+                if (recent.length === 0) {
+                    container.innerHTML = '<span class="text-gray-500">Waiting for ticks...</span>';
+                    return;
+                }
+
+                let html = '';
+                for (let i = 0; i < recent.length; i++) {
+                    const isLast = i === recent.length - 1;
+                    html += `<span class="inline-flex items-center justify-center w-8 h-8 rounded-lg ${isLast ? 'bg-blue-600 text-white' : 'bg-dark-700 text-gray-300'} text-sm font-bold">${recent[i]}</span>`;
+                }
+
+                container.innerHTML = html;
+                document.getElementById('historyCount').textContent = this.tickHistory.length;
+            }
+
+            connect() {
+                this.token = document.getElementById('apiToken').value.trim();
+                if (!this.token) {
+                    this.log('Please enter your Deriv API token', 'error');
+                    return;
+                }
+
+                // Initialize Kelly Manager with current settings
+                this.kellyManager = new KellyCriterionManager({
+                    investmentCapital: parseFloat(document.getElementById('investmentCapital').value) || 500,
+                    kellyFraction: parseFloat(document.getElementById('kellyFraction').value) || 0.25,
+                    minStake: parseFloat(document.getElementById('minStake').value) || 0.35,
+                    maxDrawdownPercent: parseFloat(document.getElementById('maxDrawdown').value) || 25
+                });
+
+                this.config.minConfidence = parseInt(document.getElementById('minConfidence').value) || 70;
+                this.config.minEnginesAgreement = parseInt(document.getElementById('minEngines').value) || 3;
+                this.currentAsset = document.getElementById('selectedAsset').value;
+
+                this.log('Connecting to Deriv API...', 'info');
+
+                try {
+                    this.ws = new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
+
+                    this.ws.onopen = () => {
+                        this.log('Connected to Deriv API', 'success');
+                        this.connected = true;
+                        this.updateConnectionStatus('connected');
+                        this.authenticate();
+                    };
+
+                    this.ws.onmessage = (event) => {
+                        const message = JSON.parse(event.data);
+                        this.handleMessage(message);
+                    };
+
+                    this.ws.onerror = (error) => {
+                        this.log('WebSocket error', 'error');
+                        console.error(error);
+                    };
+
+                    this.ws.onclose = () => {
+                        this.log('Disconnected from Deriv API', 'warning');
+                        this.connected = false;
+                        this.updateConnectionStatus('disconnected');
+                    };
+
+                } catch (error) {
+                    this.log(`Connection error: ${error.message}`, 'error');
+                }
+            }
+
+            disconnect() {
+                if (this.ws) {
+                    this.ws.close();
+                    this.ws = null;
+                }
+                this.connected = false;
+                this.isRunning = false;
+                this.updateConnectionStatus('disconnected');
+            }
+
+            updateConnectionStatus(status) {
+                const statusEl = document.getElementById('connectionStatus');
+                const indicator = statusEl.querySelector('.status-indicator');
+                const text = statusEl.querySelector('span');
+
+                indicator.className = 'status-indicator';
+                if (status === 'connected') {
+                    indicator.classList.add('status-connected');
+                    text.textContent = 'Connected';
+                } else if (status === 'trading') {
+                    indicator.classList.add('status-trading');
+                    text.textContent = 'Trading';
+                } else {
+                    indicator.classList.add('status-disconnected');
+                    text.textContent = 'Disconnected';
+                }
+            }
+
+            sendRequest(request) {
+                if (this.connected && this.ws) {
+                    this.ws.send(JSON.stringify(request));
+                }
+            }
+
+            authenticate() {
+                this.log('Authenticating...', 'info');
+                this.sendRequest({ authorize: this.token });
+            }
+
+            handleMessage(message) {
+                switch (message.msg_type) {
+                    case 'authorize':
+                        this.handleAuthorize(message);
+                        break;
+                    case 'balance':
+                        // this.handleBalance(message);
+                        break;
+                    case 'history':
+                        this.handleTickHistory(message.history);
+                        break;
+                    case 'tick':
+                        this.handleTickUpdate(message.tick);
+                        break;
+                    case 'buy':
+                        this.handleBuyResponse(message);
+                        break;
+                    case 'proposal_open_contract':
+                        if (message.proposal_open_contract?.is_sold) {
+                            this.handleTradeResult(message.proposal_open_contract);
+                        }
+                        break;
+                    default:
+                        if (message.error) {
+                            this.log(`API Error: ${message.error.message}`, 'error');
+                        }
+                }
+            }
+
+            handleAuthorize(message) {
+                if (message.error) {
+                    this.log(`Authentication failed: ${message.error.message}`, 'error');
+                    return;
+                }
+
+                this.log(`Authenticated as ${message.authorize.loginid}`, 'success');
+                this.balance = this.kellyManager.investmentCapital; //message.authorize.balance;
+                this.sessionStartBalance = this.balance;
+
+                // this.kellyManager.currentCapital = this.balance;
+                // this.kellyManager.investmentCapital = this.balance;
+                // this.kellyManager.peakCapital = this.balance;
+
+                this.updateUI();
+
+                this.sendRequest({ balance: 1, subscribe: 1 });
+                this.startTrading();
+            }
+
+            // handleBalance(message) {
+            //     if (message.balance) {
+            //         this.balance = message.balance.balance;
+            //         this.kellyManager.currentCapital = this.balance;
+            //         this.updateUI();
+            //     }
+            // }
+
+            startTrading() {
+                this.isRunning = true;
+                this.updateConnectionStatus('trading');
+                this.log(`Starting trading on ${this.currentAsset}`, 'trade');
+
+                this.tickHistory = [];
+
+                this.sendRequest({
+                    ticks_history: this.currentAsset,
+                    adjust_start_time: 1,
+                    count: this.config.requiredHistoryLength,
+                    end: 'latest',
+                    start: 1,
+                    style: 'ticks'
+                });
+
+                this.sendRequest({
+                    ticks: this.currentAsset,
+                    subscribe: 1
+                });
+            }
+
+            getLastDigit(quote, asset) {
+                const quoteString = quote.toString();
+                const [, fractionalPart = ''] = quoteString.split('.');
+
+                if (['RDBULL', 'RDBEAR', 'R_75', 'R_50'].includes(asset)) {
+                    return fractionalPart.length >= 4 ? parseInt(fractionalPart[3]) : 0;
+                } else if (['R_10', 'R_25'].includes(asset)) {
+                    return fractionalPart.length >= 3 ? parseInt(fractionalPart[2]) : 0;
+                } else {
+                    return fractionalPart.length >= 2 ? parseInt(fractionalPart[1]) : 0;
+                }
+            }
+
+            handleTickHistory(history) {
+                if (!history || !history.prices) {
+                    this.log('Invalid tick history received', 'warning');
+                    return;
+                }
+                this.tickHistory = history.prices.map(price => this.getLastDigit(price, this.currentAsset));
+                this.log(`Received ${this.tickHistory.length} ticks of history`, 'info');
+                this.updateRecentTicks();
+                this.updateUI();
+            }
+
+            handleTickUpdate(tick) {
+                if (!tick || !tick.quote || !this.isRunning) return;
+
+                const lastDigit = this.getLastDigit(tick.quote, this.currentAsset);
+                this.tickHistory.push(lastDigit);
+                if (this.tickHistory.length > this.config.requiredHistoryLength) {
+                    this.tickHistory.shift();
+                }
+
+                this.updateRecentTicks();
+                this.updateUI();
+
+                if (this.tickHistory.length >= this.config.requiredHistoryLength &&
+                    !this.tradeInProgress && !this.predictionInProgress) {
+                    this.analyzeTicks();
+                }
+            }
+
+            async analyzeTicks() {
+                if (this.tradeInProgress || this.predictionInProgress || !this.isRunning) return;
+
+                if (!this.kellyManager.shouldContinueTrading()) {
+                    this.log('Kelly Manager: Max drawdown reached. Stopping.', 'error');
+                    this.stopBot();
+                    return;
+                }
+
+                this.predictionInProgress = true;
+                document.getElementById('analysisStatus').textContent = 'Running AI Analysis...';
+                document.getElementById('analysisStatus').classList.remove('hidden');
+                document.getElementById('predictionDisplay').classList.add('hidden');
+
+                this.log('Starting AI ensemble analysis...', 'info');
+
+                try {
+                    const predictions = await this.runAllEngines();
+
+                    if (predictions.length === 0) {
+                        this.log('No valid predictions received', 'warning');
+                        this.predictionInProgress = false;
+                        return;
+                    }
+
+                    const ensemble = this.aiEngines.eml.analyze(this.tickHistory, predictions);
+
+                    this.lastPrediction = ensemble.predictedDigit;
+                    this.lastConfidence = ensemble.confidence;
+
+                    // Update prediction display
+                    document.getElementById('analysisStatus').classList.add('hidden');
+                    document.getElementById('predictionDisplay').classList.remove('hidden');
+                    document.getElementById('predictedDigit').textContent = ensemble.predictedDigit;
+                    document.getElementById('confidence').textContent = `${ensemble.confidence}%`;
+                    document.getElementById('confidence').className = `font-bold text-lg ${ensemble.confidence >= 80 ? 'text-green-400' : ensemble.confidence >= 70 ? 'text-yellow-400' : 'text-red-400'}`;
+                    document.getElementById('riskLevel').textContent = ensemble.riskAssessment;
+                    document.getElementById('riskLevel').className = `font-bold text-lg ${ensemble.riskAssessment === 'low' ? 'text-green-400' : ensemble.riskAssessment === 'medium' ? 'text-yellow-400' : 'text-red-400'}`;
+                    document.getElementById('marketRegime').textContent = ensemble.marketRegime;
+                    document.getElementById('agreement').textContent = `${ensemble.agreement}/${ensemble.totalEngines}`;
+
+                    this.log(`Ensemble: digit=${ensemble.predictedDigit}, conf=${ensemble.confidence}%, risk=${ensemble.riskAssessment}`, 'info');
+
+                    // Trade decision
+                    const tradeDecision = this.shouldExecuteTrade(ensemble);
+                    const decisionEl = document.getElementById('tradeDecision');
+
+                    if (tradeDecision.execute) {
+                        const kellyResult = this.kellyManager.calculateOptimalStake({
+                            winProbability: Math.max(0.4, Math.min(0.7, this.kellyManager.getRollingWinRate() + (ensemble.confidence - 50) / 200)),
+                            payout: 1.85,
+                            confidence: ensemble.confidence,
+                            marketRegime: ensemble.marketRegime,
+                            consecutiveLosses: this.consecutiveLosses,
+                            consecutiveWins: this.consecutiveWins
+                        });
+
+                        decisionEl.innerHTML = `<div class="text-green-400 font-bold">✅ EXECUTING TRADE</div><div class="text-sm text-gray-400 mt-2">Stake: $${kellyResult.stake.toFixed(2)}</div>`;
+                        decisionEl.className = 'p-4 rounded-lg bg-green-900/30 text-center';
+
+                        this.placeTrade(ensemble.predictedDigit, ensemble.confidence, kellyResult.stake);
+                    } else {
+                        decisionEl.innerHTML = `<div class="text-yellow-400 font-bold">⏭️ SKIPPING</div><div class="text-sm text-gray-400 mt-2">${tradeDecision.reason}</div>`;
+                        decisionEl.className = 'p-4 rounded-lg bg-yellow-900/30 text-center';
+                        this.log(`Skipping trade: ${tradeDecision.reason}`, 'warning');
+                        this.predictionInProgress = false;
+                    }
+
+                } catch (error) {
+                    this.log(`Analysis error: ${error.message}`, 'error');
+                    this.predictionInProgress = false;
+                }
+            }
+
+            async runAllEngines() {
+                const predictions = [];
+
+                for (const [key, engine] of Object.entries(this.aiEngines)) {
+                    if (key === 'eml') continue;
+
+                    try {
+                        const result = engine.analyze(this.tickHistory);
+                        if (result && !result.error && typeof result.predictedDigit === 'number') {
+                            result.name = engine.name;
+                            result.weight = engine.weight;
+                            predictions.push(result);
+                            engine.lastPrediction = result.predictedDigit;
+                        }
+                    } catch (error) {
+                        console.error(`Engine ${engine.name} error:`, error);
+                    }
+                }
+
+                return predictions;
+            }
+
+            shouldExecuteTrade(ensemble) {
+                const reasons = [];
+                let execute = true;
+
+                if (ensemble.confidence < this.config.minConfidence) {
+                    execute = false;
+                    reasons.push(`Low confidence: ${ensemble.confidence}%`);
+                }
+
+                if (ensemble.agreement < this.config.minEnginesAgreement) {
+                    execute = false;
+                    reasons.push(`Low agreement: ${ensemble.agreement}/${ensemble.totalEngines}`);
+                }
+
+                if (ensemble.riskAssessment === 'high') {
+                    execute = false;
+                    reasons.push('High risk');
+                }
+
+                const lastTickDigit = this.tickHistory[this.tickHistory.length - 1];
+                if (ensemble.predictedDigit === lastTickDigit) {
+                    execute = false;
+                    reasons.push('Digit just appeared');
+                }
+
+                if (this.consecutiveLosses >= 4 && ensemble.confidence < 85) {
+                    execute = false;
+                    reasons.push('Need 85%+ after losses');
+                }
+
+                return {
+                    execute,
+                    reason: execute ? 'All checks passed' : reasons.join(' | ')
+                };
+            }
+
+            placeTrade(digit, confidence, stake) {
+                if (this.tradeInProgress) return;
+
+                this.tradeInProgress = true;
+                stake = Math.max(0.35, Math.min(stake, this.balance * 0.1));
+                stake = Math.round(stake * 100) / 100;
+
+                this.log(`Placing trade: DIFFER ${digit} @ $${stake.toFixed(2)} (${confidence}% conf)`, 'trade');
+
+                this.sendRequest({
+                    buy: 1,
+                    price: stake,
+                    parameters: {
+                        amount: stake,
+                        basis: 'stake',
+                        contract_type: 'DIGITDIFF',
+                        currency: 'USD',
+                        duration: 1,
+                        duration_unit: 't',
+                        symbol: this.currentAsset,
+                        barrier: digit
+                    }
+                });
+
+                this.currentPrediction = { digit, confidence, stake };
+            }
+
+            handleBuyResponse(message) {
+                if (message.error) {
+                    this.log(`Trade error: ${message.error.message}`, 'error');
+                    this.tradeInProgress = false;
+                    this.predictionInProgress = false;
+                    return;
+                }
+
+                this.log('Trade placed successfully', 'success');
+                this.sendRequest({
+                    proposal_open_contract: 1,
+                    contract_id: message.buy.contract_id,
+                    subscribe: 1
+                });
+            }
+
+            handleTradeResult(contract) {
+                const won = contract.status === 'won';
+                const profit = parseFloat(contract.profit);
+                const exitSpot = contract.exit_tick_display_value;
+                const actualDigit = this.getLastDigit(exitSpot, this.currentAsset);
+
+                this.log(won ? `🎉 TRADE WON! +$${profit.toFixed(2)}` : `😔 TRADE LOST -$${Math.abs(profit).toFixed(2)}`, won ? 'success' : 'error');
+                this.log(`Predicted: ${this.lastPrediction} | Actual: ${actualDigit}`, 'info');
+
+                this.totalTrades++;
+                this.kellyManager.updateAfterTrade(profit, won);
+
+                // Update engine performance
+                for (const [key, engine] of Object.entries(this.aiEngines)) {
+                    if (engine.lastPrediction !== null && engine.lastPrediction !== undefined) {
+                        const engineWon = engine.lastPrediction !== actualDigit;
+                        if (engineWon) engine.wins++;
+                        else engine.losses++;
+                        this.aiEngines.eml.updatePerformance(engine.name, engineWon);
+                    }
+                    engine.lastPrediction = null;
+                }
+
+                if (won) {
+                    this.totalWins++;
+                    this.consecutiveLosses = 0;
+                    this.consecutiveWins++;
+                } else {
+                    this.totalLosses++;
+                    this.consecutiveLosses++;
+                    this.consecutiveWins = 0;
+                }
+
+                // Add to trade history
+                this.addTradeToHistory({
+                    time: new Date().toLocaleTimeString(),
+                    asset: this.currentAsset,
+                    predicted: this.lastPrediction,
+                    actual: actualDigit,
+                    result: won ? 'WON' : 'LOST',
+                    stake: this.currentPrediction.stake,
+                    profit: profit,
+                    balance: this.balance
+                });
+
+                this.updateUI();
+
+                // Check stop conditions
+                if (!this.kellyManager.shouldContinueTrading()) {
+                    this.log('Max drawdown reached. Stopping bot.', 'error');
+                    this.stopBot();
+                    return;
+                }
+
+                this.tradeInProgress = false;
+                this.predictionInProgress = false;
+            }
+
+            addTradeToHistory(trade) {
+                this.tradeHistory.unshift(trade);
+                if (this.tradeHistory.length > 50) this.tradeHistory.pop();
+
+                const tbody = document.getElementById('tradeHistory');
+                const row = document.createElement('tr');
+                row.className = 'trade-row';
+                row.innerHTML = `
+                <td class="py-3 px-4 text-gray-400">${trade.time}</td>
+                <td class="py-3 px-4">${trade.asset}</td>
+                <td class="py-3 px-4 text-center font-bold">${trade.predicted}</td>
+                <td class="py-3 px-4 text-center font-bold">${trade.actual}</td>
+                <td class="py-3 px-4 text-center">
+                    <span class="px-2 py-1 rounded text-xs font-bold ${trade.result === 'WON' ? 'bg-green-900/50 text-green-400' : 'bg-red-900/50 text-red-400'}">
+                        ${trade.result}
+                    </span>
+                </td>
+                <td class="py-3 px-4 text-right mono">$${trade.stake.toFixed(2)}</td>
+                <td class="py-3 px-4 text-right mono ${trade.profit >= 0 ? 'text-green-400' : 'text-red-400'}">
+                    ${trade.profit >= 0 ? '+' : ''}$${trade.profit.toFixed(2)}
+                </td>
+                <td class="py-3 px-4 text-right mono">$${trade.balance.toFixed(2)}</td>
+            `;
+
+                if (tbody.querySelector('td[colspan]')) {
+                    tbody.innerHTML = '';
+                }
+                tbody.insertBefore(row, tbody.firstChild);
+            }
+
+            stopBot() {
+                this.isRunning = false;
+                this.disconnect();
+                document.getElementById('toggleBot').textContent = 'Start Bot';
+                document.getElementById('toggleBot').className = 'px-6 py-2 rounded-lg bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 font-semibold transition-all';
+                this.log('Bot stopped', 'warning');
+            }
+        }
+
+        // ==================== SETTINGS MANAGER ====================
+
+        class SettingsManager {
+            constructor() {
+                this.STORAGE_KEY = 'ai_trading_bot_settings';
+                this.PROFILES_KEY = 'ai_trading_bot_profiles';
+                this.CURRENT_PROFILE_KEY = 'ai_trading_bot_current_profile';
+                this.autoSaveEnabled = true;
+                this.autoSaveTimeout = null;
+
+                this.defaultSettings = {
+                    apiToken: '',
+                    investmentCapital: 500,
+                    minStake: 0.35,
+                    kellyFraction: 0.25,
+                    maxDrawdown: 25,
+                    minConfidence: 70,
+                    minEngines: 3,
+                    selectedAsset: 'R_50'
+                };
+
+                this.init();
+            }
+
+            init() {
+                // Load auto-save preference
+                const autoSavePref = localStorage.getItem('ai_trading_bot_autosave');
+                this.autoSaveEnabled = autoSavePref !== 'false';
+
+                // Set checkbox state
+                const autoSaveCheckbox = document.getElementById('autoSaveEnabled');
+                if (autoSaveCheckbox) {
+                    autoSaveCheckbox.checked = this.autoSaveEnabled;
+                }
+
+                // Load last used settings
+                this.loadLastSettings();
+
+                // Populate profiles dropdown
+                this.refreshProfilesList();
+
+                // Setup event listeners
+                this.setupEventListeners();
+
+                // Setup auto-save on input changes
+                this.setupAutoSave();
+            }
+
+            setupEventListeners() {
+                // Auto-save toggle
+                document.getElementById('autoSaveEnabled')?.addEventListener('change', (e) => {
+                    this.autoSaveEnabled = e.target.checked;
+                    localStorage.setItem('ai_trading_bot_autosave', this.autoSaveEnabled);
+                    if (this.autoSaveEnabled) {
+                        this.saveCurrentSettings();
+                    }
+                });
+
+                // Save profile button
+                document.getElementById('saveProfileBtn')?.addEventListener('click', () => {
+                    this.saveProfile();
+                });
+
+                // Load profile button
+                document.getElementById('loadProfileBtn')?.addEventListener('click', () => {
+                    this.loadSelectedProfile();
+                });
+
+                // Delete profile button
+                document.getElementById('deleteProfileBtn')?.addEventListener('click', () => {
+                    this.deleteSelectedProfile();
+                });
+
+                // Export settings button
+                document.getElementById('exportSettingsBtn')?.addEventListener('click', () => {
+                    this.exportSettings();
+                });
+
+                // Import settings button
+                document.getElementById('importSettingsBtn')?.addEventListener('click', () => {
+                    document.getElementById('importFileInput')?.click();
+                });
+
+                // Import file input
+                document.getElementById('importFileInput')?.addEventListener('change', (e) => {
+                    this.importSettings(e);
+                });
+
+                // Profile select change - auto-fill profile name
+                document.getElementById('profileSelect')?.addEventListener('change', (e) => {
+                    const profileName = document.getElementById('profileName');
+                    if (profileName && e.target.value) {
+                        profileName.value = e.target.value;
+                    }
+                });
+
+                // Enter key on profile name input
+                document.getElementById('profileName')?.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        this.saveProfile();
+                    }
+                });
+            }
+
+            setupAutoSave() {
+                const inputs = [
+                    'apiToken', 'investmentCapital', 'minStake', 'kellyFraction',
+                    'maxDrawdown', 'minConfidence', 'minEngines', 'selectedAsset'
+                ];
+
+                inputs.forEach(id => {
+                    const element = document.getElementById(id);
+                    if (element) {
+                        element.addEventListener('input', () => this.triggerAutoSave());
+                        element.addEventListener('change', () => this.triggerAutoSave());
+                    }
+                });
+            }
+
+            triggerAutoSave() {
+                if (!this.autoSaveEnabled) return;
+
+                // Debounce auto-save
+                if (this.autoSaveTimeout) {
+                    clearTimeout(this.autoSaveTimeout);
+                }
+
+                this.autoSaveTimeout = setTimeout(() => {
+                    this.saveCurrentSettings();
+                }, 1000);
+            }
+
+            getCurrentSettings() {
+                return {
+                    apiToken: document.getElementById('apiToken')?.value || '',
+                    investmentCapital: parseFloat(document.getElementById('investmentCapital')?.value) || 500,
+                    minStake: parseFloat(document.getElementById('minStake')?.value) || 0.35,
+                    kellyFraction: parseFloat(document.getElementById('kellyFraction')?.value) || 0.25,
+                    maxDrawdown: parseInt(document.getElementById('maxDrawdown')?.value) || 25,
+                    minConfidence: parseInt(document.getElementById('minConfidence')?.value) || 70,
+                    minEngines: parseInt(document.getElementById('minEngines')?.value) || 3,
+                    selectedAsset: document.getElementById('selectedAsset')?.value || 'R_50'
+                };
+            }
+
+            applySettings(settings) {
+                if (!settings) return;
+
+                const fields = {
+                    apiToken: 'apiToken',
+                    investmentCapital: 'investmentCapital',
+                    minStake: 'minStake',
+                    kellyFraction: 'kellyFraction',
+                    maxDrawdown: 'maxDrawdown',
+                    minConfidence: 'minConfidence',
+                    minEngines: 'minEngines',
+                    selectedAsset: 'selectedAsset'
+                };
+
+                for (const [key, elementId] of Object.entries(fields)) {
+                    const element = document.getElementById(elementId);
+                    if (element && settings[key] !== undefined) {
+                        element.value = settings[key];
+                    }
+                }
+            }
+
+            saveCurrentSettings() {
+                const settings = this.getCurrentSettings();
+
+                // Don't save empty token for security - but keep other settings
+                const settingsToSave = { ...settings };
+                if (!document.getElementById('apiToken')?.dataset.saveToken) {
+                    // Store token separately with basic obfuscation (not secure, just to avoid accidental exposure)
+                    if (settings.apiToken) {
+                        localStorage.setItem('ai_trading_bot_token', btoa(settings.apiToken));
+                    }
+                    settingsToSave.apiToken = '';
+                }
+
+                localStorage.setItem(this.STORAGE_KEY, JSON.stringify(settingsToSave));
+                this.updateLastSavedTime();
+            }
+
+            loadLastSettings() {
+                try {
+                    const savedSettings = localStorage.getItem(this.STORAGE_KEY);
+                    if (savedSettings) {
+                        const settings = JSON.parse(savedSettings);
+
+                        // Load token separately
+                        const savedToken = localStorage.getItem('ai_trading_bot_token');
+                        if (savedToken) {
+                            settings.apiToken = atob(savedToken);
+                        }
+
+                        this.applySettings(settings);
+                        this.updateLastSavedTime('Loaded');
+                    }
+                } catch (error) {
+                    console.error('Error loading settings:', error);
+                }
+            }
+
+            updateLastSavedTime(action = 'Saved') {
+                const timeEl = document.getElementById('lastSavedTime');
+                if (timeEl) {
+                    const now = new Date().toLocaleTimeString();
+                    timeEl.textContent = `${action} at ${now}`;
+                    timeEl.classList.add('text-green-500');
+                    setTimeout(() => {
+                        timeEl.classList.remove('text-green-500');
+                    }, 2000);
+                }
+            }
+
+            // ============ PROFILES ============
+
+            getProfiles() {
+                try {
+                    const profiles = localStorage.getItem(this.PROFILES_KEY);
+                    return profiles ? JSON.parse(profiles) : {};
+                } catch {
+                    return {};
+                }
+            }
+
+            saveProfiles(profiles) {
+                localStorage.setItem(this.PROFILES_KEY, JSON.stringify(profiles));
+            }
+
+            refreshProfilesList() {
+                const select = document.getElementById('profileSelect');
+                if (!select) return;
+
+                const profiles = this.getProfiles();
+                const currentValue = select.value;
+
+                // Clear existing options except the first one
+                select.innerHTML = '<option value="">-- Select Profile --</option>';
+
+                // Add profiles
+                Object.keys(profiles).sort().forEach(name => {
+                    const option = document.createElement('option');
+                    option.value = name;
+                    option.textContent = name;
+                    select.appendChild(option);
+                });
+
+                // Restore selection if it still exists
+                if (profiles[currentValue]) {
+                    select.value = currentValue;
+                }
+            }
+
+            saveProfile() {
+                const nameInput = document.getElementById('profileName');
+                const name = nameInput?.value.trim();
+
+                if (!name) {
+                    this.showNotification('Please enter a profile name', 'error');
+                    return;
+                }
+
+                const profiles = this.getProfiles();
+                const settings = this.getCurrentSettings();
+
+                // Confirm overwrite if profile exists
+                if (profiles[name]) {
+                    if (!confirm(`Profile "${name}" already exists. Overwrite?`)) {
+                        return;
+                    }
+                }
+
+                // Save with timestamp
+                profiles[name] = {
+                    settings: settings,
+                    createdAt: profiles[name]?.createdAt || new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                };
+
+                this.saveProfiles(profiles);
+                this.refreshProfilesList();
+
+                // Select the saved profile
+                const select = document.getElementById('profileSelect');
+                if (select) select.value = name;
+
+                this.showNotification(`Profile "${name}" saved successfully!`, 'success');
+            }
+
+            loadSelectedProfile() {
+                const select = document.getElementById('profileSelect');
+                const name = select?.value;
+
+                if (!name) {
+                    this.showNotification('Please select a profile to load', 'error');
+                    return;
+                }
+
+                const profiles = this.getProfiles();
+                const profile = profiles[name];
+
+                if (!profile) {
+                    this.showNotification('Profile not found', 'error');
+                    return;
+                }
+
+                this.applySettings(profile.settings);
+
+                // Update profile name input
+                const nameInput = document.getElementById('profileName');
+                if (nameInput) nameInput.value = name;
+
+                // Save as current settings
+                if (this.autoSaveEnabled) {
+                    this.saveCurrentSettings();
+                }
+
+                this.showNotification(`Profile "${name}" loaded!`, 'success');
+            }
+
+            deleteSelectedProfile() {
+                const select = document.getElementById('profileSelect');
+                const name = select?.value;
+
+                if (!name) {
+                    this.showNotification('Please select a profile to delete', 'error');
+                    return;
+                }
+
+                if (!confirm(`Delete profile "${name}"? This cannot be undone.`)) {
+                    return;
+                }
+
+                const profiles = this.getProfiles();
+                delete profiles[name];
+                this.saveProfiles(profiles);
+                this.refreshProfilesList();
+
+                // Clear profile name input
+                const nameInput = document.getElementById('profileName');
+                if (nameInput) nameInput.value = '';
+
+                this.showNotification(`Profile "${name}" deleted`, 'success');
+            }
+
+            // ============ EXPORT/IMPORT ============
+
+            exportSettings() {
+                const profiles = this.getProfiles();
+                const currentSettings = this.getCurrentSettings();
+
+                const exportData = {
+                    version: '5.0',
+                    exportedAt: new Date().toISOString(),
+                    currentSettings: currentSettings,
+                    profiles: profiles
+                };
+
+                // Remove token from export for security
+                exportData.currentSettings.apiToken = '';
+                Object.values(exportData.profiles).forEach(profile => {
+                    if (profile.settings) {
+                        profile.settings.apiToken = '';
+                    }
+                });
+
+                const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `ai-trading-bot-settings-${new Date().toISOString().slice(0, 10)}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                this.showNotification('Settings exported successfully!', 'success');
+            }
+
+            importSettings(event) {
+                const file = event.target.files?.[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const importData = JSON.parse(e.target.result);
+
+                        // Validate import data
+                        if (!importData.version || !importData.currentSettings) {
+                            throw new Error('Invalid settings file format');
+                        }
+
+                        // Ask what to import
+                        const importProfiles = importData.profiles && Object.keys(importData.profiles).length > 0;
+                        let message = 'Import current settings?';
+                        if (importProfiles) {
+                            message = 'What would you like to import?\n\n1. Click OK to import settings AND profiles\n2. Click Cancel to skip';
+                        }
+
+                        if (confirm(message)) {
+                            // Import current settings (preserve current token)
+                            const currentToken = document.getElementById('apiToken')?.value;
+                            this.applySettings(importData.currentSettings);
+                            if (currentToken) {
+                                document.getElementById('apiToken').value = currentToken;
+                            }
+
+                            // Import profiles
+                            if (importProfiles) {
+                                const existingProfiles = this.getProfiles();
+                                const mergedProfiles = { ...existingProfiles };
+
+                                for (const [name, profile] of Object.entries(importData.profiles)) {
+                                    if (existingProfiles[name]) {
+                                        // Add suffix to avoid overwriting
+                                        const newName = `${name} (imported)`;
+                                        mergedProfiles[newName] = profile;
+                                    } else {
+                                        mergedProfiles[name] = profile;
+                                    }
+                                }
+
+                                this.saveProfiles(mergedProfiles);
+                                this.refreshProfilesList();
+                            }
+
+                            if (this.autoSaveEnabled) {
+                                this.saveCurrentSettings();
+                            }
+
+                            this.showNotification('Settings imported successfully!', 'success');
+                        }
+                    } catch (error) {
+                        console.error('Import error:', error);
+                        this.showNotification(`Import failed: ${error.message}`, 'error');
+                    }
+                };
+
+                reader.readAsText(file);
+
+                // Reset file input
+                event.target.value = '';
+            }
+
+            // ============ NOTIFICATIONS ============
+
+            showNotification(message, type = 'info') {
+                // Create notification element
+                const notification = document.createElement('div');
+                notification.className = `fixed top-4 right-4 z-50 px-6 py-3 rounded-lg shadow-lg transform transition-all duration-300 translate-x-full`;
+
+                const colors = {
+                    success: 'bg-green-600 text-white',
+                    error: 'bg-red-600 text-white',
+                    info: 'bg-blue-600 text-white',
+                    warning: 'bg-yellow-600 text-white'
+                };
+
+                notification.classList.add(...(colors[type] || colors.info).split(' '));
+                notification.innerHTML = `
+                <div class="flex items-center gap-2">
+                    <span>${type === 'success' ? '✅' : type === 'error' ? '❌' : type === 'warning' ? '⚠️' : 'ℹ️'}</span>
+                    <span>${message}</span>
+                </div>
+            `;
+
+                document.body.appendChild(notification);
+
+                // Animate in
+                setTimeout(() => {
+                    notification.classList.remove('translate-x-full');
+                }, 10);
+
+                // Remove after 3 seconds
+                setTimeout(() => {
+                    notification.classList.add('translate-x-full');
+                    setTimeout(() => {
+                        notification.remove();
+                    }, 300);
+                }, 3000);
+            }
+
+            // ============ RESET ============
+
+            resetToDefaults() {
+                if (confirm('Reset all settings to defaults? This will not delete saved profiles.')) {
+                    this.applySettings(this.defaultSettings);
+                    if (this.autoSaveEnabled) {
+                        this.saveCurrentSettings();
+                    }
+                    this.showNotification('Settings reset to defaults', 'success');
+                }
+            }
+
+            clearAllData() {
+                if (confirm('Clear ALL saved data including profiles? This cannot be undone.')) {
+                    localStorage.removeItem(this.STORAGE_KEY);
+                    localStorage.removeItem(this.PROFILES_KEY);
+                    localStorage.removeItem(this.CURRENT_PROFILE_KEY);
+                    localStorage.removeItem('ai_trading_bot_token');
+                    this.applySettings(this.defaultSettings);
+                    this.refreshProfilesList();
+                    this.showNotification('All data cleared', 'success');
+                }
+            }
+        }
+
+        // ==================== INITIALIZATION ====================
+
+        const settingsManager = new SettingsManager();
+        const bot = new AILogicDigitDifferBot();
+
+        document.getElementById('toggleBot').addEventListener('click', () => {
+            const btn = document.getElementById('toggleBot');
+            if (!bot.isRunning) {
+                btn.textContent = 'Stop Bot';
+                btn.className = 'px-6 py-2 rounded-lg bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 font-semibold transition-all';
+                bot.connect();
+            } else {
+                bot.stopBot();
+            }
+        });
+
+        document.getElementById('clearLog').addEventListener('click', () => {
+            document.getElementById('consoleLog').innerHTML = '<div class="text-gray-500">Console cleared.</div>';
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            // Ctrl/Cmd + S = Save current settings
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                e.preventDefault();
+                settingsManager.saveCurrentSettings();
+                settingsManager.showNotification('Settings saved!', 'success');
+            }
+
+            // Ctrl/Cmd + Shift + S = Save as profile
+            if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'S') {
+                e.preventDefault();
+                const name = prompt('Enter profile name:');
+                if (name) {
+                    document.getElementById('profileName').value = name;
+                    settingsManager.saveProfile();
+                }
+            }
+
+            // Ctrl/Cmd + E = Export
+            if ((e.ctrlKey || e.metaKey) && e.key === 'e') {
+                e.preventDefault();
+                settingsManager.exportSettings();
+            }
+        });
+
+        // Show keyboard shortcuts hint
+        console.log('%c⌨️ Keyboard Shortcuts:', 'font-weight: bold; color: #3b82f6;');
+        console.log('  Ctrl+S: Quick save settings');
+        console.log('  Ctrl+Shift+S: Save as new profile');
+        console.log('  Ctrl+E: Export settings');
+
+        // Reset button
+        document.getElementById('resetSettingsBtn')?.addEventListener('click', () => {
+            settingsManager.resetToDefaults();
+        });
+
+        // Help modal
+        document.getElementById('helpBtn')?.addEventListener('click', () => {
+            document.getElementById('helpModal').classList.remove('hidden');
+        });
+
+        document.getElementById('closeHelpBtn')?.addEventListener('click', () => {
+            document.getElementById('helpModal').classList.add('hidden');
+        });
+
+        document.getElementById('helpModal')?.addEventListener('click', (e) => {
+            if (e.target.id === 'helpModal') {
+                document.getElementById('helpModal').classList.add('hidden');
+            }
+        });
+
+        // Escape key closes modal
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                document.getElementById('helpModal')?.classList.add('hidden');
+            }
+        });
+
+        // Log that settings manager is ready
+        bot.log('Settings manager initialized. Use profiles to save/load configurations.', 'info');
+
+        // Initialize digit frequency display
+        const digitFreqContainer = document.getElementById('digitFrequency');
+        let digitHtml = '';
+        for (let i = 0; i < 10; i++) {
+            digitHtml += `
+            <div class="digit-box bg-dark-700 rounded-lg p-2 text-center">
+                <div class="text-lg font-bold">${i}</div>
+                <div class="text-xs text-gray-400">--%</div>
+            </div>
+        `;
+        }
+        digitFreqContainer.innerHTML = digitHtml;
+
+        // Initialize engine performance display
+        bot.updateEnginePerformance();
+    </script>
+</body>
+
+</html>
