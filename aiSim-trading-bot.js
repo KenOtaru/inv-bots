@@ -2052,8 +2052,8 @@ class AILogicDigitDifferBot {
             // bpe: new BayesianProbabilityEstimator(),
             // gamr: new GapMeanReversionAnalyzer(),
             // mtd: new MomentumTrendDetector(),
-            ctaf: new ChaosTheoryAnalyzer(),
-            // mcs: new MonteCarloSimulator(),
+            // ctaf: new ChaosTheoryAnalyzer(),
+            mcs: new MonteCarloSimulator(),
             eml: new EnsembleMetaLearner()
         };
 
@@ -2534,6 +2534,7 @@ class AILogicDigitDifferBot {
             // const highConfidenceEngine = predictions.find(p => p.confidence >= 85);
             // const highConfidenceEngine = predictions.find(p => p.confidence <= 60);
             // const highConfidenceEngine = predictions.find(p => p.confidence <= 50);
+            // const highConfidenceEngine = predictions.find(p => p.confidence >= 90);
             const highConfidenceEngine = predictions.find(p => p.confidence >= 90);
             
             if (highConfidenceEngine) {
