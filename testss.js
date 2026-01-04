@@ -993,7 +993,7 @@ class MomentumTrendDetector {
             return { error: 'Insufficient data' };
         }
 
-        const recent = tickHistory.slice(-900)
+        const recent = tickHistory.slice(-50)
 
         // Calculate momentum for each digit
         const momentum = this.calculateDigitMomentum(recent);
@@ -1976,6 +1976,7 @@ class KellyCriterionManager {
         };
     }
 }
+
 // ============================================================
 // MAIN BOT CLASS
 // ============================================================
@@ -1998,15 +1999,15 @@ class AILogicDigitDifferBot {
 
         // Initialize Simulated AI Engines
         this.aiEngines = {
-            // fda: new FrequencyDeviationAnalyzer(),
-            // mcp: new MarkovChainPredictor(),
-            // eite: new EntropyInformationEngine(),
-            // prnn: new PatternRecognitionEngine(),
-            // bpe: new BayesianProbabilityEstimator(),
-            // gamr: new GapMeanReversionAnalyzer(),
-            // mtd: new MomentumTrendDetector(),
+            fda: new FrequencyDeviationAnalyzer(),
+            mcp: new MarkovChainPredictor(),
+            eite: new EntropyInformationEngine(),
+            prnn: new PatternRecognitionEngine(),
+            bpe: new BayesianProbabilityEstimator(),
+            gamr: new GapMeanReversionAnalyzer(),
+            mtd: new MomentumTrendDetector(),
             ctaf: new ChaosTheoryAnalyzer(),
-            // mcs: new MonteCarloSimulator(),
+            mcs: new MonteCarloSimulator(),
             eml: new EnsembleMetaLearner()
         };
 
@@ -2480,21 +2481,14 @@ class AILogicDigitDifferBot {
             console.log(`   Risk Level: ${kellyResult.riskLevel}`);
             console.log(`   Recommendation: ${kellyResult.recommendation}`);
 
-            // Find any engine with over 90% confidence
-            // const highConfidenceEngine = predictions.find(p => p.confidence >= 95);
-            // const highConfidenceEngine = predictions.find(p => p.confidence >= 63);
-            // const highConfidenceEngine = predictions.find(p => p.confidence <= 65);
-            // const highConfidenceEngine = predictions.find(p => p.confidence >= 85);
-            // const highConfidenceEngine = predictions.find(p => p.confidence <= 60);
-            // const highConfidenceEngine = predictions.find(p => p.confidence <= 50);
-            const highConfidenceEngine = predictions.find(p => p.confidence >= 80);
-            
-            if (highConfidenceEngine) {
-                console.log(`🎯 Using high-confidence engine: ${highConfidenceEngine.name} (${highConfidenceEngine.confidence}% confidence)`);
-                this.placeTrade(highConfidenceEngine.predictedDigit, highConfidenceEngine.confidence, kellyResult.stake);
+            // Decide whether to trade
+            const tradeDecision = this.shouldExecuteTrade(ensemble, kellyResult);
+
+            if (tradeDecision.execute) {
+                this.placeTrade(ensemble.predictedDigit, ensemble.confidence, kellyResult.stake);
             }
             else {
-                console.log(`⏭️ Skipping trade: No engine with >90% confidence found`);
+                console.log(`⏭️ Skipping trade: ${tradeDecision.reason}`);
                 this.predictionInProgress = false;
                 // this.scheduleNextTrade();
             }
@@ -3004,8 +2998,8 @@ const bot = new AILogicDigitDifferBot({
     maxConsecutiveLosses: 3,//6
 
     minConfidence: 65,
-    minEnginesAgreement: 1,
-    minEnginesAgreement: 5,
+    minEnginesAgreement: 7,
+    minEnginesAgreement2: 2,
     requiredHistoryLength: 1000,
     minWaitTime: 1000,
     maxWaitTime: 1000,
