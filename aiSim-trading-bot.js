@@ -2544,33 +2544,42 @@ class AILogicDigitDifferBot {
             console.log(`   Recommendation: ${kellyResult.recommendation}`);
 
             // Find any engine with over 90% confidence
-            // const highConfidenceEngine = predictions.find(p => p.confidence >= 95);
-            // const highConfidenceEngine = predictions.find(p => p.confidence >= 63);
-            // const highConfidenceEngine = predictions.find(p => p.confidence <= 65);
-            // const highConfidenceEngine = predictions.find(p => p.confidence >= 85);
-            // const highConfidenceEngine = predictions.find(p => p.confidence <= 60);
-            // const highConfidenceEngine = predictions.find(p => p.confidence <= 50);
-            // const highConfidenceEngine = predictions.find(p => p.confidence >= 90);
-            // const highConfidenceEngine = predictions.find(p => p.confidence >= 90);
+            const FDA_Engine = predictions.find(p => p.confidence >= 95);
+            const MCP_Engine = predictions.find(p => p.confidence >= 63);
+            const EITE_Engine = predictions.find(p => p.confidence <= 65);
+            const PRNN_Engine = predictions.find(p => p.confidence >= 85);
+            const BPE_Engine = predictions.find(p => p.confidence <= 60);
+            const GAMR_Engine = predictions.find(p => p.confidence >= 95);
+            const MTD_Engine = predictions.find(p => p.confidence <= 50);
+            const CTAF_Engine = predictions.find(p => p.confidence >= 90);
+            const MCS_Engine = predictions.find(p => p.confidence >= 90);
             
-            // if (highConfidenceEngine) {
-            //     console.log(`🎯 Using high-confidence engine: ${highConfidenceEngine.name} (${highConfidenceEngine.confidence}% confidence)`);
-            //     this.placeTrade(highConfidenceEngine.predictedDigit, highConfidenceEngine.confidence, kellyResult.stake);
-            // }
-            // else {
-            //     console.log(`⏭️ Skipping trade: No engine with >90% confidence found`);
-            //     this.predictionInProgress = false;
-            //     // this.scheduleNextTrade();
-            // }
-
-            // Decide whether to trade
-            const tradeDecision = this.shouldExecuteTrade(ensemble, kellyResult);
-
-            if (tradeDecision.execute) {
-                this.placeTrade(ensemble.predictedDigit, ensemble.confidence, kellyResult.stake);
-            }
-            else {
-                console.log(`⏭️ Skipping trade: ${tradeDecision.reason}`);
+            if (FDA_Engine && GAMR_Engine) {
+                console.log(`🎯 Using FDA && GAMR engine: ${GAMR_Engine.name} (${GAMR_Engine.confidence}% confidence)`);
+                this.placeTrade(GAMR_Engine.predictedDigit, GAMR_Engine.confidence, kellyResult.stake);
+            } else if(MCP_Engine) {
+                console.log(`🎯 Using MCP engine: ${MCP_Engine.name} (${MCP_Engine.confidence}% confidence)`);
+                this.placeTrade(MCP_Engine.predictedDigit, MCP_Engine.confidence, kellyResult.stake);
+            } else if(EITE_Engine) {
+                console.log(`🎯 Using EITE engine: ${EITE_Engine.name} (${EITE_Engine.confidence}% confidence)`);
+                this.placeTrade(EITE_Engine.predictedDigit, EITE_Engine.confidence, kellyResult.stake);
+            } else if(PRNN_Engine) {
+                console.log(`🎯 Using PRNN engine: ${PRNN_Engine.name} (${PRNN_Engine.confidence}% confidence)`);
+                this.placeTrade(PRNN_Engine.predictedDigit, PRNN_Engine.confidence, kellyResult.stake);
+            } else if(BPE_Engine) {
+                console.log(`🎯 Using BPE engine: ${BPE_Engine.name} (${BPE_Engine.confidence}% confidence)`);
+                this.placeTrade(BPE_Engine.predictedDigit, BPE_Engine.confidence, kellyResult.stake);
+            } else if(MTD_Engine) {
+                console.log(`🎯 Using MTD engine: ${MTD_Engine.name} (${MTD_Engine.confidence}% confidence)`);
+                this.placeTrade(MTD_Engine.predictedDigit, MTD_Engine.confidence, kellyResult.stake);
+            } else if(CTAF_Engine) {
+                console.log(`🎯 Using CTAF engine: ${CTAF_Engine.name} (${CTAF_Engine.confidence}% confidence)`);
+                this.placeTrade(CTAF_Engine.predictedDigit, CTAF_Engine.confidence, kellyResult.stake);
+            } else if(MCS_Engine) {
+                console.log(`🎯 Using MCS engine: ${MCS_Engine.name} (${MCS_Engine.confidence}% confidence)`);
+                this.placeTrade(MCS_Engine.predictedDigit, MCS_Engine.confidence, kellyResult.stake);
+            } else {
+                console.log(`⏭️ Skipping trade: No engine with required confidence found`);
                 this.predictionInProgress = false;
                 // this.scheduleNextTrade();
             }
