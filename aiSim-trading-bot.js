@@ -987,7 +987,6 @@ class MomentumTrendDetector {
         this.lastOutcome = null;
     }
 
-    
     analyze(tickHistory) {
         if (tickHistory.length < 100) {
             return { error: 'Insufficient data' };
@@ -1134,7 +1133,6 @@ class MomentumTrendDetector {
     }
 }
 
-// ============================================================
 // SIMULATED AI ENGINE 8: Chaos Theory Attractor Finder (CTAF)
 // Uses chaos theory concepts like attractors and phase space
 // ============================================================
@@ -1144,6 +1142,7 @@ class ChaosTheoryAnalyzer {
         this.name = 'CTAF';
         this.fullName = 'Chaos Theory Attractor Finder';
         this.weight = 1.0;
+
         this.wins = 0;
         this.losses = 0;
         this.lastPrediction = null;
@@ -1155,56 +1154,91 @@ class ChaosTheoryAnalyzer {
             return { error: 'Insufficient data' };
         }
 
-        // Build phase space (delay embedding)
-        const phaseSpace = this.buildPhaseSpace(tickHistory, 3);
+        const sample = tickHistory.slice(-100);
+        const counts = Array(10).fill(0);
+        sample.forEach(d => counts[d]++);
 
-        // Find attractors (frequently visited states)
-        const attractors = this.findAttractors(phaseSpace);
+        let dimension = tickHistory.length >= 3000 ? 3 : 2;
+        let phaseSpace = this.buildPhaseSpace(tickHistory, dimension);
+        let attractors = this.findAttractors(phaseSpace);
 
-        // Lyapunov exponent approximation (measure of chaos)
+        const alpha = 1;
+
         const lyapunov = this.approximateLyapunov(tickHistory);
 
         // Recurrence analysis
         const recurrence = this.analyzeRecurrence(tickHistory);
 
         // Current state in phase space
-        const currentState = tickHistory.slice(-3).join(',');
-        const currentAttractor = attractors.get(currentState);
+        let currentState = tickHistory.slice(-dimension).join(',');
+        let currentAttractor = attractors.get(currentState);
+
+        // If the current embedded state is too rare, fall back to a lower dimension
+        if (dimension > 1 && (!currentAttractor || currentAttractor.total < 10)) {
+            dimension = 1;
+            phaseSpace = this.buildPhaseSpace(tickHistory, dimension);
+            attractors = this.findAttractors(phaseSpace);
+            currentState = tickHistory.slice(-dimension).join(',');
+            currentAttractor = attractors.get(currentState);
+        }
+
+        const totalStates = phaseSpace.length;
 
         // Predict based on attractor dynamics
         const predictions = [];
 
+        const lastTickDigit = tickHistory[tickHistory.length - 1];
+        const nextStatePrefix = dimension > 1 ? tickHistory.slice(-(dimension - 1)) : [];
+
         for (let d = 0; d < 10; d++) {
-            const nextState = [...tickHistory.slice(-2), d].join(',');
-            const nextAttractor = attractors.get(nextState) || { count: 0, transitions: [] };
+            const nextState = [...nextStatePrefix, d].join(',');
+            const nextAttractor = attractors.get(nextState) || { count: 0, transitions: Array(10).fill(0), total: 0 };
 
             // Score based on:
             // 1. How often this state is visited (attractor strength)
             // 2. Transition probability from current state
             let score = 0;
 
+            let transitionProb = 0.1;
+            let transitionSamples = 0;
+
+            const digitFreq = counts[d] / sample.length;
+
             // If next state is rarely visited, it's less likely = good for DIFFER
-            if (nextAttractor.count < 3) score += 20;
-            if (nextAttractor.count === 0) score += 10;
+            const rarity = Math.max(0, 5 - nextAttractor.count);
+            score += rarity * 2;
+
+            // Overrepresented digits are often decent contrarian picks for DIFFER
+            if (digitFreq > 0.1) {
+                score += (digitFreq - 0.1) * 60;
+            }
+
+            // Avoid choosing the last tick digit (keeps behavior consistent with shouldExecuteTrade)
+            if (d === lastTickDigit) {
+                score -= 15;
+            }
 
             // Check if current state typically leads to this digit
-            if (currentAttractor) {
-                const transitionCount = currentAttractor.transitions.filter(t => t === d).length;
-                const transitionProb = transitionCount / (currentAttractor.transitions.length + 1);
+            if (currentAttractor && currentAttractor.total > 0) {
+                transitionSamples = currentAttractor.total;
+                const transitionCount = currentAttractor.transitions[d] || 0;
+                transitionProb = (transitionCount + alpha) / (transitionSamples + 10 * alpha);
                 // Lower transition prob = less likely = good for DIFFER
-                score += (0.15 - transitionProb) * 100;
+                score += (0.1 - transitionProb) * 100;
             }
 
             // Recurrence penalty: if digit recurs too often, it might not recur now
             if (recurrence.digitRecurrence[d] > 0.15) {
-                score += 10;
+                score += 5;
             }
 
             predictions.push({
                 digit: d,
                 score,
                 attractorStrength: nextAttractor.count,
-                nextState
+                nextState,
+                transitionProb,
+                transitionSamples
             });
         }
 
@@ -1219,14 +1253,17 @@ class ChaosTheoryAnalyzer {
         // Confidence based on chaos level
         let confidence = 50;
 
+        if (predicted.transitionSamples >= 10) {
+            const probGap = Math.max(0, 0.1 - predicted.transitionProb);
+            confidence += probGap * 400;
+            confidence += Math.min(15, Math.log10(predicted.transitionSamples + 1) * 10);
+        }
+
         // Lower Lyapunov = more predictable
-        if (lyapunov < 0.5) confidence += 20;
-        else if (lyapunov < 1.0) confidence += 10;
+        if (lyapunov < 0.5) confidence += 10;
+        else if (lyapunov > 1.5) confidence -= 10;
 
-        // Strong attractor signals
-        if (predicted.score > 20) confidence += 10;
-
-        confidence = Math.min(90, Math.max(50, confidence));
+        confidence = Math.min(95, Math.max(50, confidence));
 
         return {
             predictedDigit: predicted.digit,
@@ -1237,8 +1274,14 @@ class ChaosTheoryAnalyzer {
             statisticalEvidence: {
                 lyapunovExponent: lyapunov.toFixed(3),
                 attractorCount: attractors.size,
+                dimension,
                 currentState,
-                recurrenceRate: recurrence.overallRate.toFixed(3)
+                recurrenceRate: recurrence.overallRate.toFixed(3),
+                currentStateCount: currentAttractor ? currentAttractor.count : 0,
+                transitionSamples: predicted.transitionSamples,
+                transitionProbability: predicted.transitionProb.toFixed(4),
+                nextStateCount: attractors.get(predicted.nextState)?.count || 0,
+                phaseStates: totalStates
             },
             alternativeCandidates: [sorted[1].digit, sorted[2].digit]
         };
@@ -1261,11 +1304,13 @@ class ChaosTheoryAnalyzer {
             const nextDigit = parseInt(phaseSpace[i + 1].split(',').pop());
 
             if (!attractors.has(state)) {
-                attractors.set(state, { count: 0, transitions: [] });
+                attractors.set(state, { count: 0, transitions: Array(10).fill(0), total: 0 });
             }
 
-            attractors.get(state).count++;
-            attractors.get(state).transitions.push(nextDigit);
+            const entry = attractors.get(state);
+            entry.count++;
+            entry.total++;
+            entry.transitions[nextDigit] = (entry.transitions[nextDigit] || 0) + 1;
         }
 
         return attractors;
@@ -1297,25 +1342,27 @@ class ChaosTheoryAnalyzer {
 
     analyzeRecurrence(tickHistory) {
         const n = tickHistory.length;
-        const digitRecurrence = Array(10).fill(0);
-        let totalRecurrence = 0;
-
-        for (let i = 1; i < n; i++) {
-            for (let j = 0; j < i; j++) {
-                if (tickHistory[i] === tickHistory[j]) {
-                    digitRecurrence[tickHistory[i]]++;
-                    totalRecurrence++;
-                }
-            }
+        const counts = Array(10).fill(0);
+        for (const d of tickHistory) {
+            counts[d]++;
         }
 
         const possiblePairs = (n * (n - 1)) / 2;
-        const overallRate = totalRecurrence / possiblePairs;
-
-        for (let d = 0; d < 10; d++) {
-            digitRecurrence[d] /= possiblePairs;
+        if (possiblePairs <= 0) {
+            return { digitRecurrence: Array(10).fill(0), overallRate: 0 };
         }
 
+        const digitRecurrence = Array(10).fill(0);
+        let totalRecurrence = 0;
+
+        for (let d = 0; d < 10; d++) {
+            const c = counts[d];
+            const pairs = (c * (c - 1)) / 2;
+            digitRecurrence[d] = pairs / possiblePairs;
+            totalRecurrence += pairs;
+        }
+
+        const overallRate = totalRecurrence / possiblePairs;
         return { digitRecurrence, overallRate };
     }
 }
@@ -2487,7 +2534,7 @@ class AILogicDigitDifferBot {
             // const highConfidenceEngine = predictions.find(p => p.confidence >= 85);
             // const highConfidenceEngine = predictions.find(p => p.confidence <= 60);
             // const highConfidenceEngine = predictions.find(p => p.confidence <= 50);
-            const highConfidenceEngine = predictions.find(p => p.confidence >= 80);
+            const highConfidenceEngine = predictions.find(p => p.confidence >= 90);
             
             if (highConfidenceEngine) {
                 console.log(`🎯 Using high-confidence engine: ${highConfidenceEngine.name} (${highConfidenceEngine.confidence}% confidence)`);
