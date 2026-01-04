@@ -1406,13 +1406,12 @@ class MonteCarloSimulator {
         }
 
         // For DIFFER: we want digit that simulations say will appear most often
-        // Because if it's "expected" to appear, it might not (contrarian)
         // Actually, let's use digit that simulations say WON'T appear
         const differScores = digitProbabilities.map((prob, digit) => ({
             digit,
             probability: prob,
             // Higher probability of appearing = choose it for DIFFER
-            differScore: prob,
+            differScore: 1 - prob,
             avgConfidence: digitConfidences[digit].length > 0
                 ? digitConfidences[digit].reduce((a, b) => a + b, 0) / digitConfidences[digit].length
                 : 50
@@ -1426,19 +1425,29 @@ class MonteCarloSimulator {
             predicted = sorted[1];
         }
 
-        // Calculate overall confidence
-        let confidence = 50;
-        if (predicted.probability < 0.15) confidence += 15;
-        if (predicted.probability < 0.10) confidence += 10;
-
-        // Consistency across simulations
-        const consistencyScore = this.calculateConsistency(results, predicted.digit);
-        if (consistencyScore > 0.7) confidence += 10;
-
-        confidence = Math.min(90, Math.max(50, confidence));
+        const predictedIndex = sorted.findIndex(s => s.digit === predicted.digit);
+        const nextCandidate = predictedIndex >= 0 ? sorted[predictedIndex + 1] : null;
 
         // Calculate confidence interval
         const ci = this.calculateConfidenceInterval(digitProbabilities[predicted.digit], numSimulations);
+
+        // Calculate overall confidence
+        const baseline = 0.1;
+        const p = predicted.probability;
+        const rarityScore = Math.max(0, baseline - p) / baseline;
+        const separation = nextCandidate ? Math.max(0, nextCandidate.probability - p) : 0;
+        const separationScore = Math.min(1, separation / baseline);
+        const precisionScore = 1 - Math.min(1, ci.width / 0.15);
+
+        let confidence = 50;
+        confidence += rarityScore * 35;
+        confidence += separationScore * 15;
+        confidence += precisionScore * 10;
+        confidence = Math.min(95, Math.max(50, confidence));
+
+        const consistencyScore = this.calculateConsistency(results, predicted.digit);
+
+        this.lastPrediction = predicted.digit;
 
         return {
             predictedDigit: predicted.digit,
@@ -1460,8 +1469,7 @@ class MonteCarloSimulator {
         const results = [];
 
         for (let sim = 0; sim < numSimulations; sim++) {
-            // Bootstrap sample
-            const bootstrapSample = this.bootstrapSample(tickHistory);
+            const sample = this.sampleRecentWindow(tickHistory);
 
             // Random analysis method
             const method = Math.floor(Math.random() * 4);
@@ -1469,16 +1477,16 @@ class MonteCarloSimulator {
 
             switch (method) {
                 case 0:
-                    prediction = this.frequencyBasedPrediction(bootstrapSample);
+                    prediction = this.frequencyBasedPrediction(sample);
                     break;
                 case 1:
-                    prediction = this.transitionBasedPrediction(bootstrapSample);
+                    prediction = this.transitionBasedPrediction(sample);
                     break;
                 case 2:
-                    prediction = this.gapBasedPrediction(bootstrapSample);
+                    prediction = this.gapBasedPrediction(sample);
                     break;
                 case 3:
-                    prediction = this.randomWalkPrediction(bootstrapSample);
+                    prediction = this.randomWalkPrediction(sample);
                     break;
             }
 
@@ -1486,6 +1494,14 @@ class MonteCarloSimulator {
         }
 
         return results;
+    }
+
+    sampleRecentWindow(tickHistory) {
+        const n = tickHistory.length;
+        const minWindow = Math.min(200, n);
+        const maxWindow = Math.min(800, n);
+        const windowSize = minWindow + Math.floor(Math.random() * (maxWindow - minWindow + 1));
+        return tickHistory.slice(-windowSize);
     }
 
     bootstrapSample(tickHistory) {
@@ -3057,8 +3073,6 @@ const bot = new AILogicDigitDifferBot({
     requiredHistoryLength: 1000,
     minWaitTime: 1000,
     maxWaitTime: 1000,
-
-    assets: process.env.ASSETS ? process.env.ASSETS.split(',').map(a => a.trim()) : undefined
 });
 
 bot.start();
