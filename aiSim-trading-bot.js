@@ -2137,12 +2137,12 @@ class AILogicDigitDifferBot {
         this.tradesInCurrentCycle = 0;
         this.engineSetups = [
             // { name: 'FDA_GAMR', check: (p) => p.find(e => e.name === 'FDA' && e.confidence >= 95) && p.find(e => e.name === 'GAMR' && e.confidence >= 95) },
-            // { name: 'MCP', check: (p) => p.find(e => e.name === 'MCP' && e.confidence >= 63) },
+            { name: 'MCP', check: (p) => p.find(e => e.name === 'MCP' && e.confidence >= 63) },
             // { name: 'EITE', check: (p) => p.find(e => e.name === 'EITE' && e.confidence <= 65) },
             // { name: 'PRNN', check: (p) { name: 'MTD', check: (p) => p.find(e => e.name === 'MTD' && e.confidence <= 50) },
             // { name: 'CTAF', check: (p) => p.find(e => e.name === 'CTAF' && e.confidence >= 90) },
             // {=> p.find(e => e.name === 'PRNN' && e.confidence >= 85) },
-            { name: 'BPE', check: (p) => p.find(e => e.name === 'BPE' && e.confidence <= 60) },
+            // { name: 'BPE', check: (p) => p.find(e => e.name === 'BPE' && e.confidence <= 60) },
             //  name: 'MCS', check: (p) => p.find(e => e.name === 'MCS' && e.confidence >= 90) }
         ];
         this.selectRandomEngineSetup();
@@ -2563,7 +2563,7 @@ class AILogicDigitDifferBot {
             console.log(`\n🎲 Current Engine Setup: ${this.currentEngineSetup.name} (${this.tradesInCurrentCycle}/10 trades)`);
 
             const FDA_Engine = predictions.find(p => p.name === 'FDA' && p.confidence >= 95);
-            const MCP_Engine = predictions.find(p => p.name === 'MCP' && p.confidence >= 65);
+            const MCP_Engine = predictions.find(p => p.name === 'MCP' && p.confidence >= 63);
             const EITE_Engine = predictions.find(p => p.name === 'EITE' && p.confidence <= 65);
             const PRNN_Engine = predictions.find(p => p.name === 'PRNN' && p.confidence >= 85);
             const BPE_Engine = predictions.find(p => p.name === 'BPE' && p.confidence <= 60);
