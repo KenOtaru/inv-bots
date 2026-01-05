@@ -2064,9 +2064,9 @@ class AILogicDigitDifferBot {
         // Initialize Simulated AI Engines
         this.aiEngines = {
             // fda: new FrequencyDeviationAnalyzer(),
-            // mcp: new MarkovChainPredictor(),
+            mcp: new MarkovChainPredictor(),
             // eite: new EntropyInformationEngine(),
-            prnn: new PatternRecognitionEngine(),
+            // prnn: new PatternRecognitionEngine(),
             // bpe: new BayesianProbabilityEstimator(),
             // gamr: new GapMeanReversionAnalyzer(),
             // mtd: new MomentumTrendDetector(),
@@ -2546,14 +2546,15 @@ class AILogicDigitDifferBot {
             console.log(`   Recommendation: ${kellyResult.recommendation}`);
 
             // Find any engine with over 90% confidence
-            // const highConfidenceEngine = predictions.find(p => p.confidence >= 95);
-            // const highConfidenceEngine = predictions.find(p => p.confidence >= 63);
-            // const highConfidenceEngine = predictions.find(p => p.confidence <= 65);
-            const highConfidenceEngine = predictions.find(p => p.confidence >= 85);
-            // const highConfidenceEngine = predictions.find(p => p.confidence <= 60);
-            // const highConfidenceEngine = predictions.find(p => p.confidence <= 50);
-            // const highConfidenceEngine = predictions.find(p => p.confidence >= 90);
-            // const highConfidenceEngine = predictions.find(p => p.confidence >= 90);
+            // const highConfidenceEngine = predictions.find(p => p.confidence >= 95); //FDA
+            const highConfidenceEngine = predictions.find(p => p.confidence >= 63); //MCP
+            // const highConfidenceEngine = predictions.find(p => p.confidence <= 65);//EITE
+            // const highConfidenceEngine = predictions.find(p => p.confidence >= 85); //PRNN
+            // const highConfidenceEngine = predictions.find(p => p.confidence <= 60); //BPE
+            // const highConfidenceEngine = predictions.find(p => p.confidence >= 95); //GAMR
+            // const highConfidenceEngine = predictions.find(p => p.confidence <= 50); //MTD
+            // const highConfidenceEngine = predictions.find(p => p.confidence >= 90); //CTAF
+            // const highConfidenceEngine = predictions.find(p => p.confidence >= 90); //MCS
             
             if (highConfidenceEngine) {
                 console.log(`🎯 Using high-confidence engine: ${highConfidenceEngine.name} (${highConfidenceEngine.confidence}% confidence)`);

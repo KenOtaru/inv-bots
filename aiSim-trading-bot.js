@@ -2563,7 +2563,7 @@ class AILogicDigitDifferBot {
             console.log(`\n🎲 Current Engine Setup: ${this.currentEngineSetup.name} (${this.tradesInCurrentCycle}/10 trades)`);
 
             const FDA_Engine = predictions.find(p => p.name === 'FDA' && p.confidence >= 95);
-            const MCP_Engine = predictions.find(p => p.name === 'MCP' && p.confidence >= 63);
+            const MCP_Engine = predictions.find(p => p.name === 'MCP' && p.confidence >= 65);
             const EITE_Engine = predictions.find(p => p.name === 'EITE' && p.confidence <= 65);
             const PRNN_Engine = predictions.find(p => p.name === 'PRNN' && p.confidence >= 85);
             const BPE_Engine = predictions.find(p => p.name === 'BPE' && p.confidence <= 60);
