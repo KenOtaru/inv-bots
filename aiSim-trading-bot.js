@@ -705,9 +705,11 @@ class BayesianProbabilityEstimator {
             return { error: 'Insufficient data' };
         }
 
+        const recentTicks = tickHistory.slice(-100)
+
         // Count observations
         const counts = Array(10).fill(0);
-        tickHistory.forEach(d => counts[d]++);
+        recentTicks.forEach(d => counts[d]++);
 
         // Posterior parameters (Dirichlet-Multinomial conjugate)
         const posteriorAlpha = this.priorAlpha.map((a, i) => a + counts[i]);
@@ -770,8 +772,8 @@ class BayesianProbabilityEstimator {
         if (predicted.variance < 0.001) confidence += 10;
 
         // More data = more confident
-        if (tickHistory.length > 300) confidence += 10;
-        if (tickHistory.length > 500) confidence += 5;
+        if (recentTicks.length > 300) confidence += 10;
+        if (recentTicks.length > 500) confidence += 5;
 
         confidence = Math.min(95, Math.max(50, confidence));
 
@@ -2130,6 +2132,21 @@ class AILogicDigitDifferBot {
         this.currentPrediction = null;
         this.RestartTrading = true;
 
+        // Random Engine Selection
+        this.currentEngineSetup = null;
+        this.tradesInCurrentCycle = 0;
+        this.engineSetups = [
+            // { name: 'FDA_GAMR', check: (p) => p.find(e => e.name === 'FDA' && e.confidence >= 95) && p.find(e => e.name === 'GAMR' && e.confidence >= 95) },
+            // { name: 'MCP', check: (p) => p.find(e => e.name === 'MCP' && e.confidence >= 63) },
+            // { name: 'EITE', check: (p) => p.find(e => e.name === 'EITE' && e.confidence <= 65) },
+            // { name: 'PRNN', check: (p) { name: 'MTD', check: (p) => p.find(e => e.name === 'MTD' && e.confidence <= 50) },
+            // { name: 'CTAF', check: (p) => p.find(e => e.name === 'CTAF' && e.confidence >= 90) },
+            // {=> p.find(e => e.name === 'PRNN' && e.confidence >= 85) },
+            { name: 'BPE', check: (p) => p.find(e => e.name === 'BPE' && e.confidence <= 60) },
+            //  name: 'MCS', check: (p) => p.find(e => e.name === 'MCS' && e.confidence >= 90) }
+        ];
+        this.selectRandomEngineSetup();
+
         // Connection State
         this.reconnectAttempts = 0;
         this.isPaused = false;
@@ -2159,15 +2176,20 @@ class AILogicDigitDifferBot {
     }
 
     logActiveEngines() {
-        console.log('\n🧠 Active Simulated AI Engines:');
+        console.log('\n🧠 Active Simulated AI Engines:')
         for (const [key, engine] of Object.entries(this.aiEngines)) {
-            console.log(`   ✅ ${engine.fullName} (${engine.name}) - Weight: ${engine.weight}`);
+            console.log(`   ✅ ${engine.fullName} (${engine.name}) - Weight: ${engine.weight}`)
         }
-        console.log(`\n   Total Active: ${Object.keys(this.aiEngines).length} engines`);
-        console.log('='.repeat(60) + '\n');
+        console.log(`\n   Total Active: ${Object.keys(this.aiEngines).length} engines`)
+        console.log('='.repeat(60) + '\n')
     }
 
-    // ==================== WEBSOCKET CONNECTION ====================
+    selectRandomEngineSetup() {
+        const randomIndex = Math.floor(Math.random() * this.engineSetups.length);
+        this.currentEngineSetup = this.engineSetups[randomIndex];
+        console.log(`🎲 Randomly selected engine setup: ${this.currentEngineSetup.name}`);
+        this.tradesInCurrentCycle = 0;
+    }
 
     connect() {
         if (this.isShuttingDown || this.connected) return;
@@ -2519,7 +2541,6 @@ class AILogicDigitDifferBot {
             console.log(`   Engines Consulted: ${ensemble.statisticalEvidence.enginesConsulted}`);
             console.log(`   Agreement: ${ensemble.statisticalEvidence.agreement}`);
 
-            
             // Calculate optimal stake
             const winRate = this.kellyManager.getRollingWinRate();
             const payout = this.kellyManager.getPayoutForAsset(this.currentAsset);
@@ -2539,6 +2560,8 @@ class AILogicDigitDifferBot {
             console.log(`   Risk Level: ${kellyResult.riskLevel}`);
             console.log(`   Recommendation: ${kellyResult.recommendation}`);
 
+            console.log(`\n🎲 Current Engine Setup: ${this.currentEngineSetup.name} (${this.tradesInCurrentCycle}/10 trades)`);
+
             const FDA_Engine = predictions.find(p => p.name === 'FDA' && p.confidence >= 95);
             const MCP_Engine = predictions.find(p => p.name === 'MCP' && p.confidence >= 63);
             const EITE_Engine = predictions.find(p => p.name === 'EITE' && p.confidence <= 65);
@@ -2549,48 +2572,85 @@ class AILogicDigitDifferBot {
             const CTAF_Engine = predictions.find(p => p.name === 'CTAF' && p.confidence >= 90);
             const MCS_Engine = predictions.find(p => p.name === 'MCS' && p.confidence >= 90);
 
-            if (FDA_Engine && GAMR_Engine) {
-                console.log(`🎯 Using FDA && GAMR: FDA (${FDA_Engine.confidence}%) && GAMR (${GAMR_Engine.confidence}%)`);
-                this.lastPrediction = FDA_Engine.predictedDigit;
-                this.lastConfidence = FDA_Engine.confidence;
-                this.placeTrade(FDA_Engine.predictedDigit, FDA_Engine.confidence, kellyResult.stake);
-            } else if (MCP_Engine) {
-                console.log(`🎯 Using MCP: ${MCP_Engine.confidence}% confidence`);
-                this.lastPrediction = MCP_Engine.predictedDigit;
-                this.lastConfidence = MCP_Engine.confidence;
-                this.placeTrade(MCP_Engine.predictedDigit, MCP_Engine.confidence, kellyResult.stake);
-            } else if (EITE_Engine) {
-                console.log(`🎯 Using EITE: ${EITE_Engine.confidence}% confidence`);
-                this.lastPrediction = EITE_Engine.predictedDigit;
-                this.lastConfidence = EITE_Engine.confidence;
-                this.placeTrade(EITE_Engine.predictedDigit, EITE_Engine.confidence, kellyResult.stake);
-            } else if (PRNN_Engine) {
-                console.log(`🎯 Using PRNN: ${PRNN_Engine.confidence}% confidence`);
-                this.lastPrediction = PRNN_Engine.predictedDigit;
-                this.lastConfidence = PRNN_Engine.confidence;
-                this.placeTrade(PRNN_Engine.predictedDigit, PRNN_Engine.confidence, kellyResult.stake);
-            } else if (BPE_Engine) {
-                console.log(`🎯 Using BPE: ${BPE_Engine.confidence}% confidence`);
-                this.lastPrediction = BPE_Engine.predictedDigit;
-                this.lastConfidence = BPE_Engine.confidence;
-                this.placeTrade(BPE_Engine.predictedDigit, BPE_Engine.confidence, kellyResult.stake);
-            } else if (MTD_Engine) {
-                console.log(`🎯 Using MTD: ${MTD_Engine.confidence}% confidence`);
-                this.lastPrediction = MTD_Engine.predictedDigit;
-                this.lastConfidence = MTD_Engine.confidence;
-                this.placeTrade(MTD_Engine.predictedDigit, MTD_Engine.confidence, kellyResult.stake);
-            } else if (CTAF_Engine) {
-                console.log(`🎯 Using CTAF: ${CTAF_Engine.confidence}% confidence`);
-                this.lastPrediction = CTAF_Engine.predictedDigit;
-                this.lastConfidence = CTAF_Engine.confidence;
-                this.placeTrade(CTAF_Engine.predictedDigit, CTAF_Engine.confidence, kellyResult.stake);
-            } else if (MCS_Engine) {
-                console.log(`🎯 Using MCS: ${MCS_Engine.confidence}% confidence`);
-                this.lastPrediction = MCS_Engine.predictedDigit;
-                this.lastConfidence = MCS_Engine.confidence;
-                this.placeTrade(MCS_Engine.predictedDigit, MCS_Engine.confidence, kellyResult.stake);
-            } else {
-                console.log(`⏭️ Skipping trade: No engine with required confidence found`);
+            let tradeExecuted = false;
+
+            switch (this.currentEngineSetup.name) {
+                case 'FDA_GAMR':
+                    if (FDA_Engine && GAMR_Engine) {
+                        console.log(`🎯 Using FDA && GAMR: FDA (${FDA_Engine.confidence}%) && GAMR (${GAMR_Engine.confidence}%)`);
+                        this.lastPrediction = FDA_Engine.predictedDigit;
+                        this.lastConfidence = FDA_Engine.confidence;
+                        this.placeTrade(FDA_Engine.predictedDigit, FDA_Engine.confidence, kellyResult.stake);
+                        tradeExecuted = true;
+                    }
+                    break;
+                case 'MCP':
+                    if (MCP_Engine) {
+                        console.log(`🎯 Using MCP: ${MCP_Engine.confidence}% confidence`);
+                        this.lastPrediction = MCP_Engine.predictedDigit;
+                        this.lastConfidence = MCP_Engine.confidence;
+                        this.placeTrade(MCP_Engine.predictedDigit, MCP_Engine.confidence, kellyResult.stake);
+                        tradeExecuted = true;
+                    }
+                    break;
+                case 'EITE':
+                    if (EITE_Engine) {
+                        console.log(`🎯 Using EITE: ${EITE_Engine.confidence}% confidence`);
+                        this.lastPrediction = EITE_Engine.predictedDigit;
+                        this.lastConfidence = EITE_Engine.confidence;
+                        this.placeTrade(EITE_Engine.predictedDigit, EITE_Engine.confidence, kellyResult.stake);
+                        tradeExecuted = true;
+                    }
+                    break;
+                case 'PRNN':
+                    if (PRNN_Engine) {
+                        console.log(`🎯 Using PRNN: ${PRNN_Engine.confidence}% confidence`);
+                        this.lastPrediction = PRNN_Engine.predictedDigit;
+                        this.lastConfidence = PRNN_Engine.confidence;
+                        this.placeTrade(PRNN_Engine.predictedDigit, PRNN_Engine.confidence, kellyResult.stake);
+                        tradeExecuted = true;
+                    }
+                    break;
+                case 'BPE':
+                    if (BPE_Engine) {
+                        console.log(`🎯 Using BPE: ${BPE_Engine.confidence}% confidence`);
+                        this.lastPrediction = BPE_Engine.predictedDigit;
+                        this.lastConfidence = BPE_Engine.confidence;
+                        this.placeTrade(BPE_Engine.predictedDigit, BPE_Engine.confidence, kellyResult.stake);
+                        tradeExecuted = true;
+                    }
+                    break;
+                case 'MTD':
+                    if (MTD_Engine) {
+                        console.log(`🎯 Using MTD: ${MTD_Engine.confidence}% confidence`);
+                        this.lastPrediction = MTD_Engine.predictedDigit;
+                        this.lastConfidence = MTD_Engine.confidence;
+                        this.placeTrade(MTD_Engine.predictedDigit, MTD_Engine.confidence, kellyResult.stake);
+                        tradeExecuted = true;
+                    }
+                    break;
+                case 'CTAF':
+                    if (CTAF_Engine) {
+                        console.log(`🎯 Using CTAF: ${CTAF_Engine.confidence}% confidence`);
+                        this.lastPrediction = CTAF_Engine.predictedDigit;
+                        this.lastConfidence = CTAF_Engine.confidence;
+                        this.placeTrade(CTAF_Engine.predictedDigit, CTAF_Engine.confidence, kellyResult.stake);
+                        tradeExecuted = true;
+                    }
+                    break;
+                case 'MCS':
+                    if (MCS_Engine) {
+                        console.log(`🎯 Using MCS: ${MCS_Engine.confidence}% confidence`);
+                        this.lastPrediction = MCS_Engine.predictedDigit;
+                        this.lastConfidence = MCS_Engine.confidence;
+                        this.placeTrade(MCS_Engine.predictedDigit, MCS_Engine.confidence, kellyResult.stake);
+                        tradeExecuted = true;
+                    }
+                    break;
+            }
+
+            if (!tradeExecuted) {
+                console.log(`⏭️ Skipping trade: ${this.currentEngineSetup.name} setup not met`);
                 this.predictionInProgress = false;
             }
 
@@ -2803,6 +2863,12 @@ class AILogicDigitDifferBot {
 
         this.tradeInProgress = false;
         this.predictionInProgress = false;
+
+        this.tradesInCurrentCycle++;
+        if (this.tradesInCurrentCycle >= 10) {
+            this.selectRandomEngineSetup();
+        }
+
         this.scheduleNextTrade2();
     }
 

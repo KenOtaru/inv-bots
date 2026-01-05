@@ -705,9 +705,11 @@ class BayesianProbabilityEstimator {
             return { error: 'Insufficient data' };
         }
 
+        const recentTicks = tickHistory.slice(-100)
+
         // Count observations
         const counts = Array(10).fill(0);
-        tickHistory.forEach(d => counts[d]++);
+        recentTicks.forEach(d => counts[d]++);
 
         // Posterior parameters (Dirichlet-Multinomial conjugate)
         const posteriorAlpha = this.priorAlpha.map((a, i) => a + counts[i]);
@@ -770,8 +772,8 @@ class BayesianProbabilityEstimator {
         if (predicted.variance < 0.001) confidence += 10;
 
         // More data = more confident
-        if (tickHistory.length > 300) confidence += 10;
-        if (tickHistory.length > 500) confidence += 5;
+        if (recentTicks.length > 300) confidence += 10;
+        if (recentTicks.length > 500) confidence += 5;
 
         confidence = Math.min(95, Math.max(50, confidence));
 
@@ -2061,15 +2063,15 @@ class AILogicDigitDifferBot {
 
         // Initialize Simulated AI Engines
         this.aiEngines = {
-            fda: new FrequencyDeviationAnalyzer(),
-            mcp: new MarkovChainPredictor(),
-            eite: new EntropyInformationEngine(),
+            // fda: new FrequencyDeviationAnalyzer(),
+            // mcp: new MarkovChainPredictor(),
+            // eite: new EntropyInformationEngine(),
             prnn: new PatternRecognitionEngine(),
-            bpe: new BayesianProbabilityEstimator(),
-            gamr: new GapMeanReversionAnalyzer(),
-            mtd: new MomentumTrendDetector(),
-            ctaf: new ChaosTheoryAnalyzer(),
-            mcs: new MonteCarloSimulator(),
+            // bpe: new BayesianProbabilityEstimator(),
+            // gamr: new GapMeanReversionAnalyzer(),
+            // mtd: new MomentumTrendDetector(),
+            // ctaf: new ChaosTheoryAnalyzer(),
+            // mcs: new MonteCarloSimulator(),
             eml: new EnsembleMetaLearner()
         };
 
@@ -2547,33 +2549,33 @@ class AILogicDigitDifferBot {
             // const highConfidenceEngine = predictions.find(p => p.confidence >= 95);
             // const highConfidenceEngine = predictions.find(p => p.confidence >= 63);
             // const highConfidenceEngine = predictions.find(p => p.confidence <= 65);
-            // const highConfidenceEngine = predictions.find(p => p.confidence >= 85);
+            const highConfidenceEngine = predictions.find(p => p.confidence >= 85);
             // const highConfidenceEngine = predictions.find(p => p.confidence <= 60);
             // const highConfidenceEngine = predictions.find(p => p.confidence <= 50);
             // const highConfidenceEngine = predictions.find(p => p.confidence >= 90);
             // const highConfidenceEngine = predictions.find(p => p.confidence >= 90);
             
-            // if (highConfidenceEngine) {
-            //     console.log(`🎯 Using high-confidence engine: ${highConfidenceEngine.name} (${highConfidenceEngine.confidence}% confidence)`);
-            //     this.placeTrade(highConfidenceEngine.predictedDigit, highConfidenceEngine.confidence, kellyResult.stake);
-            // }
-            // else {
-            //     console.log(`⏭️ Skipping trade: No engine with >90% confidence found`);
-            //     this.predictionInProgress = false;
-            //     // this.scheduleNextTrade();
-            // }
-
-            // Decide whether to trade
-            const tradeDecision = this.shouldExecuteTrade(ensemble, kellyResult);
-
-            if (tradeDecision.execute) {
-                this.placeTrade(ensemble.predictedDigit, ensemble.confidence, kellyResult.stake);
+            if (highConfidenceEngine) {
+                console.log(`🎯 Using high-confidence engine: ${highConfidenceEngine.name} (${highConfidenceEngine.confidence}% confidence)`);
+                this.placeTrade(highConfidenceEngine.predictedDigit, highConfidenceEngine.confidence, kellyResult.stake);
             }
             else {
-                console.log(`⏭️ Skipping trade: ${tradeDecision.reason}`);
+                console.log(`⏭️ Skipping trade: No engine with >90% confidence found`);
                 this.predictionInProgress = false;
                 // this.scheduleNextTrade();
             }
+
+            // Decide whether to trade
+            // const tradeDecision = this.shouldExecuteTrade(ensemble, kellyResult);
+
+            // if (tradeDecision.execute) {
+            //     this.placeTrade(ensemble.predictedDigit, ensemble.confidence, kellyResult.stake);
+            // }
+            // else {
+            //     console.log(`⏭️ Skipping trade: ${tradeDecision.reason}`);
+            //     this.predictionInProgress = false;
+            //     // this.scheduleNextTrade();
+            // }
 
         } catch (error) {
             console.error('❌ Analysis error:', error.message);
@@ -3082,7 +3084,7 @@ const bot = new AILogicDigitDifferBot({
     minConfidence: 85,
     minEnginesAgreement: 5,
     minEnginesAgreement: 5,
-    requiredHistoryLength: 1000,
+    requiredHistoryLength: 100,
     minWaitTime: 1000,
     maxWaitTime: 1000,
 });

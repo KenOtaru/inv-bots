@@ -705,9 +705,11 @@ class BayesianProbabilityEstimator {
             return { error: 'Insufficient data' };
         }
 
+        const recentTicks = tickHistory.slice(-100)
+
         // Count observations
         const counts = Array(10).fill(0);
-        tickHistory.forEach(d => counts[d]++);
+        recentTicks.forEach(d => counts[d]++);
 
         // Posterior parameters (Dirichlet-Multinomial conjugate)
         const posteriorAlpha = this.priorAlpha.map((a, i) => a + counts[i]);
@@ -770,8 +772,8 @@ class BayesianProbabilityEstimator {
         if (predicted.variance < 0.001) confidence += 10;
 
         // More data = more confident
-        if (tickHistory.length > 300) confidence += 10;
-        if (tickHistory.length > 500) confidence += 5;
+        if (recentTicks.length > 300) confidence += 10;
+        if (recentTicks.length > 500) confidence += 5;
 
         confidence = Math.min(95, Math.max(50, confidence));
 
