@@ -2053,8 +2053,6 @@ class AILogicDigitDifferBot {
         this.kellyManager = new KellyCriterionManager({
             investmentCapital: config.investmentCapital || 500,
             kellyFraction: config.kellyFraction || 0.25,
-            minStake: config.minStake || 0.61,
-            multiplier: config.multiplier || 11.3,
             maxStakePercent: config.maxStakePercent || 5,
             maxDrawdownPercent: config.maxDrawdownPercent || 25,
             dailyLossLimit: config.dailyLossLimit || 50,
@@ -2063,15 +2061,15 @@ class AILogicDigitDifferBot {
 
         // Initialize Simulated AI Engines
         this.aiEngines = {
-            // fda: new FrequencyDeviationAnalyzer(),
+            fda: new FrequencyDeviationAnalyzer(),
             mcp: new MarkovChainPredictor(),
-            // eite: new EntropyInformationEngine(),
-            // prnn: new PatternRecognitionEngine(),
-            // bpe: new BayesianProbabilityEstimator(),
-            // gamr: new GapMeanReversionAnalyzer(),
-            // mtd: new MomentumTrendDetector(),
-            // ctaf: new ChaosTheoryAnalyzer(),
-            // mcs: new MonteCarloSimulator(),
+            eite: new EntropyInformationEngine(),
+            prnn: new PatternRecognitionEngine(),
+            bpe: new BayesianProbabilityEstimator(),
+            gamr: new GapMeanReversionAnalyzer(),
+            mtd: new MomentumTrendDetector(),
+            ctaf: new ChaosTheoryAnalyzer(),
+             mcs: new MonteCarloSimulator(),
             eml: new EnsembleMetaLearner()
         };
 
@@ -2141,7 +2139,7 @@ class AILogicDigitDifferBot {
         this.isReconnecting = false;
 
         // Telegram Configuration
-        this.telegramToken = process.env.TELEGRAM_BOT_TOKEN3;
+        this.telegramToken = process.env.TELEGRAM_BOT_TOKEN;
         this.telegramChatId = process.env.TELEGRAM_CHAT_ID;
         this.telegramEnabled = !!(this.telegramToken && this.telegramChatId);
 
@@ -2547,7 +2545,7 @@ class AILogicDigitDifferBot {
 
             // Find any engine with over 90% confidence
             // const highConfidenceEngine = predictions.find(p => p.confidence >= 95); //FDA
-            const highConfidenceEngine = predictions.find(p => p.confidence >= 63); //MCP
+            // const highConfidenceEngine = predictions.find(p => p.confidence >= 63); //MCP
             // const highConfidenceEngine = predictions.find(p => p.confidence <= 65);//EITE
             // const highConfidenceEngine = predictions.find(p => p.confidence >= 85); //PRNN
             // const highConfidenceEngine = predictions.find(p => p.confidence <= 60); //BPE
@@ -2556,27 +2554,27 @@ class AILogicDigitDifferBot {
             // const highConfidenceEngine = predictions.find(p => p.confidence >= 90); //CTAF
             // const highConfidenceEngine = predictions.find(p => p.confidence >= 90); //MCS
             
-            if (highConfidenceEngine) {
-                console.log(`🎯 Using high-confidence engine: ${highConfidenceEngine.name} (${highConfidenceEngine.confidence}% confidence)`);
-                this.placeTrade(highConfidenceEngine.predictedDigit, highConfidenceEngine.confidence, kellyResult.stake);
-            }
-            else {
-                console.log(`⏭️ Skipping trade: No engine with >90% confidence found`);
-                this.predictionInProgress = false;
-                // this.scheduleNextTrade();
-            }
-
-            // Decide whether to trade
-            // const tradeDecision = this.shouldExecuteTrade(ensemble, kellyResult);
-
-            // if (tradeDecision.execute) {
-            //     this.placeTrade(ensemble.predictedDigit, ensemble.confidence, kellyResult.stake);
+            // if (highConfidenceEngine) {
+            //     console.log(`🎯 Using high-confidence engine: ${highConfidenceEngine.name} (${highConfidenceEngine.confidence}% confidence)`);
+            //     this.placeTrade(highConfidenceEngine.predictedDigit, highConfidenceEngine.confidence, kellyResult.stake);
             // }
             // else {
-            //     console.log(`⏭️ Skipping trade: ${tradeDecision.reason}`);
+            //     console.log(`⏭️ Skipping trade: No engine with >90% confidence found`);
             //     this.predictionInProgress = false;
             //     // this.scheduleNextTrade();
             // }
+
+            // Decide whether to trade
+            const tradeDecision = this.shouldExecuteTrade(ensemble, kellyResult);
+
+            if (tradeDecision.execute) {
+                this.placeTrade(ensemble.predictedDigit, ensemble.confidence, kellyResult.stake);
+            }
+            else {
+                console.log(`⏭️ Skipping trade: ${tradeDecision.reason}`);
+                this.predictionInProgress = false;
+                // this.scheduleNextTrade();
+            }
 
         } catch (error) {
             console.error('❌ Analysis error:', error.message);
@@ -2688,16 +2686,16 @@ class AILogicDigitDifferBot {
 
         // stake = Math.max(this.config.minStake, Math.min(stake, this.balance * 0.1));
         // stake = Math.round(stake * 100) / 100;
-        this.currentStake = this.currentStake.toFixed(2);
+        // this.currentStake = this.currentStake.toFixed(2);
 
         // console.log(`\n💰 Placing trade: DIFFER ${digit} @ $${stake.toFixed(2)} (${confidence}% confidence)`);
         console.log(`\n💰 Placing trade: DIFFER ${digit} @ $${this.currentStake} (${confidence}% confidence)`);
 
         this.sendRequest({
             buy: 1,
-            price: this.currentStake, //stake.toFixed(2),
+            price: this.currentStake.toFixed(2), //stake.toFixed(2),
             parameters: {
-                amount: this.currentStake, //stake.toFixed(2),
+                amount: this.currentStake.toFixed(2), //stake.toFixed(2),
                 basis: 'stake',
                 contract_type: 'DIGITDIFF',
                 currency: 'USD',
@@ -3069,7 +3067,7 @@ if (!process.env.DERIV_TOKEN) {
 }
 
 const bot = new AILogicDigitDifferBot({
-    derivToken: process.env.DERIV_TOKEN,
+    derivToken: 'hsj0tA0XJoIzJG5',
 
     investmentCapital: 100,
     kellyFraction: 0.25,

@@ -2141,13 +2141,13 @@ class AILogicDigitDifferBot {
         this.tradesInCurrentCycle = 0;
         this.engineSetups = [
             { name: 'FDA_GAMR', check: (p) => p.find(e => e.name === 'FDA' && e.confidence >= 95) && p.find(e => e.name === 'GAMR' && e.confidence >= 95) },
-            { name: 'MCP', check: (p) => p.find(e => e.name === 'MCP' && e.confidence >= 63) },
-            { name: 'EITE', check: (p) => p.find(e => e.name === 'EITE' && e.confidence <= 65) },
-            { name: 'PRNN', check: (p) => p.find(e => e.name === 'PRNN' && e.confidence >= 85) },
-            { name: 'BPE', check: (p) => p.find(e => e.name === 'BPE' && e.confidence <= 60) },
-            { name: 'MTD', check: (p) => p.find(e => e.name === 'MTD' && e.confidence <= 50) },
-            { name: 'CTAF', check: (p) => p.find(e => e.name === 'CTAF' && e.confidence >= 90) },
-            { name: 'MCS', check: (p) => p.find(e => e.name === 'MCS' && e.confidence >= 90) }
+            // { name: 'MCP', check: (p) => p.find(e => e.name === 'MCP' && e.confidence >= 63) },
+            // { name: 'EITE', check: (p) => p.find(e => e.name === 'EITE' && e.confidence <= 65) },
+            // { name: 'PRNN', check: (p) => p.find(e => e.name === 'PRNN' && e.confidence >= 85) },
+            // { name: 'BPE', check: (p) => p.find(e => e.name === 'BPE' && e.confidence <= 60) },
+            // { name: 'MTD', check: (p) => p.find(e => e.name === 'MTD' && e.confidence <= 50) },
+            // { name: 'CTAF', check: (p) => p.find(e => e.name === 'CTAF' && e.confidence >= 90) },
+            // { name: 'MCS', check: (p) => p.find(e => e.name === 'MCS' && e.confidence >= 90) }
         ];
         this.selectRandomEngineSetup();
 
@@ -2158,7 +2158,7 @@ class AILogicDigitDifferBot {
         this.isReconnecting = false;
 
         // Telegram Configuration
-        this.telegramToken = process.env.TELEGRAM_BOT_TOKEN3;
+        this.telegramToken = process.env.TELEGRAM_BOT_TOKENb;
         this.telegramChatId = process.env.TELEGRAM_CHAT_ID;
         this.telegramEnabled = !!(this.telegramToken && this.telegramChatId);
 
@@ -2869,7 +2869,7 @@ class AILogicDigitDifferBot {
         this.predictionInProgress = false;
 
         this.tradesInCurrentCycle++;
-        if (this.tradesInCurrentCycle >= 3) {
+        if (this.tradesInCurrentCycle >= 30000) {
             this.selectRandomEngineSetup();
         }
 
@@ -3154,7 +3154,7 @@ if (!process.env.DERIV_TOKEN) {
 }
 
 const bot = new AILogicDigitDifferBot({
-    derivToken: process.env.DERIV_TOKEN,
+    derivToken: '0P94g4WdSrSrzir',
 
     investmentCapital: 100,
     kellyFraction: 0.25,
