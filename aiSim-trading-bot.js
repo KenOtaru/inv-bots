@@ -431,8 +431,8 @@ class EntropyInformationEngine {
         confidence += predictabilityScore * 15;
         confidence += stabilityScore * 10;
         confidence += mutualInfoScore * 10;
-        if (p < 0.02) confidence += 5;
         if (p < 0.01) confidence += 5;
+        if (p < 0.005) confidence += 5;
         confidence = Math.min(100, Math.max(50, confidence));
 
         this.lastPrediction = finalPrediction.digit;
@@ -509,7 +509,6 @@ class EntropyInformationEngine {
     }
 }
 
-// ============================================================
 // SIMULATED AI ENGINE 4: Pattern Recognition Neural Network (PRNN)
 // Uses n-gram analysis and pattern matching
 // ============================================================
@@ -519,6 +518,7 @@ class PatternRecognitionEngine {
         this.name = 'PRNN';
         this.fullName = 'Pattern Recognition Neural Network';
         this.weight = 1.2;
+
         this.wins = 0;
         this.losses = 0;
         this.lastPrediction = null;
@@ -537,20 +537,20 @@ class PatternRecognitionEngine {
 
         // Analyze patterns of different lengths (2-5 digits)
         for (let patternLength = 2; patternLength <= 5; patternLength++) {
-            const patternResult = this.analyzePatternLength(recent, patternLength);
+            const patternResult = this.analyzePatternLength(tickHistory, patternLength);
             if (patternResult) results.push(patternResult);
         }
 
         // Analyze repeating sequences
-        const sequenceResult = this.analyzeRepeatingSequences(recent);
+        const sequenceResult = this.analyzeRepeatingSequences(tickHistory);
         if (sequenceResult) results.push(sequenceResult);
 
         // Analyze digit clusters
-        const clusterResult = this.analyzeDigitClusters(recent);
+        const clusterResult = this.analyzeDigitClusters(tickHistory);
         if (clusterResult) results.push(clusterResult);
 
         if (results.length === 0) {
-            return this.fallbackPrediction(recent);
+            return { error: 'No patterns found' };
         }
 
         // Combine results using weighted voting
@@ -590,6 +590,20 @@ class PatternRecognitionEngine {
             ? confidences[predicted].reduce((a, b) => a + b, 0) / confidences[predicted].length
             : 50;
 
+        const totalVoteWeight = votes.reduce((a, b) => a + Math.max(0, b), 0);
+        const predictedVoteWeight = Math.max(0, votes[predicted]);
+        const voteShare = totalVoteWeight > 0 ? predictedVoteWeight / totalVoteWeight : 0;
+        const sortedVotes = votes
+            .map((v, i) => ({ digit: i, votes: v }))
+            .sort((a, b) => b.votes - a.votes);
+        const secondVotes = sortedVotes.length > 1 ? Math.max(0, sortedVotes[1].votes) : 0;
+        const voteGap = Math.max(0, predictedVoteWeight - secondVotes);
+
+        let finalConfidence = avgConf;
+        finalConfidence += Math.min(15, voteShare * 20);
+        finalConfidence += Math.min(10, voteGap * 5);
+        finalConfidence = Math.min(100, Math.max(50, finalConfidence));
+
         // Get alternative candidates
         const alternatives = votes
             .map((v, i) => ({ digit: i, votes: v }))
@@ -598,11 +612,13 @@ class PatternRecognitionEngine {
             .slice(0, 2)
             .map(x => x.digit);
 
+        this.lastPrediction = predicted;
+
         return {
             predictedDigit: predicted,
-            confidence: Math.round(avgConf),
+            confidence: Math.round(finalConfidence),
             primaryStrategy: 'Pattern Recognition',
-            riskAssessment: avgConf >= 75 ? 'low' : avgConf >= 60 ? 'medium' : 'high',
+            riskAssessment: finalConfidence >= 85 ? 'low' : finalConfidence >= 70 ? 'medium' : 'high',
             marketRegime: results.length > 2 ? 'patterned' : 'semi-random',
             statisticalEvidence: {
                 patternsFound: results.length,
@@ -613,9 +629,9 @@ class PatternRecognitionEngine {
         };
     }
 
-    analyzePatternLength(recent, length) {
+    analyzePatternLength(tickHistory, length) {
         const patterns = new Map();
-        const sample = recent.slice(-500);
+        const sample = tickHistory.slice(-600);
 
         // Build pattern frequency map
         for (let i = 0; i <= sample.length - length - 1; i++) {
@@ -629,7 +645,7 @@ class PatternRecognitionEngine {
         }
 
         // Get current pattern
-        const currentPattern = recent.slice(-length).join(',');
+        const currentPattern = tickHistory.slice(-length).join(',');
 
         if (!patterns.has(currentPattern)) {
             return null;
@@ -638,7 +654,7 @@ class PatternRecognitionEngine {
         const nextProbs = patterns.get(currentPattern);
         const total = nextProbs.reduce((a, b) => a + b, 0);
 
-        if (total < 3) return null; // Need at least 3 occurrences
+        if (total < 5) return null; // Need at least 5 occurrences
 
         // Find digit least likely to appear (for DIFFER)
         const predictions = nextProbs.map((count, digit) => ({
@@ -651,13 +667,19 @@ class PatternRecognitionEngine {
 
         // Confidence based on sample size and probability
         let confidence = 50;
-        if (total >= 10) confidence += 15;
         if (total >= 20) confidence += 10;
-        if (predicted.probability < 0.05) confidence += 10;
+        if (total >= 40) confidence += 10;
+        if (predicted.probability < 0.02) confidence += 25;
+
+        const p2 = sorted[1] ? sorted[1].probability : 0.1;
+        const separation = Math.max(0, p2 - predicted.probability);
+        confidence += Math.min(20, (separation / 0.1) * 20);
+
+        confidence = Math.min(100, Math.max(50, confidence));
 
         return {
             predictedDigit: predicted.digit,
-            confidence: Math.min(90, confidence),
+            confidence: confidence,
             weight: 1.0 + (length - 2) * 0.2,
             type: `${length}-gram`
         };
@@ -689,11 +711,19 @@ class PatternRecognitionEngine {
 
         // If a pair repeats, the digits in it are "hot" - predict them for DIFFER
         const hotDigits = maxPair.split(',').map(Number);
-        const predicted = hotDigits[Math.floor(Math.random() * hotDigits.length)];
+        const counts = Array(10).fill(0);
+        last20.forEach(d => counts[d]++);
+        const candidates = Array.from({ length: 10 }, (_, d) => d).filter(d => !hotDigits.includes(d));
+        const predicted = candidates.reduce((best, d) => (counts[d] < counts[best] ? d : best), candidates[0]);
+
+        let confidence = 55 + maxCount * 6;
+        if (counts[predicted] === 0) confidence += 25;
+        if (counts[predicted] === 1) confidence += 10;
+        confidence = Math.min(100, Math.max(50, confidence));
 
         return {
             predictedDigit: predicted,
-            confidence: 55 + maxCount * 5,
+            confidence: confidence,
             weight: 0.8,
             type: 'sequence-repeat'
         };
@@ -722,31 +752,29 @@ class PatternRecognitionEngine {
         if (maxCluster < 3) return null;
 
         // Clustered digit is "exhausted" - good for DIFFER
-        const predicted = clusterScores.indexOf(maxCluster);
+        const counts = Array(10).fill(0);
+        last30.forEach(d => counts[d]++);
+        let predicted = 0;
+        let bestScore = Infinity;
+        for (let d = 0; d < 10; d++) {
+            const score = counts[d] * 2 + clusterScores[d];
+            if (score < bestScore) {
+                bestScore = score;
+                predicted = d;
+            }
+        }
+
+        let confidence = 55;
+        confidence += Math.min(25, maxCluster * 3);
+        if (counts[predicted] === 0) confidence += 20;
+        if (counts[predicted] === 1) confidence += 10;
+        confidence = Math.min(100, Math.max(50, confidence));
 
         return {
             predictedDigit: predicted,
-            confidence: 55 + maxCluster * 3,
+            confidence: confidence,
             weight: 0.9,
             type: 'cluster-exhaustion'
-        };
-    }
-
-    fallbackPrediction(recent) {
-        const counts = Array(10).fill(0);
-        recent.slice(-100).forEach(d => counts[d]++);
-
-        const maxCount = Math.max(...counts);
-        const predicted = counts.indexOf(maxCount);
-
-        return {
-            predictedDigit: predicted,
-            confidence: 55,
-            primaryStrategy: 'Pattern Recognition (Fallback)',
-            riskAssessment: 'medium',
-            marketRegime: 'unknown',
-            statisticalEvidence: { method: 'fallback' },
-            alternativeCandidates: []
         };
     }
 }
