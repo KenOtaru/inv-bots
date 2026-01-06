@@ -1074,84 +1074,111 @@ class MomentumTrendDetector {
     }
 
     analyze(tickHistory) {
-        if (tickHistory.length < 100) {
+        if (tickHistory.length < 150) {
             return { error: 'Insufficient data' };
         }
 
-        const recent = tickHistory.slice(-900)
+        const lastDigit = tickHistory[tickHistory.length - 1];
 
-        // Calculate momentum for each digit
-        const momentum = this.calculateDigitMomentum(recent);
+        const historyWindow = Math.min(900, tickHistory.length);
+        const history = tickHistory.slice(-historyWindow);
 
-        // Calculate trend strength
-        const trend = this.calculateTrendStrength(recent);
+        // Momentum and RoC
+        const momentum = this.calculateDigitMomentum(history);
+        const roc = this.calculateRateOfChange(history);
+        const trend = this.calculateTrendStrength(history);
 
-        // Rate of change analysis
-        const roc = this.calculateRateOfChange(recent);
-
-        // Combine analyses
-        const predictions = [];
+        // For DIGITDIFF: score digits that are hot and likely to exhaust soon
+        const scores = [];
+        const clamp01 = (x) => Math.max(0, Math.min(1, x));
 
         for (let d = 0; d < 10; d++) {
-            // High momentum = digit is "hot" = might continue OR might exhaust
-            // For DIFFER: we bet on exhaustion of hot streaks
-            const isHot = momentum[d] > 0.5;
-            const isAccelerating = roc[d] > 0;
+            const m = momentum[d];
+            const r = roc[d];
+            const isHot = m > 0.5;
+            const isAccelerating = r > 0;
+            const isDecelerating = r < -0.1;
+            const isVeryHot = m > 1.0;
+            const isMildlyHot = m > 0.3;
 
-            // Score: hot + accelerating = might exhaust soon = good for DIFFER
+            // Exhaustion signals (higher = better for DIGITDIFF)
             let score = 0;
-            if (isHot) score += momentum[d] * 20;
-            if (isAccelerating && isHot) score += 10;
-            if (momentum[d] > 1.0) score += 15; // Very hot
-
-            // Also consider: digits that are slowing down after being hot
-            if (momentum[d] > 0.3 && roc[d] < 0) {
-                score += 10; // Slowing down = exhaustion
+            if (isHot) {
+                score += 0.45 * clamp01(m); // hotness
+                if (isAccelerating) score += 0.25 * clamp01(m); // hot + accelerating = may exhaust soon
+                if (isDecelerating) score += 0.35 * clamp01(m); // hot + decelerating = exhaustion
+                if (isVeryHot) score += 0.30;
             }
+            if (isMildlyHot && isDecelerating) score += 0.20; // mild but slowing
 
-            predictions.push({
+            // Trend penalty: strong trends make exhaustion less reliable
+            const trendPenalty = clamp01(trend.strength / 0.4);
+            score *= (1 - 0.5 * trendPenalty);
+
+            scores.push({
                 digit: d,
-                momentum: momentum[d],
-                roc: roc[d],
+                momentum: m,
+                roc: r,
                 isHot,
                 isAccelerating,
+                isDecelerating,
+                isVeryHot,
                 score
             });
         }
 
-        // Sort by score
-        const sorted = predictions.sort((a, b) => b.score - a.score);
+        const sorted = scores.sort((a, b) => b.score - a.score);
+        const predicted = sorted.find(s => s.digit !== lastDigit) || sorted[0];
 
-        let predicted = sorted[0];
-        if (predicted.digit === tickHistory[tickHistory.length - 1]) {
-            predicted = sorted[1];
-        }
+        // Confidence (can reach 100% with strong evidence)
+        const evidenceStrength = clamp01((1 - Math.exp(-history.length / 300)) * (1 - Math.exp(-Math.abs(trend.slope) / 0.02)));
+        const runnerUp = sorted.find(s => s.digit !== predicted.digit && s.digit !== lastDigit) || sorted[1] || sorted[0];
+        const separation = predicted.score - runnerUp.score;
+        const separationStrength = clamp01(separation / 0.8);
 
-        // Confidence based on momentum strength
-        let confidence = 50;
-        if (predicted.momentum > 0.8) confidence += 20;
-        else if (predicted.momentum > 0.5) confidence += 10;
-        if (predicted.isHot && predicted.roc < 0) confidence += 15; // Exhaustion signal
+        const hotnessStrength = clamp01(predicted.momentum);
+        const decelerationBonus = predicted.isDecelerating ? 0.2 : 0;
+        const acceleratingBonus = predicted.isAccelerating ? 0.1 : 0;
 
-        // Trend regime affects confidence
-        if (trend.strength > 0.3) confidence -= 10; // Trending = harder to predict
+        const composite =
+            (0.35 * hotnessStrength) +
+            (0.25 * separationStrength) +
+            (0.20 * decelerationBonus) +
+            (0.10 * acceleratingBonus) +
+            (0.10 * (predicted.isVeryHot ? 1 : 0));
 
-        confidence = Math.min(95, Math.max(50, confidence));
+        let confidence = 40 + 60 * (composite * (0.4 + 0.6 * evidenceStrength));
+
+        // Strong exhaustion bonus
+        const strongExhaustionBonus =
+            15 * clamp01(predicted.momentum) * clamp01(separation / 0.6) * clamp01(evidenceStrength);
+        confidence = Math.min(100, confidence + strongExhaustionBonus);
+        confidence = Math.max(0, confidence);
+
+        this.lastPrediction = predicted.digit;
 
         return {
             predictedDigit: predicted.digit,
             confidence: Math.round(confidence),
             primaryStrategy: 'Momentum Trend Detection',
-            riskAssessment: trend.strength > 0.3 ? 'high' : trend.strength > 0.15 ? 'medium' : 'low',
+            riskAssessment: (predicted.momentum < 0.3 || trend.strength > 0.35) ? 'high' : (evidenceStrength < 0.3 || predicted.momentum < 0.5) ? 'medium' : 'low',
             marketRegime: trend.strength > 0.3 ? 'trending' : trend.strength > 0.1 ? 'ranging' : 'stable',
             statisticalEvidence: {
+                lastState: lastDigit,
                 momentum: predicted.momentum.toFixed(3),
                 rateOfChange: predicted.roc.toFixed(3),
                 isHot: predicted.isHot,
+                isAccelerating: predicted.isAccelerating,
+                isDecelerating: predicted.isDecelerating,
+                isVeryHot: predicted.isVeryHot,
                 trendStrength: trend.strength.toFixed(3),
-                trendDirection: trend.direction
+                trendDirection: trend.direction,
+                evidenceStrength: evidenceStrength.toFixed(3)
             },
-            alternativeCandidates: [sorted[1].digit, sorted[2].digit]
+            alternativeCandidates: sorted
+                .filter(s => s.digit !== predicted.digit && s.digit !== lastDigit)
+                .slice(0, 2)
+                .map(s => s.digit)
         };
     }
 
@@ -1218,6 +1245,7 @@ class MomentumTrendDetector {
         return { strength, direction, slope };
     }
 }
+
 
 // SIMULATED AI ENGINE 8: Chaos Theory Attractor Finder (CTAF)
 // Uses chaos theory concepts like attractors and phase space
@@ -2217,13 +2245,13 @@ class AILogicDigitDifferBot {
         this.currentEngineSetup = null;
         this.tradesInCurrentCycle = 0;
         this.engineSetups = [
-            { name: 'FDA_GAMR', check: (p) => p.find(e => e.name === 'FDA' && e.confidence >= 95) },
+            // { name: 'FDA_GAMR', check: (p) => p.find(e => e.name === 'FDA' && e.confidence >= 95) },
             // { name: 'MCP', check: (p) => p.find(e => e.name === 'MCP' && e.confidence >= 63) },// Good
             // { name: 'EITE', check: (p) => p.find(e => e.name === 'EITE' && e.confidence >= 100) },//Good
             // { name: 'PRNN', check: (p) => p.find(e => e.name === 'PRNN' && e.confidence >= 85) }, //Good
             // { name: 'BPE', check: (p) => p.find(e => e.name === 'BPE' && e.confidence >= 100) }, //Good
-            { name: 'GAMR', check: (p) => p.find(e => e.name === 'GAMR' && e.confidence >= 70) },
-            // { name: 'MTD', check: (p) => p.find(e => e.name === 'MTD' && e.confidence <= 50) }, //Good
+            // { name: 'GAMR', check: (p) => p.find(e => e.name === 'GAMR' && e.confidence >= 70) },
+            { name: 'MTD', check: (p) => p.find(e => e.name === 'MTD' && e.confidence >= 87) }, //Good
             // { name: 'CTAF', check: (p) => p.find(e => e.name === 'CTAF' && e.confidence >= 90) }, //Good
             // { name: 'MCS', check: (p) => p.find(e => e.name === 'MCS' && e.confidence >= 90) } //Good
         ];
@@ -2650,7 +2678,7 @@ class AILogicDigitDifferBot {
             const PRNN_Engine = predictions.find(p => p.name === 'PRNN' && p.confidence >= 85);
             const BPE_Engine = predictions.find(p => p.name === 'BPE' && p.confidence >= 100 && p.riskAssessment === 'low');
             const GAMR_Engine = predictions.find(p => p.name === 'GAMR' && p.confidence >= 70 && p.riskAssessment === 'low');
-            const MTD_Engine = predictions.find(p => p.name === 'MTD' && p.confidence <= 50);
+            const MTD_Engine = predictions.find(p => p.name === 'MTD' && p.confidence >= 87 && p.riskAssessment === 'low');
             const CTAF_Engine = predictions.find(p => p.name === 'CTAF' && p.confidence >= 90);
             const MCS_Engine = predictions.find(p => p.name === 'MCS' && p.confidence >= 90);
 
