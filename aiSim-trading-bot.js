@@ -868,8 +868,6 @@ class BayesianProbabilityEstimator {
         };
     }
 }
-
-// ============================================================
 // SIMULATED AI ENGINE 6: Gap Analysis & Mean Reversion (GAMR)
 // Uses gap lengths and mean reversion principles
 // ============================================================
@@ -886,20 +884,53 @@ class GapMeanReversionAnalyzer {
     }
 
     analyze(tickHistory) {
-        if (tickHistory.length < 100) {
+        if (tickHistory.length < 150) {
             return { error: 'Insufficient data' };
         }
 
-        const recent = tickHistory.slice(-100)
+        const lastDigit = tickHistory[tickHistory.length - 1];
+
+        const historyWindow = Math.min(800, tickHistory.length);
+        const history = tickHistory.slice(-historyWindow);
+
+        const freqWindow = Math.min(60, tickHistory.length);
+        const recentFreqSlice = tickHistory.slice(-freqWindow);
 
         // Calculate gap for each digit (how long since it last appeared)
-        const gaps = this.calculateCurrentGaps(recent);
+        const gaps = this.calculateCurrentGaps(history);
 
         // Calculate historical gap statistics
-        const historicalGaps = this.calculateHistoricalGaps(recent);
+        const historicalGaps = this.calculateHistoricalGaps(history);
 
-        // Mean reversion analysis
+        // Recent/long frequencies (mean reversion signal)
+        const longCounts = Array(10).fill(0);
+        for (const d of history) longCounts[d]++;
+        const longFreq = longCounts.map(c => c / history.length);
+
+        const recentCounts = Array(10).fill(0);
+        for (const d of recentFreqSlice) recentCounts[d]++;
+        const recentFreq = recentCounts.map(c => c / recentFreqSlice.length);
+
+        // Conditional posterior from lastDigit -> nextDigit (Dirichlet smoothing)
+        const alpha = 0.6;
+        const fromCounts = Array(10).fill(0);
+        let totalFromLast = 0;
+        for (let i = 1; i < history.length; i++) {
+            if (history[i - 1] === lastDigit) {
+                fromCounts[history[i]]++;
+                totalFromLast++;
+            }
+        }
+        const denom = totalFromLast + 10 * alpha;
+        const posteriorMean = fromCounts.map(c => (c + alpha) / denom);
+
+        // Mean reversion analysis for DIGITDIFF: pick the least-likely next digit
+        // based on (1) low conditional probability, (2) short gap, (3) recent overrepresentation.
         const meanReversionScores = [];
+
+        const clamp01 = (x) => Math.max(0, Math.min(1, x));
+        const baseline = 0.1;
+        const condReliability = clamp01(totalFromLast / 25);
 
         for (let d = 0; d < 10; d++) {
             const currentGap = gaps[d];
@@ -908,14 +939,27 @@ class GapMeanReversionAnalyzer {
             const maxGap = historicalGaps[d].max;
 
             // Z-score of current gap
-            const gapZScore = stdGap > 0 ? (currentGap - avgGap) / stdGap : 0;
+            const gapZScore = stdGap > 1e-9 ? (currentGap - avgGap) / stdGap : 0;
 
             // Percentile of current gap
             const gapPercentile = historicalGaps[d].percentile(currentGap);
 
-            // Mean reversion score: higher = more overdue (bad for DIFFER)
-            // For DIFFER: we want digits that are NOT overdue
-            const meanReversionScore = -gapZScore; // Negative because we want non-overdue digits
+            const pCond = posteriorMean[d];
+
+            // Strength signals (0..1)
+            const lowProbStrength = clamp01((baseline - pCond) / baseline);
+            const gapSmallStrength = clamp01((avgGap - currentGap) / Math.max(1, avgGap));
+            const overrep = recentFreq[d] - longFreq[d];
+            const overrepStrength = clamp01(overrep / 0.12);
+            const overduePenalty = clamp01((currentGap - avgGap) / Math.max(1, 2 * stdGap + 1));
+            const longBelowUniformStrength = clamp01((baseline - longFreq[d]) / baseline);
+
+            const score =
+                (1.25 * lowProbStrength * condReliability) +
+                (0.55 * overrepStrength) +
+                (0.45 * gapSmallStrength) +
+                (0.25 * longBelowUniformStrength) -
+                (0.85 * overduePenalty);
 
             meanReversionScores.push({
                 digit: d,
@@ -924,66 +968,65 @@ class GapMeanReversionAnalyzer {
                 maxGap,
                 gapZScore,
                 gapPercentile,
-                meanReversionScore,
+                meanReversionScore: score,
+                pCond,
+                lowProbStrength,
+                gapSmallStrength,
+                overrepStrength,
+                overduePenalty,
                 isOverdue: currentGap > avgGap * 1.5
             });
         }
 
-        // Sort by mean reversion score (highest = least likely to appear = best for DIFFER)
-        // Digits with small gaps (recently appeared) have high positive scores
         const sorted = meanReversionScores.sort((a, b) => b.meanReversionScore - a.meanReversionScore);
 
-        let predicted = sorted[0];
+        // Don't predict the last digit
+        const predicted = sorted.find(s => s.digit !== lastDigit) || sorted[0];
 
-        // Don't predict last digit (gap = 0)
-        if (predicted.currentGap === 0) {
-            predicted = sorted[1];
-        }
+        // Calculate confidence (can reach 100% with strong evidence)
+        const evidenceStrength = clamp01((1 - Math.exp(-totalFromLast / 40)) * (1 - Math.exp(-history.length / 300)));
+        const runnerUp = sorted.find(s => s.digit !== predicted.digit && s.digit !== lastDigit) || sorted[1] || sorted[0];
+        const separation = predicted.meanReversionScore - runnerUp.meanReversionScore;
+        const separationStrength = clamp01(separation / 0.9);
 
-        // Also consider: digit that appeared very recently but has been appearing too much
-        const recentCounts = Array(10).fill(0);
-        tickHistory.slice(-30).forEach(d => recentCounts[d]++);
+        const composite =
+            (0.45 * predicted.lowProbStrength) +
+            (0.20 * predicted.gapSmallStrength) +
+            (0.20 * predicted.overrepStrength) +
+            (0.15 * separationStrength);
 
-        // Adjust score based on recent frequency
-        for (const item of sorted) {
-            if (recentCounts[item.digit] > 4) {
-                item.meanReversionScore += 0.5; // Boost if appeared too much recently
-            }
-        }
+        let confidence = 40 + 60 * (composite * (0.35 + 0.65 * evidenceStrength));
 
-        // Re-sort after adjustment
-        sorted.sort((a, b) => b.meanReversionScore - a.meanReversionScore);
-        predicted = sorted[0].currentGap === 0 ? sorted[1] : sorted[0];
+        // Strong posterior + strong evidence bonus
+        const strongPosteriorBonus =
+            20 * clamp01((baseline - predicted.pCond) / baseline) * clamp01(totalFromLast / 120) * clamp01(separation / 1.0);
+        confidence = Math.min(100, confidence + strongPosteriorBonus);
+        confidence = Math.max(0, confidence);
 
-        // Calculate confidence
-        let confidence = 50;
-
-        // Small gap = recently appeared = likely won't appear again
-        if (predicted.currentGap <= 3) confidence += 15;
-        if (predicted.currentGap <= 1) confidence += 10;
-
-        // Negative z-score = appeared more than expected
-        if (predicted.gapZScore < -1) confidence += 10;
-
-        // High recent frequency
-        if (recentCounts[predicted.digit] >= 4) confidence += 10;
-
-        confidence = Math.min(95, Math.max(50, confidence));
+        this.lastPrediction = predicted.digit;
 
         return {
             predictedDigit: predicted.digit,
             confidence: Math.round(confidence),
             primaryStrategy: 'Gap Analysis Mean Reversion',
-            riskAssessment: Math.abs(predicted.gapZScore) > 2 ? 'high' : Math.abs(predicted.gapZScore) > 1 ? 'medium' : 'low',
-            marketRegime: this.detectGapRegime(historicalGaps),
+            riskAssessment: (predicted.pCond > 0.12 || predicted.overduePenalty > 0.5) ? 'high' : (evidenceStrength < 0.35 || predicted.pCond > 0.10) ? 'medium' : 'low',
+            marketRegime: predicted.pCond.toFixed(4) >= 0.1 ? 'volatile' : predicted.pCond.toFixed(4) > 0.06 ? 'normal' : 'stable',//this.detectGapRegime(historicalGaps),
             statisticalEvidence: {
+                lastState: lastDigit,
+                transitionsFromLast: totalFromLast,
                 currentGap: predicted.currentGap,
                 averageGap: predicted.avgGap.toFixed(2),
                 gapZScore: predicted.gapZScore.toFixed(3),
                 gapPercentile: (predicted.gapPercentile * 100).toFixed(1) + '%',
-                isOverdue: predicted.isOverdue
+                conditionalProbability: predicted.pCond.toFixed(4),
+                evidenceStrength: evidenceStrength.toFixed(3),
+                isOverdue: predicted.isOverdue,
+                detectGapRegime: this.detectGapRegime(historicalGaps),
             },
-            alternativeCandidates: [sorted[1].digit, sorted[2].digit]
+            alternativeCandidates: sorted
+                .filter(s => s.digit !== predicted.digit && s.digit !== lastDigit)
+                .slice(0, 2)
+                .map(s => s.digit)
         };
     }
 
@@ -1041,6 +1084,7 @@ class GapMeanReversionAnalyzer {
 
     detectGapRegime(historicalGaps) {
         const avgStd = historicalGaps.reduce((a, b) => a + b.std, 0) / 10;
+        // console.log('Average standard deviation:', avgStd);
         if (avgStd > 5) return 'volatile';
         if (avgStd > 3) return 'normal';
         return 'stable';
@@ -2742,15 +2786,15 @@ class AILogicDigitDifferBot {
             const tradeDecision9 = this.aiEngines.mcs.analyze(this.tickHistory);
 
             
-            console.log('FDA Prediction:', tradeDecision.predictedDigit, '(Alt:', tradeDecision.alternativeCandidates.join(','), ') | Confidence:', tradeDecision.confidence, '| Risk:', tradeDecision.riskAssessment, '| Market Regime:', tradeDecision.marketRegime);
-            console.log('MCP Prediction:', tradeDecision2.predictedDigit, '(Alt:', tradeDecision2.alternativeCandidates.join(','), ') | Confidence:', tradeDecision2.confidence, '| Risk:', tradeDecision2.riskAssessment, '| Market Regime:', tradeDecision2.marketRegime);
-            console.log('EITE Prediction:', tradeDecision3.predictedDigit, '(Alt:', tradeDecision3.alternativeCandidates.join(','), ') | Confidence:', tradeDecision3.confidence, '| Risk:', tradeDecision3.riskAssessment, '| Market Regime:', tradeDecision3.marketRegime, ' | Entropy: (', tradeDecision3.statisticalEvidence.conditionalEntropy, '|', tradeDecision3.statisticalEvidence.entropy, '|', tradeDecision3.statisticalEvidence.marginalProbability, '|', tradeDecision3.statisticalEvidence.mutualInformation, '|', tradeDecision3.statisticalEvidence.surpriseValue, ')');
-            console.log('PRNN Prediction:', tradeDecision4.predictedDigit, '(Alt:', tradeDecision4.alternativeCandidates.join(',') || 'N/A', ') | Confidence:', tradeDecision4.confidence, '| Risk:', tradeDecision4.riskAssessment, '| Market Regime:', tradeDecision4.marketRegime);
-            console.log('BPE Prediction:', tradeDecision5.predictedDigit, '(Alt:', tradeDecision5.alternativeCandidates.join(','), ') | Confidence:', tradeDecision5.confidence, '| Risk:', tradeDecision5.riskAssessment, '| Market Regime:', tradeDecision5.marketRegime, ' | Entropy:', tradeDecision5.statisticalEvidence.entropyLevel);
-            console.log('GAMR Prediction:', tradeDecision6.predictedDigit, '(Alt:', tradeDecision6.alternativeCandidates.join(','), ') | Confidence:', tradeDecision6.confidence, '| Risk:', tradeDecision6.riskAssessment, '| Market Regime:', tradeDecision6.marketRegime);
+            // console.log('FDA Prediction:', tradeDecision.predictedDigit, '(Alt:', tradeDecision.alternativeCandidates.join(','), ') | Confidence:', tradeDecision.confidence, '| Risk:', tradeDecision.riskAssessment, '| Market Regime:', tradeDecision.marketRegime);
+            // console.log('MCP Prediction:', tradeDecision2.predictedDigit, '(Alt:', tradeDecision2.alternativeCandidates.join(','), ') | Confidence:', tradeDecision2.confidence, '| Risk:', tradeDecision2.riskAssessment, '| Market Regime:', tradeDecision2.marketRegime);
+            // console.log('EITE Prediction:', tradeDecision3.predictedDigit, '(Alt:', tradeDecision3.alternativeCandidates.join(','), ') | Confidence:', tradeDecision3.confidence, '| Risk:', tradeDecision3.riskAssessment, '| Market Regime:', tradeDecision3.marketRegime, ' | Entropy: (', tradeDecision3.statisticalEvidence.conditionalEntropy, '|', tradeDecision3.statisticalEvidence.entropy, '|', tradeDecision3.statisticalEvidence.marginalProbability, '|', tradeDecision3.statisticalEvidence.mutualInformation, '|', tradeDecision3.statisticalEvidence.surpriseValue, ')');
+            // console.log('PRNN Prediction:', tradeDecision4.predictedDigit, '(Alt:', tradeDecision4.alternativeCandidates.join(',') || 'N/A', ') | Confidence:', tradeDecision4.confidence, '| Risk:', tradeDecision4.riskAssessment, '| Market Regime:', tradeDecision4.marketRegime);
+            // console.log('BPE Prediction:', tradeDecision5.predictedDigit, '(Alt:', tradeDecision5.alternativeCandidates.join(','), ') | Confidence:', tradeDecision5.confidence, '| Risk:', tradeDecision5.riskAssessment, '| Market Regime:', tradeDecision5.marketRegime, ' | Entropy:', tradeDecision5.statisticalEvidence.entropyLevel);
+            // console.log('GAMR Prediction:', tradeDecision6.predictedDigit, '(Alt:', tradeDecision6.alternativeCandidates.join(','), ') | Confidence:', tradeDecision6.confidence, '| Risk:', tradeDecision6.riskAssessment, '| Market Regime:', tradeDecision6.marketRegime, ' | A.Gap:', tradeDecision6.statisticalEvidence.averageGap, ' | C.Gap:', tradeDecision6.statisticalEvidence.currentGap, ' | Gap-Scr:', tradeDecision6.statisticalEvidence.gapZScore, ' | Gap.%:', tradeDecision6.statisticalEvidence.gapPercentile, ' | Gap.Str:', tradeDecision6.statisticalEvidence.evidenceStrength, ' | Gap.Prb:', tradeDecision6.statisticalEvidence.conditionalProbability, ' | Gap.Due?:', tradeDecision6.statisticalEvidence.isOverdue, ' | H.Gap:', tradeDecision6.statisticalEvidence.detectGapRegime);
             console.log('MTD Prediction:', tradeDecision7.predictedDigit, '(Alt:', tradeDecision7.alternativeCandidates.join(','), ') | Confidence:', tradeDecision7.confidence, '| Risk:', tradeDecision7.riskAssessment, '| Market Regime:', tradeDecision7.marketRegime);
-            console.log('CTAF Prediction:', tradeDecision8.predictedDigit, '(Alt:', tradeDecision8.alternativeCandidates.join(','), ') | Confidence:', tradeDecision8.confidence, '| Risk:', tradeDecision8.riskAssessment, '| Market Regime:', tradeDecision8.marketRegime);
-            console.log('MCS Prediction:', tradeDecision9.predictedDigit, '(Alt:', tradeDecision9.alternativeCandidates.join(','), ') | Confidence:', tradeDecision9.confidence, '| Risk:', tradeDecision9.riskAssessment, '| Market Regime:', tradeDecision9.marketRegime);
+            // console.log('CTAF Prediction:', tradeDecision8.predictedDigit, '(Alt:', tradeDecision8.alternativeCandidates.join(','), ') | Confidence:', tradeDecision8.confidence, '| Risk:', tradeDecision8.riskAssessment, '| Market Regime:', tradeDecision8.marketRegime);
+            // console.log('MCS Prediction:', tradeDecision9.predictedDigit, '(Alt:', tradeDecision9.alternativeCandidates.join(','), ') | Confidence:', tradeDecision9.confidence, '| Risk:', tradeDecision9.riskAssessment, '| Market Regime:', tradeDecision9.marketRegime);
 
             // if (tradeDecision.confidence >= 95 && tradeDecision.riskAssessment === 'low' && tradeDecision.marketRegime === 'patterned') {
             //     this.placeTrade(tradeDecision.predictedDigit, tradeDecision.confidence);
@@ -2758,8 +2802,8 @@ class AILogicDigitDifferBot {
                 // if (tradeDecision2.confidence >= 100 && tradeDecision2.riskAssessment === 'low' && tradeDecision2.marketRegime === 'structured') {
                 // this.placeTrade(tradeDecision2.predictedDigit, tradeDecision2.confidence);
             // } else 
-                if (tradeDecision3.confidence >= 100 && tradeDecision3.riskAssessment === 'low' && tradeDecision3.marketRegime === 'patterned') {
-                this.placeTrade(tradeDecision3.predictedDigit, tradeDecision3.confidence);
+                // if (tradeDecision3.confidence >= 100 && tradeDecision3.riskAssessment === 'low' && tradeDecision3.marketRegime === 'patterned') {
+                // this.placeTrade(tradeDecision3.predictedDigit, tradeDecision3.confidence);
             // } else 
                 // if (tradeDecision4.confidence >= 85 && tradeDecision4.riskAssessment === 'low' && tradeDecision4.marketRegime === 'patterned') {
                 // this.placeTrade(tradeDecision4.predictedDigit, tradeDecision4.confidence);
@@ -2767,10 +2811,12 @@ class AILogicDigitDifferBot {
                 // if (tradeDecision5.confidence >= 100 && tradeDecision5.riskAssessment === 'low' && tradeDecision5.marketRegime === 'stable') {
                 // this.placeTrade(tradeDecision5.predictedDigit, tradeDecision5.confidence);
             // } 
-            // else if (tradeDecision6.confidence >= 100 && tradeDecision6.riskAssessment === 'low' && tradeDecision6.marketRegime === 'stable') {
-            //     this.placeTrade(tradeDecision6.predictedDigit, tradeDecision6.confidence);
-            // } else if (tradeDecision7.confidence >= 100 && tradeDecision7.riskAssessment === 'low' && tradeDecision7.marketRegime === 'stable') {
-            //     this.placeTrade(tradeDecision7.predictedDigit, tradeDecision7.confidence);
+            // else 
+                // if (tradeDecision6.confidence >= 70 && tradeDecision6.riskAssessment === 'low' && tradeDecision6.marketRegime === 'stable') {
+                // this.placeTrade(tradeDecision6.predictedDigit, tradeDecision6.confidence);
+            // } else 
+                if (tradeDecision7.confidence >= 100 && tradeDecision7.riskAssessment === 'low' && tradeDecision7.marketRegime === 'stable') {
+                this.placeTrade(tradeDecision7.predictedDigit, tradeDecision7.confidence);
             // } else if (tradeDecision8.confidence >= 100 && tradeDecision8.riskAssessment === 'low' && tradeDecision8.marketRegime === 'ordered') {
             //     this.placeTrade(tradeDecision8.predictedDigit, tradeDecision8.confidence);
             // } else if (tradeDecision9.confidence >= 100 && tradeDecision9.riskAssessment === 'low' && tradeDecision9.marketRegime === 'stable') {
@@ -2804,7 +2850,7 @@ class AILogicDigitDifferBot {
                     result.name = engine.name;
                     result.weight = engine.weight;
                     predictions.push(result);
-                    console.log(`   ✅ ${engine.name}: digit=${result.predictedDigit}, conf=${result.confidence}%`);
+                    // console.log(`   ✅ ${engine.name}: digit=${result.predictedDigit}, conf=${result.confidence}%`);
                 } else if (result && result.error) {
                     console.log(`   ❌ ${engine.name}: ${result.error}`);
                 }

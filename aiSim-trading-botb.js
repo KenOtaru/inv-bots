@@ -31,7 +31,6 @@ const TelegramBot = require('node-telegram-bot-api');
 // SIMULATED AI ENGINE 1: Frequency Deviation Analyzer (FDA)
 // Uses chi-square tests and frequency deviation analysis
 // ============================================================
-
 class FrequencyDeviationAnalyzer {
     constructor() {
         this.name = 'FDA';
@@ -160,7 +159,6 @@ class FrequencyDeviationAnalyzer {
 // SIMULATED AI ENGINE 2: Markov Chain Predictor (MCP)
 // Uses transition probability matrices
 // ============================================================
-
 class MarkovChainPredictor {
     constructor() {
         this.name = 'MCP';
@@ -282,7 +280,6 @@ class MarkovChainPredictor {
 // SIMULATED AI ENGINE 3: Entropy & Information Theory (EITE)
 // Uses Shannon entropy and information gain
 // ============================================================
-
 class EntropyInformationEngine {
     constructor() {
         this.name = 'EITE';
@@ -482,7 +479,6 @@ class EntropyInformationEngine {
 // SIMULATED AI ENGINE 4: Pattern Recognition Neural Network (PRNN)
 // Uses n-gram analysis and pattern matching
 // ============================================================
-
 class PatternRecognitionEngine {
     constructor() {
         this.name = 'PRNN';
@@ -724,7 +720,6 @@ class PatternRecognitionEngine {
 // SIMULATED AI ENGINE 5: Bayesian Probability Estimator (BPE)
 // Uses Bayesian updating and posterior probabilities
 // ============================================================
-
 class BayesianProbabilityEstimator {
     constructor() {
         this.name = 'BPE';
@@ -844,7 +839,6 @@ class BayesianProbabilityEstimator {
 // SIMULATED AI ENGINE 6: Gap Analysis & Mean Reversion (GAMR)
 // Uses gap lengths and mean reversion principles
 // ============================================================
-
 class GapMeanReversionAnalyzer {
     constructor() {
         this.name = 'GAMR';
@@ -857,20 +851,53 @@ class GapMeanReversionAnalyzer {
     }
 
     analyze(tickHistory) {
-        if (tickHistory.length < 100) {
+        if (tickHistory.length < 150) {
             return { error: 'Insufficient data' };
         }
 
-        const recent = tickHistory.slice(-100)
+        const lastDigit = tickHistory[tickHistory.length - 1];
+
+        const historyWindow = Math.min(800, tickHistory.length);
+        const history = tickHistory.slice(-historyWindow);
+
+        const freqWindow = Math.min(60, tickHistory.length);
+        const recentFreqSlice = tickHistory.slice(-freqWindow);
 
         // Calculate gap for each digit (how long since it last appeared)
-        const gaps = this.calculateCurrentGaps(recent);
+        const gaps = this.calculateCurrentGaps(history);
 
         // Calculate historical gap statistics
-        const historicalGaps = this.calculateHistoricalGaps(recent);
+        const historicalGaps = this.calculateHistoricalGaps(history);
 
-        // Mean reversion analysis
+        // Recent/long frequencies (mean reversion signal)
+        const longCounts = Array(10).fill(0);
+        for (const d of history) longCounts[d]++;
+        const longFreq = longCounts.map(c => c / history.length);
+
+        const recentCounts = Array(10).fill(0);
+        for (const d of recentFreqSlice) recentCounts[d]++;
+        const recentFreq = recentCounts.map(c => c / recentFreqSlice.length);
+
+        // Conditional posterior from lastDigit -> nextDigit (Dirichlet smoothing)
+        const alpha = 0.6;
+        const fromCounts = Array(10).fill(0);
+        let totalFromLast = 0;
+        for (let i = 1; i < history.length; i++) {
+            if (history[i - 1] === lastDigit) {
+                fromCounts[history[i]]++;
+                totalFromLast++;
+            }
+        }
+        const denom = totalFromLast + 10 * alpha;
+        const posteriorMean = fromCounts.map(c => (c + alpha) / denom);
+
+        // Mean reversion analysis for DIGITDIFF: pick the least-likely next digit
+        // based on (1) low conditional probability, (2) short gap, (3) recent overrepresentation.
         const meanReversionScores = [];
+
+        const clamp01 = (x) => Math.max(0, Math.min(1, x));
+        const baseline = 0.1;
+        const condReliability = clamp01(totalFromLast / 25);
 
         for (let d = 0; d < 10; d++) {
             const currentGap = gaps[d];
@@ -879,14 +906,27 @@ class GapMeanReversionAnalyzer {
             const maxGap = historicalGaps[d].max;
 
             // Z-score of current gap
-            const gapZScore = stdGap > 0 ? (currentGap - avgGap) / stdGap : 0;
+            const gapZScore = stdGap > 1e-9 ? (currentGap - avgGap) / stdGap : 0;
 
             // Percentile of current gap
             const gapPercentile = historicalGaps[d].percentile(currentGap);
 
-            // Mean reversion score: higher = more overdue (bad for DIFFER)
-            // For DIFFER: we want digits that are NOT overdue
-            const meanReversionScore = -gapZScore; // Negative because we want non-overdue digits
+            const pCond = posteriorMean[d];
+
+            // Strength signals (0..1)
+            const lowProbStrength = clamp01((baseline - pCond) / baseline);
+            const gapSmallStrength = clamp01((avgGap - currentGap) / Math.max(1, avgGap));
+            const overrep = recentFreq[d] - longFreq[d];
+            const overrepStrength = clamp01(overrep / 0.12);
+            const overduePenalty = clamp01((currentGap - avgGap) / Math.max(1, 2 * stdGap + 1));
+            const longBelowUniformStrength = clamp01((baseline - longFreq[d]) / baseline);
+
+            const score =
+                (1.25 * lowProbStrength * condReliability) +
+                (0.55 * overrepStrength) +
+                (0.45 * gapSmallStrength) +
+                (0.25 * longBelowUniformStrength) -
+                (0.85 * overduePenalty);
 
             meanReversionScores.push({
                 digit: d,
@@ -895,66 +935,65 @@ class GapMeanReversionAnalyzer {
                 maxGap,
                 gapZScore,
                 gapPercentile,
-                meanReversionScore,
+                meanReversionScore: score,
+                pCond,
+                lowProbStrength,
+                gapSmallStrength,
+                overrepStrength,
+                overduePenalty,
                 isOverdue: currentGap > avgGap * 1.5
             });
         }
 
-        // Sort by mean reversion score (highest = least likely to appear = best for DIFFER)
-        // Digits with small gaps (recently appeared) have high positive scores
         const sorted = meanReversionScores.sort((a, b) => b.meanReversionScore - a.meanReversionScore);
 
-        let predicted = sorted[0];
+        // Don't predict the last digit
+        const predicted = sorted.find(s => s.digit !== lastDigit) || sorted[0];
 
-        // Don't predict last digit (gap = 0)
-        if (predicted.currentGap === 0) {
-            predicted = sorted[1];
-        }
+        // Calculate confidence (can reach 100% with strong evidence)
+        const evidenceStrength = clamp01((1 - Math.exp(-totalFromLast / 40)) * (1 - Math.exp(-history.length / 300)));
+        const runnerUp = sorted.find(s => s.digit !== predicted.digit && s.digit !== lastDigit) || sorted[1] || sorted[0];
+        const separation = predicted.meanReversionScore - runnerUp.meanReversionScore;
+        const separationStrength = clamp01(separation / 0.9);
 
-        // Also consider: digit that appeared very recently but has been appearing too much
-        const recentCounts = Array(10).fill(0);
-        tickHistory.slice(-30).forEach(d => recentCounts[d]++);
+        const composite =
+            (0.45 * predicted.lowProbStrength) +
+            (0.20 * predicted.gapSmallStrength) +
+            (0.20 * predicted.overrepStrength) +
+            (0.15 * separationStrength);
 
-        // Adjust score based on recent frequency
-        for (const item of sorted) {
-            if (recentCounts[item.digit] > 4) {
-                item.meanReversionScore += 0.5; // Boost if appeared too much recently
-            }
-        }
+        let confidence = 40 + 60 * (composite * (0.35 + 0.65 * evidenceStrength));
 
-        // Re-sort after adjustment
-        sorted.sort((a, b) => b.meanReversionScore - a.meanReversionScore);
-        predicted = sorted[0].currentGap === 0 ? sorted[1] : sorted[0];
+        // Strong posterior + strong evidence bonus
+        const strongPosteriorBonus =
+            20 * clamp01((baseline - predicted.pCond) / baseline) * clamp01(totalFromLast / 120) * clamp01(separation / 1.0);
+        confidence = Math.min(100, confidence + strongPosteriorBonus);
+        confidence = Math.max(0, confidence);
 
-        // Calculate confidence
-        let confidence = 50;
-
-        // Small gap = recently appeared = likely won't appear again
-        if (predicted.currentGap <= 3) confidence += 15;
-        if (predicted.currentGap <= 1) confidence += 10;
-
-        // Negative z-score = appeared more than expected
-        if (predicted.gapZScore < -1) confidence += 10;
-
-        // High recent frequency
-        if (recentCounts[predicted.digit] >= 4) confidence += 10;
-
-        confidence = Math.min(95, Math.max(50, confidence));
+        this.lastPrediction = predicted.digit;
 
         return {
             predictedDigit: predicted.digit,
             confidence: Math.round(confidence),
             primaryStrategy: 'Gap Analysis Mean Reversion',
-            riskAssessment: Math.abs(predicted.gapZScore) > 2 ? 'high' : Math.abs(predicted.gapZScore) > 1 ? 'medium' : 'low',
-            marketRegime: this.detectGapRegime(historicalGaps),
+            riskAssessment: (predicted.pCond > 0.12 || predicted.overduePenalty > 0.5) ? 'high' : (evidenceStrength < 0.35 || predicted.pCond > 0.10) ? 'medium' : 'low',
+            marketRegime: predicted.pCond.toFixed(4) >= 0.1 ? 'volatile' : predicted.pCond.toFixed(4) > 0.06 ? 'normal' : 'stable',//this.detectGapRegime(historicalGaps),
             statisticalEvidence: {
+                lastState: lastDigit,
+                transitionsFromLast: totalFromLast,
                 currentGap: predicted.currentGap,
                 averageGap: predicted.avgGap.toFixed(2),
                 gapZScore: predicted.gapZScore.toFixed(3),
                 gapPercentile: (predicted.gapPercentile * 100).toFixed(1) + '%',
-                isOverdue: predicted.isOverdue
+                conditionalProbability: predicted.pCond.toFixed(4),
+                evidenceStrength: evidenceStrength.toFixed(3),
+                isOverdue: predicted.isOverdue,
+                detectGapRegime: this.detectGapRegime(historicalGaps),
             },
-            alternativeCandidates: [sorted[1].digit, sorted[2].digit]
+            alternativeCandidates: sorted
+                .filter(s => s.digit !== predicted.digit && s.digit !== lastDigit)
+                .slice(0, 2)
+                .map(s => s.digit)
         };
     }
 
@@ -1012,6 +1051,7 @@ class GapMeanReversionAnalyzer {
 
     detectGapRegime(historicalGaps) {
         const avgStd = historicalGaps.reduce((a, b) => a + b.std, 0) / 10;
+        // console.log('Average standard deviation:', avgStd);
         if (avgStd > 5) return 'volatile';
         if (avgStd > 3) return 'normal';
         return 'stable';
@@ -1022,7 +1062,6 @@ class GapMeanReversionAnalyzer {
 // SIMULATED AI ENGINE 7: Momentum & Trend Detector (MTD)
 // Uses momentum indicators and trend analysis
 // ============================================================
-
 class MomentumTrendDetector {
     constructor() {
         this.name = 'MTD';
@@ -1183,7 +1222,6 @@ class MomentumTrendDetector {
 // SIMULATED AI ENGINE 8: Chaos Theory Attractor Finder (CTAF)
 // Uses chaos theory concepts like attractors and phase space
 // ============================================================
-
 class ChaosTheoryAnalyzer {
     constructor() {
         this.name = 'CTAF';
@@ -1418,7 +1456,6 @@ class ChaosTheoryAnalyzer {
 // SIMULATED AI ENGINE 9: Monte Carlo Simulator (MCS)
 // Uses random sampling and probability distributions
 // ============================================================
-
 class MonteCarloSimulator {
     constructor() {
         this.name = 'MCS';
@@ -1664,7 +1701,6 @@ class MonteCarloSimulator {
 // SIMULATED AI ENGINE 10: Ensemble Meta-Learner (EML)
 // Combines insights from all other engines
 // ============================================================
-
 class EnsembleMetaLearner {
     constructor() {
         this.name = 'EML';
@@ -2612,7 +2648,7 @@ class AILogicDigitDifferBot {
             const EITE_Engine = predictions.find(p => p.name === 'EITE' && p.confidence >= 100 && p.riskAssessment === 'low');
             const PRNN_Engine = predictions.find(p => p.name === 'PRNN' && p.confidence >= 85);
             const BPE_Engine = predictions.find(p => p.name === 'BPE' && p.confidence >= 100 && p.riskAssessment === 'low');
-            const GAMR_Engine = predictions.find(p => p.name === 'GAMR' && p.confidence >= 95);
+            const GAMR_Engine = predictions.find(p => p.name === 'GAMR' && p.confidence >= 70 && p.riskAssessment === 'low');
             const MTD_Engine = predictions.find(p => p.name === 'MTD' && p.confidence <= 50);
             const CTAF_Engine = predictions.find(p => p.name === 'CTAF' && p.confidence >= 90);
             const MCS_Engine = predictions.find(p => p.name === 'MCS' && p.confidence >= 90);
