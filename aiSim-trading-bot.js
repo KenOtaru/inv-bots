@@ -188,29 +188,37 @@ class MarkovChainPredictor {
             transitionCounts[current]++;
         }
 
-        // Normalize to probabilities
+        // Normalize to probabilities (handle zero counts)
         for (let i = 0; i < 10; i++) {
             if (transitionCounts[i] > 0) {
                 for (let j = 0; j < 10; j++) {
                     transitionMatrix[i][j] /= transitionCounts[i];
+                }
+            } else {
+                // If this digit never appeared as current state, use uniform distribution
+                for (let j = 0; j < 10; j++) {
+                    transitionMatrix[i][j] = 0.1;
                 }
             }
         }
 
         // Build second-order transition matrix (bigram)
         const bigramMatrix = {};
+        const bigramCounts = {};
         for (let i = 0; i < tickHistory.length - 2; i++) {
             const key = `${tickHistory[i]},${tickHistory[i + 1]}`;
             const next = tickHistory[i + 2];
             if (!bigramMatrix[key]) {
                 bigramMatrix[key] = Array(10).fill(0);
+                bigramCounts[key] = 0;
             }
             bigramMatrix[key][next]++;
+            bigramCounts[key]++;
         }
 
         // Normalize bigram probabilities
         for (const key in bigramMatrix) {
-            const total = bigramMatrix[key].reduce((a, b) => a + b, 0);
+            const total = bigramCounts[key];
             if (total > 0) {
                 bigramMatrix[key] = bigramMatrix[key].map(c => c / total);
             }
@@ -224,12 +232,17 @@ class MarkovChainPredictor {
         // First-order prediction
         const firstOrderProbs = transitionMatrix[lastDigit];
 
-        // Second-order prediction (if available)
-        const secondOrderProbs = bigramMatrix[bigramKey] || firstOrderProbs;
+        // Second-order prediction (if available and has sufficient data)
+        let secondOrderProbs;
+        if (bigramMatrix[bigramKey] && bigramCounts[bigramKey] >= 5) {
+            secondOrderProbs = [...bigramMatrix[bigramKey]];
+        } else {
+            secondOrderProbs = null;
+        }
 
         // Combine predictions (weighted average)
         const combinedProbs = firstOrderProbs.map((p, i) => {
-            const p2 = secondOrderProbs[i] || 0.1;
+            const p2 = secondOrderProbs ? secondOrderProbs[i] : 0.1;
             return p * 0.4 + p2 * 0.6; // Weight second-order more
         });
 
@@ -244,15 +257,28 @@ class MarkovChainPredictor {
         const sorted = predictions.sort((a, b) => b.differScore - a.differScore);
         const predicted = sorted[0];
 
-        // Calculate confidence based on probability difference
+        // Calculate confidence based on probability difference and rarity
         const probDiff = sorted[0].differScore - sorted[1].differScore;
-        let confidence = 50 + probDiff * 2;
+        let confidence = 50 + probDiff * 4;
 
-        // Boost if probability is significantly below expected
-        if (predicted.probability < 0.05) confidence += 15;
-        if (predicted.probability < 0.08) confidence += 10;
+        // Boost if probability is significantly below expected (for DIGITDIFF)
+        if (predicted.probability < 0.08) confidence += 25;
+        if (predicted.probability < 0.10) confidence += 5;
 
-        confidence = Math.min(95, Math.max(50, confidence));
+        // Boost if second-order data was available and reliable
+        // if (secondOrderProbs && bigramCounts[bigramKey] >= 10) confidence += 15;
+        if (secondOrderProbs && bigramCounts[bigramKey] >= 20) confidence += 20;
+
+        // Boost for strong separation between candidates
+        if (probDiff > 8) confidence += 10;
+        if (probDiff > 10) confidence += 5;
+
+        // Boost if multiple low-probability candidates exist
+        const lowProbCount = predictions.filter(p => p.probability < 0.05).length;
+        if (lowProbCount >= 2) confidence += 5;
+        if (lowProbCount >= 3) confidence += 5;
+
+        confidence = Math.min(100, Math.max(50, confidence));
 
         // Calculate entropy of transition probabilities
         let entropy = 0;
@@ -260,6 +286,9 @@ class MarkovChainPredictor {
             if (p > 0) entropy -= p * Math.log2(p);
         }
         const normalizedEntropy = entropy / Math.log2(10);
+
+        // Set last prediction for performance tracking
+        this.lastPrediction = predicted.digit;
 
         return {
             predictedDigit: predicted.digit,
@@ -271,7 +300,8 @@ class MarkovChainPredictor {
                 transitionProbability: predicted.probability.toFixed(4),
                 entropyLevel: normalizedEntropy.toFixed(4),
                 lastState: lastDigit,
-                bigramState: bigramKey
+                bigramState: bigramKey,
+                bigramCount: bigramCounts[bigramKey] || 0
             },
             alternativeCandidates: [sorted[1].digit, sorted[2].digit]
         };
@@ -2140,14 +2170,14 @@ class AILogicDigitDifferBot {
         this.currentEngineSetup = null;
         this.tradesInCurrentCycle = 0;
         this.engineSetups = [
-            { name: 'FDA_GAMR', check: (p) => p.find(e => e.name === 'FDA' && e.confidence >= 95) && p.find(e => e.name === 'GAMR' && e.confidence >= 95) },
-            { name: 'MCP', check: (p) => p.find(e => e.name === 'MCP' && e.confidence >= 63) },
-            { name: 'EITE', check: (p) => p.find(e => e.name === 'EITE' && e.confidence <= 65) },
-            { name: 'PRNN', check: (p) => p.find(e => e.name === 'PRNN' && e.confidence >= 85) },
-            { name: 'BPE', check: (p) => p.find(e => e.name === 'BPE' && e.confidence <= 60) },
-            { name: 'MTD', check: (p) => p.find(e => e.name === 'MTD' && e.confidence <= 50) },
-            { name: 'CTAF', check: (p) => p.find(e => e.name === 'CTAF' && e.confidence >= 90) },
-            { name: 'MCS', check: (p) => p.find(e => e.name === 'MCS' && e.confidence >= 90) }
+            // { name: 'FDA_GAMR', check: (p) => p.find(e => e.name === 'FDA' && e.confidence >= 95) && p.find(e => e.name === 'GAMR' && e.confidence >= 95) },
+            // { name: 'MCP', check: (p) => p.find(e => e.name === 'MCP' && e.confidence >= 100) },
+            { name: 'EITE', check: (p) => p.find(e => e.name === 'EITE' && e.confidence >= 95) },
+            // { name: 'PRNN', check: (p) => p.find(e => e.name === 'PRNN' && e.confidence >= 85) },
+            // { name: 'BPE', check: (p) => p.find(e => e.name === 'BPE' && e.confidence <= 60) },
+            // { name: 'MTD', check: (p) => p.find(e => e.name === 'MTD' && e.confidence <= 50) },
+            // { name: 'CTAF', check: (p) => p.find(e => e.name === 'CTAF' && e.confidence >= 90) },
+            // { name: 'MCS', check: (p) => p.find(e => e.name === 'MCS' && e.confidence >= 90) }
         ];
         this.selectRandomEngineSetup();
 
@@ -2566,15 +2596,15 @@ class AILogicDigitDifferBot {
 
             console.log(`\n🎲 Current Engine Setup: ${this.currentEngineSetup.name} (${this.tradesInCurrentCycle}/10 trades)`);
 
-            const FDA_Engine = predictions.find(p => p.name === 'FDA' && p.confidence >= 95);
-            const MCP_Engine = predictions.find(p => p.name === 'MCP' && p.confidence >= 63);
-            const EITE_Engine = predictions.find(p => p.name === 'EITE' && p.confidence <= 65);
-            const PRNN_Engine = predictions.find(p => p.name === 'PRNN' && p.confidence >= 85);
-            const BPE_Engine = predictions.find(p => p.name === 'BPE' && p.confidence <= 60);
-            const GAMR_Engine = predictions.find(p => p.name === 'GAMR' && p.confidence >= 95);
-            const MTD_Engine = predictions.find(p => p.name === 'MTD' && p.confidence <= 50);
-            const CTAF_Engine = predictions.find(p => p.name === 'CTAF' && p.confidence >= 90);
-            const MCS_Engine = predictions.find(p => p.name === 'MCS' && p.confidence >= 90);
+            // const FDA_Engine = predictions.find(p => p.name === 'FDA' && p.confidence >= 95);
+            // const MCP_Engine = predictions.find(p => p.name === 'MCP' && p.confidence >= 100);
+            const EITE_Engine = predictions.find(p => p.name === 'EITE' && p.confidence >= 95);
+            // const PRNN_Engine = predictions.find(p => p.name === 'PRNN' && p.confidence >= 85);
+            // const BPE_Engine = predictions.find(p => p.name === 'BPE' && p.confidence <= 60);
+            // const GAMR_Engine = predictions.find(p => p.name === 'GAMR' && p.confidence >= 95);
+            // const MTD_Engine = predictions.find(p => p.name === 'MTD' && p.confidence <= 50);
+            // const CTAF_Engine = predictions.find(p => p.name === 'CTAF' && p.confidence >= 90);
+            // const MCS_Engine = predictions.find(p => p.name === 'MCS' && p.confidence >= 90);
 
             let tradeExecuted = false;
 
@@ -3164,7 +3194,7 @@ const bot = new AILogicDigitDifferBot({
 
     maxDrawdownPercent: 25,
     dailyLossLimit: 50,
-    dailyProfitTarget: 100,
+    dailyProfitTarget: 1,
     maxConsecutiveLosses: 3,//6
 
     minConfidence: 85,
