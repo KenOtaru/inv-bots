@@ -695,6 +695,7 @@ class BayesianProbabilityEstimator {
         this.name = 'BPE';
         this.fullName = 'Bayesian Probability Estimator';
         this.weight = 1.15;
+
         this.wins = 0;
         this.losses = 0;
         this.lastPrediction = null;
@@ -705,29 +706,30 @@ class BayesianProbabilityEstimator {
     }
 
     analyze(tickHistory) {
-        if (tickHistory.length < 50) {
+        if (tickHistory.length < 100) {
             return { error: 'Insufficient data' };
         }
 
-        const recentTicks = tickHistory.slice(-100)
+        const window = tickHistory.slice(-1000);
+        const lastDigit = window[window.length - 1];
+        const baseline = 0.1;
 
-        // Count observations
-        const counts = Array(10).fill(0);
-        recentTicks.forEach(d => counts[d]++);
+        // Build conditional transition counts: count(lastDigit -> nextDigit)
+        const transitionCounts = Array(10).fill(null).map(() => Array(10).fill(0));
+        const stateCounts = Array(10).fill(0);
+        for (let i = 0; i < window.length - 1; i++) {
+            const a = window[i];
+            const b = window[i + 1];
+            transitionCounts[a][b]++;
+            stateCounts[a]++;
+        }
 
-        // Posterior parameters (Dirichlet-Multinomial conjugate)
-        const posteriorAlpha = this.priorAlpha.map((a, i) => a + counts[i]);
+        const n = stateCounts[lastDigit];
+        const posteriorAlpha = this.priorAlpha.map((a, j) => a + transitionCounts[lastDigit][j]);
         const totalAlpha = posteriorAlpha.reduce((a, b) => a + b, 0);
-
-        // Posterior mean probabilities
         const posteriorMean = posteriorAlpha.map(a => a / totalAlpha);
+        const posteriorVariance = posteriorAlpha.map(a => (a * (totalAlpha - a)) / (totalAlpha * totalAlpha * (totalAlpha + 1)));
 
-        // Posterior variance (for confidence estimation)
-        const posteriorVariance = posteriorAlpha.map(a => {
-            return (a * (totalAlpha - a)) / (totalAlpha * totalAlpha * (totalAlpha + 1));
-        });
-
-        // Calculate 95% credible intervals
         const credibleIntervals = posteriorMean.map((mean, i) => {
             const std = Math.sqrt(posteriorVariance[i]);
             return {
@@ -736,65 +738,69 @@ class BayesianProbabilityEstimator {
             };
         });
 
-        // Bayesian surprise: How unexpected was recent data?
-        const recent = tickHistory.slice(-20);
-        let bayesianSurprise = 0;
-        for (const d of recent) {
-            bayesianSurprise -= Math.log(posteriorMean[d] + 0.001);
-        }
-        bayesianSurprise /= recent.length;
-
-        // For DIFFER: predict digit with highest posterior (most likely to appear = won't differ)
-        // Actually, we want highest posterior because it's overrepresented
+        // For DIGITDIFF: choose the digit least likely to appear next
         const predictions = posteriorMean.map((prob, digit) => ({
             digit,
             posteriorProb: prob,
             variance: posteriorVariance[digit],
             credibleInterval: credibleIntervals[digit],
-            // Score: how much above expected (0.1) is the posterior?
-            excessProbability: prob - 0.1
+            // Higher is better for DIFFER when prob < 0.1
+            differScore: (baseline - prob) / baseline
         }));
 
-        // Sort by excess probability (highest = appeared too much = good for DIFFER)
-        const sorted = predictions.sort((a, b) => b.excessProbability - a.excessProbability);
-
+        const sorted = predictions.sort((a, b) => b.differScore - a.differScore);
         let predicted = sorted[0];
-
-        // Don't predict last digit
-        if (predicted.digit === tickHistory[tickHistory.length - 1]) {
+        if (predicted.digit === lastDigit && sorted.length > 1) {
             predicted = sorted[1];
         }
 
-        // Calculate confidence using Bayesian criteria
+        // Confidence: rarity + separation + evidence strength + credible interval below baseline
+        const p = predicted.posteriorProb;
+        const p2 = sorted.find(s => s.digit !== predicted.digit)?.posteriorProb ?? baseline;
+        const separation = Math.max(0, p2 - p);
+
+        const rarityScore = Math.max(0, baseline - p) / baseline;
+        const separationScore = Math.min(1, separation / baseline);
+        const evidenceScore = Math.min(1, n / 25);
+
         let confidence = 50;
+        confidence += rarityScore * 40;
+        confidence += separationScore * 25;
+        confidence += evidenceScore * 15;
+        if (predicted.credibleInterval.upper < baseline) confidence += 10;
+        if (p < 0.05) confidence += 5;
+        if (p < 0.02) confidence += 5;
+        confidence = Math.min(100, Math.max(50, confidence));
 
-        // Higher excess probability = more confident
-        if (predicted.excessProbability > 0.02) confidence += 15;
-        if (predicted.excessProbability > 0.04) confidence += 10;
+        // Entropy of the conditional distribution
+        let entropy = 0;
+        for (const prob of posteriorMean) {
+            if (prob > 0) entropy -= prob * Math.log2(prob);
+        }
+        const normalizedEntropy = entropy / Math.log2(10);
 
-        // Lower variance = more confident
-        if (predicted.variance < 0.001) confidence += 10;
+        this.lastPrediction = predicted.digit;
 
-        // More data = more confident
-        if (recentTicks.length > 300) confidence += 10;
-        if (recentTicks.length > 500) confidence += 5;
-
-        confidence = Math.min(95, Math.max(50, confidence));
+        const alternativeCandidates = sorted
+            .filter(s => s.digit !== predicted.digit)
+            .slice(0, 2)
+            .map(s => s.digit);
 
         return {
             predictedDigit: predicted.digit,
             confidence: Math.round(confidence),
-            primaryStrategy: 'Bayesian Probability Estimation',
-            riskAssessment: predicted.variance > 0.002 ? 'high' : predicted.variance > 0.001 ? 'medium' : 'low',
-            marketRegime: bayesianSurprise > 2.5 ? 'volatile' : bayesianSurprise > 2.3 ? 'normal' : 'stable',
+            primaryStrategy: 'Bayesian Conditional Transition Estimation',
+            riskAssessment: normalizedEntropy > 0.99 ? 'low' : normalizedEntropy > 0.98 ? 'medium' : 'high',
+            marketRegime: normalizedEntropy > 0.99 ? 'stable' : 'volatile',
             statisticalEvidence: {
+                lastState: lastDigit,
+                transitionCount: n,
                 posteriorProbability: predicted.posteriorProb.toFixed(4),
-                excessProbability: predicted.excessProbability.toFixed(4),
                 variance: predicted.variance.toFixed(6),
-                bayesianSurprise: bayesianSurprise.toFixed(3),
-                credibleInterval: `[${predicted.credibleInterval.lower.toFixed(3)}, ${predicted.credibleInterval.upper.toFixed(3)}]`
+                credibleInterval: `[${predicted.credibleInterval.lower.toFixed(3)}, ${predicted.credibleInterval.upper.toFixed(3)}]`,
+                entropyLevel: normalizedEntropy.toFixed(4)
             },
-            alternativeCandidates: [sorted[1].digit, sorted[2].digit]
+            alternativeCandidates: alternativeCandidates
         };
     }
 }
@@ -2144,7 +2150,7 @@ class AILogicDigitDifferBot {
             // { name: 'MCP', check: (p) => p.find(e => e.name === 'MCP' && e.confidence >= 63) },// Good
             // { name: 'EITE', check: (p) => p.find(e => e.name === 'EITE' && e.confidence <= 65) },//Bad
             // { name: 'PRNN', check: (p) => p.find(e => e.name === 'PRNN' && e.confidence >= 85) }, //Good
-            // { name: 'BPE', check: (p) => p.find(e => e.name === 'BPE' && e.confidence <= 60) }, //Bad
+            { name: 'BPE', check: (p) => p.find(e => e.name === 'BPE' && e.confidence <= 60) }, //Bad
             // { name: 'MTD', check: (p) => p.find(e => e.name === 'MTD' && e.confidence <= 50) }, //Good
             // { name: 'CTAF', check: (p) => p.find(e => e.name === 'CTAF' && e.confidence >= 90) }, //Good
             // { name: 'MCS', check: (p) => p.find(e => e.name === 'MCS' && e.confidence >= 90) } //Good
@@ -2570,7 +2576,7 @@ class AILogicDigitDifferBot {
             const MCP_Engine = predictions.find(p => p.name === 'MCP' && p.confidence >= 63);
             const EITE_Engine = predictions.find(p => p.name === 'EITE' && p.confidence <= 65);
             const PRNN_Engine = predictions.find(p => p.name === 'PRNN' && p.confidence >= 85);
-            const BPE_Engine = predictions.find(p => p.name === 'BPE' && p.confidence <= 60);
+            const BPE_Engine = predictions.find(p => p.name === 'BPE' && p.confidence >= 100 && p.riskAssessment === 'low');
             const GAMR_Engine = predictions.find(p => p.name === 'GAMR' && p.confidence >= 95);
             const MTD_Engine = predictions.find(p => p.name === 'MTD' && p.confidence <= 50);
             const CTAF_Engine = predictions.find(p => p.name === 'CTAF' && p.confidence >= 90);
