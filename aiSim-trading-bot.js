@@ -202,7 +202,6 @@ class FrequencyDeviationAnalyzer {
 // SIMULATED AI ENGINE 2: Markov Chain Predictor (MCP)
 // Uses transition probability matrices
 // ============================================================
-
 class MarkovChainPredictor {
     constructor() {
         this.name = 'MCP';
@@ -230,37 +229,29 @@ class MarkovChainPredictor {
             transitionCounts[current]++;
         }
 
-        // Normalize to probabilities (handle zero counts)
+        // Normalize to probabilities
         for (let i = 0; i < 10; i++) {
             if (transitionCounts[i] > 0) {
                 for (let j = 0; j < 10; j++) {
                     transitionMatrix[i][j] /= transitionCounts[i];
-                }
-            } else {
-                // If this digit never appeared as current state, use uniform distribution
-                for (let j = 0; j < 10; j++) {
-                    transitionMatrix[i][j] = 0.1;
                 }
             }
         }
 
         // Build second-order transition matrix (bigram)
         const bigramMatrix = {};
-        const bigramCounts = {};
         for (let i = 0; i < tickHistory.length - 2; i++) {
             const key = `${tickHistory[i]},${tickHistory[i + 1]}`;
             const next = tickHistory[i + 2];
             if (!bigramMatrix[key]) {
                 bigramMatrix[key] = Array(10).fill(0);
-                bigramCounts[key] = 0;
             }
             bigramMatrix[key][next]++;
-            bigramCounts[key]++;
         }
 
         // Normalize bigram probabilities
         for (const key in bigramMatrix) {
-            const total = bigramCounts[key];
+            const total = bigramMatrix[key].reduce((a, b) => a + b, 0);
             if (total > 0) {
                 bigramMatrix[key] = bigramMatrix[key].map(c => c / total);
             }
@@ -274,17 +265,12 @@ class MarkovChainPredictor {
         // First-order prediction
         const firstOrderProbs = transitionMatrix[lastDigit];
 
-        // Second-order prediction (if available and has sufficient data)
-        let secondOrderProbs;
-        if (bigramMatrix[bigramKey] && bigramCounts[bigramKey] >= 5) {
-            secondOrderProbs = [...bigramMatrix[bigramKey]];
-        } else {
-            secondOrderProbs = null;
-        }
+        // Second-order prediction (if available)
+        const secondOrderProbs = bigramMatrix[bigramKey] || firstOrderProbs;
 
         // Combine predictions (weighted average)
         const combinedProbs = firstOrderProbs.map((p, i) => {
-            const p2 = secondOrderProbs ? secondOrderProbs[i] : 0.1;
+            const p2 = secondOrderProbs[i] || 0.1;
             return p * 0.4 + p2 * 0.6; // Weight second-order more
         });
 
@@ -299,28 +285,15 @@ class MarkovChainPredictor {
         const sorted = predictions.sort((a, b) => b.differScore - a.differScore);
         const predicted = sorted[0];
 
-        // Calculate confidence based on probability difference and rarity
+        // Calculate confidence based on probability difference
         const probDiff = sorted[0].differScore - sorted[1].differScore;
-        let confidence = 50 + probDiff * 4;
+        let confidence = 50 + probDiff * 2;
 
-        // Boost if probability is significantly below expected (for DIGITDIFF)
-        if (predicted.probability < 0.08) confidence += 25;
-        if (predicted.probability < 0.10) confidence += 5;
+        // Boost if probability is significantly below expected
+        if (predicted.probability < 0.05) confidence += 15;
+        if (predicted.probability < 0.08) confidence += 10;
 
-        // Boost if second-order data was available and reliable
-        // if (secondOrderProbs && bigramCounts[bigramKey] >= 10) confidence += 15;
-        if (secondOrderProbs && bigramCounts[bigramKey] >= 20) confidence += 20;
-
-        // Boost for strong separation between candidates
-        if (probDiff > 8) confidence += 10;
-        if (probDiff > 10) confidence += 5;
-
-        // Boost if multiple low-probability candidates exist
-        const lowProbCount = predictions.filter(p => p.probability < 0.05).length;
-        if (lowProbCount >= 2) confidence += 5;
-        if (lowProbCount >= 3) confidence += 5;
-
-        confidence = Math.min(100, Math.max(50, confidence));
+        confidence = Math.min(95, Math.max(50, confidence));
 
         // Calculate entropy of transition probabilities
         let entropy = 0;
@@ -328,9 +301,6 @@ class MarkovChainPredictor {
             if (p > 0) entropy -= p * Math.log2(p);
         }
         const normalizedEntropy = entropy / Math.log2(10);
-
-        // Set last prediction for performance tracking
-        this.lastPrediction = predicted.digit;
 
         return {
             predictedDigit: predicted.digit,
@@ -342,8 +312,7 @@ class MarkovChainPredictor {
                 transitionProbability: predicted.probability.toFixed(4),
                 entropyLevel: normalizedEntropy.toFixed(4),
                 lastState: lastDigit,
-                bigramState: bigramKey,
-                bigramCount: bigramCounts[bigramKey] || 0
+                bigramState: bigramKey
             },
             alternativeCandidates: [sorted[1].digit, sorted[2].digit]
         };
@@ -354,7 +323,6 @@ class MarkovChainPredictor {
 // SIMULATED AI ENGINE 3: Entropy & Information Theory (EITE)
 // Uses Shannon entropy and information gain
 // ============================================================
-
 class EntropyInformationEngine {
     constructor() {
         this.name = 'EITE';
@@ -550,10 +518,10 @@ class EntropyInformationEngine {
     }
 }
 
+// ============================================================
 // SIMULATED AI ENGINE 4: Pattern Recognition Neural Network (PRNN)
 // Uses n-gram analysis and pattern matching
 // ============================================================
-
 class PatternRecognitionEngine {
     constructor() {
         this.name = 'PRNN';
@@ -795,7 +763,6 @@ class PatternRecognitionEngine {
 // SIMULATED AI ENGINE 5: Bayesian Probability Estimator (BPE)
 // Uses Bayesian updating and posterior probabilities
 // ============================================================
-
 class BayesianProbabilityEstimator {
     constructor() {
         this.name = 'BPE';
@@ -911,10 +878,10 @@ class BayesianProbabilityEstimator {
     }
 }
 
+// ============================================================
 // SIMULATED AI ENGINE 6: Gap Analysis & Mean Reversion (GAMR)
 // Uses gap lengths and mean reversion principles
 // ============================================================
-
 class GapMeanReversionAnalyzer {
     constructor() {
         this.name = 'GAMR';
@@ -1138,7 +1105,6 @@ class GapMeanReversionAnalyzer {
 // SIMULATED AI ENGINE 7: Momentum & Trend Detector (MTD)
 // Uses momentum indicators and trend analysis
 // ============================================================
-
 class MomentumTrendDetector {
     constructor() {
         this.name = 'MTD';
@@ -1323,10 +1289,10 @@ class MomentumTrendDetector {
     }
 }
 
+
 // SIMULATED AI ENGINE 8: Chaos Theory Attractor Finder (CTAF)
 // Uses chaos theory concepts like attractors and phase space
 // ============================================================
-
 class ChaosTheoryAnalyzer {
     constructor() {
         this.name = 'CTAF';
@@ -1561,7 +1527,6 @@ class ChaosTheoryAnalyzer {
 // SIMULATED AI ENGINE 9: Monte Carlo Simulator (MCS)
 // Uses random sampling and probability distributions
 // ============================================================
-
 class MonteCarloSimulator {
     constructor() {
         this.name = 'MCS';
@@ -1807,7 +1772,6 @@ class MonteCarloSimulator {
 // SIMULATED AI ENGINE 10: Ensemble Meta-Learner (EML)
 // Combines insights from all other engines
 // ============================================================
-
 class EnsembleMetaLearner {
     constructor() {
         this.name = 'EML';
@@ -2268,7 +2232,8 @@ class AILogicDigitDifferBot {
 
         // Assets
         this.assets = config.assets || [
-            'R_10', //'R_25', 'R_50', 'R_75', 'R_100', 'RDBULL', 'RDBEAR'
+            // 'R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'RDBULL', 'RDBEAR'
+            'R_100',
         ];
 
         // Trading Configuration
@@ -2888,7 +2853,7 @@ class AILogicDigitDifferBot {
                 // if (tradeDecision7.confidence >= 87 && tradeDecision7.riskAssessment === 'low' && tradeDecision7.marketRegime === 'stable') {
                 // this.placeTrade(tradeDecision7.predictedDigit, tradeDecision7.confidence);
             // } else 
-                if (tradeDecision8.confidence >= 90 && tradeDecision8.riskAssessment === 'low' && tradeDecision8.marketRegime === 'ordered') {
+                if (tradeDecision8.confidence >= 92 && tradeDecision8.riskAssessment === 'low') {
                 this.placeTrade(tradeDecision8.predictedDigit, tradeDecision8.confidence);
             // } else if (tradeDecision9.confidence >= 100 && tradeDecision9.riskAssessment === 'low' && tradeDecision9.marketRegime === 'stable') {
             //     this.placeTrade(tradeDecision9.predictedDigit, tradeDecision9.confidence);
