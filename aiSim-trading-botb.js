@@ -2287,14 +2287,14 @@ class AILogicDigitDifferBot {
         this.currentEngineSetup = null;
         this.tradesInCurrentCycle = 0;
         this.engineSetups = [
-            { name: 'FDA', check: (p) => p.find(e => e.name === 'FDA' && e.confidence >= 70) },
+            // { name: 'FDA', check: (p) => p.find(e => e.name === 'FDA' && e.confidence >= 70) },
             // { name: 'MCP', check: (p) => p.find(e => e.name === 'MCP' && e.confidence >= 63) },// Good
             // { name: 'EITE', check: (p) => p.find(e => e.name === 'EITE' && e.confidence >= 100) },//Good
             // { name: 'PRNN', check: (p) => p.find(e => e.name === 'PRNN' && e.confidence >= 85) }, //Good
             // { name: 'BPE', check: (p) => p.find(e => e.name === 'BPE' && e.confidence >= 100) }, //Good
             // { name: 'GAMR', check: (p) => p.find(e => e.name === 'GAMR' && e.confidence >= 70) },
             // { name: 'MTD', check: (p) => p.find(e => e.name === 'MTD' && e.confidence >= 87) }, //Good
-            // { name: 'CTAF', check: (p) => p.find(e => e.name === 'CTAF' && e.confidence >= 90) }, //Good
+            { name: 'CTAF', check: (p) => p.find(e => e.name === 'CTAF' && e.confidence >= 90) }, //Good
             // { name: 'MCS', check: (p) => p.find(e => e.name === 'MCS' && e.confidence >= 90) } //Good
         ];
         this.selectRandomEngineSetup();
