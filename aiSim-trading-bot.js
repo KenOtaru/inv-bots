@@ -318,6 +318,7 @@ class EntropyInformationEngine {
         this.name = 'EITE';
         this.fullName = 'Entropy Information Theory Engine';
         this.weight = 1.1;
+
         this.wins = 0;
         this.losses = 0;
         this.lastPrediction = null;
@@ -329,79 +330,112 @@ class EntropyInformationEngine {
             return { error: 'Insufficient data' };
         }
 
-        const recent = tickHistory.slice(-100)
+        const window200 = tickHistory.slice(-200);
+        const window100 = tickHistory.slice(-100);
+        const window50 = tickHistory.slice(-50);
 
         // Calculate entropy at different time scales
         const windows = [25, 50, 100, 200];
         const entropyByWindow = {};
-
         for (const w of windows) {
-            if (recent.length >= w) {
-                const sample = recent.slice(-w);
-                entropyByWindow[w] = this.calculateEntropy(sample);
+            const src = w === 25 ? tickHistory.slice(-25) : w === 50 ? window50 : w === 100 ? window100 : window200;
+            if (src.length >= Math.min(w, 100)) {
+                entropyByWindow[w] = this.calculateEntropy(src);
             }
         }
 
         // Calculate conditional entropy H(X|X-1)
-        const conditionalEntropy = this.calculateConditionalEntropy(recent.slice(-200));
+        const conditionalEntropy = this.calculateConditionalEntropy(window200);
 
         // Calculate mutual information
-        const mutualInfo = this.calculateMutualInformation(recent.slice(-200));
+        const mutualInfo = this.calculateMutualInformation(window200);
 
-        // Information gain analysis
-        const sample = recent.slice(-200);
-        const fullEntropy = this.calculateEntropy(sample);
+        const fullEntropy = this.calculateEntropy(window200);
 
-        // Calculate information gain for each digit
-        const infoGains = [];
-        for (let d = 0; d < 10; d++) {
-            // Entropy if we exclude this digit
-            const withoutD = sample.filter(x => x !== d);
-            const entropyWithout = withoutD.length > 10 ? this.calculateEntropy(withoutD) : fullEntropy;
-            const infoGain = fullEntropy - entropyWithout;
+        const counts200 = Array(10).fill(0);
+        for (const d of window200) counts200[d]++;
+        const probs200 = counts200.map(c => c / window200.length);
 
-            // Calculate surprise value (negative log probability)
-            const prob = sample.filter(x => x === d).length / sample.length;
-            const surprise = prob > 0 ? -Math.log2(prob) : 10;
-
-            infoGains.push({
-                digit: d,
-                infoGain,
-                surprise,
-                probability: prob,
-                score: (surprise - 3.32) * 10 + infoGain * 50 // 3.32 = log2(10) expected
-            });
+        const transitions = Array(10).fill(null).map(() => Array(10).fill(0));
+        const transCounts = Array(10).fill(0);
+        for (let i = 0; i < window200.length - 1; i++) {
+            const a = window200[i];
+            const b = window200[i + 1];
+            transitions[a][b]++;
+            transCounts[a]++;
         }
 
-        // For DIFFER: choose digit with lowest surprise (most common = won't appear)
-        // Actually, for Differ we want digit that appeared too often and is "due" not to appear
-        const sorted = infoGains.sort((a, b) => {
-            // High probability + low surprise = appeared too much = good for DIFFER
-            return (b.probability - 0.1) - (a.probability - 0.1);
+        const lastDigit = window200[window200.length - 1];
+        const baseline = 0.1;
+
+        const getCondProbs = (window) => {
+            if (window.length < 2) return null;
+            const t = Array(10).fill(null).map(() => Array(10).fill(0));
+            const c = Array(10).fill(0);
+            for (let i = 0; i < window.length - 1; i++) {
+                const a = window[i];
+                const b = window[i + 1];
+                t[a][b]++;
+                c[a]++;
+            }
+            if (c[lastDigit] <= 0) return null;
+            return t[lastDigit].map(v => v / c[lastDigit]);
+        };
+
+        const condProbs200 = transCounts[lastDigit] > 0
+            ? transitions[lastDigit].map(v => v / transCounts[lastDigit])
+            : probs200;
+
+        const condProbs100 = getCondProbs(window100);
+        const condProbs50 = getCondProbs(window50);
+
+        const candidates = condProbs200.map((p, digit) => {
+            const marginalP = probs200[digit];
+            const surprise = marginalP > 0 ? -Math.log2(marginalP) : 10;
+            const differScore = (baseline - p) / baseline;
+            return {
+                digit,
+                probability: p,
+                marginalProbability: marginalP,
+                surprise,
+                differScore
+            };
         });
 
-        const predicted = sorted[0];
+        const sorted = candidates.sort((a, b) => b.differScore - a.differScore);
 
-        // Don't predict the last digit
-        let finalPrediction = predicted;
-        if (predicted.digit === tickHistory[tickHistory.length - 1]) {
+        let finalPrediction = sorted[0];
+        if (finalPrediction.digit === lastDigit && sorted.length > 1) {
             finalPrediction = sorted[1];
         }
 
-        // Calculate confidence based on entropy characteristics
+        const predictedIndex = sorted.findIndex(s => s.digit === finalPrediction.digit);
+        const nextCandidate = predictedIndex >= 0 ? sorted[predictedIndex + 1] : null;
+
+        const p = finalPrediction.probability;
+        const rarityScore = Math.max(0, baseline - p) / baseline;
+        const separation = nextCandidate ? Math.max(0, nextCandidate.probability - p) : 0;
+        const separationScore = Math.min(1, separation / baseline);
+        const predictabilityScore = Math.min(1, Math.max(0, 1 - conditionalEntropy));
+        const mutualInfoScore = Math.min(1, Math.max(0, mutualInfo / 0.2));
+
+        const p100 = condProbs100 ? condProbs100[finalPrediction.digit] : null;
+        const p50 = condProbs50 ? condProbs50[finalPrediction.digit] : null;
+        const stability100 = p100 === null ? 0.5 : 1 - Math.min(1, Math.abs(p100 - p) / 0.05);
+        const stability50 = p50 === null ? 0.5 : 1 - Math.min(1, Math.abs(p50 - p) / 0.05);
+        const stabilityScore = Math.max(0, Math.min(1, (stability100 + stability50) / 2));
+
         let confidence = 50;
+        confidence += rarityScore * 35;
+        confidence += separationScore * 20;
+        confidence += predictabilityScore * 15;
+        confidence += stabilityScore * 10;
+        confidence += mutualInfoScore * 10;
+        if (p < 0.02) confidence += 5;
+        if (p < 0.01) confidence += 5;
+        confidence = Math.min(100, Math.max(50, confidence));
 
-        // Low entropy = more predictable = higher confidence
-        if (fullEntropy < 0.9) confidence += 20;
-        else if (fullEntropy < 0.95) confidence += 10;
-
-        // High mutual information = patterns exist
-        if (mutualInfo > 0.1) confidence += 15;
-
-        // Significant probability deviation
-        if (Math.abs(finalPrediction.probability - 0.1) > 0.03) confidence += 10;
-
-        confidence = Math.min(95, Math.max(50, confidence));
+        this.lastPrediction = finalPrediction.digit;
 
         return {
             predictedDigit: finalPrediction.digit,
@@ -413,7 +447,9 @@ class EntropyInformationEngine {
                 entropy: fullEntropy.toFixed(4),
                 conditionalEntropy: conditionalEntropy.toFixed(4),
                 mutualInformation: mutualInfo.toFixed(4),
-                surpriseValue: finalPrediction.surprise.toFixed(3)
+                surpriseValue: finalPrediction.surprise.toFixed(3),
+                conditionalProbability: p.toFixed(4),
+                marginalProbability: finalPrediction.marginalProbability.toFixed(4)
             },
             alternativeCandidates: [sorted[1].digit, sorted[2].digit]
         };
@@ -2114,7 +2150,7 @@ class AILogicDigitDifferBot {
 
         // Assets
         this.assets = config.assets || [
-            'R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'RDBULL', 'RDBEAR'
+            'R_10', //'R_25', 'R_50', 'R_75', 'R_100', 'RDBULL', 'RDBEAR'
         ];
 
         // Trading Configuration
@@ -2172,7 +2208,7 @@ class AILogicDigitDifferBot {
         this.engineSetups = [
             // { name: 'FDA_GAMR', check: (p) => p.find(e => e.name === 'FDA' && e.confidence >= 95) && p.find(e => e.name === 'GAMR' && e.confidence >= 95) },
             // { name: 'MCP', check: (p) => p.find(e => e.name === 'MCP' && e.confidence >= 100) },
-            { name: 'EITE', check: (p) => p.find(e => e.name === 'EITE' && e.confidence >= 95) },
+            { name: 'EITE', check: (p) => p.find(e => e.name === 'EITE' && e.confidence <= 69) },
             // { name: 'PRNN', check: (p) => p.find(e => e.name === 'PRNN' && e.confidence >= 85) },
             // { name: 'BPE', check: (p) => p.find(e => e.name === 'BPE' && e.confidence <= 60) },
             // { name: 'MTD', check: (p) => p.find(e => e.name === 'MTD' && e.confidence <= 50) },
@@ -2594,11 +2630,11 @@ class AILogicDigitDifferBot {
             console.log(`   Risk Level: ${kellyResult.riskLevel}`);
             console.log(`   Recommendation: ${kellyResult.recommendation}`);
 
-            console.log(`\n🎲 Current Engine Setup: ${this.currentEngineSetup.name} (${this.tradesInCurrentCycle}/10 trades)`);
+            // console.log(`\n🎲 Current Engine Setup: ${this.currentEngineSetup.name} (${this.tradesInCurrentCycle}/10 trades)`);
 
             // const FDA_Engine = predictions.find(p => p.name === 'FDA' && p.confidence >= 95);
             // const MCP_Engine = predictions.find(p => p.name === 'MCP' && p.confidence >= 100);
-            const EITE_Engine = predictions.find(p => p.name === 'EITE' && p.confidence >= 95);
+            // const EITE_Engine = predictions.find(p => p.name === 'EITE' && p.confidence <= 69);
             // const PRNN_Engine = predictions.find(p => p.name === 'PRNN' && p.confidence >= 85);
             // const BPE_Engine = predictions.find(p => p.name === 'BPE' && p.confidence <= 60);
             // const GAMR_Engine = predictions.find(p => p.name === 'GAMR' && p.confidence >= 95);
@@ -2608,84 +2644,150 @@ class AILogicDigitDifferBot {
 
             let tradeExecuted = false;
 
-            switch (this.currentEngineSetup.name) {
-                case 'FDA_GAMR':
-                    if (FDA_Engine && GAMR_Engine) {
-                        console.log(`🎯 Using FDA && GAMR: FDA (${FDA_Engine.confidence}%) && GAMR (${GAMR_Engine.confidence}%)`);
-                        this.lastPrediction = FDA_Engine.predictedDigit;
-                        this.lastConfidence = FDA_Engine.confidence;
-                        this.placeTrade(FDA_Engine.predictedDigit, FDA_Engine.confidence, kellyResult.stake);
-                        tradeExecuted = true;
-                    }
-                    break;
-                case 'MCP':
-                    if (MCP_Engine) {
-                        console.log(`🎯 Using MCP: ${MCP_Engine.confidence}% confidence`);
-                        this.lastPrediction = MCP_Engine.predictedDigit;
-                        this.lastConfidence = MCP_Engine.confidence;
-                        this.placeTrade(MCP_Engine.predictedDigit, MCP_Engine.confidence, kellyResult.stake);
-                        tradeExecuted = true;
-                    }
-                    break;
-                case 'EITE':
-                    if (EITE_Engine) {
-                        console.log(`🎯 Using EITE: ${EITE_Engine.confidence}% confidence`);
-                        this.lastPrediction = EITE_Engine.predictedDigit;
-                        this.lastConfidence = EITE_Engine.confidence;
-                        this.placeTrade(EITE_Engine.predictedDigit, EITE_Engine.confidence, kellyResult.stake);
-                        tradeExecuted = true;
-                    }
-                    break;
-                case 'PRNN':
-                    if (PRNN_Engine) {
-                        console.log(`🎯 Using PRNN: ${PRNN_Engine.confidence}% confidence`);
-                        this.lastPrediction = PRNN_Engine.predictedDigit;
-                        this.lastConfidence = PRNN_Engine.confidence;
-                        this.placeTrade(PRNN_Engine.predictedDigit, PRNN_Engine.confidence, kellyResult.stake);
-                        tradeExecuted = true;
-                    }
-                    break;
-                case 'BPE':
-                    if (BPE_Engine) {
-                        console.log(`🎯 Using BPE: ${BPE_Engine.confidence}% confidence`);
-                        this.lastPrediction = BPE_Engine.predictedDigit;
-                        this.lastConfidence = BPE_Engine.confidence;
-                        this.placeTrade(BPE_Engine.predictedDigit, BPE_Engine.confidence, kellyResult.stake);
-                        tradeExecuted = true;
-                    }
-                    break;
-                case 'MTD':
-                    if (MTD_Engine) {
-                        console.log(`🎯 Using MTD: ${MTD_Engine.confidence}% confidence`);
-                        this.lastPrediction = MTD_Engine.predictedDigit;
-                        this.lastConfidence = MTD_Engine.confidence;
-                        this.placeTrade(MTD_Engine.predictedDigit, MTD_Engine.confidence, kellyResult.stake);
-                        tradeExecuted = true;
-                    }
-                    break;
-                case 'CTAF':
-                    if (CTAF_Engine) {
-                        console.log(`🎯 Using CTAF: ${CTAF_Engine.confidence}% confidence`);
-                        this.lastPrediction = CTAF_Engine.predictedDigit;
-                        this.lastConfidence = CTAF_Engine.confidence;
-                        this.placeTrade(CTAF_Engine.predictedDigit, CTAF_Engine.confidence, kellyResult.stake);
-                        tradeExecuted = true;
-                    }
-                    break;
-                case 'MCS':
-                    if (MCS_Engine) {
-                        console.log(`🎯 Using MCS: ${MCS_Engine.confidence}% confidence`);
-                        this.lastPrediction = MCS_Engine.predictedDigit;
-                        this.lastConfidence = MCS_Engine.confidence;
-                        this.placeTrade(MCS_Engine.predictedDigit, MCS_Engine.confidence, kellyResult.stake);
-                        tradeExecuted = true;
-                    }
-                    break;
-            }
+        //     return {
+        //     predictedDigit: finalPrediction.digit,
+        //     confidence: Math.round(confidence),
+        //     primaryStrategy: 'Entropy Information Theory',
+        //     riskAssessment: fullEntropy > 0.97 ? 'high' : fullEntropy > 0.92 ? 'medium' : 'low',
+        //     marketRegime: fullEntropy > 0.97 ? 'random' : fullEntropy > 0.9 ? 'semi-random' : 'patterned',
+        //     statisticalEvidence: {
+        //         entropy: fullEntropy.toFixed(4),
+        //         conditionalEntropy: conditionalEntropy.toFixed(4),
+        //         mutualInformation: mutualInfo.toFixed(4),
+        //         surpriseValue: finalPrediction.surprise.toFixed(3),
+        //         conditionalProbability: p.toFixed(4),
+        //         marginalProbability: finalPrediction.marginalProbability.toFixed(4)
+        //     },
+        //     alternativeCandidates: [sorted[1].digit, sorted[2].digit]
+        // };
+            
 
-            if (!tradeExecuted) {
-                console.log(`⏭️ Skipping trade: ${this.currentEngineSetup.name} setup not met`);
+            // switch (this.currentEngineSetup.name) {
+            //     case 'FDA_GAMR':
+            //         if (FDA_Engine && GAMR_Engine) {
+            //             console.log(`🎯 Using FDA && GAMR: FDA (${FDA_Engine.confidence}%) && GAMR (${GAMR_Engine.confidence}%)`);
+            //             this.lastPrediction = FDA_Engine.predictedDigit;
+            //             this.lastConfidence = FDA_Engine.confidence;
+            //             this.placeTrade(FDA_Engine.predictedDigit, FDA_Engine.confidence, kellyResult.stake);
+            //             tradeExecuted = true;
+            //         }
+            //         break;
+            //     case 'MCP':
+            //         if (MCP_Engine) {
+            //             console.log(`🎯 Using MCP: ${MCP_Engine.confidence}% confidence`);
+            //             this.lastPrediction = MCP_Engine.predictedDigit;
+            //             this.lastConfidence = MCP_Engine.confidence;
+            //             this.placeTrade(MCP_Engine.predictedDigit, MCP_Engine.confidence, kellyResult.stake);
+            //             tradeExecuted = true;
+            //         }
+            //         break;
+            //     case 'EITE':
+            //         if (EITE_Engine) {
+            //             console.log(`🎯 Using EITE: ${EITE_Engine.confidence}% confidence`);
+            //             this.lastPrediction = EITE_Engine.predictedDigit;
+            //             this.lastConfidence = EITE_Engine.confidence;
+            //             this.placeTrade(EITE_Engine.predictedDigit, EITE_Engine.confidence, kellyResult.stake);
+            //             tradeExecuted = true;
+            //         }
+            //         break;
+            //     case 'PRNN':
+            //         if (PRNN_Engine) {
+            //             console.log(`🎯 Using PRNN: ${PRNN_Engine.confidence}% confidence`);
+            //             this.lastPrediction = PRNN_Engine.predictedDigit;
+            //             this.lastConfidence = PRNN_Engine.confidence;
+            //             this.placeTrade(PRNN_Engine.predictedDigit, PRNN_Engine.confidence, kellyResult.stake);
+            //             tradeExecuted = true;
+            //         }
+            //         break;
+            //     case 'BPE':
+            //         if (BPE_Engine) {
+            //             console.log(`🎯 Using BPE: ${BPE_Engine.confidence}% confidence`);
+            //             this.lastPrediction = BPE_Engine.predictedDigit;
+            //             this.lastConfidence = BPE_Engine.confidence;
+            //             this.placeTrade(BPE_Engine.predictedDigit, BPE_Engine.confidence, kellyResult.stake);
+            //             tradeExecuted = true;
+            //         }
+            //         break;
+            //     case 'MTD':
+            //         if (MTD_Engine) {
+            //             console.log(`🎯 Using MTD: ${MTD_Engine.confidence}% confidence`);
+            //             this.lastPrediction = MTD_Engine.predictedDigit;
+            //             this.lastConfidence = MTD_Engine.confidence;
+            //             this.placeTrade(MTD_Engine.predictedDigit, MTD_Engine.confidence, kellyResult.stake);
+            //             tradeExecuted = true;
+            //         }
+            //         break;
+            //     case 'CTAF':
+            //         if (CTAF_Engine) {
+            //             console.log(`🎯 Using CTAF: ${CTAF_Engine.confidence}% confidence`);
+            //             this.lastPrediction = CTAF_Engine.predictedDigit;
+            //             this.lastConfidence = CTAF_Engine.confidence;
+            //             this.placeTrade(CTAF_Engine.predictedDigit, CTAF_Engine.confidence, kellyResult.stake);
+            //             tradeExecuted = true;
+            //         }
+            //         break;
+            //     case 'MCS':
+            //         if (MCS_Engine) {
+            //             console.log(`🎯 Using MCS: ${MCS_Engine.confidence}% confidence`);
+            //             this.lastPrediction = MCS_Engine.predictedDigit;
+            //             this.lastConfidence = MCS_Engine.confidence;
+            //             this.placeTrade(MCS_Engine.predictedDigit, MCS_Engine.confidence, kellyResult.stake);
+            //             tradeExecuted = true;
+            //         }
+            //         break;
+            // }
+
+            
+
+            // if (!tradeExecuted) {
+            //     console.log(`⏭️ Skipping trade: ${this.currentEngineSetup.name} setup not met`);
+            //     this.predictionInProgress = false;
+            // }
+
+            // Decide whether to trade
+            const tradeDecision = this.aiEngines.fda.analyze(this.tickHistory);
+            const tradeDecision2 = this.aiEngines.mcp.analyze(this.tickHistory);
+            const tradeDecision3 = this.aiEngines.eite.analyze(this.tickHistory);
+            const tradeDecision4 = this.aiEngines.prnn.analyze(this.tickHistory);
+            const tradeDecision5 = this.aiEngines.bpe.analyze(this.tickHistory);
+            const tradeDecision6 = this.aiEngines.gamr.analyze(this.tickHistory);
+            const tradeDecision7 = this.aiEngines.mtd.analyze(this.tickHistory);
+            const tradeDecision8 = this.aiEngines.ctaf.analyze(this.tickHistory);
+            const tradeDecision9 = this.aiEngines.mcs.analyze(this.tickHistory);
+
+            
+            console.log('FDA Prediction:', tradeDecision.predictedDigit, '(Alt:', tradeDecision.alternativeCandidates.join(','), ') | Confidence:', tradeDecision.confidence, '| Risk:', tradeDecision.riskAssessment, '| Market Regime:', tradeDecision.marketRegime);
+            console.log('MCP Prediction:', tradeDecision2.predictedDigit, '(Alt:', tradeDecision2.alternativeCandidates.join(','), ') | Confidence:', tradeDecision2.confidence, '| Risk:', tradeDecision2.riskAssessment, '| Market Regime:', tradeDecision2.marketRegime);
+            console.log('EITE Prediction:', tradeDecision3.predictedDigit, '(Alt:', tradeDecision3.alternativeCandidates.join(','), ') | Confidence:', tradeDecision3.confidence, '| Risk:', tradeDecision3.riskAssessment, '| Market Regime:', tradeDecision3.marketRegime);
+            console.log('PRNN Prediction:', tradeDecision4.predictedDigit, '(Alt:', tradeDecision4.alternativeCandidates.join(','), ') | Confidence:', tradeDecision4.confidence, '| Risk:', tradeDecision4.riskAssessment, '| Market Regime:', tradeDecision4.marketRegime);
+            console.log('BPE Prediction:', tradeDecision5.predictedDigit, '(Alt:', tradeDecision5.alternativeCandidates.join(','), ') | Confidence:', tradeDecision5.confidence, '| Risk:', tradeDecision5.riskAssessment, '| Market Regime:', tradeDecision5.marketRegime);
+            console.log('GAMR Prediction:', tradeDecision6.predictedDigit, '(Alt:', tradeDecision6.alternativeCandidates.join(','), ') | Confidence:', tradeDecision6.confidence, '| Risk:', tradeDecision6.riskAssessment, '| Market Regime:', tradeDecision6.marketRegime);
+            console.log('MTD Prediction:', tradeDecision7.predictedDigit, '(Alt:', tradeDecision7.alternativeCandidates.join(','), ') | Confidence:', tradeDecision7.confidence, '| Risk:', tradeDecision7.riskAssessment, '| Market Regime:', tradeDecision7.marketRegime);
+            console.log('CTAF Prediction:', tradeDecision8.predictedDigit, '(Alt:', tradeDecision8.alternativeCandidates.join(','), ') | Confidence:', tradeDecision8.confidence, '| Risk:', tradeDecision8.riskAssessment, '| Market Regime:', tradeDecision8.marketRegime);
+            console.log('MCS Prediction:', tradeDecision9.predictedDigit, '(Alt:', tradeDecision9.alternativeCandidates.join(','), ') | Confidence:', tradeDecision9.confidence, '| Risk:', tradeDecision9.riskAssessment, '| Market Regime:', tradeDecision9.marketRegime);
+
+            if (tradeDecision.confidence >= 95 && tradeDecision.riskAssessment === 'low' && tradeDecision.marketRegime === 'patterned') {
+                this.placeTrade(tradeDecision.predictedDigit, tradeDecision.confidence);
+            } else if (tradeDecision2.confidence >= 100 && tradeDecision2.riskAssessment === 'low' && tradeDecision2.marketRegime === 'structured') {
+                this.placeTrade(tradeDecision2.predictedDigit, tradeDecision2.confidence);
+            } else if (tradeDecision3.confidence >= 100 && tradeDecision3.riskAssessment === 'low' && tradeDecision3.marketRegime === 'patterned') {
+                this.placeTrade(tradeDecision3.predictedDigit, tradeDecision3.confidence);
+            } else if (tradeDecision4.confidence >= 100 && tradeDecision4.riskAssessment === 'low' && tradeDecision4.marketRegime === 'patterned') {
+                this.placeTrade(tradeDecision4.predictedDigit, tradeDecision4.confidence);
+            } else if (tradeDecision5.confidence >= 100 && tradeDecision5.riskAssessment === 'low' && tradeDecision5.marketRegime === 'stable') {
+                this.placeTrade(tradeDecision5.predictedDigit, tradeDecision5.confidence);
+            } else if (tradeDecision6.confidence >= 100 && tradeDecision6.riskAssessment === 'low' && tradeDecision6.marketRegime === 'stable') {
+                this.placeTrade(tradeDecision6.predictedDigit, tradeDecision6.confidence);
+            } else if (tradeDecision7.confidence >= 100 && tradeDecision7.riskAssessment === 'low' && tradeDecision7.marketRegime === 'stable') {
+                this.placeTrade(tradeDecision7.predictedDigit, tradeDecision7.confidence);
+            } else if (tradeDecision8.confidence >= 100 && tradeDecision8.riskAssessment === 'low' && tradeDecision8.marketRegime === 'ordered') {
+                this.placeTrade(tradeDecision8.predictedDigit, tradeDecision8.confidence);
+            } else if (tradeDecision9.confidence >= 100 && tradeDecision9.riskAssessment === 'low' && tradeDecision9.marketRegime === 'stable') {
+                this.placeTrade(tradeDecision9.predictedDigit, tradeDecision9.confidence);
+            } else {
+                console.log(`⏭️ Skipping trade: ${tradeDecision.reason}`);
                 this.predictionInProgress = false;
+                // this.scheduleNextTrade();
             }
 
         } catch (error) {
@@ -2746,10 +2848,10 @@ class AILogicDigitDifferBot {
         const agreement = parseInt(agreementParts[0]);
         const total = parseInt(agreementParts[1]);
 
-        if (agreement < this.config.minEnginesAgreement && total >= this.config.minEnginesAgreement) {
-            execute = false;
-            reasons.push(`Low agreement: ${agreement}/${total}`);
-        }
+        // if (agreement < this.config.minEnginesAgreement && total >= this.config.minEnginesAgreement) {
+        //     execute = false;
+        //     reasons.push(`Low agreement: ${agreement}/${total}`);
+        // }
 
         if (['volatile', 'chaotic', 'random'].includes(ensemble.marketRegime) && ensemble.confidence < 80) {
             execute = false;
@@ -3197,9 +3299,8 @@ const bot = new AILogicDigitDifferBot({
     dailyProfitTarget: 1,
     maxConsecutiveLosses: 3,//6
 
-    minConfidence: 85,
-    minEnginesAgreement: 5,
-    minEnginesAgreement: 5,
+    minConfidence: 95,
+    minEnginesAgreement: 1,
     requiredHistoryLength: 1000,
     minWaitTime: 1000,
     maxWaitTime: 1000,
