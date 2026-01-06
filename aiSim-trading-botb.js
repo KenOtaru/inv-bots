@@ -43,98 +43,140 @@ class FrequencyDeviationAnalyzer {
     }
 
     analyze(tickHistory) {
-        if (tickHistory.length < 100) {
+        if (tickHistory.length < 150) {
             return { error: 'Insufficient data' };
         }
 
-        const sample = tickHistory.slice(-100);
-        const counts = Array(10).fill(0);
-        sample.forEach(d => counts[d]++);
+        const lastDigit = tickHistory[tickHistory.length - 1];
 
-        const total = sample.length;
-        const expected = total / 10;
+        const longWindow = Math.min(1000, tickHistory.length);
+        const longSample = tickHistory.slice(-longWindow);
+        const shortWindow = Math.min(60, tickHistory.length);
+        const shortSample = tickHistory.slice(-shortWindow);
 
-        // Calculate deviations and z-scores
-        const analysis = counts.map((count, digit) => {
-            const deviation = (count - expected) / expected * 100;
-            const variance = expected * (1 - 1 / 10);
-            const zScore = (count - expected) / Math.sqrt(variance);
-            const pValue = this.calculatePValue(Math.abs(zScore));
+        const longCounts = Array(10).fill(0);
+        const shortCounts = Array(10).fill(0);
+        longSample.forEach(d => longCounts[d]++);
+        shortSample.forEach(d => shortCounts[d]++);
 
-            return {
-                digit,
-                count,
-                frequency: count / total,
-                deviation,
+        const longTotal = longSample.length;
+        const shortTotal = shortSample.length;
+        const expectedLong = longTotal / 10;
+        const expectedShort = shortTotal / 10;
+
+        const baseline = 0.1;
+        const clamp01 = (x) => Math.max(0, Math.min(1, x));
+
+        // Compute deviation and significance for each digit
+        const analysis = [];
+        for (let d = 0; d < 10; d++) {
+            const longFreq = longCounts[d] / longTotal;
+            const shortFreq = shortCounts[d] / shortTotal;
+            const longDeviation = (longFreq - baseline) / baseline;
+            const shortDeviation = (shortFreq - baseline) / baseline;
+
+            // Chi-square component for this digit
+            const chiContribution = Math.pow(longCounts[d] - expectedLong, 2) / expectedLong;
+
+            // Z-score approximation for binomial
+            const varLong = baseline * (1 - baseline) / longTotal;
+            const zScore = varLong > 0 ? (longFreq - baseline) / Math.sqrt(varLong) : 0;
+
+            // For DIGITDIFF: we want digits that are OVERREPRESENTED (likely to appear)
+            // So we can bet that they will NOT appear next
+            const overrepStrength = clamp01((longFreq - baseline) / baseline);
+            const recentOverrepStrength = clamp01((shortFreq - baseline) / baseline);
+            const combinedOverrep = 0.7 * overrepStrength + 0.3 * recentOverrepStrength;
+
+            // Penalize if digit just appeared (gap = 0)
+            const gap = this.calculateGap(tickHistory, d);
+            const gapPenalty = gap === 0 ? 1 : 0;
+
+            // Score: higher = more overrepresented = better for DIGITDIFF (bet against)
+            const score =
+                (1.2 * combinedOverrep) +
+                (0.4 * clamp01(Math.abs(zScore) / 2)) +
+                (0.3 * clamp01(chiContribution / 2)) -
+                (0.9 * gapPenalty);
+
+            analysis.push({
+                digit: d,
+                longFreq,
+                shortFreq,
+                longDeviation,
+                shortDeviation,
                 zScore,
-                pValue,
-                isSignificant: Math.abs(zScore) > 1.96 // 95% confidence
-            };
-        });
-
-        // Chi-square test for uniformity
-        let chiSquare = 0;
-        for (const count of counts) {
-            chiSquare += Math.pow(count - expected, 2) / expected;
+                chiContribution,
+                overrepStrength,
+                recentOverrepStrength,
+                combinedOverrep,
+                gap,
+                score
+            });
         }
+
+        // Overall chi-square for uniformity
+        const chiSquare = analysis.reduce((sum, a) => sum + a.chiContribution, 0);
         const isUniform = chiSquare < 16.919; // df=9, p=0.05
 
-        // Find digits with highest positive deviation (appear too often)
-        // These are good candidates for "will NOT appear"
-        const sortedByDeviation = [...analysis].sort((a, b) => b.deviation - a.deviation);
+        const sorted = analysis.sort((a, b) => b.score - a.score);
+        const predicted = sorted.find(s => s.digit !== lastDigit) || sorted[0];
 
-        // Primary candidate: digit appearing most frequently
-        const primaryCandidate = sortedByDeviation[0];
+        // Confidence (can reach 100% with strong evidence)
+        const evidenceStrength = clamp01((1 - Math.exp(-longTotal / 300)) * (1 - Math.exp(-Math.abs(predicted.zScore) / 2)));
+        const runnerUp = sorted.find(s => s.digit !== predicted.digit && s.digit !== lastDigit) || sorted[1] || sorted[0];
+        const separation = predicted.score - runnerUp.score;
+        const separationStrength = clamp01(separation / 0.8);
 
-        // Secondary: check recent window for confirmation
-        const last50 = tickHistory.slice(-50);
-        const recentCounts = Array(10).fill(0);
-        last50.forEach(d => recentCounts[d]++);
+        const composite =
+            (0.45 * predicted.combinedOverrep) +
+            (0.25 * separationStrength) +
+            (0.15 * clamp01(Math.abs(predicted.zScore) / 2)) +
+            (0.15 * clamp01(predicted.chiContribution / 2));
 
-        // Combine long-term and short-term analysis
-        const combinedScores = analysis.map(a => {
-            const recentFreq = recentCounts[a.digit] / 50;
-            const longTermFreq = a.frequency;
+        let confidence = 40 + 60 * (composite * (0.4 + 0.6 * evidenceStrength));
 
-            // Higher score = more likely to NOT appear
-            let score = a.deviation * 0.4; // Long-term overrepresentation
-            score += (recentFreq - 0.1) * 100 * 0.3; // Recent overrepresentation
+        // Strong overrepresentation bonus
+        const strongOverrepBonus =
+            20 * predicted.combinedOverrep * clamp01(separation / 0.6) * clamp01(evidenceStrength);
+        confidence = Math.min(100, confidence + strongOverrepBonus);
+        confidence = Math.max(0, confidence);
 
-            // Penalize if digit just appeared
-            const lastDigit = tickHistory[tickHistory.length - 1];
-            if (a.digit === lastDigit) score -= 20;
-
-            // Bonus for statistically significant deviation
-            if (a.isSignificant && a.deviation > 0) score += 15;
-
-            return { digit: a.digit, score, ...a };
-        });
-
-        const sorted = combinedScores.sort((a, b) => b.score - a.score);
-        const predicted = sorted[0];
-
-        // Calculate confidence based on statistical significance
-        let confidence = 50;
-        if (predicted.isSignificant) confidence += 20;
-        if (Math.abs(predicted.zScore) > 2.5) confidence += 10;
-        if (!isUniform) confidence += 10;
-        confidence = Math.min(95, Math.max(50, confidence + predicted.score * 0.5));
+        this.lastPrediction = predicted.digit;
 
         return {
             predictedDigit: predicted.digit,
             confidence: Math.round(confidence),
             primaryStrategy: 'Frequency Deviation Analysis',
-            riskAssessment: confidence >= 85 ? 'low' : confidence >= 70 ? 'medium' : 'high',
+            riskAssessment: (predicted.combinedOverrep < 0.08 || evidenceStrength < 0.3) ? 'high' : (predicted.combinedOverrep < 0.12 || evidenceStrength < 0.5) ? 'medium' : 'low',
             marketRegime: isUniform ? 'random' : 'patterned',
             statisticalEvidence: {
+                lastState: lastDigit,
                 chiSquare: chiSquare.toFixed(2),
                 isUniform,
-                topDeviation: predicted.deviation.toFixed(2),
+                longDeviation: predicted.longDeviation.toFixed(3),
+                shortDeviation: predicted.shortDeviation.toFixed(3),
                 zScore: predicted.zScore.toFixed(3),
-                pValue: predicted.pValue.toFixed(4)
+                overrepStrength: predicted.overrepStrength.toFixed(3),
+                recentOverrepStrength: predicted.recentOverrepStrength.toFixed(3),
+                combinedOverrep: predicted.combinedOverrep.toFixed(3),
+                gap: predicted.gap,
+                evidenceStrength: evidenceStrength.toFixed(3)
             },
-            alternativeCandidates: [sorted[1].digit, sorted[2].digit]
+            alternativeCandidates: sorted
+                .filter(s => s.digit !== predicted.digit && s.digit !== lastDigit)
+                .slice(0, 2)
+                .map(s => s.digit)
         };
+    }
+
+    calculateGap(tickHistory, digit) {
+        for (let i = tickHistory.length - 1; i >= 0; i--) {
+            if (tickHistory[i] === digit) {
+                return tickHistory.length - 1 - i;
+            }
+        }
+        return tickHistory.length;
     }
 
     calculatePValue(zScore) {
@@ -2245,13 +2287,13 @@ class AILogicDigitDifferBot {
         this.currentEngineSetup = null;
         this.tradesInCurrentCycle = 0;
         this.engineSetups = [
-            // { name: 'FDA_GAMR', check: (p) => p.find(e => e.name === 'FDA' && e.confidence >= 95) },
+            { name: 'FDA', check: (p) => p.find(e => e.name === 'FDA' && e.confidence >= 70) },
             // { name: 'MCP', check: (p) => p.find(e => e.name === 'MCP' && e.confidence >= 63) },// Good
             // { name: 'EITE', check: (p) => p.find(e => e.name === 'EITE' && e.confidence >= 100) },//Good
             // { name: 'PRNN', check: (p) => p.find(e => e.name === 'PRNN' && e.confidence >= 85) }, //Good
             // { name: 'BPE', check: (p) => p.find(e => e.name === 'BPE' && e.confidence >= 100) }, //Good
             // { name: 'GAMR', check: (p) => p.find(e => e.name === 'GAMR' && e.confidence >= 70) },
-            { name: 'MTD', check: (p) => p.find(e => e.name === 'MTD' && e.confidence >= 87) }, //Good
+            // { name: 'MTD', check: (p) => p.find(e => e.name === 'MTD' && e.confidence >= 87) }, //Good
             // { name: 'CTAF', check: (p) => p.find(e => e.name === 'CTAF' && e.confidence >= 90) }, //Good
             // { name: 'MCS', check: (p) => p.find(e => e.name === 'MCS' && e.confidence >= 90) } //Good
         ];
@@ -2672,7 +2714,7 @@ class AILogicDigitDifferBot {
 
             console.log(`\n🎲 Current Engine Setup: ${this.currentEngineSetup.name} (${this.tradesInCurrentCycle}/10 trades)`);
 
-            const FDA_Engine = predictions.find(p => p.name === 'FDA' && p.confidence >= 95);
+            const FDA_Engine = predictions.find(p => p.name === 'FDA' && p.confidence >= 70 && p.riskAssessment === 'low' && p.marketRegime === 'random');
             const MCP_Engine = predictions.find(p => p.name === 'MCP' && p.confidence >= 63);
             const EITE_Engine = predictions.find(p => p.name === 'EITE' && p.confidence >= 100 && p.riskAssessment === 'low');
             const PRNN_Engine = predictions.find(p => p.name === 'PRNN' && p.confidence >= 85);
@@ -2685,9 +2727,9 @@ class AILogicDigitDifferBot {
             let tradeExecuted = false;
 
             switch (this.currentEngineSetup.name) {
-                case 'FDA_GAMR':
-                    if (FDA_Engine && GAMR_Engine) {
-                        console.log(`🎯 Using FDA && GAMR: FDA (${FDA_Engine.confidence}%) && GAMR (${GAMR_Engine.confidence}%)`);
+                case 'FDA':
+                    if (FDA_Engine) {
+                        console.log(`🎯 Using FDA: FDA (${FDA_Engine.confidence}%)`);
                         this.lastPrediction = FDA_Engine.predictedDigit;
                         this.lastConfidence = FDA_Engine.confidence;
                         this.placeTrade(FDA_Engine.predictedDigit, FDA_Engine.confidence, kellyResult.stake);
@@ -2727,6 +2769,15 @@ class AILogicDigitDifferBot {
                         this.lastPrediction = BPE_Engine.predictedDigit;
                         this.lastConfidence = BPE_Engine.confidence;
                         this.placeTrade(BPE_Engine.predictedDigit, BPE_Engine.confidence, kellyResult.stake);
+                        tradeExecuted = true;
+                    }
+                    break;
+                case 'GAMR':
+                    if (GAMR_Engine) {
+                        console.log(`🎯 Using GAMR: ${GAMR_Engine.confidence}% confidence`);
+                        this.lastPrediction = GAMR_Engine.predictedDigit;
+                        this.lastConfidence = GAMR_Engine.confidence;
+                        this.placeTrade(GAMR_Engine.predictedDigit, GAMR_Engine.confidence, kellyResult.stake);
                         tradeExecuted = true;
                     }
                     break;
