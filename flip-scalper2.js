@@ -33,7 +33,7 @@ const CONFIG = {
     // Investment Management
     INVESTMENT_CAPITAL: 500,
     RISK_PERCENT: 1, // 1% risk per trade (Stop Loss)
-    RR_RATIO: 3,     // 1:3 Risk-Reward (Take Profit)
+    RR_RATIO: 1.5,     // 1:3 Risk-Reward (Take Profit)
 };
 // =================================================
 
@@ -44,7 +44,7 @@ class QuickFlipBot {
         this.dailyATR = {}; // ATR values per symbol
 
         // Telegram Configuration
-        this.telegramToken = process.env.TELEGRAM_BOT_TOKEN4;
+        this.telegramToken = process.env.TELEGRAM_BOT_TOKEN5;
         this.telegramChatId = process.env.TELEGRAM_CHAT_ID;
         this.telegramEnabled = !!(this.telegramToken && this.telegramChatId);
 
@@ -578,23 +578,19 @@ ${assetBreakdown ? `\n<b>Asset Breakdown:</b>${assetBreakdown}` : ''}`;
         const lowerWick = Math.min(candle.open, candle.close) - candle.low;
 
         // Long (Hammer) below box
-        if (asset.box.direction === 'DOWN' && candle.close < asset.box.low) {
-            if (lowerWick >= (2 * body) && upperWick < body && body > 0) {
-                this.log('🔥 HAMMER DETECTED!', 'SUCCESS', symbol);
-                this.sendTelegramMessage(`🔥 <b>Hammer Pattern</b> [${symbol}]\nExecuting LONG.`);
-                asset.entryCandle = candle;
-                this.executeTrade(symbol, 'MULTUP');
-            }
+        // if (asset.box.direction === 'DOWN' && candle.close < asset.box.low) {
+        if (asset.box.direction === 'DOWN') {
+            this.sendTelegramMessage(`🔥 <b>Buy Pattern</b> [${symbol}]\nExecuting LONG.`);
+            asset.entryCandle = candle;
+            this.executeTrade(symbol, 'MULTUP');
         }
 
         // Short (Shooting Star) above box
-        if (asset.box.direction === 'UP' && candle.close > asset.box.high) {
-            if (upperWick >= (2 * body) && lowerWick < body && body > 0) {
-                this.log('🔥 SHOOTING STAR DETECTED!', 'SUCCESS', symbol);
-                this.sendTelegramMessage(`🔥 <b>Shooting Star</b> [${symbol}]\nExecuting SHORT.`);
-                asset.entryCandle = candle;
-                this.executeTrade(symbol, 'MULTDOWN');
-            }
+        // if (asset.box.direction === 'UP' && candle.close > asset.box.high) {
+        if (asset.box.direction === 'UP') {
+            this.sendTelegramMessage(`🔥 <b>Sell Pattern</b> [${symbol}]\nExecuting SHORT.`);
+            asset.entryCandle = candle;
+            this.executeTrade(symbol, 'MULTDOWN');
         }
     }
 
