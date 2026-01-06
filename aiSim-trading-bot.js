@@ -2793,7 +2793,7 @@ class AILogicDigitDifferBot {
             
             console.log('FDA Prediction:', tradeDecision.predictedDigit, '(Alt:', tradeDecision.alternativeCandidates.join(','), ') | Confidence:', tradeDecision.confidence, '| Risk:', tradeDecision.riskAssessment, '| Market Regime:', tradeDecision.marketRegime);
             console.log('MCP Prediction:', tradeDecision2.predictedDigit, '(Alt:', tradeDecision2.alternativeCandidates.join(','), ') | Confidence:', tradeDecision2.confidence, '| Risk:', tradeDecision2.riskAssessment, '| Market Regime:', tradeDecision2.marketRegime);
-            console.log('EITE Prediction:', tradeDecision3.predictedDigit, '(Alt:', tradeDecision3.alternativeCandidates.join(','), ') | Confidence:', tradeDecision3.confidence, '| Risk:', tradeDecision3.riskAssessment, '| Market Regime:', tradeDecision3.marketRegime);
+            console.log('EITE Prediction:', tradeDecision3.predictedDigit, '(Alt:', tradeDecision3.alternativeCandidates.join(','), ') | Confidence:', tradeDecision3.confidence, '| Risk:', tradeDecision3.riskAssessment, '| Market Regime:', tradeDecision3.marketRegime, ' | Entropy: (', tradeDecision3.statisticalEvidence.conditionalEntropy,'|',tradeDecision3.statisticalEvidence.conditionalProbability, '|', tradeDecision3.statisticalEvidence.entropy, '|', tradeDecision3.statisticalEvidence.marginalProbability, '|', tradeDecision3.statisticalEvidence.mutualInformation, '|', tradeDecision3.statisticalEvidence.surpriseValue, ')');
             console.log('PRNN Prediction:', tradeDecision4.predictedDigit, '(Alt:', tradeDecision4.alternativeCandidates.join(',') || 'N/A', ') | Confidence:', tradeDecision4.confidence, '| Risk:', tradeDecision4.riskAssessment, '| Market Regime:', tradeDecision4.marketRegime);
             console.log('BPE Prediction:', tradeDecision5.predictedDigit, '(Alt:', tradeDecision5.alternativeCandidates.join(','), ') | Confidence:', tradeDecision5.confidence, '| Risk:', tradeDecision5.riskAssessment, '| Market Regime:', tradeDecision5.marketRegime, ' | Entropy:', tradeDecision5.statisticalEvidence.entropyLevel);
             console.log('GAMR Prediction:', tradeDecision6.predictedDigit, '(Alt:', tradeDecision6.alternativeCandidates.join(','), ') | Confidence:', tradeDecision6.confidence, '| Risk:', tradeDecision6.riskAssessment, '| Market Regime:', tradeDecision6.marketRegime);
@@ -2803,15 +2803,16 @@ class AILogicDigitDifferBot {
 
             // if (tradeDecision.confidence >= 95 && tradeDecision.riskAssessment === 'low' && tradeDecision.marketRegime === 'patterned') {
             //     this.placeTrade(tradeDecision.predictedDigit, tradeDecision.confidence);
-            // } else if (tradeDecision2.confidence >= 100 && tradeDecision2.riskAssessment === 'low' && tradeDecision2.marketRegime === 'structured') {
-            //     this.placeTrade(tradeDecision2.predictedDigit, tradeDecision2.confidence);
+            // } else 
+                if (tradeDecision2.confidence >= 100 && tradeDecision2.riskAssessment === 'low' && tradeDecision2.marketRegime === 'structured') {
+                this.placeTrade(tradeDecision2.predictedDigit, tradeDecision2.confidence);
             // } else if (tradeDecision3.confidence >= 100 && tradeDecision3.riskAssessment === 'low' && tradeDecision3.marketRegime === 'patterned') {
             //     this.placeTrade(tradeDecision3.predictedDigit, tradeDecision3.confidence);
             // } else if (tradeDecision4.confidence >= 100 && tradeDecision4.riskAssessment === 'low' && tradeDecision4.marketRegime === 'patterned') {
             //     this.placeTrade(tradeDecision4.predictedDigit, tradeDecision4.confidence);
             // } else 
-                if (tradeDecision5.confidence >= 100 && tradeDecision5.riskAssessment === 'low' && tradeDecision5.marketRegime === 'stable') {
-                this.placeTrade(tradeDecision5.predictedDigit, tradeDecision5.confidence);
+                // if (tradeDecision5.confidence >= 100 && tradeDecision5.riskAssessment === 'low' && tradeDecision5.marketRegime === 'stable') {
+                // this.placeTrade(tradeDecision5.predictedDigit, tradeDecision5.confidence);
             // } 
             // else if (tradeDecision6.confidence >= 100 && tradeDecision6.riskAssessment === 'low' && tradeDecision6.marketRegime === 'stable') {
             //     this.placeTrade(tradeDecision6.predictedDigit, tradeDecision6.confidence);
