@@ -777,6 +777,7 @@ class PatternRecognitionEngine {
             type: 'cluster-exhaustion'
         };
     }
+    
 }
 
 // ============================================================
@@ -789,6 +790,7 @@ class BayesianProbabilityEstimator {
         this.name = 'BPE';
         this.fullName = 'Bayesian Probability Estimator';
         this.weight = 1.15;
+
         this.wins = 0;
         this.losses = 0;
         this.lastPrediction = null;
@@ -799,29 +801,30 @@ class BayesianProbabilityEstimator {
     }
 
     analyze(tickHistory) {
-        if (tickHistory.length < 50) {
+        if (tickHistory.length < 100) {
             return { error: 'Insufficient data' };
         }
 
-        const recentTicks = tickHistory.slice(-100)
+        const window = tickHistory.slice(-1000);
+        const lastDigit = window[window.length - 1];
+        const baseline = 0.1;
 
-        // Count observations
-        const counts = Array(10).fill(0);
-        recentTicks.forEach(d => counts[d]++);
+        // Build conditional transition counts: count(lastDigit -> nextDigit)
+        const transitionCounts = Array(10).fill(null).map(() => Array(10).fill(0));
+        const stateCounts = Array(10).fill(0);
+        for (let i = 0; i < window.length - 1; i++) {
+            const a = window[i];
+            const b = window[i + 1];
+            transitionCounts[a][b]++;
+            stateCounts[a]++;
+        }
 
-        // Posterior parameters (Dirichlet-Multinomial conjugate)
-        const posteriorAlpha = this.priorAlpha.map((a, i) => a + counts[i]);
+        const n = stateCounts[lastDigit];
+        const posteriorAlpha = this.priorAlpha.map((a, j) => a + transitionCounts[lastDigit][j]);
         const totalAlpha = posteriorAlpha.reduce((a, b) => a + b, 0);
-
-        // Posterior mean probabilities
         const posteriorMean = posteriorAlpha.map(a => a / totalAlpha);
+        const posteriorVariance = posteriorAlpha.map(a => (a * (totalAlpha - a)) / (totalAlpha * totalAlpha * (totalAlpha + 1)));
 
-        // Posterior variance (for confidence estimation)
-        const posteriorVariance = posteriorAlpha.map(a => {
-            return (a * (totalAlpha - a)) / (totalAlpha * totalAlpha * (totalAlpha + 1));
-        });
-
-        // Calculate 95% credible intervals
         const credibleIntervals = posteriorMean.map((mean, i) => {
             const std = Math.sqrt(posteriorVariance[i]);
             return {
@@ -830,65 +833,69 @@ class BayesianProbabilityEstimator {
             };
         });
 
-        // Bayesian surprise: How unexpected was recent data?
-        const recent = tickHistory.slice(-20);
-        let bayesianSurprise = 0;
-        for (const d of recent) {
-            bayesianSurprise -= Math.log(posteriorMean[d] + 0.001);
-        }
-        bayesianSurprise /= recent.length;
-
-        // For DIFFER: predict digit with highest posterior (most likely to appear = won't differ)
-        // Actually, we want highest posterior because it's overrepresented
+        // For DIGITDIFF: choose the digit least likely to appear next
         const predictions = posteriorMean.map((prob, digit) => ({
             digit,
             posteriorProb: prob,
             variance: posteriorVariance[digit],
             credibleInterval: credibleIntervals[digit],
-            // Score: how much above expected (0.1) is the posterior?
-            excessProbability: prob - 0.1
+            // Higher is better for DIFFER when prob < 0.1
+            differScore: (baseline - prob) / baseline
         }));
 
-        // Sort by excess probability (highest = appeared too much = good for DIFFER)
-        const sorted = predictions.sort((a, b) => b.excessProbability - a.excessProbability);
-
+        const sorted = predictions.sort((a, b) => b.differScore - a.differScore);
         let predicted = sorted[0];
-
-        // Don't predict last digit
-        if (predicted.digit === tickHistory[tickHistory.length - 1]) {
+        if (predicted.digit === lastDigit && sorted.length > 1) {
             predicted = sorted[1];
         }
 
-        // Calculate confidence using Bayesian criteria
+        // Confidence: rarity + separation + evidence strength + credible interval below baseline
+        const p = predicted.posteriorProb;
+        const p2 = sorted.find(s => s.digit !== predicted.digit)?.posteriorProb ?? baseline;
+        const separation = Math.max(0, p2 - p);
+
+        const rarityScore = Math.max(0, baseline - p) / baseline;
+        const separationScore = Math.min(1, separation / baseline);
+        const evidenceScore = Math.min(1, n / 25);
+
         let confidence = 50;
+        confidence += rarityScore * 40;
+        confidence += separationScore * 25;
+        confidence += evidenceScore * 15;
+        if (predicted.credibleInterval.upper < baseline) confidence += 10;
+        if (p < 0.05) confidence += 5;
+        if (p < 0.02) confidence += 5;
+        confidence = Math.min(100, Math.max(50, confidence));
 
-        // Higher excess probability = more confident
-        if (predicted.excessProbability > 0.02) confidence += 15;
-        if (predicted.excessProbability > 0.04) confidence += 10;
+        // Entropy of the conditional distribution
+        let entropy = 0;
+        for (const prob of posteriorMean) {
+            if (prob > 0) entropy -= prob * Math.log2(prob);
+        }
+        const normalizedEntropy = entropy / Math.log2(10);
 
-        // Lower variance = more confident
-        if (predicted.variance < 0.001) confidence += 10;
+        this.lastPrediction = predicted.digit;
 
-        // More data = more confident
-        if (recentTicks.length > 300) confidence += 10;
-        if (recentTicks.length > 500) confidence += 5;
-
-        confidence = Math.min(95, Math.max(50, confidence));
+        const alternativeCandidates = sorted
+            .filter(s => s.digit !== predicted.digit)
+            .slice(0, 2)
+            .map(s => s.digit);
 
         return {
             predictedDigit: predicted.digit,
             confidence: Math.round(confidence),
-            primaryStrategy: 'Bayesian Probability Estimation',
-            riskAssessment: predicted.variance > 0.002 ? 'high' : predicted.variance > 0.001 ? 'medium' : 'low',
-            marketRegime: bayesianSurprise > 2.5 ? 'volatile' : bayesianSurprise > 2.3 ? 'normal' : 'stable',
+            primaryStrategy: 'Bayesian Conditional Transition Estimation',
+            riskAssessment: normalizedEntropy > 0.99 ? 'low' : normalizedEntropy > 0.98 ? 'medium' : 'high',
+            marketRegime: normalizedEntropy > 0.99 ? 'stable' : 'volatile',
             statisticalEvidence: {
+                lastState: lastDigit,
+                transitionCount: n,
                 posteriorProbability: predicted.posteriorProb.toFixed(4),
-                excessProbability: predicted.excessProbability.toFixed(4),
                 variance: predicted.variance.toFixed(6),
-                bayesianSurprise: bayesianSurprise.toFixed(3),
-                credibleInterval: `[${predicted.credibleInterval.lower.toFixed(3)}, ${predicted.credibleInterval.upper.toFixed(3)}]`
+                credibleInterval: `[${predicted.credibleInterval.lower.toFixed(3)}, ${predicted.credibleInterval.upper.toFixed(3)}]`,
+                entropyLevel: normalizedEntropy.toFixed(4)
             },
-            alternativeCandidates: [sorted[1].digit, sorted[2].digit]
+            alternativeCandidates: alternativeCandidates
         };
     }
 }
@@ -2787,31 +2794,33 @@ class AILogicDigitDifferBot {
             console.log('FDA Prediction:', tradeDecision.predictedDigit, '(Alt:', tradeDecision.alternativeCandidates.join(','), ') | Confidence:', tradeDecision.confidence, '| Risk:', tradeDecision.riskAssessment, '| Market Regime:', tradeDecision.marketRegime);
             console.log('MCP Prediction:', tradeDecision2.predictedDigit, '(Alt:', tradeDecision2.alternativeCandidates.join(','), ') | Confidence:', tradeDecision2.confidence, '| Risk:', tradeDecision2.riskAssessment, '| Market Regime:', tradeDecision2.marketRegime);
             console.log('EITE Prediction:', tradeDecision3.predictedDigit, '(Alt:', tradeDecision3.alternativeCandidates.join(','), ') | Confidence:', tradeDecision3.confidence, '| Risk:', tradeDecision3.riskAssessment, '| Market Regime:', tradeDecision3.marketRegime);
-            console.log('PRNN Prediction:', tradeDecision4.predictedDigit, '(Alt:', tradeDecision4.alternativeCandidates.join(','), ') | Confidence:', tradeDecision4.confidence, '| Risk:', tradeDecision4.riskAssessment, '| Market Regime:', tradeDecision4.marketRegime);
-            console.log('BPE Prediction:', tradeDecision5.predictedDigit, '(Alt:', tradeDecision5.alternativeCandidates.join(','), ') | Confidence:', tradeDecision5.confidence, '| Risk:', tradeDecision5.riskAssessment, '| Market Regime:', tradeDecision5.marketRegime);
+            console.log('PRNN Prediction:', tradeDecision4.predictedDigit, '(Alt:', tradeDecision4.alternativeCandidates.join(',') || 'N/A', ') | Confidence:', tradeDecision4.confidence, '| Risk:', tradeDecision4.riskAssessment, '| Market Regime:', tradeDecision4.marketRegime);
+            console.log('BPE Prediction:', tradeDecision5.predictedDigit, '(Alt:', tradeDecision5.alternativeCandidates.join(','), ') | Confidence:', tradeDecision5.confidence, '| Risk:', tradeDecision5.riskAssessment, '| Market Regime:', tradeDecision5.marketRegime, ' | Entropy:', tradeDecision5.statisticalEvidence.entropyLevel);
             console.log('GAMR Prediction:', tradeDecision6.predictedDigit, '(Alt:', tradeDecision6.alternativeCandidates.join(','), ') | Confidence:', tradeDecision6.confidence, '| Risk:', tradeDecision6.riskAssessment, '| Market Regime:', tradeDecision6.marketRegime);
             console.log('MTD Prediction:', tradeDecision7.predictedDigit, '(Alt:', tradeDecision7.alternativeCandidates.join(','), ') | Confidence:', tradeDecision7.confidence, '| Risk:', tradeDecision7.riskAssessment, '| Market Regime:', tradeDecision7.marketRegime);
             console.log('CTAF Prediction:', tradeDecision8.predictedDigit, '(Alt:', tradeDecision8.alternativeCandidates.join(','), ') | Confidence:', tradeDecision8.confidence, '| Risk:', tradeDecision8.riskAssessment, '| Market Regime:', tradeDecision8.marketRegime);
             console.log('MCS Prediction:', tradeDecision9.predictedDigit, '(Alt:', tradeDecision9.alternativeCandidates.join(','), ') | Confidence:', tradeDecision9.confidence, '| Risk:', tradeDecision9.riskAssessment, '| Market Regime:', tradeDecision9.marketRegime);
 
-            if (tradeDecision.confidence >= 95 && tradeDecision.riskAssessment === 'low' && tradeDecision.marketRegime === 'patterned') {
-                this.placeTrade(tradeDecision.predictedDigit, tradeDecision.confidence);
-            } else if (tradeDecision2.confidence >= 100 && tradeDecision2.riskAssessment === 'low' && tradeDecision2.marketRegime === 'structured') {
-                this.placeTrade(tradeDecision2.predictedDigit, tradeDecision2.confidence);
-            } else if (tradeDecision3.confidence >= 100 && tradeDecision3.riskAssessment === 'low' && tradeDecision3.marketRegime === 'patterned') {
-                this.placeTrade(tradeDecision3.predictedDigit, tradeDecision3.confidence);
-            } else if (tradeDecision4.confidence >= 100 && tradeDecision4.riskAssessment === 'low' && tradeDecision4.marketRegime === 'patterned') {
-                this.placeTrade(tradeDecision4.predictedDigit, tradeDecision4.confidence);
-            } else if (tradeDecision5.confidence >= 100 && tradeDecision5.riskAssessment === 'low' && tradeDecision5.marketRegime === 'stable') {
+            // if (tradeDecision.confidence >= 95 && tradeDecision.riskAssessment === 'low' && tradeDecision.marketRegime === 'patterned') {
+            //     this.placeTrade(tradeDecision.predictedDigit, tradeDecision.confidence);
+            // } else if (tradeDecision2.confidence >= 100 && tradeDecision2.riskAssessment === 'low' && tradeDecision2.marketRegime === 'structured') {
+            //     this.placeTrade(tradeDecision2.predictedDigit, tradeDecision2.confidence);
+            // } else if (tradeDecision3.confidence >= 100 && tradeDecision3.riskAssessment === 'low' && tradeDecision3.marketRegime === 'patterned') {
+            //     this.placeTrade(tradeDecision3.predictedDigit, tradeDecision3.confidence);
+            // } else if (tradeDecision4.confidence >= 100 && tradeDecision4.riskAssessment === 'low' && tradeDecision4.marketRegime === 'patterned') {
+            //     this.placeTrade(tradeDecision4.predictedDigit, tradeDecision4.confidence);
+            // } else 
+                if (tradeDecision5.confidence >= 100 && tradeDecision5.riskAssessment === 'low' && tradeDecision5.marketRegime === 'stable') {
                 this.placeTrade(tradeDecision5.predictedDigit, tradeDecision5.confidence);
-            } else if (tradeDecision6.confidence >= 100 && tradeDecision6.riskAssessment === 'low' && tradeDecision6.marketRegime === 'stable') {
-                this.placeTrade(tradeDecision6.predictedDigit, tradeDecision6.confidence);
-            } else if (tradeDecision7.confidence >= 100 && tradeDecision7.riskAssessment === 'low' && tradeDecision7.marketRegime === 'stable') {
-                this.placeTrade(tradeDecision7.predictedDigit, tradeDecision7.confidence);
-            } else if (tradeDecision8.confidence >= 100 && tradeDecision8.riskAssessment === 'low' && tradeDecision8.marketRegime === 'ordered') {
-                this.placeTrade(tradeDecision8.predictedDigit, tradeDecision8.confidence);
-            } else if (tradeDecision9.confidence >= 100 && tradeDecision9.riskAssessment === 'low' && tradeDecision9.marketRegime === 'stable') {
-                this.placeTrade(tradeDecision9.predictedDigit, tradeDecision9.confidence);
+            // } 
+            // else if (tradeDecision6.confidence >= 100 && tradeDecision6.riskAssessment === 'low' && tradeDecision6.marketRegime === 'stable') {
+            //     this.placeTrade(tradeDecision6.predictedDigit, tradeDecision6.confidence);
+            // } else if (tradeDecision7.confidence >= 100 && tradeDecision7.riskAssessment === 'low' && tradeDecision7.marketRegime === 'stable') {
+            //     this.placeTrade(tradeDecision7.predictedDigit, tradeDecision7.confidence);
+            // } else if (tradeDecision8.confidence >= 100 && tradeDecision8.riskAssessment === 'low' && tradeDecision8.marketRegime === 'ordered') {
+            //     this.placeTrade(tradeDecision8.predictedDigit, tradeDecision8.confidence);
+            // } else if (tradeDecision9.confidence >= 100 && tradeDecision9.riskAssessment === 'low' && tradeDecision9.marketRegime === 'stable') {
+            //     this.placeTrade(tradeDecision9.predictedDigit, tradeDecision9.confidence);
             } else {
                 console.log(`⏭️ Skipping trade: ${tradeDecision.reason}`);
                 this.predictionInProgress = false;

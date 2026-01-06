@@ -2140,14 +2140,14 @@ class AILogicDigitDifferBot {
         this.currentEngineSetup = null;
         this.tradesInCurrentCycle = 0;
         this.engineSetups = [
-            { name: 'FDA_GAMR', check: (p) => p.find(e => e.name === 'FDA' && e.confidence >= 95) && p.find(e => e.name === 'GAMR' && e.confidence >= 95) },
-            // { name: 'MCP', check: (p) => p.find(e => e.name === 'MCP' && e.confidence >= 63) },
-            // { name: 'EITE', check: (p) => p.find(e => e.name === 'EITE' && e.confidence <= 65) },
-            // { name: 'PRNN', check: (p) => p.find(e => e.name === 'PRNN' && e.confidence >= 85) },
-            // { name: 'BPE', check: (p) => p.find(e => e.name === 'BPE' && e.confidence <= 60) },
-            // { name: 'MTD', check: (p) => p.find(e => e.name === 'MTD' && e.confidence <= 50) },
-            // { name: 'CTAF', check: (p) => p.find(e => e.name === 'CTAF' && e.confidence >= 90) },
-            // { name: 'MCS', check: (p) => p.find(e => e.name === 'MCS' && e.confidence >= 90) }
+            // { name: 'FDA_GAMR', check: (p) => p.find(e => e.name === 'FDA' && e.confidence >= 95) && p.find(e => e.name === 'GAMR' && e.confidence >= 95) },
+            // { name: 'MCP', check: (p) => p.find(e => e.name === 'MCP' && e.confidence >= 63) },// Good
+            // { name: 'EITE', check: (p) => p.find(e => e.name === 'EITE' && e.confidence <= 65) },//Bad
+            // { name: 'PRNN', check: (p) => p.find(e => e.name === 'PRNN' && e.confidence >= 85) }, //Good
+            // { name: 'BPE', check: (p) => p.find(e => e.name === 'BPE' && e.confidence <= 60) }, //Bad
+            // { name: 'MTD', check: (p) => p.find(e => e.name === 'MTD' && e.confidence <= 50) }, //Good
+            // { name: 'CTAF', check: (p) => p.find(e => e.name === 'CTAF' && e.confidence >= 90) }, //Good
+            // { name: 'MCS', check: (p) => p.find(e => e.name === 'MCS' && e.confidence >= 90) } //Good
         ];
         this.selectRandomEngineSetup();
 
