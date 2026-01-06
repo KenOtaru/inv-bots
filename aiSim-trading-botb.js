@@ -288,6 +288,7 @@ class EntropyInformationEngine {
         this.name = 'EITE';
         this.fullName = 'Entropy Information Theory Engine';
         this.weight = 1.1;
+
         this.wins = 0;
         this.losses = 0;
         this.lastPrediction = null;
@@ -299,91 +300,125 @@ class EntropyInformationEngine {
             return { error: 'Insufficient data' };
         }
 
-        const recent = tickHistory.slice(-100)
+        const window200 = tickHistory.slice(-200);
+        const window100 = tickHistory.slice(-100);
+        const window50 = tickHistory.slice(-50);
 
         // Calculate entropy at different time scales
         const windows = [25, 50, 100, 200];
         const entropyByWindow = {};
-
         for (const w of windows) {
-            if (recent.length >= w) {
-                const sample = recent.slice(-w);
-                entropyByWindow[w] = this.calculateEntropy(sample);
+            const src = w === 25 ? tickHistory.slice(-25) : w === 50 ? window50 : w === 100 ? window100 : window200;
+            if (src.length >= Math.min(w, 100)) {
+                entropyByWindow[w] = this.calculateEntropy(src);
             }
         }
 
         // Calculate conditional entropy H(X|X-1)
-        const conditionalEntropy = this.calculateConditionalEntropy(recent.slice(-200));
+        const conditionalEntropy = this.calculateConditionalEntropy(window200);
 
         // Calculate mutual information
-        const mutualInfo = this.calculateMutualInformation(recent.slice(-200));
+        const mutualInfo = this.calculateMutualInformation(window200);
 
-        // Information gain analysis
-        const sample = recent.slice(-200);
-        const fullEntropy = this.calculateEntropy(sample);
+        const fullEntropy = this.calculateEntropy(window200);
 
-        // Calculate information gain for each digit
-        const infoGains = [];
-        for (let d = 0; d < 10; d++) {
-            // Entropy if we exclude this digit
-            const withoutD = sample.filter(x => x !== d);
-            const entropyWithout = withoutD.length > 10 ? this.calculateEntropy(withoutD) : fullEntropy;
-            const infoGain = fullEntropy - entropyWithout;
+        const counts200 = Array(10).fill(0);
+        for (const d of window200) counts200[d]++;
+        const probs200 = counts200.map(c => c / window200.length);
 
-            // Calculate surprise value (negative log probability)
-            const prob = sample.filter(x => x === d).length / sample.length;
-            const surprise = prob > 0 ? -Math.log2(prob) : 10;
-
-            infoGains.push({
-                digit: d,
-                infoGain,
-                surprise,
-                probability: prob,
-                score: (surprise - 3.32) * 10 + infoGain * 50 // 3.32 = log2(10) expected
-            });
+        const transitions = Array(10).fill(null).map(() => Array(10).fill(0));
+        const transCounts = Array(10).fill(0);
+        for (let i = 0; i < window200.length - 1; i++) {
+            const a = window200[i];
+            const b = window200[i + 1];
+            transitions[a][b]++;
+            transCounts[a]++;
         }
 
-        // For DIFFER: choose digit with lowest surprise (most common = won't appear)
-        // Actually, for Differ we want digit that appeared too often and is "due" not to appear
-        const sorted = infoGains.sort((a, b) => {
-            // High probability + low surprise = appeared too much = good for DIFFER
-            return (b.probability - 0.1) - (a.probability - 0.1);
+        const lastDigit = window200[window200.length - 1];
+        const baseline = 0.1;
+
+        const getCondProbs = (window) => {
+            if (window.length < 2) return null;
+            const t = Array(10).fill(null).map(() => Array(10).fill(0));
+            const c = Array(10).fill(0);
+            for (let i = 0; i < window.length - 1; i++) {
+                const a = window[i];
+                const b = window[i + 1];
+                t[a][b]++;
+                c[a]++;
+            }
+            if (c[lastDigit] <= 0) return null;
+            return t[lastDigit].map(v => v / c[lastDigit]);
+        };
+
+        const condProbs200 = transCounts[lastDigit] > 0
+            ? transitions[lastDigit].map(v => v / transCounts[lastDigit])
+            : probs200;
+
+        const condProbs100 = getCondProbs(window100);
+        const condProbs50 = getCondProbs(window50);
+
+        const candidates = condProbs200.map((p, digit) => {
+            const marginalP = probs200[digit];
+            const surprise = marginalP > 0 ? -Math.log2(marginalP) : 10;
+            const differScore = (baseline - p) / baseline;
+            return {
+                digit,
+                probability: p,
+                marginalProbability: marginalP,
+                surprise,
+                differScore
+            };
         });
 
-        const predicted = sorted[0];
+        const sorted = candidates.sort((a, b) => b.differScore - a.differScore);
 
-        // Don't predict the last digit
-        let finalPrediction = predicted;
-        if (predicted.digit === tickHistory[tickHistory.length - 1]) {
+        let finalPrediction = sorted[0];
+        if (finalPrediction.digit === lastDigit && sorted.length > 1) {
             finalPrediction = sorted[1];
         }
 
-        // Calculate confidence based on entropy characteristics
+        const predictedIndex = sorted.findIndex(s => s.digit === finalPrediction.digit);
+        const nextCandidate = predictedIndex >= 0 ? sorted[predictedIndex + 1] : null;
+
+        const p = finalPrediction.probability;
+        const rarityScore = Math.max(0, baseline - p) / baseline;
+        const separation = nextCandidate ? Math.max(0, nextCandidate.probability - p) : 0;
+        const separationScore = Math.min(1, separation / baseline);
+        const predictabilityScore = Math.min(1, Math.max(0, 1 - conditionalEntropy));
+        const mutualInfoScore = Math.min(1, Math.max(0, mutualInfo / 0.2));
+
+        const p100 = condProbs100 ? condProbs100[finalPrediction.digit] : null;
+        const p50 = condProbs50 ? condProbs50[finalPrediction.digit] : null;
+        const stability100 = p100 === null ? 0.5 : 1 - Math.min(1, Math.abs(p100 - p) / 0.05);
+        const stability50 = p50 === null ? 0.5 : 1 - Math.min(1, Math.abs(p50 - p) / 0.05);
+        const stabilityScore = Math.max(0, Math.min(1, (stability100 + stability50) / 2));
+
         let confidence = 50;
+        confidence += rarityScore * 35;
+        confidence += separationScore * 20;
+        confidence += predictabilityScore * 15;
+        confidence += stabilityScore * 10;
+        confidence += mutualInfoScore * 10;
+        if (p < 0.01) confidence += 5;
+        if (p < 0.005) confidence += 5;
+        confidence = Math.min(100, Math.max(50, confidence));
 
-        // Low entropy = more predictable = higher confidence
-        if (fullEntropy < 0.9) confidence += 20;
-        else if (fullEntropy < 0.95) confidence += 10;
-
-        // High mutual information = patterns exist
-        if (mutualInfo > 0.1) confidence += 15;
-
-        // Significant probability deviation
-        if (Math.abs(finalPrediction.probability - 0.1) > 0.03) confidence += 10;
-
-        confidence = Math.min(95, Math.max(50, confidence));
+        this.lastPrediction = finalPrediction.digit;
 
         return {
             predictedDigit: finalPrediction.digit,
             confidence: Math.round(confidence),
             primaryStrategy: 'Entropy Information Theory',
-            riskAssessment: fullEntropy > 0.97 ? 'high' : fullEntropy > 0.92 ? 'medium' : 'low',
-            marketRegime: fullEntropy > 0.97 ? 'random' : fullEntropy > 0.9 ? 'semi-random' : 'patterned',
+            riskAssessment: finalPrediction.marginalProbability.toFixed(4) >= 0.1000 ? 'high' : finalPrediction.marginalProbability.toFixed(4) > 0.0900 ? 'medium' : 'low',
+            marketRegime: finalPrediction.marginalProbability.toFixed(4) >= 0.1000 ? 'random' : finalPrediction.marginalProbability.toFixed(4) > 0.0900 ? 'semi-random' : 'patterned',
             statisticalEvidence: {
                 entropy: fullEntropy.toFixed(4),
                 conditionalEntropy: conditionalEntropy.toFixed(4),
                 mutualInformation: mutualInfo.toFixed(4),
-                surpriseValue: finalPrediction.surprise.toFixed(3)
+                surpriseValue: finalPrediction.surprise.toFixed(3),
+                marginalProbability: finalPrediction.marginalProbability.toFixed(4)
             },
             alternativeCandidates: [sorted[1].digit, sorted[2].digit]
         };
@@ -2148,9 +2183,9 @@ class AILogicDigitDifferBot {
         this.engineSetups = [
             // { name: 'FDA_GAMR', check: (p) => p.find(e => e.name === 'FDA' && e.confidence >= 95) && p.find(e => e.name === 'GAMR' && e.confidence >= 95) },
             // { name: 'MCP', check: (p) => p.find(e => e.name === 'MCP' && e.confidence >= 63) },// Good
-            // { name: 'EITE', check: (p) => p.find(e => e.name === 'EITE' && e.confidence <= 65) },//Bad
+            { name: 'EITE', check: (p) => p.find(e => e.name === 'EITE' && e.confidence >= 100) },//Good
             // { name: 'PRNN', check: (p) => p.find(e => e.name === 'PRNN' && e.confidence >= 85) }, //Good
-            { name: 'BPE', check: (p) => p.find(e => e.name === 'BPE' && e.confidence <= 60) }, //Bad
+            // { name: 'BPE', check: (p) => p.find(e => e.name === 'BPE' && e.confidence <= 60) }, //Good
             // { name: 'MTD', check: (p) => p.find(e => e.name === 'MTD' && e.confidence <= 50) }, //Good
             // { name: 'CTAF', check: (p) => p.find(e => e.name === 'CTAF' && e.confidence >= 90) }, //Good
             // { name: 'MCS', check: (p) => p.find(e => e.name === 'MCS' && e.confidence >= 90) } //Good
@@ -2574,7 +2609,7 @@ class AILogicDigitDifferBot {
 
             const FDA_Engine = predictions.find(p => p.name === 'FDA' && p.confidence >= 95);
             const MCP_Engine = predictions.find(p => p.name === 'MCP' && p.confidence >= 63);
-            const EITE_Engine = predictions.find(p => p.name === 'EITE' && p.confidence <= 65);
+            const EITE_Engine = predictions.find(p => p.name === 'EITE' && p.confidence >= 100 && p.riskAssessment === 'low');
             const PRNN_Engine = predictions.find(p => p.name === 'PRNN' && p.confidence >= 85);
             const BPE_Engine = predictions.find(p => p.name === 'BPE' && p.confidence >= 100 && p.riskAssessment === 'low');
             const GAMR_Engine = predictions.find(p => p.name === 'GAMR' && p.confidence >= 95);

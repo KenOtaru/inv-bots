@@ -441,14 +441,13 @@ class EntropyInformationEngine {
             predictedDigit: finalPrediction.digit,
             confidence: Math.round(confidence),
             primaryStrategy: 'Entropy Information Theory',
-            riskAssessment: fullEntropy > 0.97 ? 'high' : fullEntropy > 0.92 ? 'medium' : 'low',
-            marketRegime: fullEntropy > 0.97 ? 'random' : fullEntropy > 0.9 ? 'semi-random' : 'patterned',
+            riskAssessment: finalPrediction.marginalProbability.toFixed(4) >= 0.1000 ? 'high' : finalPrediction.marginalProbability.toFixed(4) > 0.0900 ? 'medium' : 'low',
+            marketRegime: finalPrediction.marginalProbability.toFixed(4) >= 0.1000 ? 'random' : finalPrediction.marginalProbability.toFixed(4) > 0.0900 ? 'semi-random' : 'patterned',
             statisticalEvidence: {
                 entropy: fullEntropy.toFixed(4),
                 conditionalEntropy: conditionalEntropy.toFixed(4),
                 mutualInformation: mutualInfo.toFixed(4),
                 surpriseValue: finalPrediction.surprise.toFixed(3),
-                conditionalProbability: p.toFixed(4),
                 marginalProbability: finalPrediction.marginalProbability.toFixed(4)
             },
             alternativeCandidates: [sorted[1].digit, sorted[2].digit]
@@ -518,7 +517,6 @@ class PatternRecognitionEngine {
         this.name = 'PRNN';
         this.fullName = 'Pattern Recognition Neural Network';
         this.weight = 1.2;
-
         this.wins = 0;
         this.losses = 0;
         this.lastPrediction = null;
@@ -537,20 +535,20 @@ class PatternRecognitionEngine {
 
         // Analyze patterns of different lengths (2-5 digits)
         for (let patternLength = 2; patternLength <= 5; patternLength++) {
-            const patternResult = this.analyzePatternLength(tickHistory, patternLength);
+            const patternResult = this.analyzePatternLength(recent, patternLength);
             if (patternResult) results.push(patternResult);
         }
 
         // Analyze repeating sequences
-        const sequenceResult = this.analyzeRepeatingSequences(tickHistory);
+        const sequenceResult = this.analyzeRepeatingSequences(recent);
         if (sequenceResult) results.push(sequenceResult);
 
         // Analyze digit clusters
-        const clusterResult = this.analyzeDigitClusters(tickHistory);
+        const clusterResult = this.analyzeDigitClusters(recent);
         if (clusterResult) results.push(clusterResult);
 
         if (results.length === 0) {
-            return { error: 'No patterns found' };
+            return this.fallbackPrediction(recent);
         }
 
         // Combine results using weighted voting
@@ -590,20 +588,6 @@ class PatternRecognitionEngine {
             ? confidences[predicted].reduce((a, b) => a + b, 0) / confidences[predicted].length
             : 50;
 
-        const totalVoteWeight = votes.reduce((a, b) => a + Math.max(0, b), 0);
-        const predictedVoteWeight = Math.max(0, votes[predicted]);
-        const voteShare = totalVoteWeight > 0 ? predictedVoteWeight / totalVoteWeight : 0;
-        const sortedVotes = votes
-            .map((v, i) => ({ digit: i, votes: v }))
-            .sort((a, b) => b.votes - a.votes);
-        const secondVotes = sortedVotes.length > 1 ? Math.max(0, sortedVotes[1].votes) : 0;
-        const voteGap = Math.max(0, predictedVoteWeight - secondVotes);
-
-        let finalConfidence = avgConf;
-        finalConfidence += Math.min(15, voteShare * 20);
-        finalConfidence += Math.min(10, voteGap * 5);
-        finalConfidence = Math.min(100, Math.max(50, finalConfidence));
-
         // Get alternative candidates
         const alternatives = votes
             .map((v, i) => ({ digit: i, votes: v }))
@@ -612,13 +596,11 @@ class PatternRecognitionEngine {
             .slice(0, 2)
             .map(x => x.digit);
 
-        this.lastPrediction = predicted;
-
         return {
             predictedDigit: predicted,
-            confidence: Math.round(finalConfidence),
+            confidence: Math.round(avgConf),
             primaryStrategy: 'Pattern Recognition',
-            riskAssessment: finalConfidence >= 85 ? 'low' : finalConfidence >= 70 ? 'medium' : 'high',
+            riskAssessment: avgConf >= 75 ? 'low' : avgConf >= 60 ? 'medium' : 'high',
             marketRegime: results.length > 2 ? 'patterned' : 'semi-random',
             statisticalEvidence: {
                 patternsFound: results.length,
@@ -629,9 +611,9 @@ class PatternRecognitionEngine {
         };
     }
 
-    analyzePatternLength(tickHistory, length) {
+    analyzePatternLength(recent, length) {
         const patterns = new Map();
-        const sample = tickHistory.slice(-600);
+        const sample = recent.slice(-500);
 
         // Build pattern frequency map
         for (let i = 0; i <= sample.length - length - 1; i++) {
@@ -645,7 +627,7 @@ class PatternRecognitionEngine {
         }
 
         // Get current pattern
-        const currentPattern = tickHistory.slice(-length).join(',');
+        const currentPattern = recent.slice(-length).join(',');
 
         if (!patterns.has(currentPattern)) {
             return null;
@@ -654,7 +636,7 @@ class PatternRecognitionEngine {
         const nextProbs = patterns.get(currentPattern);
         const total = nextProbs.reduce((a, b) => a + b, 0);
 
-        if (total < 5) return null; // Need at least 5 occurrences
+        if (total < 3) return null; // Need at least 3 occurrences
 
         // Find digit least likely to appear (for DIFFER)
         const predictions = nextProbs.map((count, digit) => ({
@@ -667,19 +649,13 @@ class PatternRecognitionEngine {
 
         // Confidence based on sample size and probability
         let confidence = 50;
+        if (total >= 10) confidence += 15;
         if (total >= 20) confidence += 10;
-        if (total >= 40) confidence += 10;
-        if (predicted.probability < 0.02) confidence += 25;
-
-        const p2 = sorted[1] ? sorted[1].probability : 0.1;
-        const separation = Math.max(0, p2 - predicted.probability);
-        confidence += Math.min(20, (separation / 0.1) * 20);
-
-        confidence = Math.min(100, Math.max(50, confidence));
+        if (predicted.probability < 0.05) confidence += 10;
 
         return {
             predictedDigit: predicted.digit,
-            confidence: confidence,
+            confidence: Math.min(90, confidence),
             weight: 1.0 + (length - 2) * 0.2,
             type: `${length}-gram`
         };
@@ -711,19 +687,11 @@ class PatternRecognitionEngine {
 
         // If a pair repeats, the digits in it are "hot" - predict them for DIFFER
         const hotDigits = maxPair.split(',').map(Number);
-        const counts = Array(10).fill(0);
-        last20.forEach(d => counts[d]++);
-        const candidates = Array.from({ length: 10 }, (_, d) => d).filter(d => !hotDigits.includes(d));
-        const predicted = candidates.reduce((best, d) => (counts[d] < counts[best] ? d : best), candidates[0]);
-
-        let confidence = 55 + maxCount * 6;
-        if (counts[predicted] === 0) confidence += 25;
-        if (counts[predicted] === 1) confidence += 10;
-        confidence = Math.min(100, Math.max(50, confidence));
+        const predicted = hotDigits[Math.floor(Math.random() * hotDigits.length)];
 
         return {
             predictedDigit: predicted,
-            confidence: confidence,
+            confidence: 55 + maxCount * 5,
             weight: 0.8,
             type: 'sequence-repeat'
         };
@@ -752,32 +720,33 @@ class PatternRecognitionEngine {
         if (maxCluster < 3) return null;
 
         // Clustered digit is "exhausted" - good for DIFFER
-        const counts = Array(10).fill(0);
-        last30.forEach(d => counts[d]++);
-        let predicted = 0;
-        let bestScore = Infinity;
-        for (let d = 0; d < 10; d++) {
-            const score = counts[d] * 2 + clusterScores[d];
-            if (score < bestScore) {
-                bestScore = score;
-                predicted = d;
-            }
-        }
-
-        let confidence = 55;
-        confidence += Math.min(25, maxCluster * 3);
-        if (counts[predicted] === 0) confidence += 20;
-        if (counts[predicted] === 1) confidence += 10;
-        confidence = Math.min(100, Math.max(50, confidence));
+        const predicted = clusterScores.indexOf(maxCluster);
 
         return {
             predictedDigit: predicted,
-            confidence: confidence,
+            confidence: 55 + maxCluster * 3,
             weight: 0.9,
             type: 'cluster-exhaustion'
         };
     }
-    
+
+    fallbackPrediction(recent) {
+        const counts = Array(10).fill(0);
+        recent.slice(-100).forEach(d => counts[d]++);
+
+        const maxCount = Math.max(...counts);
+        const predicted = counts.indexOf(maxCount);
+
+        return {
+            predictedDigit: predicted,
+            confidence: 55,
+            primaryStrategy: 'Pattern Recognition (Fallback)',
+            riskAssessment: 'medium',
+            marketRegime: 'unknown',
+            statisticalEvidence: { method: 'fallback' },
+            alternativeCandidates: []
+        };
+    }
 }
 
 // ============================================================
@@ -2679,24 +2648,6 @@ class AILogicDigitDifferBot {
 
             let tradeExecuted = false;
 
-        //     return {
-        //     predictedDigit: finalPrediction.digit,
-        //     confidence: Math.round(confidence),
-        //     primaryStrategy: 'Entropy Information Theory',
-        //     riskAssessment: fullEntropy > 0.97 ? 'high' : fullEntropy > 0.92 ? 'medium' : 'low',
-        //     marketRegime: fullEntropy > 0.97 ? 'random' : fullEntropy > 0.9 ? 'semi-random' : 'patterned',
-        //     statisticalEvidence: {
-        //         entropy: fullEntropy.toFixed(4),
-        //         conditionalEntropy: conditionalEntropy.toFixed(4),
-        //         mutualInformation: mutualInfo.toFixed(4),
-        //         surpriseValue: finalPrediction.surprise.toFixed(3),
-        //         conditionalProbability: p.toFixed(4),
-        //         marginalProbability: finalPrediction.marginalProbability.toFixed(4)
-        //     },
-        //     alternativeCandidates: [sorted[1].digit, sorted[2].digit]
-        // };
-            
-
             // switch (this.currentEngineSetup.name) {
             //     case 'FDA_GAMR':
             //         if (FDA_Engine && GAMR_Engine) {
@@ -2793,7 +2744,7 @@ class AILogicDigitDifferBot {
             
             console.log('FDA Prediction:', tradeDecision.predictedDigit, '(Alt:', tradeDecision.alternativeCandidates.join(','), ') | Confidence:', tradeDecision.confidence, '| Risk:', tradeDecision.riskAssessment, '| Market Regime:', tradeDecision.marketRegime);
             console.log('MCP Prediction:', tradeDecision2.predictedDigit, '(Alt:', tradeDecision2.alternativeCandidates.join(','), ') | Confidence:', tradeDecision2.confidence, '| Risk:', tradeDecision2.riskAssessment, '| Market Regime:', tradeDecision2.marketRegime);
-            console.log('EITE Prediction:', tradeDecision3.predictedDigit, '(Alt:', tradeDecision3.alternativeCandidates.join(','), ') | Confidence:', tradeDecision3.confidence, '| Risk:', tradeDecision3.riskAssessment, '| Market Regime:', tradeDecision3.marketRegime, ' | Entropy: (', tradeDecision3.statisticalEvidence.conditionalEntropy,'|',tradeDecision3.statisticalEvidence.conditionalProbability, '|', tradeDecision3.statisticalEvidence.entropy, '|', tradeDecision3.statisticalEvidence.marginalProbability, '|', tradeDecision3.statisticalEvidence.mutualInformation, '|', tradeDecision3.statisticalEvidence.surpriseValue, ')');
+            console.log('EITE Prediction:', tradeDecision3.predictedDigit, '(Alt:', tradeDecision3.alternativeCandidates.join(','), ') | Confidence:', tradeDecision3.confidence, '| Risk:', tradeDecision3.riskAssessment, '| Market Regime:', tradeDecision3.marketRegime, ' | Entropy: (', tradeDecision3.statisticalEvidence.conditionalEntropy, '|', tradeDecision3.statisticalEvidence.entropy, '|', tradeDecision3.statisticalEvidence.marginalProbability, '|', tradeDecision3.statisticalEvidence.mutualInformation, '|', tradeDecision3.statisticalEvidence.surpriseValue, ')');
             console.log('PRNN Prediction:', tradeDecision4.predictedDigit, '(Alt:', tradeDecision4.alternativeCandidates.join(',') || 'N/A', ') | Confidence:', tradeDecision4.confidence, '| Risk:', tradeDecision4.riskAssessment, '| Market Regime:', tradeDecision4.marketRegime);
             console.log('BPE Prediction:', tradeDecision5.predictedDigit, '(Alt:', tradeDecision5.alternativeCandidates.join(','), ') | Confidence:', tradeDecision5.confidence, '| Risk:', tradeDecision5.riskAssessment, '| Market Regime:', tradeDecision5.marketRegime, ' | Entropy:', tradeDecision5.statisticalEvidence.entropyLevel);
             console.log('GAMR Prediction:', tradeDecision6.predictedDigit, '(Alt:', tradeDecision6.alternativeCandidates.join(','), ') | Confidence:', tradeDecision6.confidence, '| Risk:', tradeDecision6.riskAssessment, '| Market Regime:', tradeDecision6.marketRegime);
@@ -2804,12 +2755,14 @@ class AILogicDigitDifferBot {
             // if (tradeDecision.confidence >= 95 && tradeDecision.riskAssessment === 'low' && tradeDecision.marketRegime === 'patterned') {
             //     this.placeTrade(tradeDecision.predictedDigit, tradeDecision.confidence);
             // } else 
-                if (tradeDecision2.confidence >= 100 && tradeDecision2.riskAssessment === 'low' && tradeDecision2.marketRegime === 'structured') {
-                this.placeTrade(tradeDecision2.predictedDigit, tradeDecision2.confidence);
-            // } else if (tradeDecision3.confidence >= 100 && tradeDecision3.riskAssessment === 'low' && tradeDecision3.marketRegime === 'patterned') {
-            //     this.placeTrade(tradeDecision3.predictedDigit, tradeDecision3.confidence);
-            // } else if (tradeDecision4.confidence >= 100 && tradeDecision4.riskAssessment === 'low' && tradeDecision4.marketRegime === 'patterned') {
-            //     this.placeTrade(tradeDecision4.predictedDigit, tradeDecision4.confidence);
+                // if (tradeDecision2.confidence >= 100 && tradeDecision2.riskAssessment === 'low' && tradeDecision2.marketRegime === 'structured') {
+                // this.placeTrade(tradeDecision2.predictedDigit, tradeDecision2.confidence);
+            // } else 
+                if (tradeDecision3.confidence >= 100 && tradeDecision3.riskAssessment === 'low' && tradeDecision3.marketRegime === 'patterned') {
+                this.placeTrade(tradeDecision3.predictedDigit, tradeDecision3.confidence);
+            // } else 
+                // if (tradeDecision4.confidence >= 85 && tradeDecision4.riskAssessment === 'low' && tradeDecision4.marketRegime === 'patterned') {
+                // this.placeTrade(tradeDecision4.predictedDigit, tradeDecision4.confidence);
             // } else 
                 // if (tradeDecision5.confidence >= 100 && tradeDecision5.riskAssessment === 'low' && tradeDecision5.marketRegime === 'stable') {
                 // this.placeTrade(tradeDecision5.predictedDigit, tradeDecision5.confidence);
