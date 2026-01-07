@@ -20,7 +20,7 @@ const CONFIG = {
     // SESSIONS CONFIGURATION 
     sessions: {
         tokyo: { name: 'Tokyo', time: '23:00', enabled: true },
-        london: { name: 'London', time: '05:30', enabled: true },
+        london: { name: 'London', time: '07:00', enabled: true },
         new_york: { name: 'New York', time: '12:00', enabled: true },
     },
 
@@ -460,12 +460,12 @@ class QuickFlipBot {
         }
 
         this.dailyATR[symbol] = trSum / validIntervals;
-        const threshold = this.dailyATR[symbol] * 0.15;
+        const threshold = this.dailyATR[symbol] * 0.14;
 
         const atrOutput =
             `✅ Daily ATR Result: ${this.dailyATR[symbol].toFixed(4)}\n` +
             `• Lookback: ${validIntervals} days\n` +
-            `• Required Box Range (15%): ≥ ${threshold.toFixed(4)}`;
+            `• Required Box Range (14%): ≥ ${threshold.toFixed(4)}`;
 
         this.log(atrOutput, 'SUCCESS', symbol, true);
     }
@@ -502,7 +502,7 @@ class QuickFlipBot {
         const isGreen = candle.close > candle.open;
         const candleColor = isGreen ? '🟢 GREEN' : '🔴 RED';
         const atr = this.dailyATR[symbol] || 0;
-        const liquidityThreshold = 0.15 * atr;
+        const liquidityThreshold = 0.14 * atr;
         const rangePercent = ((range / (atr || 1)) * 100).toFixed(2);
 
         const analysisOutput =
@@ -540,7 +540,7 @@ class QuickFlipBot {
 
             this.startHunting(symbol);
         } else {
-            this.log(`❌ LIQUIDITY FAILED (${rangePercent}% of ATR is below 15%)`, 'ERROR', symbol);
+            this.log(`❌ LIQUIDITY FAILED (${rangePercent}% of ATR is below 14%)`, 'ERROR', symbol);
             this.sendTelegramMessage(`❌ <b>Liquidity Failed</b> [${symbol}]\nRange ${rangePercent}% of ATR is too low.`);
 
             // Mark session as "traded/handled" even if failed liquidity
