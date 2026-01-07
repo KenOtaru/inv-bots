@@ -2754,7 +2754,7 @@ class AILogicDigitDifferBot {
             switch (this.currentEngineSetup.name) {
                 case 'FDA':
                     if (FDA_Engine) {
-                        console.log(`🎯 Using FDA: FDA (${tradeDecision.confidence}%)`);
+                        console.log(`🎯 Using FDA: (${tradeDecision.confidence}%)`);
                         this.lastPrediction = tradeDecision.predictedDigit;
                         this.lastConfidence = tradeDecision.confidence;
                         this.placeTrade(tradeDecision.predictedDigit, tradeDecision.confidence, kellyResult.stake);
@@ -2844,7 +2844,7 @@ class AILogicDigitDifferBot {
             // if (tradeDecision.confidence >= 70 && tradeDecision.riskAssessment === 'low' && tradeDecision.marketRegime === 'random') {
             //     this.placeTrade(tradeDecision.predictedDigit, tradeDecision.confidence);
             // } else 
-            //     if (tradeDecision2.confidence >= 100 && tradeDecision2.riskAssessment === 'low' && tradeDecision2.marketRegime === 'structured') {
+            //     if (tradeDecision2.confidence >= 63 && tradeDecision2.riskAssessment === 'low') {
             //     this.placeTrade(tradeDecision2.predictedDigit, tradeDecision2.confidence);
             // } else 
             //     if (tradeDecision3.confidence >= 100 && tradeDecision3.riskAssessment === 'low' && tradeDecision3.marketRegime === 'patterned') {
