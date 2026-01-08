@@ -3238,8 +3238,8 @@ const bot = new AILogicDigitDifferBot({
     dailyProfitTarget: 10,
     maxConsecutiveLosses: 2,//6
 
-    minConfidence: 80,
-    minEnginesAgreement: 5,
+    minConfidence: 70,
+    minEnginesAgreement: 7,
     requiredHistoryLength: 1000,
     minWaitTime: 1000,
     maxWaitTime: 1000,

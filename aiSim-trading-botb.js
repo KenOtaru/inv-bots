@@ -2837,59 +2837,59 @@ class AILogicDigitDifferBot {
                 this.lastConfidence = tradeDecision.confidence;
                 this.placeTrade(tradeDecision.predictedDigit, tradeDecision.confidence, kellyResult.stake);
             }
-            else
-                if (MCP_Engine) {
-                    console.log(`🎯 Using MCP: ${tradeDecision2.confidence}% confidence`);
-                    this.lastPrediction = tradeDecision2.predictedDigit;
-                    this.lastConfidence = tradeDecision2.confidence;
-                    this.placeTrade(tradeDecision2.predictedDigit, tradeDecision2.confidence, kellyResult.stake);
-                } else
-                // if (EITE_Engine) {
-                //     console.log(`🎯 Using EITE: ${tradeDecision3.confidence}% confidence`);
-                //     this.lastPrediction = tradeDecision3.predictedDigit;
-                //     this.lastConfidence = tradeDecision3.confidence;
-                //     this.placeTrade(tradeDecision3.predictedDigit, tradeDecision3.confidence, kellyResult.stake);
-                // } else
-                // if (PRNN_Engine) {
-                //     console.log(`🎯 Using PRNN: ${tradeDecision4.confidence}% confidence`);
-                //     this.lastPrediction = tradeDecision4.predictedDigit;
-                //     this.lastConfidence = tradeDecision4.confidence;
-                //     this.placeTrade(tradeDecision4.predictedDigit, tradeDecision4.confidence, kellyResult.stake);
-                // } else
-                // if (BPE_Engine) {
-                //     console.log(`🎯 Using BPE: ${tradeDecision5.confidence}% confidence`);
-                //     this.lastPrediction = tradeDecision5.predictedDigit;
-                //     this.lastConfidence = tradeDecision5.confidence;
-                //     this.placeTrade(tradeDecision5.predictedDigit, tradeDecision5.confidence, kellyResult.stake);
-                // } else
-                // if (GAMR_Engine) {
-                //     console.log(`🎯 Using GAMR: ${tradeDecision6.confidence}% confidence`);
-                //     this.lastPrediction = tradeDecision6.predictedDigit;
-                //     this.lastConfidence = tradeDecision6.confidence;
-                //     this.placeTrade(tradeDecision6.predictedDigit, tradeDecision6.confidence, kellyResult.stake);
-                // } else
-                // if (MTD_Engine) {
-                //     console.log(`🎯 Using MTD: ${tradeDecision7.confidence}% confidence`);
-                //     this.lastPrediction = tradeDecision7.predictedDigit;
-                //     this.lastConfidence = tradeDecision7.confidence;
-                //     this.placeTrade(tradeDecision7.predictedDigit, tradeDecision7.confidence, kellyResult.stake);
-                // } else
-                // if (CTAF_Engine) {
-                //     console.log(`🎯 Using CTAF: ${tradeDecision8.confidence}% confidence`);
-                //     this.lastPrediction = tradeDecision8.predictedDigit;
-                //     this.lastConfidence = tradeDecision8.confidence;
-                //     this.placeTrade(tradeDecision8.predictedDigit, tradeDecision8.confidence, kellyResult.stake);
-                // } else
-                // if (MCS_Engine) {
-                //     console.log(`🎯 Using MCS: ${tradeDecision9.confidence}% confidence`);
-                //     this.lastPrediction = tradeDecision9.predictedDigit;
-                //     this.lastConfidence = tradeDecision9.confidence;
-                //     this.placeTrade(tradeDecision9.predictedDigit, tradeDecision9.confidence, kellyResult.stake);
-                // } else 
-                {
-                    console.log('⏭️ No engine met the criteria for trade execution.');
-                    this.predictionInProgress = false;
-                }
+            // else
+            //     if (MCP_Engine) {
+            //         console.log(`🎯 Using MCP: ${tradeDecision2.confidence}% confidence`);
+            //         this.lastPrediction = tradeDecision2.predictedDigit;
+            //         this.lastConfidence = tradeDecision2.confidence;
+            //         this.placeTrade(tradeDecision2.predictedDigit, tradeDecision2.confidence, kellyResult.stake);
+            //     } else
+            // if (EITE_Engine) {
+            //     console.log(`🎯 Using EITE: ${tradeDecision3.confidence}% confidence`);
+            //     this.lastPrediction = tradeDecision3.predictedDigit;
+            //     this.lastConfidence = tradeDecision3.confidence;
+            //     this.placeTrade(tradeDecision3.predictedDigit, tradeDecision3.confidence, kellyResult.stake);
+            // } else
+            // if (PRNN_Engine) {
+            //     console.log(`🎯 Using PRNN: ${tradeDecision4.confidence}% confidence`);
+            //     this.lastPrediction = tradeDecision4.predictedDigit;
+            //     this.lastConfidence = tradeDecision4.confidence;
+            //     this.placeTrade(tradeDecision4.predictedDigit, tradeDecision4.confidence, kellyResult.stake);
+            // } else
+            // if (BPE_Engine) {
+            //     console.log(`🎯 Using BPE: ${tradeDecision5.confidence}% confidence`);
+            //     this.lastPrediction = tradeDecision5.predictedDigit;
+            //     this.lastConfidence = tradeDecision5.confidence;
+            //     this.placeTrade(tradeDecision5.predictedDigit, tradeDecision5.confidence, kellyResult.stake);
+            // } else
+            // if (GAMR_Engine) {
+            //     console.log(`🎯 Using GAMR: ${tradeDecision6.confidence}% confidence`);
+            //     this.lastPrediction = tradeDecision6.predictedDigit;
+            //     this.lastConfidence = tradeDecision6.confidence;
+            //     this.placeTrade(tradeDecision6.predictedDigit, tradeDecision6.confidence, kellyResult.stake);
+            // } else
+            // if (MTD_Engine) {
+            //     console.log(`🎯 Using MTD: ${tradeDecision7.confidence}% confidence`);
+            //     this.lastPrediction = tradeDecision7.predictedDigit;
+            //     this.lastConfidence = tradeDecision7.confidence;
+            //     this.placeTrade(tradeDecision7.predictedDigit, tradeDecision7.confidence, kellyResult.stake);
+            // } else
+            // if (CTAF_Engine) {
+            //     console.log(`🎯 Using CTAF: ${tradeDecision8.confidence}% confidence`);
+            //     this.lastPrediction = tradeDecision8.predictedDigit;
+            //     this.lastConfidence = tradeDecision8.confidence;
+            //     this.placeTrade(tradeDecision8.predictedDigit, tradeDecision8.confidence, kellyResult.stake);
+            // } else
+            // if (MCS_Engine) {
+            //     console.log(`🎯 Using MCS: ${tradeDecision9.confidence}% confidence`);
+            //     this.lastPrediction = tradeDecision9.predictedDigit;
+            //     this.lastConfidence = tradeDecision9.confidence;
+            //     this.placeTrade(tradeDecision9.predictedDigit, tradeDecision9.confidence, kellyResult.stake);
+            // } else 
+            {
+                console.log('⏭️ No engine met the criteria for trade execution.');
+                this.predictionInProgress = false;
+            }
 
 
         } catch (error) {
