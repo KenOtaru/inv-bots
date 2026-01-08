@@ -1,13 +1,6 @@
 /**
  * ============================================================
- * AI-LOGIC DERIV DIGIT DIFFER TRADING BOT v5.0
- * Simulated AI Ensemble with Advanced Statistical Methods
- * ============================================================
- * 
- * This version replaces external AI APIs with sophisticated
- * JavaScript-based statistical analysis engines that simulate
- * AI prediction capabilities.
- * 
+ * KELLY CRITERION DERIV DIGIT DIFFER TRADING BOT v1.0
  * ============================================================
  */
 
@@ -356,7 +349,7 @@ class AILogicDigitDifferBot {
         this.isReconnecting = false;
 
         // Telegram Configuration
-        this.telegramToken = process.env.TELEGRAM_BOT_TOKEN3;
+        this.telegramToken = process.env.TELEGRAM_BOT_TOKEN6;
         this.telegramChatId = process.env.TELEGRAM_CHAT_ID;
         this.telegramEnabled = !!(this.telegramToken && this.telegramChatId);
 
@@ -367,7 +360,7 @@ class AILogicDigitDifferBot {
         this.sessionStartTime = new Date();
 
         console.log('\n' + '='.repeat(60));
-        console.log('🤖 KELLY CRITERION DIGIT DIFFER TRADING BOT v5.0');
+        console.log('🤖 KELLY CRITERION DIGIT DIFFER TRADING BOT v1.0');
         console.log('='.repeat(60));
 
         if (this.telegramEnabled) {
@@ -375,17 +368,6 @@ class AILogicDigitDifferBot {
         }
     }
 
-    logActiveEngines() {
-        console.log('\n🧠 Active Kelly Criterion Engines:')
-        console.log('='.repeat(60) + '\n')
-    }
-
-    selectRandomEngineSetup() {
-        const randomIndex = Math.floor(Math.random() * this.engineSetups.length);
-        this.currentEngineSetup = this.engineSetups[randomIndex];
-        console.log(`🎲 Randomly selected engine setup: ${this.currentEngineSetup.name}`);
-        this.tradesInCurrentCycle = 0;
-    }
 
     connect() {
         if (this.isShuttingDown || this.connected) return;
@@ -725,17 +707,20 @@ class AILogicDigitDifferBot {
                 volatility: this.getVolatilityLevel(this.tickHistory)
             });
 
+            this.volatilityLevel = this.getVolatilityLevel(this.tickHistory)
+
             console.log(`\n💰 Kelly Criterion Result:`);
             console.log(`   Prediction: ${this.lastPrediction}`);
             console.log(`   Optimal Stake: $${kellyResult.stake.toFixed(2)}`);
             console.log(`   Risk Level: ${kellyResult.riskLevel}`);
             console.log(`   Recommendation: ${kellyResult.recommendation}`);
+            console.log(`   Volatility Level: ${this.volatilityLevel}`);
 
-            if (kellyResult.recommendation === 'TRADE' && this.lastPrediction === this.tickHistory[this.tickHistory.length - 2]) {
+            if (this.lastPrediction === this.tickHistory[this.tickHistory.length - 2] && this.volatilityLevel === 'medium') {
                 this.placeTrade(this.lastPrediction, this.lastConfidence, kellyResult.stake);
             }
             else {
-                console.log(`⏭️ Skipping trade - Reason: ${kellyResult.recommendation !== 'TRADE' ? kellyResult.recommendation : 'Pattern not target'}`);
+                console.log(`⏭️ Skipping trade - Wating for proper Digit setup`);
                 this.predictionInProgress = false;
             }
 
@@ -853,7 +838,7 @@ class AILogicDigitDifferBot {
         this.tradeInProgress = false;
         this.predictionInProgress = false;
 
-        this.scheduleNextTrade2();
+        // this.scheduleNextTrade2();
     }
 
     checkStopConditions() {
@@ -901,36 +886,36 @@ class AILogicDigitDifferBot {
         }, waitTime);
     }
 
-    scheduleNextTrade2() {
-        const waitTime = Math.floor(
-            Math.random() * (this.config.maxWaitTime - this.config.minWaitTime) +
-            this.config.minWaitTime
-        );
+    // scheduleNextTrade2() {
+    //     const waitTime = Math.floor(
+    //         Math.random() * (this.config.maxWaitTime - this.config.minWaitTime) +
+    //         this.config.minWaitTime
+    //     );
 
-        console.log(`\n⏳ Next trade in ${Math.round(waitTime / 1000)}s...`);
-        this.isPaused = true;
-        this.disconnect();
-        setTimeout(() => {
-            if (!this.isShuttingDown) {
-                this.isPaused = false;
-                this.reconnectAttempts = 0;
-                this.connect();
-            }
-        }, waitTime);
-    }
+    //     console.log(`\n⏳ Next trade in ${Math.round(waitTime / 1000)}s...`);
+    //     this.isPaused = true;
+    //     this.disconnect();
+    //     setTimeout(() => {
+    //         if (!this.isShuttingDown) {
+    //             this.isPaused = false;
+    //             this.reconnectAttempts = 0;
+    //             this.connect();
+    //         }
+    //     }, waitTime);
+    // }
 
-    scheduleReconnect(delay) {
-        this.isPaused = true;
-        this.disconnect();
+    // scheduleReconnect(delay) {
+    //     this.isPaused = true;
+    //     this.disconnect();
 
-        setTimeout(() => {
-            if (!this.isShuttingDown) {
-                this.isPaused = false;
-                this.reconnectAttempts = 0;
-                this.connect();
-            }
-        }, delay);
-    }
+    //     setTimeout(() => {
+    //         if (!this.isShuttingDown) {
+    //             this.isPaused = false;
+    //             this.reconnectAttempts = 0;
+    //             this.connect();
+    //         }
+    //     }, delay);
+    // }
 
     // ==================== LOGGING & NOTIFICATIONS ====================
 
@@ -1037,27 +1022,31 @@ class AILogicDigitDifferBot {
             : 0;
         const kellyStatus = this.kellyManager.getStatus();
 
-        const body = `🚨 <b>TRADE LOSS</b>
+        const body = `🚨 TRADE LOSS
             ━━━━━━━━━━━━━━━━━━━━
-            <b>Asset:</b> ${this.currentAsset}
-            <b>Predicted:</b> ${this.lastPrediction} | <b>Actual:</b> ${actualDigit}
-            <b>Loss:</b> -$${Math.abs(profit).toFixed(2)}
+            Asset: ${this.currentAsset}
+            Predicted: ${this.lastPrediction} | Actual: ${actualDigit}
+            Loss: -$${Math.abs(profit).toFixed(2)}
             
-            📊 <b>Total Trades:</b> ${this.totalTrades}
-            ✅ <b>Wins:</b> ${this.totalWins}
-            <b>Consecutive Losses:</b> ${this.consecutiveLosses}/${this.config.maxConsecutiveLosses}
-            ❌ <b>Losses:</b> ${this.totalLosses}
-            ❌ <b>x2 Losses:</b> ${this.consecutiveLosses2}
-            ❌ <b>x3 Losses:</b> ${this.consecutiveLosses3}
-            
-            📈 <b>Win Rate:</b> ${winRate}%
+            📊 Total Trades: ${this.totalTrades}
+            ✅ Wins: ${this.totalWins}
 
-            💰 <b>Investment:</b> $${kellyStatus.investmentCapital.toFixed(2)}
-            💵 <b>Current Capital:</b> $${kellyStatus.currentCapital.toFixed(2)}
-            📉 <b>Max Drawdown:</b> ${kellyStatus.maxDrawdownReached.toFixed(1)}%
-            📊 <b>Session P/L:</b> $${kellyStatus.sessionPnL.toFixed(2)}
-            <b>Drawdown:</b> ${kellyStatus.currentDrawdown.toFixed(1)}%
-            <b>Capital:</b> $${kellyStatus.currentCapital.toFixed(2)}
+            ❌ Losses: ${this.totalLosses}
+            ❌ x2 Losses: ${this.consecutiveLosses2}
+            ❌ x3 Losses: ${this.consecutiveLosses3}
+            ❌ x4 Losses: ${this.consecutiveLosses4}
+            ❌ x5 Losses: ${this.consecutiveLosses5}
+
+            Volatility Level: ${this.volatilityLevel}
+            
+            📈 Win Rate: ${winRate}%
+
+            💰 Investment: $${kellyStatus.investmentCapital.toFixed(2)}
+            💵 Current Capital: $${kellyStatus.currentCapital.toFixed(2)}
+            📉 Max Drawdown: ${kellyStatus.maxDrawdownReached.toFixed(1)}%
+            📊 Session P/L: $${kellyStatus.sessionPnL.toFixed(2)}
+            Drawdown: ${kellyStatus.currentDrawdown.toFixed(1)}%
+            Capital: $${kellyStatus.currentCapital.toFixed(2)}
         `;
 
         await this.sendTelegramMessage(body);
@@ -1066,8 +1055,7 @@ class AILogicDigitDifferBot {
     // ==================== START BOT ====================
 
     start() {
-        console.log('🚀 Starting AI-Logic Digit Differ Bot v5.0...');
-        console.log('   Simulated AI Ensemble System Active\n');
+        console.log('🚀 Starting AI-Logic Kelly Criterion Bot v1.0...');
 
         if (!this.token) {
             console.error('❌ Error: DERIV_TOKEN is required');
@@ -1094,7 +1082,7 @@ if (!process.env.DERIV_TOKEN) {
 }
 
 const bot = new AILogicDigitDifferBot({
-    derivToken: process.env.DERIV_TOKEN,
+    derivToken: '0P94g4WdSrSrzir',
 
     investmentCapital: 100,
     kellyFraction: 0.2, // 20% of full Kelly
@@ -1102,8 +1090,8 @@ const bot = new AILogicDigitDifferBot({
     maxStakePercent: 5,
     multiplier: 11.3,
 
-    maxDrawdownPercent: 25,
-    dailyLossLimit: 50,
+    maxDrawdownPercent: 100,
+    dailyLossLimit: 100,
     dailyProfitTarget: 1000,
     maxConsecutiveLosses: 8,//6
 
