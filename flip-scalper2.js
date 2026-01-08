@@ -21,7 +21,7 @@ const CONFIG = {
     sessions: {
         tokyo: { name: 'Tokyo', time: '23:00', enabled: true },
         london: { name: 'London', time: '07:00', enabled: true },
-        new_york: { name: 'New York', time: '12:00', enabled: true },
+        new_york: { name: 'New York', time: '13:00', enabled: true },
     },
 
     market_open_duration: 90, // Minutes to look for trade after open (Strategy: 90 mins)
@@ -33,7 +33,7 @@ const CONFIG = {
     // Investment Management
     INVESTMENT_CAPITAL: 500,
     RISK_PERCENT: 1, // 1% risk per trade (Stop Loss)
-    RR_RATIO: 1.5,     // 1:3 Risk-Reward (Take Profit)
+    RR_RATIO: 1.1,     // 1:3 Risk-Reward (Take Profit)
 };
 // =================================================
 
@@ -640,7 +640,7 @@ class QuickFlipBot {
                 symbol: symbol,
                 currency: 'USD',
                 basis: 'stake',
-                amount: stakeAmount,  
+                amount: stakeAmount,
                 multiplier: asset.multiplier,
                 limit_order: {
                     take_profit: takeProfitAmount,
