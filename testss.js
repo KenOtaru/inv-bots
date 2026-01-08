@@ -2069,7 +2069,7 @@ class AILogicDigitDifferBot {
             gamr: new GapMeanReversionAnalyzer(),
             mtd: new MomentumTrendDetector(),
             ctaf: new ChaosTheoryAnalyzer(),
-             mcs: new MonteCarloSimulator(),
+            mcs: new MonteCarloSimulator(),
             eml: new EnsembleMetaLearner()
         };
 
@@ -2553,7 +2553,7 @@ class AILogicDigitDifferBot {
             // const highConfidenceEngine = predictions.find(p => p.confidence <= 50); //MTD
             // const highConfidenceEngine = predictions.find(p => p.confidence >= 90); //CTAF
             // const highConfidenceEngine = predictions.find(p => p.confidence >= 90); //MCS
-            
+
             // if (highConfidenceEngine) {
             //     console.log(`🎯 Using high-confidence engine: ${highConfidenceEngine.name} (${highConfidenceEngine.confidence}% confidence)`);
             //     this.placeTrade(highConfidenceEngine.predictedDigit, highConfidenceEngine.confidence, kellyResult.stake);
