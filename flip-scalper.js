@@ -19,9 +19,9 @@ const CONFIG = {
 
     // SESSIONS CONFIGURATION 
     sessions: {
-        tokyo: { name: 'Tokyo', time: '23:00', enabled: true },
+        tokyo: { name: 'Tokyo', time: '00:00', enabled: true },
         london: { name: 'London', time: '07:00', enabled: true },
-        new_york: { name: 'New York', time: '12:00', enabled: true },
+        new_york: { name: 'New York', time: '13:00', enabled: true },
     },
 
     market_open_duration: 90, // Minutes to look for trade after open (Strategy: 90 mins)
