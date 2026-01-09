@@ -1089,7 +1089,7 @@ const bot = new AILogicDigitDifferBot({
 
     investmentCapital: 100,
     kellyFraction: 0.2, // 20% of full Kelly
-    minStake: 1,
+    minStake: 0.35,
     maxStakePercent: 5,
     multiplier: 2,
 
