@@ -234,7 +234,7 @@ const CONFIG = {
     TAKE_PROFIT: 1.5,
 
     // Session Targets
-    SESSION_PROFIT_TARGET: 150,
+    SESSION_PROFIT_TARGET: 15000,
     SESSION_STOP_LOSS: -500,
 
     // Reversal Settings
@@ -278,7 +278,7 @@ const CONFIG = {
     // Performance
     MAX_TICKS_STORED: 100,
     MAX_CANDLES_STORED: 150,
-    DASHBOARD_UPDATE_INTERVAL: 5000,
+    DASHBOARD_UPDATE_INTERVAL: 60000,
 
     // Debug
     DEBUG_MODE: true,
@@ -373,7 +373,7 @@ const ASSET_CONFIGS = {
     }
 };
 
-let ACTIVE_ASSETS = ['R_75', 'frxXAUUSD', '1HZ50V', 'STP100'];
+let ACTIVE_ASSETS = ['R_75', 'frxXAUUSD', '1HZ50V', 'stpRNG'];
 
 // ============================================
 // STATE MANAGEMENT
@@ -625,7 +625,7 @@ class SignalManager {
             assetState.hasVisitedOversold = true;
             // When entering oversold, clear overbought flag
             if (!wasInOversold) {
-                assetState.hasVisitedOverbought = false;
+                // assetState.hasVisitedOverbought = false;
                 LOGGER.debug(`${symbol}: Entered OVERSOLD zone (WPR: ${wpr.toFixed(2)})`);
             }
         } else if (isInOverbought) {
@@ -633,7 +633,7 @@ class SignalManager {
             assetState.hasVisitedOverbought = true;
             // When entering overbought, clear oversold flag
             if (!wasInOverbought) {
-                assetState.hasVisitedOversold = false;
+                // assetState.hasVisitedOversold = false;
                 LOGGER.debug(`${symbol}: Entered OVERBOUGHT zone (WPR: ${wpr.toFixed(2)})`);
             }
         } else {
@@ -1355,7 +1355,7 @@ class ConnectionManager {
         if (Math.random() < 0.01) { // Log ~1% of updates
             const currentTime = new Date(Date.now()).toISOString().split('T')[1].split('.')[0];
             const candleTime = new Date(incomingCandle.epoch * 1000).toISOString().split('T')[1].split('.')[0];
-            LOGGER.debug(`${symbol} Candle Update [Now: ${currentTime}, Candle: ${candleTime}]: Current epoch: ${incomingCandle.epoch}, Forming: ${assetState.currentFormingCandle?.epoch || 'none'}`);
+            // LOGGER.debug(`${symbol} Candle Update [Now: ${currentTime}, Candle: ${candleTime}]: Current epoch: ${incomingCandle.epoch}, Forming: ${assetState.currentFormingCandle?.epoch || 'none'}`);
         }
 
         // Check if this is a different candle epoch (new candle = previous closed)
@@ -1387,12 +1387,12 @@ class ConnectionManager {
 
                     // Log candle close with timestamp
                     const candleTime = new Date(closedCandle.epoch * 1000).toISOString().split('T')[1].split('.')[0];
-                    LOGGER.candle(`${symbol} 🕯️ CANDLE CLOSED [${candleTime}]: O:${closedCandle.open.toFixed(5)} H:${closedCandle.high.toFixed(5)} L:${closedCandle.low.toFixed(5)} C:${closedCandle.close.toFixed(5)}`);
+                    // LOGGER.candle(`${symbol} 🕯️ CANDLE CLOSED [${candleTime}]: O:${closedCandle.open.toFixed(5)} H:${closedCandle.high.toFixed(5)} L:${closedCandle.low.toFixed(5)} C:${closedCandle.close.toFixed(5)}`);
 
                     // NOW process trading logic on the CLOSED candle
                     this.processCandleClose(symbol);
                 } else {
-                    LOGGER.debug(`${symbol}: Skipping non-aligned candle epoch: ${closedCandle.epoch} (not divisible by ${CONFIG.GRANULARITY})`);
+                    // LOGGER.debug(`${symbol}: Skipping non-aligned candle epoch: ${closedCandle.epoch} (not divisible by ${CONFIG.GRANULARITY})`);
                 }
             }
         }
@@ -1704,6 +1704,11 @@ class ConnectionManager {
             const position = state.portfolio.activePositions[posIndex];
             position.currentProfit = contract.profit;
             position.currentPrice = contract.current_spot;
+
+            // Log profit updates periodically
+            if (Math.random() < 0.05) { // Log ~5% of updates to avoid spam
+                LOGGER.debug(`${position.symbol} Live P/L: $${position.currentProfit.toFixed(2)} | Price: ${position.currentPrice.toFixed(5)}`);
+            }
 
             const assetState = state.assets[position.symbol];
             if (assetState && StakeManager.shouldAutoClose(position.symbol, contract.profit)) {

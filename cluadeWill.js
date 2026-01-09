@@ -211,8 +211,8 @@ const TIMEFRAMES = {
 };
 
 // Default to 5 minutes, user can override with TIMEFRAME env variable
-const SELECTED_TIMEFRAME = process.env.TIMEFRAME || '1m';
-const TIMEFRAME_CONFIG = TIMEFRAMES[SELECTED_TIMEFRAME] || TIMEFRAMES['1m'];
+const SELECTED_TIMEFRAME = process.env.TIMEFRAME || '5m';
+const TIMEFRAME_CONFIG = TIMEFRAMES[SELECTED_TIMEFRAME] || TIMEFRAMES['5m'];
 
 // ============================================
 // CONFIGURATION
@@ -230,7 +230,7 @@ const CONFIG = {
     TAKE_PROFIT: 1.5,
 
     // Session Targets
-    SESSION_PROFIT_TARGET: 150,
+    SESSION_PROFIT_TARGET: 15000,
     SESSION_STOP_LOSS: -500,
 
     // Reversal Settings
@@ -274,7 +274,7 @@ const CONFIG = {
     // Performance
     MAX_TICKS_STORED: 100,
     MAX_CANDLES_STORED: 150,
-    DASHBOARD_UPDATE_INTERVAL: 5000,
+    DASHBOARD_UPDATE_INTERVAL: 60000,
 
     // Debug
     DEBUG_MODE: true,
@@ -622,7 +622,7 @@ class SignalManager {
             assetState.hasVisitedOversold = true;
             // When entering oversold, clear overbought flag
             if (!wasInOversold) {
-                assetState.hasVisitedOverbought = false;
+                // assetState.hasVisitedOverbought = false;
                 LOGGER.debug(`${symbol}: Entered OVERSOLD zone (WPR: ${wpr.toFixed(2)})`);
             }
         } else if (isInOverbought) {
@@ -630,7 +630,7 @@ class SignalManager {
             assetState.hasVisitedOverbought = true;
             // When entering overbought, clear oversold flag
             if (!wasInOverbought) {
-                assetState.hasVisitedOversold = false;
+                // assetState.hasVisitedOversold = false;
                 LOGGER.debug(`${symbol}: Entered OVERBOUGHT zone (WPR: ${wpr.toFixed(2)})`);
             }
         } else {
@@ -736,17 +736,21 @@ class BreakoutManager {
 
         assetState.breakout = {
             active: true,
-            highLevel: triggerCandle.high,
-            lowLevel: triggerCandle.low,
+            highLevel: parseFloat(triggerCandle.high.toFixed(5)),
+            lowLevel: parseFloat(triggerCandle.low.toFixed(5)),
             triggerCandle: triggerCandle.epoch,
             initialDirection: direction
         };
 
         assetState.inTradeCycle = true;
 
+        const candleTime = new Date(triggerCandle.epoch * 1000).toISOString().split('T')[1].split('.')[0];
+
         LOGGER.breakout(`${symbol} 📊 BREAKOUT LEVELS SET (WPR Cross Candle):`);
-        LOGGER.breakout(`${symbol}    High: ${triggerCandle.high.toFixed(5)} | Low: ${triggerCandle.low.toFixed(5)}`);
-        LOGGER.breakout(`${symbol}    Direction: ${direction} | Candle Epoch: ${triggerCandle.epoch}`);
+        LOGGER.breakout(`${symbol}    🔺 High: ${assetState.breakout.highLevel.toFixed(5)}`);
+        LOGGER.breakout(`${symbol}    🔻 Low:  ${assetState.breakout.lowLevel.toFixed(5)}`);
+        LOGGER.breakout(`${symbol}    Direction: ${direction} | Time: ${candleTime} GMT`);
+        LOGGER.breakout(`${symbol}    🔒 LEVELS LOCKED FOR ENTIRE TRADE CYCLE`);
 
         return true;
     }
@@ -788,6 +792,20 @@ class BreakoutManager {
         }
 
         return null;
+    }
+
+    /**
+     * Maintain breakout levels during reversals
+     * Levels should stay the same throughout the entire trade cycle
+     */
+    static maintainBreakoutLevels(symbol) {
+        const assetState = state.assets[symbol];
+
+        // Breakout levels remain active and unchanged during reversals
+        if (assetState.breakout.active) {
+            LOGGER.breakout(`${symbol} 🔒 BREAKOUT LEVELS MAINTAINED:`);
+            LOGGER.breakout(`${symbol}    High: ${assetState.breakout.highLevel.toFixed(5)} | Low: ${assetState.breakout.lowLevel.toFixed(5)}`);
+        }
     }
 
     /**
@@ -1256,7 +1274,7 @@ class ConnectionManager {
         if (Math.random() < 0.01) { // Log ~1% of updates
             const currentTime = new Date(Date.now()).toISOString().split('T')[1].split('.')[0];
             const candleTime = new Date(incomingCandle.epoch * 1000).toISOString().split('T')[1].split('.')[0];
-            LOGGER.debug(`${symbol} Candle Update [Now: ${currentTime}, Candle: ${candleTime}]: Current epoch: ${incomingCandle.epoch}, Forming: ${assetState.currentFormingCandle?.epoch || 'none'}`);
+            // LOGGER.debug(`${symbol} Candle Update [Now: ${currentTime}, Candle: ${candleTime}]: Current epoch: ${incomingCandle.epoch}, Forming: ${assetState.currentFormingCandle?.epoch || 'none'}`);
         }
 
         // Check if this is a different candle epoch (new candle = previous closed)
@@ -1288,12 +1306,12 @@ class ConnectionManager {
 
                     // Log candle close with timestamp
                     const candleTime = new Date(closedCandle.epoch * 1000).toISOString().split('T')[1].split('.')[0];
-                    LOGGER.candle(`${symbol} 🕯️ CANDLE CLOSED [${candleTime}]: O:${closedCandle.open.toFixed(5)} H:${closedCandle.high.toFixed(5)} L:${closedCandle.low.toFixed(5)} C:${closedCandle.close.toFixed(5)}`);
+                    // LOGGER.candle(`${symbol} 🕯️ CANDLE CLOSED [${candleTime}]: O:${closedCandle.open.toFixed(5)} H:${closedCandle.high.toFixed(5)} L:${closedCandle.low.toFixed(5)} C:${closedCandle.close.toFixed(5)}`);
 
                     // NOW process trading logic on the CLOSED candle
                     this.processCandleClose(symbol);
                 } else {
-                    LOGGER.debug(`${symbol}: Skipping non-aligned candle epoch: ${closedCandle.epoch} (not divisible by ${CONFIG.GRANULARITY})`);
+                    // LOGGER.debug(`${symbol}: Skipping non-aligned candle epoch: ${closedCandle.epoch} (not divisible by ${CONFIG.GRANULARITY})`);
                 }
             }
         }
@@ -1408,7 +1426,7 @@ class ConnectionManager {
 
         assetState.indicatorsReady = true;
 
-        LOGGER.debug(`${symbol} INDICATORS UPDATED: WPR: ${assetState.wpr.toFixed(2)} (prev: ${assetState.prevWpr.toFixed(2)}) | Stoch K:${assetState.stochastic.k.toFixed(2)} D:${assetState.stochastic.d.toFixed(2)}`);
+        // LOGGER.debug(`${symbol} INDICATORS UPDATED: WPR: ${assetState.wpr.toFixed(2)} (prev: ${assetState.prevWpr.toFixed(2)}) | Stoch K:${assetState.stochastic.k.toFixed(2)} D:${assetState.stochastic.d.toFixed(2)}`);
     }
 
     /**
@@ -1605,11 +1623,19 @@ class ConnectionManager {
                 this.send({ forget: response.subscription.id });
             }
         } else if (posIndex >= 0) {
+            // Update live profit and price for active positions
             const position = state.portfolio.activePositions[posIndex];
-            position.currentProfit = contract.profit;
-            position.currentPrice = contract.current_spot;
+            position.currentProfit = contract.profit || 0;
+            position.currentPrice = contract.current_spot || 0;
+            position.bidPrice = contract.bid_price || 0;
 
             const assetState = state.assets[position.symbol];
+
+            // Log profit updates periodically
+            if (Math.random() < 0.05) { // Log ~5% of updates to avoid spam
+                LOGGER.debug(`${position.symbol} Live P/L: $${position.currentProfit.toFixed(2)} | Price: ${position.currentPrice.toFixed(5)}`);
+            }
+
             if (assetState && StakeManager.shouldAutoClose(position.symbol, contract.profit)) {
                 LOGGER.recovery(`${position.symbol}: Profit $${contract.profit.toFixed(2)} >= Loss $${assetState.accumulatedLoss.toFixed(2)} - AUTO CLOSING`);
                 position.isRecoveryClose = true;
@@ -1896,29 +1922,31 @@ class DerivBot {
             session: sessionStats,
             timeframe: CONFIG.TIMEFRAME_LABEL,
             activePositionsCount: state.portfolio.activePositions.length,
-            activePositions: state.portfolio.activePositions.map(pos => ({
-                symbol: pos.symbol,
-                direction: pos.direction,
-                stake: pos.stake,
-                multiplier: pos.multiplier,
-                profit: pos.currentProfit,
-                reversalLevel: pos.reversalLevel,
-                duration: Math.floor((Date.now() - pos.entryTime) / 1000)
-            })),
+            activePositions: state.portfolio.activePositions.map(pos => {
+                const assetState = state.assets[pos.symbol];
+                return {
+                    symbol: pos.symbol,
+                    direction: pos.direction,
+                    stake: pos.stake,
+                    multiplier: pos.multiplier,
+                    profit: pos.currentProfit || 0,
+                    reversalLevel: pos.reversalLevel,
+                    tpTarget: assetState ? assetState.takeProfitAmount : CONFIG.TAKE_PROFIT,
+                    duration: Math.floor((Date.now() - pos.entryTime) / 1000)
+                };
+            }),
             assetStats: Object.entries(state.assets).map(([symbol, data]) => ({
                 symbol,
                 wpr: data.wpr.toFixed(1),
+                zone: data.wprZone,
                 stochK: data.stochastic.k.toFixed(1),
                 stochD: data.stochastic.d.toFixed(1),
-                buySignal: data.buySignalActive ? '🟢' : '-',
-                sellSignal: data.sellSignalActive ? '🔴' : '-',
-                direction: data.currentDirection || '-',
+                direction: data.currentDirection || 'NONE',
                 inCycle: data.inTradeCycle ? '🔄' : '-',
                 breakoutHigh: data.breakout.active ? data.breakout.highLevel.toFixed(5) : '-',
                 breakoutLow: data.breakout.active ? data.breakout.lowLevel.toFixed(5) : '-',
                 reversalLevel: `${data.reversalLevel}/${CONFIG.MAX_REVERSAL_LEVEL}`,
-                closedCandles: data.closedCandles.length,
-                dailyTrades: data.dailyTrades
+                closedCandles: data.closedCandles.length
             }))
         };
     }
@@ -1933,8 +1961,10 @@ class Dashboard {
         const status = bot.getStatus();
         const session = status.session;
 
+        console.clear(); // Clear screen for better readability
+
         console.log('\n' + '╔' + '═'.repeat(115) + '╗');
-        console.log('║' + `     DERIV BOT v6.2 - ${CONFIG.TIMEFRAME_LABEL} CANDLES | SIGNALS ON CLOSE ONLY`.padEnd(115) + '║');
+        console.log('║' + `     DERIV BOT v6.3 - ${CONFIG.TIMEFRAME_LABEL} CANDLES | SIGNALS ON CLOSE ONLY`.padEnd(115) + '║');
         console.log('╠' + '═'.repeat(115) + '╣');
 
         const netPLColor = session.netPL >= 0 ? '\x1b[32m' : '\x1b[31m';
@@ -1948,28 +1978,42 @@ class Dashboard {
 
         if (status.activePositions.length > 0) {
             console.log('║ 🚀 ACTIVE POSITIONS:'.padEnd(116) + '║');
-            console.log('║ Symbol     | Dir  | Stake   | Multi | Profit   | Rev Lvl | Duration'.padEnd(116) + '║');
+            console.log('║ Symbol      | Dir  | Stake    | Multi | Profit    | Rev | TP Target | Duration  ║');
             console.log('║' + '-'.repeat(115) + '║');
 
             status.activePositions.forEach(pos => {
                 const profitColor = pos.profit >= 0 ? '\x1b[32m' : '\x1b[31m';
                 const profitStr = pos.profit >= 0 ? `+${pos.profit.toFixed(2)}` : pos.profit.toFixed(2);
-                console.log(`║ ${pos.symbol.padEnd(10)} | ${pos.direction.padEnd(4)} | $${pos.stake.toFixed(2).padEnd(6)} | x${pos.multiplier.toString().padEnd(4)} | ${profitColor}${profitStr.padEnd(8)}${resetColor} | ${pos.reversalLevel.toString().padEnd(7)} | ${pos.duration}s`.padEnd(124) + '║');
+                const durationStr = this.formatDuration(pos.duration);
+
+                console.log(`║ ${pos.symbol.padEnd(11)} | ${pos.direction.padEnd(4)} | $${pos.stake.toFixed(2).padEnd(7)} | x${pos.multiplier.toString().padEnd(4)} | ${profitColor}${profitStr.padEnd(9)}${resetColor} | ${pos.reversalLevel}/${CONFIG.MAX_REVERSAL_LEVEL} | $${pos.tpTarget.toFixed(2).padEnd(8)} | ${durationStr.padEnd(9)} ║`);
             });
             console.log('╠' + '═'.repeat(115) + '╣');
         }
 
-        console.log('║ 📊 SIGNAL STATUS (Updated on CANDLE CLOSE only):'.padEnd(116) + '║');
-        console.log('║ Symbol     | WPR   | Buy  | Sell | Cycle | High Level    | Low Level     | Rev     | Bars ║');
+        console.log('║ 📊 ASSET STATUS (Updated on CANDLE CLOSE only):'.padEnd(116) + '║');
+        console.log('║ Symbol      | WPR    | Zone     | Cycle | High Lvl      | Low Lvl       | Rev   | Direction | Candles ║');
         console.log('║' + '-'.repeat(115) + '║');
 
         status.assetStats.forEach(stat => {
             const cycleColor = stat.inCycle === '🔄' ? '\x1b[33m' : '\x1b[90m';
-            console.log(`║ ${stat.symbol.padEnd(10)} | ${stat.wpr.padEnd(6)} | ${stat.buySignal.padEnd(4)} | ${stat.sellSignal.padEnd(4)} | ${cycleColor}${stat.inCycle.padEnd(5)}${resetColor} | ${stat.breakoutHigh.padEnd(13)} | ${stat.breakoutLow.padEnd(13)} | ${stat.reversalLevel.padEnd(7)} | ${stat.closedCandles.toString().padEnd(4)} ║`);
+            const zoneColor = stat.zone === 'oversold' ? '\x1b[36m' : (stat.zone === 'overbought' ? '\x1b[35m' : '\x1b[90m');
+
+            console.log(`║ ${stat.symbol.padEnd(11)} | ${stat.wpr.padEnd(6)} | ${zoneColor}${stat.zone.padEnd(8)}${resetColor} | ${cycleColor}${stat.inCycle.padEnd(5)}${resetColor} | ${stat.breakoutHigh.padEnd(13)} | ${stat.breakoutLow.padEnd(13)} | ${stat.reversalLevel.padEnd(5)} | ${stat.direction.padEnd(9)} | ${stat.closedCandles.toString().padEnd(7)} ║`);
         });
 
         console.log('╚' + '═'.repeat(115) + '╝');
-        console.log(`⏰ ${getGMTTime()} | TF: ${CONFIG.TIMEFRAME} | Signals: ON CANDLE CLOSE | Ctrl+C to stop\n`);
+        console.log(`⏰ ${getGMTTime()} | TF: ${CONFIG.TIMEFRAME} | Active Pos: ${status.activePositionsCount} | Ctrl+C to stop\n`);
+    }
+
+    static formatDuration(seconds) {
+        if (seconds < 60) return `${seconds}s`;
+        const minutes = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        if (minutes < 60) return `${minutes}m ${secs}s`;
+        const hours = Math.floor(minutes / 60);
+        const mins = minutes % 60;
+        return `${hours}h ${mins}m`;
     }
 
     static startLiveUpdates() {
