@@ -24,8 +24,8 @@ connection.on('message', (raw) => {
     // response may contain active_symbols
     const symbols = msg.active_symbols || (msg.msg_type === 'active_symbols' && msg.active_symbols) || null;
     if (symbols && Array.isArray(symbols)) {
-      const jump = symbols.filter(s => s.symbol && s.symbol.includes('JD')).map(s => s.symbol);
-      console.log('📊 Jump Indices:', jump);
+      const assets = symbols.filter(s => s.symbol).map(s => s.symbol);
+      console.log('📊 Deriv Assets:', assets);
       // console.log('📊 All Indices:', symbols);
       connection.close();
     } else {

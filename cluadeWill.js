@@ -349,6 +349,17 @@ const ASSET_CONFIGS = {
         maxStake: 1000,
         tradingHours: '24/7'
     },
+    'stpRNG': {
+        name: 'Step Index',
+        category: 'synthetic',
+        contractType: 'multiplier',
+        multipliers: [750, 2000, 3500, 5500, 7500],
+        defaultMultiplier: 7500,
+        maxTradesPerDay: 120,
+        minStake: 1.00,
+        maxStake: 1000,
+        tradingHours: '24/7'
+    },
     'frxXAUUSD': {
         name: 'Gold/USD',
         category: 'commodity',
@@ -362,7 +373,7 @@ const ASSET_CONFIGS = {
     }
 };
 
-let ACTIVE_ASSETS = ['R_75', 'frxXAUUSD', '1HZ50V'];
+let ACTIVE_ASSETS = ['R_75', 'frxXAUUSD', '1HZ50V', 'STP100'];
 
 // ============================================
 // STATE MANAGEMENT
