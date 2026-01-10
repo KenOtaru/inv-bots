@@ -294,17 +294,6 @@ const CONFIG = {
 // ============================================
 
 const ASSET_CONFIGS = {
-    // 'R_10': {
-    //     name: 'Volatility 10 Index',
-    //     category: 'synthetic',
-    //     contractType: 'multiplier',
-    //     multipliers: [400, 1000, 2000, 3000, 4000],
-    //     defaultMultiplier: 4000,
-    //     maxTradesPerDay: 100,
-    //     minStake: 1.00,
-    //     maxStake: 2000,
-    //     tradingHours: '24/7'
-    // },
     'R_75': {
         name: 'Volatility 75 Index',
         category: 'synthetic',
@@ -316,28 +305,28 @@ const ASSET_CONFIGS = {
         maxStake: 3000,
         tradingHours: '24/7'
     },
-    // 'R_100': {
-    //     name: 'Volatility 100 Index',
-    //     category: 'synthetic',
-    //     contractType: 'multiplier',
-    //     multipliers: [40, 100, 200, 300, 500],
-    //     defaultMultiplier: 500,
-    //     maxTradesPerDay: 50,
-    //     minStake: 1.00,
-    //     maxStake: 3000,
-    //     tradingHours: '24/7'
-    // },
-    // '1HZ10V': {
-    //     name: 'Volatility 10 (1s) Index',
-    //     category: 'synthetic',
-    //     contractType: 'multiplier',
-    //     multipliers: [400, 1000, 2000, 3000, 4000],
-    //     defaultMultiplier: 4000,
-    //     maxTradesPerDay: 150,
-    //     minStake: 1.00,
-    //     maxStake: 1000,
-    //     tradingHours: '24/7'
-    // },
+    'R_100': {
+        name: 'Volatility 100 Index',
+        category: 'synthetic',
+        contractType: 'multiplier',
+        multipliers: [40, 100, 200, 300, 500],
+        defaultMultiplier: 500,
+        maxTradesPerDay: 50,
+        minStake: 1.00,
+        maxStake: 3000,
+        tradingHours: '24/7'
+    },
+    '1HZ25V': {
+        name: 'Volatility 25 (1s) Index',
+        category: 'synthetic',
+        contractType: 'multiplier',
+        multipliers: [160, 400, 800, 1200, 1600],
+        defaultMultiplier: 1600,
+        maxTradesPerDay: 120,
+        minStake: 1.00,
+        maxStake: 1000,
+        tradingHours: '24/7'
+    },
     '1HZ50V': {
         name: 'Volatility 50 (1s) Index',
         category: 'synthetic',
@@ -373,7 +362,7 @@ const ASSET_CONFIGS = {
     }
 };
 
-let ACTIVE_ASSETS = ['R_75', 'frxXAUUSD', '1HZ50V', 'stpRNG'];
+let ACTIVE_ASSETS = ['R_75', 'frxXAUUSD', '1HZ50V', 'stpRNG', '1HZ25V', 'R_100'];
 
 // ============================================
 // STATE MANAGEMENT

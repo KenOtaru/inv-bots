@@ -1,0 +1,1674 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deriv Fibonacci Scalper Bot</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @keyframes pulse-green {
+
+            0%,
+            100% {
+                box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.7);
+            }
+
+            50% {
+                box-shadow: 0 0 0 10px rgba(34, 197, 94, 0);
+            }
+        }
+
+        @keyframes pulse-red {
+
+            0%,
+            100% {
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+            }
+
+            50% {
+                box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+            }
+        }
+
+        .pulse-green {
+            animation: pulse-green 2s infinite;
+        }
+
+        .pulse-red {
+            animation: pulse-red 2s infinite;
+        }
+
+        .log-entry {
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #1f2937;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #4b5563;
+            border-radius: 3px;
+        }
+    </style>
+</head>
+
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+    <!-- 
+    ╔══════════════════════════════════════════════════════════════════════════════╗
+    ║  DERIV FIBONACCI SCALPER BOT - Browser Edition                               ║
+    ║  Implements 1-minute Fibonacci Scalping Strategy                             ║
+    ║                                                                               ║
+    ║  ARCHITECTURE:                                                                ║
+    ║  1. CONFIG - All configurable parameters                                     ║
+    ║  2. STATE - Application state management                                     ║
+    ║  3. DERIV API - WebSocket connection & messaging                             ║
+    ║  4. CANDLE MANAGER - Buffer management & processing                          ║
+    ║  5. SWING DETECTOR - Identifies swing highs/lows                             ║
+    ║  6. FIBONACCI CALCULATOR - Computes retracement levels                       ║
+    ║  7. STRATEGY ENGINE - Core trading logic                                     ║
+    ║  8. RISK MANAGER - Position sizing & daily limits                            ║
+    ║  9. TRADE EXECUTOR - Order management                                        ║
+    ║  10. UI CONTROLLER - Dashboard updates                                       ║
+    ║                                                                               ║
+    ║  ⚠️ DISCLAIMER: FOR EDUCATIONAL PURPOSES ONLY - NOT FINANCIAL ADVICE         ║
+    ║  Test extensively on VIRTUAL accounts before any live trading!               ║
+    ╚══════════════════════════════════════════════════════════════════════════════╝
+    -->
+
+    <!-- Header -->
+    <header class="bg-gray-800 border-b border-gray-700 px-6 py-4">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <div class="flex items-center gap-2">
+                    <svg class="w-8 h-8 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                    </svg>
+                    <h1 class="text-xl font-bold">Deriv Fib Scalper</h1>
+                </div>
+                <span id="connectionStatus"
+                    class="px-3 py-1 rounded-full text-xs font-medium bg-gray-700 text-gray-400">
+                    Disconnected
+                </span>
+                <span id="accountType" class="px-3 py-1 rounded-full text-xs font-medium bg-blue-900 text-blue-300">
+                    VIRTUAL
+                </span>
+            </div>
+            <div class="flex items-center gap-4">
+                <div id="balanceDisplay" class="text-right">
+                    <div class="text-xs text-gray-400">Balance</div>
+                    <div class="text-lg font-bold text-emerald-400">$0.00</div>
+                </div>
+                <button id="toggleBot"
+                    class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 rounded-lg font-medium transition disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled>
+                    Start Bot
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div class="flex h-[calc(100vh-73px)]">
+        <!-- Left Sidebar - Configuration -->
+        <aside class="w-80 bg-gray-800 border-r border-gray-700 overflow-y-auto p-4">
+            <div class="space-y-4">
+                <!-- Connection Settings -->
+                <div class="bg-gray-750 rounded-lg p-4 border border-gray-700">
+                    <h3 class="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />
+                        </svg>
+                        Connection
+                    </h3>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">App ID</label>
+                            <input type="text" id="appId" value="1089"
+                                class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">API Token</label>
+                            <input type="password" id="apiToken" placeholder="Enter your Deriv API token"
+                                class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none">
+                        </div>
+                        <button id="connectBtn"
+                            class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded font-medium text-sm transition">
+                            Connect
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Trading Settings -->
+                <div class="bg-gray-750 rounded-lg p-4 border border-gray-700">
+                    <h3 class="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Trading
+                    </h3>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">Symbol</label>
+                            <select id="symbol"
+                                class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none">
+                                <option value="R_75">Volatility 75 Index</option>
+                                <option value="R_100">Volatility 100 Index</option>
+                                <option value="1HZ25V">Volatility 25 (1s)</option>
+                                <option value="1HZ50V">Volatility 50 (1s)</option>
+                                <option value="1HZ100V">Volatility 100 (1s)</option>
+                                <option value="stpRNG">Step Index</option>
+                            </select>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-xs text-gray-400 mb-1">Stake ($)</label>
+                                <input type="number" id="stake" value="1" min="0.35" step="0.01"
+                                    class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-xs text-gray-400 mb-1">Multiplier</label>
+                                <select id="multiplier"
+                                    class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none">
+                                    <option value="40">40x</option>
+                                    <option value="50">50x</option>
+                                    <option value="100" selected>100x</option>
+                                    <option value="160">160x</option>
+                                    <option value="200">200x</option>
+                                    <option value="300">300x</option>
+                                    <option value="500">500x</option>
+                                    <option value="80">80x</option>
+                                    <option value="400">400x</option>
+                                    <option value="600">600x</option>
+                                    <option value="800">800x</option>
+                                    <option value="1200">1200x</option>
+                                    <option value="1600">1600x</option>
+                                    <option value="2000">2000x</option>
+                                    <option value="3500">3500x</option>
+                                    <option value="5500">5500x</option>
+                                    <option value="7500">7500x</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Strategy Settings -->
+                <div class="bg-gray-750 rounded-lg p-4 border border-gray-700">
+                    <h3 class="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                        </svg>
+                        Strategy
+                    </h3>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">Swing Lookback</label>
+                            <input type="number" id="swingLookback" value="5" min="3" max="10"
+                                class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">Min Trend Swings</label>
+                            <input type="number" id="minTrendSwings" value="2" min="2" max="5"
+                                class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none">
+                        </div>
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <label class="block text-xs text-gray-400 mb-1">Fib Upper</label>
+                                <input type="number" id="fibUpper" value="0.618" step="0.01"
+                                    class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-xs text-gray-400 mb-1">Fib Lower</label>
+                                <input type="number" id="fibLower" value="0.5" step="0.01"
+                                    class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">Risk/Reward Ratio</label>
+                            <input type="number" id="rrRatio" value="1.5" step="0.1" min="1"
+                                class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Risk Management -->
+                <div class="bg-gray-750 rounded-lg p-4 border border-gray-700">
+                    <h3 class="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        Risk Management
+                    </h3>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">Max Daily Loss ($)</label>
+                            <input type="number" id="maxDailyLoss" value="20" min="1"
+                                class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">Max Trades/Day</label>
+                            <input type="number" id="maxTradesDay" value="10" min="1"
+                                class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">Max Consecutive Losses</label>
+                            <input type="number" id="maxConsecLoss" value="3" min="1"
+                                class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-400 mb-1">Cooldown After Max Loss (min)</label>
+                            <input type="number" id="cooldownMinutes" value="15" min="1"
+                                class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm focus:border-emerald-500 focus:outline-none">
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="flex-1 overflow-y-auto p-6">
+            <div class="grid grid-cols-3 gap-4 mb-6">
+                <!-- Stats Cards -->
+                <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-xs text-gray-400">Today's P&L</p>
+                            <p id="dailyPnl" class="text-2xl font-bold text-gray-100">$0.00</p>
+                        </div>
+                        <div class="w-12 h-12 bg-gray-700 rounded-lg flex items-center justify-center">
+                            <svg class="w-6 h-6 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1" />
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-xs text-gray-400">Trades Today</p>
+                            <p id="tradesCount" class="text-2xl font-bold">0 / 10</p>
+                        </div>
+                        <div class="w-12 h-12 bg-gray-700 rounded-lg flex items-center justify-center">
+                            <svg class="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <p class="text-xs text-gray-400">Win Rate</p>
+                            <p id="winRate" class="text-2xl font-bold">0%</p>
+                        </div>
+                        <div class="w-12 h-12 bg-gray-700 rounded-lg flex items-center justify-center">
+                            <svg class="w-6 h-6 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                            </svg>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Strategy Status Panel -->
+            <div class="grid grid-cols-2 gap-4 mb-6">
+                <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                    <h3 class="text-sm font-semibold text-gray-300 mb-3">Market Analysis</h3>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <p class="text-xs text-gray-400">Current Trend</p>
+                            <p id="currentTrend" class="text-lg font-bold text-gray-500">--</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-400">Last Price</p>
+                            <p id="lastPrice" class="text-lg font-bold">--</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-400">Break of Structure</p>
+                            <p id="bosStatus" class="text-lg font-bold text-gray-500">--</p>
+                        </div>
+                        <div>
+                            <p class="text-xs text-gray-400">Fib Zone Status</p>
+                            <p id="fibZoneStatus" class="text-lg font-bold text-gray-500">--</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                    <h3 class="text-sm font-semibold text-gray-300 mb-3">Fibonacci Levels</h3>
+                    <div id="fibLevels" class="space-y-2">
+                        <div class="flex justify-between text-sm">
+                            <span class="text-gray-400">0.0 (Swing End)</span>
+                            <span class="text-gray-500">--</span>
+                        </div>
+                        <div class="flex justify-between text-sm">
+                            <span class="text-gray-400">0.382</span>
+                            <span class="text-gray-500">--</span>
+                        </div>
+                        <div class="flex justify-between text-sm bg-amber-900/30 px-2 py-1 rounded">
+                            <span class="text-amber-400">0.5 (Golden Zone)</span>
+                            <span class="text-amber-400">--</span>
+                        </div>
+                        <div class="flex justify-between text-sm bg-amber-900/30 px-2 py-1 rounded">
+                            <span class="text-amber-400">0.618 (Golden Zone)</span>
+                            <span class="text-amber-400">--</span>
+                        </div>
+                        <div class="flex justify-between text-sm">
+                            <span class="text-gray-400">1.0 (Swing Start)</span>
+                            <span class="text-gray-500">--</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Active Position -->
+            <div id="activePositionPanel" class="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6 hidden">
+                <h3 class="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
+                    <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                    Active Position
+                </h3>
+                <div class="grid grid-cols-5 gap-4">
+                    <div>
+                        <p class="text-xs text-gray-400">Direction</p>
+                        <p id="posDirection" class="text-lg font-bold">--</p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-gray-400">Entry</p>
+                        <p id="posEntry" class="text-lg font-bold">--</p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-gray-400">Current P&L</p>
+                        <p id="posPnl" class="text-lg font-bold">--</p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-gray-400">Take Profit</p>
+                        <p id="posTp" class="text-lg font-bold text-emerald-400">--</p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-gray-400">Stop Loss</p>
+                        <p id="posSl" class="text-lg font-bold text-red-400">--</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Chart Placeholder -->
+            <div class="bg-gray-800 rounded-lg p-4 border border-gray-700 mb-6">
+                <h3 class="text-sm font-semibold text-gray-300 mb-3">Price Chart (Last 50 Candles)</h3>
+                <div class="h-64">
+                    <canvas id="priceChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Trade History -->
+            <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+                <h3 class="text-sm font-semibold text-gray-300 mb-3">Trade History</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead>
+                            <tr class="text-gray-400 border-b border-gray-700">
+                                <th class="text-left py-2 px-2">Time</th>
+                                <th class="text-left py-2 px-2">Direction</th>
+                                <th class="text-right py-2 px-2">Entry</th>
+                                <th class="text-right py-2 px-2">Exit</th>
+                                <th class="text-right py-2 px-2">P&L</th>
+                                <th class="text-left py-2 px-2">Reason</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tradeHistory">
+                            <tr class="text-gray-500">
+                                <td colspan="6" class="text-center py-4">No trades yet</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+
+        <!-- Right Sidebar - Log -->
+        <aside class="w-96 bg-gray-800 border-l border-gray-700 flex flex-col">
+            <div class="p-4 border-b border-gray-700 flex items-center justify-between">
+                <h3 class="text-sm font-semibold text-gray-300">Activity Log</h3>
+                <button id="clearLog" class="text-xs text-gray-400 hover:text-gray-200">Clear</button>
+            </div>
+            <div id="activityLog" class="flex-1 overflow-y-auto p-4 space-y-1">
+                <div class="log-entry text-gray-500">[System] Bot initialized. Configure and connect to start.</div>
+            </div>
+        </aside>
+    </div>
+
+    <script>
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // SECTION 1: CONFIGURATION & CONSTANTS
+        // ═══════════════════════════════════════════════════════════════════════════════
+
+        const CONFIG = {
+            // Connection (will be set from UI)
+            appId: '1089',
+            apiToken: '',
+
+            // Trading
+            symbol: 'R_100',
+            stake: 1,
+            multiplier: 50,
+
+            // Strategy parameters
+            swingLookback: 5,        // Bars to look for swing high/low
+            minTrendSwings: 2,       // Minimum swings to confirm trend
+            fibUpperZone: 0.618,     // Upper bound of golden zone
+            fibLowerZone: 0.5,       // Lower bound of golden zone
+            rrRatio: 1.5,            // Risk-reward target
+            minImpulseSize: 0.0005,  // Minimum impulse size (% of price)
+
+            // Risk management
+            maxDailyLoss: 20,
+            maxTradesPerDay: 10,
+            maxConsecutiveLosses: 3,
+            cooldownMinutes: 15,
+
+            // Candle buffer
+            maxCandles: 300,
+
+            // Time filters (24h format, set null to disable)
+            tradingHoursStart: null,
+            tradingHoursEnd: null,
+            tradingDays: [1, 2, 3, 4, 5, 6, 7] // Mon-Sun
+        };
+
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // SECTION 2: STATE MANAGEMENT
+        // ═══════════════════════════════════════════════════════════════════════════════
+
+        const STATE = {
+            // Connection
+            ws: null,
+            connected: false,
+            authorized: false,
+            subscriptionId: null,
+
+            // Account
+            balance: 0,
+            currency: 'USD',
+            accountType: 'virtual',
+
+            // Bot
+            isRunning: false,
+
+            // Market data
+            candles: [],
+            lastTick: null,
+
+            // Strategy state
+            swingHighs: [],
+            swingLows: [],
+            currentTrend: null,        // 'up', 'down', null
+            bosDetected: false,
+            impulseStart: null,
+            impulseEnd: null,
+            fibLevels: null,
+            waitingForEntry: false,
+
+            // Position
+            activeContract: null,
+            entryPrice: null,
+            direction: null,
+            takeProfitPrice: null,
+            stopLossPrice: null,
+
+            // Risk tracking
+            dailyPnl: 0,
+            tradesToday: 0,
+            consecutiveLosses: 0,
+            lastLossTime: null,
+            wins: 0,
+            losses: 0,
+
+            // Trade history
+            tradeHistory: []
+        };
+
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // SECTION 3: LOGGING & UI UTILITIES
+        // ═══════════════════════════════════════════════════════════════════════════════
+
+        function log(message, type = 'info') {
+            const logContainer = document.getElementById('activityLog');
+            const timestamp = new Date().toLocaleTimeString();
+            const colors = {
+                info: 'text-gray-400',
+                success: 'text-emerald-400',
+                error: 'text-red-400',
+                warning: 'text-amber-400',
+                trade: 'text-blue-400',
+                signal: 'text-purple-400'
+            };
+
+            const entry = document.createElement('div');
+            entry.className = `log-entry ${colors[type] || colors.info}`;
+            entry.textContent = `[${timestamp}] ${message}`;
+            logContainer.appendChild(entry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+
+            console.log(`[${type.toUpperCase()}] ${message}`);
+        }
+
+        function updateUI() {
+            // Balance
+            document.getElementById('balanceDisplay').innerHTML = `
+            <div class="text-xs text-gray-400">Balance</div>
+            <div class="text-lg font-bold text-emerald-400">${STATE.currency} ${STATE.balance.toFixed(2)}</div>
+        `;
+
+            // Daily PnL
+            const pnlEl = document.getElementById('dailyPnl');
+            pnlEl.textContent = `$${STATE.dailyPnl.toFixed(2)}`;
+            pnlEl.className = `text-2xl font-bold ${STATE.dailyPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`;
+
+            // Trades count
+            document.getElementById('tradesCount').textContent = `${STATE.tradesToday} / ${CONFIG.maxTradesPerDay}`;
+
+            // Win rate
+            const totalTrades = STATE.wins + STATE.losses;
+            const winRate = totalTrades > 0 ? ((STATE.wins / totalTrades) * 100).toFixed(1) : 0;
+            document.getElementById('winRate').textContent = `${winRate}%`;
+
+            // Current trend
+            const trendEl = document.getElementById('currentTrend');
+            if (STATE.currentTrend === 'up') {
+                trendEl.textContent = '↑ UPTREND';
+                trendEl.className = 'text-lg font-bold text-emerald-400';
+            } else if (STATE.currentTrend === 'down') {
+                trendEl.textContent = '↓ DOWNTREND';
+                trendEl.className = 'text-lg font-bold text-red-400';
+            } else {
+                trendEl.textContent = 'NO TREND';
+                trendEl.className = 'text-lg font-bold text-gray-500';
+            }
+
+            // Last price
+            if (STATE.lastTick) {
+                document.getElementById('lastPrice').textContent = STATE.lastTick.toFixed(4);
+            }
+
+            // BoS status
+            const bosEl = document.getElementById('bosStatus');
+            bosEl.textContent = STATE.bosDetected ? 'CONFIRMED' : 'WAITING';
+            bosEl.className = `text-lg font-bold ${STATE.bosDetected ? 'text-emerald-400' : 'text-gray-500'}`;
+
+            // Fib zone status
+            const fibEl = document.getElementById('fibZoneStatus');
+            if (STATE.waitingForEntry) {
+                fibEl.textContent = 'IN ZONE';
+                fibEl.className = 'text-lg font-bold text-amber-400';
+            } else if (STATE.fibLevels) {
+                fibEl.textContent = 'WAITING';
+                fibEl.className = 'text-lg font-bold text-gray-500';
+            } else {
+                fibEl.textContent = '--';
+                fibEl.className = 'text-lg font-bold text-gray-500';
+            }
+
+            // Update Fib levels display
+            updateFibLevelsDisplay();
+        }
+
+        function updateFibLevelsDisplay() {
+            if (!STATE.fibLevels) return;
+
+            const { start, end, levels } = STATE.fibLevels;
+            const fibContainer = document.getElementById('fibLevels');
+
+            fibContainer.innerHTML = `
+            <div class="flex justify-between text-sm">
+                <span class="text-gray-400">0.0 (Swing End)</span>
+                <span class="text-gray-300">${end.toFixed(4)}</span>
+            </div>
+            <div class="flex justify-between text-sm">
+                <span class="text-gray-400">0.382</span>
+                <span class="text-gray-300">${levels['0.382'].toFixed(4)}</span>
+            </div>
+            <div class="flex justify-between text-sm bg-amber-900/30 px-2 py-1 rounded">
+                <span class="text-amber-400">0.5 (Golden Zone)</span>
+                <span class="text-amber-400">${levels['0.5'].toFixed(4)}</span>
+            </div>
+            <div class="flex justify-between text-sm bg-amber-900/30 px-2 py-1 rounded">
+                <span class="text-amber-400">0.618 (Golden Zone)</span>
+                <span class="text-amber-400">${levels['0.618'].toFixed(4)}</span>
+            </div>
+            <div class="flex justify-between text-sm">
+                <span class="text-gray-400">1.0 (Swing Start)</span>
+                <span class="text-gray-300">${start.toFixed(4)}</span>
+            </div>
+        `;
+        }
+
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // SECTION 4: DERIV API WRAPPER
+        // ═══════════════════════════════════════════════════════════════════════════════
+
+        const DerivAPI = {
+            reqId: 0,
+            pendingRequests: {},
+
+            connect() {
+                return new Promise((resolve, reject) => {
+                    const wsUrl = `wss://ws.derivws.com/websockets/v3?app_id=${CONFIG.appId}`;
+
+                    log(`Connecting to Deriv API...`, 'info');
+                    STATE.ws = new WebSocket(wsUrl);
+
+                    STATE.ws.onopen = () => {
+                        STATE.connected = true;
+                        document.getElementById('connectionStatus').className = 'px-3 py-1 rounded-full text-xs font-medium bg-emerald-900 text-emerald-300';
+                        document.getElementById('connectionStatus').textContent = 'Connected';
+                        log('WebSocket connected', 'success');
+                        resolve();
+                    };
+
+                    STATE.ws.onclose = () => {
+                        STATE.connected = false;
+                        STATE.authorized = false;
+                        document.getElementById('connectionStatus').className = 'px-3 py-1 rounded-full text-xs font-medium bg-gray-700 text-gray-400';
+                        document.getElementById('connectionStatus').textContent = 'Disconnected';
+                        document.getElementById('toggleBot').disabled = true;
+                        log('WebSocket disconnected', 'warning');
+                    };
+
+                    STATE.ws.onerror = (error) => {
+                        log(`WebSocket error: ${error.message || 'Unknown error'}`, 'error');
+                        reject(error);
+                    };
+
+                    STATE.ws.onmessage = (event) => {
+                        this.handleMessage(JSON.parse(event.data));
+                    };
+                });
+            },
+
+            send(request) {
+                return new Promise((resolve, reject) => {
+                    if (!STATE.ws || STATE.ws.readyState !== WebSocket.OPEN) {
+                        reject(new Error('WebSocket not connected'));
+                        return;
+                    }
+
+                    const reqId = ++this.reqId;
+                    request.req_id = reqId;
+
+                    this.pendingRequests[reqId] = { resolve, reject };
+                    STATE.ws.send(JSON.stringify(request));
+                });
+            },
+
+            handleMessage(response) {
+                // Handle subscription messages (no req_id match needed)
+                if (response.msg_type === 'ohlc') {
+                    CandleManager.handleCandleUpdate(response.ohlc);
+                    return;
+                }
+
+                if (response.msg_type === 'proposal_open_contract') {
+                    TradeExecutor.handleContractUpdate(response.proposal_open_contract);
+                    return;
+                }
+
+                // Handle response to specific request
+                const reqId = response.req_id;
+                if (reqId && this.pendingRequests[reqId]) {
+                    const { resolve, reject } = this.pendingRequests[reqId];
+                    delete this.pendingRequests[reqId];
+
+                    if (response.error) {
+                        log(`API Error: ${response.error.message}`, 'error');
+                        reject(new Error(response.error.message));
+                    } else {
+                        resolve(response);
+                    }
+                }
+            },
+
+            async authorize() {
+                const response = await this.send({ authorize: CONFIG.apiToken });
+                STATE.authorized = true;
+                STATE.balance = response.authorize.balance;
+                STATE.currency = response.authorize.currency;
+                STATE.accountType = response.authorize.is_virtual ? 'virtual' : 'real';
+
+                const accountEl = document.getElementById('accountType');
+                if (STATE.accountType === 'virtual') {
+                    accountEl.className = 'px-3 py-1 rounded-full text-xs font-medium bg-blue-900 text-blue-300';
+                    accountEl.textContent = 'VIRTUAL';
+                } else {
+                    accountEl.className = 'px-3 py-1 rounded-full text-xs font-medium bg-red-900 text-red-300';
+                    accountEl.textContent = 'REAL';
+                }
+
+                log(`Authorized: ${response.authorize.fullname} (${STATE.accountType.toUpperCase()})`, 'success');
+                document.getElementById('toggleBot').disabled = false;
+                updateUI();
+                return response;
+            },
+
+            async subscribeCandles() {
+                const response = await this.send({
+                    ticks_history: CONFIG.symbol,
+                    adjust_start_time: 1,
+                    count: CONFIG.maxCandles,
+                    end: 'latest',
+                    granularity: 60,
+                    style: 'candles',
+                    subscribe: 1
+                });
+
+                // Process historical candles
+                if (response.candles) {
+                    STATE.candles = response.candles.map(c => ({
+                        time: c.epoch,
+                        open: parseFloat(c.open),
+                        high: parseFloat(c.high),
+                        low: parseFloat(c.low),
+                        close: parseFloat(c.close)
+                    }));
+                    log(`Loaded ${STATE.candles.length} historical candles`, 'info');
+                }
+
+                STATE.subscriptionId = response.subscription?.id;
+                return response;
+            },
+
+            async buyMultiplier(contractType, stake, multiplier, takeProfit = null, stopLoss = null) {
+                const request = {
+                    buy: 1,
+                    price: stake,
+                    parameters: {
+                        contract_type: contractType,
+                        symbol: CONFIG.symbol,
+                        amount: stake,
+                        basis: 'stake',
+                        multiplier: multiplier
+                    }
+                };
+
+                if (takeProfit !== null) {
+                    request.parameters.limit_order = request.parameters.limit_order || {};
+                    request.parameters.limit_order.take_profit = takeProfit;
+                }
+
+                if (stopLoss !== null) {
+                    request.parameters.limit_order = request.parameters.limit_order || {};
+                    request.parameters.limit_order.stop_loss = stopLoss;
+                }
+
+                return await this.send(request);
+            },
+
+            async sellContract(contractId) {
+                return await this.send({
+                    sell: contractId,
+                    price: 0 // Market price
+                });
+            },
+
+            async subscribeContract(contractId) {
+                return await this.send({
+                    proposal_open_contract: 1,
+                    contract_id: contractId,
+                    subscribe: 1
+                });
+            }
+        };
+
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // SECTION 5: CANDLE MANAGER
+        // ═══════════════════════════════════════════════════════════════════════════════
+
+        const CandleManager = {
+            lastCandleTime: null,
+
+            handleCandleUpdate(ohlc) {
+                const candle = {
+                    time: ohlc.epoch,
+                    open: parseFloat(ohlc.open),
+                    high: parseFloat(ohlc.high),
+                    low: parseFloat(ohlc.low),
+                    close: parseFloat(ohlc.close)
+                };
+
+                STATE.lastTick = candle.close;
+
+                // Check if this is a new candle or update to existing
+                if (STATE.candles.length > 0) {
+                    const lastCandle = STATE.candles[STATE.candles.length - 1];
+
+                    if (candle.time === lastCandle.time) {
+                        // Update existing candle
+                        STATE.candles[STATE.candles.length - 1] = candle;
+                    } else if (candle.time > lastCandle.time) {
+                        // New candle - process the closed candle
+                        STATE.candles.push(candle);
+
+                        // Trim buffer if needed
+                        if (STATE.candles.length > CONFIG.maxCandles) {
+                            STATE.candles.shift();
+                        }
+
+                        // Process the closed candle (previous one)
+                        if (STATE.isRunning) {
+                            StrategyEngine.onNewClosedCandle();
+                        }
+                    }
+                } else {
+                    STATE.candles.push(candle);
+                }
+
+                updateUI();
+                ChartManager.update();
+            },
+
+            getRecentCandles(count) {
+                return STATE.candles.slice(-count);
+            },
+
+            getLastClosedCandle() {
+                if (STATE.candles.length < 2) return null;
+                return STATE.candles[STATE.candles.length - 2];
+            }
+        };
+
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // SECTION 6: SWING DETECTOR
+        // ═══════════════════════════════════════════════════════════════════════════════
+
+        const SwingDetector = {
+            /**
+             * Detect swing high: A candle whose high is higher than
+             * the highs of `lookback` candles on both sides
+             */
+            findSwingHighs(candles, lookback) {
+                const swings = [];
+
+                for (let i = lookback; i < candles.length - lookback; i++) {
+                    let isSwingHigh = true;
+                    const currentHigh = candles[i].high;
+
+                    for (let j = 1; j <= lookback; j++) {
+                        if (candles[i - j].high >= currentHigh || candles[i + j].high >= currentHigh) {
+                            isSwingHigh = false;
+                            break;
+                        }
+                    }
+
+                    if (isSwingHigh) {
+                        swings.push({
+                            index: i,
+                            time: candles[i].time,
+                            price: currentHigh
+                        });
+                    }
+                }
+
+                return swings;
+            },
+
+            /**
+             * Detect swing low: A candle whose low is lower than
+             * the lows of `lookback` candles on both sides
+             */
+            findSwingLows(candles, lookback) {
+                const swings = [];
+
+                for (let i = lookback; i < candles.length - lookback; i++) {
+                    let isSwingLow = true;
+                    const currentLow = candles[i].low;
+
+                    for (let j = 1; j <= lookback; j++) {
+                        if (candles[i - j].low <= currentLow || candles[i + j].low <= currentLow) {
+                            isSwingLow = false;
+                            break;
+                        }
+                    }
+
+                    if (isSwingLow) {
+                        swings.push({
+                            index: i,
+                            time: candles[i].time,
+                            price: currentLow
+                        });
+                    }
+                }
+
+                return swings;
+            },
+
+            /**
+             * Determine micro-trend based on sequence of swing highs and lows
+             * Uptrend: Higher highs + higher lows
+             * Downtrend: Lower highs + lower lows
+             */
+            determineTrend(swingHighs, swingLows, minSwings) {
+                if (swingHighs.length < minSwings || swingLows.length < minSwings) {
+                    return null;
+                }
+
+                // Get recent swings
+                const recentHighs = swingHighs.slice(-minSwings);
+                const recentLows = swingLows.slice(-minSwings);
+
+                // Check for uptrend (higher highs and higher lows)
+                let higherHighs = true;
+                let higherLows = true;
+
+                for (let i = 1; i < recentHighs.length; i++) {
+                    if (recentHighs[i].price <= recentHighs[i - 1].price) {
+                        higherHighs = false;
+                        break;
+                    }
+                }
+
+                for (let i = 1; i < recentLows.length; i++) {
+                    if (recentLows[i].price <= recentLows[i - 1].price) {
+                        higherLows = false;
+                        break;
+                    }
+                }
+
+                if (higherHighs && higherLows) {
+                    return 'up';
+                }
+
+                // Check for downtrend (lower highs and lower lows)
+                let lowerHighs = true;
+                let lowerLows = true;
+
+                for (let i = 1; i < recentHighs.length; i++) {
+                    if (recentHighs[i].price >= recentHighs[i - 1].price) {
+                        lowerHighs = false;
+                        break;
+                    }
+                }
+
+                for (let i = 1; i < recentLows.length; i++) {
+                    if (recentLows[i].price >= recentLows[i - 1].price) {
+                        lowerLows = false;
+                        break;
+                    }
+                }
+
+                if (lowerHighs && lowerLows) {
+                    return 'down';
+                }
+
+                return null;
+            }
+        };
+
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // SECTION 7: FIBONACCI CALCULATOR
+        // ═══════════════════════════════════════════════════════════════════════════════
+
+        const FibCalculator = {
+            /**
+             * Calculate Fibonacci retracement levels between two points
+             * For uptrend: start = swing low, end = swing high
+             * For downtrend: start = swing high, end = swing low
+             */
+            calculate(start, end) {
+                const range = end - start;
+
+                return {
+                    start: start,
+                    end: end,
+                    range: Math.abs(range),
+                    levels: {
+                        '0.0': end,
+                        '0.236': end - (range * 0.236),
+                        '0.382': end - (range * 0.382),
+                        '0.5': end - (range * 0.5),
+                        '0.618': end - (range * 0.618),
+                        '0.786': end - (range * 0.786),
+                        '1.0': start
+                    }
+                };
+            },
+
+            /**
+             * Check if price is in the golden zone (0.5 - 0.618)
+             */
+            isInGoldenZone(price, fibLevels, trend) {
+                const upper = fibLevels.levels[CONFIG.fibLowerZone.toString()];
+                const lower = fibLevels.levels[CONFIG.fibUpperZone.toString()];
+
+                if (trend === 'up') {
+                    // For uptrend, golden zone is below price
+                    return price >= Math.min(upper, lower) && price <= Math.max(upper, lower);
+                } else {
+                    // For downtrend, golden zone is above price
+                    return price >= Math.min(upper, lower) && price <= Math.max(upper, lower);
+                }
+            }
+        };
+
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // SECTION 8: STRATEGY ENGINE
+        // ═══════════════════════════════════════════════════════════════════════════════
+
+        const StrategyEngine = {
+            /**
+             * Main strategy function called on each closed candle
+             */
+            onNewClosedCandle() {
+                // Skip if we have an active position
+                if (STATE.activeContract) {
+                    return;
+                }
+
+                // Get recent candles for analysis
+                const candles = CandleManager.getRecentCandles(100);
+                if (candles.length < 50) {
+                    return;
+                }
+
+                // Step 1: Detect swings
+                STATE.swingHighs = SwingDetector.findSwingHighs(candles, CONFIG.swingLookback);
+                STATE.swingLows = SwingDetector.findSwingLows(candles, CONFIG.swingLookback);
+
+                // Step 2: Determine trend
+                STATE.currentTrend = SwingDetector.determineTrend(
+                    STATE.swingHighs,
+                    STATE.swingLows,
+                    CONFIG.minTrendSwings
+                );
+
+                if (!STATE.currentTrend) {
+                    STATE.bosDetected = false;
+                    STATE.fibLevels = null;
+                    STATE.waitingForEntry = false;
+                    return;
+                }
+
+                // Step 3: Check for Break of Structure (BoS)
+                const lastCandle = candles[candles.length - 1];
+                const recentHighs = STATE.swingHighs.slice(-3);
+                const recentLows = STATE.swingLows.slice(-3);
+
+                if (STATE.currentTrend === 'up' && recentHighs.length >= 2) {
+                    // BoS for uptrend: price breaks above last swing high
+                    const lastSwingHigh = recentHighs[recentHighs.length - 2];
+                    if (lastCandle.close > lastSwingHigh.price) {
+                        if (!STATE.bosDetected) {
+                            STATE.bosDetected = true;
+                            log(`Break of Structure detected (UPTREND) - Price broke above ${lastSwingHigh.price.toFixed(4)}`, 'signal');
+
+                            // Define impulse leg and calculate Fib
+                            const lastSwingLow = recentLows[recentLows.length - 1];
+                            if (lastSwingLow) {
+                                STATE.impulseStart = lastSwingLow.price;
+                                STATE.impulseEnd = lastCandle.high;
+                                STATE.fibLevels = FibCalculator.calculate(STATE.impulseStart, STATE.impulseEnd);
+                                log(`Fib levels calculated: Golden zone ${STATE.fibLevels.levels['0.5'].toFixed(4)} - ${STATE.fibLevels.levels['0.618'].toFixed(4)}`, 'signal');
+                            }
+                        }
+                    }
+                } else if (STATE.currentTrend === 'down' && recentLows.length >= 2) {
+                    // BoS for downtrend: price breaks below last swing low
+                    const lastSwingLow = recentLows[recentLows.length - 2];
+                    if (lastCandle.close < lastSwingLow.price) {
+                        if (!STATE.bosDetected) {
+                            STATE.bosDetected = true;
+                            log(`Break of Structure detected (DOWNTREND) - Price broke below ${lastSwingLow.price.toFixed(4)}`, 'signal');
+
+                            // Define impulse leg and calculate Fib
+                            const lastSwingHigh = recentHighs[recentHighs.length - 1];
+                            if (lastSwingHigh) {
+                                STATE.impulseStart = lastSwingHigh.price;
+                                STATE.impulseEnd = lastCandle.low;
+                                STATE.fibLevels = FibCalculator.calculate(STATE.impulseStart, STATE.impulseEnd);
+                                log(`Fib levels calculated: Golden zone ${STATE.fibLevels.levels['0.5'].toFixed(4)} - ${STATE.fibLevels.levels['0.618'].toFixed(4)}`, 'signal');
+                            }
+                        }
+                    }
+                }
+
+                // Step 4: Check for entry in golden zone
+                if (STATE.bosDetected && STATE.fibLevels) {
+                    const currentPrice = lastCandle.close;
+                    const inGoldenZone = FibCalculator.isInGoldenZone(currentPrice, STATE.fibLevels, STATE.currentTrend);
+
+                    STATE.waitingForEntry = inGoldenZone;
+
+                    if (inGoldenZone) {
+                        // Additional confirmation: Check for rejection candle
+                        const prevCandle = candles[candles.length - 2];
+                        let confirmationValid = false;
+
+                        if (STATE.currentTrend === 'up') {
+                            // For long entry: bullish candle close
+                            confirmationValid = lastCandle.close > lastCandle.open;
+                        } else {
+                            // For short entry: bearish candle close
+                            confirmationValid = lastCandle.close < lastCandle.open;
+                        }
+
+                        if (confirmationValid) {
+                            // Generate signal
+                            const signal = this.generateSignal(lastCandle);
+                            if (signal) {
+                                // Check with risk manager
+                                if (RiskManager.canTrade()) {
+                                    TradeExecutor.executeSignal(signal);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                updateUI();
+            },
+
+            /**
+             * Generate trading signal with entry, SL, and TP
+             */
+            generateSignal(currentCandle) {
+                if (!STATE.fibLevels) return null;
+
+                const entryPrice = currentCandle.close;
+                const recentHighs = STATE.swingHighs.slice(-3);
+                const recentLows = STATE.swingLows.slice(-3);
+
+                if (STATE.currentTrend === 'up') {
+                    // Long trade
+                    const stopLoss = STATE.fibLevels.levels['0.786']; // Below 78.6% level
+                    const riskAmount = entryPrice - stopLoss;
+                    const takeProfit = entryPrice + (riskAmount * CONFIG.rrRatio);
+
+                    return {
+                        direction: 'MULTUP',
+                        entry: entryPrice,
+                        stopLoss: stopLoss,
+                        takeProfit: takeProfit,
+                        riskPips: riskAmount
+                    };
+                } else {
+                    // Short trade
+                    const stopLoss = STATE.fibLevels.levels['0.786']; // Above 78.6% level
+                    const riskAmount = stopLoss - entryPrice;
+                    const takeProfit = entryPrice - (riskAmount * CONFIG.rrRatio);
+
+                    return {
+                        direction: 'MULTDOWN',
+                        entry: entryPrice,
+                        stopLoss: stopLoss,
+                        takeProfit: takeProfit,
+                        riskPips: riskAmount
+                    };
+                }
+            },
+
+            /**
+             * Reset strategy state after trade closes
+             */
+            reset() {
+                STATE.bosDetected = false;
+                STATE.fibLevels = null;
+                STATE.waitingForEntry = false;
+                STATE.impulseStart = null;
+                STATE.impulseEnd = null;
+            }
+        };
+
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // SECTION 9: RISK MANAGER
+        // ═══════════════════════════════════════════════════════════════════════════════
+
+        const RiskManager = {
+            /**
+             * Check if trading is allowed based on risk parameters
+             */
+            canTrade() {
+                // Check daily loss limit
+                if (STATE.dailyPnl <= -CONFIG.maxDailyLoss) {
+                    log('Trading blocked: Max daily loss reached', 'warning');
+                    return false;
+                }
+
+                // Check max trades per day
+                if (STATE.tradesToday >= CONFIG.maxTradesPerDay) {
+                    log('Trading blocked: Max trades per day reached', 'warning');
+                    return false;
+                }
+
+                // Check consecutive losses cooldown
+                if (STATE.consecutiveLosses >= CONFIG.maxConsecutiveLosses) {
+                    if (STATE.lastLossTime) {
+                        const cooldownEnd = new Date(STATE.lastLossTime.getTime() + (CONFIG.cooldownMinutes * 60000));
+                        if (new Date() < cooldownEnd) {
+                            const remaining = Math.ceil((cooldownEnd - new Date()) / 60000);
+                            log(`Trading blocked: Cooldown active (${remaining} min remaining)`, 'warning');
+                            return false;
+                        } else {
+                            // Cooldown expired, reset
+                            STATE.consecutiveLosses = 0;
+                        }
+                    }
+                }
+
+                // Check trading hours (if configured)
+                if (CONFIG.tradingHoursStart !== null && CONFIG.tradingHoursEnd !== null) {
+                    const now = new Date();
+                    const currentHour = now.getHours();
+                    if (currentHour < CONFIG.tradingHoursStart || currentHour >= CONFIG.tradingHoursEnd) {
+                        log('Trading blocked: Outside trading hours', 'warning');
+                        return false;
+                    }
+                }
+
+                // Check trading days
+                const dayOfWeek = new Date().getDay();
+                if (!CONFIG.tradingDays.includes(dayOfWeek)) {
+                    log('Trading blocked: Non-trading day', 'warning');
+                    return false;
+                }
+
+                return true;
+            },
+
+            /**
+             * Record trade result
+             */
+            recordTrade(pnl, isWin) {
+                STATE.dailyPnl += pnl;
+                STATE.tradesToday++;
+
+                if (isWin) {
+                    STATE.wins++;
+                    STATE.consecutiveLosses = 0;
+                } else {
+                    STATE.losses++;
+                    STATE.consecutiveLosses++;
+                    STATE.lastLossTime = new Date();
+                }
+
+                updateUI();
+            }
+        };
+
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // SECTION 10: TRADE EXECUTOR
+        // ═══════════════════════════════════════════════════════════════════════════════
+
+        const TradeExecutor = {
+            /**
+             * Execute a trading signal
+             */
+            async executeSignal(signal) {
+                try {
+                    log(`Executing ${signal.direction} @ ${signal.entry.toFixed(4)}`, 'trade');
+                    log(`SL: ${signal.stopLoss.toFixed(4)} | TP: ${signal.takeProfit.toFixed(4)}`, 'trade');
+
+                    // Calculate SL/TP as profit amounts for multiplier
+                    const slAmount = CONFIG.stake; // Max loss is the stake
+                    const tpAmount = CONFIG.stake * CONFIG.rrRatio; // Target profit
+
+                    const response = await DerivAPI.buyMultiplier(
+                        signal.direction,
+                        CONFIG.stake,
+                        CONFIG.multiplier,
+                        tpAmount,
+                        slAmount
+                    );
+
+                    if (response.buy) {
+                        STATE.activeContract = response.buy.contract_id;
+                        STATE.entryPrice = signal.entry;
+                        STATE.direction = signal.direction;
+                        STATE.takeProfitPrice = signal.takeProfit;
+                        STATE.stopLossPrice = signal.stopLoss;
+
+                        log(`Trade opened: Contract ID ${STATE.activeContract}`, 'success');
+
+                        // Subscribe to contract updates
+                        await DerivAPI.subscribeContract(STATE.activeContract);
+
+                        // Show active position panel
+                        document.getElementById('activePositionPanel').classList.remove('hidden');
+                        this.updatePositionDisplay();
+                    }
+                } catch (error) {
+                    log(`Trade execution failed: ${error.message}`, 'error');
+                }
+            },
+
+            /**
+             * Handle contract updates from subscription
+             */
+            handleContractUpdate(contract) {
+                if (!contract || contract.contract_id !== STATE.activeContract) return;
+
+                // Update position display
+                const currentPnl = contract.profit || 0;
+                document.getElementById('posPnl').textContent = `$${currentPnl.toFixed(2)}`;
+                document.getElementById('posPnl').className = `text-lg font-bold ${currentPnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`;
+
+                // Check if contract is closed
+                if (contract.is_sold || contract.status === 'sold') {
+                    this.onContractClosed(contract);
+                }
+            },
+
+            /**
+             * Handle contract closure
+             */
+            onContractClosed(contract) {
+                const pnl = contract.profit || 0;
+                const isWin = pnl > 0;
+
+                log(`Trade closed: ${isWin ? 'WIN' : 'LOSS'} $${pnl.toFixed(2)}`, isWin ? 'success' : 'error');
+
+                // Record in history
+                STATE.tradeHistory.push({
+                    time: new Date().toLocaleTimeString(),
+                    direction: STATE.direction,
+                    entry: STATE.entryPrice,
+                    exit: contract.sell_price / CONFIG.multiplier || STATE.lastTick,
+                    pnl: pnl,
+                    reason: contract.status
+                });
+
+                // Update trade history table
+                this.updateTradeHistory();
+
+                // Record with risk manager
+                RiskManager.recordTrade(pnl, isWin);
+
+                // Reset state
+                STATE.activeContract = null;
+                STATE.entryPrice = null;
+                STATE.direction = null;
+                STATE.takeProfitPrice = null;
+                STATE.stopLossPrice = null;
+
+                // Hide position panel
+                document.getElementById('activePositionPanel').classList.add('hidden');
+
+                // Reset strategy
+                StrategyEngine.reset();
+
+                updateUI();
+            },
+
+            updatePositionDisplay() {
+                document.getElementById('posDirection').textContent = STATE.direction === 'MULTUP' ? '↑ LONG' : '↓ SHORT';
+                document.getElementById('posDirection').className = `text-lg font-bold ${STATE.direction === 'MULTUP' ? 'text-emerald-400' : 'text-red-400'}`;
+                document.getElementById('posEntry').textContent = STATE.entryPrice.toFixed(4);
+                document.getElementById('posTp').textContent = STATE.takeProfitPrice.toFixed(4);
+                document.getElementById('posSl').textContent = STATE.stopLossPrice.toFixed(4);
+            },
+
+            updateTradeHistory() {
+                const tbody = document.getElementById('tradeHistory');
+
+                if (STATE.tradeHistory.length === 0) {
+                    tbody.innerHTML = '<tr class="text-gray-500"><td colspan="6" class="text-center py-4">No trades yet</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = STATE.tradeHistory.slice(-20).reverse().map(trade => `
+                <tr class="border-b border-gray-700">
+                    <td class="py-2 px-2">${trade.time}</td>
+                    <td class="py-2 px-2">
+                        <span class="${trade.direction === 'MULTUP' ? 'text-emerald-400' : 'text-red-400'}">
+                            ${trade.direction === 'MULTUP' ? '↑ LONG' : '↓ SHORT'}
+                        </span>
+                    </td>
+                    <td class="py-2 px-2 text-right">${trade.entry.toFixed(4)}</td>
+                    <td class="py-2 px-2 text-right">${trade.exit.toFixed(4)}</td>
+                    <td class="py-2 px-2 text-right ${trade.pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}">
+                        ${trade.pnl >= 0 ? '+' : ''}$${trade.pnl.toFixed(2)}
+                    </td>
+                    <td class="py-2 px-2 text-gray-400">${trade.reason}</td>
+                </tr>
+            `).join('');
+            }
+        };
+
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // SECTION 11: CHART MANAGER
+        // ═══════════════════════════════════════════════════════════════════════════════
+
+        const ChartManager = {
+            chart: null,
+
+            init() {
+                const ctx = document.getElementById('priceChart').getContext('2d');
+                this.chart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: [],
+                        datasets: [{
+                            label: 'Price',
+                            data: [],
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                            fill: true,
+                            tension: 0.1,
+                            pointRadius: 0
+                        }, {
+                            label: 'Fib 0.5',
+                            data: [],
+                            borderColor: '#f59e0b',
+                            borderDash: [5, 5],
+                            pointRadius: 0,
+                            fill: false
+                        }, {
+                            label: 'Fib 0.618',
+                            data: [],
+                            borderColor: '#f59e0b',
+                            borderDash: [5, 5],
+                            pointRadius: 0,
+                            fill: false
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: false
+                            }
+                        },
+                        scales: {
+                            x: {
+                                display: false
+                            },
+                            y: {
+                                grid: {
+                                    color: 'rgba(75, 85, 99, 0.3)'
+                                },
+                                ticks: {
+                                    color: '#9ca3af'
+                                }
+                            }
+                        },
+                        interaction: {
+                            intersect: false,
+                            mode: 'index'
+                        }
+                    }
+                });
+            },
+
+            update() {
+                if (!this.chart) return;
+
+                const recentCandles = CandleManager.getRecentCandles(50);
+                const labels = recentCandles.map((_, i) => i);
+                const prices = recentCandles.map(c => c.close);
+
+                this.chart.data.labels = labels;
+                this.chart.data.datasets[0].data = prices;
+
+                // Update Fib levels if available
+                if (STATE.fibLevels) {
+                    const fib05 = Array(prices.length).fill(STATE.fibLevels.levels['0.5']);
+                    const fib0618 = Array(prices.length).fill(STATE.fibLevels.levels['0.618']);
+                    this.chart.data.datasets[1].data = fib05;
+                    this.chart.data.datasets[2].data = fib0618;
+                } else {
+                    this.chart.data.datasets[1].data = [];
+                    this.chart.data.datasets[2].data = [];
+                }
+
+                this.chart.update('none');
+            }
+        };
+
+        // ═══════════════════════════════════════════════════════════════════════════════
+        // SECTION 12: MAIN APPLICATION
+        // ═══════════════════════════════════════════════════════════════════════════════
+
+        async function init() {
+            log('Deriv Fibonacci Scalper Bot initialized', 'info');
+            log('⚠️ DISCLAIMER: For educational purposes only. Not financial advice!', 'warning');
+            log('Always test on VIRTUAL accounts before live trading.', 'warning');
+
+            ChartManager.init();
+
+            // Load saved config from localStorage
+            loadConfig();
+
+            // Setup event listeners
+            setupEventListeners();
+        }
+
+        function loadConfig() {
+            const savedConfig = localStorage.getItem('fibScalperConfig');
+            if (savedConfig) {
+                const config = JSON.parse(savedConfig);
+                document.getElementById('appId').value = config.appId || CONFIG.appId;
+                document.getElementById('symbol').value = config.symbol || CONFIG.symbol;
+                document.getElementById('stake').value = config.stake || CONFIG.stake;
+                document.getElementById('multiplier').value = config.multiplier || CONFIG.multiplier;
+                document.getElementById('swingLookback').value = config.swingLookback || CONFIG.swingLookback;
+                document.getElementById('minTrendSwings').value = config.minTrendSwings || CONFIG.minTrendSwings;
+                document.getElementById('fibUpper').value = config.fibUpper || CONFIG.fibUpperZone;
+                document.getElementById('fibLower').value = config.fibLower || CONFIG.fibLowerZone;
+                document.getElementById('rrRatio').value = config.rrRatio || CONFIG.rrRatio;
+                document.getElementById('maxDailyLoss').value = config.maxDailyLoss || CONFIG.maxDailyLoss;
+                document.getElementById('maxTradesDay').value = config.maxTradesDay || CONFIG.maxTradesPerDay;
+                document.getElementById('maxConsecLoss').value = config.maxConsecLoss || CONFIG.maxConsecutiveLosses;
+                document.getElementById('cooldownMinutes').value = config.cooldownMinutes || CONFIG.cooldownMinutes;
+            }
+        }
+
+        function saveConfig() {
+            const config = {
+                appId: document.getElementById('appId').value,
+                symbol: document.getElementById('symbol').value,
+                stake: parseFloat(document.getElementById('stake').value),
+                multiplier: parseInt(document.getElementById('multiplier').value),
+                swingLookback: parseInt(document.getElementById('swingLookback').value),
+                minTrendSwings: parseInt(document.getElementById('minTrendSwings').value),
+                fibUpper: parseFloat(document.getElementById('fibUpper').value),
+                fibLower: parseFloat(document.getElementById('fibLower').value),
+                rrRatio: parseFloat(document.getElementById('rrRatio').value),
+                maxDailyLoss: parseFloat(document.getElementById('maxDailyLoss').value),
+                maxTradesDay: parseInt(document.getElementById('maxTradesDay').value),
+                maxConsecLoss: parseInt(document.getElementById('maxConsecLoss').value),
+                cooldownMinutes: parseInt(document.getElementById('cooldownMinutes').value)
+            };
+            localStorage.setItem('fibScalperConfig', JSON.stringify(config));
+        }
+
+        function updateConfigFromUI() {
+            CONFIG.appId = document.getElementById('appId').value;
+            CONFIG.apiToken = document.getElementById('apiToken').value;
+            CONFIG.symbol = document.getElementById('symbol').value;
+            CONFIG.stake = parseFloat(document.getElementById('stake').value);
+            CONFIG.multiplier = parseInt(document.getElementById('multiplier').value);
+            CONFIG.swingLookback = parseInt(document.getElementById('swingLookback').value);
+            CONFIG.minTrendSwings = parseInt(document.getElementById('minTrendSwings').value);
+            CONFIG.fibUpperZone = parseFloat(document.getElementById('fibUpper').value);
+            CONFIG.fibLowerZone = parseFloat(document.getElementById('fibLower').value);
+            CONFIG.rrRatio = parseFloat(document.getElementById('rrRatio').value);
+            CONFIG.maxDailyLoss = parseFloat(document.getElementById('maxDailyLoss').value);
+            CONFIG.maxTradesPerDay = parseInt(document.getElementById('maxTradesDay').value);
+            CONFIG.maxConsecutiveLosses = parseInt(document.getElementById('maxConsecLoss').value);
+            CONFIG.cooldownMinutes = parseInt(document.getElementById('cooldownMinutes').value);
+
+            saveConfig();
+        }
+
+        function setupEventListeners() {
+            // Connect button
+            document.getElementById('connectBtn').addEventListener('click', async () => {
+                updateConfigFromUI();
+
+                if (!CONFIG.apiToken) {
+                    log('Please enter your Deriv API token', 'error');
+                    return;
+                }
+
+                try {
+                    await DerivAPI.connect();
+                    await DerivAPI.authorize();
+                    await DerivAPI.subscribeCandles();
+                    log(`Subscribed to ${CONFIG.symbol} 1-minute candles`, 'success');
+                } catch (error) {
+                    log(`Connection failed: ${error.message}`, 'error');
+                }
+            });
+
+            // Toggle bot button
+            document.getElementById('toggleBot').addEventListener('click', () => {
+                STATE.isRunning = !STATE.isRunning;
+                const btn = document.getElementById('toggleBot');
+
+                if (STATE.isRunning) {
+                    btn.textContent = 'Stop Bot';
+                    btn.className = 'px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg font-medium transition';
+                    log('Bot STARTED - Monitoring for signals...', 'success');
+                } else {
+                    btn.textContent = 'Start Bot';
+                    btn.className = 'px-4 py-2 bg-emerald-600 hover:bg-emerald-700 rounded-lg font-medium transition';
+                    log('Bot STOPPED', 'warning');
+                }
+            });
+
+            // Clear log button
+            document.getElementById('clearLog').addEventListener('click', () => {
+                document.getElementById('activityLog').innerHTML = '';
+                log('Log cleared', 'info');
+            });
+
+            // Save config on input change
+            const configInputs = ['symbol', 'stake', 'multiplier', 'swingLookback', 'minTrendSwings',
+                'fibUpper', 'fibLower', 'rrRatio', 'maxDailyLoss', 'maxTradesDay',
+                'maxConsecLoss', 'cooldownMinutes'];
+
+            configInputs.forEach(id => {
+                document.getElementById(id).addEventListener('change', () => {
+                    updateConfigFromUI();
+                    log('Configuration updated', 'info');
+                });
+            });
+        }
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+
+</html>
