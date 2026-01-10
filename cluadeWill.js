@@ -511,7 +511,7 @@ class TechnicalIndicators {
     /**
      * Calculate Williams Percent Range (WPR) - ONLY on closed candles
      */
-    static calculateWPR(candles, period = 14) {
+    static calculateWPR(candles, period = 80) {
         if (!candles || candles.length < period) {
             return -50;
         }
