@@ -12,7 +12,7 @@ require('dotenv').config();
 
 const ASSET_CONFIGS = {
     'R_75': {
-        name: 'Volatility 75 Index',
+        name: 'Volatility 75',
         category: 'synthetic',
         contractType: 'multiplier',
         multipliers: [50, 100, 200, 300, 500],
@@ -26,7 +26,7 @@ const ASSET_CONFIGS = {
         rrRatio: 1.5
     },
     'R_100': {
-        name: 'Volatility 100 Index',
+        name: 'Volatility 100',
         category: 'synthetic',
         contractType: 'multiplier',
         multipliers: [40, 100, 200, 300, 500],
@@ -40,7 +40,7 @@ const ASSET_CONFIGS = {
         rrRatio: 1.5
     },
     '1HZ25V': {
-        name: 'Volatility 25 (1s) Index',
+        name: 'Volatility 25 (1s)',
         category: 'synthetic',
         contractType: 'multiplier',
         multipliers: [160, 400, 800, 1200, 1600],
@@ -54,7 +54,7 @@ const ASSET_CONFIGS = {
         rrRatio: 1.3
     },
     '1HZ50V': {
-        name: 'Volatility 50 (1s) Index',
+        name: 'Volatility 50 (1s)',
         category: 'synthetic',
         contractType: 'multiplier',
         multipliers: [80, 200, 400, 600, 800],
@@ -68,7 +68,7 @@ const ASSET_CONFIGS = {
         rrRatio: 1.4
     },
     '1HZ100V': {
-        name: 'Volatility 100 (1s) Index',
+        name: 'Volatility 100 (1s)',
         category: 'synthetic',
         contractType: 'multiplier',
         multipliers: [40, 100, 200, 300, 500],
@@ -140,9 +140,9 @@ const CONFIG = {
     // Global risk management
     maxDailyLossPercent: 10,
     maxDailyLoss: 50,
-    maxTotalOpenPositions: 3,
+    maxTotalOpenPositions: 7,
     maxConsecutiveLosses: 5,
-    cooldownMinutes: 10,
+    cooldownMinutes: 15,
 
     // Telegram settings
     telegram: {
