@@ -16,7 +16,7 @@ const ASSET_CONFIGS = {
         category: 'synthetic',
         contractType: 'multiplier',
         multipliers: [50, 100, 200, 300, 500],
-        defaultMultiplier: 500,
+        defaultMultiplier: 200,
         maxTradesPerDay: 500000,
         minStake: 1.00,
         maxStake: 3000,
@@ -30,7 +30,7 @@ const ASSET_CONFIGS = {
         category: 'synthetic',
         contractType: 'multiplier',
         multipliers: [40, 100, 200, 300, 500],
-        defaultMultiplier: 500,
+        defaultMultiplier: 200,
         maxTradesPerDay: 50,
         minStake: 1.00,
         maxStake: 3000,
@@ -44,7 +44,7 @@ const ASSET_CONFIGS = {
         category: 'synthetic',
         contractType: 'multiplier',
         multipliers: [160, 400, 800, 1200, 1600],
-        defaultMultiplier: 1600,
+        defaultMultiplier: 800,
         maxTradesPerDay: 120,
         minStake: 1.00,
         maxStake: 1000,
@@ -58,7 +58,21 @@ const ASSET_CONFIGS = {
         category: 'synthetic',
         contractType: 'multiplier',
         multipliers: [80, 200, 400, 600, 800],
-        defaultMultiplier: 800,
+        defaultMultiplier: 400,
+        maxTradesPerDay: 120,
+        minStake: 1.00,
+        maxStake: 1000,
+        tradingHours: '24/7',
+        swingLookback: 4,
+        minImpulsePercent: 0.0005,
+        rrRatio: 1.4
+    },
+    '1HZ100V': {
+        name: 'Volatility 100 (1s) Index',
+        category: 'synthetic',
+        contractType: 'multiplier',
+        multipliers: [40, 100, 200, 300, 500],
+        defaultMultiplier: 200,
         maxTradesPerDay: 120,
         minStake: 1.00,
         maxStake: 1000,
@@ -72,7 +86,7 @@ const ASSET_CONFIGS = {
         category: 'synthetic',
         contractType: 'multiplier',
         multipliers: [750, 2000, 3500, 5500, 7500],
-        defaultMultiplier: 7500,
+        defaultMultiplier: 3500,
         maxTradesPerDay: 120,
         minStake: 1.00,
         maxStake: 1000,
@@ -86,7 +100,7 @@ const ASSET_CONFIGS = {
         category: 'commodity',
         contractType: 'multiplier',
         multipliers: [50, 100, 200, 300, 400, 500],
-        defaultMultiplier: 500,
+        defaultMultiplier: 300,
         maxTradesPerDay: 5,
         minStake: 5,
         maxStake: 5000,
@@ -104,12 +118,12 @@ const ASSET_CONFIGS = {
 const CONFIG = {
     // Connection settings
     appId: '1089',
-    apiToken: '',
+    apiToken: '0P94g4WdSrSrzir',
     accountType: 'real',
     wsUrl: 'wss://ws.derivws.com/websockets/v3?app_id=',
 
     // Active assets to trade
-    activeAssets: ['R_75', 'R_100', '1HZ50V', 'stpRNG', '1HZ25V', 'frxXAUUSD'],
+    activeAssets: ['R_75', 'R_100', '1HZ25V', '1HZ50V', '1HZ100V', 'stpRNG',],
 
     // Investment Capital
     investmentCapital: 500,
@@ -133,8 +147,8 @@ const CONFIG = {
     // Telegram settings
     telegram: {
         enabled: true,
-        botToken: '',
-        chatId: '',
+        botToken: '8322457666:AAHuXoU9JlD-wxaL-Yw1Bl9f056AGT_9WFU',
+        chatId: '752497117',
         sendTradeAlerts: true,
         sendHourlySummary: true,
         sendDailySummary: true
@@ -1190,7 +1204,8 @@ const StrategyEngine = {
             const currentPrice = lastCandle.close;
             const inGoldenZone = FibCalculator.isInGoldenZone(currentPrice, asset.fibLevels);
 
-            if (inGoldenZone && this.checkConfirmation(asset, lastCandle)) {
+            // if (inGoldenZone && this.checkConfirmation(asset, lastCandle)) {
+            if (this.checkConfirmation(asset, lastCandle)) {
                 const signal = this.generateSignal(symbol, lastCandle);
 
                 if (signal && RiskManager.canTrade(symbol)) {
