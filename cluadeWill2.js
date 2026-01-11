@@ -1090,10 +1090,17 @@ class SessionManager {
 // ============================================
 
 class RiskManager {
-    static canTrade() {
-        if (!SessionManager.isSessionActive()) return false;
-        if (SessionManager.checkSessionTargets()) return false;
+    static canTrade(isReversal = false) {
+        // If it's a reversal, we allow trading even if session is technically "ended" or paused
+        // This ensures recovery trades can execute
+        if (!isReversal) {
+            if (!SessionManager.isSessionActive()) return false;
+            if (SessionManager.checkSessionTargets()) return false;
+        }
+
         if (state.portfolio.activePositions.length >= CONFIG.MAX_OPEN_POSITIONS) return false;
+
+        // Always check capital limits
         if (state.capital < CONFIG.INITIAL_STAKE) {
             LOGGER.error(`Insufficient capital: $${state.capital.toFixed(2)} available, $${CONFIG.INITIAL_STAKE.toFixed(2)} required`);
             return false;
@@ -1855,7 +1862,7 @@ class DerivBot {
     }
 
     executeTrade(symbol, direction, isReversal = false, previousLoss = 0) {
-        if (!RiskManager.canTrade()) return;
+        if (!RiskManager.canTrade(isReversal)) return;
 
         const assetCheck = RiskManager.canAssetTrade(symbol);
         if (!assetCheck.allowed) {
