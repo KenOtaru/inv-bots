@@ -215,8 +215,8 @@ const TIMEFRAMES = {
 };
 
 // Default to 5 minutes, user can override with TIMEFRAME env variable
-const SELECTED_TIMEFRAME = process.env.TIMEFRAME || '5m';
-const TIMEFRAME_CONFIG = TIMEFRAMES[SELECTED_TIMEFRAME] || TIMEFRAMES['5m'];
+const SELECTED_TIMEFRAME = process.env.TIMEFRAME || '1m';
+const TIMEFRAME_CONFIG = TIMEFRAMES[SELECTED_TIMEFRAME] || TIMEFRAMES['1m'];
 
 // ============================================
 // CONFIGURATION
@@ -299,7 +299,7 @@ const ASSET_CONFIGS = {
         category: 'synthetic',
         contractType: 'multiplier',
         multipliers: [50, 100, 200, 300, 500],
-        defaultMultiplier: 500,
+        defaultMultiplier: 200,
         maxTradesPerDay: 500000,
         minStake: 1.00,
         maxStake: 3000,
@@ -310,8 +310,8 @@ const ASSET_CONFIGS = {
         category: 'synthetic',
         contractType: 'multiplier',
         multipliers: [40, 100, 200, 300, 500],
-        defaultMultiplier: 500,
-        maxTradesPerDay: 50,
+        defaultMultiplier: 200,
+        maxTradesPerDay: 50000,
         minStake: 1.00,
         maxStake: 3000,
         tradingHours: '24/7'
@@ -321,8 +321,8 @@ const ASSET_CONFIGS = {
         category: 'synthetic',
         contractType: 'multiplier',
         multipliers: [160, 400, 800, 1200, 1600],
-        defaultMultiplier: 1600,
-        maxTradesPerDay: 120,
+        defaultMultiplier: 800,
+        maxTradesPerDay: 120000,
         minStake: 1.00,
         maxStake: 1000,
         tradingHours: '24/7'
@@ -332,8 +332,19 @@ const ASSET_CONFIGS = {
         category: 'synthetic',
         contractType: 'multiplier',
         multipliers: [80, 200, 400, 600, 800],
-        defaultMultiplier: 800,
-        maxTradesPerDay: 120,
+        defaultMultiplier: 400,
+        maxTradesPerDay: 120000,
+        minStake: 1.00,
+        maxStake: 1000,
+        tradingHours: '24/7'
+    },
+    '1HZ100V': {
+        name: 'Volatility 100 (1s) Index',
+        category: 'synthetic',
+        contractType: 'multiplier',
+        multipliers: [80, 200, 400, 600, 800],
+        defaultMultiplier: 400,
+        maxTradesPerDay: 120000,
         minStake: 1.00,
         maxStake: 1000,
         tradingHours: '24/7'
@@ -343,8 +354,8 @@ const ASSET_CONFIGS = {
         category: 'synthetic',
         contractType: 'multiplier',
         multipliers: [750, 2000, 3500, 5500, 7500],
-        defaultMultiplier: 7500,
-        maxTradesPerDay: 120,
+        defaultMultiplier: 3500,
+        maxTradesPerDay: 120000,
         minStake: 1.00,
         maxStake: 1000,
         tradingHours: '24/7'
@@ -354,15 +365,15 @@ const ASSET_CONFIGS = {
         category: 'commodity',
         contractType: 'multiplier',
         multipliers: [50, 100, 200, 300, 400, 500],
-        defaultMultiplier: 500,
+        defaultMultiplier: 500000,
         maxTradesPerDay: 5,
-        minStake: 5,
+        minStake: 1,
         maxStake: 5000,
         tradingHours: 'Sun 23:00 - Fri 21:55 GMT'
     }
 };
 
-let ACTIVE_ASSETS = ['R_75', 'frxXAUUSD', '1HZ50V', 'stpRNG', '1HZ25V', 'R_100'];
+let ACTIVE_ASSETS = ['R_75', 'frxXAUUSD', '1HZ50V', 'stpRNG', '1HZ25V', 'R_100', '1HZ100V'];
 
 // ============================================
 // STATE MANAGEMENT
