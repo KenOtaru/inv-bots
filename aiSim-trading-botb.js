@@ -2819,10 +2819,10 @@ class AILogicDigitDifferBot {
             );
 
 
-            console.log('FDA Prediction:', tradeDecision.predictedDigit, '(Alt:', tradeDecision.alternativeCandidates.join(','), ') | Confidence:', tradeDecision.confidence, '| Risk:', tradeDecision.riskAssessment, '| Market Regime:', tradeDecision.marketRegime);
+            // console.log('FDA Prediction:', tradeDecision.predictedDigit, '(Alt:', tradeDecision.alternativeCandidates.join(','), ') | Confidence:', tradeDecision.confidence, '| Risk:', tradeDecision.riskAssessment, '| Market Regime:', tradeDecision.marketRegime);
             // console.log('MCP Prediction:', tradeDecision2.predictedDigit, '(Alt:', tradeDecision2.alternativeCandidates.join(','), ') | Confidence:', tradeDecision2.confidence, '| Risk:', tradeDecision2.riskAssessment, '| Market Regime:', tradeDecision2.marketRegime);
             // console.log('EITE Prediction:', tradeDecision3.predictedDigit, '(Alt:', tradeDecision3.alternativeCandidates.join(','), ') | Confidence:', tradeDecision3.confidence, '| Risk:', tradeDecision3.riskAssessment, '| Market Regime:', tradeDecision3.marketRegime);
-            // console.log('PRNN Prediction:', tradeDecision4.predictedDigit, '(Alt:', tradeDecision4.alternativeCandidates.join(','), ') | Confidence:', tradeDecision4.confidence, '| Risk:', tradeDecision4.riskAssessment, '| Market Regime:', tradeDecision4.marketRegime);
+            console.log('PRNN Prediction:', tradeDecision4.predictedDigit, '(Alt:', tradeDecision4.alternativeCandidates.join(','), ') | Confidence:', tradeDecision4.confidence, '| Risk:', tradeDecision4.riskAssessment, '| Market Regime:', tradeDecision4.marketRegime);
             // console.log('BPE Prediction:', tradeDecision5.predictedDigit, '(Alt:', tradeDecision5.alternativeCandidates.join(','), ') | Confidence:', tradeDecision5.confidence, '| Risk:', tradeDecision5.riskAssessment, '| Market Regime:', tradeDecision5.marketRegime);
             // console.log('GAMR Prediction:', tradeDecision6.predictedDigit, '(Alt:', tradeDecision6.alternativeCandidates.join(','), ') | Confidence:', tradeDecision6.confidence, '| Risk:', tradeDecision6.riskAssessment, '| Market Regime:', tradeDecision6.marketRegime);
             // console.log('MTD Prediction:', tradeDecision7.predictedDigit, '(Alt:', tradeDecision7.alternativeCandidates.join(','), ') | Confidence:', tradeDecision7.confidence, '| Risk:', tradeDecision7.riskAssessment, '| Market Regime:', tradeDecision7.marketRegime);
@@ -2831,12 +2831,12 @@ class AILogicDigitDifferBot {
 
 
 
-            if (FDA_Engine) {
-                console.log(`🎯 Using FDA: (${tradeDecision.confidence}%)`);
-                this.lastPrediction = tradeDecision.predictedDigit;
-                this.lastConfidence = tradeDecision.confidence;
-                this.placeTrade(tradeDecision.predictedDigit, tradeDecision.confidence, kellyResult.stake);
-            }
+            // if (FDA_Engine) {
+            //     console.log(`🎯 Using FDA: (${tradeDecision.confidence}%)`);
+            //     this.lastPrediction = tradeDecision.predictedDigit;
+            //     this.lastConfidence = tradeDecision.confidence;
+            //     this.placeTrade(tradeDecision.predictedDigit, tradeDecision.confidence, kellyResult.stake);
+            // }
             // else
             //     if (MCP_Engine) {
             //         console.log(`🎯 Using MCP: ${tradeDecision2.confidence}% confidence`);
@@ -2850,12 +2850,12 @@ class AILogicDigitDifferBot {
             //     this.lastConfidence = tradeDecision3.confidence;
             //     this.placeTrade(tradeDecision3.predictedDigit, tradeDecision3.confidence, kellyResult.stake);
             // } else
-            // if (PRNN_Engine) {
-            //     console.log(`🎯 Using PRNN: ${tradeDecision4.confidence}% confidence`);
-            //     this.lastPrediction = tradeDecision4.predictedDigit;
-            //     this.lastConfidence = tradeDecision4.confidence;
-            //     this.placeTrade(tradeDecision4.predictedDigit, tradeDecision4.confidence, kellyResult.stake);
-            // } else
+            if (PRNN_Engine) {
+                console.log(`🎯 Using PRNN: ${tradeDecision4.confidence}% confidence`);
+                this.lastPrediction = tradeDecision4.predictedDigit;
+                this.lastConfidence = tradeDecision4.confidence;
+                this.placeTrade(tradeDecision4.predictedDigit, tradeDecision4.confidence, kellyResult.stake);
+            } else
             // if (BPE_Engine) {
             //     console.log(`🎯 Using BPE: ${tradeDecision5.confidence}% confidence`);
             //     this.lastPrediction = tradeDecision5.predictedDigit;
@@ -3398,7 +3398,7 @@ const bot = new AILogicDigitDifferBot({
 
     maxDrawdownPercent: 25,
     dailyLossLimit: 50,
-    dailyProfitTarget: 15,
+    dailyProfitTarget: 1500,
     maxConsecutiveLosses: 3,//6
 
     minConfidence: 95,
