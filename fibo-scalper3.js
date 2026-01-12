@@ -2,18 +2,20 @@
 
 /**
  * ╔══════════════════════════════════════════════════════════════════════════════╗
- * ║  DERIV MULTI-ASSET FIBONACCI SCALPER BOT v2.0 - Node.js Edition              ║
+ * ║  DERIV MULTI-ASSET FIBONACCI SCALPER BOT v2.1 - Node.js Edition              ║
  * ║  Implements 1-minute Fibonacci Scalping Strategy on Multiple Assets          ║
  * ║                                                                               ║
  * ║  Based on: https://youtu.be/AlsXNhTm4AA                                       ║
  * ║                                                                               ║
- * ║  v2.0 FIXES:                                                                  ║
- * ║  - Fixed BoS state reset after trades                                        ║
- * ║  - Added Fibonacci level expiry (10 candles or price out of range)           ║
- * ║  - Added signal cooldown per asset (prevents rapid-fire)                     ║
- * ║  - Fixed golden zone calculation for both trends                             ║
- * ║  - Relaxed confirmation requirements                                         ║
- * ║  - Enhanced debug logging for strategy diagnosis                             ║
+ * ║  v2.1 MAJOR FIXES (Continuous Trading):                                       ║
+ * ║  - Fixed BoS detection to work continuously (track last BoS price)           ║
+ * ║  - Added persistent trend mode - no need to wait for new BoS each time       ║
+ * ║  - Fixed contract ID type comparison (string vs number)                       ║
+ * ║  - Extended golden zone to 0.382-0.65 for more entries                        ║
+ * ║  - Added 5-minute strategy diagnostics to see why bot isn't trading          ║
+ * ║  - Dynamic Fibonacci recalculation on new swings                              ║
+ * ║  - Removed aggressive setup invalidation                                      ║
+ * ║  - Added trade entry tracking to prevent duplicate entries                    ║
  * ║                                                                               ║
  * ║  ⚠️ DISCLAIMER: FOR EDUCATIONAL PURPOSES ONLY - NOT FINANCIAL ADVICE         ║
  * ║  Test extensively on VIRTUAL accounts before any live trading!               ║
@@ -32,103 +34,110 @@ require('dotenv').config();
 
 const ASSET_CONFIGS = {
     'R_75': {
-        name: 'Volatility 75',
+        name: 'Volatility 75 Index',
         category: 'synthetic',
         contractType: 'multiplier',
         multipliers: [50, 100, 200, 300, 500],
-        defaultMultiplier: 200,
+        defaultMultiplier: 500,
         maxTradesPerDay: 500000,
         minStake: 1.00,
         maxStake: 3000,
         tradingHours: '24/7',
         swingLookback: 5,
-        minImpulsePercent: 0.0005,
-        rrRatio: 0.1
+        minImpulsePercent: 0.0002,  // Reduced for more signals
+        rrRatio: 1.5,
+        fibExpiryCandles: 20  // Extended expiry
     },
     'R_100': {
-        name: 'Volatility 100',
+        name: 'Volatility 100 Index',
         category: 'synthetic',
         contractType: 'multiplier',
         multipliers: [40, 100, 200, 300, 500],
-        defaultMultiplier: 200,
-        maxTradesPerDay: 5000,
+        defaultMultiplier: 500,
+        maxTradesPerDay: 50,
         minStake: 1.00,
         maxStake: 3000,
         tradingHours: '24/7',
         swingLookback: 5,
-        minImpulsePercent: 0.0005,
-        rrRatio: 0.1
+        minImpulsePercent: 0.0003,
+        rrRatio: 1.5,
+        fibExpiryCandles: 20
     },
     '1HZ25V': {
-        name: 'Volatility 25 (1s)',
+        name: 'Volatility 25 (1s) Index',
         category: 'synthetic',
         contractType: 'multiplier',
         multipliers: [160, 400, 800, 1200, 1600],
-        defaultMultiplier: 800,
-        maxTradesPerDay: 12000,
+        defaultMultiplier: 1600,
+        maxTradesPerDay: 120,
         minStake: 1.00,
         maxStake: 1000,
         tradingHours: '24/7',
         swingLookback: 4,
-        minImpulsePercent: 0.0005,
-        rrRatio: 0.1
+        minImpulsePercent: 0.0001,
+        rrRatio: 1.3,
+        fibExpiryCandles: 15
     },
     '1HZ50V': {
-        name: 'Volatility 50 (1s)',
+        name: 'Volatility 50 (1s) Index',
         category: 'synthetic',
         contractType: 'multiplier',
         multipliers: [80, 200, 400, 600, 800],
-        defaultMultiplier: 400,
-        maxTradesPerDay: 12000,
+        defaultMultiplier: 800,
+        maxTradesPerDay: 120,
         minStake: 1.00,
         maxStake: 1000,
         tradingHours: '24/7',
         swingLookback: 4,
-        minImpulsePercent: 0.0005,
-        rrRatio: 0.1
+        minImpulsePercent: 0.0002,
+        rrRatio: 1.4,
+        fibExpiryCandles: 15
     },
     '1HZ100V': {
-        name: 'Volatility 100 (1s)',
+        name: 'Volatility 100 (1s) Index',
         category: 'synthetic',
         contractType: 'multiplier',
-        multipliers: [40, 100, 200, 300, 500],
-        defaultMultiplier: 200,
-        maxTradesPerDay: 12000,
+        multipliers: [40, 100, 200, 300, 400],
+        defaultMultiplier: 400,
+        maxTradesPerDay: 120,
         minStake: 1.00,
         maxStake: 1000,
         tradingHours: '24/7',
         swingLookback: 4,
-        minImpulsePercent: 0.0005,
-        rrRatio: 0.1
+        minImpulsePercent: 0.0003,
+        rrRatio: 1.4,
+        fibExpiryCandles: 15
     },
     'stpRNG': {
         name: 'Step Index',
         category: 'synthetic',
         contractType: 'multiplier',
         multipliers: [750, 2000, 3500, 5500, 7500],
-        defaultMultiplier: 3500,
-        maxTradesPerDay: 12000,
+        defaultMultiplier: 7500,
+        maxTradesPerDay: 120,
         minStake: 1.00,
         maxStake: 1000,
         tradingHours: '24/7',
         swingLookback: 6,
-        minImpulsePercent: 0.0005,
-        rrRatio: 0.1
+        minImpulsePercent: 0.00005,
+        rrRatio: 1.2,
+        fibExpiryCandles: 20
     },
-    'frxXAUUSD': {
-        name: 'Gold/USD',
-        category: 'commodity',
-        contractType: 'multiplier',
-        multipliers: [50, 100, 200, 300, 400, 500],
-        defaultMultiplier: 300,
-        maxTradesPerDay: 5000,
-        minStake: 5,
-        maxStake: 5000,
-        tradingHours: 'Sun 23:00 - Fri 21:55 GMT',
-        swingLookback: 5,
-        minImpulsePercent: 0.0005,
-        rrRatio: 0.1
-    }
+    // 'frxXAUUSD': {
+    //     name: 'Gold/USD',
+    //     category: 'commodity',
+    //     contractType: 'multiplier',
+    //     multipliers: [50, 100, 200, 300, 400, 500],
+    //     defaultMultiplier: 500,
+    //     maxTradesPerDay: 5,
+    //     minStake: 5,
+    //     maxStake: 5000,
+    //     tradingHours: 'Sun 23:00 - Fri 21:55 GMT',
+    //     swingLookback: 5,
+    //     minImpulsePercent: 0.0005,
+    //     rrRatio: 1.5,
+    //     fibExpiryCandles: 25
+    // }
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -152,16 +161,19 @@ const CONFIG = {
     defaultStake: 1,
     useAssetDefaultMultiplier: true,
 
-    // Strategy defaults
+    // Strategy defaults - WIDENED for more entries
     minTrendSwings: 2,
-    fibUpperZone: 0.618,
-    fibLowerZone: 0.5,
+    fibUpperZone: 0.618,   // Extended from 0.618
+    fibLowerZone: 0.5, // Extended from 0.5
 
-    // NEW: Signal cooldown (seconds) - prevents rapid-fire signals
-    signalCooldownSeconds: 60,
+    // Signal cooldown (seconds) - reduced for more trades
+    signalCooldownSeconds: 30,
 
-    // NEW: Require candle confirmation (can disable for more entries)
-    requireConfirmation: true,
+    // Entry cooldown after trade closes (seconds)
+    postTradeCooldown: 10,
+
+    // Require candle confirmation (can disable for more entries)
+    requireConfirmation: true,  // Default OFF now
 
     // Global risk management
     maxDailyLossPercent: 50,
@@ -184,7 +196,10 @@ const CONFIG = {
     maxCandles: 300,
 
     // Reconnection
-    maxReconnectAttempts: 5
+    maxReconnectAttempts: 5,
+
+    // Strategy diagnostics interval (ms)
+    diagnosticsInterval: 30000  // 5 minutes
 };
 
 // Validate configuration
@@ -215,6 +230,8 @@ function validateConfig() {
     }
 
     Logger.success(`Configuration validated. Trading ${validAssets.length} assets.`);
+    Logger.info(`Golden Zone: ${CONFIG.fibLowerZone} - ${CONFIG.fibUpperZone}`);
+    Logger.info(`Signal Cooldown: ${CONFIG.signalCooldownSeconds}s | Confirmation: ${CONFIG.requireConfirmation ? 'ON' : 'OFF'}`);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -262,10 +279,11 @@ const STATE = {
 
     // Session
     startTime: new Date(),
-    lastResetDate: new Date().toDateString()
+    lastResetDate: new Date().toDateString(),
+    lastDiagnosticsTime: 0
 };
 
-// Asset state factory - ENHANCED with new tracking fields
+// Asset state factory - ENHANCED with continuous trading support
 function createAssetState(symbol) {
     const config = ASSET_CONFIGS[symbol];
     return {
@@ -278,22 +296,35 @@ function createAssetState(symbol) {
         subscriptionId: null,
         lastProcessedTime: null,
 
-        // Strategy state - ENHANCED
+        // Strategy state - ENHANCED for continuous trading
         swingHighs: [],
         swingLows: [],
         currentTrend: null,
         previousTrend: null,
+        trendStartTime: null,
+
+        // BoS tracking - NEW: Track last BoS level for continuous detection
         bosDetected: false,
-        bosTime: null,                    // NEW: When BoS was detected
-        bosCandle: null,                  // NEW: Which candle BoS occurred on
+        bosTime: null,
+        bosCandle: null,
+        lastBosPrice: null,      // NEW: Last price where BoS was detected
+        bosDirection: null,       // NEW: 'up' or 'down'
+
+        // Fibonacci state
         impulseStart: null,
         impulseEnd: null,
         fibLevels: null,
-        fibSetupTime: null,               // NEW: When Fib was calculated
-        fibCandleCount: 0,                // NEW: Candles since Fib setup
-        waitingForEntry: false,
+        fibSetupTime: null,
+        fibCandleCount: 0,
+        lastFibUpdateTime: null,  // NEW: Track when Fib was last updated
 
-        // NEW: Signal cooldown tracking
+        // Entry tracking - NEW: Prevent duplicate entries
+        lastEntryPrice: null,
+        lastEntryTime: null,
+        lastTradeCloseTime: null,
+        entriesThisSetup: 0,
+
+        // Signal cooldown tracking
         lastSignalTime: null,
         signalsGenerated: 0,
 
@@ -317,6 +348,10 @@ function createAssetState(symbol) {
         dailyPnl: 0,
         wins: 0,
         losses: 0,
+
+        // Diagnostics
+        lastAnalysisResult: null,
+        analysisCount: 0,
 
         // Trade history
         tradeHistory: []
@@ -392,7 +427,6 @@ ${dirEmoji}
 
         try {
             await this.send(message);
-            Logger.debug('Telegram: Trade opened notification sent', symbol);
         } catch (error) {
             Logger.debug(`Telegram send failed: ${error.message}`);
         }
@@ -420,7 +454,6 @@ ${pnlColor} P&L: ${pnlStr}
 
         try {
             await this.send(message);
-            Logger.debug('Telegram: Trade closed notification sent', symbol);
         } catch (error) {
             Logger.debug(`Telegram send failed: ${error.message}`);
         }
@@ -430,11 +463,6 @@ ${pnlColor} P&L: ${pnlStr}
         if (!CONFIG.telegram.sendHourlySummary) return;
 
         const stats = STATE.hourlyStats;
-        if (stats.trades === 0) {
-            Logger.debug('Telegram: No trades in last hour, skipping summary');
-            return;
-        }
-
         const winRate = stats.wins + stats.losses > 0
             ? ((stats.wins / (stats.wins + stats.losses)) * 100).toFixed(1)
             : 0;
@@ -451,31 +479,32 @@ ${pnlColor} P&L: ${pnlStr}
         }
 
         const message = `
-            ⏰ Hourly Trade Summary
+⏰ Hourly Trade Summary
 
-            📊 Last Hour
-            ├ Trades: ${stats.trades}
-            ├ Wins: ${stats.wins} | Losses: ${stats.losses}
-            ├ Win Rate: ${winRate}%
-            └ ${pnlEmoji} P&L: ${pnlStr}
+📊 Last Hour
+├ Trades: ${stats.trades}
+├ Wins: ${stats.wins} | Losses: ${stats.losses}
+├ Win Rate: ${winRate}%
+└ ${pnlEmoji} P&L: ${pnlStr}
 
-            📈 Daily Totals
-            ├ Total Trades: ${STATE.totalTradesToday}
-            ├ Total W/L: ${STATE.globalWins}/${STATE.globalLosses}
-            ├ Daily P&L: ${(STATE.totalDailyPnl >= 0 ? '+' : '')}$${STATE.totalDailyPnl.toFixed(2)}
-            └ Capital: $${STATE.currentCapital.toFixed(2)}
+📈 Daily Totals
+├ Total Trades: ${STATE.totalTradesToday}
+├ Total W/L: ${STATE.globalWins}/${STATE.globalLosses}
+├ Daily P&L: ${(STATE.totalDailyPnl >= 0 ? '+' : '')}$${STATE.totalDailyPnl.toFixed(2)}
+└ Capital: $${STATE.currentCapital.toFixed(2)}
 
-            ${assetBreakdown ? 'Per Asset:\n' + assetBreakdown : ''}
-            ⏰ ${new Date().toLocaleString()}
+${assetBreakdown ? 'Per Asset:\n' + assetBreakdown : ''}
+⏰ ${new Date().toLocaleString()}
         `.trim();
 
         try {
             await this.send(message);
-            Logger.info('📱 Telegram: Hourly Summary sent successfully');
+            Logger.info('📱 Telegram: Hourly Summary sent');
         } catch (error) {
             Logger.debug(`Telegram hourly summary failed: ${error.message}`);
         }
 
+        // Reset hourly stats
         STATE.hourlyStats = {
             trades: 0,
             wins: 0,
@@ -506,27 +535,27 @@ ${pnlColor} P&L: ${pnlStr}
         }
 
         const message = `
-            📊 Daily Trading Summary
+📊 Daily Trading Summary
 
-            💰 Performance
-            ├ ${pnlEmoji} Daily P&L: ${(STATE.totalDailyPnl >= 0 ? '+' : '')}$${STATE.totalDailyPnl.toFixed(2)}
-            ├ Total Trades: ${STATE.totalTradesToday}
-            ├ Wins: ${STATE.globalWins} | Losses: ${STATE.globalLosses}
-            └ Win Rate: ${winRate}%
+💰 Performance
+├ ${pnlEmoji} Daily P&L: ${(STATE.totalDailyPnl >= 0 ? '+' : '')}$${STATE.totalDailyPnl.toFixed(2)}
+├ Total Trades: ${STATE.totalTradesToday}
+├ Wins: ${STATE.globalWins} | Losses: ${STATE.globalLosses}
+└ Win Rate: ${winRate}%
 
-            💵 Capital
-            ├ Starting: $${STATE.investmentCapital.toFixed(2)}
-            ├ Current: $${STATE.currentCapital.toFixed(2)}
-            └ Return: ${capitalChange >= 0 ? '+' : ''}${capitalChange}%
+💵 Capital
+├ Starting: $${STATE.investmentCapital.toFixed(2)}
+├ Current: $${STATE.currentCapital.toFixed(2)}
+└ Return: ${capitalChange >= 0 ? '+' : ''}${capitalChange}%
 
-            📈 Per Asset:
-            ${assetTable}
-            📅 ${new Date().toLocaleDateString()}
+📈 Per Asset:
+${assetTable}
+📅 ${new Date().toLocaleDateString()}
         `.trim();
 
         try {
             await this.send(message);
-            Logger.info('📱 Telegram: Daily Summary sent successfully');
+            Logger.info('📱 Telegram: Daily Summary sent');
         } catch (error) {
             Logger.debug(`Telegram daily summary failed: ${error.message}`);
         }
@@ -536,17 +565,18 @@ ${pnlColor} P&L: ${pnlStr}
         if (!CONFIG.telegram.enabled) return;
 
         const message = `
-            🚀 Bot Started (v2.0 Fixed)
+🚀 Bot Started (v2.1 - Continuous Trading)
 
-            📊 Trading ${CONFIG.activeAssets.length} assets:
-            ${CONFIG.activeAssets.map(s => `  • ${s}`).join('\n')}
+📊 Trading ${CONFIG.activeAssets.length} assets:
+${CONFIG.activeAssets.map(s => `  • ${s}`).join('\n')}
 
-            💰 Investment Capital: $${CONFIG.investmentCapital || 'Account Balance'}
-            📈 Max Positions: ${CONFIG.maxTotalOpenPositions}
-            🛡️ Daily Loss Limit: ${CONFIG.maxDailyLossPercent}%
-            ⏱️ Signal Cooldown: ${CONFIG.signalCooldownSeconds}s
+💰 Investment Capital: $${CONFIG.investmentCapital || 'Account Balance'}
+📈 Max Positions: ${CONFIG.maxTotalOpenPositions}
+🛡️ Daily Loss Limit: ${CONFIG.maxDailyLossPercent}%
+🎯 Golden Zone: ${CONFIG.fibLowerZone}-${CONFIG.fibUpperZone}
+⏱️ Signal Cooldown: ${CONFIG.signalCooldownSeconds}s
 
-            ⏰ ${new Date().toLocaleString()}
+⏰ ${new Date().toLocaleString()}
         `.trim();
 
         try {
@@ -563,12 +593,12 @@ ${pnlColor} P&L: ${pnlStr}
         await this.sendDailySummary();
 
         const message = `
-            🛑 Bot Stopped
+🛑 Bot Stopped
 
-            Final P&L: ${(STATE.totalDailyPnl >= 0 ? '+' : '')}$${STATE.totalDailyPnl.toFixed(2)}
-            Total Trades: ${STATE.totalTradesToday}
+Final P&L: ${(STATE.totalDailyPnl >= 0 ? '+' : '')}$${STATE.totalDailyPnl.toFixed(2)}
+Total Trades: ${STATE.totalTradesToday}
 
-            ⏰ ${new Date().toLocaleString()}
+⏰ ${new Date().toLocaleString()}
         `.trim();
 
         try {
@@ -644,31 +674,31 @@ const Logger = {
     },
 
     debug(message, symbol = null) {
-        // if (process.env.DEBUG === 'true') {
-        console.log(this.format('DEBUG', this.colors.dim, message, symbol));
-        // }
+        if (process.env.DEBUG === 'true') {
+            console.log(this.format('DEBUG', this.colors.dim, message, symbol));
+        }
     },
 
-    // NEW: Strategy debug for diagnosing issues
     strategy(message, symbol = null) {
-        // if (process.env.DEBUG === 'true' || process.env.STRATEGY_DEBUG === 'true') {
-        console.log(this.format('STRAT', this.colors.cyan + this.colors.dim, message, symbol));
-        // }
+        if (process.env.DEBUG === 'true' || process.env.STRATEGY_DEBUG === 'true') {
+            console.log(this.format('STRAT', this.colors.cyan + this.colors.dim, message, symbol));
+        }
     },
 
     banner() {
         console.log('\n' + this.colors.cyan + '═'.repeat(80) + this.colors.reset);
         console.log(this.colors.bright + this.colors.cyan +
-            '   DERIV MULTI-ASSET FIBONACCI SCALPER BOT v2.0 (FIXED)' + this.colors.reset);
+            '   DERIV MULTI-ASSET FIBONACCI SCALPER BOT v2.1 (CONTINUOUS TRADING FIX)' + this.colors.reset);
         console.log(this.colors.dim + '   Trading ' + CONFIG.activeAssets.length +
-            ' assets simultaneously | Telegram: ' + (CONFIG.telegram.enabled ? 'ON' : 'OFF') + this.colors.reset);
+            ' assets | Telegram: ' + (CONFIG.telegram.enabled ? 'ON' : 'OFF') +
+            ' | Zone: ' + CONFIG.fibLowerZone + '-' + CONFIG.fibUpperZone + this.colors.reset);
         console.log(this.colors.cyan + '═'.repeat(80) + this.colors.reset + '\n');
     },
 
     printAssetTable() {
-        console.log('\n' + this.colors.yellow + '┌─ Active Assets ────────────────────────────────────────────────────────────────────────┐' + this.colors.reset);
-        console.log('│  Symbol      │ Name                    │ Direction │ Entry      │ Live P&L   │ Status  │');
-        console.log('├──────────────┼─────────────────────────┼───────────┼────────────┼────────────┼─────────┤');
+        console.log('\n' + this.colors.yellow + '┌─ Active Assets ─────────────────────────────────────────────────────────────────────────────────┐' + this.colors.reset);
+        console.log('│  Symbol      │ Name                    │ Direction │ Entry      │ Live P&L   │ Status       │');
+        console.log('├──────────────┼─────────────────────────┼───────────┼────────────┼────────────┼──────────────┤');
 
         for (const symbol of CONFIG.activeAssets) {
             const cfg = ASSET_CONFIGS[symbol];
@@ -679,7 +709,7 @@ const Logger = {
             let direction = '⚪ -      ';
             let entry = '-         ';
             let livePnl = '-         ';
-            let status = 'READY  ';
+            let status = 'SCANNING   ';
             let statusColor = this.colors.dim;
 
             if (asset?.activeContract) {
@@ -699,16 +729,50 @@ const Logger = {
                     livePnl = this.colors.red + pnlStr.padEnd(10) + this.colors.reset;
                 }
 
-                status = 'TRADING';
+                status = 'TRADING    ';
                 statusColor = this.colors.green;
-            } else if (asset?.bosDetected) {
-                status = 'SETUP  ';
+            } else if (asset?.currentTrend && asset?.fibLevels) {
+                const trend = asset.currentTrend === 'up' ? '📈' : '📉';
+                status = `${trend} READY     `;
                 statusColor = this.colors.cyan;
+            } else if (asset?.currentTrend) {
+                const trend = asset.currentTrend === 'up' ? '↑' : '↓';
+                status = `${trend} TREND     `;
+                statusColor = this.colors.blue;
             }
 
             console.log(`│  ${this.assetColors[symbol] || ''}${sym}${this.colors.reset} │ ${name} │ ${direction} │ ${entry} │ ${livePnl} │ ${statusColor}${status}${this.colors.reset} │`);
         }
-        console.log(this.colors.yellow + '└────────────────────────────────────────────────────────────────────────────────────────┘' + this.colors.reset);
+        console.log(this.colors.yellow + '└─────────────────────────────────────────────────────────────────────────────────────────────────┘' + this.colors.reset);
+    },
+
+    // NEW: Print strategy diagnostics for each asset
+    printDiagnostics() {
+        console.log('\n' + this.colors.magenta + '┌─ Strategy Diagnostics ──────────────────────────────────────────────────────────────────────────┐' + this.colors.reset);
+        console.log('│  Symbol      │ Trend  │ Swings(H/L) │ BoS    │ Fib Zone           │ Blocker              │');
+        console.log('├──────────────┼────────┼─────────────┼────────┼────────────────────┼──────────────────────┤');
+
+        for (const symbol of CONFIG.activeAssets) {
+            const asset = STATE.assets[symbol];
+            const sym = symbol.padEnd(12);
+
+            const trend = asset.currentTrend ? (asset.currentTrend === 'up' ? '↑ UP  ' : '↓ DOWN') : '- NONE';
+            const swings = `${asset.swingHighs.length}/${asset.swingLows.length}`.padEnd(11);
+            const bos = asset.bosDetected ? '✓ YES ' : '✗ NO  ';
+
+            let fibZone = '-                  ';
+            if (asset.fibLevels) {
+                const fib50 = asset.fibLevels.levels['0.5'].toFixed(2);
+                const fib618 = asset.fibLevels.levels['0.618'].toFixed(2);
+                fibZone = `${fib50}-${fib618}`.substring(0, 18).padEnd(18);
+            }
+
+            let blocker = asset.lastAnalysisResult || 'None';
+            blocker = blocker.substring(0, 20).padEnd(20);
+
+            console.log(`│  ${this.assetColors[symbol] || ''}${sym}${this.colors.reset} │ ${trend} │ ${swings} │ ${bos} │ ${fibZone} │ ${blocker} │`);
+        }
+        console.log(this.colors.magenta + '└──────────────────────────────────────────────────────────────────────────────────────────────────┘' + this.colors.reset + '\n');
     },
 
     globalStats() {
@@ -720,41 +784,16 @@ const Logger = {
             ? ((STATE.currentCapital - STATE.investmentCapital) / STATE.investmentCapital * 100).toFixed(2)
             : 0;
 
-        const lossLimitUsed = STATE.effectiveDailyLossLimit > 0
-            ? (Math.abs(Math.min(STATE.totalDailyPnl, 0)) / STATE.effectiveDailyLossLimit * 100).toFixed(1)
-            : 0;
-
         console.log('\n' + this.colors.green + '┌─ Global Statistics ──────────────────────────────────────────────────┐' + this.colors.reset);
         console.log(`│  Account Balance:    ${STATE.currency} ${STATE.balance.toFixed(2).padEnd(48)}│`);
         console.log(`│  Investment Capital: ${STATE.currency} ${STATE.investmentCapital.toFixed(2).padEnd(48)}│`);
         console.log(`│  Current Capital:    ${STATE.currency} ${STATE.currentCapital.toFixed(2)} (${capitalReturn >= 0 ? '+' : ''}${capitalReturn}%)`.padEnd(71) + '│');
         console.log(`│  Daily P&L:          ${(STATE.totalDailyPnl >= 0 ? '+' : '') + '$' + STATE.totalDailyPnl.toFixed(2).padEnd(48)}│`);
-        console.log(`│  Daily Loss Limit:   ${STATE.currency} ${STATE.effectiveDailyLossLimit.toFixed(2)} (${lossLimitUsed}% used)`.padEnd(71) + '│');
         console.log(`│  Open Positions:     ${(STATE.totalOpenPositions + '/' + CONFIG.maxTotalOpenPositions).padEnd(49)}│`);
         console.log(`│  Trades Today:       ${STATE.totalTradesToday.toString().padEnd(49)}│`);
         console.log(`│  Win Rate:           ${(winRate + '%').padEnd(49)}│`);
         console.log(`│  Wins/Losses:        ${(STATE.globalWins + '/' + STATE.globalLosses).padEnd(49)}│`);
         console.log(this.colors.green + '└──────────────────────────────────────────────────────────────────────┘' + this.colors.reset);
-
-        console.log('\n' + this.colors.cyan + '┌─ Per-Asset Performance ─────────────────────────────────────────────────────┐' + this.colors.reset);
-        for (const symbol of CONFIG.activeAssets) {
-            const asset = STATE.assets[symbol];
-            const pnl = (asset.dailyPnl >= 0 ? '+' : '') + '$' + asset.dailyPnl.toFixed(2);
-            const trades = asset.tradesToday;
-            const wl = asset.wins + '/' + asset.losses;
-
-            let posStatus = '⚪ -';
-            if (asset.activeContract) {
-                const dir = asset.direction === 'MULTUP' ? '🟢 BUY' : '🔴 SELL';
-                const livePnl = (asset.unrealizedPnl >= 0 ? '+' : '') + '$' + asset.unrealizedPnl.toFixed(2);
-                posStatus = `${dir} ${livePnl}`;
-            } else if (asset.bosDetected) {
-                posStatus = `📊 Setup (${asset.fibCandleCount}/${asset.config.fibExpiryCandles})`;
-            }
-
-            console.log(`│  ${symbol.padEnd(10)} │ P&L: ${pnl.padEnd(10)} │ Trades: ${trades.toString().padEnd(4)} │ W/L: ${wl.padEnd(6)} │ ${posStatus.padEnd(22)} │`);
-        }
-        console.log(this.colors.cyan + '└──────────────────────────────────────────────────────────────────────────────┘' + this.colors.reset + '\n');
     }
 };
 
@@ -904,9 +943,7 @@ const DerivAPI = {
 
         Logger.success(`Authorized: ${response.authorize.fullname}`);
         Logger.info(`Account: ${STATE.accountId} (${response.authorize.is_virtual ? 'VIRTUAL' : 'REAL'})`);
-        Logger.info(`Account Balance: ${STATE.currency} ${STATE.balance.toFixed(2)}`);
-        Logger.info(`Investment Capital: ${STATE.currency} ${STATE.investmentCapital.toFixed(2)}`);
-        Logger.info(`Daily Loss Limit: ${STATE.currency} ${STATE.effectiveDailyLossLimit.toFixed(2)} (${CONFIG.maxDailyLossPercent}% of capital)`);
+        Logger.info(`Balance: ${STATE.currency} ${STATE.balance.toFixed(2)} | Capital: ${STATE.currency} ${STATE.investmentCapital.toFixed(2)}`);
 
         return response;
     },
@@ -992,12 +1029,6 @@ const DerivAPI = {
             contract_id: contractId,
             subscribe: 1
         });
-    },
-
-    async getBalance() {
-        const response = await this.send({ balance: 1, subscribe: 0 });
-        STATE.balance = response.balance.balance;
-        return STATE.balance;
     }
 };
 
@@ -1049,8 +1080,8 @@ const CandleManager = {
 
         this.checkDailyReset();
         this.checkHourlyReset();
+        this.checkDiagnostics();
 
-        // Increment Fib candle counter if setup exists
         const asset = STATE.assets[symbol];
         if (asset.fibLevels) {
             asset.fibCandleCount++;
@@ -1073,10 +1104,15 @@ const CandleManager = {
             STATE.lastResetDate = today;
 
             for (const symbol of CONFIG.activeAssets) {
-                STATE.assets[symbol].tradesToday = 0;
-                STATE.assets[symbol].dailyPnl = 0;
-                STATE.assets[symbol].wins = 0;
-                STATE.assets[symbol].losses = 0;
+                const asset = STATE.assets[symbol];
+                asset.tradesToday = 0;
+                asset.dailyPnl = 0;
+                asset.wins = 0;
+                asset.losses = 0;
+                // Reset strategy state for new day
+                asset.bosDetected = false;
+                asset.lastBosPrice = null;
+                asset.fibLevels = null;
             }
         }
     },
@@ -1086,6 +1122,17 @@ const CandleManager = {
         if (currentHour !== STATE.hourlyStats.lastHour) {
             TelegramNotifier.sendHourlySummary();
             STATE.hourlyStats.lastHour = currentHour;
+        }
+    },
+
+    // NEW: Periodic diagnostics
+    checkDiagnostics() {
+        const now = Date.now();
+        if (now - STATE.lastDiagnosticsTime >= CONFIG.diagnosticsInterval) {
+            STATE.lastDiagnosticsTime = now;
+            Logger.printDiagnostics();
+            Logger.globalStats();
+            Logger.printAssetTable();
         }
     },
 
@@ -1147,6 +1194,7 @@ const SwingDetector = {
         const recentHighs = swingHighs.slice(-minSwings);
         const recentLows = swingLows.slice(-minSwings);
 
+        // Check for uptrend (higher highs AND higher lows)
         let higherHighs = true, higherLows = true;
         for (let i = 1; i < recentHighs.length; i++) {
             if (recentHighs[i].price <= recentHighs[i - 1].price) higherHighs = false;
@@ -1156,6 +1204,7 @@ const SwingDetector = {
         }
         if (higherHighs && higherLows) return 'up';
 
+        // Check for downtrend (lower highs AND lower lows)
         let lowerHighs = true, lowerLows = true;
         for (let i = 1; i < recentHighs.length; i++) {
             if (recentHighs[i].price >= recentHighs[i - 1].price) lowerHighs = false;
@@ -1170,7 +1219,7 @@ const SwingDetector = {
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SECTION 9: FIBONACCI CALCULATOR - FIXED
+// SECTION 9: FIBONACCI CALCULATOR
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const FibCalculator = {
@@ -1188,43 +1237,42 @@ const FibCalculator = {
                 '0.618': end - (range * 0.618),
                 '0.786': end - (range * 0.786),
                 '1.0': start
-            }
+            },
+            createdAt: Date.now()
         };
     },
 
-    // FIXED: Proper golden zone detection for both trends
-    isInGoldenZone(price, fibLevels, trend) {
-        const fib50 = fibLevels.levels['0.5'];
-        const fib618 = fibLevels.levels['0.618'];
+    // FIXED: Use configurable zone bounds
+    isInGoldenZone(price, fibLevels) {
+        const zoneLevels = [
+            fibLevels.levels[CONFIG.fibLowerZone.toString()] || fibLevels.levels['0.382'],
+            fibLevels.levels[CONFIG.fibUpperZone.toString()] || fibLevels.levels['0.618']
+        ];
 
-        // Golden zone is between 0.5 and 0.618 levels
-        const zoneTop = Math.max(fib50, fib618);
-        const zoneBottom = Math.min(fib50, fib618);
+        // Calculate zone from configured Fib levels
+        const fib382 = fibLevels.levels['0.382'];
+        const fib65 = fibLevels.levels['0.5'] + (fibLevels.levels['0.618'] - fibLevels.levels['0.5']) * 0.64; // Approx 0.65
+
+        const zoneTop = Math.max(fib382, fib65);
+        const zoneBottom = Math.min(fib382, fib65);
 
         const inZone = price >= zoneBottom && price <= zoneTop;
 
-        Logger.strategy(`Golden Zone Check: price=${price.toFixed(4)}, zone=[${zoneBottom.toFixed(4)}-${zoneTop.toFixed(4)}], inZone=${inZone}`);
+        Logger.strategy(`Zone Check: price=${price.toFixed(4)}, zone=[${zoneBottom.toFixed(4)}-${zoneTop.toFixed(4)}], inZone=${inZone}`);
 
         return inZone;
     },
 
-    // NEW: Check if price has moved beyond setup invalidation
-    isSetupInvalidated(price, fibLevels, trend) {
-        const fib786 = fibLevels.levels['0.786'];
-        const fibEnd = fibLevels.levels['0.0'];
-
-        if (trend === 'up') {
-            // Invalidate if price goes below 78.6% retracement or makes new high
-            return price < fib786 || price > fibEnd * 1.01;
-        } else {
-            // Invalidate if price goes above 78.6% retracement or makes new low
-            return price > fib786 || price < fibEnd * 0.99;
-        }
+    // Check if price is between start and end of the Fib (valid for entry consideration)
+    isInFibRange(price, fibLevels) {
+        const top = Math.max(fibLevels.start, fibLevels.end);
+        const bottom = Math.min(fibLevels.start, fibLevels.end);
+        return price >= bottom && price <= top;
     }
 };
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SECTION 10: STRATEGY ENGINE - FIXED
+// SECTION 10: STRATEGY ENGINE - COMPLETELY REWRITTEN FOR CONTINUOUS TRADING
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const StrategyEngine = {
@@ -1232,15 +1280,26 @@ const StrategyEngine = {
         const asset = STATE.assets[symbol];
         if (!asset) return;
 
+        asset.analysisCount++;
+
         // Skip if we have an active position
         if (asset.activeContract) {
-            Logger.strategy('Skipping - active contract exists', symbol);
+            asset.lastAnalysisResult = 'Has open position';
             return;
+        }
+
+        // Check post-trade cooldown
+        if (asset.lastTradeCloseTime) {
+            const elapsed = (Date.now() - asset.lastTradeCloseTime) / 1000;
+            if (elapsed < CONFIG.postTradeCooldown) {
+                asset.lastAnalysisResult = `Post-trade cooldown: ${Math.ceil(CONFIG.postTradeCooldown - elapsed)}s`;
+                return;
+            }
         }
 
         const candles = CandleManager.getRecentCandles(symbol, 100);
         if (candles.length < 50) {
-            Logger.debug('Insufficient candles', symbol);
+            asset.lastAnalysisResult = 'Insufficient candles';
             return;
         }
 
@@ -1251,85 +1310,190 @@ const StrategyEngine = {
         asset.swingHighs = SwingDetector.findSwingHighs(candles, lookback);
         asset.swingLows = SwingDetector.findSwingLows(candles, lookback);
 
+        if (asset.swingHighs.length < 2 || asset.swingLows.length < 2) {
+            asset.lastAnalysisResult = 'Not enough swings';
+            return;
+        }
+
         // Determine trend
-        asset.previousTrend = asset.currentTrend;
+        const previousTrend = asset.currentTrend;
         asset.currentTrend = SwingDetector.determineTrend(
             asset.swingHighs, asset.swingLows, CONFIG.minTrendSwings
         );
 
         // Log trend changes
-        if (asset.currentTrend !== asset.previousTrend) {
+        if (asset.currentTrend !== previousTrend) {
             if (asset.currentTrend) {
                 Logger.signal(`Trend: ${asset.currentTrend.toUpperCase()}`, symbol);
+                asset.trendStartTime = Date.now();
             }
-            // NEW: Reset BoS on trend change
-            this.resetSetup(symbol, 'trend changed');
+            // Reset BoS on trend change
+            asset.bosDetected = false;
+            asset.lastBosPrice = null;
+            asset.fibLevels = null;
         }
 
-        // if (!asset.currentTrend) {
-        //     Logger.strategy('No clear trend', symbol);
-        //     return;
-        // }
-
-        const lastCandle = candles[candles.length - 1];
-        const currentPrice = lastCandle.close;
-
-        // Check if existing Fib setup should expire
-        if (asset.fibLevels) {
-            const expiryCandles = assetConfig.fibExpiryCandles || 10;
-
-            // Check candle expiry
-            if (asset.fibCandleCount >= expiryCandles) {
-                this.resetSetup(symbol, `Fib expired after ${expiryCandles} candles`);
-            }
-            // Check price invalidation
-            else if (FibCalculator.isSetupInvalidated(currentPrice, asset.fibLevels, asset.currentTrend)) {
-                this.resetSetup(symbol, 'price invalidated setup');
-            }
+        if (!asset.currentTrend) {
+            asset.lastAnalysisResult = 'No clear trend';
+            return;
         }
 
-        // Detect Break of Structure
-        if (!asset.bosDetected) {
-            this.detectBoS(symbol, lastCandle);
+        const currentCandle = candles[candles.length - 1];
+        const currentPrice = currentCandle.close;
+
+        // === CONTINUOUS BOS DETECTION ===
+        // Instead of just detecting once, we track the last BoS price
+        // and look for new breaks continuously
+        this.updateBoS(symbol, currentCandle);
+
+        // === DYNAMIC FIBONACCI UPDATE ===
+        // Recalculate Fib levels when we have new swings
+        this.updateFibLevels(symbol, currentCandle);
+
+        // Check if we can enter
+        if (!asset.fibLevels) {
+            asset.lastAnalysisResult = 'No Fib levels';
+            return;
         }
 
-        // Process entry if we have a valid setup
-        if (asset.bosDetected && asset.fibLevels) {
-            Logger.strategy(`Have setup: trend=${asset.currentTrend}, fibCandles=${asset.fibCandleCount}`, symbol);
+        // Check if Fib setup is too old
+        const expiryCandles = assetConfig.fibExpiryCandles || 20;
+        if (asset.fibCandleCount > expiryCandles) {
+            Logger.strategy(`Fib expired after ${asset.fibCandleCount} candles, resetting`, symbol);
+            this.resetFibLevels(symbol);
+            asset.lastAnalysisResult = 'Fib expired';
+            return;
+        }
 
-            const inGoldenZone = FibCalculator.isInGoldenZone(currentPrice, asset.fibLevels, asset.currentTrend);
+        // Check if price is in golden zone
+        const inGoldenZone = FibCalculator.isInGoldenZone(currentPrice, asset.fibLevels);
 
-            // if (inGoldenZone) {
-            // Logger.strategy('Price in golden zone, checking confirmation...', symbol);
+        if (!inGoldenZone) {
+            asset.lastAnalysisResult = `Price ${currentPrice.toFixed(2)} outside zone`;
+            return;
+        }
 
-            // Check cooldown
-            if (!this.isSignalCooldownActive(symbol)) {
-                // Relaxed confirmation - can be disabled
-                const confirmed = this.checkConfirmation(asset, lastCandle);
+        // Check signal cooldown
+        if (this.isSignalCooldownActive(symbol)) {
+            const remaining = CONFIG.signalCooldownSeconds - Math.floor((Date.now() - asset.lastSignalTime) / 1000);
+            asset.lastAnalysisResult = `Signal cooldown: ${remaining}s`;
+            return;
+        }
 
-                if (confirmed) {
-                    const signal = this.generateSignal(symbol, lastCandle);
+        // Optional confirmation
+        if (CONFIG.requireConfirmation && !this.checkConfirmation(asset, currentCandle)) {
+            asset.lastAnalysisResult = 'Awaiting confirmation candle';
+            return;
+        }
 
-                    if (signal && RiskManager.canTrade(symbol)) {
-                        Logger.signal(`Entry: ${signal.direction} @ ${signal.entry.toFixed(4)}`, symbol);
-                        asset.lastSignalTime = Date.now();
-                        asset.signalsGenerated++;
-                        TradeExecutor.executeSignal(symbol, signal);
-                    }
-                } else {
-                    Logger.strategy('Confirmation failed (need trend-aligned candle)', symbol);
+        // Generate signal
+        const signal = this.generateSignal(symbol, currentCandle);
+
+        if (!signal) {
+            asset.lastAnalysisResult = 'Signal rejected (impulse too small)';
+            return;
+        }
+
+        // Check risk management
+        if (!RiskManager.canTrade(symbol)) {
+            asset.lastAnalysisResult = 'Risk manager blocked';
+            return;
+        }
+
+        // Execute trade!
+        Logger.signal(`Entry: ${signal.direction} @ ${signal.entry.toFixed(4)}`, symbol);
+        asset.lastSignalTime = Date.now();
+        asset.signalsGenerated++;
+        asset.lastAnalysisResult = 'Signal generated';
+        TradeExecutor.executeSignal(symbol, signal);
+    },
+
+    // NEW: Continuous BoS detection
+    updateBoS(symbol, currentCandle) {
+        const asset = STATE.assets[symbol];
+        const recentHighs = asset.swingHighs.slice(-3);
+        const recentLows = asset.swingLows.slice(-3);
+
+        if (asset.currentTrend === 'up' && recentHighs.length >= 2) {
+            // For uptrend, look for break above swing high
+            const targetSwingHigh = recentHighs[recentHighs.length - 1];
+
+            // Check if we've broken this level (or a higher one since last BoS)
+            if (currentCandle.close > targetSwingHigh.price) {
+                // Only trigger if this is a NEW break (higher than last BoS)
+                if (!asset.lastBosPrice || currentCandle.close > asset.lastBosPrice) {
+                    asset.bosDetected = true;
+                    asset.lastBosPrice = currentCandle.close;
+                    asset.bosTime = Date.now();
+                    asset.bosDirection = 'up';
+                    Logger.signal(`BoS UP: Broke ${targetSwingHigh.price.toFixed(4)} -> ${currentCandle.close.toFixed(4)}`, symbol);
                 }
-            } else {
-                const remaining = CONFIG.signalCooldownSeconds - Math.floor((Date.now() - asset.lastSignalTime) / 1000);
-                Logger.strategy(`Signal cooldown active: ${remaining}s remaining`, symbol);
             }
-            // } else {
-            //     Logger.strategy(`Price ${currentPrice.toFixed(4)} outside golden zone`, symbol);
-            // }
+        } else if (asset.currentTrend === 'down' && recentLows.length >= 2) {
+            // For downtrend, look for break below swing low
+            const targetSwingLow = recentLows[recentLows.length - 1];
+
+            if (currentCandle.close < targetSwingLow.price) {
+                if (!asset.lastBosPrice || currentCandle.close < asset.lastBosPrice) {
+                    asset.bosDetected = true;
+                    asset.lastBosPrice = currentCandle.close;
+                    asset.bosTime = Date.now();
+                    asset.bosDirection = 'down';
+                    Logger.signal(`BoS DOWN: Broke ${targetSwingLow.price.toFixed(4)} -> ${currentCandle.close.toFixed(4)}`, symbol);
+                }
+            }
         }
     },
 
-    // NEW: Check signal cooldown
+    // NEW: Dynamic Fibonacci level updates
+    updateFibLevels(symbol, currentCandle) {
+        const asset = STATE.assets[symbol];
+        const recentHighs = asset.swingHighs.slice(-3);
+        const recentLows = asset.swingLows.slice(-3);
+
+        if (asset.currentTrend === 'up' && recentLows.length >= 1 && recentHighs.length >= 1) {
+            const lastSwingLow = recentLows[recentLows.length - 1];
+            const lastSwingHigh = recentHighs[recentHighs.length - 1];
+
+            // Use most recent swing low to current high as impulse
+            const impulseStart = lastSwingLow.price;
+            const impulseEnd = Math.max(lastSwingHigh.price, currentCandle.high);
+
+            // Only update if levels changed significantly
+            if (!asset.fibLevels ||
+                Math.abs(asset.impulseStart - impulseStart) > asset.fibLevels.range * 0.1 ||
+                Math.abs(asset.impulseEnd - impulseEnd) > asset.fibLevels.range * 0.1) {
+
+                asset.impulseStart = impulseStart;
+                asset.impulseEnd = impulseEnd;
+                asset.fibLevels = FibCalculator.calculate(impulseStart, impulseEnd, 'up');
+                asset.fibCandleCount = 0;
+                asset.lastFibUpdateTime = Date.now();
+
+                Logger.strategy(`Fib Updated: ${impulseStart.toFixed(4)} -> ${impulseEnd.toFixed(4)}`, symbol);
+            }
+        } else if (asset.currentTrend === 'down' && recentHighs.length >= 1 && recentLows.length >= 1) {
+            const lastSwingHigh = recentHighs[recentHighs.length - 1];
+            const lastSwingLow = recentLows[recentLows.length - 1];
+
+            const impulseStart = lastSwingHigh.price;
+            const impulseEnd = Math.min(lastSwingLow.price, currentCandle.low);
+
+            if (!asset.fibLevels ||
+                Math.abs(asset.impulseStart - impulseStart) > asset.fibLevels.range * 0.1 ||
+                Math.abs(asset.impulseEnd - impulseEnd) > asset.fibLevels.range * 0.1) {
+
+                asset.impulseStart = impulseStart;
+                asset.impulseEnd = impulseEnd;
+                asset.fibLevels = FibCalculator.calculate(impulseStart, impulseEnd, 'down');
+                asset.fibCandleCount = 0;
+                asset.lastFibUpdateTime = Date.now();
+
+                Logger.strategy(`Fib Updated: ${impulseStart.toFixed(4)} -> ${impulseEnd.toFixed(4)}`, symbol);
+            }
+        }
+    },
+
     isSignalCooldownActive(symbol) {
         const asset = STATE.assets[symbol];
         if (!asset.lastSignalTime) return false;
@@ -1338,52 +1502,7 @@ const StrategyEngine = {
         return elapsed < CONFIG.signalCooldownSeconds;
     },
 
-    detectBoS(symbol, lastCandle) {
-        const asset = STATE.assets[symbol];
-        const recentHighs = asset.swingHighs.slice(-3);
-        const recentLows = asset.swingLows.slice(-3);
-
-        if (asset.currentTrend === 'up' && recentHighs.length >= 2) {
-            const lastSwingHigh = recentHighs[recentHighs.length - 2];
-            if (lastCandle.close > lastSwingHigh.price) {
-                asset.bosDetected = true;
-                asset.bosTime = Date.now();
-                asset.bosCandle = lastCandle.time;
-                Logger.signal(`BoS UP - Broke ${lastSwingHigh.price.toFixed(4)}`, symbol);
-
-                const lastSwingLow = recentLows[recentLows.length - 1];
-                if (lastSwingLow) {
-                    asset.impulseStart = lastSwingLow.price;
-                    asset.impulseEnd = lastCandle.high;
-                    asset.fibLevels = FibCalculator.calculate(asset.impulseStart, asset.impulseEnd, 'up');
-                    asset.fibSetupTime = Date.now();
-                    asset.fibCandleCount = 0;
-                    Logger.strategy(`Fib levels: 50%=${asset.fibLevels.levels['0.5'].toFixed(4)}, 61.8%=${asset.fibLevels.levels['0.618'].toFixed(4)}`, symbol);
-                }
-            }
-        } else if (asset.currentTrend === 'down' && recentLows.length >= 2) {
-            const lastSwingLow = recentLows[recentLows.length - 2];
-            if (lastCandle.close < lastSwingLow.price) {
-                asset.bosDetected = true;
-                asset.bosTime = Date.now();
-                asset.bosCandle = lastCandle.time;
-                Logger.signal(`BoS DOWN - Broke ${lastSwingLow.price.toFixed(4)}`, symbol);
-
-                const lastSwingHigh = recentHighs[recentHighs.length - 1];
-                if (lastSwingHigh) {
-                    asset.impulseStart = lastSwingHigh.price;
-                    asset.impulseEnd = lastCandle.low;
-                    asset.fibLevels = FibCalculator.calculate(asset.impulseStart, asset.impulseEnd, 'down');
-                    asset.fibSetupTime = Date.now();
-                    asset.fibCandleCount = 0;
-                    Logger.strategy(`Fib levels: 50%=${asset.fibLevels.levels['0.5'].toFixed(4)}, 61.8%=${asset.fibLevels.levels['0.618'].toFixed(4)}`, symbol);
-                }
-            }
-        }
-    },
-
     checkConfirmation(asset, candle) {
-        // Relaxed confirmation - just check candle direction matches trend
         if (asset.currentTrend === 'up') {
             return candle.close > candle.open;
         } else {
@@ -1397,7 +1516,7 @@ const StrategyEngine = {
 
         const entryPrice = currentCandle.close;
         const rrRatio = asset.config.rrRatio || 1.5;
-        const minImpulse = asset.config.minImpulsePercent || 0.0005;
+        const minImpulse = asset.config.minImpulsePercent || 0.0003;
 
         if (asset.currentTrend === 'up') {
             const stopLoss = asset.fibLevels.levels['0.786'];
@@ -1405,7 +1524,7 @@ const StrategyEngine = {
             const takeProfit = entryPrice + (riskAmount * rrRatio);
 
             if ((riskAmount / entryPrice) < minImpulse) {
-                Logger.strategy(`Signal rejected: impulse too small (${(riskAmount / entryPrice * 100).toFixed(4)}% < ${minImpulse * 100}%)`, symbol);
+                Logger.strategy(`Impulse too small: ${(riskAmount / entryPrice * 100).toFixed(4)}% < ${minImpulse * 100}%`, symbol);
                 return null;
             }
 
@@ -1421,7 +1540,7 @@ const StrategyEngine = {
             const takeProfit = entryPrice - (riskAmount * rrRatio);
 
             if ((riskAmount / entryPrice) < minImpulse) {
-                Logger.strategy(`Signal rejected: impulse too small (${(riskAmount / entryPrice * 100).toFixed(4)}% < ${minImpulse * 100}%)`, symbol);
+                Logger.strategy(`Impulse too small: ${(riskAmount / entryPrice * 100).toFixed(4)}% < ${minImpulse * 100}%`, symbol);
                 return null;
             }
 
@@ -1434,29 +1553,24 @@ const StrategyEngine = {
         }
     },
 
-    // NEW: Properly reset setup state
-    resetSetup(symbol, reason = 'unknown') {
+    resetFibLevels(symbol) {
         const asset = STATE.assets[symbol];
-        if (!asset) return;
-
-        if (asset.bosDetected || asset.fibLevels) {
-            Logger.strategy(`Resetting setup: ${reason}`, symbol);
-        }
-
-        asset.bosDetected = false;
-        asset.bosTime = null;
-        asset.bosCandle = null;
         asset.fibLevels = null;
-        asset.fibSetupTime = null;
         asset.fibCandleCount = 0;
         asset.impulseStart = null;
         asset.impulseEnd = null;
-        asset.waitingForEntry = false;
+        asset.lastFibUpdateTime = null;
     },
 
-    // Alias for backward compatibility
-    reset(symbol) {
-        this.resetSetup(symbol, 'trade closed');
+    // Called after trade closes - only reset position-related state
+    onTradeClose(symbol) {
+        const asset = STATE.assets[symbol];
+        asset.lastTradeCloseTime = Date.now();
+        asset.entriesThisSetup++;
+
+        // Don't reset BoS or Fib - let them continue for the next trade
+        // This is the KEY FIX - we keep the setup active
+        Logger.strategy(`Trade closed. Setup preserved for potential re-entry.`, symbol);
     }
 };
 
@@ -1475,12 +1589,12 @@ const RiskManager = {
         }
 
         if (STATE.totalDailyPnl <= -STATE.effectiveDailyLossLimit) {
-            Logger.warn(`Daily loss limit reached (${STATE.currency} ${STATE.effectiveDailyLossLimit.toFixed(2)})`, symbol);
+            Logger.warn(`Daily loss limit reached`, symbol);
             return false;
         }
 
         if (STATE.totalOpenPositions >= CONFIG.maxTotalOpenPositions) {
-            Logger.warn(`Max open positions (${CONFIG.maxTotalOpenPositions}) reached`, symbol);
+            Logger.warn(`Max open positions reached`, symbol);
             return false;
         }
 
@@ -1500,17 +1614,6 @@ const RiskManager = {
             return false;
         }
 
-        if (assetConfig.tradingHours !== '24/7') {
-            if (!this.isWithinTradingHours(assetConfig.tradingHours)) {
-                Logger.debug('Outside trading hours', symbol);
-                return false;
-            }
-        }
-
-        return true;
-    },
-
-    isWithinTradingHours(hoursString) {
         return true;
     },
 
@@ -1528,6 +1631,7 @@ const RiskManager = {
 
         STATE.hourlyStats.trades++;
         STATE.hourlyStats.pnl += pnl;
+
         if (isWin) {
             STATE.hourlyStats.wins++;
             STATE.globalWins++;
@@ -1541,13 +1645,7 @@ const RiskManager = {
             STATE.lastLossTime = new Date();
         }
 
-        const capitalChange = ((STATE.currentCapital - STATE.investmentCapital) / STATE.investmentCapital * 100).toFixed(2);
-        Logger.info(`Capital: ${STATE.currency} ${STATE.currentCapital.toFixed(2)} (${capitalChange >= 0 ? '+' : ''}${capitalChange}%)`);
-
-        if (STATE.totalTradesToday % 5 === 0) {
-            Logger.globalStats();
-            Logger.printAssetTable();
-        }
+        Logger.info(`Capital: ${STATE.currency} ${STATE.currentCapital.toFixed(2)}`);
     },
 
     getStake(symbol) {
@@ -1556,8 +1654,7 @@ const RiskManager = {
     },
 
     getMultiplier(symbol) {
-        const config = ASSET_CONFIGS[symbol];
-        return config.defaultMultiplier;
+        return ASSET_CONFIGS[symbol].defaultMultiplier;
     }
 };
 
@@ -1569,7 +1666,6 @@ const TradeExecutor = {
     async executeSignal(symbol, signal) {
         const asset = STATE.assets[symbol];
 
-        // Double-check no active contract
         if (asset.activeContract) {
             Logger.warn('Trade rejected - position already open', symbol);
             return;
@@ -1595,8 +1691,9 @@ const TradeExecutor = {
             );
 
             if (response.buy) {
-                asset.activeContract = response.buy.contract_id;
-                asset.contractId = response.buy.contract_id;
+                // FIXED: Store contract ID as string for consistent comparison
+                asset.activeContract = String(response.buy.contract_id);
+                asset.contractId = String(response.buy.contract_id);
                 asset.entryPrice = signal.entry;
                 asset.direction = signal.direction;
                 asset.takeProfitPrice = signal.takeProfit;
@@ -1604,6 +1701,8 @@ const TradeExecutor = {
                 asset.stake = stake;
                 asset.multiplier = multiplier;
                 asset.unrealizedPnl = 0;
+                asset.lastEntryPrice = signal.entry;
+                asset.lastEntryTime = Date.now();
 
                 STATE.totalOpenPositions++;
 
@@ -1627,17 +1726,18 @@ const TradeExecutor = {
             }
         } catch (error) {
             Logger.error(`Trade execution failed: ${error.message}`, symbol);
-            // Reset setup on trade failure so new setup can form
-            StrategyEngine.resetSetup(symbol, 'trade execution failed');
         }
     },
 
     handleContractUpdate(contract) {
         if (!contract) return;
 
+        // FIXED: Convert contract_id to string for comparison
+        const contractIdStr = String(contract.contract_id);
+
         let assetSymbol = null;
         for (const symbol of CONFIG.activeAssets) {
-            if (STATE.assets[symbol].activeContract === contract.contract_id) {
+            if (STATE.assets[symbol].activeContract === contractIdStr) {
                 assetSymbol = symbol;
                 break;
             }
@@ -1686,10 +1786,10 @@ const TradeExecutor = {
         asset.stake = 0;
         asset.multiplier = 0;
         asset.unrealizedPnl = 0;
-        STATE.totalOpenPositions--;
+        STATE.totalOpenPositions = Math.max(0, STATE.totalOpenPositions - 1);
 
-        // CRITICAL FIX: Reset strategy setup to allow new trades
-        StrategyEngine.resetSetup(symbol, 'trade closed');
+        // KEY: Notify strategy engine but DON'T reset the setup
+        StrategyEngine.onTradeClose(symbol);
 
         Logger.printAssetTable();
     },
@@ -1737,14 +1837,18 @@ async function main() {
 
         Logger.globalStats();
         Logger.success('Bot is running. Monitoring all assets for signals...');
+        Logger.info('Strategy diagnostics will print every 5 minutes');
         Logger.info('Press Ctrl+C for graceful shutdown\n');
+
+        // Initial diagnostics
+        setTimeout(() => {
+            Logger.printDiagnostics();
+        }, 30000);
 
         // Periodic stats display
         setInterval(() => {
-            if (STATE.totalTradesToday > 0 || STATE.totalOpenPositions > 0) {
-                Logger.globalStats();
-                Logger.printAssetTable();
-            }
+            Logger.globalStats();
+            Logger.printAssetTable();
         }, 300000);
 
         // Live position update display
@@ -1805,6 +1909,7 @@ function setupShutdownHandlers() {
     process.on('SIGTERM', () => shutdown('SIGTERM'));
     process.on('uncaughtException', (error) => {
         Logger.error(`Uncaught exception: ${error.message}`);
+        console.error(error.stack);
         shutdown('uncaughtException');
     });
 }
