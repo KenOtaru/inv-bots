@@ -36,21 +36,21 @@ const ASSET_CONFIGS = {
         category: 'synthetic',
         multipliers: [50, 100, 200, 300, 500],
         defaultMultiplier: 500,
-        maxTradesPerDay: 500,
+        maxTradesPerDay: 5000,
         minStake: 1.00,
         maxStake: 3000,
-        swingLookback: 3,  // Reduced for more swings
-        rrRatio: 1.5
+        swingLookback: 5,  // Reduced for more swings
+        rrRatio: 1.0
     },
     'R_100': {
         name: 'Volatility 100 Index',
         category: 'synthetic',
         multipliers: [40, 100, 200, 300, 400],
         defaultMultiplier: 400,
-        maxTradesPerDay: 500,
+        maxTradesPerDay: 5000,
         minStake: 1.00,
         maxStake: 3000,
-        swingLookback: 3,
+        swingLookback: 4,
         rrRatio: 1.5
     },
     '1HZ25V': {
@@ -58,55 +58,55 @@ const ASSET_CONFIGS = {
         category: 'synthetic',
         multipliers: [160, 400, 800, 1200, 1600],
         defaultMultiplier: 1600,
-        maxTradesPerDay: 500,
+        maxTradesPerDay: 5000,
         minStake: 1.00,
         maxStake: 1000,
-        swingLookback: 3,
-        rrRatio: 1.3
+        swingLookback: 4,
+        rrRatio: 1.0
     },
     '1HZ50V': {
         name: 'Volatility 50 (1s) Index',
         category: 'synthetic',
         multipliers: [80, 200, 400, 600, 800],
         defaultMultiplier: 800,
-        maxTradesPerDay: 500,
+        maxTradesPerDay: 5000,
         minStake: 1.00,
         maxStake: 1000,
-        swingLookback: 3,
-        rrRatio: 1.4
+        swingLookback: 4,
+        rrRatio: 1.0
     },
     '1HZ100V': {
         name: 'Volatility 100 (1s) Index',
         category: 'synthetic',
         multipliers: [40, 100, 200, 300, 400],
         defaultMultiplier: 400,
-        maxTradesPerDay: 500,
+        maxTradesPerDay: 5000,
         minStake: 1.00,
         maxStake: 1000,
-        swingLookback: 3,
-        rrRatio: 1.4
+        swingLookback: 4,
+        rrRatio: 1.0
     },
     'stpRNG': {
         name: 'Step Index',
         category: 'synthetic',
         multipliers: [750, 2000, 3500, 5500, 7500],
         defaultMultiplier: 7500,
-        maxTradesPerDay: 500,
+        maxTradesPerDay: 5000,
         minStake: 1.00,
         maxStake: 1000,
         swingLookback: 4,
-        rrRatio: 1.2
+        rrRatio: 1.0
     },
     'frxXAUUSD': {
         name: 'Gold/USD',
         category: 'commodity',
         multipliers: [50, 100, 200, 300, 400, 500],
         defaultMultiplier: 500,
-        maxTradesPerDay: 50,
+        maxTradesPerDay: 5000,
         minStake: 5,
         maxStake: 5000,
-        swingLookback: 3,
-        rrRatio: 1.5
+        swingLookback: 4,
+        rrRatio: 1.0
     }
 };
 
@@ -134,9 +134,9 @@ const CONFIG = {
     postTradeCooldown: 5,
 
     // Risk management
-    maxDailyLossPercent: 10,
-    maxTotalOpenPositions: 7,
-    maxConsecutiveLosses: 5,
+    maxDailyLossPercent: 50,
+    maxTotalOpenPositions: 6,
+    maxConsecutiveLosses: 50,
     cooldownMinutes: 10,
 
     // Telegram
@@ -221,10 +221,14 @@ function createAssetState(symbol) {
         subscriptionId: null,
         lastProcessedTime: null,
 
-        // Simplified state - no complex BoS tracking
+        // BoS tracking
         swingHighs: [],
         swingLows: [],
         currentTrend: null,
+        bosDetected: false,
+        bosTime: null,
+        lastBosPrice: null,
+        lastBosSwingPrice: null,
         fibLevels: null,
 
         lastSignalTime: 0,
@@ -625,15 +629,27 @@ const Strategy = {
         }
 
         // 6. Determine trend (RELAXED - only need one of HH/HL or LH/LL)
+        const previousTrend = asset.currentTrend;
         asset.currentTrend = this.detectTrend(asset.swingHighs, asset.swingLows);
+
+        if (asset.currentTrend !== previousTrend) {
+            // Reset BoS tracking on trend change
+            asset.bosDetected = false;
+            asset.lastBosPrice = null;
+            asset.lastBosSwingPrice = null;
+        }
 
         if (!asset.currentTrend) {
             asset.lastBlockReason = 'No trend';
             return;
         }
 
-        // 7. Calculate Fib levels (ALWAYS recalculate on each candle)
         const currentCandle = candles[candles.length - 1];
+
+        // 7. Detect BoS (Analysis only - doesn't block trading)
+        this.detectBoS(symbol, currentCandle);
+
+        // 8. Calculate Fib levels (ALWAYS recalculate on each candle)
         asset.fibLevels = this.calculateFib(asset, currentCandle);
 
         if (!asset.fibLevels) {
@@ -641,7 +657,7 @@ const Strategy = {
             return;
         }
 
-        // 8. Check if price is in golden zone
+        // 9. Check if price is in golden zone
         const price = currentCandle.close;
         const inZone = this.isInGoldenZone(price, asset.fibLevels);
 
@@ -650,19 +666,58 @@ const Strategy = {
             return;
         }
 
-        // 9. Check risk management
+        // 10. Check risk management
         if (!RiskManager.canTrade(symbol)) {
             asset.lastBlockReason = 'Risk blocked';
             return;
         }
 
-        // 10. Generate and execute signal!
+        // 11. Generate and execute signal!
         const signal = this.createSignal(asset, currentCandle);
         if (signal) {
             Logger.signal(`ENTRY: ${signal.direction} @ ${signal.entry.toFixed(4)}`, symbol);
             asset.lastSignalTime = now;
             asset.lastBlockReason = 'Signal sent';
             TradeExecutor.execute(symbol, signal);
+        }
+    },
+
+    // NEW: Continuous BoS Detection (Analysis)
+    detectBoS(symbol, lastCandle) {
+        const asset = STATE.assets[symbol];
+        const recentHighs = asset.swingHighs.slice(-3);
+        const recentLows = asset.swingLows.slice(-3);
+
+        if (asset.currentTrend === 'up' && recentHighs.length >= 2) {
+            const targetSwingHigh = recentHighs[recentHighs.length - 2];
+
+            if (lastCandle.close > targetSwingHigh.price) {
+                const isFirstBreak = !asset.bosDetected;
+                const isNewSwingTarget = asset.lastBosSwingPrice !== targetSwingHigh.price;
+
+                if (isFirstBreak || isNewSwingTarget) {
+                    asset.bosDetected = true;
+                    asset.lastBosPrice = lastCandle.close;
+                    asset.lastBosSwingPrice = targetSwingHigh.price;
+                    asset.bosTime = Date.now();
+                    Logger.signal(`BoS UP: Broke ${targetSwingHigh.price.toFixed(4)}`, symbol);
+                }
+            }
+        } else if (asset.currentTrend === 'down' && recentLows.length >= 2) {
+            const targetSwingLow = recentLows[recentLows.length - 2];
+
+            if (lastCandle.close < targetSwingLow.price) {
+                const isFirstBreak = !asset.bosDetected;
+                const isNewSwingTarget = asset.lastBosSwingPrice !== targetSwingLow.price;
+
+                if (isFirstBreak || isNewSwingTarget) {
+                    asset.bosDetected = true;
+                    asset.lastBosPrice = lastCandle.close;
+                    asset.lastBosSwingPrice = targetSwingLow.price;
+                    asset.bosTime = Date.now();
+                    Logger.signal(`BoS DOWN: Broke ${targetSwingLow.price.toFixed(4)}`, symbol);
+                }
+            }
         }
     },
 
@@ -922,6 +977,11 @@ const TradeExecutor = {
         asset.stake = 0;
         asset.multiplier = 0;
         asset.unrealizedPnl = 0;
+
+        // Reset BoS state for fresh analysis
+        asset.bosDetected = false;
+        asset.lastBosPrice = null;
+        asset.lastBosSwingPrice = null;
 
         // CRITICAL: Reset cooldowns to allow immediate re-entry
         asset.lastTradeCloseTime = Date.now();

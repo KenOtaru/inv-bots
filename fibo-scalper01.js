@@ -1,0 +1,1377 @@
+#!/usr/bin/env node
+
+/**
+ * ╔══════════════════════════════════════════════════════════════════════════════╗
+ * ║  DERIV FIBONACCI SCALPER BOT - Node.js Edition                               ║
+ * ║  Implements 1-minute Fibonacci Scalping Strategy                             ║
+ * ║                                                                               ║
+ * ║  Based on: https://youtu.be/AlsXNhTm4AA                                       ║
+ * ║                                                                               ║
+ * ║  ARCHITECTURE (Single File, Modular Structure):                              ║
+ * ║  1. CONFIG - All configurable parameters from ENV                            ║
+ * ║  2. STATE - Application state management                                     ║
+ * ║  3. LOGGER - Console logging with levels                                     ║
+ * ║  4. DERIV API - WebSocket connection & messaging                             ║
+ * ║  5. CANDLE MANAGER - Buffer management & processing                          ║
+ * ║  6. SWING DETECTOR - Identifies swing highs/lows                             ║
+ * ║  7. FIBONACCI CALCULATOR - Computes retracement levels                       ║
+ * ║  8. STRATEGY ENGINE - Core trading logic                                     ║
+ * ║  9. RISK MANAGER - Position sizing & daily limits                            ║
+ * ║  10. TRADE EXECUTOR - Order management                                       ║
+ * ║  11. MAIN - Application entry point                                          ║
+ * ║                                                                               ║
+ * ║  ⚠️ DISCLAIMER: FOR EDUCATIONAL PURPOSES ONLY - NOT FINANCIAL ADVICE         ║
+ * ║  Test extensively on VIRTUAL accounts before any live trading!               ║
+ * ╚══════════════════════════════════════════════════════════════════════════════╝
+ * 
+ * Example .env file:
+ * ─────────────────────────────────────────────────────────────────────────────────
+ * # Deriv API Credentials
+ * DERIV_APP_ID=1089
+ * DERIV_API_TOKEN=your_api_token_here
+ * 
+ * # Account Settings
+ * ACCOUNT_TYPE=virtual
+ * 
+ * # Trading Settings
+ * SYMBOL=R_100
+ * STAKE=1
+ * MULTIPLIER=50
+ * 
+ * # Strategy Parameters (optional - defaults provided)
+ * SWING_LOOKBACK=5
+ * MIN_TREND_SWINGS=2
+ * FIB_UPPER_ZONE=0.618
+ * FIB_LOWER_ZONE=0.5
+ * RR_RATIO=1.5
+ * 
+ * # Risk Management (optional - defaults provided)
+ * MAX_DAILY_LOSS=20
+ * MAX_TRADES_PER_DAY=10
+ * MAX_CONSECUTIVE_LOSSES=3
+ * COOLDOWN_MINUTES=15
+ * ─────────────────────────────────────────────────────────────────────────────────
+ */
+
+'use strict';
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DEPENDENCIES
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const WebSocket = require('ws');
+require('dotenv').config();
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION 1: CONFIGURATION & CONSTANTS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const CONFIG = {
+    // Connection settings (from environment)
+    appId: '1089',
+    apiToken: '0P94g4WdSrSrzir',
+    accountType: 'real',
+
+    // Trading settings
+    symbol: '1HZ25V',
+    stake: 1,
+    multiplier: 1600,
+
+    // Strategy parameters
+    swingLookback: 3,
+    minTrendSwings: 2,
+    fibUpperZone: 0.618,
+    fibLowerZone: 0.5,
+    rrRatio: 0.10,
+    minImpulsePercent: 0.0002,
+
+    // Risk management
+    maxDailyLoss: 2000,
+    maxTradesPerDay: 1000,
+    maxConsecutiveLosses: 8,
+    cooldownMinutes: 15,
+
+    // Candle buffer
+    maxCandles: 300,
+
+    // Session filters (24h format, null to disable)
+    tradingHoursStart: null,
+    tradingHoursEnd: null,
+    tradingDays: [1, 2, 3, 4, 5, 6, 7], // Monday to Friday
+
+    // WebSocket URL
+    wsUrl: `wss://ws.derivws.com/websockets/v3?app_id=`
+};
+
+// Validate critical configuration
+function validateConfig() {
+    if (!CONFIG.apiToken) {
+        Logger.error('DERIV_API_TOKEN is required. Please set it in .env file.');
+        process.exit(1);
+    }
+
+    if (CONFIG.accountType === 'real') {
+        Logger.warn('⚠️  REAL ACCOUNT MODE ENABLED - Trading with real money!');
+        Logger.warn('⚠️  Make sure you understand the risks involved.');
+    }
+
+    Logger.info('Configuration validated successfully');
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION 2: STATE MANAGEMENT
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const STATE = {
+    // Connection
+    ws: null,
+    connected: false,
+    authorized: false,
+    subscriptionId: null,
+    reconnectAttempts: 0,
+    maxReconnectAttempts: 5,
+
+    // Account
+    balance: 0,
+    currency: 'USD',
+    accountId: null,
+
+    // Market data
+    candles: [],
+    lastTick: null,
+
+    // Strategy state
+    swingHighs: [],
+    swingLows: [],
+    currentTrend: null,
+    bosDetected: false,
+    impulseStart: null,
+    impulseEnd: null,
+    fibLevels: null,
+    waitingForEntry: false,
+
+    // Position tracking
+    activeContract: null,
+    entryPrice: null,
+    direction: null,
+    takeProfitPrice: null,
+    stopLossPrice: null,
+    contractSubscriptionId: null,
+
+    // Risk tracking
+    dailyPnl: 0,
+    tradesToday: 0,
+    consecutiveLosses: 0,
+    consecutiveWins: 0,
+    lastLossTime: null,
+    wins: 0,
+    losses: 0,
+
+    // Trade history
+    tradeHistory: [],
+
+    // Session
+    startTime: new Date(),
+    lastResetDate: new Date().toDateString()
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION 3: LOGGER
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const Logger = {
+    colors: {
+        reset: '\x1b[0m',
+        bright: '\x1b[1m',
+        dim: '\x1b[2m',
+        red: '\x1b[31m',
+        green: '\x1b[32m',
+        yellow: '\x1b[33m',
+        blue: '\x1b[34m',
+        magenta: '\x1b[35m',
+        cyan: '\x1b[36m',
+        white: '\x1b[37m',
+        bgRed: '\x1b[41m',
+        bgGreen: '\x1b[42m',
+        bgYellow: '\x1b[43m'
+    },
+
+    timestamp() {
+        return new Date().toISOString().replace('T', ' ').substr(0, 19);
+    },
+
+    format(level, color, message) {
+        const ts = this.timestamp();
+        return `${this.colors.dim}[${ts}]${this.colors.reset} ${color}[${level}]${this.colors.reset} ${message}`;
+    },
+
+    info(message) {
+        console.log(this.format('INFO', this.colors.blue, message));
+    },
+
+    success(message) {
+        console.log(this.format('SUCCESS', this.colors.green, message));
+    },
+
+    warn(message) {
+        console.log(this.format('WARN', this.colors.yellow, message));
+    },
+
+    error(message) {
+        console.log(this.format('ERROR', this.colors.red, message));
+    },
+
+    trade(message) {
+        console.log(this.format('TRADE', this.colors.magenta, message));
+    },
+
+    signal(message) {
+        console.log(this.format('SIGNAL', this.colors.cyan, message));
+    },
+
+    debug(message) {
+        // if (process.env.DEBUG === 'true') {
+        console.log(this.format('DEBUG', this.colors.dim, message));
+        // }
+    },
+
+    banner() {
+        console.log('\n' + this.colors.cyan + '═'.repeat(70) + this.colors.reset);
+        console.log(this.colors.bright + this.colors.cyan +
+            '   DERIV FIBONACCI SCALPER BOT - Node.js Edition' + this.colors.reset);
+        console.log(this.colors.cyan + '═'.repeat(70) + this.colors.reset + '\n');
+    },
+
+    config() {
+        console.log(this.colors.yellow + '┌─ Configuration ─────────────────────────────────────────────────┐' + this.colors.reset);
+        console.log(`│  Account Type:    ${CONFIG.accountType.toUpperCase().padEnd(47)}│`);
+        console.log(`│  Symbol:          ${CONFIG.symbol.padEnd(47)}│`);
+        console.log(`│  Stake:           $${CONFIG.stake.toString().padEnd(46)}│`);
+        console.log(`│  Multiplier:      ${(CONFIG.multiplier + 'x').padEnd(47)}│`);
+        console.log(`│  Max Daily Loss:  $${CONFIG.maxDailyLoss.toString().padEnd(46)}│`);
+        console.log(`│  Max Trades/Day:  ${CONFIG.maxTradesPerDay.toString().padEnd(47)}│`);
+        console.log(`│  R:R Ratio:       ${(CONFIG.rrRatio + ':1').padEnd(47)}│`);
+        console.log(this.colors.yellow + '└──────────────────────────────────────────────────────────────────┘' + this.colors.reset + '\n');
+    },
+
+    stats() {
+        const winRate = (STATE.wins + STATE.losses) > 0
+            ? ((STATE.wins / (STATE.wins + STATE.losses)) * 100).toFixed(1)
+            : 0;
+
+        console.log('\n' + this.colors.green + '┌─ Session Statistics ─────────────────────────────────────────────┐' + this.colors.reset);
+        console.log(`│  Balance:         ${STATE.currency} ${STATE.balance.toFixed(2).padEnd(44)}│`);
+        console.log(`│  Daily P&L:       ${(STATE.dailyPnl >= 0 ? '+' : '') + '$' + STATE.dailyPnl.toFixed(2).padEnd(44)}│`);
+        console.log(`│  Trades Today:    ${(STATE.tradesToday + '/' + CONFIG.maxTradesPerDay).padEnd(47)}│`);
+        console.log(`│  Win Rate:        ${(winRate + '%').padEnd(47)}│`);
+        console.log(`│  Wins/Losses:     ${(STATE.wins + '/' + STATE.losses).padEnd(47)}│`);
+        console.log(this.colors.green + '└──────────────────────────────────────────────────────────────────┘' + this.colors.reset + '\n');
+    }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION 4: DERIV API WRAPPER
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const DerivAPI = {
+    reqId: 0,
+    pendingRequests: new Map(),
+
+    /**
+     * Establish WebSocket connection to Deriv
+     */
+    connect() {
+        return new Promise((resolve, reject) => {
+            const wsUrl = CONFIG.wsUrl + CONFIG.appId;
+            Logger.info(`Connecting to Deriv API...`);
+
+            STATE.ws = new WebSocket(wsUrl);
+
+            STATE.ws.on('open', () => {
+                STATE.connected = true;
+                STATE.reconnectAttempts = 0;
+                Logger.success('WebSocket connected');
+                resolve();
+            });
+
+            STATE.ws.on('close', () => {
+                STATE.connected = false;
+                STATE.authorized = false;
+                Logger.warn('WebSocket disconnected');
+                this.handleDisconnect();
+            });
+
+            STATE.ws.on('error', (error) => {
+                Logger.error(`WebSocket error: ${error.message}`);
+                reject(error);
+            });
+
+            STATE.ws.on('message', (data) => {
+                try {
+                    const response = JSON.parse(data.toString());
+                    this.handleMessage(response);
+                } catch (error) {
+                    Logger.error(`Failed to parse message: ${error.message}`);
+                }
+            });
+        });
+    },
+
+    /**
+     * Handle WebSocket disconnection with auto-reconnect
+     */
+    async handleDisconnect() {
+        if (STATE.reconnectAttempts < STATE.maxReconnectAttempts) {
+            STATE.reconnectAttempts++;
+            const delay = Math.min(1000 * Math.pow(2, STATE.reconnectAttempts), 30000);
+            Logger.info(`Reconnecting in ${delay / 1000}s (attempt ${STATE.reconnectAttempts}/${STATE.maxReconnectAttempts})...`);
+
+            setTimeout(async () => {
+                try {
+                    await this.connect();
+                    await this.authorize();
+                    await this.subscribeCandles();
+                    Logger.success('Reconnected successfully');
+                } catch (error) {
+                    Logger.error(`Reconnection failed: ${error.message}`);
+                }
+            }, delay);
+        } else {
+            Logger.error('Max reconnection attempts reached. Exiting...');
+            process.exit(1);
+        }
+    },
+
+    /**
+     * Send a request and wait for response
+     */
+    send(request) {
+        return new Promise((resolve, reject) => {
+            if (!STATE.ws || STATE.ws.readyState !== WebSocket.OPEN) {
+                reject(new Error('WebSocket not connected'));
+                return;
+            }
+
+            const reqId = ++this.reqId;
+            request.req_id = reqId;
+
+            // Set timeout for request
+            const timeout = setTimeout(() => {
+                this.pendingRequests.delete(reqId);
+                reject(new Error('Request timeout'));
+            }, 30000);
+
+            this.pendingRequests.set(reqId, { resolve, reject, timeout });
+
+            STATE.ws.send(JSON.stringify(request));
+            Logger.debug(`Sent request: ${JSON.stringify(request)}`);
+        });
+    },
+
+    /**
+     * Handle incoming WebSocket messages
+     */
+    handleMessage(response) {
+        Logger.debug(`Received: ${response.msg_type}`);
+
+        // Handle subscription messages (candles, contract updates)
+        if (response.msg_type === 'ohlc') {
+            CandleManager.handleCandleUpdate(response.ohlc);
+            return;
+        }
+
+        if (response.msg_type === 'proposal_open_contract') {
+            TradeExecutor.handleContractUpdate(response.proposal_open_contract);
+            return;
+        }
+
+        // Handle response to specific request
+        const reqId = response.req_id;
+        if (reqId && this.pendingRequests.has(reqId)) {
+            const { resolve, reject, timeout } = this.pendingRequests.get(reqId);
+            clearTimeout(timeout);
+            this.pendingRequests.delete(reqId);
+
+            if (response.error) {
+                Logger.error(`API Error: ${response.error.message}`);
+                reject(new Error(response.error.message));
+            } else {
+                resolve(response);
+            }
+        }
+    },
+
+    /**
+     * Authorize with API token
+     */
+    async authorize() {
+        Logger.info('Authorizing...');
+        const response = await this.send({ authorize: CONFIG.apiToken });
+
+        STATE.authorized = true;
+        STATE.balance = response.authorize.balance;
+        STATE.currency = response.authorize.currency;
+        STATE.accountId = response.authorize.loginid;
+
+        const isVirtual = response.authorize.is_virtual;
+
+        if (CONFIG.accountType === 'real' && isVirtual) {
+            Logger.warn('Token is for virtual account but ACCOUNT_TYPE=real. Using virtual.');
+        }
+
+        Logger.success(`Authorized: ${response.authorize.fullname}`);
+        Logger.info(`Account: ${STATE.accountId} (${isVirtual ? 'VIRTUAL' : 'REAL'})`);
+        Logger.info(`Balance: ${STATE.currency} ${STATE.balance}`);
+
+        return response;
+    },
+
+    /**
+     * Subscribe to 1-minute candles
+     */
+    async subscribeCandles() {
+        Logger.info(`Subscribing to ${CONFIG.symbol} 1-minute candles...`);
+
+        const response = await this.send({
+            ticks_history: CONFIG.symbol,
+            adjust_start_time: 1,
+            count: CONFIG.maxCandles,
+            end: 'latest',
+            granularity: 60,
+            style: 'candles',
+            subscribe: 1
+        });
+
+        // Process historical candles
+        if (response.candles) {
+            STATE.candles = response.candles.map(c => ({
+                time: c.epoch,
+                open: parseFloat(c.open),
+                high: parseFloat(c.high),
+                low: parseFloat(c.low),
+                close: parseFloat(c.close)
+            }));
+            Logger.info(`Loaded ${STATE.candles.length} historical candles`);
+        }
+
+        STATE.subscriptionId = response.subscription?.id;
+        Logger.success(`Subscribed to candles (ID: ${STATE.subscriptionId})`);
+
+        return response;
+    },
+
+    /**
+     * Buy a multiplier contract
+     */
+    async buyMultiplier(contractType, stake, multiplier, takeProfit = null, stopLoss = null) {
+        const request = {
+            buy: 1,
+            price: stake,
+            parameters: {
+                contract_type: contractType,
+                symbol: CONFIG.symbol,
+                amount: stake,
+                basis: 'stake',
+                multiplier: multiplier,
+                currency: STATE.currency,
+            }
+        };
+
+        // Add limit orders if specified
+        if (takeProfit !== null || stopLoss !== null) {
+            request.parameters.limit_order = {};
+            if (takeProfit !== null) {
+                request.parameters.limit_order.take_profit = takeProfit;
+            }
+            if (stopLoss !== null) {
+                request.parameters.limit_order.stop_loss = stopLoss;
+            }
+        }
+
+        Logger.debug(`Buy request: ${JSON.stringify(request)}`);
+        return await this.send(request);
+    },
+
+    /**
+     * Sell/close a contract
+     */
+    async sellContract(contractId) {
+        return await this.send({
+            sell: contractId,
+            price: 0 // Market price
+        });
+    },
+
+    /**
+     * Subscribe to contract updates
+     */
+    async subscribeContract(contractId) {
+        return await this.send({
+            proposal_open_contract: 1,
+            contract_id: contractId,
+            subscribe: 1
+        });
+    },
+
+    /**
+     * Get account balance
+     */
+    async getBalance() {
+        const response = await this.send({ balance: 1, subscribe: 0 });
+        STATE.balance = response.balance.balance;
+        return STATE.balance;
+    }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION 5: CANDLE MANAGER
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const CandleManager = {
+    lastProcessedTime: null,
+    lastCandleTime: null,
+    GRANULARITY: 60, // 60 seconds = 1 minute candles
+
+    /**
+     * Normalize epoch to candle start time
+     * This ensures all ticks within the same minute map to the same candle
+     */
+    normalizeEpoch(epoch) {
+        return Math.floor(epoch / this.GRANULARITY) * this.GRANULARITY;
+    },
+
+    /**
+     * Handle incoming candle updates from WebSocket
+     * FIXED: Normalizes epoch to prevent multiple candles per minute
+     */
+    handleCandleUpdate(ohlc) {
+        const rawEpoch = ohlc.epoch;
+        const normalizedEpoch = this.normalizeEpoch(rawEpoch);
+
+        const candle = {
+            time: normalizedEpoch,  // Use normalized epoch!
+            open: parseFloat(ohlc.open),
+            high: parseFloat(ohlc.high),
+            low: parseFloat(ohlc.low),
+            close: parseFloat(ohlc.close)
+        };
+
+        STATE.lastTick = candle.close;
+
+        // First candle ever received
+        if (STATE.candles.length === 0) {
+            STATE.candles.push(candle);
+            this.lastCandleTime = normalizedEpoch;
+            Logger.debug(`First candle received: epoch=${normalizedEpoch}`);
+            return;
+        }
+
+        const lastCandle = STATE.candles[STATE.candles.length - 1];
+
+        // Compare normalized epochs (candle start times)
+        if (normalizedEpoch === lastCandle.time) {
+            // Same candle - just update it (still forming)
+            // Update high/low/close but keep the original open
+            STATE.candles[STATE.candles.length - 1] = {
+                time: lastCandle.time,
+                open: lastCandle.open,  // Keep original open
+                high: Math.max(lastCandle.high, candle.high),
+                low: Math.min(lastCandle.low, candle.low),
+                close: candle.close
+            };
+            // DO NOT call onCandleClosed here - candle is still forming!
+
+        } else if (normalizedEpoch > lastCandle.time) {
+            // NEW candle started - the previous candle is now CLOSED
+            Logger.debug(`New candle detected: ${lastCandle.time} → ${normalizedEpoch}`);
+
+            // Save the closed candle before pushing new one
+            const closedCandle = { ...lastCandle };
+
+            // Add the new forming candle
+            STATE.candles.push(candle);
+
+            // Trim buffer if needed
+            if (STATE.candles.length > CONFIG.maxCandles) {
+                STATE.candles.shift();
+            }
+
+            // Process the CLOSED candle (only once per minute!)
+            if (this.lastProcessedTime !== closedCandle.time) {
+                this.lastProcessedTime = closedCandle.time;
+                this.lastCandleTime = normalizedEpoch;
+                this.onCandleClosed(closedCandle);
+            }
+        }
+    },
+
+    /**
+     * Called when a candle closes - triggers strategy analysis
+     * Now only called ONCE per minute (when new candle starts)
+     */
+    onCandleClosed(closedCandle) {
+        Logger.debug(`Candle CLOSED: O=${closedCandle.open.toFixed(2)} H=${closedCandle.high.toFixed(2)} L=${closedCandle.low.toFixed(2)} C=${closedCandle.close.toFixed(2)}`);
+
+        // Check for daily reset
+        this.checkDailyReset();
+
+        // Run strategy analysis on the closed candle
+        StrategyEngine.onNewClosedCandle();
+    },
+
+    /**
+     * Reset daily statistics at midnight
+     */
+    checkDailyReset() {
+        const today = new Date().toDateString();
+        if (today !== STATE.lastResetDate) {
+            Logger.info('New trading day - resetting daily statistics');
+            STATE.dailyPnl = 0;
+            STATE.tradesToday = 0;
+            STATE.lastResetDate = today;
+        }
+    },
+
+    /**
+     * Get recent candles for analysis
+     */
+    getRecentCandles(count) {
+        return STATE.candles.slice(-count);
+    },
+
+    /**
+     * Get completed candles only (excludes current forming candle)
+     */
+    getCompletedCandles(count) {
+        if (STATE.candles.length < 2) return [];
+        return STATE.candles.slice(0, -1).slice(-count);
+    },
+
+    /**
+     * Get the last closed candle (not the current forming one)
+     */
+    getLastClosedCandle() {
+        if (STATE.candles.length < 2) return null;
+        return STATE.candles[STATE.candles.length - 2];
+    }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION 6: SWING DETECTOR
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const SwingDetector = {
+    /**
+     * Find swing highs - local maxima with N bars on each side lower
+     * Excludes the current forming candle from analysis
+     */
+    findSwingHighs(candles, lookback) {
+        const swings = [];
+
+        // Exclude the last candle (current forming candle)
+        if (candles.length < 2) return swings;
+        const completedCandles = candles.slice(0, -1);
+
+        // Need at least (lookback * 2 + 1) candles for valid swing detection
+        if (completedCandles.length < (lookback * 2 + 1)) {
+            return swings;
+        }
+
+        for (let i = lookback; i < completedCandles.length - lookback; i++) {
+            let isSwingHigh = true;
+            const currentHigh = completedCandles[i].high;
+
+            // Check bars on both sides
+            for (let j = 1; j <= lookback; j++) {
+                if (completedCandles[i - j].high >= currentHigh ||
+                    completedCandles[i + j].high >= currentHigh) {
+                    isSwingHigh = false;
+                    break;
+                }
+            }
+
+            if (isSwingHigh) {
+                swings.push({
+                    index: i,
+                    time: completedCandles[i].time,
+                    price: currentHigh,
+                    candle: completedCandles[i]
+                });
+            }
+        }
+
+        return swings;
+    },
+
+    /**
+     * Find swing lows - local minima with N bars on each side higher
+     * Excludes the current forming candle from analysis
+     */
+    findSwingLows(candles, lookback) {
+        const swings = [];
+
+        // Exclude the last candle (current forming candle)
+        if (candles.length < 2) return swings;
+        const completedCandles = candles.slice(0, -1);
+
+        // Need at least (lookback * 2 + 1) candles for valid swing detection
+        if (completedCandles.length < (lookback * 2 + 1)) {
+            return swings;
+        }
+
+        for (let i = lookback; i < completedCandles.length - lookback; i++) {
+            let isSwingLow = true;
+            const currentLow = completedCandles[i].low;
+
+            // Check bars on both sides
+            for (let j = 1; j <= lookback; j++) {
+                if (completedCandles[i - j].low <= currentLow ||
+                    completedCandles[i + j].low <= currentLow) {
+                    isSwingLow = false;
+                    break;
+                }
+            }
+
+            if (isSwingLow) {
+                swings.push({
+                    index: i,
+                    time: completedCandles[i].time,
+                    price: currentLow,
+                    candle: completedCandles[i]
+                });
+            }
+        }
+
+        return swings;
+    },
+
+    /**
+     * Determine micro-trend from sequence of swings
+     */
+    determineTrend(swingHighs, swingLows, minSwings) {
+        if (swingHighs.length < minSwings || swingLows.length < minSwings) {
+            return null;
+        }
+
+        const recentHighs = swingHighs.slice(-minSwings);
+        const recentLows = swingLows.slice(-minSwings);
+
+        // Check for uptrend (higher highs AND higher lows)
+        let higherHighs = true;
+        let higherLows = true;
+
+        for (let i = 1; i < recentHighs.length; i++) {
+            if (recentHighs[i].price <= recentHighs[i - 1].price) {
+                higherHighs = false;
+                break;
+            }
+        }
+
+        for (let i = 1; i < recentLows.length; i++) {
+            if (recentLows[i].price <= recentLows[i - 1].price) {
+                higherLows = false;
+                break;
+            }
+        }
+
+        if (higherHighs && higherLows) {
+            return 'up';
+        }
+
+        // Check for downtrend (lower highs AND lower lows)
+        let lowerHighs = true;
+        let lowerLows = true;
+
+        for (let i = 1; i < recentHighs.length; i++) {
+            if (recentHighs[i].price >= recentHighs[i - 1].price) {
+                lowerHighs = false;
+                break;
+            }
+        }
+
+        for (let i = 1; i < recentLows.length; i++) {
+            if (recentLows[i].price >= recentLows[i - 1].price) {
+                lowerLows = false;
+                break;
+            }
+        }
+
+        if (lowerHighs && lowerLows) {
+            return 'down';
+        }
+
+        return null;
+    }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION 7: FIBONACCI CALCULATOR
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const FibCalculator = {
+    /**
+     * Calculate Fibonacci retracement levels
+     * @param {number} start - Swing start price
+     * @param {number} end - Swing end price
+     * @returns {object} Fibonacci levels object
+     */
+    calculate(start, end) {
+        const range = end - start;
+
+        return {
+            start: start,
+            end: end,
+            range: Math.abs(range),
+            levels: {
+                '0.0': end,
+                '0.236': end - (range * 0.236),
+                '0.382': end - (range * 0.382),
+                '0.5': end - (range * 0.5),
+                '0.618': end - (range * 0.618),
+                '0.786': end - (range * 0.786),
+                '1.0': start
+            }
+        };
+    },
+
+    /**
+     * Check if price is in the golden zone (0.5 - 0.618)
+     */
+    isInGoldenZone(price, fibLevels, trend) {
+        const upperLevel = fibLevels.levels[CONFIG.fibLowerZone.toString()];
+        const lowerLevel = fibLevels.levels[CONFIG.fibUpperZone.toString()];
+
+        const zoneTop = Math.max(upperLevel, lowerLevel);
+        const zoneBottom = Math.min(upperLevel, lowerLevel);
+
+        return (trend === 'up' ? price <= zoneTop && price >= zoneBottom : trend === 'down' ? price >= zoneBottom && price <= zoneTop : null);
+    },
+
+    /**
+     * Format Fibonacci levels for logging
+     */
+    formatLevels(fibLevels) {
+        return `0.5=${fibLevels.levels['0.5'].toFixed(4)} | 0.618=${fibLevels.levels['0.618'].toFixed(4)}`;
+    }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION 8: STRATEGY ENGINE
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const StrategyEngine = {
+    /**
+     * Main strategy function - called on each closed candle
+     */
+    onNewClosedCandle() {
+        // Validation: Log candle buffer status
+        const totalCandles = STATE.candles.length;
+        const completedCandles = totalCandles > 0 ? totalCandles - 1 : 0;
+        Logger.debug(`Candle buffer: ${completedCandles} completed, 1 forming (total: ${totalCandles})`);
+
+        // Skip if we have an active position
+        if (STATE.activeContract) {
+            return { action: 'none', reason: 'Position active' };
+        }
+
+        // Get candles for analysis
+        const candles = CandleManager.getRecentCandles(100);
+        if (candles.length < 50) {
+            Logger.debug('Not enough candles for analysis');
+            return { action: 'none', reason: 'Insufficient data' };
+        }
+
+        // Step 1: Detect swing points
+        STATE.swingHighs = SwingDetector.findSwingHighs(candles, CONFIG.swingLookback);
+        STATE.swingLows = SwingDetector.findSwingLows(candles, CONFIG.swingLookback);
+
+        Logger.debug(`Found ${STATE.swingHighs.length} swing highs, ${STATE.swingLows.length} swing lows`);
+
+        // Step 2: Determine trend
+        const previousTrend = STATE.currentTrend;
+        STATE.currentTrend = SwingDetector.determineTrend(
+            STATE.swingHighs,
+            STATE.swingLows,
+            CONFIG.minTrendSwings
+        );
+
+        if (STATE.currentTrend !== previousTrend) {
+            if (STATE.currentTrend) {
+                Logger.signal(`Trend detected: ${STATE.currentTrend.toUpperCase()}`);
+            } else {
+                Logger.debug('No clear trend');
+            }
+        }
+
+        if (!STATE.currentTrend) {
+            STATE.bosDetected = false;
+            STATE.fibLevels = null;
+            STATE.waitingForEntry = false;
+            return { action: 'none', reason: 'No trend' };
+        }
+
+        // Step 3: Check for Break of Structure (BoS)
+        const lastCandle = candles[candles.length - 1];
+        const recentHighs = STATE.swingHighs.slice(-3);
+        const recentLows = STATE.swingLows.slice(-3);
+
+        this.detectBreakOfStructure(lastCandle, recentHighs, recentLows);
+
+        // Step 4: Check for entry in golden zone
+        if (STATE.bosDetected && STATE.fibLevels) {
+            const currentPrice = lastCandle.close;
+            const inGoldenZone = FibCalculator.isInGoldenZone(currentPrice, STATE.fibLevels, STATE.currentTrend);
+
+            STATE.waitingForEntry = inGoldenZone;
+
+            if (inGoldenZone) {
+                Logger.signal(`Price in golden zone: ${currentPrice.toFixed(4)}`);
+
+                // Check for confirmation (candle closes in trend direction)
+                const confirmationValid = this.checkEntryConfirmation(lastCandle);
+
+                if (confirmationValid) {
+                    const signal = this.generateSignal(lastCandle);
+
+                    if (signal) {
+                        // Pass through risk manager
+                        if (RiskManager.canTrade()) {
+                            Logger.signal(`Entry signal: ${signal.direction} @ ${signal.entry.toFixed(4)}`);
+                            TradeExecutor.executeSignal(signal);
+                            return { action: 'trade', signal };
+                        }
+                    }
+                }
+            }
+        }
+
+        return { action: 'none', reason: 'No valid entry' };
+    },
+
+    /**
+     * Detect Break of Structure (BoS)
+     */
+    detectBreakOfStructure(lastCandle, recentHighs, recentLows) {
+        if (STATE.currentTrend === 'up' && recentHighs.length >= 2) {
+            const lastSwingHigh = recentHighs[recentHighs.length - 2];
+
+            if (lastCandle.close > lastSwingHigh.price && !STATE.bosDetected) {
+                STATE.bosDetected = true;
+                Logger.signal(`Break of Structure (UP) - Price broke above ${lastSwingHigh.price.toFixed(4)}`);
+
+                // Define impulse and calculate Fib
+                const lastSwingLow = recentLows[recentLows.length - 1];
+                if (lastSwingLow) {
+                    STATE.impulseStart = lastSwingLow.price;
+                    STATE.impulseEnd = lastCandle.high;
+                    STATE.fibLevels = FibCalculator.calculate(STATE.impulseStart, STATE.impulseEnd);
+                    Logger.signal(`Fib levels: ${FibCalculator.formatLevels(STATE.fibLevels)}`);
+                }
+            }
+        } else if (STATE.currentTrend === 'down' && recentLows.length >= 2) {
+            const lastSwingLow = recentLows[recentLows.length - 2];
+
+            if (lastCandle.close < lastSwingLow.price && !STATE.bosDetected) {
+                STATE.bosDetected = true;
+                Logger.signal(`Break of Structure (DOWN) - Price broke below ${lastSwingLow.price.toFixed(4)}`);
+
+                // Define impulse and calculate Fib
+                const lastSwingHigh = recentHighs[recentHighs.length - 1];
+                if (lastSwingHigh) {
+                    STATE.impulseStart = lastSwingHigh.price;
+                    STATE.impulseEnd = lastCandle.low;
+                    STATE.fibLevels = FibCalculator.calculate(STATE.impulseStart, STATE.impulseEnd);
+                    Logger.signal(`Fib levels: ${FibCalculator.formatLevels(STATE.fibLevels)}`);
+                }
+            }
+        }
+    },
+
+    /**
+     * Check for entry confirmation (rejection candle pattern)
+     */
+    checkEntryConfirmation(candle) {
+        if (STATE.currentTrend === 'up') {
+            // Bullish candle close for long entry
+            return candle.close > candle.open;
+        } else {
+            // Bearish candle close for short entry
+            return candle.close < candle.open;
+        }
+    },
+
+    /**
+     * Generate trading signal with entry, SL, and TP
+     */
+    generateSignal(currentCandle) {
+        if (!STATE.fibLevels) return null;
+
+        const entryPrice = currentCandle.close;
+
+        if (STATE.currentTrend === 'up') {
+            // Long trade
+            const stopLoss = STATE.fibLevels.levels['0.786'];
+            const riskAmount = entryPrice - stopLoss;
+            const takeProfit = entryPrice + (riskAmount * CONFIG.rrRatio);
+
+            // Validate minimum risk
+            const riskPercent = riskAmount / entryPrice;
+            if (riskPercent < CONFIG.minImpulsePercent) {
+                Logger.debug('Risk too small, skipping signal');
+                return null;
+            }
+
+            return {
+                direction: 'MULTUP',
+                entry: entryPrice,
+                stopLoss: stopLoss,
+                takeProfit: takeProfit,
+                riskPips: riskAmount,
+                trend: 'up'
+            };
+        } else {
+            // Short trade
+            const stopLoss = STATE.fibLevels.levels['0.786'];
+            const riskAmount = stopLoss - entryPrice;
+            const takeProfit = entryPrice - (riskAmount * CONFIG.rrRatio);
+
+            // Validate minimum risk
+            const riskPercent = riskAmount / entryPrice;
+            if (riskPercent < CONFIG.minImpulsePercent) {
+                Logger.debug('Risk too small, skipping signal');
+                return null;
+            }
+
+            return {
+                direction: 'MULTDOWN',
+                entry: entryPrice,
+                stopLoss: stopLoss,
+                takeProfit: takeProfit,
+                riskPips: riskAmount,
+                trend: 'down'
+            };
+        }
+    },
+
+    /**
+     * Reset strategy state after trade closes
+     */
+    reset() {
+        STATE.bosDetected = false;
+        STATE.fibLevels = null;
+        STATE.waitingForEntry = false;
+        STATE.impulseStart = null;
+        STATE.impulseEnd = null;
+        Logger.debug('Strategy state reset');
+    }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION 9: RISK MANAGER
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const RiskManager = {
+    /**
+     * Check if trading is allowed based on risk parameters
+     */
+    canTrade() {
+        // Check daily loss limit
+        if (STATE.dailyPnl <= -CONFIG.maxDailyLoss) {
+            Logger.warn('Trading blocked: Max daily loss reached');
+            return false;
+        }
+
+        // Check max trades per day
+        if (STATE.tradesToday >= CONFIG.maxTradesPerDay) {
+            Logger.warn('Trading blocked: Max trades per day reached');
+            return false;
+        }
+
+        // Check consecutive losses cooldown
+        if (STATE.consecutiveLosses >= CONFIG.maxConsecutiveLosses) {
+            if (STATE.lastLossTime) {
+                const cooldownEnd = new Date(STATE.lastLossTime.getTime() + (CONFIG.cooldownMinutes * 60000));
+                if (new Date() < cooldownEnd) {
+                    const remaining = Math.ceil((cooldownEnd - new Date()) / 60000);
+                    Logger.warn(`Trading blocked: Cooldown active (${remaining} min remaining)`);
+                    return false;
+                } else {
+                    STATE.consecutiveLosses = 0;
+                    Logger.info('Cooldown expired, trading resumed');
+                }
+            }
+        }
+
+        // Check trading hours
+        if (CONFIG.tradingHoursStart !== null && CONFIG.tradingHoursEnd !== null) {
+            const now = new Date();
+            const currentHour = now.getUTCHours();
+            if (currentHour < CONFIG.tradingHoursStart || currentHour >= CONFIG.tradingHoursEnd) {
+                Logger.debug('Outside trading hours');
+                return false;
+            }
+        }
+
+        // Check trading days
+        const dayOfWeek = new Date().getUTCDay();
+        if (!CONFIG.tradingDays.includes(dayOfWeek)) {
+            Logger.debug('Non-trading day');
+            return false;
+        }
+
+        return true;
+    },
+
+    /**
+     * Record trade result and update statistics
+     */
+    recordTrade(pnl, isWin) {
+        STATE.dailyPnl += pnl;
+        STATE.tradesToday++;
+
+        if (isWin) {
+            STATE.wins++;
+            STATE.consecutiveWins++;
+            STATE.consecutiveLosses = 0;
+        } else {
+            STATE.losses++;
+            STATE.consecutiveLosses++;
+            STATE.consecutiveWins = 0;
+            STATE.lastLossTime = new Date();
+        }
+
+        // Update balance
+        STATE.balance += pnl;
+
+        // Log stats periodically
+        if (STATE.tradesToday % 5 === 0) {
+            Logger.stats();
+        }
+    },
+
+    /**
+     * Calculate position size based on risk percentage
+     * (Optional - for more advanced position sizing)
+     */
+    calculatePositionSize(riskPercent, stopLossDistance) {
+        const riskAmount = STATE.balance * (riskPercent / 100);
+        const positionSize = riskAmount / stopLossDistance;
+        return Math.max(CONFIG.stake, Math.min(positionSize, STATE.balance * 0.1));
+    }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION 10: TRADE EXECUTOR
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const TradeExecutor = {
+    /**
+     * Execute a trading signal
+     */
+    async executeSignal(signal) {
+        try {
+            Logger.trade(`Opening ${signal.direction} @ ${signal.entry.toFixed(4)}`);
+            Logger.trade(`SL: ${signal.stopLoss.toFixed(4)} | TP: ${signal.takeProfit.toFixed(4)}`);
+
+            // Calculate TP/SL as profit amounts for multiplier contracts
+            const slAmount = CONFIG.stake; // Maximum loss is the stake
+            const tpAmount = CONFIG.stake * CONFIG.rrRatio; // Target profit
+
+            const response = await DerivAPI.buyMultiplier(
+                signal.direction,
+                CONFIG.stake,
+                CONFIG.multiplier,
+                tpAmount,
+                slAmount
+            );
+
+            if (response.buy) {
+                STATE.activeContract = response.buy.contract_id;
+                STATE.entryPrice = signal.entry;
+                STATE.direction = signal.direction;
+                STATE.takeProfitPrice = signal.takeProfit;
+                STATE.stopLossPrice = signal.stopLoss;
+
+                Logger.success(`Trade opened: Contract ID ${STATE.activeContract}`);
+                Logger.trade(`Buy price: ${response.buy.buy_price} ${STATE.currency}`);
+
+                // Subscribe to contract updates
+                const subResponse = await DerivAPI.subscribeContract(STATE.activeContract);
+                STATE.contractSubscriptionId = subResponse.subscription?.id;
+
+                // Store in trade history
+                STATE.tradeHistory.push({
+                    id: STATE.activeContract,
+                    openTime: new Date(),
+                    direction: signal.direction,
+                    entry: signal.entry,
+                    stopLoss: signal.stopLoss,
+                    takeProfit: signal.takeProfit,
+                    stake: CONFIG.stake,
+                    status: 'open'
+                });
+            }
+        } catch (error) {
+            Logger.error(`Trade execution failed: ${error.message}`);
+        }
+    },
+
+    /**
+     * Handle contract updates from subscription
+     */
+    handleContractUpdate(contract) {
+        if (!contract || contract.contract_id !== STATE.activeContract) {
+            return;
+        }
+
+        const currentPnl = contract.profit || 0;
+        Logger.debug(`Contract update: P&L = ${currentPnl.toFixed(2)}`);
+
+        // Check if contract is closed
+        if (contract.is_sold || contract.status === 'sold') {
+            this.onContractClosed(contract);
+        }
+    },
+
+    /**
+     * Handle contract closure
+     */
+    onContractClosed(contract) {
+        const pnl = contract.profit || 0;
+        const isWin = pnl > 0;
+
+        const resultEmoji = isWin ? '✅' : '❌';
+        Logger.trade(`${resultEmoji} Trade closed: ${isWin ? 'WIN' : 'LOSS'} ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`);
+
+        // Update trade history
+        const trade = STATE.tradeHistory.find(t => t.id === STATE.activeContract);
+        if (trade) {
+            trade.closeTime = new Date();
+            trade.pnl = pnl;
+            trade.status = isWin ? 'win' : 'loss';
+            trade.exitReason = contract.status;
+        }
+
+        // Record with risk manager
+        RiskManager.recordTrade(pnl, isWin);
+
+        // Reset state
+        STATE.activeContract = null;
+        STATE.entryPrice = null;
+        STATE.direction = null;
+        STATE.takeProfitPrice = null;
+        STATE.stopLossPrice = null;
+        STATE.contractSubscriptionId = null;
+
+        // Reset strategy for next setup
+        StrategyEngine.reset();
+
+        // Log updated stats
+        Logger.info(`Daily P&L: ${STATE.dailyPnl >= 0 ? '+' : ''}$${STATE.dailyPnl.toFixed(2)} | Win Rate: ${((STATE.wins / (STATE.wins + STATE.losses)) * 100).toFixed(1)}%`);
+    },
+
+    /**
+     * Manually close current position (if needed)
+     */
+    async closePosition(reason = 'manual') {
+        if (!STATE.activeContract) {
+            Logger.warn('No active position to close');
+            return;
+        }
+
+        try {
+            Logger.trade(`Closing position: ${reason}`);
+            await DerivAPI.sellContract(STATE.activeContract);
+        } catch (error) {
+            Logger.error(`Failed to close position: ${error.message}`);
+        }
+    }
+};
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION 11: MAIN APPLICATION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+async function main() {
+    // Display banner
+    Logger.banner();
+
+    // Display configuration
+    Logger.config();
+
+    // Validate configuration
+    validateConfig();
+
+    // Setup graceful shutdown
+    setupShutdownHandlers();
+
+    try {
+        // Connect to Deriv API
+        await DerivAPI.connect();
+
+        // Authorize
+        await DerivAPI.authorize();
+
+        // Subscribe to candles
+        await DerivAPI.subscribeCandles();
+
+        // Log initial stats
+        Logger.stats();
+
+        // Bot is now running
+        Logger.success('Bot is now running and monitoring for signals...');
+        Logger.info('Press Ctrl+C to stop the bot gracefully\n');
+
+        // Keep the process alive
+        process.stdin.resume();
+
+    } catch (error) {
+        Logger.error(`Startup failed: ${error.message}`);
+        process.exit(1);
+    }
+}
+
+/**
+ * Setup handlers for graceful shutdown
+ */
+function setupShutdownHandlers() {
+    const shutdown = async (signal) => {
+        Logger.warn(`\nReceived ${signal}. Shutting down gracefully...`);
+
+        // Close any active position
+        if (STATE.activeContract) {
+            Logger.warn('Closing active position before shutdown...');
+            await TradeExecutor.closePosition('shutdown');
+        }
+
+        // Close WebSocket connection
+        if (STATE.ws) {
+            STATE.ws.close();
+        }
+
+        // Final stats
+        Logger.stats();
+
+        Logger.info('Goodbye!');
+        process.exit(0);
+    };
+
+    process.on('SIGINT', () => shutdown('SIGINT'));
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+
+    process.on('uncaughtException', (error) => {
+        Logger.error(`Uncaught exception: ${error.message}`);
+        Logger.error(error.stack);
+        shutdown('uncaughtException');
+    });
+
+    process.on('unhandledRejection', (reason, promise) => {
+        Logger.error(`Unhandled rejection at: ${promise}, reason: ${reason}`);
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// START THE BOT
+// ═══════════════════════════════════════════════════════════════════════════════
+
+main();

@@ -23,7 +23,7 @@ const ASSET_CONFIGS = {
         tradingHours: '24/7',
         swingLookback: 5,
         minImpulsePercent: 0.0005,
-        rrRatio: 0.5
+        rrRatio: 1.5
     },
     'R_100': {
         name: 'Volatility 100',
@@ -31,13 +31,13 @@ const ASSET_CONFIGS = {
         contractType: 'multiplier',
         multipliers: [40, 100, 200, 300, 500],
         defaultMultiplier: 200,
-        maxTradesPerDay: 5000,
+        maxTradesPerDay: 50,
         minStake: 1.00,
         maxStake: 3000,
         tradingHours: '24/7',
         swingLookback: 5,
         minImpulsePercent: 0.0005,
-        rrRatio: 0.5
+        rrRatio: 1.5
     },
     '1HZ25V': {
         name: 'Volatility 25 (1s)',
@@ -45,13 +45,13 @@ const ASSET_CONFIGS = {
         contractType: 'multiplier',
         multipliers: [160, 400, 800, 1200, 1600],
         defaultMultiplier: 800,
-        maxTradesPerDay: 12000,
+        maxTradesPerDay: 120,
         minStake: 1.00,
         maxStake: 1000,
         tradingHours: '24/7',
         swingLookback: 4,
         minImpulsePercent: 0.0005,
-        rrRatio: 0.5
+        rrRatio: 1.3
     },
     '1HZ50V': {
         name: 'Volatility 50 (1s)',
@@ -59,13 +59,13 @@ const ASSET_CONFIGS = {
         contractType: 'multiplier',
         multipliers: [80, 200, 400, 600, 800],
         defaultMultiplier: 400,
-        maxTradesPerDay: 12000,
+        maxTradesPerDay: 120,
         minStake: 1.00,
         maxStake: 1000,
         tradingHours: '24/7',
         swingLookback: 4,
         minImpulsePercent: 0.0005,
-        rrRatio: 0.5
+        rrRatio: 1.4
     },
     '1HZ100V': {
         name: 'Volatility 100 (1s)',
@@ -73,13 +73,13 @@ const ASSET_CONFIGS = {
         contractType: 'multiplier',
         multipliers: [40, 100, 200, 300, 500],
         defaultMultiplier: 200,
-        maxTradesPerDay: 12000,
+        maxTradesPerDay: 120,
         minStake: 1.00,
         maxStake: 1000,
         tradingHours: '24/7',
         swingLookback: 4,
         minImpulsePercent: 0.0005,
-        rrRatio: 0.5
+        rrRatio: 1.4
     },
     'stpRNG': {
         name: 'Step Index',
@@ -87,13 +87,13 @@ const ASSET_CONFIGS = {
         contractType: 'multiplier',
         multipliers: [750, 2000, 3500, 5500, 7500],
         defaultMultiplier: 3500,
-        maxTradesPerDay: 12000,
+        maxTradesPerDay: 120,
         minStake: 1.00,
         maxStake: 1000,
         tradingHours: '24/7',
         swingLookback: 6,
         minImpulsePercent: 0.0005,
-        rrRatio: 0.5
+        rrRatio: 1.2
     },
     'frxXAUUSD': {
         name: 'Gold/USD',
@@ -101,13 +101,13 @@ const ASSET_CONFIGS = {
         contractType: 'multiplier',
         multipliers: [50, 100, 200, 300, 400, 500],
         defaultMultiplier: 300,
-        maxTradesPerDay: 5000,
+        maxTradesPerDay: 5,
         minStake: 5,
         maxStake: 5000,
         tradingHours: 'Sun 23:00 - Fri 21:55 GMT',
         swingLookback: 5,
         minImpulsePercent: 0.0005,
-        rrRatio: 0.5
+        rrRatio: 1.5
     }
 };
 
@@ -138,10 +138,10 @@ const CONFIG = {
     fibLowerZone: 0.5,
 
     // Global risk management
-    maxDailyLossPercent: 50,
-    maxDailyLoss: 500,
+    maxDailyLossPercent: 10,
+    maxDailyLoss: 50,
     maxTotalOpenPositions: 7,
-    maxConsecutiveLosses: 20,
+    maxConsecutiveLosses: 5,
     cooldownMinutes: 15,
 
     // Telegram settings
@@ -252,24 +252,15 @@ function createAssetState(symbol) {
         subscriptionId: null,
         lastProcessedTime: null,
 
-        // Strategy state - ENHANCED
+        // Strategy state
         swingHighs: [],
         swingLows: [],
         currentTrend: null,
-        previousTrend: null,
         bosDetected: false,
-        bosTime: null,                    // NEW: When BoS was detected
-        bosCandle: null,                  // NEW: Which candle BoS occurred on
         impulseStart: null,
         impulseEnd: null,
         fibLevels: null,
-        fibSetupTime: null,               // NEW: When Fib was calculated
-        fibCandleCount: 0,                // NEW: Candles since Fib setup
         waitingForEntry: false,
-
-        // NEW: Signal cooldown tracking
-        lastSignalTime: null,
-        signalsGenerated: 0,
 
         // Position tracking with live P&L
         activeContract: null,
@@ -282,7 +273,7 @@ function createAssetState(symbol) {
         stake: 0,
         multiplier: 0,
 
-        // Live position data
+        // Live position data (updated from contract subscription)
         currentPrice: null,
         unrealizedPnl: 0,
 
@@ -352,7 +343,7 @@ const TelegramNotifier = {
 
         const dirEmoji = direction === 'MULTUP' ? '🟢 BUY' : '🔴 SELL';
         const message = `
-            🔔 Trade Opened in Bot
+            🔔 Trade Opened
 
             📊 ${symbol} - ${ASSET_CONFIGS[symbol]?.name || symbol}
             ${dirEmoji}
@@ -380,7 +371,7 @@ const TelegramNotifier = {
         const pnlColor = pnl >= 0 ? '🟢' : '🔴';
 
         const message = `
-            ${resultEmoji} in Bot
+            ${resultEmoji}
 
             📊 ${symbol}
             ${pnlColor} P&L: ${pnlStr}
@@ -394,9 +385,9 @@ const TelegramNotifier = {
 
         try {
             await this.send(message);
-            // Logger.debug('Telegram: Trade closed notification sent', symbol);
+            //Logger.debug('Telegram: Trade closed notification sent', symbol);
         } catch (error) {
-            // Logger.debug(`Telegram send failed: ${error.message}`);
+            //Logger.debug(`Telegram send failed: ${error.message}`);
         }
     },
 
@@ -426,7 +417,7 @@ const TelegramNotifier = {
         }
 
         const message = `
-            ⏰ Hourly Trade Summary in Bot
+            ⏰ Hourly Trade Summary
 
             📊 Last Hour
             ├ Trades: ${stats.trades}
@@ -483,7 +474,7 @@ const TelegramNotifier = {
         }
 
         const message = `
-            📊 Daily Trading Summary in Bot
+            📊 Daily Trading Summary
 
             💰 Performance
             ├ ${pnlEmoji} Daily P&L: ${(STATE.totalDailyPnl >= 0 ? '+' : '')}$${STATE.totalDailyPnl.toFixed(2)}
@@ -621,13 +612,6 @@ const Logger = {
     debug(message, symbol = null) {
         if (process.env.DEBUG === 'true') {
             console.log(this.format('DEBUG', this.colors.dim, message, symbol));
-        }
-    },
-
-    // NEW: Strategy debug for diagnosing issues
-    strategy(message, symbol = null) {
-        if (process.env.DEBUG === 'true' || process.env.STRATEGY_DEBUG === 'true') {
-            console.log(this.format('STRAT', this.colors.cyan + this.colors.dim, message, symbol));
         }
     },
 
@@ -1007,12 +991,29 @@ const DerivAPI = {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const CandleManager = {
+    GRANULARITY: 60, // 60 seconds = 1 minute candles
+
+    /**
+     * Normalize epoch to candle start time
+     * This ensures all ticks within the same minute map to the same candle
+     */
+    normalizeEpoch(epoch) {
+        return Math.floor(epoch / this.GRANULARITY) * this.GRANULARITY;
+    },
+
+    /**
+     * Handle incoming candle updates from WebSocket
+     * FIXED: Normalizes epoch to prevent multiple candles per minute
+     */
     handleCandleUpdate(symbol, ohlc) {
         const asset = STATE.assets[symbol];
         if (!asset) return;
 
+        const rawEpoch = ohlc.epoch;
+        const normalizedEpoch = this.normalizeEpoch(rawEpoch);
+
         const candle = {
-            time: ohlc.epoch,
+            time: normalizedEpoch,  // Use normalized epoch!
             open: parseFloat(ohlc.open),
             high: parseFloat(ohlc.high),
             low: parseFloat(ohlc.low),
@@ -1022,36 +1023,62 @@ const CandleManager = {
         asset.lastTick = candle.close;
         asset.currentPrice = candle.close;
 
+        // First candle ever received
         if (asset.candles.length === 0) {
             asset.candles.push(candle);
+            Logger.debug(`First candle: epoch=${normalizedEpoch}`, symbol);
             return;
         }
 
         const lastCandle = asset.candles[asset.candles.length - 1];
 
-        if (candle.time === lastCandle.time) {
-            asset.candles[asset.candles.length - 1] = candle;
-        } else if (candle.time > lastCandle.time) {
+        // Compare normalized epochs (candle start times)
+        if (normalizedEpoch === lastCandle.time) {
+            // Same candle - just update it (still forming)
+            // Update high/low/close but keep the original open
+            asset.candles[asset.candles.length - 1] = {
+                time: lastCandle.time,
+                open: lastCandle.open,  // Keep original open
+                high: Math.max(lastCandle.high, candle.high),
+                low: Math.min(lastCandle.low, candle.low),
+                close: candle.close
+            };
+            // DO NOT call onCandleClosed here - candle is still forming!
+
+        } else if (normalizedEpoch > lastCandle.time) {
+            // NEW candle started - the previous candle is now CLOSED
+            Logger.debug(`New candle: ${lastCandle.time} → ${normalizedEpoch}`, symbol);
+
+            // Save the closed candle before pushing new one
+            const closedCandle = { ...lastCandle };
+
+            // Add the new forming candle
             asset.candles.push(candle);
 
+            // Trim buffer if needed
             if (asset.candles.length > CONFIG.maxCandles) {
                 asset.candles.shift();
             }
 
-            if (asset.lastProcessedTime !== lastCandle.time) {
-                asset.lastProcessedTime = lastCandle.time;
-                this.onCandleClosed(symbol, lastCandle);
+            // Process the CLOSED candle (only once per minute!)
+            if (asset.lastProcessedTime !== closedCandle.time) {
+                asset.lastProcessedTime = closedCandle.time;
+                this.onCandleClosed(symbol, closedCandle);
             }
         }
     },
 
+    /**
+     * Called when a candle closes - triggers strategy analysis
+     * Now only called ONCE per minute (when new candle starts)
+     */
     onCandleClosed(symbol, closedCandle) {
-        Logger.debug(`Candle closed: ${closedCandle.close.toFixed(4)}`, symbol);
+        Logger.debug(`Candle CLOSED: O=${closedCandle.open.toFixed(4)} H=${closedCandle.high.toFixed(4)} L=${closedCandle.low.toFixed(4)} C=${closedCandle.close.toFixed(4)}`, symbol);
 
         this.checkDailyReset();
         this.checkHourlyReset();
+        this.checkDiagnostics();
 
-        // Increment Fib candle counter if setup exists
         const asset = STATE.assets[symbol];
         if (asset.fibLevels) {
             asset.fibCandleCount++;
@@ -1065,7 +1092,6 @@ const CandleManager = {
         if (today !== STATE.lastResetDate) {
             Logger.info('New trading day - resetting statistics');
 
-            // Send daily summary before reset
             TelegramNotifier.sendDailySummary();
 
             STATE.totalDailyPnl = 0;
@@ -1075,10 +1101,15 @@ const CandleManager = {
             STATE.lastResetDate = today;
 
             for (const symbol of CONFIG.activeAssets) {
-                STATE.assets[symbol].tradesToday = 0;
-                STATE.assets[symbol].dailyPnl = 0;
-                STATE.assets[symbol].wins = 0;
-                STATE.assets[symbol].losses = 0;
+                const asset = STATE.assets[symbol];
+                asset.tradesToday = 0;
+                asset.dailyPnl = 0;
+                asset.wins = 0;
+                asset.losses = 0;
+                // Reset strategy state for new day
+                asset.bosDetected = false;
+                asset.lastBosPrice = null;
+                asset.fibLevels = null;
             }
         }
     },
@@ -1086,14 +1117,32 @@ const CandleManager = {
     checkHourlyReset() {
         const currentHour = new Date().getHours();
         if (currentHour !== STATE.hourlyStats.lastHour) {
-            // Send hourly summary
             TelegramNotifier.sendHourlySummary();
             STATE.hourlyStats.lastHour = currentHour;
         }
     },
 
+    checkDiagnostics() {
+        const now = Date.now();
+        if (now - STATE.lastDiagnosticsTime >= CONFIG.diagnosticsInterval) {
+            STATE.lastDiagnosticsTime = now;
+            Logger.printDiagnostics();
+            Logger.globalStats();
+            Logger.printAssetTable();
+        }
+    },
+
     getRecentCandles(symbol, count) {
         return STATE.assets[symbol]?.candles.slice(-count) || [];
+    },
+
+    /**
+     * Get completed candles only (excludes current forming candle)
+     */
+    getCompletedCandles(symbol, count) {
+        const candles = STATE.assets[symbol]?.candles || [];
+        if (candles.length < 2) return [];
+        return candles.slice(0, -1).slice(-count);
     }
 };
 
@@ -1102,46 +1151,93 @@ const CandleManager = {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const SwingDetector = {
+    /**
+     * Find swing highs - local maxima with N bars on each side lower
+     * Excludes the current forming candle from analysis
+     */
     findSwingHighs(candles, lookback) {
         const swings = [];
-        for (let i = lookback; i < candles.length - lookback; i++) {
-            let isSwingHigh = true;
-            const currentHigh = candles[i].high;
 
+        // Exclude the last candle (current forming candle)
+        if (candles.length < 2) return swings;
+        const completedCandles = candles.slice(0, -1);
+
+        // Need at least (lookback * 2 + 1) candles for valid swing detection
+        if (completedCandles.length < (lookback * 2 + 1)) {
+            return swings;
+        }
+
+        for (let i = lookback; i < completedCandles.length - lookback; i++) {
+            let isSwingHigh = true;
+            const currentHigh = completedCandles[i].high;
+
+            // Check bars on both sides
             for (let j = 1; j <= lookback; j++) {
-                if (candles[i - j].high >= currentHigh || candles[i + j].high >= currentHigh) {
+                if (completedCandles[i - j].high >= currentHigh ||
+                    completedCandles[i + j].high >= currentHigh) {
                     isSwingHigh = false;
                     break;
                 }
             }
 
             if (isSwingHigh) {
-                swings.push({ index: i, time: candles[i].time, price: currentHigh });
+                swings.push({
+                    index: i,
+                    time: completedCandles[i].time,
+                    price: currentHigh,
+                    candle: completedCandles[i]
+                });
             }
         }
+
         return swings;
     },
 
+    /**
+     * Find swing lows - local minima with N bars on each side higher
+     * Excludes the current forming candle from analysis
+     */
     findSwingLows(candles, lookback) {
         const swings = [];
-        for (let i = lookback; i < candles.length - lookback; i++) {
-            let isSwingLow = true;
-            const currentLow = candles[i].low;
 
+        // Exclude the last candle (current forming candle)
+        if (candles.length < 2) return swings;
+        const completedCandles = candles.slice(0, -1);
+
+        // Need at least (lookback * 2 + 1) candles for valid swing detection
+        if (completedCandles.length < (lookback * 2 + 1)) {
+            return swings;
+        }
+
+        for (let i = lookback; i < completedCandles.length - lookback; i++) {
+            let isSwingLow = true;
+            const currentLow = completedCandles[i].low;
+
+            // Check bars on both sides
             for (let j = 1; j <= lookback; j++) {
-                if (candles[i - j].low <= currentLow || candles[i + j].low <= currentLow) {
+                if (completedCandles[i - j].low <= currentLow ||
+                    completedCandles[i + j].low <= currentLow) {
                     isSwingLow = false;
                     break;
                 }
             }
 
             if (isSwingLow) {
-                swings.push({ index: i, time: candles[i].time, price: currentLow });
+                swings.push({
+                    index: i,
+                    time: completedCandles[i].time,
+                    price: currentLow,
+                    candle: completedCandles[i]
+                });
             }
         }
+
         return swings;
     },
 
+    /**
+     * Determine micro-trend from sequence of swings
+     */
     determineTrend(swingHighs, swingLows, minSwings) {
         if (swingHighs.length < minSwings || swingLows.length < minSwings) {
             return null;
@@ -1150,23 +1246,49 @@ const SwingDetector = {
         const recentHighs = swingHighs.slice(-minSwings);
         const recentLows = swingLows.slice(-minSwings);
 
-        let higherHighs = true, higherLows = true;
-        for (let i = 1; i < recentHighs.length; i++) {
-            if (recentHighs[i].price <= recentHighs[i - 1].price) higherHighs = false;
-        }
-        for (let i = 1; i < recentLows.length; i++) {
-            if (recentLows[i].price <= recentLows[i - 1].price) higherLows = false;
-        }
-        if (higherHighs && higherLows) return 'up';
+        // Check for uptrend (higher highs AND higher lows)
+        let higherHighs = true;
+        let higherLows = true;
 
-        let lowerHighs = true, lowerLows = true;
         for (let i = 1; i < recentHighs.length; i++) {
-            if (recentHighs[i].price >= recentHighs[i - 1].price) lowerHighs = false;
+            if (recentHighs[i].price <= recentHighs[i - 1].price) {
+                higherHighs = false;
+                break;
+            }
         }
+
         for (let i = 1; i < recentLows.length; i++) {
-            if (recentLows[i].price >= recentLows[i - 1].price) lowerLows = false;
+            if (recentLows[i].price <= recentLows[i - 1].price) {
+                higherLows = false;
+                break;
+            }
         }
-        if (lowerHighs && lowerLows) return 'down';
+
+        if (higherHighs && higherLows) {
+            return 'up';
+        }
+
+        // Check for downtrend (lower highs AND lower lows)
+        let lowerHighs = true;
+        let lowerLows = true;
+
+        for (let i = 1; i < recentHighs.length; i++) {
+            if (recentHighs[i].price >= recentHighs[i - 1].price) {
+                lowerHighs = false;
+                break;
+            }
+        }
+
+        for (let i = 1; i < recentLows.length; i++) {
+            if (recentLows[i].price >= recentLows[i - 1].price) {
+                lowerLows = false;
+                break;
+            }
+        }
+
+        if (lowerHighs && lowerLows) {
+            return 'down';
+        }
 
         return null;
     }
@@ -1194,17 +1316,12 @@ const FibCalculator = {
         };
     },
 
-    isCandleInGoldenZone(candle, fibLevels) {
+    isInGoldenZone(price, fibLevels) {
         const upperLevel = fibLevels.levels[CONFIG.fibLowerZone.toString()];
         const lowerLevel = fibLevels.levels[CONFIG.fibUpperZone.toString()];
         const zoneTop = Math.max(upperLevel, lowerLevel);
         const zoneBottom = Math.min(upperLevel, lowerLevel);
-
-        // Check if candle interacts with the Golden Zone (wick or body)
-        // For Uptrend (Retracing down): Low should be <= Top
-        // For Downtrend (Retracing up): High should be >= Bottom
-        // General overlap:
-        return (candle.low <= zoneTop && candle.high >= zoneBottom);
+        return price >= zoneBottom && price <= zoneTop;
     }
 };
 
@@ -1217,9 +1334,7 @@ const StrategyEngine = {
         const asset = STATE.assets[symbol];
         if (!asset) return;
 
-        // Skip if we have an active position
         if (asset.activeContract) {
-            Logger.strategy('Skipping - active contract exists', symbol);
             return;
         }
 
@@ -1240,53 +1355,22 @@ const StrategyEngine = {
             asset.swingHighs, asset.swingLows, CONFIG.minTrendSwings
         );
 
-        // Log trend changes
-        if (asset.currentTrend !== asset.previousTrend) {
-            if (asset.currentTrend) {
-                Logger.signal(`Trend: ${asset.currentTrend.toUpperCase()}`, symbol);
-            }
-            // NEW: Reset BoS on trend change
-            this.resetSetup(symbol, 'trend changed');
+        if (asset.currentTrend !== previousTrend && asset.currentTrend) {
+            Logger.signal(`Trend: ${asset.currentTrend.toUpperCase()}`, symbol);
         }
 
-        // if (asset.currentTrend !== previousTrend && asset.currentTrend) {
-        //     Logger.signal(`Trend: ${asset.currentTrend.toUpperCase()}`, symbol);
-        // }
-
         if (!asset.currentTrend) {
-            Logger.strategy('No clear trend', symbol);
+            asset.bosDetected = false;
+            asset.fibLevels = null;
             return;
         }
 
-        // if (!asset.currentTrend) {
-        //     asset.bosDetected = false;
-        //     asset.fibLevels = null;
-        //     return;
-        // }
-
         const lastCandle = candles[candles.length - 1];
-        const currentPrice = lastCandle.close;
-
-        // Check if existing Fib setup should expire
-        if (asset.fibLevels) {
-            const expiryCandles = assetConfig.fibExpiryCandles || 10;
-
-            // Check candle expiry
-            if (asset.fibCandleCount >= expiryCandles) {
-                this.resetSetup(symbol, `Fib expired after ${expiryCandles} candles`);
-            }
-            // Check price invalidation
-            else if (FibCalculator.isSetupInvalidated(currentPrice, asset.fibLevels, asset.currentTrend)) {
-                this.resetSetup(symbol, 'price invalidated setup');
-            }
-        }
-
-        // Detect Break of Structure
         this.detectBoS(symbol, lastCandle);
 
-        // Process entry if we have a valid setup
         if (asset.bosDetected && asset.fibLevels) {
-            const inGoldenZone = FibCalculator.isCandleInGoldenZone(lastCandle, asset.fibLevels);
+            const currentPrice = lastCandle.close;
+            const inGoldenZone = FibCalculator.isInGoldenZone(currentPrice, asset.fibLevels);
 
             // if (inGoldenZone && this.checkConfirmation(asset, lastCandle)) {
             if (this.checkConfirmation(asset, lastCandle)) {
@@ -1298,15 +1382,6 @@ const StrategyEngine = {
                 }
             }
         }
-    },
-
-    // NEW: Check signal cooldown
-    isSignalCooldownActive(symbol) {
-        const asset = STATE.assets[symbol];
-        if (!asset.lastSignalTime) return false;
-
-        const elapsed = (Date.now() - asset.lastSignalTime) / 1000;
-        return elapsed < CONFIG.signalCooldownSeconds;
     },
 
     detectBoS(symbol, lastCandle) {
@@ -1388,38 +1463,13 @@ const StrategyEngine = {
         }
     },
 
-    // reset(symbol) {
-    //     const asset = STATE.assets[symbol];
-    //     if (asset) {
-    //         asset.bosDetected = false;
-    //         asset.fibLevels = null;
-    //         asset.waitingForEntry = false;
-    //     }
-    // }
-
-    // NEW: Properly reset setup state
-    resetSetup(symbol, reason = 'unknown') {
-        const asset = STATE.assets[symbol];
-        if (!asset) return;
-
-        if (asset.bosDetected || asset.fibLevels) {
-            Logger.strategy(`Resetting setup: ${reason}`, symbol);
-        }
-
-        asset.bosDetected = false;
-        asset.bosTime = null;
-        asset.bosCandle = null;
-        asset.fibLevels = null;
-        asset.fibSetupTime = null;
-        asset.fibCandleCount = 0;
-        asset.impulseStart = null;
-        asset.impulseEnd = null;
-        asset.waitingForEntry = false;
-    },
-
-    // Alias for backward compatibility
     reset(symbol) {
-        this.resetSetup(symbol, 'trade closed');
+        const asset = STATE.assets[symbol];
+        if (asset) {
+            asset.bosDetected = false;
+            asset.fibLevels = null;
+            asset.waitingForEntry = false;
+        }
     }
 };
 
@@ -1533,12 +1583,6 @@ const TradeExecutor = {
     async executeSignal(symbol, signal) {
         const asset = STATE.assets[symbol];
 
-        // Double-check no active contract
-        if (asset.activeContract) {
-            Logger.warn('Trade rejected - position already open', symbol);
-            return;
-        }
-
         try {
             const stake = RiskManager.getStake(symbol);
             const multiplier = RiskManager.getMultiplier(symbol);
@@ -1593,8 +1637,6 @@ const TradeExecutor = {
             }
         } catch (error) {
             Logger.error(`Trade execution failed: ${error.message}`, symbol);
-            // Reset setup on trade failure so new setup can form
-            StrategyEngine.resetSetup(symbol, 'trade execution failed');
         }
     },
 
@@ -1656,11 +1698,9 @@ const TradeExecutor = {
         asset.unrealizedPnl = 0;
         STATE.totalOpenPositions--;
 
-        // StrategyEngine.reset(symbol);
+        StrategyEngine.reset(symbol);
 
-        // CRITICAL FIX: Reset strategy setup to allow new trades
-        StrategyEngine.resetSetup(symbol, 'trade closed');
-
+        // Update display
         Logger.printAssetTable();
     },
 
@@ -1716,14 +1756,14 @@ async function main() {
                 Logger.globalStats();
                 Logger.printAssetTable();
             }
-        }, 30000); // 5 minutes
+        }, 300000); // 5 minutes
 
         // Live position update display (every 10 seconds if positions open)
         setInterval(() => {
             if (STATE.totalOpenPositions > 0) {
                 Logger.printAssetTable();
             }
-        }, 2000);
+        }, 30000);
 
         process.stdin.resume();
 
@@ -1751,7 +1791,7 @@ function setupHourlySummaryTimer() {
         // Then run every hour
         setInterval(() => {
             TelegramNotifier.sendHourlySummary();
-        }, 3600000); // 1 hour
+        }, 60 * 60 * 1000);
     }, timeUntilNextHour);
 
     Logger.info(`Hourly summaries scheduled. First in ${Math.ceil(timeUntilNextHour / 60000)} minutes.`);

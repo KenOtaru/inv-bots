@@ -619,16 +619,16 @@ const Logger = {
     },
 
     debug(message, symbol = null) {
-        // if (process.env.DEBUG === 'true') {
-        console.log(this.format('DEBUG', this.colors.dim, message, symbol));
-        // }
+        if (process.env.DEBUG === 'true') {
+            console.log(this.format('DEBUG', this.colors.dim, message, symbol));
+        }
     },
 
     // NEW: Strategy debug for diagnosing issues
     strategy(message, symbol = null) {
-        // if (process.env.DEBUG === 'true' || process.env.STRATEGY_DEBUG === 'true') {
-        console.log(this.format('STRAT', this.colors.cyan + this.colors.dim, message, symbol));
-        // }
+        if (process.env.DEBUG === 'true' || process.env.STRATEGY_DEBUG === 'true') {
+            console.log(this.format('STRAT', this.colors.cyan + this.colors.dim, message, symbol));
+        }
     },
 
     banner() {
@@ -1007,12 +1007,29 @@ const DerivAPI = {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const CandleManager = {
+    GRANULARITY: 60, // 60 seconds = 1 minute candles
+
+    /**
+     * Normalize epoch to candle start time
+     * This ensures all ticks within the same minute map to the same candle
+     */
+    normalizeEpoch(epoch) {
+        return Math.floor(epoch / this.GRANULARITY) * this.GRANULARITY;
+    },
+
+    /**
+     * Handle incoming candle updates from WebSocket
+     * FIXED: Normalizes epoch to prevent multiple candles per minute
+     */
     handleCandleUpdate(symbol, ohlc) {
         const asset = STATE.assets[symbol];
         if (!asset) return;
 
+        const rawEpoch = ohlc.epoch;
+        const normalizedEpoch = this.normalizeEpoch(rawEpoch);
+
         const candle = {
-            time: ohlc.epoch,
+            time: normalizedEpoch,  // Use normalized epoch!
             open: parseFloat(ohlc.open),
             high: parseFloat(ohlc.high),
             low: parseFloat(ohlc.low),
@@ -1022,36 +1039,62 @@ const CandleManager = {
         asset.lastTick = candle.close;
         asset.currentPrice = candle.close;
 
+        // First candle ever received
         if (asset.candles.length === 0) {
             asset.candles.push(candle);
+            Logger.debug(`First candle: epoch=${normalizedEpoch}`, symbol);
             return;
         }
 
         const lastCandle = asset.candles[asset.candles.length - 1];
 
-        if (candle.time === lastCandle.time) {
-            asset.candles[asset.candles.length - 1] = candle;
-        } else if (candle.time > lastCandle.time) {
+        // Compare normalized epochs (candle start times)
+        if (normalizedEpoch === lastCandle.time) {
+            // Same candle - just update it (still forming)
+            // Update high/low/close but keep the original open
+            asset.candles[asset.candles.length - 1] = {
+                time: lastCandle.time,
+                open: lastCandle.open,  // Keep original open
+                high: Math.max(lastCandle.high, candle.high),
+                low: Math.min(lastCandle.low, candle.low),
+                close: candle.close
+            };
+            // DO NOT call onCandleClosed here - candle is still forming!
+
+        } else if (normalizedEpoch > lastCandle.time) {
+            // NEW candle started - the previous candle is now CLOSED
+            Logger.debug(`New candle: ${lastCandle.time} → ${normalizedEpoch}`, symbol);
+
+            // Save the closed candle before pushing new one
+            const closedCandle = { ...lastCandle };
+
+            // Add the new forming candle
             asset.candles.push(candle);
 
+            // Trim buffer if needed
             if (asset.candles.length > CONFIG.maxCandles) {
                 asset.candles.shift();
             }
 
-            if (asset.lastProcessedTime !== lastCandle.time) {
-                asset.lastProcessedTime = lastCandle.time;
-                this.onCandleClosed(symbol, lastCandle);
+            // Process the CLOSED candle (only once per minute!)
+            if (asset.lastProcessedTime !== closedCandle.time) {
+                asset.lastProcessedTime = closedCandle.time;
+                this.onCandleClosed(symbol, closedCandle);
             }
         }
     },
 
+    /**
+     * Called when a candle closes - triggers strategy analysis
+     * Now only called ONCE per minute (when new candle starts)
+     */
     onCandleClosed(symbol, closedCandle) {
-        Logger.debug(`Candle closed: ${closedCandle.close.toFixed(4)}`, symbol);
+        Logger.debug(`Candle CLOSED: O=${closedCandle.open.toFixed(4)} H=${closedCandle.high.toFixed(4)} L=${closedCandle.low.toFixed(4)} C=${closedCandle.close.toFixed(4)}`, symbol);
 
         this.checkDailyReset();
         this.checkHourlyReset();
+        this.checkDiagnostics();
 
-        // Increment Fib candle counter if setup exists
         const asset = STATE.assets[symbol];
         if (asset.fibLevels) {
             asset.fibCandleCount++;
@@ -1065,7 +1108,6 @@ const CandleManager = {
         if (today !== STATE.lastResetDate) {
             Logger.info('New trading day - resetting statistics');
 
-            // Send daily summary before reset
             TelegramNotifier.sendDailySummary();
 
             STATE.totalDailyPnl = 0;
@@ -1075,10 +1117,15 @@ const CandleManager = {
             STATE.lastResetDate = today;
 
             for (const symbol of CONFIG.activeAssets) {
-                STATE.assets[symbol].tradesToday = 0;
-                STATE.assets[symbol].dailyPnl = 0;
-                STATE.assets[symbol].wins = 0;
-                STATE.assets[symbol].losses = 0;
+                const asset = STATE.assets[symbol];
+                asset.tradesToday = 0;
+                asset.dailyPnl = 0;
+                asset.wins = 0;
+                asset.losses = 0;
+                // Reset strategy state for new day
+                asset.bosDetected = false;
+                asset.lastBosPrice = null;
+                asset.fibLevels = null;
             }
         }
     },
@@ -1086,14 +1133,32 @@ const CandleManager = {
     checkHourlyReset() {
         const currentHour = new Date().getHours();
         if (currentHour !== STATE.hourlyStats.lastHour) {
-            // Send hourly summary
             TelegramNotifier.sendHourlySummary();
             STATE.hourlyStats.lastHour = currentHour;
         }
     },
 
+    checkDiagnostics() {
+        const now = Date.now();
+        if (now - STATE.lastDiagnosticsTime >= CONFIG.diagnosticsInterval) {
+            STATE.lastDiagnosticsTime = now;
+            Logger.printDiagnostics();
+            Logger.globalStats();
+            Logger.printAssetTable();
+        }
+    },
+
     getRecentCandles(symbol, count) {
         return STATE.assets[symbol]?.candles.slice(-count) || [];
+    },
+
+    /**
+     * Get completed candles only (excludes current forming candle)
+     */
+    getCompletedCandles(symbol, count) {
+        const candles = STATE.assets[symbol]?.candles || [];
+        if (candles.length < 2) return [];
+        return candles.slice(0, -1).slice(-count);
     }
 };
 
@@ -1102,46 +1167,93 @@ const CandleManager = {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 const SwingDetector = {
+    /**
+     * Find swing highs - local maxima with N bars on each side lower
+     * Excludes the current forming candle from analysis
+     */
     findSwingHighs(candles, lookback) {
         const swings = [];
-        for (let i = lookback; i < candles.length - lookback; i++) {
-            let isSwingHigh = true;
-            const currentHigh = candles[i].high;
 
+        // Exclude the last candle (current forming candle)
+        if (candles.length < 2) return swings;
+        const completedCandles = candles.slice(0, -1);
+
+        // Need at least (lookback * 2 + 1) candles for valid swing detection
+        if (completedCandles.length < (lookback * 2 + 1)) {
+            return swings;
+        }
+
+        for (let i = lookback; i < completedCandles.length - lookback; i++) {
+            let isSwingHigh = true;
+            const currentHigh = completedCandles[i].high;
+
+            // Check bars on both sides
             for (let j = 1; j <= lookback; j++) {
-                if (candles[i - j].high >= currentHigh || candles[i + j].high >= currentHigh) {
+                if (completedCandles[i - j].high >= currentHigh ||
+                    completedCandles[i + j].high >= currentHigh) {
                     isSwingHigh = false;
                     break;
                 }
             }
 
             if (isSwingHigh) {
-                swings.push({ index: i, time: candles[i].time, price: currentHigh });
+                swings.push({
+                    index: i,
+                    time: completedCandles[i].time,
+                    price: currentHigh,
+                    candle: completedCandles[i]
+                });
             }
         }
+
         return swings;
     },
 
+    /**
+     * Find swing lows - local minima with N bars on each side higher
+     * Excludes the current forming candle from analysis
+     */
     findSwingLows(candles, lookback) {
         const swings = [];
-        for (let i = lookback; i < candles.length - lookback; i++) {
-            let isSwingLow = true;
-            const currentLow = candles[i].low;
 
+        // Exclude the last candle (current forming candle)
+        if (candles.length < 2) return swings;
+        const completedCandles = candles.slice(0, -1);
+
+        // Need at least (lookback * 2 + 1) candles for valid swing detection
+        if (completedCandles.length < (lookback * 2 + 1)) {
+            return swings;
+        }
+
+        for (let i = lookback; i < completedCandles.length - lookback; i++) {
+            let isSwingLow = true;
+            const currentLow = completedCandles[i].low;
+
+            // Check bars on both sides
             for (let j = 1; j <= lookback; j++) {
-                if (candles[i - j].low <= currentLow || candles[i + j].low <= currentLow) {
+                if (completedCandles[i - j].low <= currentLow ||
+                    completedCandles[i + j].low <= currentLow) {
                     isSwingLow = false;
                     break;
                 }
             }
 
             if (isSwingLow) {
-                swings.push({ index: i, time: candles[i].time, price: currentLow });
+                swings.push({
+                    index: i,
+                    time: completedCandles[i].time,
+                    price: currentLow,
+                    candle: completedCandles[i]
+                });
             }
         }
+
         return swings;
     },
 
+    /**
+     * Determine micro-trend from sequence of swings
+     */
     determineTrend(swingHighs, swingLows, minSwings) {
         if (swingHighs.length < minSwings || swingLows.length < minSwings) {
             return null;
@@ -1150,23 +1262,49 @@ const SwingDetector = {
         const recentHighs = swingHighs.slice(-minSwings);
         const recentLows = swingLows.slice(-minSwings);
 
-        let higherHighs = true, higherLows = true;
-        for (let i = 1; i < recentHighs.length; i++) {
-            if (recentHighs[i].price <= recentHighs[i - 1].price) higherHighs = false;
-        }
-        for (let i = 1; i < recentLows.length; i++) {
-            if (recentLows[i].price <= recentLows[i - 1].price) higherLows = false;
-        }
-        if (higherHighs && higherLows) return 'up';
+        // Check for uptrend (higher highs AND higher lows)
+        let higherHighs = true;
+        let higherLows = true;
 
-        let lowerHighs = true, lowerLows = true;
         for (let i = 1; i < recentHighs.length; i++) {
-            if (recentHighs[i].price >= recentHighs[i - 1].price) lowerHighs = false;
+            if (recentHighs[i].price <= recentHighs[i - 1].price) {
+                higherHighs = false;
+                break;
+            }
         }
+
         for (let i = 1; i < recentLows.length; i++) {
-            if (recentLows[i].price >= recentLows[i - 1].price) lowerLows = false;
+            if (recentLows[i].price <= recentLows[i - 1].price) {
+                higherLows = false;
+                break;
+            }
         }
-        if (lowerHighs && lowerLows) return 'down';
+
+        if (higherHighs && higherLows) {
+            return 'up';
+        }
+
+        // Check for downtrend (lower highs AND lower lows)
+        let lowerHighs = true;
+        let lowerLows = true;
+
+        for (let i = 1; i < recentHighs.length; i++) {
+            if (recentHighs[i].price >= recentHighs[i - 1].price) {
+                lowerHighs = false;
+                break;
+            }
+        }
+
+        for (let i = 1; i < recentLows.length; i++) {
+            if (recentLows[i].price >= recentLows[i - 1].price) {
+                lowerLows = false;
+                break;
+            }
+        }
+
+        if (lowerHighs && lowerLows) {
+            return 'down';
+        }
 
         return null;
     }
@@ -1235,7 +1373,7 @@ const StrategyEngine = {
         asset.swingHighs = SwingDetector.findSwingHighs(candles, lookback);
         asset.swingLows = SwingDetector.findSwingLows(candles, lookback);
 
-        asset.previousTrend = asset.currentTrend
+        const previousTrend = asset.currentTrend;
         asset.currentTrend = SwingDetector.determineTrend(
             asset.swingHighs, asset.swingLows, CONFIG.minTrendSwings
         );
@@ -1276,9 +1414,9 @@ const StrategyEngine = {
                 this.resetSetup(symbol, `Fib expired after ${expiryCandles} candles`);
             }
             // Check price invalidation
-            // else if (FibCalculator.isSetupInvalidated(currentPrice, asset.fibLevels, asset.currentTrend)) {
-            //     this.resetSetup(symbol, 'price invalidated setup');
-            // }
+            else if (FibCalculator.isSetupInvalidated(currentPrice, asset.fibLevels, asset.currentTrend)) {
+                this.resetSetup(symbol, 'price invalidated setup');
+            }
         }
 
         // Detect Break of Structure
