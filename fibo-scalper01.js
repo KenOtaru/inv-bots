@@ -73,9 +73,9 @@ const CONFIG = {
     accountType: 'real',
 
     // Trading settings
-    symbol: '1HZ25V',
+    symbol: 'stpRNG',
     stake: 1,
-    multiplier: 1600,
+    multiplier: 3500,
 
     // Strategy parameters
     swingLookback: 3,
@@ -372,7 +372,7 @@ const DerivAPI = {
      * Handle incoming WebSocket messages
      */
     handleMessage(response) {
-        Logger.debug(`Received: ${response.msg_type}`);
+        // Logger.debug(`Received: ${response.msg_type}`);
 
         // Handle subscription messages (candles, contract updates)
         if (response.msg_type === 'ohlc') {
@@ -562,7 +562,7 @@ const CandleManager = {
         if (STATE.candles.length === 0) {
             STATE.candles.push(candle);
             this.lastCandleTime = normalizedEpoch;
-            Logger.debug(`First candle received: epoch=${normalizedEpoch}`);
+            // Logger.debug(`First candle received: epoch=${normalizedEpoch}`);
             return;
         }
 
@@ -924,25 +924,25 @@ const StrategyEngine = {
 
             STATE.waitingForEntry = inGoldenZone;
 
-            if (inGoldenZone) {
-                Logger.signal(`Price in golden zone: ${currentPrice.toFixed(4)}`);
+            // if (inGoldenZone) {
+            Logger.signal(`Price in golden zone: ${currentPrice.toFixed(4)}`);
 
-                // Check for confirmation (candle closes in trend direction)
-                const confirmationValid = this.checkEntryConfirmation(lastCandle);
+            // Check for confirmation (candle closes in trend direction)
+            const confirmationValid = this.checkEntryConfirmation(lastCandle);
 
-                if (confirmationValid) {
-                    const signal = this.generateSignal(lastCandle);
+            if (confirmationValid) {
+                const signal = this.generateSignal(lastCandle);
 
-                    if (signal) {
-                        // Pass through risk manager
-                        if (RiskManager.canTrade()) {
-                            Logger.signal(`Entry signal: ${signal.direction} @ ${signal.entry.toFixed(4)}`);
-                            TradeExecutor.executeSignal(signal);
-                            return { action: 'trade', signal };
-                        }
+                if (signal) {
+                    // Pass through risk manager
+                    if (RiskManager.canTrade()) {
+                        Logger.signal(`Entry signal: ${signal.direction} @ ${signal.entry.toFixed(4)}`);
+                        TradeExecutor.executeSignal(signal);
+                        return { action: 'trade', signal };
                     }
                 }
             }
+            // }
         }
 
         return { action: 'none', reason: 'No valid entry' };
