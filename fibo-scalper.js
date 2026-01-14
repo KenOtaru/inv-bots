@@ -52,7 +52,7 @@ const ASSET_CONFIGS = {
         name: 'Volatility 100',
         category: 'synthetic',
         contractType: 'multiplier',
-        multipliers: [40, 100, 200, 300, 500],
+        multipliers: [40, 100, 200, 300, 400],
         defaultMultiplier: 200,
         maxTradesPerDay: 50,
         minStake: 1.00,
