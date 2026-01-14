@@ -366,7 +366,7 @@ const TIMEFRAMES = {
     '4h': { seconds: 14400, granularity: 14400, label: '4 Hours' }
 };
 
-const SELECTED_TIMEFRAME = '1m';
+const SELECTED_TIMEFRAME = '5m';
 const TIMEFRAME_CONFIG = TIMEFRAMES[SELECTED_TIMEFRAME];
 
 // ============================================
@@ -381,7 +381,7 @@ const CONFIG = {
     // Capital Settings
     INITIAL_CAPITAL: 1000,
     INITIAL_STAKE: 1.00,
-    TAKE_PROFIT: 1.5,
+    TAKE_PROFIT: 2.5,
 
     // Session Targets
     SESSION_PROFIT_TARGET: 15000,
