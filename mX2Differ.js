@@ -293,7 +293,7 @@ class AIWeightedEnsembleBot {
         console.log(`Volatility stdDev: ${stdDev.toFixed(2)}`);
 
         if (stdDev > 3.1) return 'extreme';
-        if (stdDev > 2.67) return 'high';
+        if (stdDev > 2.6) return 'high';
         if (stdDev > 2.0) return 'medium';
 
         return 'low';
@@ -544,7 +544,7 @@ class AIWeightedEnsembleBot {
 // Initialize and start bot
 const bot = new AIWeightedEnsembleBot('0P94g4WdSrSrzir', {
     // 'DMylfkyce6VyZt7', '0P94g4WdSrSrzir'
-    initialStake: 5.7,
+    initialStake: 0.61,
     multiplier: 11.3,
     maxConsecutiveLosses: 3,
     stopLoss: 129,
