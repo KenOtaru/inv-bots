@@ -839,7 +839,7 @@ class BreakoutManager {
         // Use the PREVIOUS candle (2nd to last closed candle)
         // The last closed candle is the stochastic confirmation candle
         // We want the candle BEFORE that
-        const previousCandle = closedCandles[closedCandles.length - 2];
+        const previousCandle = closedCandles[closedCandles.length - 1];
 
         assetState.breakout = {
             active: true,

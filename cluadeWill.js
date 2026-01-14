@@ -698,7 +698,7 @@ class BreakoutManager {
             return false;
         }
 
-        const previousCandle = closedCandles[closedCandles.length - 2];
+        const previousCandle = closedCandles[closedCandles.length - 1];
 
         LOGGER.breakout(`${symbol} 🔄 REPLACING ${assetState.breakout.type} breakout with ${newType}`);
 
