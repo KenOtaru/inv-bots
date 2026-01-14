@@ -9,7 +9,7 @@ class AIWeightedEnsembleBot {
         this.connected = false;
         this.wsReady = false;
 
-        this.assets = config.assets || ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'];
+        this.assets = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'RDBULL', 'RDBEAR'];
 
         this.config = {
             initialStake: config.initialStake || 0.61,
