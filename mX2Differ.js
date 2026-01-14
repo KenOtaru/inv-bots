@@ -1,6 +1,6 @@
 require('dotenv').config();
 const WebSocket = require('ws');
-const nodemailer = require('nodemailer');
+const TelegramBot = require('node-telegram-bot-api');
 
 class AIWeightedEnsembleBot {
     constructor(token, config = {}) {
@@ -40,24 +40,33 @@ class AIWeightedEnsembleBot {
         this.lastPrediction = null;
         this.actualDigit = null;
 
+        // Telegram Configuration
+        this.telegramToken = '8397622765:AAGL93lrQ0LtVPw8MhB3JzFjPOCAJA5CLro';
+        this.telegramChatId = '752497117';
+        this.telegramEnabled = true;
+
+        if (this.telegramEnabled) {
+            this.telegramBot = new TelegramBot(this.telegramToken, { polling: false });
+            this.startTelegramTimer();
+        } else {
+            console.log('📱 Telegram notifications disabled (missing API keys).');
+        }
+
+        // Stats tracking for Telegram summaries
+        this.hourlyStats = {
+            trades: 0,
+            wins: 0,
+            losses: 0,
+            pnl: 0,
+            lastHour: new Date().getHours()
+        };
+
         // Tick data storage
         this.tickHistories = {};
         this.tickSubscriptionIds = {};
         this.assets.forEach(asset => {
             this.tickHistories[asset] = [];
         });
-
-        this.emailConfig = {
-            service: 'gmail',
-            auth: {
-                user: 'kenzkdp2@gmail.com',
-                pass: 'jfjhtmussgfpbgpk'
-            }
-        };
-
-        this.emailRecipient = 'kenotaru@gmail.com';
-
-        this.startEmailTimer();
     }
 
     connect() {
@@ -128,6 +137,81 @@ class AIWeightedEnsembleBot {
                 this.handleTradeResult(message.proposal_open_contract);
             }
         }
+    }
+
+    async sendTelegramMessage(message) {
+        if (!this.telegramEnabled || !this.telegramBot) return;
+        try {
+            await this.telegramBot.sendMessage(this.telegramChatId, message, { parse_mode: 'HTML' });
+            // console.log('📱 Telegram notification sent');
+        } catch (error) {
+            console.error(`❌ Failed to send Telegram message: ${error.message}`);
+        }
+    }
+
+    async sendHourlySummary() {
+        const stats = this.hourlyStats;
+        const winRate = stats.wins + stats.losses > 0
+            ? ((stats.wins / (stats.wins + stats.losses)) * 100).toFixed(1)
+            : 0;
+        const pnlEmoji = stats.pnl >= 0 ? '🟢' : '🔴';
+        const pnlStr = (stats.pnl >= 0 ? '+' : '') + '$' + stats.pnl.toFixed(2);
+
+        const message = `
+⏰ <b>x2 Differ Bot Hourly Summary</b>
+
+📊 <b>Last Hour</b>
+├ Trades: ${stats.trades}
+├ Wins: ${stats.wins} | Losses: ${stats.losses}
+├ Win Rate: ${winRate}%
+└ ${pnlEmoji} <b>P&L:</b> ${pnlStr}
+
+📈 <b>Daily Totals</b>
+├ Total Trades: ${this.totalTrades}
+├ Total W/L: ${this.totalWins}/${this.totalLosses}
+├ Daily P&L: ${(this.totalProfitLoss >= 0 ? '+' : '')}$${this.totalProfitLoss.toFixed(2)}
+└ Current Capital: $${(this.config.initialStake + this.totalProfitLoss).toFixed(2)}
+
+⏰ ${new Date().toLocaleString()}
+        `.trim();
+
+        try {
+            await this.sendTelegramMessage(message);
+            console.log('📱 Telegram: Hourly Summary sent');
+        } catch (error) {
+            console.error(`❌ Telegram hourly summary failed: ${error.message}`);
+        }
+
+        // Reset hourly stats
+        this.hourlyStats = {
+            trades: 0,
+            wins: 0,
+            losses: 0,
+            pnl: 0,
+            lastHour: new Date().getHours()
+        };
+    }
+
+    startTelegramTimer() {
+        // Schedule hourly summary at the top of every hour
+        const now = new Date();
+        const nextHour = new Date(now);
+        nextHour.setHours(nextHour.getHours() + 1);
+        nextHour.setMinutes(0);
+        nextHour.setSeconds(0);
+        nextHour.setMilliseconds(0);
+
+        const timeUntilNextHour = nextHour.getTime() - now.getTime();
+
+        setTimeout(() => {
+            this.sendHourlySummary();
+
+            setInterval(() => {
+                this.sendHourlySummary();
+            }, 60 * 60 * 1000);
+        }, timeUntilNextHour);
+
+        console.log(`📱 Hourly summaries scheduled. First in ${Math.ceil(timeUntilNextHour / 60000)} minutes.`);
     }
 
     initializeSubscriptions() {
@@ -206,11 +290,12 @@ class AIWeightedEnsembleBot {
         const variance = recent.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / recent.length;
         const stdDev = Math.sqrt(variance);
 
-        if (stdDev > 3.5) return 'extreme';
-        if (stdDev > 2.8) return 'high';
+        console.log(`Volatility stdDev: ${stdDev.toFixed(2)}`);
+
+        if (stdDev > 3.1) return 'extreme';
+        if (stdDev > 2.67) return 'high';
         if (stdDev > 2.0) return 'medium';
 
-        console.log(`Volatility stdDev: ${stdDev.toFixed(2)}`);
         return 'low';
     }
 
@@ -221,6 +306,18 @@ class AIWeightedEnsembleBot {
         this.tradeInProgress = true;
 
         console.log(`Placing Trade:  [${asset}] Digit ${predictedDigit} | Stake: $${this.currentStake.toFixed(2)}`);
+
+        // Notify Trade Opened
+        const message = `
+            🔔 <b>Trade Opened (x2 Differ Bot)</b>
+
+            📊 <b>${asset}</b>
+            🎯 <b>Differ Digit:</b> ${predictedDigit}
+            💰 <b>Stake:</b> $${this.currentStake.toFixed(2)}
+
+            ⏰ ${new Date().toLocaleTimeString()}
+        `.trim();
+        this.sendTelegramMessage(message);
 
         this.sendRequest({
             buy: 1,
@@ -285,6 +382,45 @@ class AIWeightedEnsembleBot {
 
         this.totalProfitLoss += profit;
 
+        // Update hourly stats
+        this.hourlyStats.trades++;
+        this.hourlyStats.pnl += profit;
+        if (won) this.hourlyStats.wins++;
+        else this.hourlyStats.losses++;
+
+        // Send Trade Closed Notification
+        const resultEmoji = won ? '✅ WIN' : '❌ LOSS';
+        const pnlStr = (profit >= 0 ? '+' : '') + '$' + profit.toFixed(2);
+        const pnlColor = profit >= 0 ? '🟢' : '🔴';
+        const winRate = ((this.totalWins / this.totalTrades) * 100).toFixed(1);
+
+        const telegramMsg = `
+            ${resultEmoji} (x2 Differ Bot)
+
+            📊 <b>${asset}</b>
+            ${pnlColor} <b>P&L:</b> ${pnlStr}
+            📊 <b>Last Prediction:</b> ${this.lastPrediction}
+            🎯 <b>Exit Digit:</b> ${this.actualDigit}
+
+            📊 <b>Trades Today:</b> ${this.totalTrades}
+            📊 <b>Wins Today:</b> ${this.totalWins}
+            📊 <b>Losses Today:</b> ${this.totalLosses}
+            📊 <b>x2Losses Today:</b> ${this.x2Losses}
+            📊 <b>x3Losses Today:</b> ${this.x3Losses}
+            📊 <b>x4Losses Today:</b> ${this.x4Losses}
+            📊 <b>x5Losses Today:</b> ${this.x5Losses}
+
+            📈 <b>Daily P&L:</b> ${(this.totalProfitLoss >= 0 ? '+' : '')}$${this.totalProfitLoss.toFixed(2)}
+            🎯 <b>Win Rate:</b> ${winRate}%
+
+            📊 <b>Current Stake:</b> $${this.currentStake.toFixed(2)}
+
+            📊 <b>Suspended Assets:</b> ${Array.from(this.suspendedAssets).join(', ') || 'None'}
+
+            ⏰ ${new Date().toLocaleTimeString()}
+        `.trim();
+        this.sendTelegramMessage(telegramMsg);
+
         if (!this.endOfDay) {
             this.logSummary();
         }
@@ -293,6 +429,7 @@ class AIWeightedEnsembleBot {
         if (this.consecutiveLosses >= this.config.maxConsecutiveLosses ||
             this.totalProfitLoss <= -this.config.stopLoss) {
             console.log('🛑 Stop loss reached');
+            this.sendTelegramMessage(`🛑 <b>Stop Loss Reached!</b>\nFinal P&L: $${this.totalProfitLoss.toFixed(2)}`);
             this.endOfDay = true;
             this.disconnect();
             return;
@@ -300,17 +437,13 @@ class AIWeightedEnsembleBot {
 
         if (this.totalProfitLoss >= this.config.takeProfit) {
             console.log('🎉 Take profit reached');
+            this.sendTelegramMessage(`🎉 <b>Take Profit Reached!</b>\nFinal P&L: $${this.totalProfitLoss.toFixed(2)}`);
             this.endOfDay = true;
-            this.sendEmailSummary();
             this.disconnect();
             return;
         }
 
         this.disconnect();
-
-        if (!won) {
-            this.sendLossEmail(asset);
-        }
 
         const waitTime = Math.floor(Math.random() *
             (this.config.maxWaitTime - this.config.minWaitTime + 1)) + this.config.minWaitTime;
@@ -366,7 +499,7 @@ class AIWeightedEnsembleBot {
             if (this.isWinTrade && !this.endOfDay) {
                 if (currentHours >= 17 && currentMinutes >= 0) {
                     console.log("It's past 5:00 PM GMT+1 after a win trade, disconnecting the bot.");
-                    this.sendDisconnectResumptionEmailSummary();
+                    this.sendHourlySummary(); // Send final summary
                     this.Pause = true;
                     this.disconnect();
                     this.endOfDay = true;
@@ -389,120 +522,7 @@ class AIWeightedEnsembleBot {
         console.log(`P&L: $${this.totalProfitLoss.toFixed(2)} | Win Rate: ${((this.totalWins / this.totalTrades) * 100).toFixed(2)}%`);
     }
 
-    startEmailTimer() {
-        if (!this.endOfDay) {
-            setInterval(() => {
-                this.sendEmailSummary();
-            }, 3600000); // 1 Hours
-        }
-    }
 
-    async sendEmailSummary() {
-        const transporter = nodemailer.createTransport(this.emailConfig);
-
-        const mailOptions = {
-            from: this.emailConfig.auth.user,
-            to: this.emailRecipient,
-            subject: 'x5 Differ Bot - Summary',
-            text: `
-                Trading Summary:
-                Total Trades: ${this.totalTrades}
-                Wins: ${this.totalWins}
-                Losses: ${this.totalLosses}
-                x2Losse: ${this.x2Losses}
-                x3Losse: ${this.x3Losses}
-                x4Losse: ${this.x4Losses}
-                x5Losse: ${this.x5Losses}
-
-                P&L: $${this.totalProfitLoss.toFixed(2)}
-                Win Rate: ${((this.totalWins / this.totalTrades) * 100).toFixed(2)}%
-
-                Currently Suspended Assets: ${Array.from(this.suspendedAssets).join(', ') || 'None'}
-            `
-        };
-
-        try {
-            await transporter.sendMail(mailOptions);
-            console.log('📧 Summary email sent successfully');
-        } catch (error) {
-            console.error('❌ Error sending email:', error.message);
-        }
-    }
-
-    async sendLossEmail(asset) {
-        const transporter = nodemailer.createTransport(this.emailConfig);
-
-        const mailOptions = {
-            from: this.emailConfig.auth.user,
-            to: this.emailRecipient,
-            subject: 'x5 Differ Bot - Loss Summary',
-            text: `
-                Loss Summary:
-                Asset: ${asset}
-                Predicted Digit: ${this.lastPrediction} | ${this.actualDigit}
-                Last 10 Digits: ${this.tickHistories[asset].slice(-10).join(', ')}
-                
-                Total Trades: ${this.totalTrades}
-                Wins: ${this.totalWins}
-                Losses: ${this.totalLosses}
-                x2Losse: ${this.x2Losses}
-                x3Losse: ${this.x3Losses}
-                x4Losse: ${this.x4Losses}
-                x5Losse: ${this.x5Losses}
-
-                Stake: $${this.currentStake.toFixed(2)}
-                P&L: $${this.totalProfitLoss.toFixed(2)}
-                Win Rate: ${((this.totalWins / this.totalTrades) * 100).toFixed(2)}%
-
-                Currently Suspended Assets: ${Array.from(this.suspendedAssets).join(', ') || 'None'} 
-            `
-        };
-
-        try {
-            await transporter.sendMail(mailOptions);
-            // console.log('📧 Loss email sent successfully');
-        } catch (error) {
-            // console.error('❌ Error sending email:', error.message);
-        }
-    }
-
-    async sendDisconnectResumptionEmailSummary() {
-        const transporter = nodemailer.createTransport(this.emailConfig);
-        const currentHours = new Date().getHours();
-        const currentMinutes = new Date().getMinutes();
-
-        const summaryText = `
-        Disconnect/Reconnect Email: Time (${currentHours}:${currentMinutes})
-        Trading Summary:
-        Total Trades: ${this.totalTrades}
-        Total Trades Won: ${this.totalWins}
-        Total Trades Lost: ${this.totalLosses}
-        x2 Losses: ${this.x2Losses}
-        x3 Losses: ${this.x3Losses}
-        x4 Losses: ${this.x4Losses}
-        x5 Losses: ${this.x5Losses}
-
-        Currently Suspended Assets: ${Array.from(this.suspendedAssets).join(', ') || 'None'}
-
-        Current Stake: $${this.currentStake.toFixed(2)}
-        Total Profit/Loss Amount: ${this.totalProfitLoss.toFixed(2)}
-        Win Rate: ${((this.totalWins / this.totalTrades) * 100).toFixed(2)}%
-        `;
-
-        const mailOptions = {
-            from: this.emailConfig.auth.user,
-            to: this.emailRecipient,
-            subject: 'x5 Differ Bot - Connection/Dissconnection Summary',
-            text: summaryText
-        };
-
-        try {
-            const info = await transporter.sendMail(mailOptions);
-            // console.log('Email sent:', info.messageId);
-        } catch (error) {
-            // console.error('Error sending email:', error);
-        }
-    }
 
     handleDisconnect() {
         this.connected = false;
@@ -524,7 +544,7 @@ class AIWeightedEnsembleBot {
 // Initialize and start bot
 const bot = new AIWeightedEnsembleBot('0P94g4WdSrSrzir', {
     // 'DMylfkyce6VyZt7', '0P94g4WdSrSrzir'
-    initialStake: 0.61,
+    initialStake: 5.7,
     multiplier: 11.3,
     maxConsecutiveLosses: 3,
     stopLoss: 129,
