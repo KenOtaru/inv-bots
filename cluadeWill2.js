@@ -223,7 +223,7 @@ Time: ${new Date().toUTCString()}
 // ============================================
 
 class StatePersistence {
-    static STATE_FILE = './bot_state.json';
+    static STATE_FILE = './claudeWill2.json';
     static SAVE_INTERVAL = 5000; // Save every 5 seconds
     static saveTimer = null;
 
@@ -239,7 +239,7 @@ class StatePersistence {
             this.saveState();
         }, this.SAVE_INTERVAL);
 
-        LOGGER.info('💾 State auto-save started (every 5 seconds)');
+        // LOGGER.info('💾 State auto-save started (every 5 seconds)');
     }
 
     /**
@@ -343,7 +343,7 @@ class StatePersistence {
             });
 
             fs.writeFileSync(this.STATE_FILE, JSON.stringify(criticalState, null, 2));
-            LOGGER.debug('💾 State saved successfully');
+            // LOGGER.debug('💾 State saved successfully');
 
         } catch (error) {
             LOGGER.error(`Failed to save state: ${error.message}`);
