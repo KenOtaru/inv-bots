@@ -533,8 +533,8 @@ const TIMEFRAMES = {
 };
 
 // Default to 5 minutes, user can override with TIMEFRAME env variable
-const SELECTED_TIMEFRAME = '1m';
-const TIMEFRAME_CONFIG = TIMEFRAMES['1m'];
+const SELECTED_TIMEFRAME = '5m';
+const TIMEFRAME_CONFIG = TIMEFRAMES['5m'];
 
 // ============================================
 // CONFIGURATION
