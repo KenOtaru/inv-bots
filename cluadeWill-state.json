@@ -1,6 +1,6 @@
 {
-  "savedAt": 1768419040852,
-  "capital": 64378.55,
+  "savedAt": 1768569804654,
+  "capital": 64323.73,
   "session": {
     "profit": 0,
     "loss": 0,
@@ -12,8 +12,8 @@
     "currentProfitTarget": 15000,
     "isActive": true,
     "pausedUntil": 0,
-    "startTime": 1768419025355,
-    "startCapital": 64378.55
+    "startTime": 1768569797411,
+    "startCapital": 64323.73
   },
   "portfolio": {
     "dailyProfit": 0,
@@ -24,7 +24,7 @@
   },
   "assets": {
     "R_75": {
-      "wpr": -77.38628898634023,
+      "wpr": -75.42659976854753,
       "prevWpr": -50,
       "buyFlagActive": false,
       "sellFlagActive": false,
@@ -51,7 +51,7 @@
       "consecutiveLosses": 0
     },
     "frxXAUUSD": {
-      "wpr": -17.831437195263945,
+      "wpr": -82.10395269218805,
       "prevWpr": -50,
       "buyFlagActive": false,
       "sellFlagActive": false,
@@ -78,7 +78,7 @@
       "consecutiveLosses": 0
     },
     "1HZ50V": {
-      "wpr": -7.311220502131855,
+      "wpr": -92.34393163092435,
       "prevWpr": -50,
       "buyFlagActive": false,
       "sellFlagActive": false,
@@ -105,7 +105,7 @@
       "consecutiveLosses": 0
     },
     "stpRNG": {
-      "wpr": -75.77464788732293,
+      "wpr": -98.98989898989987,
       "prevWpr": -50,
       "buyFlagActive": false,
       "sellFlagActive": false,
@@ -132,7 +132,7 @@
       "consecutiveLosses": 0
     },
     "1HZ25V": {
-      "wpr": -76.00072928997403,
+      "wpr": -65.14141416596372,
       "prevWpr": -50,
       "buyFlagActive": false,
       "sellFlagActive": false,
@@ -159,7 +159,7 @@
       "consecutiveLosses": 0
     },
     "R_100": {
-      "wpr": -54.58803491590395,
+      "wpr": -1.7410897173287796,
       "prevWpr": -50,
       "buyFlagActive": false,
       "sellFlagActive": false,
@@ -186,7 +186,7 @@
       "consecutiveLosses": 0
     },
     "1HZ100V": {
-      "wpr": -19.503182098131784,
+      "wpr": -55.22933616318836,
       "prevWpr": -50,
       "buyFlagActive": false,
       "sellFlagActive": false,
