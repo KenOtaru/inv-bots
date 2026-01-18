@@ -565,7 +565,7 @@ const TIMEFRAMES = {
 };
 
 // Default to 5 minutes, user can override with TIMEFRAME env variable
-const SELECTED_TIMEFRAME = '1m';
+const SELECTED_TIMEFRAME = '5m';
 const TIMEFRAME_CONFIG = TIMEFRAMES[SELECTED_TIMEFRAME];
 
 // ============================================
@@ -651,55 +651,55 @@ const CONFIG = {
 
 const ASSET_CONFIGS = {
     'R_75': {
-        name: 'Volatility 75 Index',
+        name: 'Volatility 75',
         category: 'synthetic',
         contractType: 'multiplier',
         multipliers: [50, 100, 200, 300, 500],
-        defaultMultiplier: 500,
+        defaultMultiplier: 100,
         maxTradesPerDay: 500000,
         minStake: 1.00,
         maxStake: 3000,
         tradingHours: '24/7'
     },
     'R_100': {
-        name: 'Volatility 100 Index',
+        name: 'Volatility 100',
         category: 'synthetic',
         contractType: 'multiplier',
         multipliers: [40, 100, 200, 300, 400],
-        defaultMultiplier: 400,
+        defaultMultiplier: 100,
         maxTradesPerDay: 50000,
         minStake: 1.00,
         maxStake: 3000,
         tradingHours: '24/7'
     },
     '1HZ25V': {
-        name: 'Volatility 25 (1s) Index',
+        name: 'Volatility 25 (1s)',
         category: 'synthetic',
         contractType: 'multiplier',
         multipliers: [160, 400, 800, 1200, 1600],
-        defaultMultiplier: 1600,
+        defaultMultiplier: 400,
         maxTradesPerDay: 120000,
         minStake: 1.00,
         maxStake: 1000,
         tradingHours: '24/7'
     },
     '1HZ50V': {
-        name: 'Volatility 50 (1s) Index',
+        name: 'Volatility 50 (1s)',
         category: 'synthetic',
         contractType: 'multiplier',
         multipliers: [80, 200, 400, 600, 800],
-        defaultMultiplier: 800,
+        defaultMultiplier: 200,
         maxTradesPerDay: 120000,
         minStake: 1.00,
         maxStake: 1000,
         tradingHours: '24/7'
     },
     '1HZ100V': {
-        name: 'Volatility 100 (1s) Index',
+        name: 'Volatility 100 (1s)',
         category: 'synthetic',
         contractType: 'multiplier',
         multipliers: [40, 100, 200, 300, 400],
-        defaultMultiplier: 400,
+        defaultMultiplier: 100,
         maxTradesPerDay: 50000,
         minStake: 1.00,
         maxStake: 3000,
@@ -710,7 +710,7 @@ const ASSET_CONFIGS = {
         category: 'synthetic',
         contractType: 'multiplier',
         multipliers: [750, 2000, 3500, 5500, 7500],
-        defaultMultiplier: 7500,
+        defaultMultiplier: 2000,
         maxTradesPerDay: 120000,
         minStake: 1.00,
         maxStake: 1000,
@@ -721,15 +721,15 @@ const ASSET_CONFIGS = {
         category: 'commodity',
         contractType: 'multiplier',
         multipliers: [50, 100, 200, 300, 400, 500],
-        defaultMultiplier: 500,
-        maxTradesPerDay: 50000,
+        defaultMultiplier: 100,
+        maxTradesPerDay: 5000,
         minStake: 1,
         maxStake: 5000,
         tradingHours: 'Sun 23:00 - Fri 21:55 GMT'
     }
 };
 
-let ACTIVE_ASSETS = ['R_75', 'frxXAUUSD', '1HZ50V', 'stpRNG', '1HZ25V', 'R_100', '1HZ100V'];
+let ACTIVE_ASSETS = ['R_75', '1HZ50V', 'stpRNG', '1HZ25V', 'R_100', '1HZ100V', 'frxXAUUSD'];
 
 // ============================================
 // STATE MANAGEMENT
@@ -1508,10 +1508,10 @@ class RiskManager {
             return { allowed: false, reason: `Daily trade limit reached (${assetState.dailyTrades}/${config.maxTradesPerDay})` };
         }
 
-        if (Date.now() < assetState.blacklistedUntil) {
-            const remaining = Math.ceil((assetState.blacklistedUntil - Date.now()) / 1000);
-            return { allowed: false, reason: `Asset blacklisted for ${remaining}s` };
-        }
+        // if (Date.now() < assetState.blacklistedUntil) {
+        //     const remaining = Math.ceil((assetState.blacklistedUntil - Date.now()) / 1000);
+        //     return { allowed: false, reason: `Asset blacklisted for ${remaining}s` };
+        // }
 
         return { allowed: true };
     }
