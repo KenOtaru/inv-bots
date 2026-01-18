@@ -18,14 +18,14 @@
  * 2. Signal invalidated if WPR crosses below -60 - ON CANDLE CLOSE
  * 3. Wait for Stochastic (5,3,3) bullish crossover below 20 - ON CANDLE CLOSE
  * 4. Execute BUY, mark previous candle High/Low as breakout levels
- * 5. Reversal system on breakout level violations (max 6 times)
+ * 5. Reversal system on breakout level violations 
  * 
  * SELL SETUP:
  * 1. WPR crosses below -80 (first time since leaving -20 zone) - ON CANDLE CLOSE
  * 2. Signal invalidated if WPR crosses above -40 - ON CANDLE CLOSE
  * 3. Wait for Stochastic (5,3,3) bearish crossover above 80 - ON CANDLE CLOSE
  * 4. Execute SELL, mark previous candle High/Low as breakout levels
- * 5. Reversal system on breakout level violations (max 6 times)
+ * 5. Reversal system on breakout level violations 
  * 
  * Dependencies: npm install ws mathjs axios
  * Usage: API_TOKEN=your_token TIMEFRAME=5m TELEGRAM_BOT_TOKEN=xxx TELEGRAM_CHAT_ID=xxx node deriv-bot.js
@@ -565,7 +565,7 @@ const TIMEFRAMES = {
 };
 
 // Default to 5 minutes, user can override with TIMEFRAME env variable
-const SELECTED_TIMEFRAME = '5m';
+const SELECTED_TIMEFRAME = '1m';
 const TIMEFRAME_CONFIG = TIMEFRAMES[SELECTED_TIMEFRAME];
 
 // ============================================
@@ -589,7 +589,7 @@ const CONFIG = {
 
     // Reversal Settings
     REVERSAL_STAKE_MULTIPLIER: 2,
-    MAX_REVERSAL_LEVEL: 6,
+    MAX_REVERSAL_LEVEL: 7,
     AUTO_CLOSE_ON_RECOVERY: true,
 
     // Timeframe Settings (DEFAULT 5 MINUTES)
