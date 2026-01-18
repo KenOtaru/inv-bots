@@ -29,7 +29,7 @@ const CONFIG = {
         new_york: { name: 'New York', time: '13:00', enabled: true },
     },
 
-    market_open_duration: 90, // Minutes to look for trade after open (Strategy: 90 mins)
+    market_open_duration: 120, // Minutes to look for trade after open (Strategy: 90 mins)
     candle_timeframe: 15, // Opening Range Candle (Minutes)
     entry_timeframe: 5,   // Reversal Pattern Timeframe (Minutes)
     reconnect_delay: 5000, // Milliseconds before reconnection attempt
@@ -574,6 +574,7 @@ ${assetBreakdown ? '<b>Per Asset:</b>\n' + assetBreakdown : ''}
             const bias = asset.box.direction === 'UP' ? 'SELL' : 'BUY';
             const targetSide = asset.box.direction === 'UP' ? 'High' : 'Low';
             const level = asset.box.direction === 'UP' ? asset.box.high : asset.box.low;
+            const level2 = asset.box.direction === 'UP' ? asset.box.low : asset.box.high;
 
             const setupInfo =
                 `🎯 TRADING SETUP IDENTIFIED\n` +
@@ -586,7 +587,7 @@ ${assetBreakdown ? '<b>Per Asset:</b>\n' + assetBreakdown : ''}
                 `✅ <b>Liquidity Confirmed!</b> [${symbol}]\n` +
                 `<b>Session:</b> ${CONFIG.sessions[asset.session].name}\n` +
                 `<b>Bias:</b> ${bias}\n` +
-                `<b>Level:</b> ${level.toFixed(4)}\n` +
+                `<b>Level:</b> ${level.toFixed(4)} - ${level2.toFixed(4)}\n` +
                 `<b>Range:</b> ${rangePercent}% of ATR`
             );
 
@@ -630,15 +631,24 @@ ${assetBreakdown ? '<b>Per Asset:</b>\n' + assetBreakdown : ''}
         // const upperWick = candle.high - Math.max(candle.open, candle.close);
         // const lowerWick = Math.min(candle.open, candle.close) - candle.low;
 
+        let buyTrade = false;
+
         // Short when Below box
-        if (asset.box.direction === 'UP' && candle.close > asset.box.high) {
-            this.sendTelegramMessage(`🔥 [${symbol}]\nExecuting LONG Trade!`);
+        if (asset.box.direction === 'UP' && candle.close < asset.box.low) {
+            buyTrade = true;
+        }
+        if (buyTrade && candle.close > asset.box.low) {
+            this.sendTelegramMessage(`🔥 [${symbol}]\nExecuting SHORT Trade!`);
             asset.entryCandle = candle;
             this.executeTrade(symbol, 'MULTUP');
         }
 
+        let sellTrade = false;
         // Long when Above box
-        if (asset.box.direction === 'DOWN' && candle.close < asset.box.low) {
+        if (asset.box.direction === 'DOWN' && candle.close > asset.box.high) {
+            sellTrade = true;
+        }
+        if (sellTrade && candle.close < asset.box.high) {
             this.sendTelegramMessage(`🔥 [${symbol}]\nExecuting SHORT Trade!`);
             asset.entryCandle = candle;
             this.executeTrade(symbol, 'MULTDOWN');

@@ -5,7 +5,7 @@ const TelegramBot = require('node-telegram-bot-api');
 // ================= CONFIGURATION =================
 const CONFIG = {
     app_id: 1089, // Replace with your App ID if you have one, or keep 1089 (Deriv generic)
-    token: 'hsj0tA0XJoIzJG5' || process.env.DERIV_API_TOKEN, // Use env variable or fallback
+    token: 'hsj0tA0XJoIzJG5', // Use env variable or fallback
 
     // MULTI-ASSET CONFIGURATION
     symbols: [
@@ -29,7 +29,7 @@ const CONFIG = {
         new_york: { name: 'New York', time: '13:00', enabled: true },
     },
 
-    market_open_duration: 90, // Minutes to look for trade after open (Strategy: 90 mins)
+    market_open_duration: 120, // Minutes to look for trade after open (Strategy: 90 mins)
     candle_timeframe: 15, // Opening Range Candle (Minutes)
     entry_timeframe: 5,   // Reversal Pattern Timeframe (Minutes)
     reconnect_delay: 5000, // Milliseconds before reconnection attempt
@@ -38,7 +38,7 @@ const CONFIG = {
     // Investment Management
     INVESTMENT_CAPITAL: 500,
     RISK_PERCENT: 1, // 1% risk per trade (Stop Loss)
-    RR_RATIO: 3,     // 1:3 Risk-Reward (Take Profit)
+    RR_RATIO: 1.1,     // 1:3 Risk-Reward (Take Profit)
 };
 // =================================================
 
@@ -49,8 +49,8 @@ class QuickFlipBot {
         this.dailyATR = {}; // ATR values per symbol
 
         // Telegram Configuration
-        this.telegramToken = process.env.TELEGRAM_BOT_TOKEN4;
-        this.telegramChatId = process.env.TELEGRAM_CHAT_ID;
+        this.telegramToken = '8584545459:AAFvyVjgeBnPGs-w_ehTMBG-bTvxHpAIjeI';
+        this.telegramChatId = '752497117';
         this.telegramEnabled = !!(this.telegramToken && this.telegramChatId);
 
         if (this.telegramEnabled) {
@@ -66,6 +66,20 @@ class QuickFlipBot {
         this.isConnected = false;
         this.requestIdCounter = 100; // Counter for unique request IDs
 
+        // Stats tracking for Telegram summaries
+        this.dailyWins = 0;
+        this.dailyLosses = 0;
+        this.totalDailyPnl = 0;
+        this.totalTradesToday = 0;
+
+        this.hourlyStats = {
+            trades: 0,
+            wins: 0,
+            losses: 0,
+            pnl: 0,
+            lastHour: new Date().getHours()
+        };
+
         this.initializeAssets();
     }
 
@@ -78,14 +92,18 @@ class QuickFlipBot {
                     multiplier: s.multiplier,
                     state: 'WAITING_FOR_OPEN',
                     openTimeEpoch: null,
-                    session: null, // 'london' or 'new_york'
+                    session: null, // 'Tokyo, london' or 'new_york'
                     box: { high: null, low: null, direction: null, valid: false },
                     lastCandle: null,
                     entryCandle: null,
                     currentContractId: null,
                     lastTimeLog: 0,
                     lastWarningLog: 0,
-                    lastSessionTraded: null // Tracks 'YYYY-MM-DD:sessionKey'
+                    lastSessionTraded: null, // Tracks 'YYYY-MM-DD:sessionKey'
+                    wins: 0,
+                    losses: 0,
+                    dailyPnl: 0,
+                    tradesToday: 0
                 });
             }
         });
@@ -185,48 +203,78 @@ class QuickFlipBot {
         }
     }
 
-    getTelegramSummary() {
-        let totalProfit = 0;
-        let wins = 0;
-        let losses = 0;
-        const assetStats = {};
-
-        this.tradeLog.forEach(trade => {
-            if (trade.profit !== undefined) {
-                totalProfit += trade.profit;
-                if (trade.result === 'WIN') wins++;
-                else losses++;
-
-                if (!assetStats[trade.symbol]) assetStats[trade.symbol] = { pnl: 0, count: 0 };
-                assetStats[trade.symbol].pnl += trade.profit;
-                assetStats[trade.symbol].count++;
-            }
-        });
-
-        const winRate = (wins + losses) > 0 ? (wins / (wins + losses) * 100).toFixed(1) : 0;
+    async sendHourlySummary() {
+        const stats = this.hourlyStats;
+        const winRate = stats.wins + stats.losses > 0
+            ? ((stats.wins / (stats.wins + stats.losses)) * 100).toFixed(1)
+            : 0;
+        const pnlEmoji = stats.pnl >= 0 ? '🟢' : '🔴';
+        const pnlStr = (stats.pnl >= 0 ? '+' : '') + '$' + stats.pnl.toFixed(2);
 
         let assetBreakdown = '';
-        Object.keys(assetStats).forEach(sym => {
-            assetBreakdown += `\n• <b>${sym}:</b> $${assetStats[sym].pnl.toFixed(2)} (${assetStats[sym].count} trades)`;
-        });
+        for (const [symbol, asset] of this.assets) {
+            if (asset.tradesToday > 0) {
+                const assetPnl = (asset.dailyPnl >= 0 ? '+' : '') + '$' + asset.dailyPnl.toFixed(2);
+                assetBreakdown += `  • ${symbol}: ${assetPnl} (${asset.wins}W/${asset.losses}L)\n`;
+            }
+        }
 
-        return `
-📊 <b>Flip Scalper Session Summary</b>
-========================
-<b>Total Trades:</b> ${wins + losses}
-✅ <b>Wins:</b> ${wins} | ❌ <b>Losses:</b> ${losses}
-🔥 <b>Win Rate:</b> ${winRate}%
-💰 <b>Total P/L:</b> $${totalProfit.toFixed(2)}
-${assetBreakdown ? `\n<b>Asset Breakdown:</b>${assetBreakdown}` : ''}`;
+        const message = `
+⏰ <b>Hourly Trade Summary</b>
+
+📊 <b>Last Hour</b>
+├ Trades: ${stats.trades}
+├ Wins: ${stats.wins} | Losses: ${stats.losses}
+├ Win Rate: ${winRate}%
+└ ${pnlEmoji} <b>P&L:</b> ${pnlStr}
+
+📈 <b>Daily Totals</b>
+├ Total Trades: ${this.totalTradesToday}
+├ Total W/L: ${this.dailyWins}/${this.dailyLosses}
+├ Daily P&L: ${(this.totalDailyPnl >= 0 ? '+' : '')}$${this.totalDailyPnl.toFixed(2)}
+└ Current Capital: $${(CONFIG.INVESTMENT_CAPITAL + this.totalDailyPnl).toFixed(2)}
+
+${assetBreakdown ? '<b>Per Asset:</b>\n' + assetBreakdown : ''}
+⏰ ${new Date().toLocaleString()}
+        `.trim();
+
+        try {
+            await this.sendTelegramMessage(message);
+            this.log('📱 Telegram: Hourly Summary sent', 'SYSTEM');
+        } catch (error) {
+            this.log(`❌ Telegram hourly summary failed: ${error.message}`, 'ERROR');
+        }
+
+        // Reset hourly stats
+        this.hourlyStats = {
+            trades: 0,
+            wins: 0,
+            losses: 0,
+            pnl: 0,
+            lastHour: new Date().getHours()
+        };
     }
 
     startTelegramTimer() {
-        // Send summary every 30 minutes
-        setInterval(() => {
-            if (this.tradeLog.length > 0) {
-                this.sendTelegramMessage(`📊 <b>Periodic Performance Summary</b>\n${this.getTelegramSummary()}`);
-            }
-        }, 30 * 60 * 1000);
+        // Schedule hourly summary at the top of every hour
+        const now = new Date();
+        const nextHour = new Date(now);
+        nextHour.setHours(nextHour.getHours() + 1);
+        nextHour.setMinutes(0);
+        nextHour.setSeconds(0);
+        nextHour.setMilliseconds(0);
+
+        const timeUntilNextHour = nextHour.getTime() - now.getTime();
+
+        setTimeout(() => {
+            this.sendHourlySummary();
+
+            setInterval(() => {
+                this.sendHourlySummary();
+            }, 60 * 60 * 1000);
+        }, timeUntilNextHour);
+
+        this.log(`📱 Hourly summaries scheduled. First in ${Math.ceil(timeUntilNextHour / 60000)} minutes.`, 'SYSTEM');
     }
 
     authorize() {
@@ -464,12 +512,12 @@ ${assetBreakdown ? `\n<b>Asset Breakdown:</b>${assetBreakdown}` : ''}`;
         }
 
         this.dailyATR[symbol] = trSum / validIntervals;
-        const threshold = this.dailyATR[symbol] * 0.11;
+        const threshold = this.dailyATR[symbol] * 0.14;
 
         const atrOutput =
             `✅ Daily ATR Result: ${this.dailyATR[symbol].toFixed(4)}\n` +
             `• Lookback: ${validIntervals} days\n` +
-            `• Required Box Range (11%): ≥ ${threshold.toFixed(4)}`;
+            `• Required Box Range (14%): ≥ ${threshold.toFixed(4)}`;
 
         this.log(atrOutput, 'SUCCESS', symbol, true);
     }
@@ -506,7 +554,7 @@ ${assetBreakdown ? `\n<b>Asset Breakdown:</b>${assetBreakdown}` : ''}`;
         const isGreen = candle.close > candle.open;
         const candleColor = isGreen ? '🟢 GREEN' : '🔴 RED';
         const atr = this.dailyATR[symbol] || 0;
-        const liquidityThreshold = 0.11 * atr;
+        const liquidityThreshold = 0.14 * atr;
         const rangePercent = ((range / (atr || 1)) * 100).toFixed(2);
 
         const analysisOutput =
@@ -545,7 +593,7 @@ ${assetBreakdown ? `\n<b>Asset Breakdown:</b>${assetBreakdown}` : ''}`;
 
             this.startHunting(symbol);
         } else {
-            this.log(`❌ LIQUIDITY FAILED (${rangePercent}% of ATR is below 11%)`, 'ERROR', symbol);
+            this.log(`❌ LIQUIDITY FAILED (${rangePercent}% of ATR is below 14%)`, 'ERROR', symbol);
             this.sendTelegramMessage(`❌ <b>Liquidity Failed</b> [${symbol}]\nRange ${rangePercent}% of ATR is too low.`);
 
             // Mark session as "traded/handled" even if failed liquidity
@@ -576,31 +624,34 @@ ${assetBreakdown ? `\n<b>Asset Breakdown:</b>${assetBreakdown}` : ''}`;
         const asset = this.assets.get(symbol);
         if (!asset || asset.state !== 'HUNTING') return;
 
-        if (asset.lastCandle && asset.lastCandle.epoch === candle.epoch) return;
-        asset.lastCandle = candle;
+        // if (asset.lastCandle && asset.lastCandle.epoch === candle.epoch) return;
+        // asset.lastCandle = candle;
 
-        const body = Math.abs(candle.close - candle.open);
-        const upperWick = candle.high - Math.max(candle.open, candle.close);
-        const lowerWick = Math.min(candle.open, candle.close) - candle.low;
+        // const body = Math.abs(candle.close - candle.open);
+        // const upperWick = candle.high - Math.max(candle.open, candle.close);
+        // const lowerWick = Math.min(candle.open, candle.close) - candle.low;
 
-        // Long (Hammer) below box
-        if (asset.box.direction === 'DOWN' && candle.close < asset.box.low) {
-            if (lowerWick >= (2 * body) && upperWick < body && body > 0) {
-                this.log('🔥 HAMMER DETECTED!', 'SUCCESS', symbol);
-                this.sendTelegramMessage(`🔥 <b>Hammer Pattern</b> [${symbol}]\nExecuting LONG.`);
-                asset.entryCandle = candle;
-                this.executeTrade(symbol, 'MULTUP');
-            }
+        let buyTrade = false;
+
+        // Short when Below box
+        // if (asset.box.direction === 'UP' && candle.close < asset.box.low) {
+        //     buyTrade = true;
+        // }
+        if (asset.box.direction === 'UP') {
+            this.sendTelegramMessage(`🔥 [${symbol}]\nExecuting SHORT Trade!`);
+            asset.entryCandle = candle;
+            this.executeTrade(symbol, 'MULTUP');
         }
 
-        // Short (Shooting Star) above box
-        if (asset.box.direction === 'UP' && candle.close > asset.box.high) {
-            if (upperWick >= (2 * body) && lowerWick < body && body > 0) {
-                this.log('🔥 SHOOTING STAR DETECTED!', 'SUCCESS', symbol);
-                this.sendTelegramMessage(`🔥 <b>Shooting Star</b> [${symbol}]\nExecuting SHORT.`);
-                asset.entryCandle = candle;
-                this.executeTrade(symbol, 'MULTDOWN');
-            }
+        let sellTrade = false;
+        // Long when Above box
+        // if (asset.box.direction === 'DOWN' && candle.close > asset.box.high) {
+        //     sellTrade = true;
+        // }
+        if (asset.box.direction === 'DOWN') {
+            this.sendTelegramMessage(`🔥 [${symbol}]\nExecuting SHORT Trade!`);
+            asset.entryCandle = candle;
+            this.executeTrade(symbol, 'MULTDOWN');
         }
     }
 
@@ -611,7 +662,7 @@ ${assetBreakdown ? `\n<b>Asset Breakdown:</b>${assetBreakdown}` : ''}`;
         // Calculate stake as a NUMBER (not string)
         const stakeAmount = parseFloat((CONFIG.INVESTMENT_CAPITAL * (CONFIG.RISK_PERCENT / 100)).toFixed(2));
         const stopLossAmount = stakeAmount; // 100% of stake = SL
-        const takeProfitAmount = parseFloat((stakeAmount * CONFIG.RR_RATIO).toFixed(2)); // 300% of stake = TP
+        const takeProfitAmount = parseFloat((stakeAmount * CONFIG.RR_RATIO).toFixed(2)); // 150% of stake = TP
 
         const direction = contractType === 'MULTUP' ? '🔼 LONG' : '🔻 SHORT';
 
@@ -627,15 +678,22 @@ ${assetBreakdown ? `\n<b>Asset Breakdown:</b>${assetBreakdown}` : ''}`;
 
         this.ws.send(JSON.stringify({ forget_all: 'candles' }));
 
-        this.sendTelegramMessage(
-            `🚀 <b>Executing Trade</b> [${symbol}]\n` +
-            `<b>Session:</b> ${CONFIG.sessions[asset.session].name}\n` +
-            `<b>Side:</b> ${direction}\n\n` +
-            `💰 <b>Stake:</b> $${stakeAmount.toFixed(2)}\n` +
-            `⚙️ <b>Mult:</b> x${asset.multiplier}\n` +
-            `🛑 <b>SL:</b> $${stopLossAmount.toFixed(2)}\n` +
-            `🎯 <b>TP:</b> $${takeProfitAmount.toFixed(2)}`
-        );
+        const dirEmoji = contractType === 'MULTUP' ? '🟢 BUY' : '🔴 SELL';
+        const message = `
+� <b>Trade Opened</b>
+
+📊 <b>${symbol}</b> - ${asset.label}
+${dirEmoji}
+
+💰 <b>Stake:</b> $${stakeAmount.toFixed(2)}
+📈 <b>Multiplier:</b> ${asset.multiplier}x
+🛑 <b>SL:</b> $${stopLossAmount.toFixed(2)}
+🎯 <b>TP:</b> $${takeProfitAmount.toFixed(2)}
+
+⏰ ${new Date().toLocaleTimeString()}
+        `.trim();
+
+        this.sendTelegramMessage(message);
 
         // ============================================
         // FIX: Correct API format for multiplier contracts
@@ -649,7 +707,7 @@ ${assetBreakdown ? `\n<b>Asset Breakdown:</b>${assetBreakdown}` : ''}`;
                 symbol: symbol,
                 currency: 'USD',
                 basis: 'stake',
-                amount: stakeAmount,  // ← THIS IS THE FIX: stake amount goes here
+                amount: stakeAmount,
                 multiplier: asset.multiplier,
                 limit_order: {
                     take_profit: takeProfitAmount,
@@ -727,6 +785,35 @@ ${assetBreakdown ? `\n<b>Asset Breakdown:</b>${assetBreakdown}` : ''}`;
         const profit = parseFloat(contract.profit);
         const isWin = profit > 0;
 
+        // Update stats
+        this.totalTradesToday++;
+        this.totalDailyPnl += profit;
+        if (isWin) {
+            this.dailyWins++;
+        } else {
+            this.dailyLosses++;
+        }
+
+        // Update per-asset stats
+        if (asset) {
+            asset.tradesToday++;
+            asset.dailyPnl += profit;
+            if (isWin) {
+                asset.wins++;
+            } else {
+                asset.losses++;
+            }
+        }
+
+        // Update hourly stats
+        this.hourlyStats.trades++;
+        this.hourlyStats.pnl += profit;
+        if (isWin) {
+            this.hourlyStats.wins++;
+        } else {
+            this.hourlyStats.losses++;
+        }
+
         this.log('='.repeat(60), isWin ? 'SUCCESS' : 'ERROR', sym);
         this.log(`🏁 TRADE CLOSED: ${isWin ? 'WIN 💰' : 'LOSS ❌'}`, isWin ? 'SUCCESS' : 'ERROR', sym);
         this.log(`   Profit/Loss: $${profit.toFixed(2)}`, 'INFO', sym);
@@ -739,7 +826,26 @@ ${assetBreakdown ? `\n<b>Asset Breakdown:</b>${assetBreakdown}` : ''}`;
             trade.exitTime = new Date().toISOString();
         }
 
-        this.sendTelegramMessage(`${isWin ? '💰' : '❌'} <b>Trade Closed</b> [${sym}]\n<b>Result:</b> ${isWin ? 'WIN' : 'LOSS'}\n<b>P/L:</b> $${profit.toFixed(2)}\n${this.getTelegramSummary()}`);
+        // Send Premium notification like fibo-scalper3.js
+        const resultEmoji = isWin ? '✅ WIN' : '❌ LOSS';
+        const pnlStr = (profit >= 0 ? '+' : '') + '$' + profit.toFixed(2);
+        const pnlColor = profit >= 0 ? '🟢' : '🔴';
+        const winRate = (this.dailyWins + this.dailyLosses) > 0 ? ((this.dailyWins / (this.dailyWins + this.dailyLosses)) * 100).toFixed(1) : 0;
+
+        const message = `
+${resultEmoji}
+
+📊 <b>${sym}</b>
+${pnlColor} <b>P&L:</b> ${pnlStr}
+
+📈 <b>Daily P&L:</b> ${(this.totalDailyPnl >= 0 ? '+' : '')}$${this.totalDailyPnl.toFixed(2)}
+🎯 <b>Win Rate:</b> ${winRate}%
+📊 <b>Trades Today:</b> ${this.totalTradesToday}
+
+⏰ ${new Date().toLocaleTimeString()}
+        `.trim();
+
+        this.sendTelegramMessage(message);
 
         if (asset) {
             const sessionTag = `${new Date().toISOString().split('T')[0]}:${asset.session}`;

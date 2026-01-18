@@ -9,7 +9,8 @@ class EnhancedDerivTradingBot {
         this.ws = null;
         this.connected = false;
         this.assets = [
-            'R_10','R_25','R_50','R_75', 'R_100', 'RDBULL', 'RDBEAR', '1HZ10V', '1HZ15V', '1HZ25V', '1HZ30V', '1HZ50V', '1HZ75V', '1HZ90V', '1HZ100V', 'JD_10', 'JD_25', 'JD_50', 'JD_75', 'JD_100',
+            // 'R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'RDBULL', 'RDBEAR', 
+            '1HZ10V', '1HZ15V', '1HZ25V', '1HZ30V', '1HZ50V', '1HZ75V', '1HZ90V', '1HZ100V', 'JD10', 'JD25', 'JD50', 'JD75', 'JD100',
             // 'RDBEAR'
         ];
 
@@ -48,7 +49,7 @@ class EnhancedDerivTradingBot {
         this.kCountNum = 0;
         this.kLoss = 0;
         this.multiplier2 = false;
-        this.confidenceThreshold = null; 
+        this.confidenceThreshold = null;
         this.kTradeCount = 0;
         this.isWinTrade = true;
         this.waitTime = 0;
@@ -59,7 +60,7 @@ class EnhancedDerivTradingBot {
         this.kChaos = null;
         this.scanChaos = false;
 
-        
+
         // WebSocket management
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 10000;
@@ -103,7 +104,7 @@ class EnhancedDerivTradingBot {
         this.ws.on('close', () => {
             console.log('Disconnected from Deriv API');
             this.connected = false;
-            if(!this.Pause) {
+            if (!this.Pause) {
                 this.handleDisconnect();
             }
         });
@@ -126,12 +127,12 @@ class EnhancedDerivTradingBot {
         if (this.reconnectAttempts < this.maxReconnectAttempts) {
             console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
             setTimeout(() => this.connect(), this.reconnectInterval);
-        } 
+        }
     }
 
     handleApiError(error) {
         console.error('API Error:', error.message);
-        
+
         switch (error.code) {
             case 'InvalidToken':
                 console.error('Invalid token. Please check your API token and restart the bot.');
@@ -192,7 +193,7 @@ class EnhancedDerivTradingBot {
             this.tradeInProgress = false;
             this.lastDigitsList = [];
             this.tickHistory = [];
-            
+
             this.startTrading();
 
         } else if (message.msg_type === 'history') {
@@ -247,14 +248,14 @@ class EnhancedDerivTradingBot {
         if (this.usedAssets.size === this.assets.length) {
             this.usedAssets = new Set();
         }
-            
-        if (this.RestartTrading) {            
+
+        if (this.RestartTrading) {
             let availableAssets = this.assets.filter(asset => !this.usedAssets.has(asset));
             this.currentAsset = availableAssets[Math.floor(Math.random() * availableAssets.length)];
             this.usedAssets.add(this.currentAsset);
         }
         console.log(`Selected asset: ${this.currentAsset}`);
-        
+
         this.unsubscribeFromTicks(() => {
             this.subscribeToTickHistory(this.currentAsset);
             this.subscribeToTicks(this.currentAsset);
@@ -262,31 +263,31 @@ class EnhancedDerivTradingBot {
 
         this.RestartTrading = false;
     }
-        
+
     handleTickHistory(history) {
         this.tickHistory = history.prices.map(price => this.getLastDigit(price, this.currentAsset));
-        
+
     }
 
     handleTickUpdate(tick) {
         const lastDigit = this.getLastDigit(tick.quote, this.currentAsset);
         this.lastDigitsList.push(lastDigit);
-        
+
         // Update tick history
         this.tickHistory.push(lastDigit);
         if (this.tickHistory.length > this.requiredHistoryLength) {
             this.tickHistory.shift();
         }
-                       
-        console.log(`Recent tick History: ${this.tickHistory.slice(-10).join(', ')}`);           
+
+        console.log(`Recent tick History: ${this.tickHistory.slice(-10).join(', ')}`);
 
         // Enhanced logging
-        if(!this.tradeInProgress) { 
-            this.analyzeTicksEnhanced();           
+        if (!this.tradeInProgress) {
+            this.analyzeTicksEnhanced();
         }
     }
 
-        
+
     analyzeTicksEnhanced() {
         if (this.tradeInProgress) {
             return;
@@ -377,17 +378,37 @@ class EnhancedDerivTradingBot {
 
         // Confidence: Inverted for Differ (higher = less likely to appear)
         const confidence = Math.round(100 - minP);
-        
+
         console.log('Adjusted next-digit percentages:', adjustedP.map(p => p.toFixed(2)));
         console.log('Predicted Differ digit:', predictedDigit, '(Adjusted P:', minP.toFixed(2), '%, Confidence:', confidence, '%)');
 
+        this.volatilityLevel = this.getVolatilityLevel();
+
+        console.log(`Volatility: ${this.volatilityLevel}`);
+
         // Trade only if low probability (high confidence for Differ) and threshold met
-        if (minP < 8 && confidence > 91 && this.xDigit !== predictedDigit) {
+        if (minP < 8 && confidence > 91 && this.xDigit !== predictedDigit && this.volatilityLevel === 'extreme') {
             this.xDigit = predictedDigit;
             this.winProbNumber = confidence;
 
             this.placeTrade(this.xDigit, this.winProbNumber);
         }
+    }
+
+    getVolatilityLevel() {
+        if (this.tickHistory.length < 50) return;
+        const recent = this.tickHistory.slice(-50);
+        const mean = recent.reduce((a, b) => a + b, 0) / recent.length;
+        const variance = recent.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / recent.length;
+        const stdDev = Math.sqrt(variance);
+
+        console.log(`Volatility stdDev: ${stdDev.toFixed(2)}`);
+
+        if (stdDev > 3.1) return 'extreme';
+        if (stdDev > 2.8) return 'high';
+        if (stdDev > 2.0) return 'medium';
+
+        return 'low';
     }
 
 
@@ -397,14 +418,14 @@ class EnhancedDerivTradingBot {
         }
 
         this.tradeInProgress = true;
-        
+
         console.log(`\n PLACING TRADE`);
         console.log(`Digit: ${predictedDigit} (${confidence}%)`);
         console.log(`Stake: $${this.currentStake.toFixed(2)}`);
-        
+
         const request = {
             buy: 1,
-            price: this.currentStake.toFixed(2), 
+            price: this.currentStake.toFixed(2),
             parameters: {
                 amount: this.currentStake.toFixed(2),
                 basis: 'stake',
@@ -437,21 +458,21 @@ class EnhancedDerivTradingBot {
     handleTradeResult(contract) {
         const won = contract.status === 'won';
         const profit = parseFloat(contract.profit);
-        
+
         console.log(`\n📊 TRADE RESULT: ${won ? '✅ WON' : '❌ LOST'}`);
         console.log(`Profit/Loss: $${profit.toFixed(2)}`);
-       
+
         this.totalTrades++;
-        
+
         if (won) {
-            this.totalWins++;            
+            this.totalWins++;
             this.consecutiveLosses = 0;
             this.currentStake = this.config.initialStake;
         } else {
             this.isWinTrade = false;
             this.totalLosses++;
             this.consecutiveLosses++;
-            
+
             if (this.consecutiveLosses === 2) {
                 this.consecutiveLosses2++;
             } else if (this.consecutiveLosses === 3) {
@@ -463,7 +484,7 @@ class EnhancedDerivTradingBot {
             }
 
             this.currentStake = Math.ceil(this.currentStake * this.config.multiplier * 100) / 100;
-            
+
             // this.RestartTrading = true; 
         }
 
@@ -475,7 +496,7 @@ class EnhancedDerivTradingBot {
 
         this.Pause = true;
 
-        this.RestartTrading = true; 
+        this.RestartTrading = true;
 
         if (!this.endOfDay) {
             this.logTradingSummary();
@@ -484,7 +505,7 @@ class EnhancedDerivTradingBot {
         this.regimCount = 0;
         this.kChaos = null;
         this.scanChaos = false;
-        
+
         // Take profit condition
         if (this.totalProfitLoss >= this.config.takeProfit) {
             console.log('Take Profit Reached... Stopping trading.');
@@ -498,17 +519,17 @@ class EnhancedDerivTradingBot {
         if (this.consecutiveLosses >= this.config.maxConsecutiveLosses ||
             this.totalProfitLoss <= -this.config.stopLoss) {
             console.log('Stopping condition met. Disconnecting...');
-            this.endOfDay = true; 
+            this.endOfDay = true;
             this.sendDisconnectResumptionEmailSummary();
             this.disconnect();
             return;
         }
 
         this.disconnect();
-        
+
         if (!this.endOfDay) {
-            this.waitTime = Math.floor(Math.random() * (1000 - 1000 + 1)) + 100000;
-            console.log(`⏳ Waiting ${Math.round(this.waitTime/1000)} seconds before next trade...\n`);
+            this.waitTime = Math.floor(Math.random() * (1000 - 1000 + 1)) + 1000;
+            console.log(`⏳ Waiting ${Math.round(this.waitTime / 1000)} seconds before next trade...\n`);
             setTimeout(() => {
                 this.Pause = false;
                 this.kTrade = false;
@@ -524,7 +545,7 @@ class EnhancedDerivTradingBot {
             };
             this.sendRequest(request);
             console.log(`Unsubscribing from ticks with ID: ${this.tickSubscriptionId}`);
-            
+
             this.ws.once('message', (data) => {
                 const message = JSON.parse(data);
                 if (message.msg_type === 'forget' && message.forget === this.tickSubscriptionId) {
@@ -555,7 +576,7 @@ class EnhancedDerivTradingBot {
                 this.endOfDay = false;
                 this.connect();
             }
-    
+
             // Check for evening stop condition (after 8:00 PM)
             if (this.isWinTrade && !this.endOfDay) {
                 if (currentHours === 17 && currentMinutes >= 0) {
@@ -585,10 +606,10 @@ class EnhancedDerivTradingBot {
         console.log(`Total P/L: $${this.totalProfitLoss.toFixed(2)}`);
         console.log(`Current Stake: $${this.currentStake.toFixed(2)}`);
         console.log('Predicted Digit:', this.xDigit);
-        console.log('Percentage:', this.winProbNumber),'%';
+        console.log('Percentage:', this.winProbNumber), '%';
         console.log('═══════════════════════════════════════\n');
     }
-    
+
     startEmailTimer() {
         setInterval(() => {
             if (!this.endOfDay) {
@@ -669,7 +690,7 @@ class EnhancedDerivTradingBot {
         Last 20 Digits: ${klastDigits.join(', ')}
         
         Current Stake: $${this.currentStake.toFixed(2)}
-        `;      
+        `;
 
         const mailOptions = {
             from: this.emailConfig.auth.user,
@@ -743,7 +764,7 @@ class EnhancedDerivTradingBot {
         }
     }
 
-    start() {        
+    start() {
         this.connect();
         // this.checkTimeForDisconnectReconnect();
     }
