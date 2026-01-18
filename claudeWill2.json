@@ -1,6 +1,6 @@
 {
-  "savedAt": 1768751968520,
-  "savedAtISO": "2026-01-18T15:59:28.520Z",
+  "savedAt": 1768753690435,
+  "savedAtISO": "2026-01-18T16:28:10.435Z",
   "capital": 64311.4,
   "session": {
     "profit": 0,
@@ -10,7 +10,7 @@
     "winsCount": 0,
     "lossesCount": 0,
     "accumulatedLoss": 0,
-    "startTime": 1768751743033,
+    "startTime": 1768753666079,
     "isActive": true
   },
   "activePositions": [],
@@ -30,8 +30,8 @@
       "wprZone": "neutral",
       "hasVisitedOversold": false,
       "hasVisitedOverbought": false,
-      "wpr": -57.93022540761594,
-      "prevWpr": -50,
+      "wpr": -73.50888796143508,
+      "prevWpr": -74.32898031953168,
       "currentStake": 1,
       "takeProfit": 2.5,
       "reversalLevel": 0,
@@ -41,7 +41,7 @@
       "dailyWins": 0,
       "dailyLosses": 0,
       "consecutiveLosses": 0,
-      "lastProcessedCandleOpenTime": 1768751400
+      "lastProcessedCandleOpenTime": 1768753620
     },
     "1HZ50V": {
       "breakout": {
@@ -55,11 +55,11 @@
       "currentDirection": null,
       "buySignalActive": false,
       "sellSignalActive": false,
-      "wprZone": "neutral",
+      "wprZone": "overbought",
       "hasVisitedOversold": false,
-      "hasVisitedOverbought": false,
-      "wpr": -28.9346509366544,
-      "prevWpr": -50,
+      "hasVisitedOverbought": true,
+      "wpr": -9.052365324396687,
+      "prevWpr": -12.810027377913755,
       "currentStake": 1,
       "takeProfit": 2.5,
       "reversalLevel": 0,
@@ -69,7 +69,7 @@
       "dailyWins": 0,
       "dailyLosses": 0,
       "consecutiveLosses": 0,
-      "lastProcessedCandleOpenTime": 1768751400
+      "lastProcessedCandleOpenTime": 1768753620
     },
     "stpRNG": {
       "breakout": {
@@ -86,8 +86,8 @@
       "wprZone": "neutral",
       "hasVisitedOversold": false,
       "hasVisitedOverbought": false,
-      "wpr": -3.1746031746003482,
-      "prevWpr": -50,
+      "wpr": -29.565217391301186,
+      "prevWpr": -28.695652173914628,
       "currentStake": 1,
       "takeProfit": 2.5,
       "reversalLevel": 0,
@@ -97,7 +97,7 @@
       "dailyWins": 0,
       "dailyLosses": 0,
       "consecutiveLosses": 0,
-      "lastProcessedCandleOpenTime": 1768751400
+      "lastProcessedCandleOpenTime": 1768753620
     },
     "1HZ25V": {
       "breakout": {
@@ -114,8 +114,8 @@
       "wprZone": "neutral",
       "hasVisitedOversold": false,
       "hasVisitedOverbought": false,
-      "wpr": -14.495896812358605,
-      "prevWpr": -50,
+      "wpr": -71.98288559501601,
+      "prevWpr": -71.19147010008395,
       "currentStake": 1,
       "takeProfit": 2.5,
       "reversalLevel": 0,
@@ -125,7 +125,7 @@
       "dailyWins": 0,
       "dailyLosses": 0,
       "consecutiveLosses": 0,
-      "lastProcessedCandleOpenTime": 1768751400
+      "lastProcessedCandleOpenTime": 1768753620
     },
     "R_100": {
       "breakout": {
@@ -142,8 +142,8 @@
       "wprZone": "neutral",
       "hasVisitedOversold": false,
       "hasVisitedOverbought": false,
-      "wpr": -86.0528823249166,
-      "prevWpr": -50,
+      "wpr": -23.75434530706785,
+      "prevWpr": -21.26303592120553,
       "currentStake": 1,
       "takeProfit": 2.5,
       "reversalLevel": 0,
@@ -153,7 +153,7 @@
       "dailyWins": 0,
       "dailyLosses": 0,
       "consecutiveLosses": 0,
-      "lastProcessedCandleOpenTime": 1768751400
+      "lastProcessedCandleOpenTime": 1768753620
     },
     "1HZ100V": {
       "breakout": {
@@ -167,11 +167,11 @@
       "currentDirection": null,
       "buySignalActive": false,
       "sellSignalActive": false,
-      "wprZone": "neutral",
+      "wprZone": "overbought",
       "hasVisitedOversold": false,
-      "hasVisitedOverbought": false,
-      "wpr": -31.55711550733854,
-      "prevWpr": -50,
+      "hasVisitedOverbought": true,
+      "wpr": -16.192468619246497,
+      "prevWpr": -13.347280334727389,
       "currentStake": 1,
       "takeProfit": 2.5,
       "reversalLevel": 0,
@@ -181,7 +181,7 @@
       "dailyWins": 0,
       "dailyLosses": 0,
       "consecutiveLosses": 0,
-      "lastProcessedCandleOpenTime": 1768751400
+      "lastProcessedCandleOpenTime": 1768753620
     },
     "frxXAUUSD": {
       "breakout": {
@@ -198,8 +198,8 @@
       "wprZone": "neutral",
       "hasVisitedOversold": false,
       "hasVisitedOverbought": false,
-      "wpr": -37.62447510497954,
-      "prevWpr": -50,
+      "wpr": -46.70255720053996,
+      "prevWpr": -37.62447510497954,
       "currentStake": 1,
       "takeProfit": 2.5,
       "reversalLevel": 0,
@@ -209,7 +209,7 @@
       "dailyWins": 0,
       "dailyLosses": 0,
       "consecutiveLosses": 0,
-      "lastProcessedCandleOpenTime": 1768596600
+      "lastProcessedCandleOpenTime": 1768596840
     }
   }
 }

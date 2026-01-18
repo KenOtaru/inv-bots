@@ -198,6 +198,7 @@ Time: ${new Date().toUTCString()}
         if (activeSymbols.length === 0) return;
 
         let message = `🚀 <b>ACTIVE CONTRACTS UPDATE</b>\n\n`;
+        let totalProfit = 0;
 
         for (const symbol of activeSymbols) {
             const asset = state.assets[symbol];
@@ -205,6 +206,7 @@ Time: ${new Date().toUTCString()}
             if (!pos) continue;
 
             const profit = asset.unrealizedPnl || 0;
+            totalProfit += profit;
             const emoji = profit >= 0 ? '🟢' : '🔴';
             const entryTime = pos.entryTime || Date.now();
             const durationArr = SessionManager.formatDuration(Math.floor((Date.now() - entryTime) / 1000)).split(' ');
@@ -216,6 +218,19 @@ Time: ${new Date().toUTCString()}
             message += `├ Status: ${emoji} <b>$${profit.toFixed(2)}</b>\n`;
             message += `└ Rev: ${pos.reversalLevel}/${CONFIG.MAX_REVERSAL_LEVEL} | ${duration} ago\n\n`;
         }
+
+        const totalEmoji = totalProfit >= 0 ? '🟢' : '🔴';
+        message += `💰 Total Unrealized P/L: ${totalEmoji} <b>$${totalProfit.toFixed(2)}</b>\n\n`;
+
+        // Add session statistics
+        message += `📈 <b>SESSION STATS</b>\n`;
+        message += `├ Session P/L: $${state.session.netPL.toFixed(2)}\n`;
+        message += `├ Trades: ${state.session.tradesCount} (W:${state.session.winsCount} L:${state.session.lossesCount})\n`;
+        const sessionWinRate = state.session.tradesCount > 0
+            ? ((state.session.winsCount / state.session.tradesCount) * 100).toFixed(1)
+            : '0.0';
+        message += `├ Win Rate: ${sessionWinRate}%\n`;
+        message += `└ Capital: $${state.capital.toFixed(2)}\n\n`;
 
         message += `⏰ ${new Date().toUTCString()}`;
         await this.sendMessage(message);
@@ -255,7 +270,7 @@ Time: ${new Date().toUTCString()}
 // ============================================
 
 class StatePersistence {
-    static STATE_FILE = './claudeWill2.json';
+    static STATE_FILE = './claudeWill2n.json';
     static SAVE_INTERVAL = 5000; // Save every 5 seconds
     static saveTimer = null;
 
@@ -565,7 +580,7 @@ const TIMEFRAMES = {
 };
 
 // Default to 5 minutes, user can override with TIMEFRAME env variable
-const SELECTED_TIMEFRAME = '1m';
+const SELECTED_TIMEFRAME = '5m';
 const TIMEFRAME_CONFIG = TIMEFRAMES[SELECTED_TIMEFRAME];
 
 // ============================================
@@ -635,7 +650,7 @@ const CONFIG = {
 
     // Telegram Settings
     TELEGRAM_ENABLED: true,
-    TELEGRAM_BOT_TOKEN: '8196927342:AAHa8d0OrF3D6yYTA_QcCPOzz5G0SPj82xE',
+    TELEGRAM_BOT_TOKEN: '8240410751:AAHK1sLe6Qkiyfcf04fC6RqouzLou0dPT0I',
     TELEGRAM_CHAT_ID: '752497117',
 
     // NEW: Stale Trade Detection (for TP/SL stuck trades)
@@ -991,7 +1006,7 @@ class SignalManager {
             // FIXED: When entering oversold, clear overbought flag
             // This ensures "first time since" logic works correctly
             if (!wasInOversold) {
-                // assetState.hasVisitedOverbought = false;
+                assetState.hasVisitedOverbought = false;
                 LOGGER.debug(`${symbol}: Entered OVERSOLD zone (WPR: ${wpr.toFixed(2)}) - cleared overbought flag`);
             }
         } else if (isInOverbought) {
@@ -999,7 +1014,7 @@ class SignalManager {
             assetState.hasVisitedOverbought = true;
             // FIXED: When entering overbought, clear oversold flag
             if (!wasInOverbought) {
-                // assetState.hasVisitedOversold = false;
+                assetState.hasVisitedOversold = false;
                 LOGGER.debug(`${symbol}: Entered OVERBOUGHT zone (WPR: ${wpr.toFixed(2)}) - cleared oversold flag`);
             }
         } else {
@@ -1034,7 +1049,7 @@ class SignalManager {
             !assetState.inTradeCycle) {
 
             assetState.buySignalActive = true;
-            // assetState.hasVisitedOversold = false;  // Reset flag after signal
+            assetState.hasVisitedOversold = false;  // Reset flag after signal
 
             // Store the closed candle that triggered the signal
             const closedCandles = assetState.closedCandles;
@@ -1069,7 +1084,7 @@ class SignalManager {
             !assetState.inTradeCycle) {
 
             assetState.sellSignalActive = true;
-            // assetState.hasVisitedOverbought = false;  // Reset flag after signal
+            assetState.hasVisitedOverbought = false;  // Reset flag after signal
 
             const closedCandles = assetState.closedCandles;
             if (closedCandles.length > 0) {
@@ -2023,9 +2038,26 @@ class ConnectionManager {
                 state.assets[position.symbol].activePosition = position;
                 state.assets[position.symbol].activeContract = contract.contract_id;
                 state.assets[position.symbol].unrealizedPnl = 0;
-            }
 
-            TelegramService.sendTradeAlert('OPEN', position.symbol, position.direction, position.stake, position.multiplier, { reversalLevel: position.reversalLevel });
+                // Send appropriate notification based on trade type
+                if (position.isReversal) {
+                    TelegramService.sendReversalAlert(
+                        position.symbol,
+                        position.direction,
+                        position.stake,
+                        position.multiplier,
+                        position.reversalLevel,
+                        0, // Previous loss handled in stake calculation
+                        state.assets[position.symbol].accumulatedLoss,
+                        state.assets[position.symbol].takeProfitAmount
+                    );
+                    LOGGER.trade(`📱 Reversal notification sent for ${position.symbol}`);
+                } else {
+                    TelegramService.sendTradeAlert('OPEN', position.symbol, position.direction, position.stake, position.multiplier, {
+                        reversalLevel: position.reversalLevel
+                    });
+                }
+            }
 
             // NEW: Save state after position opened
             StatePersistence.saveState();
@@ -2072,9 +2104,8 @@ class ConnectionManager {
                     assetState.unrealizedPnl = 0;
                     assetState.currentDirection = null;
 
-                    setTimeout(() => {
-                        bot.executeTrade(position.symbol, reversalDir, true, lossAmount);
-                    }, 500);
+                    // FIX: Execute reversal immediately (no setTimeout)
+                    bot.executeTrade(position.symbol, reversalDir, true, lossAmount);
                 } else if (position.isMaxReversalClose) {
                     LOGGER.warn(`${position.symbol}: Max reversals reached. Full reset.`);
                     StakeManager.fullReset(position.symbol);
@@ -2245,6 +2276,54 @@ class ConnectionManager {
                 if (this.ws) this.ws.terminate();
             }
         }, 10000);
+
+        // NEW: Detailed active trades logging every 60 seconds
+        this.activeTradesLogInterval = setInterval(() => {
+            if (!state.isConnected || !state.isAuthorized) return;
+
+            const activePositions = state.portfolio.activePositions.filter(p => p.contractId);
+
+            if (activePositions.length === 0) {
+                // LOGGER.debug('📊 No active trades');
+                return;
+            }
+
+            LOGGER.info(`\n${'═'.repeat(100)}`);
+            LOGGER.info(`📊 ACTIVE TRADES SUMMARY (${activePositions.length} positions)`);
+            LOGGER.info('─'.repeat(100));
+
+            activePositions.forEach((p, idx) => {
+                const profit = p.currentProfit || 0;
+                const duration = Math.floor((Date.now() - p.entryTime) / 1000);
+                const minutes = Math.floor(duration / 60);
+                const seconds = duration % 60;
+                const profitColor = profit >= 0 ? '\x1b[32m' : '\x1b[31m';
+
+                LOGGER.info(`${idx + 1}. ${p.symbol.padEnd(10)} | ${p.direction.padEnd(4)} | $${p.stake.toFixed(2).padEnd(8)} x${p.multiplier}`);
+                LOGGER.info(`   P/L: ${profitColor}$${profit.toFixed(2)}\x1b[0m | Rev: ${p.reversalLevel}/${CONFIG.MAX_REVERSAL_LEVEL} | Time: ${minutes}m ${seconds}s`);
+
+                const assetState = state.assets[p.symbol];
+                if (assetState && assetState.breakout.active) {
+                    LOGGER.info(`   Breakout: High: ${assetState.breakout.highLevel.toFixed(5)} | Low: ${assetState.breakout.lowLevel.toFixed(5)}`);
+                }
+                LOGGER.info('');
+            });
+
+            const totalProfit = activePositions.reduce((sum, p) => sum + (p.currentProfit || 0), 0);
+            const totalColor = totalProfit >= 0 ? '\x1b[32m' : '\x1b[31m';
+            LOGGER.info(`💰 Total Unrealized P/L: ${totalColor}$${totalProfit.toFixed(2)}\x1b[0m`);
+
+            // Add session statistics
+            LOGGER.info('─'.repeat(100));
+            LOGGER.info(`📈 SESSION STATS:`);
+            const sessionPLColor = state.session.netPL >= 0 ? '\x1b[32m' : '\x1b[31m';
+            LOGGER.info(`   Session P/L: ${sessionPLColor}$${state.session.netPL.toFixed(2)}\x1b[0m | Trades: ${state.session.tradesCount} (W:${state.session.winsCount} L:${state.session.lossesCount})`);
+            const sessionWinRate = state.session.tradesCount > 0
+                ? ((state.session.winsCount / state.session.tradesCount) * 100).toFixed(1)
+                : '0.0';
+            LOGGER.info(`   Win Rate: ${sessionWinRate}% | Capital: $${state.capital.toFixed(2)}`);
+            LOGGER.info('═'.repeat(100) + '\n');
+        }, 60000);
     }
 
     stopMonitor() {
@@ -2394,19 +2473,7 @@ class DerivBot {
                 StakeManager.fullReset(symbol);
                 return;
             }
-
-            // NEW: Send Telegram alert for Reversal trade
-            TelegramService.sendReversalAlert(
-                symbol,
-                direction,
-                stake,
-                StakeManager.getMultiplier(symbol),
-                assetState.reversalLevel,
-                previousLoss,
-                assetState.accumulatedLoss,
-                assetState.takeProfitAmount
-            );
-
+            // Notification will be sent in handleBuyResponse after trade is confirmed
         } else {
             stake = StakeManager.getInitialStake(symbol);
         }
