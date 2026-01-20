@@ -33,9 +33,9 @@ const fs = require('fs');
 const path = require('path');
 
 // ============================================
-// STATE PERSISTENCE MANAGER
+// STATE PERSISTENCE MANAGER - FIXED VERSION
 // ============================================
-const STATE_FILE = path.join(__dirname, 'cluadeWillbot5Min-state.json');
+const STATE_FILE = path.join(__dirname, 'claudeWillbot3Minss-state.json');
 const STATE_SAVE_INTERVAL = 5000; // Save every 5 seconds
 
 class StatePersistence {
@@ -61,7 +61,10 @@ class StatePersistence {
                         buyPrice: pos.buyPrice,
                         isReversal: pos.isReversal,
                         reversalLevel: pos.reversalLevel,
-                        currentProfit: pos.currentProfit
+                        currentProfit: pos.currentProfit,
+                        pendingReversal: pos.pendingReversal, // FIX: Added missing field
+                        isRecoveryClose: pos.isRecoveryClose, // FIX: Added missing field
+                        isMaxReversalClose: pos.isMaxReversalClose // FIX: Added missing field
                     }))
                 },
                 assets: {}
@@ -71,30 +74,50 @@ class StatePersistence {
             Object.keys(state.assets).forEach(symbol => {
                 const asset = state.assets[symbol];
                 persistableState.assets[symbol] = {
+                    // WPR tracking
                     wpr: asset.wpr,
                     prevWpr: asset.prevWpr,
+
+                    // WPR Zone flags
                     buyFlagActive: asset.buyFlagActive,
                     sellFlagActive: asset.sellFlagActive,
+
+                    // Breakout levels
                     breakout: { ...asset.breakout },
+
+                    // Trade cycle state
                     currentDirection: asset.currentDirection,
                     inTradeCycle: asset.inTradeCycle,
                     waitingForReentry: asset.waitingForReentry,
                     priceReturnedToZone: asset.priceReturnedToZone,
                     lastTradeDirection: asset.lastTradeDirection,
+
+                    // Stake management
                     currentStake: asset.currentStake,
                     takeProfit: asset.takeProfit,
                     reversalLevel: asset.reversalLevel,
                     accumulatedLoss: asset.accumulatedLoss,
                     takeProfitAmount: asset.takeProfitAmount,
+
+                    // Stats
                     dailyTrades: asset.dailyTrades,
                     dailyWins: asset.dailyWins,
                     dailyLosses: asset.dailyLosses,
-                    consecutiveLosses: asset.consecutiveLosses
+                    consecutiveLosses: asset.consecutiveLosses,
+
+                    // FIX: Added missing critical fields
+                    indicatorsReady: asset.indicatorsReady,
+                    lastProcessedCandleOpenTime: asset.lastProcessedCandleOpenTime,
+                    activeContract: asset.activeContract,
+                    unrealizedPnl: asset.unrealizedPnl,
+
+                    // FIX: Save last few closed candles for continuity
+                    closedCandles: asset.closedCandles.slice(-20) // Save last 20 candles
                 };
             });
 
             fs.writeFileSync(STATE_FILE, JSON.stringify(persistableState, null, 2));
-            LOGGER.debug('💾 State saved to disk');
+            // LOGGER.debug('💾 State saved to disk');
         } catch (error) {
             LOGGER.error(`Failed to save state: ${error.message}`);
         }
@@ -113,6 +136,7 @@ class StatePersistence {
             // Only restore if state is less than 30 minutes old
             if (ageMinutes > 30) {
                 LOGGER.warn(`⚠️ Saved state is ${ageMinutes.toFixed(1)} minutes old, starting fresh`);
+                fs.unlinkSync(STATE_FILE); // FIX: Delete old state file
                 return false;
             }
 
@@ -120,14 +144,24 @@ class StatePersistence {
 
             // Restore capital and session
             state.capital = savedData.capital;
-            state.session = { ...state.session, ...savedData.session };
+            state.session = {
+                ...state.session,
+                ...savedData.session,
+                startTime: savedData.session.startTime || Date.now(), // FIX: Preserve original start time
+                startCapital: savedData.session.startCapital || savedData.capital
+            };
 
             // Restore portfolio
             state.portfolio.dailyProfit = savedData.portfolio.dailyProfit;
             state.portfolio.dailyLoss = savedData.portfolio.dailyLoss;
             state.portfolio.dailyWins = savedData.portfolio.dailyWins;
             state.portfolio.dailyLosses = savedData.portfolio.dailyLosses;
-            state.portfolio.activePositions = savedData.portfolio.activePositions || [];
+
+            // FIX: Restore active positions with all fields
+            state.portfolio.activePositions = (savedData.portfolio.activePositions || []).map(pos => ({
+                ...pos,
+                entryTime: pos.entryTime || Date.now() // FIX: Ensure entryTime exists
+            }));
 
             // Restore asset states
             Object.keys(savedData.assets).forEach(symbol => {
@@ -135,33 +169,76 @@ class StatePersistence {
                     const saved = savedData.assets[symbol];
                     const asset = state.assets[symbol];
 
-                    asset.wpr = saved.wpr;
-                    asset.prevWpr = saved.prevWpr;
-                    asset.buyFlagActive = saved.buyFlagActive;
-                    asset.sellFlagActive = saved.sellFlagActive;
-                    asset.breakout = { ...saved.breakout };
-                    asset.currentDirection = saved.currentDirection;
-                    asset.inTradeCycle = saved.inTradeCycle;
-                    asset.waitingForReentry = saved.waitingForReentry;
-                    asset.priceReturnedToZone = saved.priceReturnedToZone || false;
-                    asset.lastTradeDirection = saved.lastTradeDirection;
-                    asset.currentStake = saved.currentStake;
-                    asset.takeProfit = saved.takeProfit;
-                    asset.reversalLevel = saved.reversalLevel;
-                    asset.accumulatedLoss = saved.accumulatedLoss;
-                    asset.takeProfitAmount = saved.takeProfitAmount;
-                    asset.dailyTrades = saved.dailyTrades;
-                    asset.dailyWins = saved.dailyWins;
-                    asset.dailyLosses = saved.dailyLosses;
-                    asset.consecutiveLosses = saved.consecutiveLosses;
+                    // WPR tracking
+                    asset.wpr = saved.wpr || -50;
+                    asset.prevWpr = saved.prevWpr || -50;
 
-                    LOGGER.info(`  ✅ Restored ${symbol}: BuyFlag=${saved.buyFlagActive}, SellFlag=${saved.sellFlagActive}, InCycle=${saved.inTradeCycle}`);
+                    // WPR Zone flags
+                    asset.buyFlagActive = saved.buyFlagActive || false;
+                    asset.sellFlagActive = saved.sellFlagActive || false;
+
+                    // Breakout levels
+                    asset.breakout = {
+                        active: saved.breakout?.active || false,
+                        type: saved.breakout?.type || null,
+                        highLevel: saved.breakout?.highLevel || 0,
+                        lowLevel: saved.breakout?.lowLevel || 0,
+                        triggerCandle: saved.breakout?.triggerCandle || 0,
+                        canBeReplaced: saved.breakout?.canBeReplaced || true
+                    };
+
+                    // Trade cycle state
+                    asset.currentDirection = saved.currentDirection || null;
+                    asset.inTradeCycle = saved.inTradeCycle || false;
+                    asset.waitingForReentry = saved.waitingForReentry || false;
+                    asset.priceReturnedToZone = saved.priceReturnedToZone || false;
+                    asset.lastTradeDirection = saved.lastTradeDirection || null;
+
+                    // Stake management
+                    asset.currentStake = saved.currentStake || CONFIG.INITIAL_STAKE;
+                    asset.takeProfit = saved.takeProfit || CONFIG.TAKE_PROFIT;
+                    asset.reversalLevel = saved.reversalLevel || 0;
+                    asset.accumulatedLoss = saved.accumulatedLoss || 0;
+                    asset.takeProfitAmount = saved.takeProfitAmount || CONFIG.TAKE_PROFIT;
+
+                    // Stats
+                    asset.dailyTrades = saved.dailyTrades || 0;
+                    asset.dailyWins = saved.dailyWins || 0;
+                    asset.dailyLosses = saved.dailyLosses || 0;
+                    asset.consecutiveLosses = saved.consecutiveLosses || 0;
+
+                    // FIX: Restore critical fields
+                    asset.indicatorsReady = saved.indicatorsReady || false;
+                    asset.lastProcessedCandleOpenTime = saved.lastProcessedCandleOpenTime || 0;
+                    asset.activeContract = saved.activeContract || null;
+                    asset.unrealizedPnl = saved.unrealizedPnl || 0;
+
+                    // FIX: Restore closed candles if available
+                    if (saved.closedCandles && saved.closedCandles.length > 0) {
+                        asset.closedCandles = saved.closedCandles;
+                        LOGGER.info(`  📊 Restored ${saved.closedCandles.length} closed candles for ${symbol}`);
+                    }
+
+                    // FIX: Link active positions back to assets
+                    const activePos = state.portfolio.activePositions.find(p => p.symbol === symbol);
+                    if (activePos) {
+                        asset.activePosition = activePos;
+                    }
+
+                    LOGGER.info(`  ✅ ${symbol}: BuyFlag=${saved.buyFlagActive}, SellFlag=${saved.sellFlagActive}, InCycle=${saved.inTradeCycle}, Rev=${saved.reversalLevel}`);
                 }
             });
+
+            LOGGER.info(`✅ State restored successfully!`);
+            LOGGER.info(`   💰 Capital: $${state.capital.toFixed(2)}`);
+            LOGGER.info(`   📊 Session P/L: $${state.session.netPL.toFixed(2)}`);
+            LOGGER.info(`   🎯 Trades: ${state.session.tradesCount} (W:${state.session.winsCount} L:${state.session.lossesCount})`);
+            LOGGER.info(`   🚀 Active Positions: ${state.portfolio.activePositions.length}`);
 
             return true;
         } catch (error) {
             LOGGER.error(`Failed to load state: ${error.message}`);
+            LOGGER.error(`Stack: ${error.stack}`);
             return false;
         }
     }
@@ -429,7 +506,7 @@ const TIMEFRAMES = {
     '4h': { seconds: 14400, granularity: 14400, label: '4 Hours' }
 };
 
-const SELECTED_TIMEFRAME = '5m';
+const SELECTED_TIMEFRAME = '3m';
 const TIMEFRAME_CONFIG = TIMEFRAMES[SELECTED_TIMEFRAME];
 
 // ============================================
@@ -502,7 +579,7 @@ const ASSET_CONFIGS = {
         category: 'synthetic',
         contractType: 'multiplier',
         multipliers: [50, 100, 200, 300, 500],
-        defaultMultiplier: 100,
+        defaultMultiplier: 50,
         maxTradesPerDay: 500000,
         minStake: 1.00,
         maxStake: 3000,
@@ -513,7 +590,7 @@ const ASSET_CONFIGS = {
         category: 'synthetic',
         contractType: 'multiplier',
         multipliers: [40, 100, 200, 300, 400],
-        defaultMultiplier: 100,
+        defaultMultiplier: 40,
         maxTradesPerDay: 50000,
         minStake: 1.00,
         maxStake: 3000,
@@ -524,7 +601,7 @@ const ASSET_CONFIGS = {
         category: 'synthetic',
         contractType: 'multiplier',
         multipliers: [160, 400, 800, 1200, 1600],
-        defaultMultiplier: 400,
+        defaultMultiplier: 160,
         maxTradesPerDay: 120000,
         minStake: 1.00,
         maxStake: 1000,
@@ -535,7 +612,7 @@ const ASSET_CONFIGS = {
         category: 'synthetic',
         contractType: 'multiplier',
         multipliers: [80, 200, 400, 600, 800],
-        defaultMultiplier: 200,
+        defaultMultiplier: 80,
         maxTradesPerDay: 120000,
         minStake: 1.00,
         maxStake: 1000,
@@ -546,7 +623,7 @@ const ASSET_CONFIGS = {
         category: 'synthetic',
         contractType: 'multiplier',
         multipliers: [40, 100, 200, 300, 400],
-        defaultMultiplier: 100,
+        defaultMultiplier: 40,
         maxTradesPerDay: 50000,
         minStake: 1.00,
         maxStake: 3000,
@@ -557,7 +634,7 @@ const ASSET_CONFIGS = {
         category: 'synthetic',
         contractType: 'multiplier',
         multipliers: [750, 2000, 3500, 5500, 7500],
-        defaultMultiplier: 2000,
+        defaultMultiplier: 750,
         maxTradesPerDay: 120000,
         minStake: 1.00,
         maxStake: 1000,
@@ -568,7 +645,7 @@ const ASSET_CONFIGS = {
         category: 'commodity',
         contractType: 'multiplier',
         multipliers: [50, 100, 200, 300, 400, 500],
-        defaultMultiplier: 100,
+        defaultMultiplier: 50,
         maxTradesPerDay: 5000,
         minStake: 1,
         maxStake: 5000,
@@ -694,6 +771,15 @@ function initializeAssetStates() {
 }
 
 initializeAssetStates();
+
+// FIX: Try to load saved state AFTER assets are initialized
+const stateLoaded = StatePersistence.loadState();
+
+if (stateLoaded) {
+    LOGGER.info('🔄 Bot will resume from saved state after connection');
+} else {
+    LOGGER.info('🆕 Bot will start with fresh state');
+}
 
 // ============================================
 // TECHNICAL INDICATORS (WPR ONLY)
@@ -1448,6 +1534,7 @@ class ConnectionManager {
         this.lastDataTime = Date.now();
         this.isReconnecting = false;
         this.stalledContractChecks = new Map(); // Track stalled contracts
+        this.autoSaveStarted = false;
     }
 
     connect() {
@@ -1469,6 +1556,13 @@ class ConnectionManager {
         this.lastDataTime = Date.now();
 
         this.startMonitor();
+
+        // FIX: Start auto-save after connection established
+        if (!this.autoSaveStarted) {
+            StatePersistence.startAutoSave();
+            this.autoSaveStarted = true;
+        }
+
         this.send({ authorize: CONFIG.API_TOKEN });
 
         // If reconnecting, we need to restore subscriptions after authorization
