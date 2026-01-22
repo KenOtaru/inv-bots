@@ -7,7 +7,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'mX5Differ-state.json');
+const STATE_FILE = path.join(__dirname, 'mX4Differ-state.json');
 const STATE_SAVE_INTERVAL = 5000; // Save every 5 seconds
 
 class StatePersistence {
@@ -162,7 +162,7 @@ class AIWeightedEnsembleBot {
         this.contractSubscription = null;
 
         // Telegram Configuration
-        this.telegramToken = '8397622765:AAGL93lrQ0LtVPw8MhB3JzFjPOCAJA5CLro';
+        this.telegramToken = '8578702717:AAFShpdLRtat7PHqjZMUqhY4UNKlWyaGtmo';
         this.telegramChatId = '752497117';
         this.telegramEnabled = true;
 
@@ -458,21 +458,21 @@ class AIWeightedEnsembleBot {
         const pnlStr = (stats.pnl >= 0 ? '+' : '') + '$' + stats.pnl.toFixed(2);
 
         const message = `
-            ⏰ <b>x5 Differ Bot Hourly Summary</b>
+⏰ <b>x4 Differ Bot Hourly Summary</b>
 
-            📊 <b>Last Hour</b>
-            ├ Trades: ${stats.trades}
-            ├ Wins: ${stats.wins} | Losses: ${stats.losses}
-            ├ Win Rate: ${winRate}%
-            └ ${pnlEmoji} <b>P&L:</b> ${pnlStr}
+📊 <b>Last Hour</b>
+├ Trades: ${stats.trades}
+├ Wins: ${stats.wins} | Losses: ${stats.losses}
+├ Win Rate: ${winRate}%
+└ ${pnlEmoji} <b>P&L:</b> ${pnlStr}
 
-            📈 <b>Daily Totals</b>
-            ├ Total Trades: ${this.totalTrades}
-            ├ Total W/L: ${this.totalWins}/${this.totalLosses}
-            ├ Daily P&L: ${(this.totalProfitLoss >= 0 ? '+' : '')}$${this.totalProfitLoss.toFixed(2)}
-            └ Current Capital: $${(this.config.initialStake + this.totalProfitLoss).toFixed(2)}
+📈 <b>Daily Totals</b>
+├ Total Trades: ${this.totalTrades}
+├ Total W/L: ${this.totalWins}/${this.totalLosses}
+├ Daily P&L: ${(this.totalProfitLoss >= 0 ? '+' : '')}$${this.totalProfitLoss.toFixed(2)}
+└ Current Capital: $${(this.config.initialStake + this.totalProfitLoss).toFixed(2)}
 
-            ⏰ ${new Date().toLocaleString()}
+⏰ ${new Date().toLocaleString()}
         `.trim();
 
         try {
@@ -580,7 +580,7 @@ class AIWeightedEnsembleBot {
             this.lastPrediction === history[history.length - 2] &&
             this.lastPrediction === history[history.length - 3] &&
             this.lastPrediction === history[history.length - 4] &&
-            this.lastPrediction === history[history.length - 5] &&
+            // this.lastPrediction === history[history.length - 5] &&
             this.volatilityLevel === 'medium'
         ) {
             this.placeTrade(asset, this.lastPrediction);
@@ -609,7 +609,7 @@ class AIWeightedEnsembleBot {
         console.log(`Placing Trade: [${asset}] Digit ${predictedDigit} | Stake: $${this.currentStake.toFixed(2)}`);
 
         const message = `
-            🔔 <b>Trade Opened (x5 Differ Bot)</b>
+            🔔 <b>Trade Opened (x4 Differ Bot)</b>
 
             📊 <b>${asset}</b>
             🎯 <b>Differ Digit:</b> ${predictedDigit}
@@ -692,7 +692,7 @@ class AIWeightedEnsembleBot {
         const winRate = ((this.totalWins / this.totalTrades) * 100).toFixed(1);
 
         const telegramMsg = `
-            ${resultEmoji} (x5 Differ Bot)
+            ${resultEmoji} (x4 Differ Bot)
             
             📊 <b>${asset}</b>
             ${pnlColor} <b>P&L:</b> ${pnlStr}
@@ -872,7 +872,7 @@ class AIWeightedEnsembleBot {
     }
 
     start() {
-        console.log('🚀 Starting x5 Differ Bot...');
+        console.log('🚀 Starting x4 Differ Bot...');
         console.log(`📊 Session Summary:`);
         console.log(`   Total Trades: ${this.totalTrades}`);
         console.log(`   Wins/Losses: ${this.totalWins}/${this.totalLosses}`);

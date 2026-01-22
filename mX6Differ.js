@@ -7,7 +7,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'mX5Differ-state.json');
+const STATE_FILE = path.join(__dirname, 'mX6Differ-state.json');
 const STATE_SAVE_INTERVAL = 5000; // Save every 5 seconds
 
 class StatePersistence {
@@ -162,7 +162,7 @@ class AIWeightedEnsembleBot {
         this.contractSubscription = null;
 
         // Telegram Configuration
-        this.telegramToken = '8397622765:AAGL93lrQ0LtVPw8MhB3JzFjPOCAJA5CLro';
+        this.telegramToken = '8218636914:AAGvaKFh8MT769-_9eOEiU4XKufL0aHRhZ4';
         this.telegramChatId = '752497117';
         this.telegramEnabled = true;
 
@@ -458,7 +458,7 @@ class AIWeightedEnsembleBot {
         const pnlStr = (stats.pnl >= 0 ? '+' : '') + '$' + stats.pnl.toFixed(2);
 
         const message = `
-            ⏰ <b>x5 Differ Bot Hourly Summary</b>
+            ⏰ <b>x6 Differ Bot Hourly Summary</b>
 
             📊 <b>Last Hour</b>
             ├ Trades: ${stats.trades}
@@ -581,6 +581,7 @@ class AIWeightedEnsembleBot {
             this.lastPrediction === history[history.length - 3] &&
             this.lastPrediction === history[history.length - 4] &&
             this.lastPrediction === history[history.length - 5] &&
+            this.lastPrediction === history[history.length - 6] &&
             this.volatilityLevel === 'medium'
         ) {
             this.placeTrade(asset, this.lastPrediction);
@@ -609,7 +610,7 @@ class AIWeightedEnsembleBot {
         console.log(`Placing Trade: [${asset}] Digit ${predictedDigit} | Stake: $${this.currentStake.toFixed(2)}`);
 
         const message = `
-            🔔 <b>Trade Opened (x5 Differ Bot)</b>
+            🔔 <b>Trade Opened (x6 Differ Bot)</b>
 
             📊 <b>${asset}</b>
             🎯 <b>Differ Digit:</b> ${predictedDigit}
@@ -692,7 +693,7 @@ class AIWeightedEnsembleBot {
         const winRate = ((this.totalWins / this.totalTrades) * 100).toFixed(1);
 
         const telegramMsg = `
-            ${resultEmoji} (x5 Differ Bot)
+            ${resultEmoji} (x6 Differ Bot)
             
             📊 <b>${asset}</b>
             ${pnlColor} <b>P&L:</b> ${pnlStr}
@@ -872,7 +873,7 @@ class AIWeightedEnsembleBot {
     }
 
     start() {
-        console.log('🚀 Starting x5 Differ Bot...');
+        console.log('🚀 Starting x6 Differ Bot...');
         console.log(`📊 Session Summary:`);
         console.log(`   Total Trades: ${this.totalTrades}`);
         console.log(`   Wins/Losses: ${this.totalWins}/${this.totalLosses}`);
