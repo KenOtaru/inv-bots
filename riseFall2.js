@@ -6,7 +6,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'risefall-state.json');
+const STATE_FILE = path.join(__dirname, 'risefall2-state.json');
 const STATE_SAVE_INTERVAL = 5000; // Save every 5 seconds
 
 class StatePersistence {
@@ -88,9 +88,8 @@ class StatePersistence {
             state.martingaleLevel = savedData.martingaleLevel || 0;
 
             LOGGER.info(`✅ State restored successfully!`);
-            LOGGER.info(`   💰 Capital: $${state.capital.toFixed(2)}`);
-            LOGGER.info(`   📊 Session P/L: $${state.session.netPL.toFixed(2)}`);
             LOGGER.info(`   🎯 Trades: ${state.session.tradesCount} (W:${state.session.winsCount} L:${state.session.lossesCount})`);
+            LOGGER.info(`   � Loss Stats: x2:${state.session.x2Losses} x3:${state.session.x3Losses} x4:${state.session.x4Losses} x5:${state.session.x5Losses} x6:${state.session.x6Losses} x7:${state.session.x7Losses}`);
             LOGGER.info(`   🚀 Active Positions: ${state.portfolio.activePositions.length}`);
             LOGGER.info(`   🔄 Last Direction: ${state.lastTradeDirection || 'None'}`);
             LOGGER.info(`   📈 Martingale Level: ${state.martingaleLevel}`);
@@ -177,6 +176,7 @@ class TelegramService {
             Stake: $${stake.toFixed(2)}
             Duration: ${duration} ${durationUnit}
             Martingale Level: ${state.martingaleLevel}
+            Consecutive Losses: x2:${state.session.x2Losses} x3:${state.session.x3Losses} x4:${state.session.x4Losses} x5:${state.session.x5Losses} x6:${state.session.x6Losses} x7:${state.session.x7Losses}
             ${details.profit !== undefined ? `Profit: $${details.profit.toFixed(2)}` : ''}
             Time: ${new Date().toUTCString()}
         `.trim();
@@ -192,6 +192,7 @@ class TelegramService {
             Wins: ${stats.wins} | Losses: ${stats.losses}
             Win Rate: ${stats.winRate}
             Martingale Level: ${state.martingaleLevel}
+            Loss Stats: x2:${stats.x2Losses} | x3:${stats.x3Losses} | x4:${stats.x4Losses} | x5:${stats.x5Losses} | x6:${stats.x6Losses} | x7:${stats.x7Losses}
             Net P/L: $${stats.netPL.toFixed(2)}
             Current Capital: $${state.capital.toFixed(2)}
             Time: ${new Date().toUTCString()}
@@ -246,7 +247,7 @@ const CONFIG = {
     SESSION_STOP_LOSS: -60,
 
     // Trade Duration Settings
-    DURATION: 1,
+    DURATION: 15,
     DURATION_UNIT: 'm', // t=ticks, s=seconds, m=minutes
 
     // Trade Settings
@@ -280,6 +281,12 @@ const state = {
         tradesCount: 0,
         winsCount: 0,
         lossesCount: 0,
+        x2Losses: 0,
+        x3Losses: 0,
+        x4Losses: 0,
+        x5Losses: 0,
+        x6Losses: 0,
+        x7Losses: 0,
         isActive: true,
         startTime: Date.now(),
         startCapital: CONFIG.INITIAL_CAPITAL
@@ -347,6 +354,12 @@ class SessionManager {
             winRate: state.session.tradesCount > 0
                 ? ((state.session.winsCount / state.session.tradesCount) * 100).toFixed(1) + '%'
                 : '0%',
+            x2Losses: state.session.x2Losses,
+            x3Losses: state.session.x3Losses,
+            x4Losses: state.session.x4Losses,
+            x5Losses: state.session.x5Losses,
+            x6Losses: state.session.x6Losses,
+            x7Losses: state.session.x7Losses,
             netPL: state.session.netPL
         };
     }
@@ -371,6 +384,15 @@ class SessionManager {
             state.portfolio.dailyLosses++;
 
             state.martingaleLevel++;
+
+            // Track consecutive loss levels
+            if (state.martingaleLevel === 2) state.session.x2Losses++;
+            if (state.martingaleLevel === 3) state.session.x3Losses++;
+            if (state.martingaleLevel === 4) state.session.x4Losses++;
+            if (state.martingaleLevel === 5) state.session.x5Losses++;
+            if (state.martingaleLevel === 6) state.session.x6Losses++;
+            if (state.martingaleLevel === 7) state.session.x7Losses++;
+
             if (state.martingaleLevel >= CONFIG.MAX_MARTINGALE_STEPS) {
                 LOGGER.warn(`⚠️ Maximum Martingale step reached (${CONFIG.MAX_MARTINGALE_STEPS}), resetting level to 0`);
                 state.martingaleLevel = 0;
@@ -649,7 +671,7 @@ class DerivBot {
         setTimeout(() => {
             state.canTrade = true;
             this.executeNextTrade();
-        }, 3000);
+        }, 1000);
 
         LOGGER.info('✅ Bot started successfully!');
     }
@@ -815,6 +837,8 @@ bot.connection.connect();
 setInterval(() => {
     if (state.isAuthorized) {
         const status = bot.getStatus();
+        const s = state.session;
         console.log(`\n📊 ${getGMTTime()} | ${status.session.trades} trades | ${status.session.winRate} | $${status.session.netPL.toFixed(2)} | ${status.activePositions.length} active`);
+        console.log(`📉 Loss Stats: x2:${s.x2Losses} x3:${s.x3Losses} x4:${s.x4Losses} x5:${s.x5Losses} x6:${s.x6Losses} x7:${s.x7Losses} | Level: ${state.martingaleLevel}`);
     }
 }, 30000);
