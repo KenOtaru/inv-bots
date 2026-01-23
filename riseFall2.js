@@ -33,7 +33,8 @@ class StatePersistence {
                         currentProfit: pos.currentProfit
                     }))
                 },
-                lastTradeDirection: state.lastTradeDirection
+                lastTradeDirection: state.lastTradeDirection,
+                martingaleLevel: state.martingaleLevel
             };
 
             fs.writeFileSync(STATE_FILE, JSON.stringify(persistableState, null, 2));
@@ -84,6 +85,7 @@ class StatePersistence {
 
             // Restore last trade direction
             state.lastTradeDirection = savedData.lastTradeDirection || null;
+            state.martingaleLevel = savedData.martingaleLevel || 0;
 
             LOGGER.info(`✅ State restored successfully!`);
             LOGGER.info(`   💰 Capital: $${state.capital.toFixed(2)}`);
@@ -91,6 +93,7 @@ class StatePersistence {
             LOGGER.info(`   🎯 Trades: ${state.session.tradesCount} (W:${state.session.winsCount} L:${state.session.lossesCount})`);
             LOGGER.info(`   🚀 Active Positions: ${state.portfolio.activePositions.length}`);
             LOGGER.info(`   🔄 Last Direction: ${state.lastTradeDirection || 'None'}`);
+            LOGGER.info(`   📈 Martingale Level: ${state.martingaleLevel}`);
 
             return true;
         } catch (error) {
@@ -168,13 +171,14 @@ class TelegramService {
     static async sendTradeAlert(type, symbol, direction, stake, duration, durationUnit, details = {}) {
         const emoji = type === 'OPEN' ? '🚀' : (type === 'WIN' ? '✅' : '❌');
         const message = `
-${emoji} <b>${type} TRADE ALERT</b>
-Asset: ${symbol}
-Direction: ${direction}
-Stake: $${stake.toFixed(2)}
-Duration: ${duration} ${durationUnit}
-${details.profit !== undefined ? `Profit: $${details.profit.toFixed(2)}` : ''}
-Time: ${new Date().toUTCString()}
+            ${emoji} <b>${type} TRADE ALERT</b>
+            Asset: ${symbol}
+            Direction: ${direction}
+            Stake: $${stake.toFixed(2)}
+            Duration: ${duration} ${durationUnit}
+            Martingale Level: ${state.martingaleLevel}
+            ${details.profit !== undefined ? `Profit: $${details.profit.toFixed(2)}` : ''}
+            Time: ${new Date().toUTCString()}
         `.trim();
         await this.sendMessage(message);
     }
@@ -187,6 +191,7 @@ Time: ${new Date().toUTCString()}
             Trades: ${stats.trades}
             Wins: ${stats.wins} | Losses: ${stats.losses}
             Win Rate: ${stats.winRate}
+            Martingale Level: ${state.martingaleLevel}
             Net P/L: $${stats.netPL.toFixed(2)}
             Current Capital: $${state.capital.toFixed(2)}
             Time: ${new Date().toUTCString()}
@@ -247,6 +252,8 @@ const CONFIG = {
     // Trade Settings
     MAX_OPEN_POSITIONS: 1, // One at a time for alternating strategy
     TRADE_DELAY: 1000, // 2 seconds delay between trades
+    MARTINGALE_MULTIPLIER: 2,
+    MAX_MARTINGALE_STEPS: 7,
 
     // Debug
     DEBUG_MODE: true,
@@ -287,6 +294,7 @@ const state = {
         activePositions: []
     },
     lastTradeDirection: null, // 'CALL' or 'PUT'
+    martingaleLevel: 0,
     requestId: 1,
     canTrade: false
 };
@@ -353,14 +361,22 @@ class SessionManager {
             state.session.netPL += profit;
             state.portfolio.dailyProfit += profit;
             state.portfolio.dailyWins++;
-            LOGGER.trade(`✅ WIN: +$${profit.toFixed(2)} | Direction: ${direction}`);
+            state.martingaleLevel = 0; // Reset on win
+            LOGGER.trade(`✅ WIN: +$${profit.toFixed(2)} | Direction: ${direction} | Martingale Reset`);
         } else {
             state.session.lossesCount++;
             state.session.loss += Math.abs(profit);
             state.session.netPL += profit;
             state.portfolio.dailyLoss += Math.abs(profit);
             state.portfolio.dailyLosses++;
-            LOGGER.trade(`❌ LOSS: -$${Math.abs(profit).toFixed(2)} | Direction: ${direction}`);
+
+            state.martingaleLevel++;
+            if (state.martingaleLevel >= CONFIG.MAX_MARTINGALE_STEPS) {
+                LOGGER.warn(`⚠️ Maximum Martingale step reached (${CONFIG.MAX_MARTINGALE_STEPS}), resetting level to 0`);
+                state.martingaleLevel = 0;
+            } else {
+                LOGGER.trade(`❌ LOSS: -$${Math.abs(profit).toFixed(2)} | Direction: ${direction} | Next Martingale Level: ${state.martingaleLevel}`);
+            }
         }
     }
 }
@@ -642,8 +658,16 @@ class DerivBot {
         if (!state.canTrade) return;
         if (!SessionManager.isSessionActive()) return;
         if (state.portfolio.activePositions.length >= CONFIG.MAX_OPEN_POSITIONS) return;
-        if (state.capital < CONFIG.STAKE) {
-            LOGGER.error(`Insufficient capital: $${state.capital.toFixed(2)}`);
+
+        const stake = CONFIG.STAKE * Math.pow(CONFIG.MARTINGALE_MULTIPLIER, state.martingaleLevel);
+        const symbol = ACTIVE_ASSETS[0];
+
+        if (state.capital < stake) {
+            LOGGER.error(`Insufficient capital for stake: $${state.capital.toFixed(2)} (Needed: $${stake.toFixed(2)})`);
+            if (state.martingaleLevel > 0) {
+                LOGGER.info('Resetting Martingale level due to insufficient capital.');
+                state.martingaleLevel = 0;
+            }
             return;
         }
 
@@ -657,9 +681,6 @@ class DerivBot {
         } else {
             direction = 'CALL';
         }
-
-        const symbol = ACTIVE_ASSETS[0]; // Use first symbol
-        const stake = CONFIG.STAKE;
 
         state.canTrade = false; // Prevent multiple trades
         state.lastTradeDirection = direction;
