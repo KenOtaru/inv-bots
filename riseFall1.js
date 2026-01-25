@@ -323,11 +323,11 @@ const CONFIG = {
     STAKE: 0.35,
 
     // Session Targets
-    SESSION_PROFIT_TARGET: 10000,
-    SESSION_STOP_LOSS: -85,
+    SESSION_PROFIT_TARGET: 5,
+    SESSION_STOP_LOSS: -90,
 
     // Trade Duration Settings
-    DURATION: 7,
+    DURATION: 2,
     DURATION_UNIT: 't', // t=ticks, s=seconds, m=minutes
 
     // Trade Settings
@@ -335,6 +335,9 @@ const CONFIG = {
     TRADE_DELAY: 1000, // 2 seconds delay between trades
     MARTINGALE_MULTIPLIER: 2,
     MAX_MARTINGALE_STEPS: 8,
+    System: 3, // 1 = Continue same direction on Win, 2 = Switch direction on Win, 
+    // 3 = Switch direction every trade, 4 = Same direction every trade
+    iDirection: 'RISE', //Set initial direction 'RISE' or 'FALL'
 
     // Debug
     DEBUG_MODE: true,
@@ -346,7 +349,10 @@ const CONFIG = {
 };
 
 
-let ACTIVE_ASSETS = ['R_100'];
+let ACTIVE_ASSETS = [
+    // 'R_75', 'R_100', '1HZ25V', '1HZ50V', '1HZ100V' 'stpRNG',
+    'stpRNG'
+];
 
 // ============================================
 // STATE MANAGEMENT
@@ -802,16 +808,28 @@ class DerivBot {
 
         // NEW LOGIC: Determine next direction based on last trade result
         let direction;
-        if (state.lastTradeDirection === null || state.lastTradeWasWin === null) {
+        if (state.lastTradeDirection === null || state.lastTradeWasWin === null || CONFIG.System === 4) {
             // First trade - start with CALL (Rise)
-            direction = 'CALL';
+            CONFIG.iDirection === 'CALL' ? direction = 'CALL' : direction = 'PUT';
         } else {
             // If last trade was a win, continue with same direction
             // If last trade was a loss, switch direction
             if (state.lastTradeWasWin) {
-                direction = state.lastTradeDirection; // Continue same direction
+                if (CONFIG.System === 1) {
+                    direction = state.lastTradeDirection; // Continue same direction
+                } else if (CONFIG.System === 2) {
+                    direction = state.lastTradeDirection === 'CALL' ? 'PUT' : 'CALL'; // Switch direction
+                } else if (CONFIG.System === 3) {
+                    direction = state.lastTradeDirection === 'CALL' ? 'PUT' : 'CALL'; // Switch direction
+                }
             } else {
-                direction = state.lastTradeDirection === 'CALL' ? 'PUT' : 'CALL'; // Switch direction
+                if (CONFIG.System === 1) {
+                    direction = state.lastTradeDirection === 'CALL' ? 'PUT' : 'CALL'; // Switch direction
+                } else if (CONFIG.System === 2) {
+                    direction = direction = state.lastTradeDirection; // Continue same direction
+                } else if (CONFIG.System === 3) {
+                    direction = state.lastTradeDirection === 'CALL' ? 'PUT' : 'CALL'; // Switch direction
+                }
             }
         }
 
