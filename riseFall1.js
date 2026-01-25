@@ -6,7 +6,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'risefall2-state6.json');
+const STATE_FILE = path.join(__dirname, 'risefall01-state.json');
 const STATE_SAVE_INTERVAL = 5000; // Save every 5 seconds
 
 class StatePersistence {
@@ -34,6 +34,7 @@ class StatePersistence {
                     }))
                 },
                 lastTradeDirection: state.lastTradeDirection,
+                lastTradeWasWin: state.lastTradeWasWin, // NEW
                 martingaleLevel: state.martingaleLevel,
                 hourlyStats: { ...state.hourlyStats }
             };
@@ -319,28 +320,28 @@ const CONFIG = {
 
     // Capital Settings
     INITIAL_CAPITAL: 100,
-    STAKE: 1,
+    STAKE: 0.35,
 
     // Session Targets
     SESSION_PROFIT_TARGET: 10000,
     SESSION_STOP_LOSS: -85,
 
     // Trade Duration Settings
-    DURATION: 120,
-    DURATION_UNIT: 'm', // t=ticks, s=seconds, m=minutes
+    DURATION: 7,
+    DURATION_UNIT: 't', // t=ticks, s=seconds, m=minutes
 
     // Trade Settings
     MAX_OPEN_POSITIONS: 1, // One at a time for alternating strategy
     TRADE_DELAY: 1000, // 2 seconds delay between trades
     MARTINGALE_MULTIPLIER: 2,
-    MAX_MARTINGALE_STEPS: 6,
+    MAX_MARTINGALE_STEPS: 8,
 
     // Debug
     DEBUG_MODE: true,
 
     // Telegram Settings
     TELEGRAM_ENABLED: true,
-    TELEGRAM_BOT_TOKEN: '8588380880:AAH8tOl8dxvjJ4qfWf3yr-i7FS_qlew-8t0',
+    TELEGRAM_BOT_TOKEN: '8335656318:AAEVL50j7n8ZdQHcC-3ov6OYOTOh5ZyEgE0',
     TELEGRAM_CHAT_ID: '752497117',
 };
 
@@ -380,6 +381,7 @@ const state = {
         activePositions: []
     },
     lastTradeDirection: null, // 'CALL' or 'PUT'
+    lastTradeWasWin: null, // NEW: track if last trade won
     martingaleLevel: 0,
     hourlyStats: {
         trades: 0,
@@ -449,7 +451,7 @@ class SessionManager {
     }
 
     static recordTradeResult(profit, direction) {
-        // FIX #6: Check if hour has changed (in case timer missed)
+        // Check if hour has changed
         const currentHour = new Date().getHours();
         if (currentHour !== state.hourlyStats.lastHour) {
             LOGGER.warn(`⏰ Hour changed detected (${state.hourlyStats.lastHour} → ${currentHour}), resetting hourly stats`);
@@ -477,6 +479,7 @@ class SessionManager {
             state.portfolio.dailyWins++;
             state.martingaleLevel = 0;
             state.hourlyStats.wins++;
+            state.lastTradeWasWin = true; // NEW
 
             LOGGER.trade(`✅ WIN: +$${profit.toFixed(2)} | Direction: ${direction} | Martingale Reset`);
         } else {
@@ -487,6 +490,7 @@ class SessionManager {
             state.portfolio.dailyLosses++;
             state.hourlyStats.losses++;
             state.martingaleLevel++;
+            state.lastTradeWasWin = false; // NEW
 
             if (state.martingaleLevel === 2) state.session.x2Losses++;
             if (state.martingaleLevel === 3) state.session.x3Losses++;
@@ -796,22 +800,32 @@ class DerivBot {
             return;
         }
 
-        // Determine next direction (alternate)
+        // NEW LOGIC: Determine next direction based on last trade result
         let direction;
-        if (state.lastTradeDirection === null) {
+        if (state.lastTradeDirection === null || state.lastTradeWasWin === null) {
             // First trade - start with CALL (Rise)
             direction = 'CALL';
-        } else if (state.lastTradeDirection === 'CALL') {
-            direction = 'PUT';
         } else {
-            direction = 'CALL';
+            // If last trade was a win, continue with same direction
+            // If last trade was a loss, switch direction
+            if (state.lastTradeWasWin) {
+                direction = state.lastTradeDirection; // Continue same direction
+            } else {
+                direction = state.lastTradeDirection === 'CALL' ? 'PUT' : 'CALL'; // Switch direction
+            }
         }
 
         state.canTrade = false; // Prevent multiple trades
         state.lastTradeDirection = direction;
 
-        LOGGER.trade(`🎯 Executing ${direction === 'CALL' ? 'RISE' : 'FALL'} trade on ${symbol}`);
-        LOGGER.trade(` Stake: $${stake.toFixed(2)} | Duration: ${CONFIG.DURATION} ${CONFIG.DURATION_UNIT}`);
+        const strategyNote = state.lastTradeWasWin === null
+            ? 'First trade'
+            : state.lastTradeWasWin
+                ? 'Continue (Last was Win)'
+                : 'Switch (Last was Loss)';
+
+        LOGGER.trade(`🎯 Executing ${direction === 'CALL' ? 'RISE' : 'FALL'} trade on ${symbol} [${strategyNote}]`);
+        LOGGER.trade(`   Stake: $${stake.toFixed(2)} | Duration: ${CONFIG.DURATION} ${CONFIG.DURATION_UNIT}`);
 
         const position = {
             symbol,
@@ -860,6 +874,12 @@ class DerivBot {
     getStatus() {
         const sessionStats = SessionManager.getSessionStats();
 
+        const nextDirection = state.lastTradeWasWin === null
+            ? 'CALL (First trade)'
+            : state.lastTradeWasWin
+                ? state.lastTradeDirection // Same if won
+                : (state.lastTradeDirection === 'CALL' ? 'PUT' : 'CALL'); // Switch if lost
+
         return {
             connected: state.isConnected,
             authorized: state.isAuthorized,
@@ -867,7 +887,8 @@ class DerivBot {
             accountBalance: state.accountBalance,
             session: sessionStats,
             lastDirection: state.lastTradeDirection,
-            nextDirection: state.lastTradeDirection === 'CALL' ? 'PUT' : 'CALL',
+            lastWasWin: state.lastTradeWasWin,
+            nextDirection: nextDirection,
             activePositionsCount: state.portfolio.activePositions.length,
             activePositions: state.portfolio.activePositions.map(pos => ({
                 symbol: pos.symbol,
