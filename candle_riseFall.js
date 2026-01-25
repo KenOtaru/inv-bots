@@ -382,7 +382,7 @@ const CONFIG = {
 
     // Telegram Settings
     TELEGRAM_ENABLED: true,
-    TELEGRAM_BOT_TOKEN: '8335656318:AAEVL50j7n8ZdQHcC-3ov6OYOTOh5ZyEgE0',
+    TELEGRAM_BOT_TOKEN: '8356265372:AAELmgFj-xJP3EJNPR5G_D2R2fke-T9wxBA',
     TELEGRAM_CHAT_ID: '752497117',
 };
 
@@ -810,10 +810,10 @@ class ConnectionManager {
                 LOGGER.info(`${symbol} ${candleEmoji} CANDLE CLOSED [${closeTime}] ${candleType}: O:${closedCandle.open.toFixed(5)} H:${closedCandle.high.toFixed(5)} L:${closedCandle.low.toFixed(5)} C:${closedCandle.close.toFixed(5)}`);
 
                 // TRIGGER TRADE AFTER CANDLE CLOSE
-                setTimeout(() => {
-                    state.canTrade = true;
-                    bot.executeNextTrade(symbol, closedCandle);
-                }, 500); // Small delay to ensure candle is fully processed
+                // setTimeout(() => {
+                state.canTrade = true;
+                bot.executeNextTrade(symbol, closedCandle);
+                // }, 500); // Small delay to ensure candle is fully processed
             }
         }
 
@@ -949,7 +949,7 @@ class DerivBot {
         console.log('═'.repeat(80) + '\n');
 
         // Initialize assets
-        initializeAssets();
+        this.connection.initializeAssets();
 
         // Subscribe to candles for each asset
         ACTIVE_ASSETS.forEach(symbol => {
@@ -1018,16 +1018,18 @@ class DerivBot {
             } else if (CandleAnalyzer.isBearish(lastClosedCandle)) {
                 direction = 'PUT'; // Sell if previous candle was bearish
                 LOGGER.trade(`📉 Last candle was BEARISH (Close < Open) → Executing FALL trade`);
-            } else {
-                // Doji candle - use fallback logic
-                LOGGER.warn(`⚪ Last candle was DOJI (Close = Open) → Using fallback direction`);
-                direction = state.lastTradeDirection === 'CALL' ? 'PUT' : 'CALL';
             }
-        } else {
-            // No candle data - use initial direction
-            direction = CONFIG.iDirection === 'RISE' ? 'CALL' : 'PUT';
-            LOGGER.info(`🎯 No candle data available, using initial direction: ${direction}`);
+            // else {
+            //     // Doji candle - use fallback logic
+            //     LOGGER.warn(`⚪ Last candle was DOJI (Close = Open) → Using fallback direction`);
+            //     direction = state.lastTradeDirection === 'CALL' ? 'PUT' : 'CALL';
+            // }
         }
+        // else {
+        //     // No candle data - use initial direction
+        //     direction = CONFIG.iDirection === 'RISE' ? 'CALL' : 'PUT';
+        //     LOGGER.info(`🎯 No candle data available, using initial direction: ${direction}`);
+        // }
 
         state.canTrade = false; // Prevent multiple trades
         state.lastTradeDirection = direction;
@@ -1162,7 +1164,7 @@ console.log(' DERIV RISE/FALL ALTERNATING BOT');
 console.log(` Duration: ${CONFIG.DURATION} ${CONFIG.DURATION_UNIT} | Stake: $${CONFIG.STAKE}`);
 console.log('═'.repeat(80));
 console.log('\n🚀 Initializing...\n');
-F
+
 bot.connection.connect();
 
 // Status display every 30 seconds
