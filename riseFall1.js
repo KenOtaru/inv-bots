@@ -323,8 +323,8 @@ const CONFIG = {
     STAKE: 0.35,
 
     // Session Targets
-    SESSION_PROFIT_TARGET: 5,
-    SESSION_STOP_LOSS: -90,
+    SESSION_PROFIT_TARGET: 500,
+    SESSION_STOP_LOSS: -500,
 
     // Trade Duration Settings
     DURATION: 2,
@@ -333,9 +333,14 @@ const CONFIG = {
     // Trade Settings
     MAX_OPEN_POSITIONS: 1, // One at a time for alternating strategy
     TRADE_DELAY: 1000, // 2 seconds delay between trades
-    MARTINGALE_MULTIPLIER: 2,
-    MAX_MARTINGALE_STEPS: 8,
-    System: 3, // 1 = Continue same direction on Win, 2 = Switch direction on Win, 
+    MARTINGALE_MULTIPLIER: 1.2,
+    MARTINGALE_MULTIPLIER2: 1.4,
+    MARTINGALE_MULTIPLIER3: 1.6,
+    MARTINGALE_MULTIPLIER4: 1.8,
+    MARTINGALE_MULTIPLIER5: 2,
+    MAX_MARTINGALE_STEPS: 25,
+    System: 2, // 1 = Continue same direction on Win and Switch direction on Loss, 
+    // 2 = Switch direction on Win and Continue same direction on Loss, 
     // 3 = Switch direction every trade, 4 = Same direction every trade
     iDirection: 'RISE', //Set initial direction 'RISE' or 'FALL'
 
@@ -360,6 +365,7 @@ let ACTIVE_ASSETS = [
 const state = {
     capital: CONFIG.INITIAL_CAPITAL,
     accountBalance: 0,
+    currentStake: CONFIG.STAKE,
     session: {
         profit: 0,
         loss: 0,
@@ -486,6 +492,7 @@ class SessionManager {
             state.martingaleLevel = 0;
             state.hourlyStats.wins++;
             state.lastTradeWasWin = true; // NEW
+            state.currentStake = CONFIG.STAKE;
 
             LOGGER.trade(`✅ WIN: +$${profit.toFixed(2)} | Direction: ${direction} | Martingale Reset`);
         } else {
@@ -504,6 +511,25 @@ class SessionManager {
             if (state.martingaleLevel === 5) state.session.x5Losses++;
             if (state.martingaleLevel === 6) state.session.x6Losses++;
             if (state.martingaleLevel === 7) state.session.x7Losses++;
+
+
+            // Martingale Multiplier
+            if (state.martingaleLevel <= 5) {
+                state.currentStake = Math.ceil(state.currentStake * CONFIG.MARTINGALE_MULTIPLIER * 100) / 100;
+            };
+            if (state.martingaleLevel >= 6 && state.martingaleLevel <= 10) {
+                state.currentStake = Math.ceil(state.currentStake * CONFIG.MARTINGALE_MULTIPLIER2 * 100) / 100;
+            };
+            if (state.martingaleLevel >= 11 && state.martingaleLevel <= 15) {
+                state.currentStake = Math.ceil(state.currentStake * CONFIG.MARTINGALE_MULTIPLIER3 * 100) / 100;
+            };
+            if (state.martingaleLevel >= 16 && state.martingaleLevel <= 20) {
+                state.currentStake = Math.ceil(state.currentStake * CONFIG.MARTINGALE_MULTIPLIER4 * 100) / 100;
+            };
+            if (state.martingaleLevel >= 21 && state.martingaleLevel <= 25) {
+                state.currentStake = Math.ceil(state.currentStake * CONFIG.MARTINGALE_MULTIPLIER5 * 100) / 100;
+            };
+
 
             if (state.martingaleLevel >= CONFIG.MAX_MARTINGALE_STEPS) {
                 LOGGER.warn(`⚠️ Maximum Martingale step reached (${CONFIG.MAX_MARTINGALE_STEPS}), resetting level to 0`);
@@ -794,7 +820,7 @@ class DerivBot {
         if (!SessionManager.isSessionActive()) return;
         if (state.portfolio.activePositions.length >= CONFIG.MAX_OPEN_POSITIONS) return;
 
-        const stake = CONFIG.STAKE * Math.pow(CONFIG.MARTINGALE_MULTIPLIER, state.martingaleLevel);
+        const stake = state.currentStake;
         const symbol = ACTIVE_ASSETS[0];
 
         if (state.capital < stake) {
@@ -863,12 +889,12 @@ class DerivBot {
         const tradeRequest = {
             buy: 1,
             subscribe: 1,
-            price: stake,
+            price: stake.toFixed(2),
             parameters: {
                 contract_type: direction,
                 symbol: symbol,
                 currency: 'USD',
-                amount: stake,
+                amount: stake.toFixed(2),
                 duration: CONFIG.DURATION,
                 duration_unit: CONFIG.DURATION_UNIT,
                 basis: 'stake'
