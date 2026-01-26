@@ -6,7 +6,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'candleRF001-state.json');
+const STATE_FILE = path.join(__dirname, 'candleRF1001-state.json');
 const STATE_SAVE_INTERVAL = 5000; // Save every 5 seconds
 
 class StatePersistence {
@@ -420,7 +420,7 @@ const CONFIG = {
 
     // Telegram Settings
     TELEGRAM_ENABLED: true,
-    TELEGRAM_BOT_TOKEN: '8356265372:AAELmgFj-xJP3EJNPR5G_D2R2fke-T9wxBA',
+    TELEGRAM_BOT_TOKEN: '7683695132:AAGA9_4uDcyZWEOAwv1_zj7Nnz5Oy0gVw04',
     TELEGRAM_CHAT_ID: '752497117',
 };
 
@@ -1119,23 +1119,13 @@ class DerivBot {
         if (lastClosedCandle) {
             // Trade based on candle pattern
             if (CandleAnalyzer.isBullish(lastClosedCandle)) {
-                direction = 'CALL'; // Buy if previous candle was bullish
-                LOGGER.trade(`📈 Last candle was BULLISH (Close > Open) → Executing RISE trade`);
+                direction = 'PUT'; // Buy if previous candle was bullish
+                LOGGER.trade(`📈 Last candle was BULLISH (Close > Open) → Executing FALL trade`);
             } else if (CandleAnalyzer.isBearish(lastClosedCandle)) {
-                direction = 'PUT'; // Sell if previous candle was bearish
-                LOGGER.trade(`📉 Last candle was BEARISH (Close < Open) → Executing FALL trade`);
+                direction = 'CALL'; // Sell if previous candle was bearish
+                LOGGER.trade(`📉 Last candle was BEARISH (Close < Open) → Executing RISE trade`);
             }
-            // else {
-            //     // Doji candle - use fallback logic
-            //     LOGGER.warn(`⚪ Last candle was DOJI (Close = Open) → Using fallback direction`);
-            //     direction = state.lastTradeDirection === 'CALL' ? 'PUT' : 'CALL';
-            // }
         }
-        // else {
-        //     // No candle data - use initial direction
-        //     direction = CONFIG.iDirection === 'RISE' ? 'CALL' : 'PUT';
-        //     LOGGER.info(`🎯 No candle data available, using initial direction: ${direction}`);
-        // }
 
         state.canTrade = false; // Prevent multiple trades
         state.lastTradeDirection = direction;

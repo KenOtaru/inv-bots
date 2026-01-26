@@ -1,0 +1,219 @@
+{
+  "savedAt": 1769458553503,
+  "capital": 64644.25000000001,
+  "session": {
+    "profit": 0.97,
+    "loss": 0.7,
+    "netPL": 0.27000000000000013,
+    "tradesCount": 4,
+    "winsCount": 2,
+    "lossesCount": 2,
+    "x2Losses": 0,
+    "x3Losses": 0,
+    "x4Losses": 0,
+    "x5Losses": 0,
+    "x6Losses": 0,
+    "x7Losses": 0,
+    "isActive": true,
+    "startTime": 1769457601562,
+    "startCapital": 500
+  },
+  "portfolio": {
+    "dailyProfit": 0.97,
+    "dailyLoss": 0.7,
+    "dailyWins": 2,
+    "dailyLosses": 2,
+    "activePositions": [
+      {
+        "symbol": "stpRNG",
+        "direction": "PUT",
+        "stake": 0.7,
+        "duration": 116,
+        "durationUnit": "s",
+        "entryTime": 1769458144211,
+        "contractId": 305003314828,
+        "reqId": 36,
+        "buyPrice": 0.7,
+        "currentProfit": -0.54
+      }
+    ]
+  },
+  "lastTradeDirection": "PUT",
+  "lastTradeWasWin": false,
+  "martingaleLevel": 1,
+  "hourlyStats": {
+    "trades": 4,
+    "wins": 2,
+    "losses": 2,
+    "pnl": 0.27000000000000013,
+    "lastHour": 21
+  },
+  "assets": {
+    "stpRNG": {
+      "closedCandles": [
+        {
+          "open": 7888.5,
+          "high": 7888.6,
+          "low": 7887.5,
+          "close": 7887.8,
+          "epoch": 1769457060,
+          "open_time": 1769457000
+        },
+        {
+          "open": 7887.7,
+          "high": 7887.9,
+          "low": 7886.6,
+          "close": 7886.8,
+          "epoch": 1769457120,
+          "open_time": 1769457060
+        },
+        {
+          "open": 7886.9,
+          "high": 7887.8,
+          "low": 7886.9,
+          "close": 7887.2,
+          "epoch": 1769457180,
+          "open_time": 1769457120
+        },
+        {
+          "open": 7887.3,
+          "high": 7888.2,
+          "low": 7886.9,
+          "close": 7888.2,
+          "epoch": 1769457240,
+          "open_time": 1769457180
+        },
+        {
+          "open": 7888.1,
+          "high": 7889.3,
+          "low": 7888.1,
+          "close": 7889,
+          "epoch": 1769457300,
+          "open_time": 1769457240
+        },
+        {
+          "open": 7888.9,
+          "high": 7890.4,
+          "low": 7888.5,
+          "close": 7890.4,
+          "epoch": 1769457360,
+          "open_time": 1769457300
+        },
+        {
+          "open": 7890.3,
+          "high": 7890.4,
+          "low": 7888.6,
+          "close": 7888.8,
+          "epoch": 1769457420,
+          "open_time": 1769457360
+        },
+        {
+          "open": 7888.9,
+          "high": 7889.8,
+          "low": 7888.8,
+          "close": 7889.2,
+          "epoch": 1769457480,
+          "open_time": 1769457420
+        },
+        {
+          "open": 7889.1,
+          "high": 7889.2,
+          "low": 7888.5,
+          "close": 7888.6,
+          "epoch": 1769457540,
+          "open_time": 1769457480
+        },
+        {
+          "open": 7888.5,
+          "high": 7889.7,
+          "low": 7888.3,
+          "close": 7889.4,
+          "epoch": 1769457600,
+          "open_time": 1769457540
+        },
+        {
+          "open": 7889.5,
+          "high": 7890.1,
+          "low": 7889,
+          "close": 7889.2,
+          "epoch": 1769457660,
+          "open_time": 1769457600
+        },
+        {
+          "open": 7889.3,
+          "high": 7890,
+          "low": 7889,
+          "close": 7890,
+          "epoch": 1769457720,
+          "open_time": 1769457660
+        },
+        {
+          "open": 7890.1,
+          "high": 7890.7,
+          "low": 7889.4,
+          "close": 7890.4,
+          "epoch": 1769457780,
+          "open_time": 1769457720
+        },
+        {
+          "open": 7890.3,
+          "high": 7890.4,
+          "low": 7889.7,
+          "close": 7890,
+          "epoch": 1769457840,
+          "open_time": 1769457780
+        },
+        {
+          "open": 7890.3,
+          "high": 7890.5,
+          "low": 7889.7,
+          "close": 7890,
+          "epoch": 1769457900,
+          "open_time": 1769457840
+        },
+        {
+          "open": 7890.1,
+          "high": 7890.4,
+          "low": 7889.5,
+          "close": 7890,
+          "epoch": 1769457960,
+          "open_time": 1769457900
+        },
+        {
+          "open": 7889.9,
+          "high": 7890.3,
+          "low": 7889.2,
+          "close": 7889.6,
+          "epoch": 1769458020,
+          "open_time": 1769457960
+        },
+        {
+          "open": 7889.7,
+          "high": 7890.9,
+          "low": 7889.6,
+          "close": 7890.8,
+          "epoch": 1769458080,
+          "open_time": 1769458020
+        },
+        {
+          "open": 7890.7,
+          "high": 7890.7,
+          "low": 7889.7,
+          "close": 7890,
+          "epoch": 1769458140,
+          "open_time": 1769458080
+        },
+        {
+          "open": 7890.1,
+          "high": 7891.4,
+          "low": 7890,
+          "close": 7891.4,
+          "epoch": 1769458200,
+          "open_time": 1769458140
+        }
+      ],
+      "lastProcessedCandleOpenTime": 1769458140,
+      "candlesLoaded": false
+    }
+  }
+}
