@@ -676,7 +676,7 @@ class AIWeightedEnsembleBot {
             if (this.consecutiveLosses === 4) this.x4Losses++;
             if (this.consecutiveLosses === 5) this.x5Losses++;
 
-            if (this.consecutiveLosses === 3) {
+            if (this.consecutiveLosses === 2) {
                 this.currentStake = this.config.initialStake;
             } else {
                 this.currentStake = Math.ceil(this.currentStake * this.config.multiplier * 100) / 100;
