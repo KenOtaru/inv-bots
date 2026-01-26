@@ -6,7 +6,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'willRF01-state.json');
+const STATE_FILE = path.join(__dirname, 'candleRF001-state.json');
 const STATE_SAVE_INTERVAL = 5000; // Save every 5 seconds
 
 class StatePersistence {
@@ -346,12 +346,12 @@ const CONFIG = {
     WS_URL: 'wss://ws.derivws.com/websockets/v3',
 
     // Capital Settings
-    INITIAL_CAPITAL: 100,
+    INITIAL_CAPITAL: 500,
     STAKE: 0.35,
 
     // Session Targets
-    SESSION_PROFIT_TARGET: 500,
-    SESSION_STOP_LOSS: -500,
+    SESSION_PROFIT_TARGET: 5000,
+    SESSION_STOP_LOSS: -100,
 
     // Candle Settings
     GRANULARITY: 60, // 60 seconds = 1 minute candles
@@ -360,18 +360,18 @@ const CONFIG = {
     CANDLES_TO_LOAD: 50,
 
     // Trade Duration Settings
-    DURATION: 2,
-    DURATION_UNIT: 't', // t=ticks, s=seconds, m=minutes
+    DURATION: 116,
+    DURATION_UNIT: 's', // t=ticks, s=seconds, m=minutes
 
     // Trade Settings
     MAX_OPEN_POSITIONS: 1, // One at a time for alternating strategy
     TRADE_DELAY: 1000, // 2 seconds delay between trades
-    MARTINGALE_MULTIPLIER: 1.2,
-    MARTINGALE_MULTIPLIER2: 1.4,
-    MARTINGALE_MULTIPLIER3: 1.6,
-    MARTINGALE_MULTIPLIER4: 1.8,
-    MARTINGALE_MULTIPLIER5: 2,
-    MAX_MARTINGALE_STEPS: 25,
+    MARTINGALE_MULTIPLIER: 2,
+    MARTINGALE_MULTIPLIER2: 2.3,
+    MARTINGALE_MULTIPLIER3: 2.5,
+    MARTINGALE_MULTIPLIER4: 2.3,
+    MARTINGALE_MULTIPLIER5: 3,
+    MAX_MARTINGALE_STEPS: 8,
     System: 1, // 1 = Continue same direction on Win and Switch direction on Loss, 
     // 2 = Switch direction on Win and Continue same direction on Loss, 
     // 3 = Switch direction every trade, 4 = Same direction every trade
