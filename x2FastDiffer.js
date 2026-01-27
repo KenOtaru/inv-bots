@@ -573,7 +573,7 @@ class KODerivDifferBot {
             // this.consecutiveLosses = 0;
             // this.martingaleStep = 0;
             this.kWins++;
-            if (this.kWins >= 10) {
+            if (this.kWins >= 6) {
                 this.currentStake = this.initialStake;
                 this.consecutiveLosses = 0;
                 this.martingaleStep = 0;
@@ -612,7 +612,7 @@ class KODerivDifferBot {
             this.isWinTrade = false;
         }
 
-        this.suspendAsset(asset);
+        // this.suspendAsset(asset);
 
         this.totalPnL += profit;
         this.addTradeToHistory(won, profit, selectedDigit, actualDigit, asset);
@@ -895,13 +895,13 @@ const bot = new KODerivDifferBot(token, {
     sequenceThresholdB: 8,
 
     // Martingale
-    martingaleMultiplier: 2,
+    martingaleMultiplier: 2.5,
     martingaleSteps: 7,
     resetAfterMax: 'stop', // 'reset', 'stop', 'continue'
 
     // Multi-Asset Trading
     multiAssetEnabled: true,
-    assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'RDBULL', 'RDBEAR'], // Use single asset or ['R_10', 'R_25', 'R_50', 'R_75', 'R_100','RDBULL', 'RDBEAR',]
+    assets: ['R_100'], // Use single asset or ['R_10', 'R_25', 'R_50', 'R_75', 'R_100','RDBULL', 'RDBEAR',]
     parallelTrading: false,
     suspendOnLoss: false,
     TradeSys: 2,

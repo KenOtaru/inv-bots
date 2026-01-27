@@ -76,10 +76,12 @@ class KODerivDifferBot {
         this.x7Losses = 0;
         this.x8Losses = 0;
         this.kWins = 0;
+        this.kWins2 = 0;
         this.balance = 0;
         this.tradeInProgress = false;
         this.endOfDay = false;
         this.isWinTrade = false;
+        this.tradeTrigger = false;
 
         // Martingale
         this.martingaleStep = 0;
@@ -425,16 +427,17 @@ class KODerivDifferBot {
         const sequenceProbability = sequenceTotal > 0 ? (sequenceRepetitions / sequenceTotal) * 100 : 0;
 
         // Log analysis
-        // console.log(`[${asset}] Repetition Analysis (Last: ${currentDigit})`);
-        // console.log(`    Global:   ${globalProbability.toFixed(2)}% (${globalRepetitions}/${globalTotal})`);
-        // console.log(`    Specific: ${specificProbability.toFixed(2)}% (${specificRepetitions}/${specificTotal})`);
+        console.log(`[${asset}] Repetition Analysis (Last: ${currentDigit})`);
+        console.log(`    Global:   ${globalProbability.toFixed(2)}% (${globalRepetitions}/${globalTotal})`);
+        console.log(`    Specific: ${specificProbability.toFixed(2)}% (${specificRepetitions}/${specificTotal})`);
         // console.log(`    Sequence: ${sequenceProbability.toFixed(2)}% (${sequenceRepetitions}/${sequenceTotal}) [Pattern: ${currentSequence.join('')}]`);
 
         // Check conditions (ALL 3 must be met)
-        const canTrade = globalProbability < this.config.repetitionThreshold &&
-            specificProbability < this.config.repetitionThreshold2 &&
-            sequenceProbability < this.config.sequenceThreshold &&
-            specificTotal >= 10; // Minimum samples
+        const canTrade = globalProbability < this.config.repetitionThreshold
+        // &&
+        //     specificProbability < this.config.repetitionThreshold2 &&
+        //     sequenceProbability < this.config.sequenceThreshold &&
+        //     specificTotal >= 10; // Minimum samples
 
         const canTradeB = globalProbability >= this.config.repetitionThresholdB
         // &&
@@ -463,7 +466,7 @@ class KODerivDifferBot {
 
     analyzeAndTrade(asset) {
         const data = this.assetData[asset];
-        if (!data || data.tickHistory.length < 50) return;
+        if (!data) return;
 
         if (this.assetTradesInProgress[asset]) return;
         if (!this.config.parallelTrading && Object.values(this.assetTradesInProgress).some(v => v)) return;
@@ -473,30 +476,36 @@ class KODerivDifferBot {
         if (!repData) return;
 
         // Trade selection based on TradeSys
-        let triggerTrade = false;
-        // if (this.config.TradeSys === 2) {
-        triggerTrade = repData.canTradeB;
-        // }
-        // else {
-        //     triggerTrade = repData.canTrade;
-        // }
+        if (!this.tradeTrigger) {
+            let triggerTrade = false;
+            if (this.config.TradeSys === 2) {
+                triggerTrade = repData.canTradeB;
+            }
+            else {
+                triggerTrade = repData.canTrade;
+            }
 
-        if (!triggerTrade) return;
+            if (!triggerTrade) return;
+
+
+            this.tradeTrigger = true;
+
+        }
 
         // Trade: Bet DIFFER from current digit (predicted digit = current digit)
         const currentDigit = repData.currentDigit;
 
-        // console.log(`[${asset}] 🎯 TRADE SIGNAL MATCHED (System ${this.config.TradeSys})!`);
-        // if (this.config.TradeSys === 2) {
-        //     console.log(`    Global Prob: ${repData.globalProbability.toFixed(2)}% > ${this.config.repetitionThresholdB}%`);
-        //     console.log(`    Specific Prob: ${repData.specificProbability.toFixed(2)}% > ${this.config.repetitionThresholdB2}%`);
-        //     console.log(`    Sequence Prob: ${repData.sequenceProbability.toFixed(2)}% > ${this.config.sequenceThresholdB}%`);
-        // } else {
-        //     console.log(`    Global Prob: ${repData.globalProbability.toFixed(2)}% < ${this.config.repetitionThreshold}%`);
-        //     console.log(`    Specific Prob: ${repData.specificProbability.toFixed(2)}% < ${this.config.repetitionThreshold2}%`);
-        //     console.log(`    Sequence Prob: ${repData.sequenceProbability.toFixed(2)}% < ${this.config.sequenceThreshold}%`);
-        // }
-        // console.log(`    Action: Betting NEXT DIGIT will NOT be ${currentDigit}`);
+        console.log(`[${asset}] 🎯 TRADE SIGNAL MATCHED (System ${this.config.TradeSys})!`);
+        if (this.config.TradeSys === 2) {
+            console.log(`    Global Prob: ${repData.globalProbability.toFixed(2)}% > ${this.config.repetitionThresholdB}%`);
+            console.log(`    Specific Prob: ${repData.specificProbability.toFixed(2)}% > ${this.config.repetitionThresholdB2}%`);
+            console.log(`    Sequence Prob: ${repData.sequenceProbability.toFixed(2)}% > ${this.config.sequenceThresholdB}%`);
+        } else {
+            console.log(`    Global Prob: ${repData.globalProbability.toFixed(2)}% < ${this.config.repetitionThreshold}%`);
+            console.log(`    Specific Prob: ${repData.specificProbability.toFixed(2)}% < ${this.config.repetitionThreshold2}%`);
+            console.log(`    Sequence Prob: ${repData.sequenceProbability.toFixed(2)}% < ${this.config.sequenceThreshold}%`);
+        }
+        console.log(`    Action: Betting NEXT DIGIT will NOT be ${currentDigit}`);
 
         this.assetSelectedDigits[asset] = currentDigit;
         this.requestProposal(asset, currentDigit);
@@ -573,11 +582,24 @@ class KODerivDifferBot {
             // this.consecutiveLosses = 0;
             // this.martingaleStep = 0;
             this.kWins++;
+            this.kWins2++;
+
             if (this.kWins >= 10) {
                 this.currentStake = this.initialStake;
                 this.consecutiveLosses = 0;
                 this.martingaleStep = 0;
+                this.tradeTrigger = false;
                 this.kWins = 0;
+            }
+
+            //Suspend All Assets (Non-Loss)
+            this.suspendAllExcept(asset);
+
+            if (this.kWins2 >= 3) {
+                this.tradeTrigger = false;
+                //Reactivate All Suspended Assets
+                this.reactivateAllSuspended();
+                this.kWins2 = 0;
             }
             console.log(`[${asset}] ✅ WON: +$${profit.toFixed(2)} (Predicted: ${selectedDigit}, Actual: ${actualDigit}) | Martingale reset`);
 
@@ -591,6 +613,7 @@ class KODerivDifferBot {
             this.consecutiveLosses++;
             this.martingaleStep++;
             this.kWins = 0;
+            this.kWins2 = 0;
 
             if (this.consecutiveLosses === 2) this.x2Losses++;
             else if (this.consecutiveLosses === 3) this.x3Losses++;
@@ -614,7 +637,7 @@ class KODerivDifferBot {
 
         this.totalPnL += profit;
         this.addTradeToHistory(won, profit, selectedDigit, actualDigit, asset);
-        // this.updateStats();
+        this.updateStats();
 
         if (this.totalPnL <= -this.config.stopLoss) {
             console.log('Stop loss reached. Stopping bot.');
@@ -645,6 +668,24 @@ class KODerivDifferBot {
     reactivateAsset(asset) {
         this.suspendedAssets.delete(asset);
         console.log(`[${asset}] Reactivated`);
+    }
+
+    // Add new method to handle all other assets suspension
+    suspendAllExcept(asset) {
+        this.assets.forEach(a => {
+            if (a !== asset) {
+                this.suspendAsset(a);
+            }
+        });
+        this.suspendedAssets.delete(asset);
+        console.log(`🚫 Suspended all except: ${asset}`);
+    }
+
+    // Add new method to reactivate all suspended assets
+    reactivateAllSuspended() {
+        Array.from(this.suspendedAssets).forEach(a => {
+            this.reactivateAsset(a);
+        });
     }
 
     // ========================================================================
@@ -882,12 +923,12 @@ const bot = new KODerivDifferBot(token, {
     takeProfit: 1000,
 
     // Repetition Pattern Strategy
-    historyLength: 50,
-    repetitionThreshold: 9.88,
+    historyLength: 20,
+    repetitionThreshold: 0,
     repetitionThreshold2: 9,
     sequenceLength: 2,
     sequenceThreshold: 5,
-    repetitionThresholdB: 20,
+    repetitionThresholdB: 15,
     repetitionThresholdB2: 0,
     sequenceLengthB: 2,
     sequenceThresholdB: 8,
