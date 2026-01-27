@@ -108,7 +108,7 @@ class KODerivDifferBot {
         });
 
         // Telegram Configuration
-        this.telegramToken = '7919033379:AAHluKFMECmhMrBhNr_XVpWvCKEonQPx9_0';
+        this.telegramToken = '8106601008:AAEMyCma6mvPYIHEvw3RHQX2tkD5-wUe1o0';
         this.telegramChatId = '752497117';
 
         if (this.telegramToken && this.telegramChatId) {
@@ -326,9 +326,9 @@ class KODerivDifferBot {
         this.calculateAndDisplayRepetition(asset);
 
         // Try to trade
-        // if (!this.suspendedAssets.has(asset)) {
-        this.analyzeAndTrade(asset);
-        // }
+        if (!this.suspendedAssets.has(asset)) {
+            this.analyzeAndTrade(asset);
+        }
     }
 
     getLastDigit(quote, asset) {
@@ -427,9 +427,9 @@ class KODerivDifferBot {
         const sequenceProbability = sequenceTotal > 0 ? (sequenceRepetitions / sequenceTotal) * 100 : 0;
 
         // Log analysis
-        console.log(`[${asset}] Repetition Analysis (Last: ${currentDigit})`);
-        console.log(`    Global:   ${globalProbability.toFixed(2)}% (${globalRepetitions}/${globalTotal})`);
-        console.log(`    Specific: ${specificProbability.toFixed(2)}% (${specificRepetitions}/${specificTotal})`);
+        // console.log(`[${asset}] Repetition Analysis (Last: ${currentDigit})`);
+        // console.log(`    Global:   ${globalProbability.toFixed(2)}% (${globalRepetitions}/${globalTotal})`);
+        // console.log(`    Specific: ${specificProbability.toFixed(2)}% (${specificRepetitions}/${specificTotal})`);
         // console.log(`    Sequence: ${sequenceProbability.toFixed(2)}% (${sequenceRepetitions}/${sequenceTotal}) [Pattern: ${currentSequence.join('')}]`);
 
         // Check conditions (ALL 3 must be met)
@@ -495,17 +495,17 @@ class KODerivDifferBot {
         // Trade: Bet DIFFER from current digit (predicted digit = current digit)
         const currentDigit = repData.currentDigit;
 
-        console.log(`[${asset}] 🎯 TRADE SIGNAL MATCHED (System ${this.config.TradeSys})!`);
-        if (this.config.TradeSys === 2) {
-            console.log(`    Global Prob: ${repData.globalProbability.toFixed(2)}% > ${this.config.repetitionThresholdB}%`);
-            console.log(`    Specific Prob: ${repData.specificProbability.toFixed(2)}% > ${this.config.repetitionThresholdB2}%`);
-            console.log(`    Sequence Prob: ${repData.sequenceProbability.toFixed(2)}% > ${this.config.sequenceThresholdB}%`);
-        } else {
-            console.log(`    Global Prob: ${repData.globalProbability.toFixed(2)}% < ${this.config.repetitionThreshold}%`);
-            console.log(`    Specific Prob: ${repData.specificProbability.toFixed(2)}% < ${this.config.repetitionThreshold2}%`);
-            console.log(`    Sequence Prob: ${repData.sequenceProbability.toFixed(2)}% < ${this.config.sequenceThreshold}%`);
-        }
-        console.log(`    Action: Betting NEXT DIGIT will NOT be ${currentDigit}`);
+        // console.log(`[${asset}] 🎯 TRADE SIGNAL MATCHED (System ${this.config.TradeSys})!`);
+        // if (this.config.TradeSys === 2) {
+        //     console.log(`    Global Prob: ${repData.globalProbability.toFixed(2)}% > ${this.config.repetitionThresholdB}%`);
+        //     console.log(`    Specific Prob: ${repData.specificProbability.toFixed(2)}% > ${this.config.repetitionThresholdB2}%`);
+        //     console.log(`    Sequence Prob: ${repData.sequenceProbability.toFixed(2)}% > ${this.config.sequenceThresholdB}%`);
+        // } else {
+        //     console.log(`    Global Prob: ${repData.globalProbability.toFixed(2)}% < ${this.config.repetitionThreshold}%`);
+        //     console.log(`    Specific Prob: ${repData.specificProbability.toFixed(2)}% < ${this.config.repetitionThreshold2}%`);
+        //     console.log(`    Sequence Prob: ${repData.sequenceProbability.toFixed(2)}% < ${this.config.sequenceThreshold}%`);
+        // }
+        // console.log(`    Action: Betting NEXT DIGIT will NOT be ${currentDigit}`);
 
         this.assetSelectedDigits[asset] = currentDigit;
         this.requestProposal(asset, currentDigit);
@@ -603,10 +603,10 @@ class KODerivDifferBot {
             }
             console.log(`[${asset}] ✅ WON: +$${profit.toFixed(2)} (Predicted: ${selectedDigit}, Actual: ${actualDigit}) | Martingale reset`);
 
-            if (this.suspendedAssets.size > 0) {
-                const toReactivate = this.suspendedAssets.values().next().value;
-                this.reactivateAsset(toReactivate);
-            }
+            // if (this.suspendedAssets.size > 0) {
+            //     const toReactivate = this.suspendedAssets.values().next().value;
+            //     this.reactivateAsset(toReactivate);
+            // }
             this.isWinTrade = true;
         } else {
             this.totalLosses++;
@@ -637,7 +637,7 @@ class KODerivDifferBot {
 
         this.totalPnL += profit;
         this.addTradeToHistory(won, profit, selectedDigit, actualDigit, asset);
-        this.updateStats();
+        // this.updateStats();
 
         if (this.totalPnL <= -this.config.stopLoss) {
             console.log('Stop loss reached. Stopping bot.');
@@ -662,17 +662,17 @@ class KODerivDifferBot {
 
     suspendAsset(asset) {
         this.suspendedAssets.add(asset);
-        console.log(`[${asset}] Suspended due to loss`);
+        console.log(`[${asset}] 🚫 Suspended`);
     }
 
     reactivateAsset(asset) {
         this.suspendedAssets.delete(asset);
-        console.log(`[${asset}] Reactivated`);
+        console.log(`[${asset}] ✅ Reactivated`);
     }
 
     // Add new method to handle all other assets suspension
     suspendAllExcept(asset) {
-        this.assets.forEach(a => {
+        this.activeAssets.forEach(a => {
             if (a !== asset) {
                 this.suspendAsset(a);
             }
@@ -730,6 +730,12 @@ class KODerivDifferBot {
         }, 1800000); // 30 minutes
     }
 
+    resetDailyStats() {
+        this.tradeInProgress = false;
+        this.suspendedAssets.clear();
+        this.isWinTrade = false;
+    }
+
     async sendTelegramSummary() {
         if (!this.telegramBot) return;
 
@@ -755,7 +761,6 @@ class KODerivDifferBot {
             x5: ${this.x5Losses}
             x6: ${this.x6Losses}
             x7: ${this.x7Losses}
-            x8: ${this.x8Losses}
 
             *FINANCIAL*
             Current Stake: $${this.currentStake.toFixed(2)}
@@ -794,15 +799,15 @@ class KODerivDifferBot {
             Actual Digit: ${actualDigit}
 
             *PATTERN ANALYSIS*
-            Rep Probability: ${(repData.probability || 0).toFixed(2)}%
-            Threshold: ${this.config.repetitionThreshold}% / ${this.config.repetitionThreshold2}%
-            Historical Samples: ${repData.total || 0}
+            Global Probability: ${(100 - (repData.probability || 0)).toFixed(2)}% / ${this.config.repetitionThreshold2}%
+            History Length: ${this.config.historyLength}
 
             *CURRENT STATUS*
             Wins: ${this.totalWins} | Losses: ${this.totalLosses}
             Martingale Step: ${this.martingaleStep}/${this.config.martingaleSteps}
             Current Stake: $${this.currentStake.toFixed(2)}
             Total P/L: *$${this.totalPnL.toFixed(2)}*
+            Balance: $${this.balance.toFixed(2)}
 
             xLosses:
             x2: ${this.x2Losses}
@@ -811,7 +816,6 @@ class KODerivDifferBot {
             x5: ${this.x5Losses}
             x6: ${this.x6Losses}
             x7: ${this.x7Losses}
-            x8: ${this.x8Losses}
         `;
 
         try {
@@ -842,7 +846,7 @@ class KODerivDifferBot {
             if (isWeekend) {
                 if (!this.endOfDay) {
                     console.log("Weekend trading suspension (Saturday 11pm - Monday 2am). Disconnecting...");
-                    this.sendHourlySummary();
+                    this.sendTelegramSummary();
                     this.disconnect();
                     this.endOfDay = true;
                 }
@@ -859,7 +863,7 @@ class KODerivDifferBot {
             if (this.isWinTrade && !this.endOfDay) {
                 if (currentHours >= 23 && currentMinutes >= 0) {
                     console.log("It's past 23:00 PM GMT+1 after a win trade, disconnecting the bot.");
-                    this.sendHourlySummary();
+                    this.sendTelegramSummary();
                     this.disconnect();
                     this.endOfDay = true;
                 }
@@ -928,7 +932,7 @@ const bot = new KODerivDifferBot(token, {
     repetitionThreshold2: 9,
     sequenceLength: 2,
     sequenceThreshold: 5,
-    repetitionThresholdB: 15,
+    repetitionThresholdB: 30,
     repetitionThresholdB2: 0,
     sequenceLengthB: 2,
     sequenceThresholdB: 8,

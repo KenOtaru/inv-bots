@@ -106,7 +106,7 @@ class KODerivDifferBot {
         });
 
         // Telegram Configuration
-        this.telegramToken = '8212244373:AAE6-5-ANOmp2rEYYfPBSn8N7uSbRp6HM-k';
+        this.telegramToken = '8418934966:AAFG-S3wUPV6Cdr8pQF133Ew5SfGpkfoDoU';
         this.telegramChatId = '752497117';
 
         if (this.telegramToken && this.telegramChatId) {
@@ -324,9 +324,9 @@ class KODerivDifferBot {
         this.calculateAndDisplayRepetition(asset);
 
         // Try to trade
-        // if (!this.suspendedAssets.has(asset)) {
-        this.analyzeAndTrade(asset);
-        // }
+        if (!this.suspendedAssets.has(asset)) {
+            this.analyzeAndTrade(asset);
+        }
     }
 
     getLastDigit(quote, asset) {
@@ -641,12 +641,30 @@ class KODerivDifferBot {
 
     suspendAsset(asset) {
         this.suspendedAssets.add(asset);
-        console.log(`[${asset}] Suspended due to loss`);
+        console.log(`[${asset}] 🚫 Suspended`);
     }
 
     reactivateAsset(asset) {
         this.suspendedAssets.delete(asset);
-        console.log(`[${asset}] Reactivated`);
+        console.log(`[${asset}] ✅ Reactivated`);
+    }
+
+    // Add new method to handle all other assets suspension
+    suspendAllExcept(asset) {
+        this.activeAssets.forEach(a => {
+            if (a !== asset) {
+                this.suspendAsset(a);
+            }
+        });
+        this.suspendedAssets.delete(asset);
+        console.log(`🚫 Suspended all except: ${asset}`);
+    }
+
+    // Add new method to reactivate all suspended assets
+    reactivateAllSuspended() {
+        Array.from(this.suspendedAssets).forEach(a => {
+            this.reactivateAsset(a);
+        });
     }
 
     // ========================================================================
@@ -691,6 +709,12 @@ class KODerivDifferBot {
         }, 1800000); // 30 minutes
     }
 
+    resetDailyStats() {
+        this.tradeInProgress = false;
+        this.suspendedAssets.clear();
+        this.isWinTrade = false;
+    }
+
     async sendTelegramSummary() {
         if (!this.telegramBot) return;
 
@@ -716,16 +740,11 @@ class KODerivDifferBot {
             x5: ${this.x5Losses}
             x6: ${this.x6Losses}
             x7: ${this.x7Losses}
-            x8: ${this.x8Losses}
 
             *FINANCIAL*
             Current Stake: $${this.currentStake.toFixed(2)}
             Total P/L: *$${this.totalPnL.toFixed(2)}*
             Balance: $${this.balance.toFixed(2)}
-
-            *STRATEGY*
-            Rep Threshold: ${this.config.repetitionThreshold}%
-            Martingale: ${this.config.martingaleMultiplier}x (${this.config.martingaleSteps} steps)
         `;
 
         try {
@@ -754,16 +773,12 @@ class KODerivDifferBot {
             Predicted (Betting NOT): ${predictedDigit}
             Actual Digit: ${actualDigit}
 
-            *PATTERN ANALYSIS*
-            Rep Probability: ${(repData.probability || 0).toFixed(2)}%
-            Threshold: ${this.config.repetitionThreshold}% / ${this.config.repetitionThreshold2}%
-            Historical Samples: ${repData.total || 0}
-
             *CURRENT STATUS*
             Wins: ${this.totalWins} | Losses: ${this.totalLosses}
             Martingale Step: ${this.martingaleStep}/${this.config.martingaleSteps}
             Current Stake: $${this.currentStake.toFixed(2)}
-            Total P/L: *$${this.totalPnL.toFixed(2)}*
+            Total P/L: *$${this.totalPnL.toFixed(2)}
+            Balance: $${this.balance.toFixed(2)}
 
             xLosses:
             x2: ${this.x2Losses}
@@ -772,7 +787,6 @@ class KODerivDifferBot {
             x5: ${this.x5Losses}
             x6: ${this.x6Losses}
             x7: ${this.x7Losses}
-            x8: ${this.x8Losses}
         `;
 
         try {
@@ -803,7 +817,7 @@ class KODerivDifferBot {
             if (isWeekend) {
                 if (!this.endOfDay) {
                     console.log("Weekend trading suspension (Saturday 11pm - Monday 2am). Disconnecting...");
-                    this.sendHourlySummary();
+                    this.sendTelegramSummary();
                     this.disconnect();
                     this.endOfDay = true;
                 }
@@ -820,7 +834,7 @@ class KODerivDifferBot {
             if (this.isWinTrade && !this.endOfDay) {
                 if (currentHours >= 23 && currentMinutes >= 0) {
                     console.log("It's past 23:00 PM GMT+1 after a win trade, disconnecting the bot.");
-                    this.sendHourlySummary();
+                    this.sendTelegramSummary();
                     this.disconnect();
                     this.endOfDay = true;
                 }
