@@ -1,17 +1,3 @@
-/**
- * KO Deriv Differ Bot - NodeJS Version
- * Version 1.00 - Repetition Pattern Strategy
- * 
- * Strategy: Analyze digit repetition patterns and trade when probability is low
- * 
- * Features:
- * - Digit Repetition Pattern Analysis
- * - Multi-Asset Trading
- * - Martingale System
- * - Email Notifications
- * - Configurable Parameters
- */
-
 require('dotenv').config();
 const WebSocket = require('ws');
 const TelegramBot = require('node-telegram-bot-api');
@@ -720,20 +706,20 @@ class KODerivDifferBot {
 
         const assetStats = this.activeAssets.map(a => {
             const repData = this.currentRepetitionProb[a] || {};
-            return `*${a}*: Rep Prob=${(repData.probability || 0).toFixed(2)}%, Digit=${repData.currentDigit || '--'}`;
+            return `<b>${a}</b>: Rep Prob=${(repData.globalProbability || 0).toFixed(2)}%, Digit=${repData.currentDigit || '--'}`;
         }).join('\n');
 
         const winRate = this.totalTrades > 0 ? ((this.totalWins / this.totalTrades) * 100).toFixed(2) : 0;
 
         const summaryText = `
-            📊 *Fast x2 Differ Bot Summary*
+            📊 <b>Fast x2 Differ Bot Summary</b>
 
-            *TRADING PERFORMANCE*
+            <b>TRADING PERFORMANCE</b>
             Total Trades: ${this.totalTrades}
             Wins: ${this.totalWins} | Losses: ${this.totalLosses}
             Win Rate: ${winRate}%
 
-            *Consecutive Losses*
+            <b>Consecutive Losses</b>
             x2: ${this.x2Losses}
             x3: ${this.x3Losses}
             x4: ${this.x4Losses}
@@ -741,14 +727,14 @@ class KODerivDifferBot {
             x6: ${this.x6Losses}
             x7: ${this.x7Losses}
 
-            *FINANCIAL*
+            <b>FINANCIAL</b>
             Current Stake: $${this.currentStake.toFixed(2)}
-            Total P/L: *$${this.totalPnL.toFixed(2)}*
+            Total P/L: <b>$${this.totalPnL.toFixed(2)}</b>
             Balance: $${this.balance.toFixed(2)}
         `;
 
         try {
-            await this.telegramBot.sendMessage(this.telegramChatId, summaryText, { parse_mode: 'Markdown' });
+            await this.telegramBot.sendMessage(this.telegramChatId, summaryText, { parse_mode: 'HTML' });
             console.log('Telegram summary sent');
         } catch (error) {
             console.error('Telegram Error (Summary):', error.message);
@@ -766,18 +752,18 @@ class KODerivDifferBot {
         const repData = this.currentRepetitionProb[asset] || {};
 
         const summaryText = `
-            🚨 *LOSS ALERT [${asset}]*
+            🚨 <b>LOSS ALERT [${asset}]</b>
 
-            *TRADE DETAILS*
+            <b>TRADE DETAILS</b>
             Asset: ${asset}
             Predicted (Betting NOT): ${predictedDigit}
             Actual Digit: ${actualDigit}
 
-            *CURRENT STATUS*
+            <b>CURRENT STATUS</b>
             Wins: ${this.totalWins} | Losses: ${this.totalLosses}
             Martingale Step: ${this.martingaleStep}/${this.config.martingaleSteps}
             Current Stake: $${this.currentStake.toFixed(2)}
-            Total P/L: *$${this.totalPnL.toFixed(2)}
+            Total P/L: <b>$${this.totalPnL.toFixed(2)}</b>
             Balance: $${this.balance.toFixed(2)}
 
             xLosses:
@@ -790,7 +776,7 @@ class KODerivDifferBot {
         `;
 
         try {
-            await this.telegramBot.sendMessage(this.telegramChatId, summaryText, { parse_mode: 'Markdown' });
+            await this.telegramBot.sendMessage(this.telegramChatId, summaryText, { parse_mode: 'HTML' });
             console.log('Telegram loss alert sent');
         } catch (error) {
             console.error('Telegram Error (Loss Alert):', error.message);
