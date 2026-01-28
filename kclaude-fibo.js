@@ -165,36 +165,261 @@ class FibonacciZScoreEngine {
 // VOLATILITY FILTER ENGINE
 // ============================================================================
 
+// class VolatilityFilterEngine {
+//     constructor() {
+//         // EXACT windows and weights as specified
+//         this.WINDOWS = [
+//             { size: 50, weight: 1.0 },
+//             { size: 100, weight: 1.0 },
+//             { size: 200, weight: 1.0 },
+//             { size: 500, weight: 2.5 }  // 2.5× weight for 500
+//         ];
+
+//         // EXACT weights as specified: 60% concentration, 40% streak
+//         this.CONCENTRATION_WEIGHT = 0.60;
+//         this.STREAK_WEIGHT = 0.40;
+
+//         // EXACT thresholds as specified
+//         this.THRESHOLDS = {
+//             EXTREME: 0.72,
+//             HIGH: 0.62,
+//             MEDIUM: 0.48,
+//             LOW: 0.35
+//             // ULTRA_LOW: < 0.35
+//         };
+
+//         // Only trade in these volatility levels
+//         this.TRADEABLE_LEVELS = ['low', 'ultra-low'];
+//     }
+
+//     /**
+//      * Calculate entropy-based concentration score
+//      * Lower entropy = more concentrated = lower volatility score
+//      */
+//     calculateConcentrationScore(history, windowSize) {
+//         if (history.length < windowSize) return null;
+
+//         const window = history.slice(-windowSize);
+//         const frequency = Array(10).fill(0);
+
+//         window.forEach(digit => frequency[digit]++);
+
+//         // Calculate Shannon entropy
+//         let entropy = 0;
+//         for (let i = 0; i < 10; i++) {
+//             if (frequency[i] > 0) {
+//                 const p = frequency[i] / windowSize;
+//                 entropy -= p * Math.log2(p);
+//             }
+//         }
+
+//         // Normalize: max entropy for 10 outcomes = log2(10) ≈ 3.322
+//         const maxEntropy = Math.log2(10);
+//         const normalizedEntropy = entropy / maxEntropy;
+
+//         // Convert to concentration (inverse)
+//         // High concentration (low entropy) = low volatility
+//         const concentration = 1 - normalizedEntropy;
+
+//         return concentration;
+//     }
+
+//     /**
+//      * Calculate longest streak factor
+//      * Longer streaks = more predictable = lower volatility
+//      */
+//     calculateStreakFactor(history, windowSize) {
+//         if (history.length < windowSize) return null;
+
+//         const window = history.slice(-windowSize);
+//         let maxStreak = 1;
+//         let currentStreak = 1;
+
+//         for (let i = 1; i < window.length; i++) {
+//             if (window[i] === window[i - 1]) {
+//                 currentStreak++;
+//                 maxStreak = Math.max(maxStreak, currentStreak);
+//             } else {
+//                 currentStreak = 1;
+//             }
+//         }
+
+//         // Normalize streak: typical max streak in window
+//         // For window of 500, max reasonable streak might be ~10-15
+//         const expectedMaxStreak = Math.log2(windowSize) * 1.5;
+//         const normalizedStreak = Math.min(maxStreak / expectedMaxStreak, 1);
+
+//         return normalizedStreak;
+//     }
+
+//     /**
+//      * Calculate composite volatility score for a single window
+//      */
+//     calculateWindowVolatility(history, windowSize) {
+//         const concentration = this.calculateConcentrationScore(history, windowSize);
+//         const streakFactor = this.calculateStreakFactor(history, windowSize);
+
+//         if (concentration === null || streakFactor === null) {
+//             return null;
+//         }
+
+//         // Composite: 60% concentration + 40% streak
+//         // Higher score = higher volatility
+//         // We invert concentration since high concentration = low volatility
+//         const volatilityScore = (1 - concentration) * this.CONCENTRATION_WEIGHT +
+//             (1 - streakFactor) * this.STREAK_WEIGHT;
+
+//         return volatilityScore;
+//     }
+
+//     /**
+//      * Calculate overall volatility level using weighted windows
+//      */
+//     calculateVolatilityLevel(history) {
+//         let weightedSum = 0;
+//         let totalWeight = 0;
+//         const windowResults = [];
+
+//         for (const { size, weight } of this.WINDOWS) {
+//             const score = this.calculateWindowVolatility(history, size);
+
+//             if (score !== null) {
+//                 weightedSum += score * weight;
+//                 totalWeight += weight;
+//                 windowResults.push({
+//                     window: size,
+//                     weight,
+//                     score: score.toFixed(3)
+//                 });
+//             }
+//         }
+
+//         if (totalWeight === 0) {
+//             return { level: 'unknown', score: null, canTrade: false, windowResults };
+//         }
+
+//         const finalScore = weightedSum / totalWeight;
+
+//         // Determine level using EXACT thresholds
+//         let level;
+//         if (finalScore >= this.THRESHOLDS.EXTREME) {
+//             level = 'extreme';
+//         } else if (finalScore >= this.THRESHOLDS.HIGH) {
+//             level = 'high';
+//         } else if (finalScore >= this.THRESHOLDS.MEDIUM) {
+//             level = 'medium';
+//         } else if (finalScore >= this.THRESHOLDS.LOW) {
+//             level = 'low';
+//         } else {
+//             level = 'ultra-low';
+//         }
+
+//         const canTrade = this.TRADEABLE_LEVELS.includes(level);
+
+//         return {
+//             level,
+//             score: finalScore,
+//             canTrade,
+//             windowResults
+//         };
+//     }
+
+//     /**
+//      * Check for ultra-low volatility bonus trigger
+//      * Same digit repeats 5+ times in a row
+//      */
+//     checkBonusTrigger(history) {
+//         if (history.length < 5) return null;
+
+//         const last5 = history.slice(-5);
+//         const allSame = last5.every(d => d === last5[0]);
+
+//         if (allSame) {
+//             return {
+//                 triggered: true,
+//                 digit: last5[0],
+//                 streakLength: this.countCurrentStreak(history, last5[0])
+//             };
+//         }
+
+//         return { triggered: false, digit: null, streakLength: 0 };
+//     }
+
+//     /**
+//      * Count current streak of a digit at the end of history
+//      */
+//     countCurrentStreak(history, digit) {
+//         let count = 0;
+//         for (let i = history.length - 1; i >= 0; i--) {
+//             if (history[i] === digit) {
+//                 count++;
+//             } else {
+//                 break;
+//             }
+//         }
+//         return count;
+//     }
+// }
+
+// ============================================================================
+// FIXED VOLATILITY FILTER ENGINE
+// ============================================================================
+
 class VolatilityFilterEngine {
-    constructor() {
-        // EXACT windows and weights as specified
+    constructor(options = {}) {
+        // Windows and weights as specified
         this.WINDOWS = [
             { size: 50, weight: 1.0 },
             { size: 100, weight: 1.0 },
             { size: 200, weight: 1.0 },
-            { size: 500, weight: 2.5 }  // 2.5× weight for 500
+            { size: 500, weight: 2.5 }
         ];
 
-        // EXACT weights as specified: 60% concentration, 40% streak
+        // Weights: 60% concentration, 40% streak
         this.CONCENTRATION_WEIGHT = 0.60;
         this.STREAK_WEIGHT = 0.40;
 
-        // EXACT thresholds as specified
-        this.THRESHOLDS = {
+        // Choose threshold mode
+        this.thresholdMode = options.thresholdMode || 'adaptive';
+
+        // OPTION 1: Original thresholds (will rarely trigger)
+        this.ORIGINAL_THRESHOLDS = {
             EXTREME: 0.72,
             HIGH: 0.62,
             MEDIUM: 0.48,
             LOW: 0.35
-            // ULTRA_LOW: < 0.35
         };
 
-        // Only trade in these volatility levels
+        // OPTION 2: Realistic thresholds for synthetic indices
+        // Based on observed data: synthetic indices score 0.83-0.93
+        this.REALISTIC_THRESHOLDS = {
+            EXTREME: 0.91,    // Very random (above 91%)
+            HIGH: 0.87,       // Typical random (87-91%)
+            MEDIUM: 0.83,     // Slightly less random (83-87%)
+            LOW: 0.78         // Noticeable patterns (78-83%)
+            // ULTRA_LOW: < 0.78
+        };
+
+        // OPTION 3: Percentile-based adaptive thresholds
+        this.volatilityHistory = [];
+        this.maxHistoryForAdaptive = 1000;
+
+        // Active thresholds
+        this.THRESHOLDS = this.thresholdMode === 'realistic'
+            ? this.REALISTIC_THRESHOLDS
+            : this.ORIGINAL_THRESHOLDS;
+
         this.TRADEABLE_LEVELS = ['low', 'ultra-low'];
+
+        // Debug mode
+        this.debug = options.debug || false;
     }
 
     /**
      * Calculate entropy-based concentration score
-     * Lower entropy = more concentrated = lower volatility score
+     * Returns value 0-1 where:
+     *   0 = uniform distribution (max entropy, unpredictable)
+     *   1 = single digit dominates (min entropy, predictable)
      */
     calculateConcentrationScore(history, windowSize) {
         if (history.length < windowSize) return null;
@@ -217,16 +442,22 @@ class VolatilityFilterEngine {
         const maxEntropy = Math.log2(10);
         const normalizedEntropy = entropy / maxEntropy;
 
-        // Convert to concentration (inverse)
-        // High concentration (low entropy) = low volatility
+        // Concentration = inverse of entropy
+        // High concentration (close to 1) = predictable = LOW volatility
         const concentration = 1 - normalizedEntropy;
+
+        if (this.debug) {
+            console.log(`  [Concentration W${windowSize}] entropy=${entropy.toFixed(3)}, normalized=${normalizedEntropy.toFixed(3)}, concentration=${concentration.toFixed(3)}`);
+        }
 
         return concentration;
     }
 
     /**
      * Calculate longest streak factor
-     * Longer streaks = more predictable = lower volatility
+     * Returns value 0-1 where:
+     *   0 = no consecutive repeats
+     *   1 = very long streak (relative to window size)
      */
     calculateStreakFactor(history, windowSize) {
         if (history.length < windowSize) return null;
@@ -244,16 +475,71 @@ class VolatilityFilterEngine {
             }
         }
 
-        // Normalize streak: typical max streak in window
-        // For window of 500, max reasonable streak might be ~10-15
-        const expectedMaxStreak = Math.log2(windowSize) * 1.5;
+        // Expected max streak for random sequence
+        // Using a more accurate formula for expected max run length
+        // E[max run] ≈ log(n) / log(1/p) where p = 1/10 for digits
+        // For window 500: log(500) / log(10) ≈ 2.7, but empirically it's higher
+        // Using empirical formula: ~log2(n) for 10 outcomes
+        const expectedMaxStreak = Math.log2(windowSize);
+
+        // Normalize with cap at 1
         const normalizedStreak = Math.min(maxStreak / expectedMaxStreak, 1);
+
+        if (this.debug) {
+            console.log(`  [Streak W${windowSize}] maxStreak=${maxStreak}, expected=${expectedMaxStreak.toFixed(1)}, factor=${normalizedStreak.toFixed(3)}`);
+        }
 
         return normalizedStreak;
     }
 
     /**
+     * Calculate Hurst exponent approximation for persistence
+     * H > 0.5 = trending (persistent)
+     * H < 0.5 = mean-reverting
+     * H = 0.5 = random walk
+     */
+    calculateHurstExponent(history, windowSize) {
+        if (history.length < windowSize) return null;
+
+        const window = history.slice(-windowSize);
+        const n = window.length;
+
+        // Calculate mean
+        const mean = window.reduce((a, b) => a + b, 0) / n;
+
+        // Calculate cumulative deviation from mean
+        let cumDev = 0;
+        let maxCumDev = 0;
+        let minCumDev = 0;
+
+        for (let i = 0; i < n; i++) {
+            cumDev += window[i] - mean;
+            maxCumDev = Math.max(maxCumDev, cumDev);
+            minCumDev = Math.min(minCumDev, cumDev);
+        }
+
+        // Range
+        const R = maxCumDev - minCumDev;
+
+        // Standard deviation
+        const variance = window.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / n;
+        const S = Math.sqrt(variance);
+
+        if (S === 0) return 0.5;
+
+        // R/S statistic
+        const RS = R / S;
+
+        // Approximate Hurst exponent: H ≈ log(R/S) / log(n)
+        const H = Math.log(RS) / Math.log(n);
+
+        return Math.max(0, Math.min(1, H)); // Clamp to [0, 1]
+    }
+
+    /**
      * Calculate composite volatility score for a single window
+     * Higher score = MORE volatile (random, unpredictable)
+     * Lower score = LESS volatile (patterned, predictable)
      */
     calculateWindowVolatility(history, windowSize) {
         const concentration = this.calculateConcentrationScore(history, windowSize);
@@ -263,13 +549,42 @@ class VolatilityFilterEngine {
             return null;
         }
 
-        // Composite: 60% concentration + 40% streak
-        // Higher score = higher volatility
-        // We invert concentration since high concentration = low volatility
-        const volatilityScore = (1 - concentration) * this.CONCENTRATION_WEIGHT +
+        // CORRECTED FORMULA:
+        // High concentration = LOW volatility → use (1 - concentration) for volatility
+        // High streak factor = LOW volatility → use (1 - streakFactor) for volatility
+        // 
+        // volatilityScore close to 1 = very random = high volatility
+        // volatilityScore close to 0 = very patterned = low volatility
+
+        const volatilityScore =
+            (1 - concentration) * this.CONCENTRATION_WEIGHT +
             (1 - streakFactor) * this.STREAK_WEIGHT;
 
+        if (this.debug) {
+            console.log(`  [Window ${windowSize}] vol=${volatilityScore.toFixed(3)} = (1-${concentration.toFixed(3)})*0.6 + (1-${streakFactor.toFixed(3)})*0.4`);
+        }
+
         return volatilityScore;
+    }
+
+    /**
+     * Alternative: Calculate predictability score (inverse of volatility)
+     * This might be more intuitive for the original thresholds
+     */
+    calculatePredictabilityScore(history, windowSize) {
+        const concentration = this.calculateConcentrationScore(history, windowSize);
+        const streakFactor = this.calculateStreakFactor(history, windowSize);
+
+        if (concentration === null || streakFactor === null) {
+            return null;
+        }
+
+        // Predictability: high concentration + long streaks = predictable
+        const predictabilityScore =
+            concentration * this.CONCENTRATION_WEIGHT +
+            streakFactor * this.STREAK_WEIGHT;
+
+        return predictabilityScore;
     }
 
     /**
@@ -280,6 +595,10 @@ class VolatilityFilterEngine {
         let totalWeight = 0;
         const windowResults = [];
 
+        if (this.debug) {
+            console.log('\n=== VOLATILITY CALCULATION DEBUG ===');
+        }
+
         for (const { size, weight } of this.WINDOWS) {
             const score = this.calculateWindowVolatility(history, size);
 
@@ -289,7 +608,7 @@ class VolatilityFilterEngine {
                 windowResults.push({
                     window: size,
                     weight,
-                    score: score.toFixed(3)
+                    score: score.toFixed(4)
                 });
             }
         }
@@ -300,15 +619,27 @@ class VolatilityFilterEngine {
 
         const finalScore = weightedSum / totalWeight;
 
-        // Determine level using EXACT thresholds
+        // Update adaptive history
+        this.volatilityHistory.push(finalScore);
+        if (this.volatilityHistory.length > this.maxHistoryForAdaptive) {
+            this.volatilityHistory.shift();
+        }
+
+        // Determine level using appropriate thresholds
         let level;
-        if (finalScore >= this.THRESHOLDS.EXTREME) {
+        let thresholdsUsed = this.THRESHOLDS;
+
+        if (this.thresholdMode === 'adaptive' && this.volatilityHistory.length >= 100) {
+            thresholdsUsed = this.calculateAdaptiveThresholds();
+        }
+
+        if (finalScore >= thresholdsUsed.EXTREME) {
             level = 'extreme';
-        } else if (finalScore >= this.THRESHOLDS.HIGH) {
+        } else if (finalScore >= thresholdsUsed.HIGH) {
             level = 'high';
-        } else if (finalScore >= this.THRESHOLDS.MEDIUM) {
+        } else if (finalScore >= thresholdsUsed.MEDIUM) {
             level = 'medium';
-        } else if (finalScore >= this.THRESHOLDS.LOW) {
+        } else if (finalScore >= thresholdsUsed.LOW) {
             level = 'low';
         } else {
             level = 'ultra-low';
@@ -316,11 +647,42 @@ class VolatilityFilterEngine {
 
         const canTrade = this.TRADEABLE_LEVELS.includes(level);
 
+        if (this.debug) {
+            console.log(`\n  Final Score: ${finalScore.toFixed(4)}`);
+            console.log(`  Level: ${level} (canTrade: ${canTrade})`);
+            console.log(`  Thresholds: ${JSON.stringify(thresholdsUsed)}`);
+            console.log('=====================================\n');
+        }
+
         return {
             level,
             score: finalScore,
             canTrade,
-            windowResults
+            windowResults,
+            thresholdsUsed
+        };
+    }
+
+    /**
+     * Calculate adaptive thresholds based on historical volatility distribution
+     * Uses percentiles of observed data
+     */
+    calculateAdaptiveThresholds() {
+        const sorted = [...this.volatilityHistory].sort((a, b) => a - b);
+        const n = sorted.length;
+
+        // Percentile-based thresholds
+        // Bottom 10% = ultra-low
+        // 10-25% = low
+        // 25-50% = medium
+        // 50-80% = high
+        // 80%+ = extreme
+
+        return {
+            EXTREME: sorted[Math.floor(n * 0.80)] || 0.90,
+            HIGH: sorted[Math.floor(n * 0.50)] || 0.85,
+            MEDIUM: sorted[Math.floor(n * 0.25)] || 0.80,
+            LOW: sorted[Math.floor(n * 0.10)] || 0.75
         };
     }
 
@@ -329,7 +691,7 @@ class VolatilityFilterEngine {
      * Same digit repeats 5+ times in a row
      */
     checkBonusTrigger(history) {
-        if (history.length < 5) return null;
+        if (history.length < 5) return { triggered: false, digit: null, streakLength: 0 };
 
         const last5 = history.slice(-5);
         const allSame = last5.every(d => d === last5[0]);
@@ -359,7 +721,211 @@ class VolatilityFilterEngine {
         }
         return count;
     }
+
+    /**
+     * Get statistics about volatility distribution
+     */
+    getVolatilityStats() {
+        if (this.volatilityHistory.length < 10) {
+            return { message: 'Insufficient data' };
+        }
+
+        const sorted = [...this.volatilityHistory].sort((a, b) => a - b);
+        const n = sorted.length;
+        const sum = sorted.reduce((a, b) => a + b, 0);
+        const mean = sum / n;
+        const variance = sorted.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / n;
+
+        return {
+            count: n,
+            min: sorted[0].toFixed(4),
+            max: sorted[n - 1].toFixed(4),
+            mean: mean.toFixed(4),
+            stdDev: Math.sqrt(variance).toFixed(4),
+            p10: sorted[Math.floor(n * 0.10)].toFixed(4),
+            p25: sorted[Math.floor(n * 0.25)].toFixed(4),
+            p50: sorted[Math.floor(n * 0.50)].toFixed(4),
+            p75: sorted[Math.floor(n * 0.75)].toFixed(4),
+            p90: sorted[Math.floor(n * 0.90)].toFixed(4)
+        };
+    }
 }
+
+// ============================================================================
+// ALTERNATIVE: RELATIVE VOLATILITY ENGINE
+// Uses deviation from baseline rather than absolute thresholds
+// ============================================================================
+
+class RelativeVolatilityEngine {
+    constructor() {
+        this.WINDOWS = [
+            { size: 50, weight: 1.0 },
+            { size: 100, weight: 1.0 },
+            { size: 200, weight: 1.0 },
+            { size: 500, weight: 2.5 }
+        ];
+
+        this.CONCENTRATION_WEIGHT = 0.60;
+        this.STREAK_WEIGHT = 0.40;
+
+        // Baseline expectations for random data
+        // For 10 equally likely outcomes:
+        this.EXPECTED_ENTROPY_RATIO = 0.95; // Random data is ~95% of max entropy
+        this.EXPECTED_MAX_STREAK_RATIO = 0.35; // Max streak is ~35% of log2(n)
+
+        // Thresholds based on deviation from expected
+        // Negative deviation = less random than expected = more predictable
+        this.TRADEABLE_LEVELS = ['low', 'ultra-low'];
+    }
+
+    calculateDeviation(history, windowSize) {
+        if (history.length < windowSize) return null;
+
+        const window = history.slice(-windowSize);
+
+        // Calculate actual entropy
+        const frequency = Array(10).fill(0);
+        window.forEach(d => frequency[d]++);
+
+        let entropy = 0;
+        for (let i = 0; i < 10; i++) {
+            if (frequency[i] > 0) {
+                const p = frequency[i] / windowSize;
+                entropy -= p * Math.log2(p);
+            }
+        }
+        const maxEntropy = Math.log2(10);
+        const entropyRatio = entropy / maxEntropy;
+
+        // Calculate actual max streak
+        let maxStreak = 1, currentStreak = 1;
+        for (let i = 1; i < window.length; i++) {
+            if (window[i] === window[i - 1]) {
+                currentStreak++;
+                maxStreak = Math.max(maxStreak, currentStreak);
+            } else {
+                currentStreak = 1;
+            }
+        }
+        const expectedMaxStreak = Math.log2(windowSize);
+        const streakRatio = maxStreak / expectedMaxStreak;
+
+        // Calculate deviations from expected
+        // Positive = more random than expected
+        // Negative = less random than expected (more predictable)
+        const entropyDeviation = (entropyRatio - this.EXPECTED_ENTROPY_RATIO) / this.EXPECTED_ENTROPY_RATIO;
+        const streakDeviation = (streakRatio - this.EXPECTED_MAX_STREAK_RATIO) / this.EXPECTED_MAX_STREAK_RATIO;
+
+        return {
+            entropyDeviation,
+            streakDeviation,
+            entropyRatio,
+            streakRatio,
+            maxStreak
+        };
+    }
+
+    calculateVolatilityLevel(history) {
+        let entropyDeviationSum = 0;
+        let streakDeviationSum = 0;
+        let totalWeight = 0;
+        const windowResults = [];
+
+        for (const { size, weight } of this.WINDOWS) {
+            const deviation = this.calculateDeviation(history, size);
+
+            if (deviation !== null) {
+                entropyDeviationSum += deviation.entropyDeviation * weight;
+                streakDeviationSum += deviation.streakDeviation * weight;
+                totalWeight += weight;
+
+                windowResults.push({
+                    window: size,
+                    entropyDev: (deviation.entropyDeviation * 100).toFixed(1) + '%',
+                    streakDev: (deviation.streakDeviation * 100).toFixed(1) + '%',
+                    maxStreak: deviation.maxStreak
+                });
+            }
+        }
+
+        if (totalWeight === 0) {
+            return { level: 'unknown', canTrade: false };
+        }
+
+        // Weighted average deviations
+        const avgEntropyDev = entropyDeviationSum / totalWeight;
+        const avgStreakDev = streakDeviationSum / totalWeight;
+
+        // Combined deviation score
+        // Negative = more predictable than expected
+        const combinedDeviation = avgEntropyDev * this.CONCENTRATION_WEIGHT +
+            (-avgStreakDev) * this.STREAK_WEIGHT;
+
+        console.log('Combined Deviation:', combinedDeviation);
+
+        // Determine level based on how much less random than expected
+        let level;
+        if (combinedDeviation > 0.05) {
+            level = 'extreme';       // More random than expected
+        } else if (combinedDeviation > 0.02) {
+            level = 'high';          // Slightly more random
+        } else if (combinedDeviation > -0.02) {
+            level = 'medium';        // Around expected randomness
+        } else if (combinedDeviation > -0.05) {
+            level = 'low';           // Slightly less random (tradeable!)
+        } else {
+            level = 'ultra-low';     // Much less random (definitely tradeable!)
+        }
+
+        const canTrade = this.TRADEABLE_LEVELS.includes(level);
+
+        return {
+            level,
+            score: combinedDeviation,
+            canTrade,
+            avgEntropyDeviation: avgEntropyDev,
+            avgStreakDeviation: avgStreakDev,
+            windowResults
+        };
+    }
+
+    checkBonusTrigger(history) {
+        if (history.length < 5) return { triggered: false };
+
+        const last5 = history.slice(-5);
+        if (last5.every(d => d === last5[0])) {
+            let count = 0;
+            for (let i = history.length - 1; i >= 0 && history[i] === last5[0]; i--) {
+                count++;
+            }
+            return { triggered: true, digit: last5[0], streakLength: count };
+        }
+        return { triggered: false };
+    }
+}
+
+// ============================================================================
+// USAGE EXAMPLE WITH RECOMMENDATIONS
+// ============================================================================
+
+/*
+// OPTION 1: Use realistic thresholds (recommended for synthetic indices)
+const volatilityEngine = new VolatilityFilterEngine({
+    thresholdMode: 'realistic',
+    debug: false
+});
+
+// OPTION 2: Use adaptive thresholds (learns from data)
+const volatilityEngine = new VolatilityFilterEngine({
+    thresholdMode: 'adaptive',
+    debug: false
+});
+
+// OPTION 3: Use relative deviation approach
+const volatilityEngine = new RelativeVolatilityEngine();
+*/
+
+module.exports = { VolatilityFilterEngine, RelativeVolatilityEngine };
 
 // ============================================================================
 // MONEY MANAGEMENT ENGINE
@@ -582,7 +1148,11 @@ class FibonacciZScoreBot {
         this.wsReady = false;
 
         // EXACT assets as specified
-        this.assets = ['R_10', 'R_25', 'R_50'];
+        this.assets = [
+            // 'R_10',
+            // 'R_25',
+            'R_50'
+        ];
 
         // Configuration
         this.config = {
@@ -1048,6 +1618,11 @@ Win Rate: ${stats.winRate}%
                 return;
             }
         }
+
+        //zScores
+        const zScores = this.zScoreEngine.calculateMultiLayerZScores(history);
+        console.log('Predicted Digit', zScores.digit);
+        console.log('zScores', zScores.totalZScore);
 
         // STEP 3: Z-score saturation analysis
         const saturation = this.zScoreEngine.findSaturatedDigit(history);
