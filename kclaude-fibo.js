@@ -1622,10 +1622,10 @@ Win Rate: ${stats.winRate}%
             }
         }
 
-        //zScores
-        const zScores = this.zScoreEngine.calculateMultiLayerZScores(history);
-        console.log('Predicted Digit', zScores.digit);
-        console.log('zScores', zScores.totalZScore);
+        const zScoresArray = this.zScoreEngine.calculateMultiLayerZScores(history);
+        const topZScore = zScoresArray.sort((a, b) => b.totalZScore - a.totalZScore)[0];
+        console.log('Predicted Digit', topZScore.digit);
+        console.log('zScores', topZScore.totalZScore);
 
         // STEP 3: Z-score saturation analysis
         const saturation = this.zScoreEngine.findSaturatedDigit(history);
