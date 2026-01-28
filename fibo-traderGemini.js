@@ -168,7 +168,7 @@ class AIWeightedEnsembleBot {
         this.contractSubscription = null;
 
         // Telegram Configuration
-        this.telegramToken = '8578702717:AAFShpdLRtat7PHqjZMUqhY4UNKlWyaGtmo';
+        this.telegramToken = '8584545459:AAFvyVjgeBnPGs-w_ehTMBG-bTvxHpAIjeI';
         this.telegramChatId = '752497117';
         this.telegramEnabled = true;
 
