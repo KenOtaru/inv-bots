@@ -383,7 +383,7 @@ class AIWeightedEnsembleBot {
 
         this.assets = [
             // 'R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'RDBULL', 'RDBEAR'
-            'R_10'
+            'R_25'
         ];
 
         this.config = {
