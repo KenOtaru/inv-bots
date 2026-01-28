@@ -1150,8 +1150,8 @@ class FibonacciZScoreBot {
         // EXACT assets as specified
         this.assets = [
             'R_10',
-            'R_25',
-            'R_50'
+            // 'R_25',
+            // 'R_50'
         ];
 
         // Configuration
@@ -1165,7 +1165,7 @@ class FibonacciZScoreBot {
 
         // Initialize engines
         this.zScoreEngine = new FibonacciZScoreEngine();
-        this.volatilityEngine = new VolatilityFilterEngine();
+        this.volatilityEngine = new VolatilityFilterEngine({ thresholdMode: 'realistic' });
         this.moneyManager = new MoneyManagementEngine({
             baseStake: this.config.baseStake
         });
