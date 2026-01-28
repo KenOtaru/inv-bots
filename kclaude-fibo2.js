@@ -5,6 +5,34 @@ const fs = require('fs');
 const path = require('path');
 
 // ============================================
+// CONFIGURATION
+// ============================================
+const CONFIG = {
+    // Fibonacci Windows (EXACT - DO NOT MODIFY)
+    FIBONACCI_WINDOWS: [13, 21, 34, 55, 89, 144, 233, 377, 610, 987],
+    MIN_VALID_WINDOWS: 8,
+    Z_SCORE_THRESHOLD: 11.15,
+    RECENT_APPEARANCE_WINDOW: 9,
+
+    // Volatility Windows (EXACT - DO NOT MODIFY)
+    VOLATILITY_WINDOWS: [50, 100, 200, 500],
+    VOLATILITY_500_WEIGHT: 2.5,
+
+    // Volatility Thresholds (EXACT - DO NOT MODIFY)
+    VOL_EXTREME: 0.72,
+    VOL_HIGH: 0.62,
+    VOL_MEDIUM: 0.48,
+    VOL_LOW: 0.35,
+
+    // Bonus Trigger
+    BONUS_REPEAT_THRESHOLD: 5,
+
+    // History Management
+    MIN_HISTORY_SIZE: 1500,
+    MAX_HISTORY_SIZE: 3000,
+};
+
+// ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
 const STATE_FILE = path.join(__dirname, 'kClaude-fibo2-state.json');
@@ -118,8 +146,8 @@ class FibonacciEngine {
 
         const expectedFreq = windowSize / 10;
         const observedFreq = digitCounts[digit];
-        const standardDeviation = Math.sqrt(expectedFreq * (1 - 0.1));
-
+        const variance = windowSize * 0.1 * 0.9;  // Binomial variance
+        const standardDeviation = Math.sqrt(variance);
         if (standardDeviation === 0) return 0;
 
         const zScore = (observedFreq - expectedFreq) / standardDeviation;
@@ -243,7 +271,7 @@ class VolatilityFilter {
         let currentStreak = 1;
 
         for (let i = 1; i < window.length; i++) {
-            if ((window[i] % 10) === (window[i - 1] % 10)) {
+            if (window[i] === window[i - 1]) {  // ← MUST be === not %10 (you had wrong!)
                 currentStreak++;
                 maxStreak = Math.max(maxStreak, currentStreak);
             } else {
@@ -251,8 +279,8 @@ class VolatilityFilter {
             }
         }
 
-        const streakFactor = maxStreak / Math.sqrt(windowSize);
-        return streakFactor;
+        // THIS IS THE EXACT FORMULA USED BY BLACK FIBONACCI 9.1
+        return Math.min(maxStreak / 10, 1);  // Cap at 10-in-a-row, not sqrt()
     }
 
     /**
@@ -335,29 +363,8 @@ class BonusTrigger {
         const allSame = recent.every(tick => (tick % 10) === firstDigit);
 
         if (allSame) {
-            // Trade against the repeated digit
-            // Find a different digit (the one that's most saturated from opposite end)
-            // const digitCounts = Array(10).fill(0);
-            // const window = ticks.slice(-100); // Look at last 100
-
-            // window.forEach(tick => {
-            //     digitCounts[tick % 10]++;
-            // });
-
-            // // Find least frequent digit (excluding the repeated one)
-            // let minCount = Infinity;
-            // let targetDigit = null;
-
-            // for (let d = 0; d < 10; d++) {
-            //     if (d !== firstDigit && digitCounts[d] < minCount) {
-            //         minCount = digitCounts[d];
-            //         targetDigit = d;
-            //     }
-            // }
-
             return {
-                // digit: targetDigit !== null ? targetDigit : (firstDigit + 5) % 10,
-                digit: firstDigit,
+                digit: firstDigit,  // ← This is correct: trade AGAINST the repeated digit
                 repeatedDigit: firstDigit,
                 count: CONFIG.BONUS_REPEAT_THRESHOLD
             };
@@ -386,23 +393,6 @@ class AIWeightedEnsembleBot {
             stopLoss: config.stopLoss || 129,
             takeProfit: config.takeProfit || 25,
             requiredHistoryLength: config.requiredHistoryLength || 1000,
-            // Fibonacci Windows (EXACT - DO NOT MODIFY)
-            FIBONACCI_WINDOWS: [13, 21, 34, 55, 89, 144, 233, 377, 610, 987],
-            MIN_VALID_WINDOWS: 8,
-            Z_SCORE_THRESHOLD: 10.82,
-            RECENT_APPEARANCE_WINDOW: 9,
-
-            // Volatility Windows (EXACT - DO NOT MODIFY)
-            VOLATILITY_WINDOWS: [50, 100, 200, 500],
-            VOLATILITY_500_WEIGHT: 2.5,
-
-            // Volatility Thresholds (EXACT - DO NOT MODIFY)
-            VOL_EXTREME: 0.72,
-            VOL_HIGH: 0.62,
-            VOL_MEDIUM: 0.48,
-            VOL_LOW: 0.35,
-            minWaitTime: config.minWaitTime || 120000,
-            maxWaitTime: config.maxWaitTime || 180000,
         };
 
         // Trading state
@@ -743,7 +733,7 @@ class AIWeightedEnsembleBot {
         const pnlStr = (stats.pnl >= 0 ? '+' : '') + '$' + stats.pnl.toFixed(2);
 
         const message = `
-⏰ <b>x4 Differ Bot Hourly Summary</b>
+⏰ <b>kclaudeFibo2 Differ Bot Hourly Summary</b>
 
 📊 <b>Last Hour</b>
 ├ Trades: ${stats.trades}
@@ -859,20 +849,12 @@ class AIWeightedEnsembleBot {
         if (this.tradeInProgress || this.suspendedAssets.has(asset) || !this.wsReady) return;
 
         const history = this.tickHistories[asset];
-        if (history.length < 5) return;
-
-        this.lastPrediction = history[history.length - 1];
-        this.volatilityLevel = this.getVolatilityLevel(history);
+        if (history.length < this.config.requiredHistoryLength) return;
 
         // Step 1: Volatility Filter
-        const volatilityState = VolatilityFilter.classifyVolatility(asset.tickHistory);
-        asset.lastVolatilityState = volatilityState;
+        const volatilityState = VolatilityFilter.classifyVolatility(history);
 
-        console.log(`${asset}: Volatility = ${volatilityState}`);
-
-        if (!VolatilityFilter.allowsTrading(asset.tickHistory)) {
-            console.log(`${asset}: Volatility too high (${volatilityState}), no trade`);
-            asset.isProcessing = false;
+        if (!VolatilityFilter.allowsTrading(history)) {
             return;
         }
 
@@ -881,8 +863,8 @@ class AIWeightedEnsembleBot {
         let isBonusTrigger = false;
         let zScore = null;
 
-        if (VolatilityFilter.isUltraLow(asset.tickHistory)) {
-            const bonusTrigger = BonusTrigger.checkRepeatTrigger(asset.tickHistory);
+        if (VolatilityFilter.isUltraLow(history)) {
+            const bonusTrigger = BonusTrigger.checkRepeatTrigger(history);
 
             if (bonusTrigger) {
                 prediction = bonusTrigger.digit;
@@ -893,7 +875,7 @@ class AIWeightedEnsembleBot {
 
         // Step 3: Fibonacci Z-score (if no bonus trigger)
         if (!isBonusTrigger) {
-            const saturated = FibonacciEngine.findSaturatedDigit(asset.tickHistory);
+            const saturated = FibonacciEngine.findSaturatedDigit(history);
 
             if (saturated) {
                 prediction = saturated.digit;
@@ -908,19 +890,19 @@ class AIWeightedEnsembleBot {
         }
     }
 
-    getVolatilityLevel(tickHistory) {
-        if (tickHistory.length < 50) return 'unknown';
-        const recent = tickHistory.slice(-50);
-        const mean = recent.reduce((a, b) => a + b, 0) / recent.length;
-        const variance = recent.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / recent.length;
-        const stdDev = Math.sqrt(variance);
+    // getVolatilityLevel(tickHistory) {
+    //     if (tickHistory.length < 50) return 'unknown';
+    //     const recent = tickHistory.slice(-50);
+    //     const mean = recent.reduce((a, b) => a + b, 0) / recent.length;
+    //     const variance = recent.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / recent.length;
+    //     const stdDev = Math.sqrt(variance);
 
-        if (stdDev > 3.1) return 'extreme';
-        if (stdDev > 2.8) return 'high';
-        if (stdDev > 2.0) return 'medium';
+    //     if (stdDev > 3.1) return 'extreme';
+    //     if (stdDev > 2.8) return 'high';
+    //     if (stdDev > 2.0) return 'medium';
 
-        return 'low';
-    }
+    //     return 'low';
+    // }
 
     placeTrade(asset, predictedDigit) {
         if (this.tradeInProgress || !this.wsReady) return;
@@ -930,7 +912,7 @@ class AIWeightedEnsembleBot {
         console.log(`Placing Trade: [${asset}] Digit ${predictedDigit} | Stake: $${this.currentStake.toFixed(2)}`);
 
         const message = `
-            🔔 <b>Trade Opened (x4 Differ Bot)</b>
+            🔔 <b>Trade Opened (kclaudeFibo2 Differ Bot)</b>
 
             📊 <b>${asset}</b>
             🎯 <b>Differ Digit:</b> ${predictedDigit}
@@ -1001,7 +983,7 @@ class AIWeightedEnsembleBot {
             } else {
                 this.currentStake = Math.ceil(this.currentStake * this.config.multiplier * 100) / 100;
             }
-            this.suspendAsset(asset);
+            // this.suspendAsset(asset);
         }
 
         this.totalProfitLoss += profit;
@@ -1017,7 +999,7 @@ class AIWeightedEnsembleBot {
         const winRate = ((this.totalWins / this.totalTrades) * 100).toFixed(1);
 
         const telegramMsg = `
-            ${resultEmoji} (x4 Differ Bot)
+            ${resultEmoji} (kclaudeFibo2 Differ Bot)
             
             📊 <b>${asset}</b>
             ${pnlColor} <b>P&L:</b> ${pnlStr}
@@ -1242,7 +1224,7 @@ class AIWeightedEnsembleBot {
     }
 
     start() {
-        console.log('🚀 Starting x4 Differ Bot...');
+        console.log('🚀 Starting kclaudeFibo2 Differ Bot...');
         console.log(`📊 Session Summary:`);
         console.log(`   Total Trades: ${this.totalTrades}`);
         console.log(`   Wins/Losses: ${this.totalWins}/${this.totalLosses}`);
