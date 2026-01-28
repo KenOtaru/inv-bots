@@ -806,9 +806,9 @@ class FibonacciDifferBot {
         this.contractSubscription = null;
 
         // Telegram Configuration
-        this.telegramToken = '8578702717:AAFShpdLRtat7PHqjZMUqhY4UNKlWyaGtmo';
+        this.telegramToken = '8106601008:AAEMyCma6mvPYIHEvw3RHQX2tkD5-wUe1o0';
         this.telegramChatId = '752497117';
-        this.telegramEnabled = false;
+        this.telegramEnabled = true;
 
         if (this.telegramEnabled) {
             this.telegramBot = new TelegramBot(this.telegramToken, { polling: false });
@@ -1179,27 +1179,31 @@ class FibonacciDifferBot {
             this.lastTickLogTime[asset] = now;
         }
 
-        if (!this.tradeInProgress && this.wsReady) {
+        if (!this.tradeInProgress) {
             this.analyzeTicks(asset);
         }
     }
 
     analyzeTicks(asset) {
-        if (this.tradeInProgress || this.suspendedAssets.has(asset) || !this.wsReady) return;
+        if (this.tradeInProgress || this.suspendedAssets.has(asset)) return;
 
         const history = this.tickHistories[asset];
         if (history.length < 100) return;
 
         // Use Fibonacci analysis to predict unlikely digit
         const prediction = this.fibAnalyzer.predictUnlikelyDigit(history);
+        // console.log('Prediction:', prediction);
 
         // Check if conditions are favorable
         const isFavorable = this.fibAnalyzer.isFavorableTradingCondition(history);
+        // console.log('Is Favorable:', isFavorable);
 
         // Check confidence threshold
         const confidenceLevels = ['LOW', 'MEDIUM', 'HIGH', 'VERY_HIGH'];
         const minConfidenceIndex = confidenceLevels.indexOf(this.config.minConfidence);
         const currentConfidenceIndex = confidenceLevels.indexOf(prediction.confidence);
+        // console.log('Min Confidence Index:', minConfidenceIndex);
+        // console.log('Current Confidence Index:', currentConfidenceIndex);
 
         if (prediction.digit !== null &&
             isFavorable &&

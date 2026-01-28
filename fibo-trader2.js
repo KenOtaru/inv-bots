@@ -204,9 +204,9 @@ class AIWeightedEnsembleBot {
         this.contractSubscription = null;
 
         // Telegram Configuration (from env)
-        this.telegramToken = process.env.TELEGRAM_BOT_TOKEN || '';
-        this.telegramChatId = process.env.TELEGRAM_CHAT_ID || '';
-        this.telegramEnabled = false;
+        this.telegramToken = '8418934966:AAFG-S3wUPV6Cdr8pQF133Ew5SfGpkfoDoU';
+        this.telegramChatId = '752497117';
+        this.telegramEnabled = true;
 
         if (this.telegramEnabled) {
             this.telegramBot = new TelegramBot(this.telegramToken, { polling: false });
@@ -733,7 +733,7 @@ class AIWeightedEnsembleBot {
         this.lastPrediction = pred.digit;
 
         // Only trade if the digit is meaningfully below uniform probability
-        if (pred.confidence < this.config.fibConfidenceThreshold && pred.prob >= 0.045) return;
+        if (pred.confidence < this.config.fibConfidenceThreshold || pred.prob < 0.045) return;
 
         this.placeTrade(asset, pred.digit);
     }
