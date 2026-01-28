@@ -192,10 +192,10 @@ class EliteFibonacciBot {
 
         this.currentStake = Math.round(this.currentStake * 100) / 100;
 
-        console.log(`ELITE TRADE → ${asset} | Differ ${digit} | Stake $${this.currentStake} | Z=${this.lastZ?.toFixed(2)}`);
+        console.log(`PLACING ELITE TRADE → ${asset} | Differ ${digit} | Stake $${this.currentStake} | Z=${this.lastZ?.toFixed(2)}`);
 
         this.sendTelegram(`
-            ELITE FIB TRADE
+            PLACING ELITE FIB TRADE
 
             ${asset} → Differ ${digit}
             Stake: $${this.currentStake}
