@@ -725,7 +725,7 @@ const volatilityEngine = new VolatilityFilterEngine({
 const volatilityEngine = new RelativeVolatilityEngine();
 */
 
-module.exports = { VolatilityFilterEngine, RelativeVolatilityEngine };
+// module.exports = { VolatilityFilterEngine, RelativeVolatilityEngine };
 
 // ============================================================================
 // MONEY MANAGEMENT ENGINE
