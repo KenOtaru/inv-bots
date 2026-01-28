@@ -37,7 +37,7 @@ class FibonacciZScoreEngine {
 
         // EXACT thresholds as specified
         this.MIN_VALID_WINDOWS = 8;
-        this.Z_SCORE_THRESHOLD = 10.82;
+        this.Z_SCORE_THRESHOLD = 11.15;
         this.RECENT_TICKS_CHECK = 9;
 
         // Pre-compute expected frequency for uniform distribution
@@ -1165,7 +1165,7 @@ class FibonacciZScoreBot {
 
         // Initialize engines
         this.zScoreEngine = new FibonacciZScoreEngine();
-        this.volatilityEngine = new VolatilityFilterEngine({ thresholdMode: 'realistic' });
+        this.volatilityEngine = new RelativeVolatilityEngine();
         this.moneyManager = new MoneyManagementEngine({
             baseStake: this.config.baseStake
         });
