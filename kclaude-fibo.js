@@ -1178,6 +1178,7 @@ class FibonacciZScoreBot {
         this.sessionStartTime = Date.now();
         this.suspendedAssets = new Set();
         this.endOfDay = false;
+        this.lastPrediction = null;
 
         // Connection management
         this.reconnectAttempts = 0;
@@ -1630,8 +1631,9 @@ Win Rate: ${stats.winRate}%
         // STEP 3: Z-score saturation analysis
         const saturation = this.zScoreEngine.findSaturatedDigit(history);
 
-        if (saturation) {
+        if (saturation && this.lastPrediction !== saturation.digit) {
             // Trade AGAINST the saturated digit (it's unlikely to appear again)
+            this.lastPrediction = saturation.digit;
             this.executeTrade(asset, saturation.digit, 'ZSCORE_SATURATION', {
                 volatility,
                 saturationInfo: saturation
