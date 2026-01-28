@@ -324,9 +324,23 @@ Time: ${new Date().toUTCString()}
 }
 
 // ============================================
-// LOGGER UTILITY
+// UTILITIES
 // ============================================
 const getGMTTime = () => new Date().toISOString().split('T')[1].split('.')[0] + ' GMT';
+
+const getLastDigit = (quote, symbol) => {
+    if (quote === undefined || quote === null) return 0;
+    const str = quote.toString();
+    const [, decimal = ''] = str.split('.');
+
+    // Different decimal places for different assets (following kclaude-fibo.js logic)
+    if (symbol === 'R_50') {
+        return decimal.length >= 4 ? parseInt(decimal[3]) : 0;
+    } else if (symbol === 'R_10' || symbol === 'R_25') {
+        return decimal.length >= 3 ? parseInt(decimal[2]) : 0;
+    }
+    return decimal.length >= 2 ? parseInt(decimal[1]) : 0;
+};
 
 const LOGGER = {
     info: (msg) => console.log(`[INFO] ${getGMTTime()} - ${msg}`),
@@ -920,6 +934,10 @@ class ConnectionManager {
             this.handleTick(response.tick);
         }
 
+        if (response.msg_type === 'history') {
+            this.handleTickHistory(response);
+        }
+
         if (response.msg_type === 'buy') {
             this.handleBuyResponse(response);
         }
@@ -938,9 +956,9 @@ class ConnectionManager {
         if (!state.assets[symbol]) return;
 
         const asset = state.assets[symbol];
-        const quote = parseFloat(tick.quote);
+        const digit = getLastDigit(tick.quote, symbol);
 
-        asset.tickHistory.push(quote);
+        asset.tickHistory.push(digit);
 
         // Trim history to max size
         if (asset.tickHistory.length > CONFIG.MAX_HISTORY_SIZE) {
@@ -951,6 +969,17 @@ class ConnectionManager {
         setTimeout(() => {
             SignalProcessor.processSignal(symbol);
         }, CONFIG.TICK_PROCESSING_DELAY);
+    }
+
+    handleTickHistory(response) {
+        const symbol = response.echo_req.ticks_history;
+        if (!state.assets[symbol]) return;
+
+        const asset = state.assets[symbol];
+        const prices = response.history?.prices || [];
+
+        asset.tickHistory = prices.map(p => getLastDigit(p, symbol));
+        LOGGER.info(`📊 ${symbol}: Loaded ${asset.tickHistory.length} historical ticks`);
     }
 
     handleBuyResponse(response) {
@@ -1180,13 +1209,24 @@ class BlackFibBot {
 
     async subscribeToAssets() {
         for (const symbol of CONFIG.ACTIVE_ASSETS) {
+            // Request historical ticks first (following kclaude-fibo.js)
+            this.connection.send({
+                ticks_history: symbol,
+                adjust_start_time: 1,
+                count: CONFIG.MIN_HISTORY_SIZE,
+                end: 'latest',
+                start: 1,
+                style: 'ticks'
+            });
+
+            // Subscribe to live ticks
             this.connection.send({
                 ticks: symbol,
                 subscribe: 1
             });
 
-            LOGGER.info(`📡 Subscribed to ${symbol}`);
-            await new Promise(resolve => setTimeout(resolve, 300));
+            LOGGER.info(`📡 Requested history and subscription for ${symbol}`);
+            await new Promise(resolve => setTimeout(resolve, 500));
         }
     }
 
@@ -1223,14 +1263,15 @@ class BlackFibBot {
         // Send buy request
         const tradeRequest = {
             buy: 1,
-            subscribe: 1,
             price: asset.currentStake,
             parameters: {
-                contract_type: 'DIGITDIFF',
-                symbol: symbol,
-                currency: 'USD',
                 amount: asset.currentStake,
                 basis: 'stake',
+                contract_type: 'DIGITDIFF',
+                currency: 'USD',
+                duration: 1,
+                duration_unit: 't',
+                symbol: asset,
                 barrier: prediction.toString()
             }
         };
