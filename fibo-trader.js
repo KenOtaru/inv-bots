@@ -1226,32 +1226,32 @@ class FibonacciDifferBot {
         console.log(`\n🎯 Placing Fibonacci Trade: [${asset}] Digit ${predictedDigit} | Stake: $${this.currentStake.toFixed(2)}`);
 
         const message = `
-🔔 <b>Fibonacci Trade Opened</b>
+            🔔 <b>Fibonacci Trade Opened</b>
 
-📊 <b>${asset}</b>
-🎯 <b>Differ Digit:</b> ${predictedDigit}
-💰 <b>Stake:</b> $${this.currentStake.toFixed(2)}
+            📊 <b>${asset}</b>
+            🎯 <b>Differ Digit:</b> ${predictedDigit}
+            💰 <b>Stake:</b> $${this.currentStake.toFixed(2)}
 
-🔢 <b>Fibonacci Analysis:</b>
-├ Confidence: ${analysis.confidence}
-├ Is Fib Digit: ${analysis.isFibonacciDigit ? 'Yes' : 'No'}
-├ Recent Count: ${analysis.recentCount}/5
-├ φ Score: ${analysis.confidenceScore.toFixed(3)}
+            🔢 <b>Fibonacci Analysis:</b>
+            ├ Confidence: ${analysis.confidence}
+            ├ Is Fib Digit: ${analysis.isFibonacciDigit ? 'Yes' : 'No'}
+            ├ Recent Count: ${analysis.recentCount}/5
+            ├ φ Score: ${analysis.confidenceScore.toFixed(3)}
 
-📈 <b>Method Scores:</b>
-├ Frequency: ${analysis.analysis.frequencyScore}
-├ Gap: ${analysis.analysis.gapScore}
-├ Pisano: ${analysis.analysis.pisanoScore}
-├ Momentum: ${analysis.analysis.momentumScore}
-├ Cluster: ${analysis.analysis.clusterScore}
-├ Cyclical: ${analysis.analysis.cyclicalScore}
-├ Lucas: ${analysis.analysis.lucasScore}
-└ Entropy: ${analysis.analysis.entropyScore}
+            📈 <b>Method Scores:</b>
+            ├ Frequency: ${analysis.analysis.frequencyScore}
+            ├ Gap: ${analysis.analysis.gapScore}
+            ├ Pisano: ${analysis.analysis.pisanoScore}
+            ├ Momentum: ${analysis.analysis.momentumScore}
+            ├ Cluster: ${analysis.analysis.clusterScore}
+            ├ Cyclical: ${analysis.analysis.cyclicalScore}
+            ├ Lucas: ${analysis.analysis.lucasScore}
+            └ Entropy: ${analysis.analysis.entropyScore}
 
-Last10: ${this.tickHistories[asset].slice(-10).join(',')}
+            Last10: ${this.tickHistories[asset].slice(-10).join(',')}
 
-⏰ ${new Date().toLocaleTimeString()}
-`.trim();
+            ⏰ ${new Date().toLocaleTimeString()}
+        `.trim();
         this.sendTelegramMessage(message);
 
         const success = this.sendRequest({
@@ -1314,7 +1314,7 @@ Last10: ${this.tickHistories[asset].slice(-10).join(',')}
             } else {
                 this.currentStake = Math.ceil(this.currentStake * this.config.multiplier * 100) / 100;
             }
-            this.suspendAsset(asset);
+            // this.suspendAsset(asset);
         }
 
         this.totalProfitLoss += profit;

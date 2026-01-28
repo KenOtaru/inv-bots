@@ -23,7 +23,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'mX4Differ-state3.json');
+const STATE_FILE = path.join(__dirname, 'fibo-trader2-state.json');
 const STATE_SAVE_INTERVAL = 5000; // Save every 5 seconds
 
 class StatePersistence {
@@ -486,21 +486,21 @@ class AIWeightedEnsembleBot {
         const pnlStr = (stats.pnl >= 0 ? '+' : '') + '$' + stats.pnl.toFixed(2);
 
         const message = `
-⏰ <b>x4 Differ Bot Hourly Summary</b>
+            ⏰ <b>Fibo2 Differ Bot Hourly Summary</b>
 
-📊 <b>Last Hour</b>
-├ Trades: ${stats.trades}
-├ Wins: ${stats.wins} | Losses: ${stats.losses}
-├ Win Rate: ${winRate}%
-└ ${pnlEmoji} <b>P&L:</b> ${pnlStr}
+            📊 <b>Last Hour</b>
+            ├ Trades: ${stats.trades}
+            ├ Wins: ${stats.wins} | Losses: ${stats.losses}
+            ├ Win Rate: ${winRate}%
+            └ ${pnlEmoji} <b>P&L:</b> ${pnlStr}
 
-📈 <b>Daily Totals</b>
-├ Total Trades: ${this.totalTrades}
-├ Total W/L: ${this.totalWins}/${this.totalLosses}
-├ Daily P&L: ${(this.totalProfitLoss >= 0 ? '+' : '')}$${this.totalProfitLoss.toFixed(2)}
-└ Current Capital: $${(this.config.initialStake + this.totalProfitLoss).toFixed(2)}
+            📈 <b>Daily Totals</b>
+            ├ Total Trades: ${this.totalTrades}
+            ├ Total W/L: ${this.totalWins}/${this.totalLosses}
+            ├ Daily P&L: ${(this.totalProfitLoss >= 0 ? '+' : '')}$${this.totalProfitLoss.toFixed(2)}
+            └ Current Capital: $${(this.config.initialStake + this.totalProfitLoss).toFixed(2)}
 
-⏰ ${new Date().toLocaleString()}
+            ⏰ ${new Date().toLocaleString()}
         `.trim();
 
         try {
@@ -733,7 +733,7 @@ class AIWeightedEnsembleBot {
         this.lastPrediction = pred.digit;
 
         // Only trade if the digit is meaningfully below uniform probability
-        if (pred.confidence < this.config.fibConfidenceThreshold) return;
+        if (pred.confidence < this.config.fibConfidenceThreshold && pred.prob >= 0.045) return;
 
         this.placeTrade(asset, pred.digit);
     }
@@ -759,14 +759,14 @@ class AIWeightedEnsembleBot {
         console.log(`Placing Trade: [${asset}] DIGITDIFF barrier=${predictedDigit} | Stake: $${this.currentStake.toFixed(2)}`);
 
         const message = `
-🔔 <b>Trade Opened (x4 Differ Bot)</b>
+            🔔 <b>Trade Opened (Fibo2 Differ Bot)</b>
 
-📊 <b>${asset}</b>
-🧬 <b>Fibonacci Unlikely Digit:</b> ${predictedDigit}
-💰 <b>Stake:</b> $${this.currentStake.toFixed(2)}
-Last10Digits = ${this.tickHistories[asset].slice(-10).join(',')}
+            📊 <b>${asset}</b>
+            🧬 <b>Fibonacci Unlikely Digit:</b> ${predictedDigit}
+            💰 <b>Stake:</b> $${this.currentStake.toFixed(2)}
+            Last10Digits = ${this.tickHistories[asset].slice(-10).join(',')}
 
-⏰ ${new Date().toLocaleTimeString()}
+            ⏰ ${new Date().toLocaleTimeString()}
         `.trim();
         this.sendTelegramMessage(message);
 
@@ -830,7 +830,7 @@ Last10Digits = ${this.tickHistories[asset].slice(-10).join(',')}
             } else {
                 this.currentStake = Math.ceil(this.currentStake * this.config.multiplier * 100) / 100;
             }
-            this.suspendAsset(asset);
+            // this.suspendAsset(asset);
         }
 
         this.totalProfitLoss += profit;
@@ -846,7 +846,7 @@ Last10Digits = ${this.tickHistories[asset].slice(-10).join(',')}
         const winRate = ((this.totalWins / this.totalTrades) * 100).toFixed(1);
 
         const telegramMsg = `
-${resultEmoji} (x4 Differ Bot)
+${resultEmoji} (Fibo2 Differ Bot)
 
 📊 <b>${asset}</b>
 ${pnlColor} <b>P&L:</b> ${pnlStr}
@@ -1068,7 +1068,7 @@ Last10Digits = ${this.tickHistories[asset].slice(-10).join(',')}
     }
 
     start() {
-        console.log('🚀 Starting x4 Differ Bot...');
+        console.log('🚀 Starting Fibo2 Differ Bot...');
         console.log(`📊 Session Summary:`);
         console.log(`   Total Trades: ${this.totalTrades}`);
         console.log(`   Wins/Losses: ${this.totalWins}/${this.totalLosses}`);
