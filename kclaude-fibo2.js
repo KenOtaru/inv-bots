@@ -439,9 +439,9 @@ class AIWeightedEnsembleBot {
         this.contractSubscription = null;
 
         // Telegram Configuration
-        this.telegramToken = '8578702717:AAFShpdLRtat7PHqjZMUqhY4UNKlWyaGtmo';
+        this.telegramToken = '8584545459:AAFvyVjgeBnPGs-w_ehTMBG-bTvxHpAIjeI';
         this.telegramChatId = '752497117';
-        this.telegramEnabled = false;
+        this.telegramEnabled = true;
 
         if (this.telegramEnabled) {
             this.telegramBot = new TelegramBot(this.telegramToken, { polling: false });
@@ -890,19 +890,6 @@ class AIWeightedEnsembleBot {
         }
     }
 
-    // getVolatilityLevel(tickHistory) {
-    //     if (tickHistory.length < 50) return 'unknown';
-    //     const recent = tickHistory.slice(-50);
-    //     const mean = recent.reduce((a, b) => a + b, 0) / recent.length;
-    //     const variance = recent.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / recent.length;
-    //     const stdDev = Math.sqrt(variance);
-
-    //     if (stdDev > 3.1) return 'extreme';
-    //     if (stdDev > 2.8) return 'high';
-    //     if (stdDev > 2.0) return 'medium';
-
-    //     return 'low';
-    // }
 
     placeTrade(asset, predictedDigit) {
         if (this.tradeInProgress || !this.wsReady) return;
@@ -1231,7 +1218,7 @@ class AIWeightedEnsembleBot {
         console.log(`   Total P&L: $${this.totalProfitLoss.toFixed(2)}`);
         console.log(`   Current Stake: $${this.currentStake.toFixed(2)}`);
         this.connect();
-        this.checkTimeForDisconnectReconnect();
+        // this.checkTimeForDisconnectReconnect();
     }
 }
 
