@@ -937,7 +937,7 @@ class MoneyManagementEngine {
         this.baseStake = config.baseStake || 2.20;
         this.firstLossMultiplier = 1.8;      // 1 loss → base × 1.8
         this.subsequentMultiplier = 11.3;    // 2+ losses → base × 11.3^(n-1)
-        this.maxConsecutiveLosses = 5;
+        this.maxConsecutiveLosses = 4;
 
         // State
         this.consecutiveLosses = 0;
@@ -1149,8 +1149,8 @@ class FibonacciZScoreBot {
 
         // EXACT assets as specified
         this.assets = [
-            // 'R_10',
-            // 'R_25',
+            'R_10',
+            'R_25',
             'R_50'
         ];
 
@@ -1482,7 +1482,10 @@ class FibonacciZScoreBot {
         if (now - this.lastTickLogTime[asset] >= 60000) {
             this.logAssetStatus(asset);
             this.lastTickLogTime[asset] = now;
+            console.log(`📊 ${asset}: ${this.tickHistories[asset].slice(-10).join(', ')}`);
         }
+
+        // console.log(`📊 ${asset}: ${this.tickHistories[asset].slice(-10).join(', ')}`);
 
         // Analyze for trading
         if (!this.tradeInProgress && this.wsReady) {
@@ -1815,10 +1818,6 @@ ${analysisData.bonusInfo ? `├ Streak: ${analysisData.bonusInfo.streakLength}×
         console.log('\n' + '═'.repeat(60));
         console.log('  FIBONACCI Z-SCORE SATURATION BOT');
         console.log('═'.repeat(60));
-        console.log('');
-        console.log('⚠️  WARNING: Trading involves substantial risk of loss.');
-        console.log('⚠️  Only trade money you can afford to lose completely.');
-        console.log('⚠️  Past performance does NOT guarantee future results.');
         console.log('');
         console.log('📋 Configuration:');
         console.log(`   Assets: ${this.assets.join(', ')}`);
