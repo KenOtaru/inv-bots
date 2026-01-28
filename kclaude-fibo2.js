@@ -1250,7 +1250,7 @@ class BlackFibBot {
         const contract = {
             symbol,
             prediction,
-            stake: asset.currentStake,
+            stake: asset.currentStake.toFixed(2),
             buyPrice: 0,
             openTime: Date.now(),
             consecutiveLosses: asset.consecutiveLosses,
@@ -1265,13 +1265,13 @@ class BlackFibBot {
             buy: 1,
             price: asset.currentStake,
             parameters: {
-                amount: asset.currentStake,
+                amount: asset.currentStake.toFixed(2),
                 basis: 'stake',
                 contract_type: 'DIGITDIFF',
                 currency: 'USD',
                 duration: 1,
                 duration_unit: 't',
-                symbol: asset,
+                symbol: symbol,
                 barrier: prediction.toString()
             }
         };
