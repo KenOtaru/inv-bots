@@ -60,7 +60,10 @@ const CONFIG = {
     MAX_HISTORY_SIZE: 3000,
 
     // Assets (ONLY these 3)
-    ACTIVE_ASSETS: ['R_10', 'R_25', 'R_50'],
+    ACTIVE_ASSETS: [
+        // 'R_10', 'R_25', 'R_50'
+        'R_10',
+    ],
 
     // Performance
     TICK_PROCESSING_DELAY: 100,
@@ -688,13 +691,15 @@ class StakeManager {
      * Calculate stake based on consecutive losses
      */
     static calculateStake(consecutiveLosses) {
+        let stake;
         if (consecutiveLosses === 0) {
-            return CONFIG.BASE_STAKE;
+            stake = CONFIG.BASE_STAKE;
         } else if (consecutiveLosses === 1) {
-            return CONFIG.BASE_STAKE * CONFIG.LOSS_1_MULTIPLIER;
+            stake = CONFIG.BASE_STAKE * CONFIG.LOSS_1_MULTIPLIER;
         } else {
-            return CONFIG.BASE_STAKE * Math.pow(CONFIG.LOSS_2PLUS_MULTIPLIER, consecutiveLosses - 1);
+            stake = CONFIG.BASE_STAKE * Math.pow(CONFIG.LOSS_2PLUS_MULTIPLIER, consecutiveLosses - 1);
         }
+        return Math.round(stake * 100) / 100;
     }
 
     /**
@@ -1250,7 +1255,7 @@ class BlackFibBot {
         const contract = {
             symbol,
             prediction,
-            stake: asset.currentStake.toFixed(2),
+            stake: asset.currentStake,
             buyPrice: 0,
             openTime: Date.now(),
             consecutiveLosses: asset.consecutiveLosses,
@@ -1265,7 +1270,7 @@ class BlackFibBot {
             buy: 1,
             price: asset.currentStake,
             parameters: {
-                amount: asset.currentStake.toFixed(2),
+                amount: asset.currentStake,
                 basis: 'stake',
                 contract_type: 'DIGITDIFF',
                 currency: 'USD',
