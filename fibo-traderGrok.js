@@ -561,10 +561,10 @@ class AIWeightedEnsembleBot {
         }
 
         const now = Date.now();
-        if (now - this.lastTickLogTime[asset] >= 30000) {
-            console.log(`[${asset}] ${tick.quote}: ${this.tickHistories[asset].slice(-5).join(', ')}`);
-            this.lastTickLogTime[asset] = now;
-        }
+        // if (now - this.lastTickLogTime[asset] >= 30000) {
+        console.log(`[${asset}] ${tick.quote}: ${this.tickHistories[asset].slice(-10).join(', ')}`);
+        // this.lastTickLogTime[asset] = now;
+        // }
 
         if (!this.tradeInProgress && this.wsReady) {
             this.analyzeTicks(asset);
@@ -612,6 +612,8 @@ class AIWeightedEnsembleBot {
             }
         }
 
+        console.log(`[${asset}] Max score: ${maxScore}, Predicted digit: ${predictedDigit}`);
+
         // === TRADING TRIGGER (extremely selective & high win-rate) ===
         // Threshold 9.0+ means the digit is statistically dominant across multiple Fib layers
         // This is the sweet spot used by the very best Differ bots right now
@@ -621,9 +623,9 @@ class AIWeightedEnsembleBot {
         const vol = this.getVolatilityLevel(history);
         console.log(`[${asset}] Volatility: ${vol}`);
 
-        if (vol === 'medium' || vol === 'low' || vol === 'ultra-low') {
+        if (vol === 'ultra-low' || vol === 'low') {
             // Only trade Fibonacci saturation in these regimes
-            if (maxScore >= 9.0 && recent.includes(predictedDigit)) {
+            if (maxScore >= 20.0 && recent.includes(predictedDigit)) {
                 this.lastPrediction = predictedDigit;
                 this.placeTrade(asset, predictedDigit);
             }
@@ -632,7 +634,7 @@ class AIWeightedEnsembleBot {
         // Optional secondary trigger: classic 3–4 consecutive repeat in medium volatility
         // (kept as fallback for extra stability – many pros still use this hybrid)
         // Keep classic repeat as bonus trigger only in ultra-low/low
-        // if (vol === 'ultra-low' || vol === 'low') {
+        // if (vol === 'ultra-low') {
         //     const streak = this.getCurrentStreak(history);
         //     if (streak >= 3) {
         //         this.placeTrade(asset, history[history.length - 1]);
