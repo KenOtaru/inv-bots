@@ -638,7 +638,7 @@ class BlackFibonacci {
             this.totalWins++;
             this.hourly.wins++;
             this.consecutiveLosses = 0;
-            this.stake = 2.20;
+            this.stake = 5;
         } else {
             this.hourly.losses++;
             this.consecutiveLosses++;
@@ -649,8 +649,8 @@ class BlackFibonacci {
             if (this.consecutiveLosses === 5) this.x5++;
 
             this.stake = this.consecutiveLosses === 1
-                ? 3.96
-                : 2.20 * Math.pow(11.3, this.consecutiveLosses - 1);
+                ? 9
+                : 5 * Math.pow(11.3, this.consecutiveLosses - 1);
             this.stake = Math.round(this.stake * 100) / 100;
 
             // Send loss alert
