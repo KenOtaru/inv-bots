@@ -357,16 +357,16 @@ class BlackFibonacci {
 
             // Send loss alert
             this.sendTelegram(`
-❌ <b>LOSS TRADE</b>
+                ❌ <b>LOSS TRADE</b>
 
-📊 Exit Digit: ${exitDigit}
-💸 Profit: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}
-📈 Total Trades: ${this.totalTrades}
-✅/❌ W/L: ${this.totalWins}/${this.totalTrades - this.totalWins}
-🔢 x2-x5 Losses: ${this.x2}/${this.x3}/${this.x4}/${this.x5}
-💰 Next Stake: $${this.stake.toFixed(2)}
-💵 Net P&L: $${this.netProfit.toFixed(2)}
-⏰ ${new Date().toLocaleString()}
+                📊 Exit Digit: ${exitDigit}
+                💸 Profit: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}
+                📈 Total Trades: ${this.totalTrades}
+                ✅/❌ W/L: ${this.totalWins}/${this.totalTrades - this.totalWins}
+                🔢 x2-x5 Losses: ${this.x2}/${this.x3}/${this.x4}/${this.x5}
+                💰 Next Stake: $${this.stake.toFixed(2)}
+                💵 Net P&L: $${this.netProfit.toFixed(2)}
+                ⏰ ${new Date().toLocaleString()}
             `.trim());
         }
 
@@ -410,21 +410,21 @@ class BlackFibonacci {
         console.log(`   P&L: ${this.hourly.pnl >= 0 ? '+' : ''}$${this.hourly.pnl.toFixed(2)}\n`);
 
         this.sendTelegram(`
-⏰ <b>HOURLY SUMMARY</b>
+            ⏰ <b>HOURLY SUMMARY</b>
 
-📊 <b>Last Hour</b>
-├ Trades: ${this.hourly.trades}
-├ W/L: ${this.hourly.wins}/${this.hourly.losses}
-├ Win Rate: ${winRate}%
-└ P&L: ${this.hourly.pnl >= 0 ? '+' : ''}$${this.hourly.pnl.toFixed(2)}
+            📊 <b>Last Hour</b>
+            ├ Trades: ${this.hourly.trades}
+            ├ W/L: ${this.hourly.wins}/${this.hourly.losses}
+            ├ Win Rate: ${winRate}%
+            └ P&L: ${this.hourly.pnl >= 0 ? '+' : ''}$${this.hourly.pnl.toFixed(2)}
 
-📈 <b>Session Total</b>
-├ Total Trades: ${this.totalTrades}
-├ Total W/L: ${this.totalWins}/${this.totalTrades - this.totalWins}
-├ x2-x5: ${this.x2}/${this.x3}/${this.x4}/${this.x5}
-└ Net P&L: $${this.netProfit.toFixed(2)}
+            📈 <b>Session Total</b>
+            ├ Total Trades: ${this.totalTrades}
+            ├ Total W/L: ${this.totalWins}/${this.totalTrades - this.totalWins}
+            ├ x2-x5: ${this.x2}/${this.x3}/${this.x4}/${this.x5}
+            └ Net P&L: $${this.netProfit.toFixed(2)}
 
-⏰ ${new Date().toLocaleString()}
+            ⏰ ${new Date().toLocaleString()}
         `.trim());
 
         this.hourly = { trades: 0, wins: 0, losses: 0, pnl: 0 };
