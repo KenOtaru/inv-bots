@@ -1412,25 +1412,24 @@ class FibonacciZScoreBot {
             }
         }
 
-        // === 2. FIBONACCI SATURATION (ONLY if no bonus and Z-score is rising) ===
+        // === 2. FIBONACCI SATURATION (ROMANIAN GHOST EXACT LOGIC) ===
         if (!shouldTrade) {
             const saturation = this.zScoreEngine.findSaturatedDigit(history);
 
             if (saturation) {
-                // CRITICAL: Only trade if Z-score is HIGHER than last signal OR it's a new digit
-                const zImproved = saturation.totalZScore > this.lastZScore + 2.5;
+                // ROMANIAN GHOST'S EXACT CONDITION — ONLY +0.3 improvement OR new digit
+                const zImproved = !this.lastZScore || saturation.totalZScore > this.lastZScore + 0.3;
                 const newDigit = this.lastPrediction !== saturation.digit;
 
                 if ((newDigit || zImproved) && saturation.totalZScore >= 11.15) {
                     shouldTrade = true;
                     digitToTrade = saturation.digit;
                     tradeType = 'FIB_SATURATION';
-                    this.lastZScore = saturation.totalZScore;  // Track for next comparison
+                    this.lastZScore = saturation.totalZScore;  // Update for next comparison
                 }
             }
         }
 
-        // === EXECUTE ONLY IF ALL CONDITIONS MET ===
         if (shouldTrade && digitToTrade !== null) {
             this.lastPrediction = digitToTrade;
             this.executeTrade(asset, digitToTrade, tradeType, { volatility });
