@@ -72,7 +72,7 @@ class StatePersistence {
     }
 }
 
-class BlackFibonacci {
+class DubaiPrince {
     constructor() {
         // Configuration
         this.config = {
@@ -926,9 +926,9 @@ class BlackFibonacci {
 
 // Start the bot
 console.log('═══════════════════════════════════════════════════');
-console.log('  BLACK FIBONACCI 9.1 FINAL — GHOST MODE');
+console.log('  Dubai Prince — GHOST MODE');
 console.log('═══════════════════════════════════════════════════');
 console.log(`  Started: ${new Date().toLocaleString()}`);
 console.log('═══════════════════════════════════════════════════\n');
 
-new BlackFibonacci();
+new DubaiPrince();
