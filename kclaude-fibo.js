@@ -661,7 +661,7 @@ class RelativeVolatilityEngine {
         const combinedDeviation = avgEntropyDev * this.CONCENTRATION_WEIGHT +
             (-avgStreakDev) * this.STREAK_WEIGHT;
 
-        console.log('Combined Deviation:', combinedDeviation);
+        // console.log('Combined Deviation:', combinedDeviation);
 
         // Determine level based on how much less random than expected
         let level;
