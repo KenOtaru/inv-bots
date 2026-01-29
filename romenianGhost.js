@@ -271,7 +271,7 @@ class BlackFibonacci {
         }
 
         // Trade signal
-        if (ultraLow && maxZ >= 15.30 && inRecent && sat !== this.lastTradeDigit) {
+        if (ultraLow && maxZ >= 11.30 && inRecent && sat !== this.lastTradeDigit) {
             this.placeTrade(sat, maxZ, concentration);
         }
     }
