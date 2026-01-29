@@ -517,6 +517,10 @@ class BlackFibonacci {
         const fib = [21, 55, 89, 144, 233, 377, 610, 987];
         const z = Array(10).fill(0);
 
+        const volatility = this.volatilityEngine.calculateVolatilityLevel(this.history);
+        console.log(`📊 Volatility: ${volatility.level}`);
+        if (!volatility.canTrade) return;
+
         for (const len of fib) {
             const slice = this.history.slice(-len);
             const c = Array(10).fill(0);
@@ -556,17 +560,129 @@ class BlackFibonacci {
         console.log(`
             Digit: ${best}
             Z-Score: ${bestZ.toFixed(2)}
-            Concentration: ${concentration.toFixed(4)}
-            Volatility: ${vol.toFixed(3)}
+            Volatility: ${volatility.level}
             Trade Scan: ${this.tradeScan}
         `.trim());
 
-        if (this.tradeScan && bestZ >= 11.40 && this.history.slice(-9).includes(best) && best !== this.lastTradeDigit) {
+        if (this.tradeScan && bestZ >= 11.40 && this.history.slice(-9).includes(best) && best !== this.lastTradeDigit && (volatility.level === 'ultra-low' || volatility.level === 'low')) {
             this.lastTradeDigit = best;
 
             this.placeTrade(best, bestZ, concentration);
         }
     }
+
+    calculateVolatilityLevel(history) {
+        let entropyDeviationSum = 0;
+        let streakDeviationSum = 0;
+        let totalWeight = 0;
+        const windowResults = [];
+
+        for (const { size, weight } of this.WINDOWS) {
+            const deviation = this.calculateDeviation(history, size);
+
+            if (deviation !== null) {
+                entropyDeviationSum += deviation.entropyDeviation * weight;
+                streakDeviationSum += deviation.streakDeviation * weight;
+                totalWeight += weight;
+
+                windowResults.push({
+                    window: size,
+                    entropyDev: (deviation.entropyDeviation * 100).toFixed(1) + '%',
+                    streakDev: (deviation.streakDeviation * 100).toFixed(1) + '%',
+                    maxStreak: deviation.maxStreak
+                });
+            }
+        }
+
+        if (totalWeight === 0) {
+            return { level: 'unknown', canTrade: false };
+        }
+
+        // Weighted average deviations
+        const avgEntropyDev = entropyDeviationSum / totalWeight;
+        const avgStreakDev = streakDeviationSum / totalWeight;
+
+        // Combined deviation score
+        // Negative = more predictable than expected
+        const combinedDeviation = avgEntropyDev * this.CONCENTRATION_WEIGHT +
+            (-avgStreakDev) * this.STREAK_WEIGHT;
+
+        // console.log('Combined Deviation:', combinedDeviation);
+
+        // Determine level based on how much less random than expected
+        let level;
+        if (combinedDeviation > 0.05) {
+            level = 'extreme';       // More random than expected
+        } else if (combinedDeviation > 0.02) {
+            level = 'high';          // Slightly more random
+        } else if (combinedDeviation > -0.02) {
+            level = 'medium';        // Around expected randomness
+        } else if (combinedDeviation > -0.05) {
+            level = 'low';           // Slightly less random (tradeable!)
+        } else {
+            level = 'ultra-low';     // Much less random (definitely tradeable!)
+        }
+
+        const canTrade = this.TRADEABLE_LEVELS.includes(level);
+
+        return {
+            level,
+            score: combinedDeviation,
+            canTrade,
+            avgEntropyDeviation: avgEntropyDev,
+            avgStreakDeviation: avgStreakDev,
+            windowResults
+        };
+    }
+
+    calculateDeviation(history, windowSize) {
+        if (history.length < windowSize) return null;
+
+        const window = history.slice(-windowSize);
+
+        // Calculate actual entropy
+        const frequency = Array(10).fill(0);
+        window.forEach(d => frequency[d]++);
+
+        let entropy = 0;
+        for (let i = 0; i < 10; i++) {
+            if (frequency[i] > 0) {
+                const p = frequency[i] / windowSize;
+                entropy -= p * Math.log2(p);
+            }
+        }
+        const maxEntropy = Math.log2(10);
+        const entropyRatio = entropy / maxEntropy;
+
+        // Calculate actual max streak
+        let maxStreak = 1, currentStreak = 1;
+        for (let i = 1; i < window.length; i++) {
+            if (window[i] === window[i - 1]) {
+                currentStreak++;
+                maxStreak = Math.max(maxStreak, currentStreak);
+            } else {
+                currentStreak = 1;
+            }
+        }
+        const expectedMaxStreak = Math.log2(windowSize);
+        const streakRatio = maxStreak / expectedMaxStreak;
+
+        // Calculate deviations from expected
+        // Positive = more random than expected
+        // Negative = less random than expected (more predictable)
+        const entropyDeviation = (entropyRatio - this.EXPECTED_ENTROPY_RATIO) / this.EXPECTED_ENTROPY_RATIO;
+        const streakDeviation = (streakRatio - this.EXPECTED_MAX_STREAK_RATIO) / this.EXPECTED_MAX_STREAK_RATIO;
+
+        return {
+            entropyDeviation,
+            streakDeviation,
+            entropyRatio,
+            streakRatio,
+            maxStreak
+        };
+    }
+
+
 
     placeTrade(digit, zScore, concentration) {
         if (this.tradeInProgress) return;
