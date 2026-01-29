@@ -609,14 +609,14 @@ class BlackFibonacci {
         console.log(`
             📊 Digit: ${best}
             📈 Z-Score: ${bestZ.toFixed(2)}
-            🔬 Concentration: ${conc.toFixed(3)}
+            🔬 Concentration: ${concentration.toFixed(3)}
             💰 Volatility: ${vol.toFixed(3)}
         `.trim());
 
         if (vol < 0.31 && bestZ >= 11.40 && this.history.slice(-9).includes(best) && best !== this.lastSignal) {
             this.lastSignal = best;
 
-            this.placeTrade(best, bestZ, conc);
+            this.placeTrade(best, bestZ, concentration);
         }
     }
 
