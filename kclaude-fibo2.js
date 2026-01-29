@@ -211,6 +211,7 @@ class FibonacciEngine {
 
         // Must meet Z-score threshold
         if (top.totalZScore < CONFIG.Z_SCORE_THRESHOLD) {
+            console.log(`Digit ${top.digit} Z-score ${top.totalZScore.toFixed(2)} but below threshold ${CONFIG.Z_SCORE_THRESHOLD}`);
             return null;
         }
 
@@ -364,7 +365,7 @@ class BonusTrigger {
 
         if (allSame) {
             return {
-                digit: firstDigit,  // ← This is correct: trade AGAINST the repeated digit
+                digit: firstDigit,
                 repeatedDigit: firstDigit,
                 count: CONFIG.BONUS_REPEAT_THRESHOLD
             };
@@ -876,6 +877,8 @@ class AIWeightedEnsembleBot {
         // Step 3: Fibonacci Z-score (if no bonus trigger)
         if (!isBonusTrigger) {
             const saturated = FibonacciEngine.findSaturatedDigit(history);
+
+            console.log(`${asset}: 🎯 FIBONACCI SIGNAL! Digit ${saturated.digit}, Z-score ${saturated.zScore.toFixed(2)}`);
 
             if (saturated) {
                 prediction = saturated.digit;

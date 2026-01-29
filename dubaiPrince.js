@@ -131,11 +131,24 @@ class BlackFibonacci {
         // Telegram bot
         this.telegramBot = new TelegramBot(TELEGRAM_TOKEN, { polling: false });
 
-        // Volatility calculation constants
-        this.CONCENTRATION_WEIGHT = 0.6;
-        this.STREAK_WEIGHT = 0.4;
-        this.EXPECTED_ENTROPY_RATIO = 0.95;  // Expected entropy ratio for random data
-        this.EXPECTED_MAX_STREAK_RATIO = 1.0; // Expected max streak ratio
+        this.WINDOWS = [
+            { size: 50, weight: 1.0 },
+            { size: 100, weight: 1.0 },
+            { size: 200, weight: 1.0 },
+            { size: 500, weight: 2.5 }
+        ];
+
+        this.CONCENTRATION_WEIGHT = 0.60;
+        this.STREAK_WEIGHT = 0.40;
+
+        // Baseline expectations for random data
+        // For 10 equally likely outcomes:
+        this.EXPECTED_ENTROPY_RATIO = 0.95; // Random data is ~95% of max entropy
+        this.EXPECTED_MAX_STREAK_RATIO = 0.35; // Max streak is ~35% of log2(n)
+
+        // Thresholds based on deviation from expected
+        // Negative deviation = less random than expected = more predictable
+        this.TRADEABLE_LEVELS = ['low', 'ultra-low'];
 
         // Load saved state if available
         this.loadSavedState();
@@ -578,22 +591,61 @@ class BlackFibonacci {
         }
     }
 
+    calculateDeviation(history, windowSize) {
+        if (history.length < windowSize) return null;
+
+
+        const window = history.slice(-windowSize);
+
+        // Calculate actual entropy
+        const frequency = Array(10).fill(0);
+        window.forEach(d => frequency[d]++);
+
+        let entropy = 0;
+        for (let i = 0; i < 10; i++) {
+            if (frequency[i] > 0) {
+                const p = frequency[i] / windowSize;
+                entropy -= p * Math.log2(p);
+            }
+        }
+        const maxEntropy = Math.log2(10);
+        const entropyRatio = entropy / maxEntropy;
+
+        // Calculate actual max streak
+        let maxStreak = 1, currentStreak = 1;
+        for (let i = 1; i < window.length; i++) {
+            if (window[i] === window[i - 1]) {
+                currentStreak++;
+                maxStreak = Math.max(maxStreak, currentStreak);
+            } else {
+                currentStreak = 1;
+            }
+        }
+        const expectedMaxStreak = Math.log2(windowSize);
+        const streakRatio = maxStreak / expectedMaxStreak;
+
+        // Calculate deviations from expected
+        // Positive = more random than expected
+        // Negative = less random than expected (more predictable)
+        const entropyDeviation = (entropyRatio - this.EXPECTED_ENTROPY_RATIO) / this.EXPECTED_ENTROPY_RATIO;
+        const streakDeviation = (streakRatio - this.EXPECTED_MAX_STREAK_RATIO) / this.EXPECTED_MAX_STREAK_RATIO;
+
+        return {
+            entropyDeviation,
+            streakDeviation,
+            entropyRatio,
+            streakRatio,
+            maxStreak
+        };
+    }
+
     calculateVolatilityLevel(history) {
         let entropyDeviationSum = 0;
         let streakDeviationSum = 0;
         let totalWeight = 0;
         const windowResults = [];
-        // Windows and weights as specified
-        const windows = [
-            { size: 50, weight: 1.0 },
-            { size: 100, weight: 1.0 },
-            { size: 200, weight: 1.0 },
-            { size: 500, weight: 2.5 }
-        ];
 
-        this.TRADEABLE_LEVELS = ['low', 'ultra-low'];
-
-        for (const { size, weight } of windows) {
+        for (const { size, weight } of this.WINDOWS) {
             const deviation = this.calculateDeviation(history, size);
 
             if (deviation !== null) {
@@ -641,8 +693,6 @@ class BlackFibonacci {
 
         const canTrade = this.TRADEABLE_LEVELS.includes(level);
 
-        console.log('Can trade:', canTrade);
-
         return {
             level,
             score: combinedDeviation,
@@ -650,53 +700,6 @@ class BlackFibonacci {
             avgEntropyDeviation: avgEntropyDev,
             avgStreakDeviation: avgStreakDev,
             windowResults
-        };
-    }
-
-    calculateDeviation(history, windowSize) {
-        if (history.length < windowSize) return null;
-
-        const window = history.slice(-windowSize);
-
-        // Calculate actual entropy
-        const frequency = Array(10).fill(0);
-        window.forEach(d => frequency[d]++);
-
-        let entropy = 0;
-        for (let i = 0; i < 10; i++) {
-            if (frequency[i] > 0) {
-                const p = frequency[i] / windowSize;
-                entropy -= p * Math.log2(p);
-            }
-        }
-        const maxEntropy = Math.log2(10);
-        const entropyRatio = entropy / maxEntropy;
-
-        // Calculate actual max streak
-        let maxStreak = 1, currentStreak = 1;
-        for (let i = 1; i < window.length; i++) {
-            if (window[i] === window[i - 1]) {
-                currentStreak++;
-                maxStreak = Math.max(maxStreak, currentStreak);
-            } else {
-                currentStreak = 1;
-            }
-        }
-        const expectedMaxStreak = Math.log2(windowSize);
-        const streakRatio = maxStreak / expectedMaxStreak;
-
-        // Calculate deviations from expected
-        // Positive = more random than expected
-        // Negative = less random than expected (more predictable)
-        const entropyDeviation = (entropyRatio - this.EXPECTED_ENTROPY_RATIO) / this.EXPECTED_ENTROPY_RATIO;
-        const streakDeviation = (streakRatio - this.EXPECTED_MAX_STREAK_RATIO) / this.EXPECTED_MAX_STREAK_RATIO;
-
-        return {
-            entropyDeviation,
-            streakDeviation,
-            entropyRatio,
-            streakRatio,
-            maxStreak
         };
     }
 
