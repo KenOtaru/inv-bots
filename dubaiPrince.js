@@ -96,6 +96,7 @@ class BlackFibonacci {
         this.netProfit = 0;
         this.lastTradeDigit = null;
         this.tradeInProgress = false;
+        this.tradeScan = false;
 
         // Hourly stats
         this.hourly = { trades: 0, wins: 0, losses: 0, pnl: 0 };
@@ -512,64 +513,6 @@ class BlackFibonacci {
         }
     }
 
-    scanForSignal() {
-        const windows = [13, 21, 34, 55, 89, 144, 233, 377, 610, 987];
-        const scores = Array(10).fill(0);
-
-        // Calculate Z-scores across Fibonacci windows
-        for (const w of windows) {
-            if (this.history.length < w) continue;
-            const slice = this.history.slice(-w);
-            const counts = Array(10).fill(0);
-            slice.forEach(d => counts[d]++);
-            const exp = w / 10;
-            const sd = Math.sqrt(w * 0.1 * 0.9);
-
-            for (let i = 0; i < 10; i++) {
-                scores[i] += (counts[i] - exp) / sd;
-            }
-        }
-
-        // Find saturated digit
-        let maxZ = -99, sat = -1;
-        for (let i = 0; i < 10; i++) {
-            if (scores[i] > maxZ) {
-                maxZ = scores[i];
-                sat = i;
-            }
-        }
-
-        // Calculate volatility (concentration)
-        // ULTRA-LOW VOLATILITY CHECK — ROMANIAN GHOST EXACT
-        const last500 = this.history.slice(-500);
-        const freq = Array(10).fill(0);
-        last500.forEach(d => freq[d]++);
-
-        let entropy = 0;
-        for (let f of freq) {
-            if (f > 0) {
-                const p = f / 500;
-                entropy -= p * Math.log2(p);
-            }
-        }
-
-        // Check conditions
-        const inRecent = this.history.slice(-9).includes(sat);
-
-        const concentration = 1 - (entropy / Math.log2(10));
-        const ultraLow = concentration > 0.0075;  // THIS IS THE REAL THRESHOLD
-
-        // Log analysis every 100 ticks
-        if (this.history.length % 100 === 0) {
-            console.log(`Z=${maxZ.toFixed(2)} | Digit=${sat} | Conc=${concentration.toFixed(4)} | UltraLow=${ultraLow} | InRecent=${inRecent}`);
-        }
-
-        // Trade signal
-        if (ultraLow && maxZ >= 11.30 && inRecent && sat !== this.lastTradeDigit) {
-            this.placeTrade(sat, maxZ, concentration);
-        }
-    }
-
     detectPhoenixSignal() {
         const fib = [21, 55, 89, 144, 233, 377, 610, 987];
         const z = Array(10).fill(0);
@@ -606,15 +549,20 @@ class BlackFibonacci {
         const streak = Math.max(...last500.join('').match(/((\d)\2*)/g)?.map(x => x.length) || [0]);
         const vol = (1 - concentration) * 0.65 + (streak / 12) * 0.35;
 
+        if (bestZ < 8.00) {
+            this.tradeScan = true;
+        }
+
         console.log(`
-            📊 Digit: ${best}
-            📈 Z-Score: ${bestZ.toFixed(2)}
-            🔬 Concentration: ${concentration.toFixed(3)}
-            💰 Volatility: ${vol.toFixed(3)}
+            Digit: ${best}
+            Z-Score: ${bestZ.toFixed(2)}
+            Concentration: ${concentration.toFixed(4)}
+            Volatility: ${vol.toFixed(3)}
+            Trade Scan: ${this.tradeScan}
         `.trim());
 
-        if (vol < 0.31 && bestZ >= 11.40 && this.history.slice(-9).includes(best) && best !== this.lastSignal) {
-            this.lastSignal = best;
+        if (this.tradeScan && bestZ >= 11.40 && this.history.slice(-9).includes(best) && best !== this.lastTradeDigit) {
+            this.lastTradeDigit = best;
 
             this.placeTrade(best, bestZ, concentration);
         }
@@ -627,11 +575,11 @@ class BlackFibonacci {
         this.lastTradeDigit = digit;
 
         console.log(`\n🎯 PHOENIX SIGNAL DETECTED!`);
-        console.log(`   Digit: ${digit}`);
-        console.log(`   Z-Score: ${zScore.toFixed(2)}`);
-        console.log(`   Concentration: ${concentration.toFixed(3)}`);
-        console.log(`   Stake: $${this.stake.toFixed(2)}`);
-        console.log(`   Consecutive Losses: ${this.consecutiveLosses}`);
+        console.log(`Digit: ${digit}`);
+        console.log(`Z-Score: ${zScore.toFixed(2)}`);
+        console.log(`Concentration: ${concentration.toFixed(3)}`);
+        console.log(`Stake: $${this.stake.toFixed(2)}`);
+        console.log(`Consecutive Losses: ${this.consecutiveLosses}`);
 
         this.sendRequest({
             buy: 1,
@@ -734,6 +682,8 @@ class BlackFibonacci {
             this.disconnect();
             return;
         }
+
+        this.tradeScan = false;
 
         this.tradeInProgress = false;
     }
