@@ -77,7 +77,7 @@ class BlackFibonacci {
         // Configuration
         this.config = {
             takeProfit: 10000,
-            maxConsecutiveLosses: 3,
+            maxConsecutiveLosses: 4,
             requiredHistoryLength: 3000,
             minHistoryForTrading: 2000,
             asset: 'R_10'
