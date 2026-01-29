@@ -959,7 +959,7 @@ class FibonacciZScoreBot {
             baseStake: config.baseStake || 2.20,
             minHistoryLength: config.minHistoryLength || 2000,
             maxHistoryLength: config.maxHistoryLength || 3000,
-            telegramToken: '8106601008:AAEMyCma6mvPYIHEvw3RHQX2tkD5-wUe1o0',
+            telegramToken: '7919033379:AAHluKFMECmhMrBhNr_XVpWvCKEonQPx9_0',
             telegramChatId: '752497117'
         };
 
