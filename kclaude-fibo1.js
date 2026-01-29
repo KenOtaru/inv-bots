@@ -870,7 +870,7 @@ class MoneyManagementEngine {
 // STATE PERSISTENCE
 // ============================================================================
 
-const STATE_FILE = path.join(__dirname, 'fib-zscore-bot2-state.json');
+const STATE_FILE = path.join(__dirname, 'kclaude-fibo1-state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -965,8 +965,8 @@ class FibonacciZScoreBot {
 
         // Initialize engines
         this.zScoreEngine = new FibonacciZScoreEngine();
-        this.volatilityEngine = new RelativeVolatilityEngine();
-        // this.volatilityEngine = new VolatilityFilterEngine();
+        // this.volatilityEngine = new RelativeVolatilityEngine();
+        this.volatilityEngine = new VolatilityFilterEngine();
         this.moneyManager = new MoneyManagementEngine({
             baseStake: this.config.baseStake
         });
