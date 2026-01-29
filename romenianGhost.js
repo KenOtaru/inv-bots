@@ -263,7 +263,7 @@ class BlackFibonacci {
         const inRecent = this.history.slice(-9).includes(sat);
 
         const concentration = 1 - (entropy / Math.log2(10));
-        const ultraLow = concentration > 0.0071;  // THIS IS THE REAL THRESHOLD
+        const ultraLow = concentration > 0.0075;  // THIS IS THE REAL THRESHOLD
 
         // Log analysis every 100 ticks
         if (this.history.length % 100 === 0) {
@@ -271,8 +271,8 @@ class BlackFibonacci {
         }
 
         // Trade signal
-        if (ultraLow && maxZ >= 11.15 && inRecent && sat !== this.lastTradeDigit) {
-            this.placeTrade(sat, maxZ, conc);
+        if (ultraLow && maxZ >= 15.30 && inRecent && sat !== this.lastTradeDigit) {
+            this.placeTrade(sat, maxZ, concentration);
         }
     }
 
@@ -305,14 +305,14 @@ class BlackFibonacci {
         });
 
         this.sendTelegram(`
-🎯 <b>TRADE SIGNAL</b>
+            🎯 <b>TRADE SIGNAL</b>
 
-📊 Digit: ${digit}
-📈 Z-Score: ${zScore.toFixed(2)}
-🔬 Concentration: ${concentration.toFixed(3)}
-💰 Stake: $${this.stake.toFixed(2)}
-📉 Consecutive Losses: ${this.consecutiveLosses}
-⏰ ${new Date().toLocaleTimeString()}
+            📊 Digit: ${digit}
+            📈 Z-Score: ${zScore.toFixed(2)}
+            🔬 Concentration: ${concentration.toFixed(3)}
+            💰 Stake: $${this.stake.toFixed(2)}
+            📉 Consecutive Losses: ${this.consecutiveLosses}
+            ⏰ ${new Date().toLocaleTimeString()}
         `.trim());
     }
 

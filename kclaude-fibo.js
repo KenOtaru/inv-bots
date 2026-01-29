@@ -734,8 +734,8 @@ const volatilityEngine = new RelativeVolatilityEngine();
 class MoneyManagementEngine {
     constructor(config) {
         // EXACT configuration as specified
-        this.baseStake = config.baseStake || 2.20;
-        this.firstLossMultiplier = 1.8;      // 1 loss → base × 1.8
+        this.baseStake = config.baseStake || 0.61;
+        this.firstLossMultiplier = 11.3;      // 1 loss → base × 1.8
         this.subsequentMultiplier = 11.3;    // 2+ losses → base × 11.3^(n-1)
         this.maxConsecutiveLosses = 4;
 
@@ -870,7 +870,7 @@ class MoneyManagementEngine {
 // STATE PERSISTENCE
 // ============================================================================
 
-const STATE_FILE = path.join(__dirname, 'fib-zscore-bot2-state.json');
+const STATE_FILE = path.join(__dirname, 'kclaude-00001-state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -1419,10 +1419,11 @@ class FibonacciZScoreBot {
 
             if (saturation) {
                 // ROMANIAN GHOST'S EXACT CONDITION — ONLY +0.3 improvement OR new digit
+                console.log('Saturation Score:', saturation.totalZScore)
                 const zImproved = !this.lastZScore || saturation.totalZScore > this.lastZScore + 0.3;
                 const newDigit = this.lastPrediction !== saturation.digit;
 
-                if ((newDigit || zImproved) && saturation.totalZScore >= 11.15) {
+                if ((newDigit || zImproved) && saturation.totalZScore >= 22.30 && (volatility.level === 'ultra-low' || volatility.level === 'low')) {
                     shouldTrade = true;
                     digitToTrade = saturation.digit;
                     tradeType = 'FIB_SATURATION';
