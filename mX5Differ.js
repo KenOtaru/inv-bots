@@ -1071,7 +1071,7 @@ const bot = new AIWeightedEnsembleBot('0P94g4WdSrSrzir', {
     maxConsecutiveLosses: 4,
     stopLoss: 55,
     takeProfit: 5000,
-    requiredHistoryLength: 1000,
+    requiredHistoryLength: 3000,
     minWaitTime: 1000,
     maxWaitTime: 3000,
 });
