@@ -131,6 +131,12 @@ class BlackFibonacci {
         // Telegram bot
         this.telegramBot = new TelegramBot(TELEGRAM_TOKEN, { polling: false });
 
+        // Volatility calculation constants
+        this.CONCENTRATION_WEIGHT = 0.6;
+        this.STREAK_WEIGHT = 0.4;
+        this.EXPECTED_ENTROPY_RATIO = 0.95;  // Expected entropy ratio for random data
+        this.EXPECTED_MAX_STREAK_RATIO = 1.0; // Expected max streak ratio
+
         // Load saved state if available
         this.loadSavedState();
 
@@ -517,8 +523,9 @@ class BlackFibonacci {
         const fib = [21, 55, 89, 144, 233, 377, 610, 987];
         const z = Array(10).fill(0);
 
-        const volatility = this.volatilityEngine.calculateVolatilityLevel(this.history);
-        console.log(`📊 Volatility: ${volatility.level}`);
+        const volatility = this.calculateVolatilityLevel(this.history);
+        console.log(`📊 Volatility: ${volatility.level} Score: ${volatility.score}`);
+
         if (!volatility.canTrade) return;
 
         for (const len of fib) {
@@ -576,8 +583,17 @@ class BlackFibonacci {
         let streakDeviationSum = 0;
         let totalWeight = 0;
         const windowResults = [];
+        // Windows and weights as specified
+        const windows = [
+            { size: 50, weight: 1.0 },
+            { size: 100, weight: 1.0 },
+            { size: 200, weight: 1.0 },
+            { size: 500, weight: 2.5 }
+        ];
 
-        for (const { size, weight } of this.WINDOWS) {
+        this.TRADEABLE_LEVELS = ['low', 'ultra-low'];
+
+        for (const { size, weight } of windows) {
             const deviation = this.calculateDeviation(history, size);
 
             if (deviation !== null) {
@@ -607,7 +623,7 @@ class BlackFibonacci {
         const combinedDeviation = avgEntropyDev * this.CONCENTRATION_WEIGHT +
             (-avgStreakDev) * this.STREAK_WEIGHT;
 
-        // console.log('Combined Deviation:', combinedDeviation);
+        console.log('Combined Deviation:', combinedDeviation);
 
         // Determine level based on how much less random than expected
         let level;
@@ -624,6 +640,8 @@ class BlackFibonacci {
         }
 
         const canTrade = this.TRADEABLE_LEVELS.includes(level);
+
+        console.log('Can trade:', canTrade);
 
         return {
             level,
