@@ -1069,7 +1069,7 @@ const bot = new AIWeightedEnsembleBot('0P94g4WdSrSrzir', {
     initialStake: 2.2,
     multiplier: 11.3,
     maxConsecutiveLosses: 4,
-    stopLoss: 55,
+    stopLoss: 65,
     takeProfit: 5000,
     requiredHistoryLength: 3000,
     minWaitTime: 1000,
