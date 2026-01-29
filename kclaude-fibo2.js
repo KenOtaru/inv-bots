@@ -198,6 +198,7 @@ class FibonacciEngine {
      */
     static findSaturatedDigit(ticks) {
         if (ticks.length < CONFIG.MIN_HISTORY_SIZE) {
+            console.log(`Not enough ticks to find saturated digit`, ticks.length);
             return null;
         }
 
@@ -854,8 +855,11 @@ class AIWeightedEnsembleBot {
 
         // Step 1: Volatility Filter
         const volatilityState = VolatilityFilter.classifyVolatility(history);
+        const volatilityScore = VolatilityFilter.calculateCompositeVolatility(history);
 
+        console.log(`${asset}: Volatility: ${volatilityState} Score: ${volatilityScore}`);
         if (!VolatilityFilter.allowsTrading(history)) {
+            // console.log(`${asset}: Volatility: ${volatilityState} Score: ${volatilityScore}`);
             return;
         }
 
@@ -878,9 +882,7 @@ class AIWeightedEnsembleBot {
         if (!isBonusTrigger) {
             const saturated = FibonacciEngine.findSaturatedDigit(history);
 
-            console.log(`${asset}: 🎯 FIBONACCI SIGNAL! Digit ${saturated.digit}, Z-score ${saturated.zScore.toFixed(2)}`);
-
-            if (saturated) {
+            if (saturated && VolatilityFilter.isUltraLow(history)) {
                 prediction = saturated.digit;
                 zScore = saturated.zScore;
                 console.log(`${asset}: 🎯 FIBONACCI SIGNAL! Digit ${prediction}, Z-score ${zScore.toFixed(2)}`);
@@ -889,7 +891,7 @@ class AIWeightedEnsembleBot {
 
         // Step 4: Execute trade if we have a prediction
         if (prediction !== null) {
-            this.placeTrade(asset, prediction);
+            // this.placeTrade(asset, prediction);
         }
     }
 
@@ -1232,7 +1234,7 @@ const bot = new AIWeightedEnsembleBot('0P94g4WdSrSrzir', {
     maxConsecutiveLosses: 4,
     stopLoss: 55,
     takeProfit: 5000,
-    requiredHistoryLength: 1000,
+    requiredHistoryLength: 3000,
     minWaitTime: 1000,
     maxWaitTime: 3000,
 });
