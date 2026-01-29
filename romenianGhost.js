@@ -109,11 +109,11 @@ class BlackFibonacci {
             this.wsReady = true;
             this.initializeSubscriptions();
             this.sendTelegram(`
-🚀 <b>BLACK FIBONACCI 9.1 FINAL — GHOST MODE ACTIVATED</b>
+                🚀 <b>BLACK FIBONACCI 9.1 FINAL — GHOST MODE ACTIVATED</b>
 
-💰 Balance: $${message.authorize.balance} ${message.authorize.currency}
-📊 Subscribing to ${this.config.requiredHistoryLength} ticks history for ${this.config.asset}
-⏰ ${new Date().toLocaleString()}
+                💰 Balance: $${message.authorize.balance} ${message.authorize.currency}
+                📊 Subscribing to ${this.config.requiredHistoryLength} ticks history for ${this.config.asset}
+                ⏰ ${new Date().toLocaleString()}
             `.trim());
         }
 
@@ -374,6 +374,22 @@ class BlackFibonacci {
                 💵 Net P&L: $${this.netProfit.toFixed(2)}
                 ⏰ ${new Date().toLocaleString()}
             `.trim());
+        }
+
+        // Check stop conditions
+        if (this.consecutiveLosses >= this.config.maxConsecutiveLosses ||
+            this.totalProfitLoss <= -this.config.stopLoss) {
+            console.log('🛑 Stop loss reached');
+            this.sendTelegram(`🛑 <b>Stop Loss Reached!</b>\nFinal P&L: $${this.totalProfitLoss.toFixed(2)}`);
+            this.disconnect();
+            return;
+        }
+
+        if (this.totalProfitLoss >= this.config.takeProfit) {
+            console.log('🎉 Take profit reached');
+            this.sendTelegram(`🎉 <b>Take Profit Reached!</b>\nFinal P&L: $${this.totalProfitLoss.toFixed(2)}`);
+            this.disconnect();
+            return;
         }
 
         this.tradeInProgress = false;
