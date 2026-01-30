@@ -323,8 +323,8 @@ const CONFIG = {
     STAKE: 0.35,
 
     // Session Targets
-    SESSION_PROFIT_TARGET: 500,
-    SESSION_STOP_LOSS: -500,
+    SESSION_PROFIT_TARGET: 5,
+    SESSION_STOP_LOSS: -30,
 
     // Trade Duration Settings
     DURATION: 2,
@@ -333,12 +333,12 @@ const CONFIG = {
     // Trade Settings
     MAX_OPEN_POSITIONS: 1, // One at a time for alternating strategy
     TRADE_DELAY: 1000, // 2 seconds delay between trades
-    MARTINGALE_MULTIPLIER: 3,
-    MARTINGALE_MULTIPLIER2: 3,
+    MARTINGALE_MULTIPLIER: 4,
+    MARTINGALE_MULTIPLIER2: 4,
     MARTINGALE_MULTIPLIER3: 2.5,
     MARTINGALE_MULTIPLIER4: 2.7,
     MARTINGALE_MULTIPLIER5: 2.9,
-    MAX_MARTINGALE_STEPS: 5,
+    MAX_MARTINGALE_STEPS: 4,
     System: 1, // 1 = Continue same direction on Win and Switch direction on Loss, 
     // 2 = Switch direction on Win and Continue same direction on Loss, 
     // 3 = Switch direction every trade, 4 = Same direction every trade
