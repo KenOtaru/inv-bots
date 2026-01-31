@@ -1276,21 +1276,21 @@ class FibonacciZScoreBot {
             const stats = this.moneyManager.getStats();
 
             this.sendTelegram(`
-⏰ <b>Hourly Summary</b>
+                ⏰ <b>Hourly Summary</b>
 
-<b>Last Hour:</b>
-├ Trades: ${this.hourlyStats.trades}
-├ W/L: ${this.hourlyStats.wins}/${this.hourlyStats.losses}
-└ P&L: ${this.hourlyStats.pnl >= 0 ? '+' : ''}$${this.hourlyStats.pnl.toFixed(2)}
+                <b>Last Hour:</b>
+                ├ Trades: ${this.hourlyStats.trades}
+                ├ W/L: ${this.hourlyStats.wins}/${this.hourlyStats.losses}
+                └ P&L: ${this.hourlyStats.pnl >= 0 ? '+' : ''}$${this.hourlyStats.pnl.toFixed(2)}
 
-<b>Session Total:</b>
-├ Trades: ${stats.totalTrades}
-├ W/L: ${stats.totalWins}/${stats.totalLosses} (${stats.winRate}%)
-├ P&L: ${this.totalProfitLoss >= 0 ? '+' : ''}$${this.totalProfitLoss.toFixed(2)}
-├ Streak: ${stats.consecutiveLosses}L
-└ Loss Streaks: 2L×${stats.lossStreaks[2]} | 3L×${stats.lossStreaks[3]} | 4L×${stats.lossStreaks[4]} | 5L×${stats.lossStreaks[5]}
+                <b>Session Total:</b>
+                ├ Trades: ${stats.totalTrades}
+                ├ W/L: ${stats.totalWins}/${stats.totalLosses} (${stats.winRate}%)
+                ├ P&L: ${this.totalProfitLoss >= 0 ? '+' : ''}$${this.totalProfitLoss.toFixed(2)}
+                ├ Streak: ${stats.consecutiveLosses}L
+                └ Loss Streaks: 2L×${stats.lossStreaks[2]} | 3L×${stats.lossStreaks[3]} | 4L×${stats.lossStreaks[4]} | 5L×${stats.lossStreaks[5]}
 
-⏰ ${new Date().toLocaleString()}
+                ⏰ ${new Date().toLocaleString()}
             `.trim());
 
             // Reset hourly stats
