@@ -513,8 +513,6 @@ class AIWeightedEnsembleBot {
             ├ x6 Losses: ${this.x6Losses}
             ├ x7 Losses: ${this.x7Losses}
             ├ x8 Losses: ${this.x8Losses}
-            ├ x9 Losses: ${this.x9Losses}
-            ├ x10 Losses: ${this.x10Losses}
             ├ Daily P&L: ${(this.totalProfitLoss >= 0 ? '+' : '')}$${this.totalProfitLoss.toFixed(2)}
             └ Current Capital: $${(this.config.initialStake + this.totalProfitLoss).toFixed(2)}
 
@@ -634,7 +632,7 @@ class AIWeightedEnsembleBot {
             // volatility.level === 'ultra-low' &&
             // this.volatilityLevel === 'high'
             // ||
-            this.volatilityLevel === 'extreme'
+            this.volatilityLevel === 'low'
         ) {
             // NEW LOGIC: Determine next direction based on last trade result
             let direction;
@@ -1134,9 +1132,9 @@ class AIWeightedEnsembleBot {
 // Initialize and start bot
 const bot = new AIWeightedEnsembleBot('0P94g4WdSrSrzir', {
     initialStake: 0.35,
-    multiplier: 4,
+    multiplier: 2.3,
     maxConsecutiveLosses: 7,
-    stopLoss: 65,
+    stopLoss: 100,
     takeProfit: 5000,
     requiredHistoryLength: 3000,
     minWaitTime: 1000,
