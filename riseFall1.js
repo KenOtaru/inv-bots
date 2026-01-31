@@ -873,7 +873,7 @@ class AIWeightedEnsembleBot {
             if (this.consecutiveLosses === 7) this.x7Losses++;
             if (this.consecutiveLosses === 8) this.x8Losses++;
 
-            if (this.consecutiveLosses === 5) {
+            if (this.consecutiveLosses === 7) {
                 this.currentStake = this.config.initialStake;
                 this.consecutiveLosses = 0;
             } else {
@@ -1135,8 +1135,8 @@ class AIWeightedEnsembleBot {
 // Initialize and start bot
 const bot = new AIWeightedEnsembleBot('0P94g4WdSrSrzir', {
     initialStake: 0.35,
-    multiplier: 4,
-    maxConsecutiveLosses: 6,
+    multiplier: 2.3,
+    maxConsecutiveLosses: 12,
     stopLoss: 100,
     takeProfit: 5000,
     requiredHistoryLength: 3000,
