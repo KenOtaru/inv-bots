@@ -480,7 +480,7 @@ class MoneyManagementEngine {
 // STATE PERSISTENCE
 // ============================================================================
 
-const STATE_FILE = path.join(__dirname, 'kclaude-00009-state.json');
+const STATE_FILE = path.join(__dirname, 'kclaude-000010-state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -1007,6 +1007,8 @@ class FibonacciZScoreBot {
 
         this.volatilityLevel = this.getVolatilityLevel(history);
         const volatility = this.volatilityEngine.calculateVolatilityLevel(history);
+
+        console.log(`[${asset}] Volatilityn: ${this.volatilityLevel} | Volatility: ${volatility.level} (Score: ${volatility.score.toFixed(2)})`);
         if (!volatility.canTrade) return;
 
         let shouldTrade = false;
