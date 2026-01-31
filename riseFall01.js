@@ -244,6 +244,11 @@ class AIWeightedEnsembleBot {
             this.x3Losses = trading.x3Losses;
             this.x4Losses = trading.x4Losses;
             this.x5Losses = trading.x5Losses;
+            this.x6Losses = trading.x6Losses;
+            this.x7Losses = trading.x7Losses;
+            this.x8Losses = trading.x8Losses;
+            this.x9Losses = trading.x9Losses;
+            this.x10Losses = trading.x10Losses;
             this.totalProfitLoss = trading.totalProfitLoss;
             this.lastPrediction = trading.lastPrediction;
             this.actualDigit = trading.actualDigit;
@@ -504,6 +509,11 @@ class AIWeightedEnsembleBot {
             ├ x3 Losses: ${this.x3Losses}
             ├ x4 Losses: ${this.x4Losses}
             ├ x5 Losses: ${this.x5Losses}
+            ├ x6 Losses: ${this.x6Losses}
+            ├ x7 Losses: ${this.x7Losses}
+            ├ x8 Losses: ${this.x8Losses}
+            ├ x9 Losses: ${this.x9Losses}
+            ├ x10 Losses: ${this.x10Losses}
             ├ Daily P&L: ${(this.totalProfitLoss >= 0 ? '+' : '')}$${this.totalProfitLoss.toFixed(2)}
             └ Current Capital: $${(this.config.initialStake + this.totalProfitLoss).toFixed(2)}
 
@@ -621,8 +631,10 @@ class AIWeightedEnsembleBot {
 
         if (
             // volatility.level === 'ultra-low' &&
-            (this.volatilityLevel === 'low' || this.volatilityLevel === 'medium'
-            )) {
+            this.volatilityLevel === 'high'
+            ||
+            this.volatilityLevel === 'extreme'
+        ) {
             // NEW LOGIC: Determine next direction based on last trade result
             let direction;
             if (this.lastTradeDirection === null || this.lastTradeWasWin === null || this.System === 4) {
@@ -857,6 +869,11 @@ class AIWeightedEnsembleBot {
             if (this.consecutiveLosses === 3) this.x3Losses++;
             if (this.consecutiveLosses === 4) this.x4Losses++;
             if (this.consecutiveLosses === 5) this.x5Losses++;
+            if (this.consecutiveLosses === 6) this.x6Losses++;
+            if (this.consecutiveLosses === 7) this.x7Losses++;
+            if (this.consecutiveLosses === 8) this.x8Losses++;
+            if (this.consecutiveLosses === 9) this.x9Losses++;
+            if (this.consecutiveLosses === 10) this.x10Losses++;
 
             if (this.consecutiveLosses === 2) {
                 this.currentStake = this.config.initialStake;
@@ -885,11 +902,12 @@ class AIWeightedEnsembleBot {
             ${pnlColor} <b>P&L:</b> ${pnlStr}
             📊 <b>Prediction:</b> ${this.lastTradeDirection}
             ⏰ Duration: ${this.DURATION} (${this.DURATION_UNIT})
+            Last10Digits = ${this.tickHistories[asset].slice(-10).join(',')}
             
             📊 <b>Trades Today:</b> ${this.totalTrades}
             📊 <b>Wins Today:</b> ${this.totalWins}
             📊 <b>Losses Today:</b> ${this.totalLosses}
-            📊 <b>x2-x5 Losses:</b> ${this.x2Losses}/${this.x3Losses}/${this.x4Losses}/${this.x5Losses}
+            📊 <b>x2-x5 Losses:</b> ${this.x2Losses}/${this.x3Losses}/${this.x4Losses}/${this.x5Losses}/${this.x6Losses}/${this.x7Losses}/${this.x8Losses}/${this.x9Losses}/${this.x10Losses}
             
             📈 <b>Daily P&L:</b> ${(this.totalProfitLoss >= 0 ? '+' : '')}$${this.totalProfitLoss.toFixed(2)}
             🎯 <b>Win Rate:</b> ${winRate}%
@@ -1116,7 +1134,7 @@ class AIWeightedEnsembleBot {
 const bot = new AIWeightedEnsembleBot('0P94g4WdSrSrzir', {
     initialStake: 0.35,
     multiplier: 4,
-    maxConsecutiveLosses: 4,
+    maxConsecutiveLosses: 7,
     stopLoss: 65,
     takeProfit: 5000,
     requiredHistoryLength: 3000,
