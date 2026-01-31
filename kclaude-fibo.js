@@ -1005,6 +1005,7 @@ class FibonacciZScoreBot {
         if (history.length < this.config.minHistoryLength) return;
         if (!this.moneyManager.canTrade()) return;
 
+        this.volatilityLevel = this.getVolatilityLevel(history);
         const volatility = this.volatilityEngine.calculateVolatilityLevel(history);
         if (!volatility.canTrade) return;
 
@@ -1013,7 +1014,7 @@ class FibonacciZScoreBot {
         let tradeType = null;
 
         // === 1. ULTRA-LOW BONUS TRIGGER (5+ streak) ===
-        if (volatility.level === 'ultra-low') {
+        if (volatility.level === 'ultra-low' && (this.volatilityLevel === 'medium' || this.volatilityLevel === 'low')) {
             const bonus = this.volatilityEngine.checkBonusTrigger(history);
             if (bonus.triggered && this.lastPrediction !== bonus.digit) {
                 shouldTrade = true;
@@ -1033,7 +1034,7 @@ class FibonacciZScoreBot {
                 const newDigit = this.lastPrediction !== saturation.digit;
 
                 // if ((newDigit || zImproved) && saturation.totalZScore >= 22.30 && (volatility.level === 'ultra-low' || volatility.level === 'low')) {
-                if (saturation.totalZScore >= 22.30 && (volatility.level === 'ultra-low' || volatility.level === 'low')) {
+                if (saturation.totalZScore >= 22.30 && (volatility.level === 'ultra-low' || volatility.level === 'low') && (this.volatilityLevel === 'medium' || this.volatilityLevel === 'low')) {
                     shouldTrade = true;
                     digitToTrade = saturation.digit;
                     tradeType = 'FIB_SATURATION';
@@ -1046,6 +1047,20 @@ class FibonacciZScoreBot {
             this.lastPrediction = digitToTrade;
             this.executeTrade(asset, digitToTrade, tradeType, { volatility });
         }
+    }
+
+    getVolatilityLevel(tickHistory) {
+        if (tickHistory.length < 50) return 'unknown';
+        const recent = tickHistory.slice(-50);
+        const mean = recent.reduce((a, b) => a + b, 0) / recent.length;
+        const variance = recent.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / recent.length;
+        const stdDev = Math.sqrt(variance);
+
+        if (stdDev > 3.1) return 'extreme';
+        if (stdDev > 2.8) return 'high';
+        if (stdDev > 2.0) return 'medium';
+
+        return 'low';
     }
 
     executeTrade(asset, digit, tradeType, analysisData) {

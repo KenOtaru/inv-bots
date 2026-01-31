@@ -623,7 +623,7 @@ class AIWeightedEnsembleBot {
         const vol = this.getVolatilityLevel(history);
         console.log(`[${asset}] Volatility: ${vol}`);
 
-        if (vol === 'ultra-low' || vol === 'low') {
+        if (vol === 'ultra-low') {
             // Only trade Fibonacci saturation in these regimes
             if (maxScore >= 20.0 && recent.includes(predictedDigit)) {
                 this.lastPrediction = predictedDigit;
