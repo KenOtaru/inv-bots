@@ -131,6 +131,9 @@ class AIWeightedEnsembleBot {
         this.x3Losses = 0;
         this.x4Losses = 0;
         this.x5Losses = 0;
+        this.x6Losses = 0;
+        this.x7Losses = 0;
+        this.x8Losses = 0;
         this.totalProfitLoss = 0;
         this.tradeInProgress = false;
         this.suspendedAssets = new Set();
@@ -247,8 +250,6 @@ class AIWeightedEnsembleBot {
             this.x6Losses = trading.x6Losses;
             this.x7Losses = trading.x7Losses;
             this.x8Losses = trading.x8Losses;
-            this.x9Losses = trading.x9Losses;
-            this.x10Losses = trading.x10Losses;
             this.totalProfitLoss = trading.totalProfitLoss;
             this.lastPrediction = trading.lastPrediction;
             this.actualDigit = trading.actualDigit;
@@ -631,8 +632,8 @@ class AIWeightedEnsembleBot {
 
         if (
             // volatility.level === 'ultra-low' &&
-            this.volatilityLevel === 'high'
-            ||
+            // this.volatilityLevel === 'high'
+            // ||
             this.volatilityLevel === 'extreme'
         ) {
             // NEW LOGIC: Determine next direction based on last trade result
@@ -811,6 +812,7 @@ class AIWeightedEnsembleBot {
             ⏰ <b>Duration:</b> ${this.DURATION} (${this.DURATION_UNIT})
             💰 <b>Stake:</b> $${this.currentStake.toFixed(2)}
             Last10Digits = ${this.tickHistories[asset].slice(-10).join(',')}
+            Volatility = ${this.volatilityLevel}
         `.trim();
         this.sendTelegramMessage(message);
 
@@ -872,14 +874,12 @@ class AIWeightedEnsembleBot {
             if (this.consecutiveLosses === 6) this.x6Losses++;
             if (this.consecutiveLosses === 7) this.x7Losses++;
             if (this.consecutiveLosses === 8) this.x8Losses++;
-            if (this.consecutiveLosses === 9) this.x9Losses++;
-            if (this.consecutiveLosses === 10) this.x10Losses++;
 
-            if (this.consecutiveLosses === 2) {
-                this.currentStake = this.config.initialStake;
-            } else {
-                this.currentStake = Math.ceil(this.currentStake * this.config.multiplier * 100) / 100;
-            }
+            // if (this.consecutiveLosses === 2) {
+            //     this.currentStake = this.config.initialStake;
+            // } else {
+            this.currentStake = Math.ceil(this.currentStake * this.config.multiplier * 100) / 100;
+            // }
             // this.suspendAsset(asset);
         }
 
@@ -903,11 +903,12 @@ class AIWeightedEnsembleBot {
             📊 <b>Prediction:</b> ${this.lastTradeDirection}
             ⏰ Duration: ${this.DURATION} (${this.DURATION_UNIT})
             Last10Digits = ${this.tickHistories[asset].slice(-10).join(',')}
+            Volatility = ${this.volatilityLevel}
             
             📊 <b>Trades Today:</b> ${this.totalTrades}
             📊 <b>Wins Today:</b> ${this.totalWins}
             📊 <b>Losses Today:</b> ${this.totalLosses}
-            📊 <b>x2-x5 Losses:</b> ${this.x2Losses}/${this.x3Losses}/${this.x4Losses}/${this.x5Losses}/${this.x6Losses}/${this.x7Losses}/${this.x8Losses}/${this.x9Losses}/${this.x10Losses}
+            📊 <b>x2-x5 Losses:</b> ${this.x2Losses}/${this.x3Losses}/${this.x4Losses}/${this.x5Losses}/${this.x6Losses}/${this.x7Losses}/${this.x8Losses}}
             
             📈 <b>Daily P&L:</b> ${(this.totalProfitLoss >= 0 ? '+' : '')}$${this.totalProfitLoss.toFixed(2)}
             🎯 <b>Win Rate:</b> ${winRate}%
@@ -1005,7 +1006,7 @@ class AIWeightedEnsembleBot {
         console.log(`Trades: ${this.totalTrades}`);
         console.log(`Wins: ${this.totalWins}`);
         console.log(`Losses: ${this.totalLosses}`);
-        console.log(`x2-x5 Losses: ${this.x2Losses}/${this.x3Losses}/${this.x4Losses}/${this.x5Losses}`);
+        console.log(`x2-x5 Losses: ${this.x2Losses}/${this.x3Losses}/${this.x4Losses}/${this.x5Losses}/${this.x6Losses}/${this.x7Losses}/${this.x8Losses}`);
         console.log(`Last Prediction: ${this.lastPrediction} | Actual Digit: ${this.actualDigit}`);
         console.log(`Current Stake: $${this.currentStake.toFixed(2)}`);
         console.log(`P&L: $${this.totalProfitLoss.toFixed(2)} | Win Rate: ${((this.totalWins / this.totalTrades) * 100).toFixed(2)}%`);
