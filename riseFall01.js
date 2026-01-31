@@ -575,6 +575,8 @@ class AIWeightedEnsembleBot {
             return fractionalPart.length >= 4 ? parseInt(fractionalPart[3]) : 0;
         } else if (['R_10', 'R_25', '1HZ15V', '1HZ30V', '1HZ90V',].includes(asset)) {
             return fractionalPart.length >= 3 ? parseInt(fractionalPart[2]) : 0;
+        } else if (['stpRNG'].includes(asset)) {
+            return fractionalPart.length >= 1 ? parseInt(fractionalPart[0]) : 0;
         } else {
             return fractionalPart.length >= 2 ? parseInt(fractionalPart[1]) : 0;
         }
@@ -595,10 +597,10 @@ class AIWeightedEnsembleBot {
         }
 
         const now = Date.now();
-        if (now - this.lastTickLogTime[asset] >= 30000) {
-            console.log(`[${asset}] ${tick.quote}: ${this.tickHistories[asset].slice(-5).join(', ')}`);
-            this.lastTickLogTime[asset] = now;
-        }
+        // if (now - this.lastTickLogTime[asset] >= 30000) {
+        console.log(`[${asset}] ${tick.quote}: ${this.tickHistories[asset].slice(-5).join(', ')}`);
+        this.lastTickLogTime[asset] = now;
+        // }
 
         if (!this.tradeInProgress && this.wsReady) {
             this.analyzeTicks(asset);
@@ -617,7 +619,10 @@ class AIWeightedEnsembleBot {
 
         console.log(`[${asset}] Volatility1: ${this.volatilityLevel} | Volatility2: ${volatility.level}| Score: ${volatility.score}`);
 
-        if (volatility.level === 'ultra-low' && (this.volatilityLevel === 'low' || this.volatilityLevel === 'medium')) {
+        if (
+            // volatility.level === 'ultra-low' &&
+            (this.volatilityLevel === 'low' || this.volatilityLevel === 'medium'
+            )) {
             // NEW LOGIC: Determine next direction based on last trade result
             let direction;
             if (this.lastTradeDirection === null || this.lastTradeWasWin === null || this.System === 4) {
@@ -780,9 +785,11 @@ class AIWeightedEnsembleBot {
 
         this.lastTradeDirection = direction;
 
+        const kDirection = direction === 'CALL' ? 'CALL' : 'PUTE';
+
         this.tradeInProgress = true;
 
-        console.log(`Placing Trade: [${asset}] Direction ${direction} | Stake: $${this.currentStake.toFixed(2)}`);
+        console.log(`Placing Trade: [${asset}] Direction ${direction === 'CALL' ? 'RISE' : 'FALL'} | Stake: $${this.currentStake.toFixed(2)}`);
 
         const message = `
             🔔 <b>Trade Opened (Rise/Fall Bot)</b>
@@ -799,13 +806,13 @@ class AIWeightedEnsembleBot {
             buy: 1,
             price: this.currentStake,
             parameters: {
-                amount: this.currentStake,
-                basis: 'stake',
-                contract_type: direction,
+                contract_type: kDirection,
+                symbol: asset,
                 currency: 'USD',
+                amount: this.currentStake.toFixed(2),
                 duration: this.DURATION,
                 duration_unit: this.DURATION_UNIT,
-                symbol: asset,
+                basis: 'stake'
             }
         });
 
@@ -856,7 +863,7 @@ class AIWeightedEnsembleBot {
             } else {
                 this.currentStake = Math.ceil(this.currentStake * this.config.multiplier * 100) / 100;
             }
-            this.suspendAsset(asset);
+            // this.suspendAsset(asset);
         }
 
         this.totalProfitLoss += profit;
