@@ -1,0 +1,35 @@
+{
+  "savedAt": 1769967937976,
+  "stake": 3.5,
+  "consecutiveLosses": 0,
+  "totalTrades": 0,
+  "totalWins": 0,
+  "x2": 0,
+  "x3": 0,
+  "x4": 0,
+  "x5": 0,
+  "netProfit": 0,
+  "recentTrades": [],
+  "assetPerformance": {
+    "R_10": {
+      "trades": 0,
+      "wins": 0,
+      "pnl": 0
+    },
+    "R_25": {
+      "trades": 0,
+      "wins": 0,
+      "pnl": 0
+    },
+    "R_50": {
+      "trades": 0,
+      "wins": 0,
+      "pnl": 0
+    },
+    "R_75": {
+      "trades": 0,
+      "wins": 0,
+      "pnl": 0
+    }
+  }
+}
