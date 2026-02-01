@@ -584,10 +584,10 @@ class AIWeightedEnsembleBot {
         let validWindowCount = 0;
 
         for (const w of windows) {
-            if (this.history.length < w) continue;
+            if (this.tickHistories[asset].length < w) continue;
             validWindowCount++;
 
-            const slice = this.history.slice(-w);
+            const slice = this.tickHistories[asset].slice(-w);
             const counts = Array(10).fill(0);
             slice.forEach(d => counts[d]++);
             const exp = w / 10;
@@ -619,7 +619,7 @@ class AIWeightedEnsembleBot {
         }
 
         // CONCENTRATION (entropy-based)
-        const last500 = this.history.slice(-500);
+        const last500 = this.tickHistories[asset].slice(-500);
         const freq = Array(10).fill(0);
         last500.forEach(d => freq[d]++);
 
@@ -637,10 +637,10 @@ class AIWeightedEnsembleBot {
         // CORRECT THRESHOLD: 0.06 = 6% deviation from uniform (realistic for synthetics)
         const ultraLowVol = concentration > 0.06;
 
-        const inRecent = this.history.slice(-9).includes(saturatedDigit);
+        const inRecent = this.tickHistories[asset].slice(-9).includes(saturatedDigit);
 
         // LOG EVERY 100 TICKS
-        if (this.history.length % 100 === 0) {
+        if (this.tickHistories[asset].length % 100 === 0) {
             console.log(`AvgZ=${bestAvgZ.toFixed(2)} | Digit=${saturatedDigit} | Conc=${concentration.toFixed(4)} | Ultra=${ultraLowVol} | Recent=${inRecent} | Part=${participation}`);
         }
 
@@ -985,7 +985,7 @@ class AIWeightedEnsembleBot {
         console.log(`   Total P&L: $${this.totalProfitLoss.toFixed(2)}`);
         console.log(`   Current Stake: $${this.currentStake.toFixed(2)}`);
         this.connect();
-        this.checkTimeForDisconnectReconnect();
+        // this.checkTimeForDisconnectReconnect();
     }
 }
 
