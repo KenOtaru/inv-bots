@@ -690,29 +690,29 @@ class ZeroGravityUltimate {
 
         // Step 1: Hurst Analysis
         const hurstAnalysis = this.calculateHurstAnalysis(asset);
-        console.log(`[${asset}] Hurst Analysis:`, hurstAnalysis);
+        // console.log(`[${asset}] Hurst Analysis:`, hurstAnalysis);
         if (!hurstAnalysis || !hurstAnalysis.isMeanReverting) return;
 
         // Step 2: Entropy Analysis
         const entropyAnalysis = this.calculateEntropyAnalysis(asset);
-        console.log(`[${asset}] Entropy Analysis:`, entropyAnalysis);
+        // console.log(`[${asset}] Entropy Analysis:`, entropyAnalysis);
         if (!entropyAnalysis || !entropyAnalysis.isConcentrated) return;
 
         // Step 3: Z-Score Confluence
         const targetDigit = entropyAnalysis.consensusDigit;
         const zScoreConfluence = this.calculateZScoreConfluence(asset, targetDigit);
-        console.log(`[${asset}] Z-Score Confluence:`, zScoreConfluence);
+        // console.log(`[${asset}] Z-Score Confluence:`, zScoreConfluence);
         if (!zScoreConfluence || !zScoreConfluence.hasConfluence) return;
 
         // Step 4: Streak Analysis
         const streakAnalysis = this.analyzeStreaks(history);
-        console.log(`[${asset}] Streak Analysis:`, streakAnalysis);
+        // console.log(`[${asset}] Streak Analysis:`, streakAnalysis);
 
         // Step 5: Calculate total score
         const signal = this.calculateTotalSignalScore(
             asset, hurstAnalysis, entropyAnalysis, zScoreConfluence, streakAnalysis
         );
-        console.log(`[${asset}] Signal:`, signal);
+        // console.log(`[${asset}] Signal:`, signal);
 
         // Log periodically
         if (history.length % 100 === 0) {

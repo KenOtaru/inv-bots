@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 
 const TOKEN = "0P94g4WdSrSrzir";
-const TELEGRAM_TOKEN = "8288121368:AAHYRb0Stk5dWUWN1iTYbdO3fyIEwIuZQR8";
+const TELEGRAM_TOKEN = "8212244373:AAE6-5-ANOmp2rEYYfPBSn8N7uSbRp6HM-k";
 const CHAT_ID = "752497117";
 
 const STATE_FILE = path.join(__dirname, 'athena9-state.json');
@@ -842,29 +842,29 @@ class AthenaPureUltimate {
 
         // Step 1: Fractal Analysis
         const fractalAnalysis = this.calculateFractalAnalysis(asset);
-        console.log(`[${asset}] Fractal Analysis:`, fractalAnalysis);
+        // console.log(`[${asset}] Fractal Analysis:`, fractalAnalysis);
         if (!fractalAnalysis || !fractalAnalysis.isLowFractal) return;
 
         // Step 2: Fibonacci Confluence
         const fibConfluence = this.calculateFibonacciConfluence(asset);
-        console.log(`[${asset}] Fibonacci Confluence:`, fibConfluence);
+        // console.log(`[${asset}] Fibonacci Confluence:`, fibConfluence);
         if (!fibConfluence || !fibConfluence.hasConfluence) return;
 
         // Step 3: Concentration Analysis
         const concentrationAnalysis = this.calculateConcentrationAnalysis(asset);
-        console.log(`[${asset}] Concentration Analysis:`, concentrationAnalysis);
+        // console.log(`[${asset}] Concentration Analysis:`, concentrationAnalysis);
         if (!concentrationAnalysis || !concentrationAnalysis.isConcentrated) return;
 
         // Step 4: Streak Analysis
         const targetDigit = fibConfluence.bestDigit;
         const streakAnalysis = this.analyzeStreakExhaustion(history, targetDigit);
-        console.log(`[${asset}] Streak Analysis:`, streakAnalysis);
+        // console.log(`[${asset}] Streak Analysis:`, streakAnalysis);
 
         // Step 5: Calculate total score
         const signal = this.calculateTotalSignalScore(
             asset, fractalAnalysis, fibConfluence, concentrationAnalysis, streakAnalysis
         );
-        console.log(`[${asset}] Signal:`, signal);
+        // console.log(`[${asset}] Signal:`, signal);
 
         // Log periodically
         if (history.length % 150 === 0) {
