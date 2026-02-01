@@ -571,13 +571,16 @@ class BlackFibonacci {
     // }
 
     scanForSignal() {
-        // === ROMANIAN GHOST'S FINAL LOGIC — OCTOBER 2025 ===
+        // === ROMANIAN GHOST FINAL — OCTOBER 2025 (MATHEMATICALLY CORRECT) ===
         const windows = [13, 21, 34, 55, 89, 144, 233, 377, 610, 987];
-        const zScores = Array(10).fill(0);
-        const participation = Array(10).fill(0);
+        const zScoreSums = Array(10).fill(0);
+        const aboveExpectedCount = Array(10).fill(0);
+        let validWindowCount = 0;
 
         for (const w of windows) {
             if (this.history.length < w) continue;
+            validWindowCount++;
+
             const slice = this.history.slice(-w);
             const counts = Array(10).fill(0);
             slice.forEach(d => counts[d]++);
@@ -585,28 +588,31 @@ class BlackFibonacci {
             const sd = Math.sqrt(w * 0.1 * 0.9);
 
             for (let i = 0; i < 10; i++) {
+                const z = (counts[i] - exp) / sd;
+                zScoreSums[i] += z;
                 if (counts[i] > exp) {
-                    zScores[i] += (counts[i] - exp) / sd;
-                    participation[i]++;
+                    aboveExpectedCount[i]++;
                 }
             }
         }
 
-        // FINAL GHOST SCORE = Z-score × participation rate
-        let bestScore = 0;
+        // AVERAGE Z-score per window (NOT sum!)
+        let bestAvgZ = -99;
         let saturatedDigit = -1;
+        let participation = 0;
 
         for (let i = 0; i < 10; i++) {
-            if (participation[i] >= 7) {  // MUST be in 8+ windows
-                const confluenceScore = zScores[i] * (participation[i] / 10);
-                if (confluenceScore > bestScore) {
-                    bestScore = confluenceScore;
+            if (aboveExpectedCount[i] >= 8) {  // Must dominate 8+ windows
+                const avgZ = zScoreSums[i] / validWindowCount;  // AVERAGE!
+                if (avgZ > bestAvgZ) {
+                    bestAvgZ = avgZ;
                     saturatedDigit = i;
+                    participation = aboveExpectedCount[i];
                 }
             }
         }
 
-        // ULTRA-LOW VOLATILITY — CORRECT ENTROPY (GHOST'S REAL METHOD)
+        // CONCENTRATION (entropy-based)
         const last500 = this.history.slice(-500);
         const freq = Array(10).fill(0);
         last500.forEach(d => freq[d]++);
@@ -619,25 +625,28 @@ class BlackFibonacci {
             }
         }
 
-        const maxEntropy = Math.log2(10); // ≈ 3.321928
+        const maxEntropy = Math.log2(10);  // ≈ 3.322
         const concentration = 1 - (entropy / maxEntropy);
-        const ultraLowVol = concentration > 0.71;  // THIS IS THE REAL THRESHOLD
+
+        // CORRECT THRESHOLD: 0.06 = 6% deviation from uniform (realistic for synthetics)
+        const ultraLowVol = concentration > 0.06;
 
         const inRecent = this.history.slice(-9).includes(saturatedDigit);
 
         // LOG EVERY 100 TICKS
         if (this.history.length % 100 === 0) {
-            console.log(`Z=${bestScore.toFixed(2)} | Digit=${saturatedDigit} | Conc=${concentration.toFixed(4)} | Ultra=${ultraLowVol} | Recent=${inRecent} | Part=${participation[saturatedDigit] || 0}`);
+            console.log(`AvgZ=${bestAvgZ.toFixed(2)} | Digit=${saturatedDigit} | Conc=${concentration.toFixed(4)} | Ultra=${ultraLowVol} | Recent=${inRecent} | Part=${participation}`);
         }
 
-        // FINAL GHOST SIGNAL — ONLY 21–28 TRADES PER DAY
+        // CORRECT THRESHOLD: Average Z >= 2.0 means strong saturation
         if (ultraLowVol &&
-            bestScore >= 11.32 &&
+            bestAvgZ >= 2.0 &&
             inRecent &&
+            saturatedDigit !== -1 &&
             saturatedDigit !== this.lastTradeDigit) {
 
             this.lastTradeDigit = saturatedDigit;
-            this.placeTrade(saturatedDigit, bestScore, concentration);
+            this.placeTrade(saturatedDigit, bestAvgZ, concentration);
         }
     }
 
