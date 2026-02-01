@@ -189,9 +189,11 @@ class AIWeightedEnsembleBot {
         this.tickHistories = {};
         this.tickSubscriptionIds = {};
         this.lastTickLogTime = {};
+        this.lastTickLogTime2 = {};
         this.assets.forEach(asset => {
             this.tickHistories[asset] = [];
             this.lastTickLogTime[asset] = 0;
+            this.lastTickLogTime2[asset] = 0;
         });
 
         // Load saved state if available
@@ -459,7 +461,7 @@ class AIWeightedEnsembleBot {
         const pnlStr = (stats.pnl >= 0 ? '+' : '') + '$' + stats.pnl.toFixed(2);
 
         const message = `
-            ⏰ <b>FiboGrok Differ Bot Hourly Summary</b>
+            ⏰ <b>Romanian Ghost Differ Bot Hourly Summary</b>
 
             📊 <b>Last Hour</b>
             ├ Trades: ${stats.trades}
@@ -470,6 +472,9 @@ class AIWeightedEnsembleBot {
             📈 <b>Daily Totals</b>
             ├ Total Trades: ${this.totalTrades}
             ├ Total W/L: ${this.totalWins}/${this.totalLosses}
+            ├ 2x Losses: ${this.x2Losses}
+            ├ 3x Losses: ${this.x3Losses}
+            ├ 4x Losses: ${this.x4Losses}
             ├ Daily P&L: ${(this.totalProfitLoss >= 0 ? '+' : '')}$${this.totalProfitLoss.toFixed(2)}
             └ Current Capital: $${(this.config.initialStake + this.totalProfitLoss).toFixed(2)}
 
@@ -560,11 +565,12 @@ class AIWeightedEnsembleBot {
             this.tickHistories[asset].shift();
         }
 
+        // LOG EVERY 30 SECONDS
         const now = Date.now();
-        // if (now - this.lastTickLogTime[asset] >= 30000) {
-        console.log(`[${asset}] ${tick.quote}: ${this.tickHistories[asset].slice(-10).join(', ')}`);
-        // this.lastTickLogTime[asset] = now;
-        // }
+        if (now - this.lastTickLogTime[asset] >= 30000) {
+            console.log(`[${asset}] ${tick.quote}: ${this.tickHistories[asset].slice(-10).join(', ')}`);
+            this.lastTickLogTime[asset] = now;
+        }
 
         if (!this.tradeInProgress && this.wsReady) {
             this.analyzeTicks(asset);
@@ -639,9 +645,11 @@ class AIWeightedEnsembleBot {
 
         const inRecent = this.tickHistories[asset].slice(-9).includes(saturatedDigit);
 
-        // LOG EVERY 100 TICKS
-        if (this.tickHistories[asset].length % 100 === 0) {
+        // LOG EVERY 30 SECONDS
+        const now = Date.now();
+        if (now - this.lastTickLogTime2[asset] >= 30000) {
             console.log(`AvgZ=${bestAvgZ.toFixed(2)} | Digit=${saturatedDigit} | Conc=${concentration.toFixed(4)} | Ultra=${ultraLowVol} | Recent=${inRecent} | Part=${participation}`);
+            this.lastTickLogTime2[asset] = now;
         }
 
         // CORRECT THRESHOLD: Average Z >= 2.0 means strong saturation
