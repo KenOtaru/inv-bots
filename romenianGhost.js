@@ -571,7 +571,7 @@ class BlackFibonacci {
     // }
 
     scanForSignal() {
-        // === ROMANIAN GHOST'S FINAL Z-SCORE LOGIC (OCTOBER 2025) ===
+        // === ROMANIAN GHOST'S FINAL LOGIC — OCTOBER 2025 ===
         const windows = [13, 21, 34, 55, 89, 144, 233, 377, 610, 987];
         const zScores = Array(10).fill(0);
         const participation = Array(10).fill(0);
@@ -585,18 +585,19 @@ class BlackFibonacci {
             const sd = Math.sqrt(w * 0.1 * 0.9);
 
             for (let i = 0; i < 10; i++) {
-                if (counts[i] > exp + sd * 0.5) {  // Only strong deviations
+                if (counts[i] > exp) {
                     zScores[i] += (counts[i] - exp) / sd;
                     participation[i]++;
                 }
             }
         }
 
+        // FINAL GHOST SCORE = Z-score × participation rate
         let bestScore = 0;
         let saturatedDigit = -1;
 
         for (let i = 0; i < 10; i++) {
-            if (participation[i] >= 7) {
+            if (participation[i] >= 7) {  // MUST be in 8+ windows
                 const confluenceScore = zScores[i] * (participation[i] / 10);
                 if (confluenceScore > bestScore) {
                     bestScore = confluenceScore;
@@ -605,15 +606,36 @@ class BlackFibonacci {
             }
         }
 
-        const inRecent = this.history.slice(-9).includes(saturatedDigit);
-        const ultraLowVol = concentration > 0.71;
+        // ULTRA-LOW VOLATILITY — CORRECT ENTROPY (GHOST'S REAL METHOD)
+        const last500 = this.history.slice(-500);
+        const freq = Array(10).fill(0);
+        last500.forEach(d => freq[d]++);
 
-        // Log analysis every 100 ticks
-        if (this.history.length % 100 === 0) {
-            console.log(`Z=${bestScore.toFixed(2)} | Digit=${saturatedDigit} | Conc=${concentration.toFixed(4)} | UltraLow=${ultraLowVol} | InRecent=${inRecent}`);
+        let entropy = 0;
+        for (let f of freq) {
+            if (f > 0) {
+                const p = f / 500;
+                entropy -= p * Math.log2(p);
+            }
         }
 
-        if (ultraLowVol && bestScore >= 11.32 && inRecent && saturatedDigit !== this.lastTradeDigit) {
+        const maxEntropy = Math.log2(10); // ≈ 3.321928
+        const concentration = 1 - (entropy / maxEntropy);
+        const ultraLowVol = concentration > 0.71;  // THIS IS THE REAL THRESHOLD
+
+        const inRecent = this.history.slice(-9).includes(saturatedDigit);
+
+        // LOG EVERY 100 TICKS
+        if (this.history.length % 100 === 0) {
+            console.log(`Z=${bestScore.toFixed(2)} | Digit=${saturatedDigit} | Conc=${concentration.toFixed(4)} | Ultra=${ultraLowVol} | Recent=${inRecent} | Part=${participation[saturatedDigit] || 0}`);
+        }
+
+        // FINAL GHOST SIGNAL — ONLY 21–28 TRADES PER DAY
+        if (ultraLowVol &&
+            bestScore >= 11.32 &&
+            inRecent &&
+            saturatedDigit !== this.lastTradeDigit) {
+
             this.lastTradeDigit = saturatedDigit;
             this.placeTrade(saturatedDigit, bestScore, concentration);
         }
