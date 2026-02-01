@@ -165,7 +165,7 @@ class AIWeightedEnsembleBot {
         this.contractSubscription = null;
 
         // Telegram Configuration
-        this.telegramToken = '8218636914:AAGvaKFh8MT769-_9eOEiU4XKufL0aHRhZ4';
+        this.telegramToken = '8584545459:AAFvyVjgeBnPGs-w_ehTMBG-bTvxHpAIjeI';
         this.telegramChatId = '752497117';
         this.telegramEnabled = true;
 
@@ -635,7 +635,7 @@ class AIWeightedEnsembleBot {
         const concentration = 1 - (entropy / maxEntropy);
 
         // CORRECT THRESHOLD: 0.06 = 6% deviation from uniform (realistic for synthetics)
-        const ultraLowVol = concentration > 0.06;
+        const ultraLowVol = concentration > 0.006;
 
         const inRecent = this.tickHistories[asset].slice(-9).includes(saturatedDigit);
 
@@ -652,12 +652,12 @@ class AIWeightedEnsembleBot {
             saturatedDigit !== this.lastTradeDigit) {
 
             this.lastTradeDigit = saturatedDigit;
-            this.placeTrade(asset, saturatedDigit, bestAvgZ, concentration);
+            this.placeTrade(asset, saturatedDigit, bestAvgZ, concentration, participation);
         }
     }
 
 
-    placeTrade(asset, predictedDigit, bestAvgZ, concentration) {
+    placeTrade(asset, predictedDigit, bestAvgZ, concentration, participation) {
         if (this.tradeInProgress || !this.wsReady) return;
 
         this.tradeInProgress = true;
@@ -668,7 +668,7 @@ class AIWeightedEnsembleBot {
             🔔 <b>Trade Opened (Romanian Ghost Differ Bot)</b>
 
             📊 <b>${asset}</b>
-            🎯 <b>Differ Digit:</b> ${predictedDigit}
+            🎯 <b>Differ Digit:</b> ${predictedDigit} (${bestAvgZ.toFixed(2)}) | <b>Concentration:</b> ${concentration.toFixed(4)} | <b>Participation:</b> ${participation}
             💰 <b>Stake:</b> $${this.currentStake.toFixed(2)}
             Last10Digits = ${this.tickHistories[asset].slice(-10).join(',')}
 
