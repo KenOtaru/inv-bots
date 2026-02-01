@@ -10,7 +10,7 @@ const CHAT_ID = "752497117";
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'romenianGhost001-state.json');
+const STATE_FILE = path.join(__dirname, 'romenianGhost01-state.json');
 const STATE_SAVE_INTERVAL = 5000; // Save every 5 seconds
 
 class StatePersistence {
@@ -512,75 +512,13 @@ class BlackFibonacci {
         }
     }
 
-    // scanForSignal() {
-    //     const windows = [13, 21, 34, 55, 89, 144, 233, 377, 610, 987];
-    //     const scores = Array(10).fill(0);
-
-    //     // Calculate Z-scores across Fibonacci windows
-    //     for (const w of windows) {
-    //         if (this.history.length < w) continue;
-    //         const slice = this.history.slice(-w);
-    //         const counts = Array(10).fill(0);
-    //         slice.forEach(d => counts[d]++);
-    //         const exp = w / 10;
-    //         const sd = Math.sqrt(w * 0.1 * 0.9);
-
-    //         for (let i = 0; i < 10; i++) {
-    //             scores[i] += (counts[i] - exp) / sd;
-    //         }
-    //     }
-
-    //     // Find saturated digit
-    //     let maxZ = -99, sat = -1;
-    //     for (let i = 0; i < 10; i++) {
-    //         if (scores[i] > maxZ) {
-    //             maxZ = scores[i];
-    //             sat = i;
-    //         }
-    //     }
-
-    //     // Calculate volatility (concentration)
-    //     // ULTRA-LOW VOLATILITY CHECK — ROMANIAN GHOST EXACT
-    //     const last500 = this.history.slice(-500);
-    //     const freq = Array(10).fill(0);
-    //     last500.forEach(d => freq[d]++);
-
-    //     let entropy = 0;
-    //     for (let f of freq) {
-    //         if (f > 0) {
-    //             const p = f / 500;
-    //             entropy -= p * Math.log2(p);
-    //         }
-    //     }
-
-    //     // Check conditions
-    //     const inRecent = this.history.slice(-9).includes(sat);
-
-    //     const concentration = 1 - (entropy / Math.log2(10));
-    //     const ultraLow = concentration > 0.0075;  // THIS IS THE REAL THRESHOLD
-
-    //     // Log analysis every 100 ticks
-    //     if (this.history.length % 100 === 0) {
-    //         console.log(`Z=${maxZ.toFixed(2)} | Digit=${sat} | Conc=${concentration.toFixed(4)} | UltraLow=${ultraLow} | InRecent=${inRecent}`);
-    //     }
-
-    //     // Trade signal
-    //     if (ultraLow && maxZ >= 11.30 && inRecent && sat !== this.lastTradeDigit) {
-    //         this.placeTrade(sat, maxZ, concentration);
-    //     }
-    // }
-
     scanForSignal() {
-        // === ROMANIAN GHOST FINAL — OCTOBER 2025 (MATHEMATICALLY CORRECT) ===
         const windows = [13, 21, 34, 55, 89, 144, 233, 377, 610, 987];
-        const zScoreSums = Array(10).fill(0);
-        const aboveExpectedCount = Array(10).fill(0);
-        let validWindowCount = 0;
+        const scores = Array(10).fill(0);
 
+        // Calculate Z-scores across Fibonacci windows
         for (const w of windows) {
             if (this.history.length < w) continue;
-            validWindowCount++;
-
             const slice = this.history.slice(-w);
             const counts = Array(10).fill(0);
             slice.forEach(d => counts[d]++);
@@ -588,31 +526,21 @@ class BlackFibonacci {
             const sd = Math.sqrt(w * 0.1 * 0.9);
 
             for (let i = 0; i < 10; i++) {
-                const z = (counts[i] - exp) / sd;
-                zScoreSums[i] += z;
-                if (counts[i] > exp) {
-                    aboveExpectedCount[i]++;
-                }
+                scores[i] += (counts[i] - exp) / sd;
             }
         }
 
-        // AVERAGE Z-score per window (NOT sum!)
-        let bestAvgZ = -99;
-        let saturatedDigit = -1;
-        let participation = 0;
-
+        // Find saturated digit
+        let maxZ = -99, sat = -1;
         for (let i = 0; i < 10; i++) {
-            if (aboveExpectedCount[i] >= 8) {  // Must dominate 8+ windows
-                const avgZ = zScoreSums[i] / validWindowCount;  // AVERAGE!
-                if (avgZ > bestAvgZ) {
-                    bestAvgZ = avgZ;
-                    saturatedDigit = i;
-                    participation = aboveExpectedCount[i];
-                }
+            if (scores[i] > maxZ) {
+                maxZ = scores[i];
+                sat = i;
             }
         }
 
-        // CONCENTRATION (entropy-based)
+        // Calculate volatility (concentration)
+        // ULTRA-LOW VOLATILITY CHECK — ROMANIAN GHOST EXACT
         const last500 = this.history.slice(-500);
         const freq = Array(10).fill(0);
         last500.forEach(d => freq[d]++);
@@ -625,28 +553,20 @@ class BlackFibonacci {
             }
         }
 
-        const maxEntropy = Math.log2(10);  // ≈ 3.322
-        const concentration = 1 - (entropy / maxEntropy);
+        // Check conditions
+        const inRecent = this.history.slice(-9).includes(sat);
 
-        // CORRECT THRESHOLD: 0.06 = 6% deviation from uniform (realistic for synthetics)
-        const ultraLowVol = concentration > 0.06;
+        const concentration = 1 - (entropy / Math.log2(10));
+        const ultraLow = concentration > 0.0075;  // THIS IS THE REAL THRESHOLD
 
-        const inRecent = this.history.slice(-9).includes(saturatedDigit);
-
-        // LOG EVERY 100 TICKS
+        // Log analysis every 100 ticks
         if (this.history.length % 100 === 0) {
-            console.log(`AvgZ=${bestAvgZ.toFixed(2)} | Digit=${saturatedDigit} | Conc=${concentration.toFixed(4)} | Ultra=${ultraLowVol} | Recent=${inRecent} | Part=${participation}`);
+            console.log(`Z=${maxZ.toFixed(2)} | Digit=${sat} | Conc=${concentration.toFixed(4)} | UltraLow=${ultraLow} | InRecent=${inRecent}`);
         }
 
-        // CORRECT THRESHOLD: Average Z >= 2.0 means strong saturation
-        if (ultraLowVol &&
-            bestAvgZ >= 2.0 &&
-            inRecent &&
-            saturatedDigit !== -1 &&
-            saturatedDigit !== this.lastTradeDigit) {
-
-            this.lastTradeDigit = saturatedDigit;
-            this.placeTrade(saturatedDigit, bestAvgZ, concentration);
+        // Trade signal
+        if (ultraLow && maxZ >= 11.30 && inRecent && sat !== this.lastTradeDigit) {
+            this.placeTrade(sat, maxZ, concentration);
         }
     }
 
