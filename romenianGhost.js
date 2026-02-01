@@ -69,12 +69,16 @@ class RomanianGhostUltimate {
         this.lastTradeDigit = {};
         this.lastTradeTime = {};
         this.ticksSinceLastTrade = {};
+        this.lastTickLogTime = {};
+        this.lastTickLogTime2 = {};
         this.tradeInProgress = false;
 
         this.config.assets.forEach(a => {
             this.lastTradeDigit[a] = null;
             this.lastTradeTime[a] = 0;
             this.ticksSinceLastTrade[a] = 999;
+            this.lastTickLogTime[a] = 0;
+            this.lastTickLogTime2[a] = 0;
         });
 
         // Performance tracking (for adaptive thresholds)
@@ -369,12 +373,12 @@ class RomanianGhostUltimate {
         if (this.histories[asset].length < this.config.minHistoryForTrading) return false;
 
         // Cooldown check
-        const ticksSinceLast = this.ticksSinceLastTrade[asset];
-        const requiredCooldown = this.consecutiveLosses > 0
-            ? this.config.cooldownAfterLoss
-            : this.config.cooldownTicks;
+        // const ticksSinceLast = this.ticksSinceLastTrade[asset];
+        // const requiredCooldown = this.consecutiveLosses > 0
+        //     ? this.config.cooldownAfterLoss
+        //     : this.config.cooldownTicks;
 
-        if (ticksSinceLast < requiredCooldown) return false;
+        // if (ticksSinceLast < requiredCooldown) return false;
 
         // Time filter (avoid volatile minutes)
         const now = new Date();
@@ -445,9 +449,11 @@ class RomanianGhostUltimate {
         // Step 4: Get adaptive thresholds
         const thresholds = this.getAdaptiveThresholds();
 
-        // Log periodically
-        if (this.histories[asset].length % 100 === 0 && signal) {
+        // LOG EVERY 30 SECONDS
+        const now = Date.now();
+        if (now - this.lastTickLogTime2[asset] >= 30000 && signal) {
             console.log(`[${asset}] Score=${signal.totalScore.toFixed(1)} | AvgZ=${signal.avgZScore.toFixed(2)} | Digit=${signal.digit} | Conc=${volAnalysis.concentration.toFixed(4)} | Ultra=${volAnalysis.isUltraLow} | Recent=${signal.inRecent} | Cooldown=${this.ticksSinceLastTrade[asset]}`);
+            this.lastTickLogTime2[asset] = now;
         }
 
         // Step 5: Check if signal is valid
@@ -620,10 +626,12 @@ class RomanianGhostUltimate {
         // Increment cooldown counter
         this.ticksSinceLastTrade[asset]++;
 
-        // Log periodically
-        if (this.histories[asset].length % 100 === 0) {
+        // LOG EVERY 30 SECONDS
+        const now = Date.now();
+        if (now - this.lastTickLogTime[asset] >= 30000) {
             console.log(`📈 [${asset}] Tick #${this.histories[asset].length} | Digit: ${lastDigit}`);
             console.log(`   Last 10: ${this.histories[asset].slice(-10).join(', ')}`);
+            this.lastTickLogTime[asset] = now;
         }
 
         // Scan for signals
