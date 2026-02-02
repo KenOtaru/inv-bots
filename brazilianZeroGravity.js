@@ -295,8 +295,8 @@ class ZeroGravityUltimate {
         const assetConfig = this.config.assets[asset];
         const isMeanReverting = avgHurst < assetConfig.hurstThreshold;
         console.log("isMeanReverting", avgHurst, 'threshold', assetConfig.hurstThreshold);
-        const isDropping = hurstTrend < -0.02;
-        console.log("isDropping trend", hurstTrend, 'threshold', -0.02);
+        const isDropping = hurstTrend < -0.002;
+        console.log("isDropping trend", hurstTrend, 'threshold', -0.002);
 
         return {
             avgHurst,

@@ -338,9 +338,9 @@ class AthenaPureUltimate {
 
         const assetConfig = this.config.assets[asset];
         const isLowFractal = avgFractalDim < assetConfig.fractalThreshold;
-        console.log("isLowFractal", avgFractalDim, 'threshold', assetConfig.fractalThreshold);
-        const isDropping = fdTrend < -0.02;
-        console.log("isDropping trend", fdTrend, 'threshold', -0.02);
+        console.log("isLowFractal", 'avgFractalDim', '(' + avgFractalDim + ')', 'threshold', assetConfig.fractalThreshold);
+        const isDropping = fdTrend < -0.002;
+        console.log("isDropping trend", 'fdTrend', '(' + fdTrend + ')', 'threshold', -0.002);
 
         return {
             avgFractalDim,
@@ -767,14 +767,15 @@ class AthenaPureUltimate {
                 reason = `cooldown(${ticksSinceLast}/${requiredCooldown})`;
             } else if (this.tradesThisHour[asset] >= this.config.maxTradesPerHour) {
                 reason = `maxTradesPerHour(${this.tradesThisHour[asset]})`;
-            } else {
-                const now = new Date();
-                const minute = now.getMinutes();
-                if (minute < this.config.avoidMinutesAroundHour ||
-                    minute > (60 - this.config.avoidMinutesAroundHour)) {
-                    reason = `timeFilter(min=${minute})`;
-                }
             }
+            // else {
+            //     const now = new Date();
+            //     const minute = now.getMinutes();
+            //     if (minute < this.config.avoidMinutesAroundHour ||
+            //         minute > (60 - this.config.avoidMinutesAroundHour)) {
+            //         reason = `timeFilter(min=${minute})`;
+            //     }
+            // }
         }
 
         const ok = (reason === null);
@@ -828,7 +829,7 @@ class AthenaPureUltimate {
 
         // Global adjustment
         if (overallWinRate < 0.88) {
-            minScore = 70;
+            minScore = 65;
         } else if (overallWinRate > 0.96) {
             minScore = 60;
         }
@@ -911,11 +912,11 @@ class AthenaPureUltimate {
             concentrationAnalysis?.isConcentrated
         ].filter(Boolean).length;
 
-        console.log('majorFlag1', fractalAnalysis?.isLowFractal);
-        console.log('majorFlag2', fibConfluence?.hasConfluence);
-        console.log('majorFlag3', fibConfluence?.hasZScore);
-        console.log('majorFlag4', fibConfluence?.inRecent);
-        console.log('majorFlag5', concentrationAnalysis?.isConcentrated);
+        console.log('fractalAnalysis_Flag1', fractalAnalysis?.isLowFractal);
+        console.log('fibConfluence_Flag2', fibConfluence?.hasConfluence);
+        console.log('fibConfluence_Flag3', fibConfluence?.hasZScore);
+        console.log('fibConfluence_Flag4', fibConfluence?.inRecent);
+        console.log('concentrationAnalysis_Flag5', concentrationAnalysis?.isConcentrated);
         const isValid =
             weightedScore >= adaptive.minScore &&
             majorFlags >= 4 &&           // at least 3 of 5 major conditions
