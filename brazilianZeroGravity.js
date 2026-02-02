@@ -705,24 +705,24 @@ class ZeroGravityUltimate {
         const targetDigit = entropyAnalysis?.consensusDigit ?? -1;
 
         // Validation checks
-        const isValid =
-            weightedScore >= adaptive.minScore &&
-            hurstAnalysis?.isMeanReverting &&
-            entropyAnalysis?.isConcentrated &&
-            zScoreConfluence?.hasConfluence &&
-            zScoreConfluence?.inRecent &&
-            targetDigit !== -1;
-
         // const isValid =
         //     weightedScore >= adaptive.minScore &&
-        //     // at least 3 of 4 major conditions true (soft gating)
-        //     [
-        //         hurstAnalysis?.isMeanReverting,
-        //         entropyAnalysis?.isConcentrated,
-        //         zScoreConfluence?.hasConfluence,
-        //         zScoreConfluence?.inRecent
-        //     ].filter(Boolean).length >= 3 &&
+        //     hurstAnalysis?.isMeanReverting &&
+        //     entropyAnalysis?.isConcentrated &&
+        //     zScoreConfluence?.hasConfluence &&
+        //     zScoreConfluence?.inRecent &&
         //     targetDigit !== -1;
+
+        const isValid =
+            weightedScore >= adaptive.minScore &&
+            // at least 3 of 4 major conditions true (soft gating)
+            [
+                hurstAnalysis?.isMeanReverting,
+                entropyAnalysis?.isConcentrated,
+                zScoreConfluence?.hasConfluence,
+                zScoreConfluence?.inRecent
+            ].filter(Boolean).length >= 4 &&
+            targetDigit !== -1;
 
         return {
             rawScore,

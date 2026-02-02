@@ -846,74 +846,32 @@ class AthenaPureUltimate {
     // ========================================================================
     // ENHANCEMENT #10: UNIFIED SIGNAL SCORING
     // ========================================================================
-    calculateTotalSignalScore(asset, fractalAnalysis, fibConfluence, concentrationAnalysis, streakAnalysis) {
-        const adaptive = this.getAdaptiveThresholds(asset);
-
-        // Component scores
-        const fractalScore = fractalAnalysis?.score || 0;
-        const confluenceScore = fibConfluence?.score || 0;
-        const concentrationScore = concentrationAnalysis?.score || 0;
-        const streakScore = streakAnalysis?.score || 0;
-
-        // Total raw score (max 100)
-        const rawScore = fractalScore + confluenceScore + concentrationScore + streakScore;
-
-        // Apply asset weight
-        const weightedScore = rawScore * adaptive.assetWeight;
-
-        // Target digit from Fibonacci confluence
-        const targetDigit = fibConfluence?.bestDigit ?? -1;
-
-        // Validation checks
-        const isValid =
-            weightedScore >= adaptive.minScore &&
-            fractalAnalysis?.isLowFractal &&
-            fibConfluence?.hasConfluence &&
-            fibConfluence?.hasZScore &&
-            fibConfluence?.inRecent &&
-            concentrationAnalysis?.isConcentrated &&
-            targetDigit !== -1;
-
-        return {
-            rawScore,
-            weightedScore,
-            minScore: adaptive.minScore,
-            targetDigit,
-            isValid,
-            components: {
-                fractal: fractalScore,
-                confluence: confluenceScore,
-                concentration: concentrationScore,
-                streak: streakScore
-            }
-        };
-    }
-
     // calculateTotalSignalScore(asset, fractalAnalysis, fibConfluence, concentrationAnalysis, streakAnalysis) {
     //     const adaptive = this.getAdaptiveThresholds(asset);
 
+    //     // Component scores
     //     const fractalScore = fractalAnalysis?.score || 0;
     //     const confluenceScore = fibConfluence?.score || 0;
     //     const concentrationScore = concentrationAnalysis?.score || 0;
     //     const streakScore = streakAnalysis?.score || 0;
 
+    //     // Total raw score (max 100)
     //     const rawScore = fractalScore + confluenceScore + concentrationScore + streakScore;
+
+    //     // Apply asset weight
     //     const weightedScore = rawScore * adaptive.assetWeight;
 
+    //     // Target digit from Fibonacci confluence
     //     const targetDigit = fibConfluence?.bestDigit ?? -1;
 
-    //     // Count how many major conditions are met
-    //     const majorFlags = [
-    //         fractalAnalysis?.isLowFractal,
-    //         fibConfluence?.hasConfluence,
-    //         fibConfluence?.hasZScore,
-    //         fibConfluence?.inRecent,
-    //         concentrationAnalysis?.isConcentrated
-    //     ].filter(Boolean).length;
-
+    //     // Validation checks
     //     const isValid =
     //         weightedScore >= adaptive.minScore &&
-    //         majorFlags >= 3 &&           // at least 3 of 5 major conditions
+    //         fractalAnalysis?.isLowFractal &&
+    //         fibConfluence?.hasConfluence &&
+    //         fibConfluence?.hasZScore &&
+    //         fibConfluence?.inRecent &&
+    //         concentrationAnalysis?.isConcentrated &&
     //         targetDigit !== -1;
 
     //     return {
@@ -926,11 +884,53 @@ class AthenaPureUltimate {
     //             fractal: fractalScore,
     //             confluence: confluenceScore,
     //             concentration: concentrationScore,
-    //             streak: streakScore,
-    //             majorFlags
+    //             streak: streakScore
     //         }
     //     };
     // }
+
+    calculateTotalSignalScore(asset, fractalAnalysis, fibConfluence, concentrationAnalysis, streakAnalysis) {
+        const adaptive = this.getAdaptiveThresholds(asset);
+
+        const fractalScore = fractalAnalysis?.score || 0;
+        const confluenceScore = fibConfluence?.score || 0;
+        const concentrationScore = concentrationAnalysis?.score || 0;
+        const streakScore = streakAnalysis?.score || 0;
+
+        const rawScore = fractalScore + confluenceScore + concentrationScore + streakScore;
+        const weightedScore = rawScore * adaptive.assetWeight;
+
+        const targetDigit = fibConfluence?.bestDigit ?? -1;
+
+        // Count how many major conditions are met
+        const majorFlags = [
+            fractalAnalysis?.isLowFractal,
+            fibConfluence?.hasConfluence,
+            fibConfluence?.hasZScore,
+            fibConfluence?.inRecent,
+            concentrationAnalysis?.isConcentrated
+        ].filter(Boolean).length;
+
+        const isValid =
+            weightedScore >= adaptive.minScore &&
+            majorFlags >= 5 &&           // at least 3 of 5 major conditions
+            targetDigit !== -1;
+
+        return {
+            rawScore,
+            weightedScore,
+            minScore: adaptive.minScore,
+            targetDigit,
+            isValid,
+            components: {
+                fractal: fractalScore,
+                confluence: confluenceScore,
+                concentration: concentrationScore,
+                streak: streakScore,
+                majorFlags
+            }
+        };
+    }
 
     // ========================================================================
     // MAIN SIGNAL SCANNER
