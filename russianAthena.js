@@ -153,6 +153,7 @@ class AthenaPureUltimate {
         this.totalWins = 0;
         this.x2 = 0; this.x3 = 0; this.x4 = 0; this.x5 = 0;
         this.netProfit = 0;
+        this.ticks = 0;
 
         // Per-asset state
         this.lastTradeDigit = {};
@@ -370,9 +371,9 @@ class AthenaPureUltimate {
 
 
         const isLowFractal = avgFractalDim < assetConfig.fractalThreshold && score > 2.5;
-        console.log("isLowFractal", '(', avgFractalDim, ') | threshold', assetConfig.fractalThreshold);
+        // console.log("isLowFractal", '(', avgFractalDim, ') | threshold', assetConfig.fractalThreshold);
         const isDropping = fdTrend < -0.002;
-        console.log("isDropping trend", '(', fdTrend, ') | threshold', -0.002);
+        // console.log("isDropping trend", '(', fdTrend, ') | threshold', -0.002);
 
         return {
             avgFractalDim,
@@ -815,9 +816,9 @@ class AthenaPureUltimate {
         if (!ok && len > 0 && len % 500 === 0) {
             console.log(`${logPrefix}=false → ${reason}`);
         } else if (ok && len > 0 && len % 500 === 0) {
-            console.log(
-                `${logPrefix}=true | len=${len}, consecLosses=${this.consecutiveLosses}, net=${this.netProfit.toFixed(2)}`
-            );
+            // console.log(
+            //     `${logPrefix}=true | len=${len}, consecLosses=${this.consecutiveLosses}, net=${this.netProfit.toFixed(2)}`
+            // );
         }
 
         return ok;
@@ -944,11 +945,11 @@ class AthenaPureUltimate {
             concentrationAnalysis?.isConcentrated
         ].filter(Boolean).length;
 
-        console.log('fractalAnalysis_Flag1', fractalAnalysis?.isLowFractal, 'Score', fractalScore.toFixed(2));
-        console.log('fibConfluence_Flag2', fibConfluence?.hasConfluence, 'Score', confluenceScore.toFixed(2));
-        console.log('fibConfluence_Flag3', fibConfluence?.hasZScore, 'Score', confluenceScore.toFixed(2));
-        console.log('fibConfluence_Flag4', fibConfluence?.inRecent, 'Score', confluenceScore.toFixed(2));
-        console.log('concentrationAnalysis_Flag5', concentrationAnalysis?.isConcentrated, 'Score', confluenceScore.toFixed(2));
+        // console.log('fractalAnalysis_Flag1', fractalAnalysis?.isLowFractal, 'Score', fractalScore.toFixed(2));
+        // console.log('fibConfluence_Flag2', fibConfluence?.hasConfluence, 'Score', confluenceScore.toFixed(2));
+        // console.log('fibConfluence_Flag3', fibConfluence?.hasZScore, 'Score', confluenceScore.toFixed(2));
+        // console.log('fibConfluence_Flag4', fibConfluence?.inRecent, 'Score', confluenceScore.toFixed(2));
+        // console.log('concentrationAnalysis_Flag5', concentrationAnalysis?.isConcentrated, 'Score', confluenceScore.toFixed(2));
         const isValid =
             weightedScore >= adaptive.minScore &&
             majorFlags >= 5 &&           // at least 4 of 5 major conditions
@@ -1028,12 +1029,13 @@ class AthenaPureUltimate {
         // --- STEP 1: Fractal Analysis ---
         const fractalAnalysis = this.calculateFractalAnalysis(asset);
         if (!fractalAnalysis) {
-            if (len % 500 === 0)
+            //Log every 20 Ticks
+            if (this.ticks % 20 === 0)
                 console.log(`[${asset}] FractalAnalysis=null`);
             return;
         }
 
-        if (len % 500 === 0) {
+        if (this.ticks % 20 === 0) {
             // console.log(
             //     `[${asset}] FRACTAL avgFD=${fractalAnalysis.avgFractalDim.toFixed(3)} ` +
             //     `trend=${fractalAnalysis.fdTrend.toFixed(4)} ` +
@@ -1045,12 +1047,13 @@ class AthenaPureUltimate {
         // --- STEP 2: Fibonacci Confluence ---
         const fibConfluence = this.calculateFibonacciConfluence(asset);
         if (!fibConfluence) {
-            if (len % 500 === 0)
-                console.log(`[${asset}] FibConfluence=null`);
+            //Log every 20 Ticks
+            // if (this.ticks % 20 === 0)
+            //     console.log(`[${asset}] FibConfluence=null`);
             return;
         }
 
-        if (len % 500 === 0) {
+        if (this.ticks % 20 === 0) {
             console.log(
                 `[${asset}] FIB confStrength=${fibConfluence.confluenceStrength.toFixed(2)} ` +
                 `avgZ=${fibConfluence.avgZScore.toFixed(2)} ` +
@@ -1068,7 +1071,7 @@ class AthenaPureUltimate {
             return;
         }
 
-        if (len % 500 === 0) {
+        if (this.ticks % 20 === 0) {
             // console.log(
             //     `[${asset}] CONC avg=${concentrationAnalysis.avgConcentration.toFixed(4)} ` +
             //     `trend=${concentrationAnalysis.concTrend.toFixed(4)} ` +
@@ -1089,7 +1092,7 @@ class AthenaPureUltimate {
             score: 0
         };
 
-        if (len % 500 === 0) {
+        if (this.ticks % 20 === 0) {
             // console.log(
             //     `[${asset}] STREAK digit=${targetDigit} ` +
             //     `streak=${streakAnalysis.currentStreak} ` +
@@ -1105,7 +1108,7 @@ class AthenaPureUltimate {
             asset, fractalAnalysis, fibConfluence, concentrationAnalysis, streakAnalysis
         );
 
-        if (len % 500 === 0) {
+        if (this.ticks % 20 === 0) {
             // console.log(
             //     `[${asset}] TOTAL Score=${signal.weightedScore.toFixed(1)}/${signal.minScore} ` +
             //     `components={FD:${signal.components.fractal.toFixed(1)}, ` +
@@ -1119,11 +1122,11 @@ class AthenaPureUltimate {
 
         // --- STEP 6: Validity check ---
         if (!signal.isValid) {
-            if (len % 500 === 0) {
+            if (this.ticks % 20 === 0) {
                 console.log(
                     `[${asset}] Signal rejected: ` +
                     `weightedScore=${signal.weightedScore.toFixed(1)} < minScore=${signal.minScore} ` +
-                    `or insufficient majorFlags`
+                    `or insufficient majorFlags (${signal.components.majorFlags})`
                 );
             }
             return;
@@ -1132,7 +1135,7 @@ class AthenaPureUltimate {
         // --- STEP 7: Same-digit suppression ---
         if (signal.targetDigit === this.lastTradeDigit[asset] &&
             signal.weightedScore < signal.minScore + 20) {
-            if (len % 500 === 0) {
+            if (this.ticks % 20 === 0) {
                 console.log(
                     `[${asset}] Signal rejected (same digit): digit=${signal.targetDigit} ` +
                     `score=${signal.weightedScore.toFixed(1)} < ${signal.minScore + 20}`
@@ -1318,6 +1321,8 @@ class AthenaPureUltimate {
         if (!this.assetList.includes(asset)) return;
 
         const lastDigit = this.getLastDigit(tick.quote, asset);
+
+        this.ticks = this.ticks + 1;
 
         this.histories[asset].push(lastDigit);
         if (this.histories[asset].length > this.config.requiredHistoryLength) {
