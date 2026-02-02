@@ -34,7 +34,7 @@ class AthenaPureUltimate {
                     decimals: 3,
                     digitIndex: 2,
                     fractalThreshold: 1.58,      // was 1.32 (too low)
-                    minConfluence: 0.60,         // was 0.70
+                    minConfluence: 0.80,         // was 0.70
                     minZScore: 1.8,              // was 1.6
                     concentrationThreshold: 0.050,// was 0.055
                     weight: 1.3
@@ -43,7 +43,7 @@ class AthenaPureUltimate {
                     decimals: 4,
                     digitIndex: 3,
                     fractalThreshold: 1.58,      // was 1.32 (too low)
-                    minConfluence: 0.60,         // was 0.70
+                    minConfluence: 0.80,         // was 0.70
                     minZScore: 1.8,              // was 1.6
                     concentrationThreshold: 0.050,// was 0.055
                     weight: 1.1
@@ -52,7 +52,7 @@ class AthenaPureUltimate {
                     decimals: 4,
                     digitIndex: 3,
                     fractalThreshold: 1.58,      // was 1.32 (too low)
-                    minConfluence: 0.60,         // was 0.70
+                    minConfluence: 0.80,         // was 0.70
                     minZScore: 1.8,              // was 1.6
                     concentrationThreshold: 0.050,// was 0.055
                     weight: 1.1
@@ -61,7 +61,7 @@ class AthenaPureUltimate {
                     decimals: 2,
                     digitIndex: 1,
                     fractalThreshold: 1.58,      // was 1.32 (too low)
-                    minConfluence: 0.60,         // was 0.70
+                    minConfluence: 0.80,         // was 0.70
                     minZScore: 1.8,              // was 1.6
                     concentrationThreshold: 0.050,// was 0.055
                     weight: 1.1
@@ -70,7 +70,7 @@ class AthenaPureUltimate {
                     decimals: 4,
                     digitIndex: 3,
                     fractalThreshold: 1.58,      // was 1.32 (too low)
-                    minConfluence: 0.60,         // was 0.70
+                    minConfluence: 0.80,         // was 0.70
                     minZScore: 1.8,              // was 1.6
                     concentrationThreshold: 0.050,// was 0.055
                     weight: 1.3
@@ -79,7 +79,7 @@ class AthenaPureUltimate {
                     decimals: 4,
                     digitIndex: 3,
                     fractalThreshold: 1.58,      // was 1.32 (too low)
-                    minConfluence: 0.60,         // was 0.70
+                    minConfluence: 0.80,         // was 0.70
                     minZScore: 1.8,              // was 1.6
                     concentrationThreshold: 0.050,// was 0.055
                     weight: 1.3
