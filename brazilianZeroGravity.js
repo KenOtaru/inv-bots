@@ -81,10 +81,10 @@ class ZeroGravityUltimate {
             maxTradesPerHour: 8,  // Per asset
 
             // Money management
-            baseStake: 3.50,
-            firstLossMultiplier: 1.8,
+            baseStake: 2.2,
+            firstLossMultiplier: 11.3,
             subsequentMultiplier: 11.3,
-            maxConsecutiveLosses: 4,
+            maxConsecutiveLosses: 6,
             takeProfit: 15000,
             stopLoss: -600,
 
@@ -690,29 +690,29 @@ class ZeroGravityUltimate {
 
         // Step 1: Hurst Analysis
         const hurstAnalysis = this.calculateHurstAnalysis(asset);
-        // console.log(`[${asset}] Hurst Analysis:`, hurstAnalysis);
+        console.log(`[${asset}] Hurst Analysis:`, hurstAnalysis);
         if (!hurstAnalysis || !hurstAnalysis.isMeanReverting) return;
 
         // Step 2: Entropy Analysis
         const entropyAnalysis = this.calculateEntropyAnalysis(asset);
-        // console.log(`[${asset}] Entropy Analysis:`, entropyAnalysis);
+        console.log(`[${asset}] Entropy Analysis:`, entropyAnalysis);
         if (!entropyAnalysis || !entropyAnalysis.isConcentrated) return;
 
         // Step 3: Z-Score Confluence
         const targetDigit = entropyAnalysis.consensusDigit;
         const zScoreConfluence = this.calculateZScoreConfluence(asset, targetDigit);
-        // console.log(`[${asset}] Z-Score Confluence:`, zScoreConfluence);
+        console.log(`[${asset}] Z-Score Confluence:`, zScoreConfluence);
         if (!zScoreConfluence || !zScoreConfluence.hasConfluence) return;
 
         // Step 4: Streak Analysis
         const streakAnalysis = this.analyzeStreaks(history);
-        // console.log(`[${asset}] Streak Analysis:`, streakAnalysis);
+        console.log(`[${asset}] Streak Analysis:`, streakAnalysis);
 
         // Step 5: Calculate total score
         const signal = this.calculateTotalSignalScore(
             asset, hurstAnalysis, entropyAnalysis, zScoreConfluence, streakAnalysis
         );
-        // console.log(`[${asset}] Signal:`, signal);
+        console.log(`[${asset}] Signal:`, signal);
 
         // Log periodically
         if (history.length % 100 === 0) {
@@ -768,18 +768,16 @@ class ZeroGravityUltimate {
         });
 
         this.sendTelegram(`
-🎯 <b>ZEROGRAVITY v5 TRADE</b>
+            🎯 <b>ZEROGRAVITY v5 TRADE</b>
 
-📊 Asset: ${asset}
-🔢 Digit: ${signal.targetDigit}
-📈 Score: ${signal.weightedScore.toFixed(1)}/${signal.minScore}
-📉 Hurst: ${hurstAnalysis.avgHurst.toFixed(3)}
-🔬 Conc: ${entropyAnalysis.avgConcentration.toFixed(4)}
-📊 Z: ${zScoreConfluence.avgZScore.toFixed(2)}
-💰 Stake: $${this.stake.toFixed(2)}
-📊 Losses: ${this.consecutiveLosses}
-
-⏰ ${new Date().toLocaleTimeString()}
+            📊 Asset: ${asset}
+            🔢 Digit: ${signal.targetDigit}
+            📈 Score: ${signal.weightedScore.toFixed(1)}/${signal.minScore}
+            📉 Hurst: ${hurstAnalysis.avgHurst.toFixed(3)}
+            🔬 Conc: ${entropyAnalysis.avgConcentration.toFixed(4)}
+            📊 Z: ${zScoreConfluence.avgZScore.toFixed(2)}
+            💰 Stake: $${this.stake.toFixed(2)}
+            📊 Losses: ${this.consecutiveLosses}
         `.trim());
     }
 
@@ -828,32 +826,38 @@ class ZeroGravityUltimate {
             if (this.consecutiveLosses === 5) this.x5++;
 
             // Money management
-            if (this.consecutiveLosses === 1) {
-                this.stake = this.config.baseStake * this.config.firstLossMultiplier;
+            // if (this.consecutiveLosses === 1) {
+            //     this.stake = this.config.baseStake * this.config.firstLossMultiplier;
+            // } else {
+            //     this.stake = this.config.baseStake *
+            //         Math.pow(this.config.subsequentMultiplier, this.consecutiveLosses - 1);
+            // }
+            // this.stake = Math.round(this.stake * 100) / 100;
+
+            if (this.consecutiveLosses === 2) {
+                this.stake = this.config.baseStake;
             } else {
-                this.stake = this.config.baseStake *
-                    Math.pow(this.config.subsequentMultiplier, this.consecutiveLosses - 1);
+                this.stake = Math.ceil(this.stake * this.config.firstLossMultiplier * 100) / 100;
             }
-            this.stake = Math.round(this.stake * 100) / 100;
-
-            // Loss alert
-            this.sendTelegram(`
-❌ <b>LOSS — ZEROGRAVITY v5</b>
-
-📊 Asset: ${asset}
-🔢 Exit: ${exitDigit}
-💸 P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}
-📈 Total: ${this.totalTrades} | W/L: ${this.totalWins}/${this.totalTrades - this.totalWins}
-🔢 x2-x5: ${this.x2}/${this.x3}/${this.x4}/${this.x5}
-💰 Next: $${this.stake.toFixed(2)}
-💵 Net: $${this.netProfit.toFixed(2)}
-
-⏰ ${new Date().toLocaleString()}
-            `.trim());
         }
 
+        // Trade result alert
+        this.sendTelegram(`
+            ${won ? '✅ WIN' : '❌ LOSS'} — ZEROGRAVITY v5
+
+            📊 Asset: ${asset}
+            🔢 Exit: ${exitDigit}
+            last10Digits: ${this.tickHistory[asset].slice(-10).join(',')}
+            💸 P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}
+            📈 Total: ${this.totalTrades} | W/L: ${this.totalWins}/${this.totalTrades - this.totalWins}
+            🔢 x2-x5: ${this.x2}/${this.x3}/${this.x4}/${this.x5}
+            📈 Win Rate: ${this.totalWins / this.totalTrades * 100}%
+            💰 Next: $${this.stake.toFixed(2)}
+            💵 Net: $${this.netProfit.toFixed(2)}
+        `.trim());
+
         // Stop conditions
-        if (this.consecutiveLosses >= this.config.maxConsecutiveLosses) {
+        if (this.consecutiveLosses >= this.config.maxConsecutiveLosses || this.netProfit <= this.config.stopLoss) {
             console.log('🛑 Max consecutive losses reached');
             this.sendTelegram(`🛑 <b>MAX LOSSES!</b>\nFinal P&L: $${this.netProfit.toFixed(2)}`);
             this.disconnect();
@@ -863,13 +867,6 @@ class ZeroGravityUltimate {
         if (this.netProfit >= this.config.takeProfit) {
             console.log('🎉 Take profit reached!');
             this.sendTelegram(`🎉 <b>TAKE PROFIT!</b>\nFinal P&L: $${this.netProfit.toFixed(2)}`);
-            this.disconnect();
-            return;
-        }
-
-        if (this.netProfit <= this.config.stopLoss) {
-            console.log('🛑 Stop loss reached');
-            this.sendTelegram(`🛑 <b>STOP LOSS!</b>\nFinal P&L: $${this.netProfit.toFixed(2)}`);
             this.disconnect();
             return;
         }
@@ -963,13 +960,12 @@ class ZeroGravityUltimate {
                 this.wsReady = true;
                 this.initializeSubscriptions();
                 this.sendTelegram(`
-🚀 <b>ZEROGRAVITY v5 ULTIMATE STARTED</b>
+                    🚀 <b>ZEROGRAVITY v5 ULTIMATE STARTED</b>
 
-📊 Assets: ${this.assetList.join(', ')}
-💰 Base Stake: $${this.config.baseStake}
-🎯 Min Score: ${this.config.minTotalScore}
+                    📊 Assets: ${this.assetList.join(', ')}
+                    💰 Base Stake: $${this.config.baseStake}
+                    🎯 Min Score: ${this.config.minTotalScore}
 
-⏰ ${new Date().toLocaleString()}
                 `.trim());
                 break;
             case 'history':
@@ -1102,20 +1098,20 @@ class ZeroGravityUltimate {
             });
 
             this.sendTelegram(`
-⏰ <b>HOURLY — ZEROGRAVITY v5</b>
+                ⏰ <b>HOURLY — ZEROGRAVITY v5</b>
 
-📊 Trades: ${this.hourly.trades}
-✅/❌ W/L: ${this.hourly.wins}/${this.hourly.losses}
-📈 Win Rate: ${winRate}%
-💰 P&L: ${this.hourly.pnl >= 0 ? '+' : ''}$${this.hourly.pnl.toFixed(2)}
+                📊 Trades: ${this.hourly.trades}
+                ✅/❌ W/L: ${this.hourly.wins}/${this.hourly.losses}
+                📈 Win Rate: ${winRate}%
+                💰 P&L: ${this.hourly.pnl >= 0 ? '+' : ''}$${this.hourly.pnl.toFixed(2)}
 
-<b>By Asset:</b>${assetBreakdown}
+                <b>By Asset:</b>${assetBreakdown}
 
-<b>Session:</b>
-├ Total: ${this.totalTrades}
-├ W/L: ${this.totalWins}/${this.totalTrades - this.totalWins}
-├ x2-x5: ${this.x2}/${this.x3}/${this.x4}/${this.x5}
-└ Net: $${this.netProfit.toFixed(2)}
+                <b>Session:</b>
+                ├ Total: ${this.totalTrades}
+                ├ W/L: ${this.totalWins}/${this.totalTrades - this.totalWins}
+                ├ x2-x5: ${this.x2}/${this.x3}/${this.x4}/${this.x5}
+                └ Net: $${this.netProfit.toFixed(2)}
             `.trim());
             this.hourly = { trades: 0, wins: 0, losses: 0, pnl: 0 };
         }, 3600000);

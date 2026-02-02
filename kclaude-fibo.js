@@ -373,18 +373,24 @@ class MoneyManagementEngine {
      * 2+ losses → base × 11.3^(losses-1)
      */
     calculateStake() {
-        if (this.consecutiveLosses === 0) {
-            this.currentStake = this.baseStake;
-        } else if (this.consecutiveLosses === 1) {
-            this.currentStake = this.baseStake * this.firstLossMultiplier;
-        } else {
-            // 2+ losses: base × 11.3^(n-1)
-            const exponent = this.consecutiveLosses - 1;
-            this.currentStake = this.currentStake * Math.pow(this.subsequentMultiplier, exponent);
-        }
+        // if (this.consecutiveLosses === 0) {
+        //     this.currentStake = this.baseStake;
+        // } else if (this.consecutiveLosses === 1) {
+        //     this.currentStake = this.baseStake * this.firstLossMultiplier;
+        // } else {
+        //     // 2+ losses: base × 11.3^(n-1)
+        //     const exponent = this.consecutiveLosses - 1;
+        //     this.currentStake = this.currentStake * Math.pow(this.subsequentMultiplier, exponent);
+        // }
 
-        // Round to 2 decimal places
-        this.currentStake = Math.round(this.currentStake * 100) / 100;
+        // // Round to 2 decimal places
+        // this.currentStake = Math.round(this.currentStake * 100) / 100;
+
+        if (this.consecutiveLosses === 2) {
+            this.currentStake = this.baseStake;
+        } else {
+            this.currentStake = Math.ceil(this.currentStake * this.firstLossMultiplier * 100) / 100;
+        }
 
         return this.currentStake;
     }
@@ -480,7 +486,7 @@ class MoneyManagementEngine {
 // STATE PERSISTENCE
 // ============================================================================
 
-const STATE_FILE = path.join(__dirname, 'kclaude-000010-state.json');
+const STATE_FILE = path.join(__dirname, 'kclaude-000011-state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -922,76 +928,6 @@ class FibonacciZScoreBot {
         });
     }
 
-    handleContractUpdate(msg) {
-        const contract = msg.proposal_open_contract;
-        if (!contract?.is_sold) return;
-
-        const won = contract.status === 'won';
-        const profit = parseFloat(contract.profit);
-        const asset = contract.underlying;
-        const exitDigit = this.getLastDigit(contract.exit_tick_display_value, asset);
-
-        // Update money manager
-        const stats = this.moneyManager.updateAfterTrade(won, profit);
-        this.totalProfitLoss += profit;
-
-        // Update hourly stats
-        this.hourlyStats.trades++;
-        this.hourlyStats.pnl += profit;
-        if (won) this.hourlyStats.wins++;
-        else this.hourlyStats.losses++;
-
-        // Log result
-        console.log(`\n${won ? '✅ WIN' : '❌ LOSS'} | ${asset}`);
-        console.log(`   Predicted: ${this.lastPrediction} | Actual: ${exitDigit}`);
-        console.log(`   P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}`);
-        console.log(`   Total P&L: ${this.totalProfitLoss >= 0 ? '+' : ''}$${this.totalProfitLoss.toFixed(2)}`);
-        console.log(`   Stats: ${stats.totalWins}W/${stats.totalLosses}L (${stats.winRate}%)`);
-        console.log(`   Next Stake: $${stats.currentStake.toFixed(2)}`);
-
-        // Telegram notification
-        this.sendTelegram(`
-        ${won ? '✅ WIN' : '❌ LOSS'} | <b>${asset}</b>
-
-            🎯 Predicted: ${this.lastPrediction} | Actual: ${exitDigit}
-            📊 Type: ${this.lastTradeType}
-            ${profit >= 0 ? '🟢' : '🔴'} P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}
-
-            <b>Session Stats:</b>
-            ├ W/L: ${stats.totalWins}/${stats.totalLosses} (${stats.winRate}%)
-            ├ Streak: ${won ? '0L' : `${stats.consecutiveLosses}L`}
-            ├ Session P&L: ${this.totalProfitLoss >= 0 ? '+' : ''}$${this.totalProfitLoss.toFixed(2)}
-            └ Next Stake: $${stats.currentStake.toFixed(2)}
-
-            ⏰ ${new Date().toLocaleTimeString()}
-        `.trim());
-
-        // Check if we hit max losses
-        if (!stats.canTrade) {
-            console.log('🛑 MAX CONSECUTIVE LOSSES REACHED - STOPPING');
-            this.sendTelegram(`
-                🛑 <b>MAX LOSSES REACHED</b>
-
-                Session ended due to ${this.moneyManager.maxConsecutiveLosses} consecutive losses.
-
-                Final P&L: ${this.totalProfitLoss >= 0 ? '+' : ''}$${this.totalProfitLoss.toFixed(2)}
-                Total Trades: ${stats.totalTrades}
-                Win Rate: ${stats.winRate}%
-            `.trim());
-
-            this.endOfDay = true;
-            this.disconnect();
-            return;
-        }
-
-        // Suspend asset briefly after loss
-        // if (!won) {
-        //     this.suspendAsset(asset, 45000);
-        // }
-
-        this.tradeInProgress = false;
-    }
-
     // ========================================================================
     // ANALYSIS AND TRADING
     // ========================================================================
@@ -1102,8 +1038,6 @@ class FibonacciZScoreBot {
             ├ Windows: ${analysisData.saturationInfo.validWindows}/10` : ''}
             ${analysisData.bonusInfo ? `├ Streak: ${analysisData.bonusInfo.streakLength}×` : ''}
             └ Last 10: ${this.tickHistories[asset].slice(-10).join(',')}
-
-            ⏰ ${new Date().toLocaleTimeString()}
         `.trim());
 
         // Place trade
@@ -1121,6 +1055,77 @@ class FibonacciZScoreBot {
                 barrier: digit.toString()
             }
         });
+    }
+
+
+    handleContractUpdate(msg) {
+        const contract = msg.proposal_open_contract;
+        if (!contract?.is_sold) return;
+
+        const won = contract.status === 'won';
+        const profit = parseFloat(contract.profit);
+        const asset = contract.underlying;
+        const exitDigit = this.getLastDigit(contract.exit_tick_display_value, asset);
+
+        // Update money manager
+        const stats = this.moneyManager.updateAfterTrade(won, profit);
+        this.totalProfitLoss += profit;
+
+        // Update hourly stats
+        this.hourlyStats.trades++;
+        this.hourlyStats.pnl += profit;
+        if (won) this.hourlyStats.wins++;
+        else this.hourlyStats.losses++;
+
+        // Log result
+        console.log(`\n${won ? '✅ WIN' : '❌ LOSS'} | ${asset}`);
+        console.log(`   Predicted: ${this.lastPrediction} | Actual: ${exitDigit}`);
+        console.log(`   P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}`);
+        console.log(`   Total P&L: ${this.totalProfitLoss >= 0 ? '+' : ''}$${this.totalProfitLoss.toFixed(2)}`);
+        console.log(`   Stats: ${stats.totalWins}W/${stats.totalLosses}L (${stats.winRate}%)`);
+        console.log(`   Next Stake: $${stats.currentStake.toFixed(2)}`);
+
+        // Telegram notification
+        this.sendTelegram(`
+        ${won ? '✅ WIN' : '❌ LOSS'} | <b>${asset}</b>
+
+            🎯 Predicted: ${this.lastPrediction} | Actual: ${exitDigit}
+            📊 Type: ${this.lastTradeType}
+            ${profit >= 0 ? '🟢' : '🔴'} P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}
+
+            <b>Session Stats:</b>
+            ├ W/L: ${stats.totalWins}/${stats.totalLosses} (${stats.winRate}%)
+            ├ Streak: ${won ? '0L' : `${stats.consecutiveLosses}L`}
+            ├ Session P&L: ${this.totalProfitLoss >= 0 ? '+' : ''}$${this.totalProfitLoss.toFixed(2)}
+            └ Next Stake: $${stats.currentStake.toFixed(2)}
+
+            ⏰ ${new Date().toLocaleTimeString()}
+        `.trim());
+
+        // Check if we hit max losses
+        if (!stats.canTrade) {
+            console.log('🛑 MAX CONSECUTIVE LOSSES REACHED - STOPPING');
+            this.sendTelegram(`
+                🛑 <b>MAX LOSSES REACHED</b>
+
+                Session ended due to ${this.moneyManager.maxConsecutiveLosses} consecutive losses.
+
+                Final P&L: ${this.totalProfitLoss >= 0 ? '+' : ''}$${this.totalProfitLoss.toFixed(2)}
+                Total Trades: ${stats.totalTrades}
+                Win Rate: ${stats.winRate}%
+            `.trim());
+
+            this.endOfDay = true;
+            this.disconnect();
+            return;
+        }
+
+        // Suspend asset briefly after loss
+        // if (!won) {
+        //     this.suspendAsset(asset, 45000);
+        // }
+
+        this.tradeInProgress = false;
     }
 
     // ========================================================================

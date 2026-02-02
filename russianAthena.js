@@ -93,10 +93,10 @@ class AthenaPureUltimate {
             maxTradesPerHour: 6,  // Per asset
 
             // Money management (MODIFIED for safety)
-            baseStake: 5.00,
-            firstLossMultiplier: 2.0,  // First loss: 5 × 2 = $10
-            subsequentMultiplier: 10.0,  // Subsequent: 5 × 10^(n-1)
-            maxConsecutiveLosses: 4,
+            baseStake: 2.2,
+            firstLossMultiplier: 11.3,  // First loss: 5 × 2 = $10
+            subsequentMultiplier: 11.1,  // Subsequent: 5 × 10^(n-1)
+            maxConsecutiveLosses: 6,
             maxStake: 1500,  // Cap maximum stake
             takeProfit: 20000,
             stopLoss: -800,
@@ -842,29 +842,29 @@ class AthenaPureUltimate {
 
         // Step 1: Fractal Analysis
         const fractalAnalysis = this.calculateFractalAnalysis(asset);
-        // console.log(`[${asset}] Fractal Analysis:`, fractalAnalysis);
+        console.log(`[${asset}] Fractal Analysis:`, fractalAnalysis);
         if (!fractalAnalysis || !fractalAnalysis.isLowFractal) return;
 
         // Step 2: Fibonacci Confluence
         const fibConfluence = this.calculateFibonacciConfluence(asset);
-        // console.log(`[${asset}] Fibonacci Confluence:`, fibConfluence);
+        console.log(`[${asset}] Fibonacci Confluence:`, fibConfluence);
         if (!fibConfluence || !fibConfluence.hasConfluence) return;
 
         // Step 3: Concentration Analysis
         const concentrationAnalysis = this.calculateConcentrationAnalysis(asset);
-        // console.log(`[${asset}] Concentration Analysis:`, concentrationAnalysis);
+        console.log(`[${asset}] Concentration Analysis:`, concentrationAnalysis);
         if (!concentrationAnalysis || !concentrationAnalysis.isConcentrated) return;
 
         // Step 4: Streak Analysis
         const targetDigit = fibConfluence.bestDigit;
         const streakAnalysis = this.analyzeStreakExhaustion(history, targetDigit);
-        // console.log(`[${asset}] Streak Analysis:`, streakAnalysis);
+        console.log(`[${asset}] Streak Analysis:`, streakAnalysis);
 
         // Step 5: Calculate total score
         const signal = this.calculateTotalSignalScore(
             asset, fractalAnalysis, fibConfluence, concentrationAnalysis, streakAnalysis
         );
-        // console.log(`[${asset}] Signal:`, signal);
+        console.log(`[${asset}] Signal:`, signal);
 
         // Log periodically
         if (history.length % 150 === 0) {
@@ -928,19 +928,17 @@ class AthenaPureUltimate {
         });
 
         this.sendTelegram(`
-🎯 <b>ATHENA v9 TRADE</b>
+            🎯 <b>ATHENA v9 TRADE</b>
 
-📊 Asset: ${asset}
-🔢 Digit: ${signal.targetDigit}
-📈 Score: ${signal.weightedScore.toFixed(1)}/${signal.minScore}
-📉 FD: ${fractalAnalysis.avgFractalDim.toFixed(3)}
-🔗 Confluence: ${(fibConfluence.confluenceStrength * 100).toFixed(1)}%
-📊 Z: ${fibConfluence.avgZScore.toFixed(2)}
-🔬 Conc: ${concentrationAnalysis.avgConcentration.toFixed(4)}
-💰 Stake: $${tradeStake.toFixed(2)}
-📊 Losses: ${this.consecutiveLosses}
-
-⏰ ${new Date().toLocaleTimeString()}
+            📊 Asset: ${asset}
+            🔢 Digit: ${signal.targetDigit}
+            📈 Score: ${signal.weightedScore.toFixed(1)}/${signal.minScore}
+            📉 FD: ${fractalAnalysis.avgFractalDim.toFixed(3)}
+            🔗 Confluence: ${(fibConfluence.confluenceStrength * 100).toFixed(1)}%
+            📊 Z: ${fibConfluence.avgZScore.toFixed(2)}
+            🔬 Conc: ${concentrationAnalysis.avgConcentration.toFixed(4)}
+            💰 Stake: $${tradeStake.toFixed(2)}
+            📊 Losses: ${this.consecutiveLosses}
         `.trim());
     }
 
@@ -992,54 +990,54 @@ class AthenaPureUltimate {
             if (this.consecutiveLosses === 5) this.x5++;
 
             // Money management (modified for safety)
-            if (this.consecutiveLosses === 1) {
-                this.stake = this.config.baseStake * this.config.firstLossMultiplier;
+            // if (this.consecutiveLosses === 1) {
+            //     this.stake = this.config.baseStake * this.config.firstLossMultiplier;
+            // } else {
+            //     this.stake = this.config.baseStake *
+            //         Math.pow(this.config.subsequentMultiplier, this.consecutiveLosses - 1);
+            // }
+            // this.stake = Math.min(Math.round(this.stake * 100) / 100, this.config.maxStake);
+
+            if (this.consecutiveLosses === 2) {
+                this.stake = this.config.baseStake;
             } else {
-                this.stake = this.config.baseStake *
-                    Math.pow(this.config.subsequentMultiplier, this.consecutiveLosses - 1);
+                this.stake = Math.ceil(this.stake * this.config.firstLossMultiplier * 100) / 100;
             }
-            this.stake = Math.min(Math.round(this.stake * 100) / 100, this.config.maxStake);
 
             // Asset suspension check
             if (this.assetConsecutiveLosses[asset] >= this.config.suspendAssetAfterLosses) {
-                this.suspendAsset(asset);
+                // this.suspendAsset(asset);
             }
-
-            // Loss alert
-            this.sendTelegram(`
-❌ <b>LOSS — ATHENA v9</b>
-
-📊 Asset: ${asset}
-🔢 Exit: ${exitDigit}
-💸 P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}
-📈 Total: ${this.totalTrades} | W/L: ${this.totalWins}/${this.totalTrades - this.totalWins}
-🔢 x2-x5: ${this.x2}/${this.x3}/${this.x4}/${this.x5}
-💰 Next: $${this.stake.toFixed(2)}
-💵 Net: $${this.netProfit.toFixed(2)}
-${this.assetConsecutiveLosses[asset] >= 2 ? `\n🚫 ${asset} SUSPENDED` : ''}
-
-⏰ ${new Date().toLocaleString()}
-            `.trim());
         }
 
+        // Trade alert
+        this.sendTelegram(`
+            ${won ? '✅' : '❌'} <b>${won ? 'WIN' : 'LOSS'} — ATHENA v9</b>
+
+            📊 Asset: ${asset}
+            🔢 Exit: ${exitDigit}
+            last10Digits: ${this.tickHistory[asset].slice(-10).join(',')}
+            💸 P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}
+            📈 Total: ${this.totalTrades} | W/L: ${this.totalWins}/${this.totalTrades - this.totalWins}
+            🔢 x2-x5: ${this.x2}/${this.x3}/${this.x4}/${this.x5}
+            📈 Win Rate: ${this.totalWins / this.totalTrades * 100}%
+            💰 Next: $${this.stake.toFixed(2)}
+            💵 Net: $${this.netProfit.toFixed(2)}
+            ${this.assetConsecutiveLosses[asset] >= 2 ? `\n🚫 ${asset} SUSPENDED` : ''}
+        `.trim());
+
         // Stop conditions
-        if (this.consecutiveLosses >= this.config.maxConsecutiveLosses) {
+        if (this.consecutiveLosses >= this.config.maxConsecutiveLosses || this.netProfit <= this.config.stopLoss) {
             console.log('🛑 Max consecutive losses reached');
             this.sendTelegram(`🛑 <b>MAX LOSSES!</b>\nFinal P&L: $${this.netProfit.toFixed(2)}`);
             this.disconnect();
             return;
         }
 
+        // Take profit
         if (this.netProfit >= this.config.takeProfit) {
             console.log('🎉 Take profit reached!');
             this.sendTelegram(`🎉 <b>TAKE PROFIT!</b>\nFinal P&L: $${this.netProfit.toFixed(2)}`);
-            this.disconnect();
-            return;
-        }
-
-        if (this.netProfit <= this.config.stopLoss) {
-            console.log('🛑 Stop loss reached');
-            this.sendTelegram(`🛑 <b>STOP LOSS!</b>\nFinal P&L: $${this.netProfit.toFixed(2)}`);
             this.disconnect();
             return;
         }
@@ -1136,14 +1134,12 @@ ${this.assetConsecutiveLosses[asset] >= 2 ? `\n🚫 ${asset} SUSPENDED` : ''}
                 this.wsReady = true;
                 this.initializeSubscriptions();
                 this.sendTelegram(`
-🚀 <b>ATHENA PURE v9 ULTIMATE STARTED</b>
+                    🚀 <b>ATHENA PURE v9 ULTIMATE STARTED</b>
 
-📊 Assets: ${this.assetList.join(', ')}
-💰 Base Stake: $${this.config.baseStake}
-🎯 Min Score: ${this.config.minTotalScore}
-⚠️ Max Stake: $${this.config.maxStake}
-
-⏰ ${new Date().toLocaleString()}
+                    📊 Assets: ${this.assetList.join(', ')}
+                    💰 Base Stake: $${this.config.baseStake}
+                    🎯 Min Score: ${this.config.minTotalScore}
+                    ⚠️ Max Stake: $${this.config.maxStake}
                 `.trim());
                 break;
             case 'history':
