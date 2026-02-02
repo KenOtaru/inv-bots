@@ -1059,18 +1059,18 @@ class AthenaPureUltimate {
         // --- STEP 3: Concentration Analysis ---
         const concentrationAnalysis = this.calculateConcentrationAnalysis(asset);
         if (!concentrationAnalysis) {
-            if (len % 500 === 0)
-                console.log(`[${asset}] ConcentrationAnalysis=null`);
+            // if (len % 500 === 0)
+            //     console.log(`[${asset}] ConcentrationAnalysis=null`);
             return;
         }
 
         if (len % 500 === 0) {
-            console.log(
-                `[${asset}] CONC avg=${concentrationAnalysis.avgConcentration.toFixed(4)} ` +
-                `trend=${concentrationAnalysis.concTrend.toFixed(4)} ` +
-                `isConcentrated=${concentrationAnalysis.isConcentrated} ` +
-                `score=${concentrationAnalysis.score.toFixed(1)}`
-            );
+            // console.log(
+            //     `[${asset}] CONC avg=${concentrationAnalysis.avgConcentration.toFixed(4)} ` +
+            //     `trend=${concentrationAnalysis.concTrend.toFixed(4)} ` +
+            //     `isConcentrated=${concentrationAnalysis.isConcentrated} ` +
+            //     `score=${concentrationAnalysis.score.toFixed(1)}`
+            // );
         }
 
         // --- STEP 4: Streak / Exhaustion ---
@@ -1086,14 +1086,14 @@ class AthenaPureUltimate {
         };
 
         if (len % 500 === 0) {
-            console.log(
-                `[${asset}] STREAK digit=${targetDigit} ` +
-                `streak=${streakAnalysis.currentStreak} ` +
-                `dens10=${streakAnalysis.density10?.toFixed(2) ?? '0.00'} ` +
-                `dens20=${streakAnalysis.density20?.toFixed(2) ?? '0.00'} ` +
-                `dens30=${streakAnalysis.density30?.toFixed(2) ?? '0.00'} ` +
-                `exhaust=${streakAnalysis.isExhausting} score=${streakAnalysis.score.toFixed(1)}`
-            );
+            // console.log(
+            //     `[${asset}] STREAK digit=${targetDigit} ` +
+            //     `streak=${streakAnalysis.currentStreak} ` +
+            //     `dens10=${streakAnalysis.density10?.toFixed(2) ?? '0.00'} ` +
+            //     `dens20=${streakAnalysis.density20?.toFixed(2) ?? '0.00'} ` +
+            //     `dens30=${streakAnalysis.density30?.toFixed(2) ?? '0.00'} ` +
+            //     `exhaust=${streakAnalysis.isExhausting} score=${streakAnalysis.score.toFixed(1)}`
+            // );
         }
 
         // --- STEP 5: Total Score ---
@@ -1102,15 +1102,15 @@ class AthenaPureUltimate {
         );
 
         if (len % 500 === 0) {
-            console.log(
-                `[${asset}] TOTAL Score=${signal.weightedScore.toFixed(1)}/${signal.minScore} ` +
-                `components={FD:${signal.components.fractal.toFixed(1)}, ` +
-                `Conf:${signal.components.confluence.toFixed(1)}, ` +
-                `Conc:${signal.components.concentration.toFixed(1)}, ` +
-                `Streak:${signal.components.streak.toFixed(1)}, ` +
-                `flags:${signal.components.majorFlags}} ` +
-                `targetDigit=${signal.targetDigit} isValid=${signal.isValid}`
-            );
+            // console.log(
+            //     `[${asset}] TOTAL Score=${signal.weightedScore.toFixed(1)}/${signal.minScore} ` +
+            //     `components={FD:${signal.components.fractal.toFixed(1)}, ` +
+            //     `Conf:${signal.components.confluence.toFixed(1)}, ` +
+            //     `Conc:${signal.components.concentration.toFixed(1)}, ` +
+            //     `Streak:${signal.components.streak.toFixed(1)}, ` +
+            //     `flags:${signal.components.majorFlags}} ` +
+            //     `targetDigit=${signal.targetDigit} isValid=${signal.isValid}`
+            // );
         }
 
         // --- STEP 6: Validity check ---
