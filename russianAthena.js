@@ -24,46 +24,46 @@ class AthenaPureUltimate {
                 'R_10': {
                     decimals: 3,
                     digitIndex: 2,
-                    fractalThreshold: 1.32,
-                    minConfluence: 0.70,
-                    minZScore: 1.6,
-                    concentrationThreshold: 0.055,
-                    weight: 1.3  // Best performer
+                    fractalThreshold: 1.45,      // was 1.32 (too low)
+                    minConfluence: 0.60,         // was 0.70
+                    minZScore: 1.3,              // was 1.6
+                    concentrationThreshold: 0.045,// was 0.055
+                    weight: 1.3
                 },
                 'R_25': {
                     decimals: 3,
                     digitIndex: 2,
-                    fractalThreshold: 1.35,
-                    minConfluence: 0.68,
-                    minZScore: 1.7,
-                    concentrationThreshold: 0.060,
+                    fractalThreshold: 1.47,      // was 1.35
+                    minConfluence: 0.58,         // was 0.68
+                    minZScore: 1.4,              // was 1.7
+                    concentrationThreshold: 0.050,// was 0.060
                     weight: 1.1
                 },
                 'R_50': {
                     decimals: 4,
                     digitIndex: 3,
-                    fractalThreshold: 1.38,
-                    minConfluence: 0.65,
-                    minZScore: 1.8,
-                    concentrationThreshold: 0.065,
+                    fractalThreshold: 1.50,      // was 1.38
+                    minConfluence: 0.55,         // was 0.65
+                    minZScore: 1.5,              // was 1.8
+                    concentrationThreshold: 0.055,
                     weight: 1.0
                 },
                 'R_75': {
                     decimals: 4,
                     digitIndex: 3,
-                    fractalThreshold: 1.40,
-                    minConfluence: 0.62,
-                    minZScore: 1.9,
-                    concentrationThreshold: 0.070,
+                    fractalThreshold: 1.52,      // was 1.40
+                    minConfluence: 0.53,         // was 0.62
+                    minZScore: 1.6,              // was 1.9
+                    concentrationThreshold: 0.060,
                     weight: 0.9
                 },
                 'R_100': {
                     decimals: 2,
                     digitIndex: 1,
-                    fractalThreshold: 1.42,
-                    minConfluence: 0.60,
-                    minZScore: 2.0,
-                    concentrationThreshold: 0.075,
+                    fractalThreshold: 1.55,      // was 1.42
+                    minConfluence: 0.50,         // was 0.60
+                    minZScore: 1.7,              // was 2.0
+                    concentrationThreshold: 0.065,
                     weight: 0.8
                 }
             },
@@ -84,18 +84,18 @@ class AthenaPureUltimate {
             approxEntropyR: 0.2,  // Tolerance ratio
 
             // Signal scoring
-            minTotalScore: 70,  // Minimum score to trade (0-100)
+            minTotalScore: 60,  // was 70 – slight relaxation  // Minimum score to trade (0-100)
 
             // Cooldown system
-            cooldownTicks: 25,
-            cooldownAfterLoss: 50,
+            cooldownTicks: 20,//25
+            cooldownAfterLoss: 40,//50
             suspensionAfterDoubleLoss: 100,  // Suspend asset after 2L
             maxTradesPerHour: 6,  // Per asset
 
             // Money management (MODIFIED for safety)
             baseStake: 2.2,
             firstLossMultiplier: 11.3,  // First loss: 5 × 2 = $10
-            subsequentMultiplier: 11.1,  // Subsequent: 5 × 10^(n-1)
+            subsequentMultiplier: 11.3,  // Subsequent: 5 × 10^(n-1)
             maxConsecutiveLosses: 6,
             maxStake: 1500,  // Cap maximum stake
             takeProfit: 20000,
@@ -110,7 +110,7 @@ class AthenaPureUltimate {
 
             // Asset suspension
             suspendAssetAfterLosses: 2,
-            suspensionDuration: 300000  // 5 minutes
+            suspensionDuration: 2000  // 5 minutes (300000)
         };
 
         // ====== TRADING STATE ======
@@ -692,47 +692,102 @@ class AthenaPureUltimate {
     // ========================================================================
     // ENHANCEMENT #8: COOLDOWN & ASSET SUSPENSION
     // ========================================================================
+    // canTrade(asset) {
+    //     // Basic checks
+    //     if (this.tradeInProgress) return false;
+    //     if (!this.wsReady) return false;
+    //     if (!this.historyLoaded[asset]) return false;
+    //     if (this.histories[asset].length < this.config.minHistoryForTrading) return false;
+
+    //     // Asset suspended?
+    //     if (this.suspendedAssets[asset]) return false;
+
+    //     // Global consecutive loss check
+    //     if (this.consecutiveLosses >= this.config.maxConsecutiveLosses) return false;
+
+    //     // Stop loss check
+    //     if (this.netProfit <= this.config.stopLoss) return false;
+
+    //     // Cooldown check
+    //     const ticksSinceLast = this.ticksSinceLastTrade[asset];
+    //     let requiredCooldown = this.config.cooldownTicks;
+
+    //     if (this.consecutiveLosses > 0) {
+    //         requiredCooldown = this.config.cooldownAfterLoss;
+    //     }
+    //     if (this.assetConsecutiveLosses[asset] >= 2) {
+    //         requiredCooldown = this.config.suspensionAfterDoubleLoss;
+    //     }
+
+    //     if (ticksSinceLast < requiredCooldown) return false;
+
+    //     // Hourly frequency check
+    //     if (this.tradesThisHour[asset] >= this.config.maxTradesPerHour) return false;
+
+    //     // Time filter
+    //     const now = new Date();
+    //     const minute = now.getMinutes();
+    //     if (minute < this.config.avoidMinutesAroundHour ||
+    //         minute > (60 - this.config.avoidMinutesAroundHour)) {
+    //         return false;
+    //     }
+
+    //     return true;
+    // }
+
     canTrade(asset) {
-        // Basic checks
-        if (this.tradeInProgress) return false;
-        if (!this.wsReady) return false;
-        if (!this.historyLoaded[asset]) return false;
-        if (this.histories[asset].length < this.config.minHistoryForTrading) return false;
+        const h = this.histories[asset];
+        const len = h.length;
+        const logPrefix = `[${asset}] canTrade`;
 
-        // Asset suspended?
-        if (this.suspendedAssets[asset]) return false;
+        let reason = null;
 
-        // Global consecutive loss check
-        if (this.consecutiveLosses >= this.config.maxConsecutiveLosses) return false;
+        if (this.tradeInProgress) reason = 'tradeInProgress';
+        else if (!this.wsReady) reason = 'wsNotReady';
+        else if (!this.historyLoaded[asset]) reason = 'historyNotLoaded';
+        else if (len < this.config.minHistoryForTrading)
+            reason = `notEnoughHistory(${len}/${this.config.minHistoryForTrading})`;
+        else if (this.suspendedAssets[asset]) reason = 'assetSuspended';
+        else if (this.consecutiveLosses >= this.config.maxConsecutiveLosses)
+            reason = `maxConsecLosses(${this.consecutiveLosses})`;
+        else if (this.netProfit <= this.config.stopLoss)
+            reason = `stopLossReached(${this.netProfit.toFixed(2)})`;
+        else {
+            const ticksSinceLast = this.ticksSinceLastTrade[asset];
+            let requiredCooldown = this.config.cooldownTicks;
 
-        // Stop loss check
-        if (this.netProfit <= this.config.stopLoss) return false;
+            if (this.consecutiveLosses > 0) {
+                requiredCooldown = this.config.cooldownAfterLoss;
+            }
+            if (this.assetConsecutiveLosses[asset] >= 2) {
+                requiredCooldown = this.config.suspensionAfterDoubleLoss;
+            }
 
-        // Cooldown check
-        const ticksSinceLast = this.ticksSinceLastTrade[asset];
-        let requiredCooldown = this.config.cooldownTicks;
-
-        if (this.consecutiveLosses > 0) {
-            requiredCooldown = this.config.cooldownAfterLoss;
+            if (ticksSinceLast < requiredCooldown) {
+                reason = `cooldown(${ticksSinceLast}/${requiredCooldown})`;
+            } else if (this.tradesThisHour[asset] >= this.config.maxTradesPerHour) {
+                reason = `maxTradesPerHour(${this.tradesThisHour[asset]})`;
+            } else {
+                const now = new Date();
+                const minute = now.getMinutes();
+                if (minute < this.config.avoidMinutesAroundHour ||
+                    minute > (60 - this.config.avoidMinutesAroundHour)) {
+                    reason = `timeFilter(min=${minute})`;
+                }
+            }
         }
-        if (this.assetConsecutiveLosses[asset] >= 2) {
-            requiredCooldown = this.config.suspensionAfterDoubleLoss;
+
+        const ok = (reason === null);
+
+        if (!ok && len > 0 && len % 500 === 0) {
+            console.log(`${logPrefix}=false → ${reason}`);
+        } else if (ok && len > 0 && len % 500 === 0) {
+            console.log(
+                `${logPrefix}=true | len=${len}, consecLosses=${this.consecutiveLosses}, net=${this.netProfit.toFixed(2)}`
+            );
         }
 
-        if (ticksSinceLast < requiredCooldown) return false;
-
-        // Hourly frequency check
-        if (this.tradesThisHour[asset] >= this.config.maxTradesPerHour) return false;
-
-        // Time filter
-        const now = new Date();
-        const minute = now.getMinutes();
-        if (minute < this.config.avoidMinutesAroundHour ||
-            minute > (60 - this.config.avoidMinutesAroundHour)) {
-            return false;
-        }
-
-        return true;
+        return ok;
     }
 
     suspendAsset(asset) {
@@ -773,7 +828,7 @@ class AthenaPureUltimate {
 
         // Global adjustment
         if (overallWinRate < 0.88) {
-            minScore = 80;
+            minScore = 70;
         } else if (overallWinRate > 0.96) {
             minScore = 60;
         }
@@ -834,49 +889,221 @@ class AthenaPureUltimate {
         };
     }
 
+    // calculateTotalSignalScore(asset, fractalAnalysis, fibConfluence, concentrationAnalysis, streakAnalysis) {
+    //     const adaptive = this.getAdaptiveThresholds(asset);
+
+    //     const fractalScore = fractalAnalysis?.score || 0;
+    //     const confluenceScore = fibConfluence?.score || 0;
+    //     const concentrationScore = concentrationAnalysis?.score || 0;
+    //     const streakScore = streakAnalysis?.score || 0;
+
+    //     const rawScore = fractalScore + confluenceScore + concentrationScore + streakScore;
+    //     const weightedScore = rawScore * adaptive.assetWeight;
+
+    //     const targetDigit = fibConfluence?.bestDigit ?? -1;
+
+    //     // Count how many major conditions are met
+    //     const majorFlags = [
+    //         fractalAnalysis?.isLowFractal,
+    //         fibConfluence?.hasConfluence,
+    //         fibConfluence?.hasZScore,
+    //         fibConfluence?.inRecent,
+    //         concentrationAnalysis?.isConcentrated
+    //     ].filter(Boolean).length;
+
+    //     const isValid =
+    //         weightedScore >= adaptive.minScore &&
+    //         majorFlags >= 3 &&           // at least 3 of 5 major conditions
+    //         targetDigit !== -1;
+
+    //     return {
+    //         rawScore,
+    //         weightedScore,
+    //         minScore: adaptive.minScore,
+    //         targetDigit,
+    //         isValid,
+    //         components: {
+    //             fractal: fractalScore,
+    //             confluence: confluenceScore,
+    //             concentration: concentrationScore,
+    //             streak: streakScore,
+    //             majorFlags
+    //         }
+    //     };
+    // }
+
     // ========================================================================
     // MAIN SIGNAL SCANNER
     // ========================================================================
+
+
+    // scanForSignal(asset) {
+    //     if (!this.canTrade(asset)) return;
+
+    //     const history = this.histories[asset];
+
+    //     // Step 1: Fractal Analysis
+    //     const fractalAnalysis = this.calculateFractalAnalysis(asset);
+    //     if (!fractalAnalysis || !fractalAnalysis.isLowFractal) return;
+
+    //     // Step 2: Fibonacci Confluence
+    //     const fibConfluence = this.calculateFibonacciConfluence(asset);
+    //     if (!fibConfluence || !fibConfluence.hasConfluence) return;
+
+    //     // Step 3: Concentration Analysis
+    //     const concentrationAnalysis = this.calculateConcentrationAnalysis(asset);
+    //     if (!concentrationAnalysis || !concentrationAnalysis.isConcentrated) return;
+
+    //     // Step 4: Streak Analysis
+    //     const targetDigit = fibConfluence.bestDigit;
+    //     const streakAnalysis = this.analyzeStreakExhaustion(history, targetDigit);
+
+    //     // Step 5: Calculate total score
+    //     const signal = this.calculateTotalSignalScore(
+    //         asset, fractalAnalysis, fibConfluence, concentrationAnalysis, streakAnalysis
+    //     );
+
+    //     // Log periodically
+    //     if (history.length % 150 === 0) {
+    //         console.log(`[${asset}] Score=${signal.weightedScore.toFixed(1)}/${signal.minScore} | FD=${fractalAnalysis.avgFractalDim.toFixed(3)} | Conf=${fibConfluence.confluenceStrength.toFixed(2)} | Z=${fibConfluence.avgZScore.toFixed(2)} | Conc=${concentrationAnalysis.avgConcentration.toFixed(4)} | D=${targetDigit} | Valid=${signal.isValid}`);
+    //     }
+
+    //     // Step 6: Check validity
+    //     if (!signal.isValid) return;
+
+    //     // Step 7: Same digit check
+    //     if (signal.targetDigit === this.lastTradeDigit[asset]) {
+    //         if (signal.weightedScore < signal.minScore + 20) return;
+    //     }
+
+    //     // Step 8: Execute trade
+    //     this.placeTrade(asset, signal, fractalAnalysis, fibConfluence, concentrationAnalysis);
+    // }
+
+
     scanForSignal(asset) {
+        const history = this.histories[asset];
+        const len = history.length;
+
         if (!this.canTrade(asset)) return;
 
-        const history = this.histories[asset];
-
-        // Step 1: Fractal Analysis
+        // --- STEP 1: Fractal Analysis ---
         const fractalAnalysis = this.calculateFractalAnalysis(asset);
-        if (!fractalAnalysis || !fractalAnalysis.isLowFractal) return;
+        if (!fractalAnalysis) {
+            if (len % 500 === 0)
+                console.log(`[${asset}] FractalAnalysis=null`);
+            return;
+        }
 
-        // Step 2: Fibonacci Confluence
+        if (len % 500 === 0) {
+            console.log(
+                `[${asset}] FRACTAL avgFD=${fractalAnalysis.avgFractalDim.toFixed(3)} ` +
+                `trend=${fractalAnalysis.fdTrend.toFixed(4)} ` +
+                `isLow=${fractalAnalysis.isLowFractal} ` +
+                `score=${fractalAnalysis.score.toFixed(1)}`
+            );
+        }
+
+        // --- STEP 2: Fibonacci Confluence ---
         const fibConfluence = this.calculateFibonacciConfluence(asset);
-        if (!fibConfluence || !fibConfluence.hasConfluence) return;
+        if (!fibConfluence) {
+            if (len % 500 === 0)
+                console.log(`[${asset}] FibConfluence=null`);
+            return;
+        }
 
-        // Step 3: Concentration Analysis
+        if (len % 500 === 0) {
+            console.log(
+                `[${asset}] FIB confStrength=${fibConfluence.confluenceStrength.toFixed(2)} ` +
+                `avgZ=${fibConfluence.avgZScore.toFixed(2)} ` +
+                `bestDigit=${fibConfluence.bestDigit} ` +
+                `hasConf=${fibConfluence.hasConfluence} hasZ=${fibConfluence.hasZScore} ` +
+                `inRecent=${fibConfluence.inRecent} score=${fibConfluence.score.toFixed(1)}`
+            );
+        }
+
+        // --- STEP 3: Concentration Analysis ---
         const concentrationAnalysis = this.calculateConcentrationAnalysis(asset);
-        if (!concentrationAnalysis || !concentrationAnalysis.isConcentrated) return;
+        if (!concentrationAnalysis) {
+            if (len % 500 === 0)
+                console.log(`[${asset}] ConcentrationAnalysis=null`);
+            return;
+        }
 
-        // Step 4: Streak Analysis
+        if (len % 500 === 0) {
+            console.log(
+                `[${asset}] CONC avg=${concentrationAnalysis.avgConcentration.toFixed(4)} ` +
+                `trend=${concentrationAnalysis.concTrend.toFixed(4)} ` +
+                `isConcentrated=${concentrationAnalysis.isConcentrated} ` +
+                `score=${concentrationAnalysis.score.toFixed(1)}`
+            );
+        }
+
+        // --- STEP 4: Streak / Exhaustion ---
         const targetDigit = fibConfluence.bestDigit;
-        const streakAnalysis = this.analyzeStreakExhaustion(history, targetDigit);
+        const streakAnalysis = this.analyzeStreakExhaustion(history, targetDigit) || {
+            currentStreak: 0,
+            density10: 0,
+            density20: 0,
+            density30: 0,
+            isExhausting: false,
+            hasStreak: false,
+            score: 0
+        };
 
-        // Step 5: Calculate total score
+        if (len % 500 === 0) {
+            console.log(
+                `[${asset}] STREAK digit=${targetDigit} ` +
+                `streak=${streakAnalysis.currentStreak} ` +
+                `dens10=${streakAnalysis.density10?.toFixed(2) ?? '0.00'} ` +
+                `dens20=${streakAnalysis.density20?.toFixed(2) ?? '0.00'} ` +
+                `dens30=${streakAnalysis.density30?.toFixed(2) ?? '0.00'} ` +
+                `exhaust=${streakAnalysis.isExhausting} score=${streakAnalysis.score.toFixed(1)}`
+            );
+        }
+
+        // --- STEP 5: Total Score ---
         const signal = this.calculateTotalSignalScore(
             asset, fractalAnalysis, fibConfluence, concentrationAnalysis, streakAnalysis
         );
 
-        // Log periodically
-        if (history.length % 150 === 0) {
-            console.log(`[${asset}] Score=${signal.weightedScore.toFixed(1)}/${signal.minScore} | FD=${fractalAnalysis.avgFractalDim.toFixed(3)} | Conf=${fibConfluence.confluenceStrength.toFixed(2)} | Z=${fibConfluence.avgZScore.toFixed(2)} | Conc=${concentrationAnalysis.avgConcentration.toFixed(4)} | D=${targetDigit} | Valid=${signal.isValid}`);
+        if (len % 500 === 0) {
+            console.log(
+                `[${asset}] TOTAL Score=${signal.weightedScore.toFixed(1)}/${signal.minScore} ` +
+                `components={FD:${signal.components.fractal.toFixed(1)}, ` +
+                `Conf:${signal.components.confluence.toFixed(1)}, ` +
+                `Conc:${signal.components.concentration.toFixed(1)}, ` +
+                `Streak:${signal.components.streak.toFixed(1)}, ` +
+                `flags:${signal.components.majorFlags}} ` +
+                `targetDigit=${signal.targetDigit} isValid=${signal.isValid}`
+            );
         }
 
-        // Step 6: Check validity
-        if (!signal.isValid) return;
-
-        // Step 7: Same digit check
-        if (signal.targetDigit === this.lastTradeDigit[asset]) {
-            if (signal.weightedScore < signal.minScore + 20) return;
+        // --- STEP 6: Validity check ---
+        if (!signal.isValid) {
+            if (len % 500 === 0) {
+                console.log(
+                    `[${asset}] Signal rejected: ` +
+                    `weightedScore=${signal.weightedScore.toFixed(1)} < minScore=${signal.minScore} ` +
+                    `or insufficient majorFlags`
+                );
+            }
+            return;
         }
 
-        // Step 8: Execute trade
+        // --- STEP 7: Same-digit suppression ---
+        if (signal.targetDigit === this.lastTradeDigit[asset] &&
+            signal.weightedScore < signal.minScore + 20) {
+            if (len % 500 === 0) {
+                console.log(
+                    `[${asset}] Signal rejected (same digit): digit=${signal.targetDigit} ` +
+                    `score=${signal.weightedScore.toFixed(1)} < ${signal.minScore + 20}`
+                );
+            }
+            return;
+        }
+
+        // --- STEP 8: Execute trade ---
         this.placeTrade(asset, signal, fractalAnalysis, fibConfluence, concentrationAnalysis);
     }
 
@@ -902,6 +1129,7 @@ class AthenaPureUltimate {
 
         console.log(`\n🎯 ATHENA SIGNAL — ${asset}`);
         console.log(`   Digit: ${signal.targetDigit}`);
+        console.log(`   last10Digits: ${this.histories[asset].slice(-10).join(',')}`);
         console.log(`   Score: ${signal.weightedScore.toFixed(1)}/${signal.minScore}`);
         console.log(`   FD: ${fractalAnalysis.avgFractalDim.toFixed(3)}`);
         console.log(`   Confluence: ${(fibConfluence.confluenceStrength * 100).toFixed(1)}%`);
@@ -929,6 +1157,7 @@ class AthenaPureUltimate {
 
             📊 Asset: ${asset}
             🔢 Digit: ${signal.targetDigit}
+            last10Digits: ${this.histories[asset].slice(-10).join(',')}
             📈 Score: ${signal.weightedScore.toFixed(1)}/${signal.minScore}
             📉 FD: ${fractalAnalysis.avgFractalDim.toFixed(3)}
             🔗 Confluence: ${(fibConfluence.confluenceStrength * 100).toFixed(1)}%
@@ -1003,7 +1232,7 @@ class AthenaPureUltimate {
 
             // Asset suspension check
             if (this.assetConsecutiveLosses[asset] >= this.config.suspendAssetAfterLosses) {
-                // this.suspendAsset(asset);
+                this.suspendAsset(asset);
             }
         }
 
@@ -1013,7 +1242,7 @@ class AthenaPureUltimate {
 
             📊 Asset: ${asset}
             🔢 Exit: ${exitDigit}
-            last10Digits: ${this.tickHistory[asset].slice(-10).join(',')}
+            last10Digits: ${this.histories[asset].slice(-10).join(',')}
             💸 P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}
             📈 Total: ${this.totalTrades} | W/L: ${this.totalWins}/${this.totalTrades - this.totalWins}
             🔢 x2-x5: ${this.x2}/${this.x3}/${this.x4}/${this.x5}
