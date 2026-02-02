@@ -65,6 +65,24 @@ class AthenaPureUltimate {
                     minZScore: 1.7,              // was 2.0
                     concentrationThreshold: 0.065,
                     weight: 0.8
+                },
+                'RDBEAR': {
+                    decimals: 4,
+                    digitIndex: 3,
+                    fractalThreshold: 1.47,      // was 1.35
+                    minConfluence: 0.58,         // was 0.68
+                    minZScore: 1.4,              // was 1.7
+                    concentrationThreshold: 0.050,// was 0.060
+                    weight: 1.1
+                },
+                'RDBULL': {
+                    decimals: 4,
+                    digitIndex: 3,
+                    fractalThreshold: 1.47,      // was 1.35
+                    minConfluence: 0.58,         // was 0.68
+                    minZScore: 1.4,              // was 1.7
+                    concentrationThreshold: 0.050,// was 0.060
+                    weight: 1.1
                 }
             },
 

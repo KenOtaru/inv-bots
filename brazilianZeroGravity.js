@@ -724,6 +724,11 @@ class ZeroGravityUltimate {
             ].filter(Boolean).length >= 3 &&
             targetDigit !== -1;
 
+        console.log('hurstAnalysis_Flag1', hurstAnalysis?.isMeanReverting);
+        console.log('entropyAnalysis_Flag2', entropyAnalysis?.isConcentrated);
+        console.log('zScoreConfluence_Flag3', zScoreConfluence?.hasConfluence);
+        console.log('zScoreConfluenceRecent_Flag4', zScoreConfluence?.inRecent);
+
         return {
             rawScore,
             weightedScore,
