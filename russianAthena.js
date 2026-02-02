@@ -365,7 +365,11 @@ class AthenaPureUltimate {
         }
 
         const assetConfig = this.config.assets[asset];
-        const isLowFractal = avgFractalDim < assetConfig.fractalThreshold;
+
+        const score = this.calculateFractalScore(avgFractalDim, fdTrend, assetConfig.fractalThreshold);
+
+
+        const isLowFractal = avgFractalDim < assetConfig.fractalThreshold && score > 2.5;
         console.log("isLowFractal", '(', avgFractalDim, ') | threshold', assetConfig.fractalThreshold);
         const isDropping = fdTrend < -0.002;
         console.log("isDropping trend", '(', fdTrend, ') | threshold', -0.002);
@@ -376,7 +380,7 @@ class AthenaPureUltimate {
             fdTrend,
             isLowFractal,
             isDropping,
-            score: this.calculateFractalScore(avgFractalDim, fdTrend, assetConfig.fractalThreshold)
+            score
         };
     }
 
@@ -1030,12 +1034,12 @@ class AthenaPureUltimate {
         }
 
         if (len % 500 === 0) {
-            console.log(
-                `[${asset}] FRACTAL avgFD=${fractalAnalysis.avgFractalDim.toFixed(3)} ` +
-                `trend=${fractalAnalysis.fdTrend.toFixed(4)} ` +
-                `isLow=${fractalAnalysis.isLowFractal} ` +
-                `score=${fractalAnalysis.score.toFixed(1)}`
-            );
+            // console.log(
+            //     `[${asset}] FRACTAL avgFD=${fractalAnalysis.avgFractalDim.toFixed(3)} ` +
+            //     `trend=${fractalAnalysis.fdTrend.toFixed(4)} ` +
+            //     `isLow=${fractalAnalysis.isLowFractal} ` +
+            //     `score=${fractalAnalysis.score.toFixed(1)}`
+            // );
         }
 
         // --- STEP 2: Fibonacci Confluence ---
@@ -1324,8 +1328,7 @@ class AthenaPureUltimate {
         this.ticksSinceLastTrade[asset]++;
 
         // Log periodically
-        if (this.histories[asset].length % 250 === 0) {
-            console.log(`📈 [${asset}] Tick #${this.histories[asset].length} | Digit: ${lastDigit}`);
+        if (this.tradeInProgress) {
             console.log(`   Last 10: ${this.histories[asset].slice(-10).join(', ')}`);
         }
 
