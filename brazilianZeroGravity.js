@@ -52,6 +52,30 @@ class ZeroGravityUltimate {
                     entropyThreshold: 0.060,//0.070
                     minDominance: 0.27,
                     weight: 0.8
+                },
+                'R_100': {
+                    decimals: 2,
+                    digitIndex: 1,
+                    hurstThreshold: 0.50,
+                    entropyThreshold: 0.055,
+                    minDominance: 0.28,
+                    weight: 0.8
+                },
+                'RDBULL': {
+                    decimals: 4,
+                    digitIndex: 3,
+                    hurstThreshold: 0.48,
+                    entropyThreshold: 0.050,
+                    minDominance: 0.30,
+                    weight: 1.0
+                },
+                'RDBEAR': {
+                    decimals: 4,
+                    digitIndex: 3,
+                    hurstThreshold: 0.48,
+                    entropyThreshold: 0.050,
+                    minDominance: 0.30,
+                    weight: 1.0
                 }
             },
 
@@ -73,7 +97,7 @@ class ZeroGravityUltimate {
             minZScoreConfluence: 1.2,   // was 1.8 – relax a bit
 
             // Signal scoring
-            minTotalScore: 55,          // was 65 – allow more signals // Minimum score to trade (0-100)
+            minTotalScore: 26,          // was 65 – allow more signals // Minimum score to trade (0-100)
 
             // Cooldown system
             cooldownTicks: 20,
@@ -668,9 +692,9 @@ class ZeroGravityUltimate {
         let assetWeight = this.config.assets[asset].weight;
 
         if (overallWinRate < 0.90) {
-            minScore = 65;  // Stricter during bad period
+            minScore = 27;  // Stricter during bad period
         } else if (overallWinRate > 0.97) {
-            minScore = 55;  // Relax during good period
+            minScore = 26;  // Relax during good period
         }
 
         // Adjust asset weight based on performance
@@ -721,7 +745,7 @@ class ZeroGravityUltimate {
                 entropyAnalysis?.isConcentrated,
                 zScoreConfluence?.hasConfluence,
                 zScoreConfluence?.inRecent
-            ].filter(Boolean).length >= 3 &&
+            ].filter(Boolean).length >= 4 &&
             targetDigit !== -1;
 
         console.log('hurstAnalysis_Flag1', hurstAnalysis?.isMeanReverting);
