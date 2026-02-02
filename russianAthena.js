@@ -1334,7 +1334,7 @@ class AthenaPureUltimate {
 
         // Log periodically
         if (this.tradeInProgress) {
-            console.log(`   Last 10: ${this.histories[asset].slice(-10).join(', ')}`);
+            console.log(` 📈 [${asset}] Last 10: ${this.histories[asset].slice(-10).join(', ')}`);
         }
 
         // Scan for signals

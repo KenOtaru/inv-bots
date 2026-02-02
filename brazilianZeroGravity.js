@@ -142,6 +142,7 @@ class ZeroGravityUltimate {
         this.totalWins = 0;
         this.x2 = 0; this.x3 = 0; this.x4 = 0; this.x5 = 0;
         this.netProfit = 0;
+        this.ticks = 0;
 
         // Per-asset state
         this.lastTradeDigit = {};
@@ -318,9 +319,9 @@ class ZeroGravityUltimate {
 
         const assetConfig = this.config.assets[asset];
         const isMeanReverting = avgHurst < assetConfig.hurstThreshold;
-        console.log("isMeanReverting", avgHurst, 'threshold', assetConfig.hurstThreshold);
+        // console.log("isMeanReverting", avgHurst, 'threshold', assetConfig.hurstThreshold);
         const isDropping = hurstTrend < -0.002;
-        console.log("isDropping trend", hurstTrend, 'threshold', -0.002);
+        // console.log("isDropping trend", hurstTrend, 'threshold', -0.002);
 
         return {
             avgHurst,
@@ -643,14 +644,15 @@ class ZeroGravityUltimate {
                 reason = `cooldown(${ticksSinceLast}/${requiredCooldown})`;
             } else if (this.tradesThisHour[asset] >= this.config.maxTradesPerHour) {
                 reason = `maxTradesPerHour(${this.tradesThisHour[asset]})`;
-            } else {
-                const now = new Date();
-                const minute = now.getMinutes();
-                if (minute < this.config.avoidMinutesAroundHour ||
-                    minute > (60 - this.config.avoidMinutesAroundHour)) {
-                    reason = `timeFilter(${minute})`;
-                }
             }
+            // else {
+            //     const now = new Date();
+            //     const minute = now.getMinutes();
+            //     if (minute < this.config.avoidMinutesAroundHour ||
+            //         minute > (60 - this.config.avoidMinutesAroundHour)) {
+            //         reason = `timeFilter(${minute})`;
+            //     }
+            // }
         }
 
         const ok = (reason === null);
@@ -660,7 +662,7 @@ class ZeroGravityUltimate {
         }
 
         if (ok && len % 500 === 0) {
-            console.log(`${logPrefix}=true | len=${len}, consecLosses=${this.consecutiveLosses}, netProfit=${this.netProfit.toFixed(2)}`);
+            // console.log(`${logPrefix}=true | len=${len}, consecLosses=${this.consecutiveLosses}, netProfit=${this.netProfit.toFixed(2)}`);
         }
 
         return ok;
@@ -748,10 +750,10 @@ class ZeroGravityUltimate {
             ].filter(Boolean).length >= 4 &&
             targetDigit !== -1;
 
-        console.log('hurstAnalysis_Flag1', hurstAnalysis?.isMeanReverting);
-        console.log('entropyAnalysis_Flag2', entropyAnalysis?.isConcentrated);
-        console.log('zScoreConfluence_Flag3', zScoreConfluence?.hasConfluence);
-        console.log('zScoreConfluenceRecent_Flag4', zScoreConfluence?.inRecent);
+        // console.log('hurstAnalysis_Flag1', hurstAnalysis?.isMeanReverting);
+        // console.log('entropyAnalysis_Flag2', entropyAnalysis?.isConcentrated);
+        // console.log('zScoreConfluence_Flag3', zScoreConfluence?.hasConfluence);
+        // console.log('zScoreConfluenceRecent_Flag4', zScoreConfluence?.inRecent);
 
         return {
             rawScore,
@@ -821,18 +823,18 @@ class ZeroGravityUltimate {
         // --- STEP 1: HURST ---
         const hurstAnalysis = this.calculateHurstAnalysis(asset);
         if (!hurstAnalysis) {
-            if (history.length % 500 === 0)
-                console.log(`[${asset}] HurstAnalysis=null`);
+            // if (this.ticks % 20 === 0)
+            //     console.log(`[${asset}] HurstAnalysis=null`);
             return;
         }
 
         // Log Hurst regularly
-        if (history.length % 500 === 0) {
-            console.log(
-                `[${asset}] Hurst avg=${hurstAnalysis.avgHurst.toFixed(3)} ` +
-                `trend=${hurstAnalysis.hurstTrend.toFixed(4)} ` +
-                `MR=${hurstAnalysis.isMeanReverting}`
-            );
+        if (this.ticks % 20 === 0) {
+            // console.log(
+            //     `[${asset}] Hurst avg=${hurstAnalysis.avgHurst.toFixed(3)} ` +
+            //     `trend=${hurstAnalysis.hurstTrend.toFixed(4)} ` +
+            //     `MR=${hurstAnalysis.isMeanReverting}`
+            // );
         }
 
         // Instead of hard return when not mean reverting, just reduce score:
@@ -844,18 +846,18 @@ class ZeroGravityUltimate {
         // --- STEP 2: ENTROPY / CONCENTRATION ---
         const entropyAnalysis = this.calculateEntropyAnalysis(asset);
         if (!entropyAnalysis) {
-            if (history.length % 500 === 0)
-                console.log(`[${asset}] EntropyAnalysis=null`);
+            // if (history.length % 500 === 0)
+            //     console.log(`[${asset}] EntropyAnalysis=null`);
             return;
         }
 
-        if (history.length % 500 === 0) {
-            console.log(
-                `[${asset}] Entropy conc=${entropyAnalysis.avgConcentration.toFixed(4)} ` +
-                `trend=${entropyAnalysis.entropyTrend.toFixed(4)} ` +
-                `isConcentrated=${entropyAnalysis.isConcentrated} ` +
-                `consensusDigit=${entropyAnalysis.consensusDigit}`
-            );
+        if (this.ticks % 20 === 0) {
+            // console.log(
+            //     `[${asset}] Entropy conc=${entropyAnalysis.avgConcentration.toFixed(4)} ` +
+            //     `trend=${entropyAnalysis.entropyTrend.toFixed(4)} ` +
+            //     `isConcentrated=${entropyAnalysis.isConcentrated} ` +
+            //     `consensusDigit=${entropyAnalysis.consensusDigit}`
+            // );
         }
 
         // Again, don't immediately kill if !isConcentrated; let score handle it.
@@ -864,16 +866,16 @@ class ZeroGravityUltimate {
         const targetDigit = entropyAnalysis.consensusDigit;
         const zScoreConfluence = this.calculateZScoreConfluence(asset, targetDigit);
         if (!zScoreConfluence) {
-            if (history.length % 500 === 0)
-                console.log(`[${asset}] ZScoreConfluence=null (digit=${targetDigit})`);
+            // if (history.length % 500 === 0)
+            //     console.log(`[${asset}] ZScoreConfluence=null (digit=${targetDigit})`);
             return;
         }
 
-        if (history.length % 500 === 0) {
-            console.log(
-                `[${asset}] ZConf digit=${targetDigit} avgZ=${zScoreConfluence.avgZScore.toFixed(2)} ` +
-                `hasConf=${zScoreConfluence.hasConfluence} inRecent=${zScoreConfluence.inRecent}`
-            );
+        if (this.ticks % 20 === 0) {
+            // console.log(
+            //     `[${asset}] ZConf digit=${targetDigit} avgZ=${zScoreConfluence.avgZScore.toFixed(2)} ` +
+            //     `hasConf=${zScoreConfluence.hasConfluence} inRecent=${zScoreConfluence.inRecent}`
+            // );
         }
 
         // --- STEP 4: STREAK ---
@@ -884,7 +886,7 @@ class ZeroGravityUltimate {
             asset, hurstAnalysis, entropyAnalysis, zScoreConfluence, streakAnalysis
         );
 
-        if (history.length % 500 === 0) {
+        if (this.ticks % 20 === 0) {
             console.log(
                 `[${asset}] TOTAL Score=${signal.weightedScore.toFixed(1)}/` +
                 `${signal.minScore} ` +
@@ -901,7 +903,7 @@ class ZeroGravityUltimate {
         // Now we log WHY it’s invalid:
         if (!signal.isValid) {
             // Only log occasionally:
-            if (history.length % 500 === 0) {
+            if (this.ticks % 20 === 0) {
                 console.log(
                     `[${asset}] Signal rejected: ` +
                     `weightedScore(${signal.weightedScore.toFixed(1)}) < minScore(${signal.minScore}) ` +
@@ -913,7 +915,7 @@ class ZeroGravityUltimate {
 
         if (signal.targetDigit === this.lastTradeDigit[asset] &&
             signal.weightedScore < signal.minScore + 20) {
-            if (history.length % 500 === 0) {
+            if (this.ticks % 20 === 0) {
                 console.log(
                     `[${asset}] Rejected same-digit signal: digit=${signal.targetDigit} ` +
                     `score=${signal.weightedScore.toFixed(1)} < ` +
@@ -1081,6 +1083,8 @@ class ZeroGravityUltimate {
 
         const lastDigit = this.getLastDigit(tick.quote, asset);
 
+        this.ticks++;
+
         this.histories[asset].push(lastDigit);
         if (this.histories[asset].length > this.config.requiredHistoryLength) {
             this.histories[asset].shift();
@@ -1090,9 +1094,8 @@ class ZeroGravityUltimate {
         this.ticksSinceLastTrade[asset]++;
 
         // Log periodically
-        if (this.histories[asset].length % 200 === 0) {
-            console.log(`📈 [${asset}] Tick #${this.histories[asset].length} | Digit: ${lastDigit}`);
-            console.log(`   Last 10: ${this.histories[asset].slice(-10).join(', ')}`);
+        if (this.tradeInProgress) {
+            console.log(` 📈 [${asset}] Last 10: ${this.histories[asset].slice(-10).join(', ')}`);
         }
 
         // Scan for signals
