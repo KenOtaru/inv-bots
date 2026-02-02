@@ -911,6 +911,11 @@ class AthenaPureUltimate {
             concentrationAnalysis?.isConcentrated
         ].filter(Boolean).length;
 
+        console.log('majorFlag1', fractalAnalysis?.isLowFractal);
+        console.log('majorFlag2', fibConfluence?.hasConfluence);
+        console.log('majorFlag3', fibConfluence?.hasZScore);
+        console.log('majorFlag4', fibConfluence?.inRecent);
+        console.log('majorFlag5', concentrationAnalysis?.isConcentrated);
         const isValid =
             weightedScore >= adaptive.minScore &&
             majorFlags >= 4 &&           // at least 3 of 5 major conditions
