@@ -660,7 +660,7 @@ class AthenaPureUltimate {
 
         // Exhaustion = high density but decreasing trend
         const isExhausting = density10 < density20 && density20 < density30;
-        const hasStreak = currentStreak >= 3;
+        const hasStreak = currentStreak >= 2;
 
         return {
             currentStreak,
@@ -913,7 +913,7 @@ class AthenaPureUltimate {
 
         const isValid =
             weightedScore >= adaptive.minScore &&
-            majorFlags >= 5 &&           // at least 3 of 5 major conditions
+            majorFlags >= 4 &&           // at least 3 of 5 major conditions
             targetDigit !== -1;
 
         return {

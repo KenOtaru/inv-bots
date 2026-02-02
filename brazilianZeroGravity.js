@@ -534,7 +534,7 @@ class ZeroGravityUltimate {
         }
 
         // Is current digit exhausted?
-        const isExhausted = currentStreak >= 5;
+        const isExhausted = currentStreak >= 2;
 
         return {
             currentStreak,
@@ -721,7 +721,7 @@ class ZeroGravityUltimate {
                 entropyAnalysis?.isConcentrated,
                 zScoreConfluence?.hasConfluence,
                 zScoreConfluence?.inRecent
-            ].filter(Boolean).length >= 4 &&
+            ].filter(Boolean).length >= 3 &&
             targetDigit !== -1;
 
         return {
