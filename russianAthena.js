@@ -366,9 +366,9 @@ class AthenaPureUltimate {
 
         const assetConfig = this.config.assets[asset];
         const isLowFractal = avgFractalDim < assetConfig.fractalThreshold;
-        console.log("isLowFractal", 'avgFractalDim', '(' + avgFractalDim + ')', 'threshold', assetConfig.fractalThreshold);
+        console.log("isLowFractal", '(', avgFractalDim, ') | threshold', assetConfig.fractalThreshold);
         const isDropping = fdTrend < -0.002;
-        console.log("isDropping trend", 'fdTrend', '(' + fdTrend + ')', 'threshold', -0.002);
+        console.log("isDropping trend", '(', fdTrend, ') | threshold', -0.002);
 
         return {
             avgFractalDim,
@@ -947,7 +947,7 @@ class AthenaPureUltimate {
         console.log('concentrationAnalysis_Flag5', concentrationAnalysis?.isConcentrated, 'Score', confluenceScore.toFixed(2));
         const isValid =
             weightedScore >= adaptive.minScore &&
-            majorFlags >= 4 &&           // at least 4 of 5 major conditions
+            majorFlags >= 5 &&           // at least 4 of 5 major conditions
             targetDigit !== -1;
 
         return {
