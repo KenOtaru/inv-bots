@@ -316,9 +316,19 @@ class AthenaPureUltimate {
 
             const slice = history.slice(-w);
 
-            // Calculate both Higuchi and Katz FD
-            const higuchiFD = this.calculateHiguchiFractalDimension(slice);
-            const katzFD = this.calculateKatzFractalDimension(slice);
+            // Preprocess: Convert to Cumulative Sum (Random Walk)
+            // Raw digits are white noise (FD ~= 2.0), we need Random Walk to measure trend/persistence
+            const cumSum = [];
+            let sum = 0;
+            const mean = 4.5;
+            for (let j = 0; j < slice.length; j++) {
+                sum += (slice[j] - mean);
+                cumSum.push(sum);
+            }
+
+            // Calculate both Higuchi and Katz FD using cumSum
+            const higuchiFD = this.calculateHiguchiFractalDimension(cumSum);
+            const katzFD = this.calculateKatzFractalDimension(cumSum);
 
             // Weighted average (Higuchi 60%, Katz 40%)
             const combinedFD = higuchiFD * 0.6 + katzFD * 0.4;
