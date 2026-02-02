@@ -7,7 +7,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'fiboGrok00002-state.json');
+const STATE_FILE = path.join(__dirname, 'fiboGrok00003-state.json');
 const STATE_SAVE_INTERVAL = 5000; // Save every 5 seconds
 
 class StatePersistence {

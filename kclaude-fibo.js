@@ -486,7 +486,7 @@ class MoneyManagementEngine {
 // STATE PERSISTENCE
 // ============================================================================
 
-const STATE_FILE = path.join(__dirname, 'kclaude-000011-state.json');
+const STATE_FILE = path.join(__dirname, 'kclaude-000012-state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -1096,6 +1096,7 @@ class FibonacciZScoreBot {
             <b>Session Stats:</b>
             ├ W/L: ${stats.totalWins}/${stats.totalLosses} (${stats.winRate}%)
             ├ Streak: ${won ? '0L' : `${stats.consecutiveLosses}L`}
+            ├ Loss Streaks: 2L×${stats.lossStreaks[2]} | 3L×${stats.lossStreaks[3]} | 4L×${stats.lossStreaks[4]} | 5L×${stats.lossStreaks[5]}
             ├ Session P&L: ${this.totalProfitLoss >= 0 ? '+' : ''}$${this.totalProfitLoss.toFixed(2)}
             └ Next Stake: $${stats.currentStake.toFixed(2)}
 

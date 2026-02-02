@@ -13,7 +13,7 @@ const TOKEN = "0P94g4WdSrSrzir";
 const TELEGRAM_TOKEN = "8591937854:AAESyF-8b17sRK-xdQXzrHfALnKA1sAR3CI";
 const CHAT_ID = "752497117";
 
-const STATE_FILE = path.join(__dirname, 'zerogravity5-state.json');
+const STATE_FILE = path.join(__dirname, 'zerogravity5-state01.json');
 
 class ZeroGravityUltimate {
     constructor() {
