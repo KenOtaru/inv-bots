@@ -930,14 +930,14 @@ class AthenaPureUltimate {
             concentrationAnalysis?.isConcentrated
         ].filter(Boolean).length;
 
-        console.log('fractalAnalysis_Flag1', fractalAnalysis?.isLowFractal);
-        console.log('fibConfluence_Flag2', fibConfluence?.hasConfluence);
-        console.log('fibConfluence_Flag3', fibConfluence?.hasZScore);
-        console.log('fibConfluence_Flag4', fibConfluence?.inRecent);
-        console.log('concentrationAnalysis_Flag5', concentrationAnalysis?.isConcentrated);
+        console.log('fractalAnalysis_Flag1', fractalAnalysis?.isLowFractal, 'Score', fractalScore);
+        console.log('fibConfluence_Flag2', fibConfluence?.hasConfluence, 'Score', confluenceScore);
+        console.log('fibConfluence_Flag3', fibConfluence?.hasZScore, 'Score', confluenceScore);
+        console.log('fibConfluence_Flag4', fibConfluence?.inRecent, 'Score', confluenceScore);
+        console.log('concentrationAnalysis_Flag5', concentrationAnalysis?.isConcentrated, 'Score', confluenceScore);
         const isValid =
             weightedScore >= adaptive.minScore &&
-            majorFlags >= 4 &&           // at least 3 of 5 major conditions
+            majorFlags >= 4 &&           // at least 4 of 5 major conditions
             targetDigit !== -1;
 
         return {
