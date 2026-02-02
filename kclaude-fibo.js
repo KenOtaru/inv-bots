@@ -386,11 +386,11 @@ class MoneyManagementEngine {
         // // Round to 2 decimal places
         // this.currentStake = Math.round(this.currentStake * 100) / 100;
 
-        if (this.consecutiveLosses === 2) {
-            this.currentStake = this.baseStake;
-        } else {
-            this.currentStake = Math.ceil(this.currentStake * this.firstLossMultiplier * 100) / 100;
-        }
+        // if (this.consecutiveLosses === 2) {
+        //     this.currentStake = this.baseStake;
+        // } else {
+        this.currentStake = Math.ceil(this.currentStake * this.firstLossMultiplier * 100) / 100;
+        // }
 
         return this.currentStake;
     }
@@ -1309,7 +1309,7 @@ class FibonacciZScoreBot {
 // ============================================================================
 
 const bot = new FibonacciZScoreBot('0P94g4WdSrSrzir', {
-    baseStake: 2.20,
+    baseStake: 1.2,
     minHistoryLength: 2000,
     maxHistoryLength: 3000,
     telegramToken: '',      // Add your Telegram bot token

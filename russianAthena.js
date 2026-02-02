@@ -24,7 +24,7 @@ class AthenaPureUltimate {
                 'R_10': {
                     decimals: 3,
                     digitIndex: 2,
-                    fractalThreshold: 1.45,      // was 1.32 (too low)
+                    fractalThreshold: 1.6,      // was 1.32 (too low)
                     minConfluence: 0.60,         // was 0.70
                     minZScore: 1.3,              // was 1.6
                     concentrationThreshold: 0.045,// was 0.055
@@ -33,8 +33,8 @@ class AthenaPureUltimate {
                 'R_25': {
                     decimals: 3,
                     digitIndex: 2,
-                    fractalThreshold: 1.47,      // was 1.35
-                    minConfluence: 0.58,         // was 0.68
+                    fractalThreshold: 1.6,      // was 1.35
+                    minConfluence: 0.60,         // was 0.68
                     minZScore: 1.4,              // was 1.7
                     concentrationThreshold: 0.050,// was 0.060
                     weight: 1.1
@@ -42,8 +42,8 @@ class AthenaPureUltimate {
                 'R_50': {
                     decimals: 4,
                     digitIndex: 3,
-                    fractalThreshold: 1.50,      // was 1.38
-                    minConfluence: 0.55,         // was 0.65
+                    fractalThreshold: 1.6,      // was 1.38
+                    minConfluence: 0.65,         // was 0.65
                     minZScore: 1.5,              // was 1.8
                     concentrationThreshold: 0.055,
                     weight: 1.0
@@ -51,8 +51,8 @@ class AthenaPureUltimate {
                 'R_75': {
                     decimals: 4,
                     digitIndex: 3,
-                    fractalThreshold: 1.52,      // was 1.40
-                    minConfluence: 0.53,         // was 0.62
+                    fractalThreshold: 1.6,      // was 1.40
+                    minConfluence: 0.65,         // was 0.62
                     minZScore: 1.6,              // was 1.9
                     concentrationThreshold: 0.060,
                     weight: 0.9
@@ -60,8 +60,8 @@ class AthenaPureUltimate {
                 'R_100': {
                     decimals: 2,
                     digitIndex: 1,
-                    fractalThreshold: 1.55,      // was 1.42
-                    minConfluence: 0.50,         // was 0.60
+                    fractalThreshold: 1.6,      // was 1.42
+                    minConfluence: 0.65,         // was 0.60
                     minZScore: 1.7,              // was 2.0
                     concentrationThreshold: 0.065,
                     weight: 0.8
@@ -69,8 +69,8 @@ class AthenaPureUltimate {
                 'RDBEAR': {
                     decimals: 4,
                     digitIndex: 3,
-                    fractalThreshold: 1.47,      // was 1.35
-                    minConfluence: 0.58,         // was 0.68
+                    fractalThreshold: 1.6,      // was 1.35
+                    minConfluence: 0.65,         // was 0.68
                     minZScore: 1.4,              // was 1.7
                     concentrationThreshold: 0.050,// was 0.060
                     weight: 1.1
@@ -78,8 +78,8 @@ class AthenaPureUltimate {
                 'RDBULL': {
                     decimals: 4,
                     digitIndex: 3,
-                    fractalThreshold: 1.47,      // was 1.35
-                    minConfluence: 0.58,         // was 0.68
+                    fractalThreshold: 1.6,      // was 1.35
+                    minConfluence: 0.65,         // was 0.68
                     minZScore: 1.4,              // was 1.7
                     concentrationThreshold: 0.050,// was 0.060
                     weight: 1.1
