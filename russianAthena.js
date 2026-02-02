@@ -338,7 +338,9 @@ class AthenaPureUltimate {
 
         const assetConfig = this.config.assets[asset];
         const isLowFractal = avgFractalDim < assetConfig.fractalThreshold;
+        console.log("isLowFractal", avgFractalDim, 'threshold', assetConfig.fractalThreshold);
         const isDropping = fdTrend < -0.02;
+        console.log("isDropping trend", fdTrend, 'threshold', -0.02);
 
         return {
             avgFractalDim,
@@ -842,29 +844,24 @@ class AthenaPureUltimate {
 
         // Step 1: Fractal Analysis
         const fractalAnalysis = this.calculateFractalAnalysis(asset);
-        console.log(`[${asset}] Fractal Analysis:`, fractalAnalysis);
         if (!fractalAnalysis || !fractalAnalysis.isLowFractal) return;
 
         // Step 2: Fibonacci Confluence
         const fibConfluence = this.calculateFibonacciConfluence(asset);
-        console.log(`[${asset}] Fibonacci Confluence:`, fibConfluence);
         if (!fibConfluence || !fibConfluence.hasConfluence) return;
 
         // Step 3: Concentration Analysis
         const concentrationAnalysis = this.calculateConcentrationAnalysis(asset);
-        console.log(`[${asset}] Concentration Analysis:`, concentrationAnalysis);
         if (!concentrationAnalysis || !concentrationAnalysis.isConcentrated) return;
 
         // Step 4: Streak Analysis
         const targetDigit = fibConfluence.bestDigit;
         const streakAnalysis = this.analyzeStreakExhaustion(history, targetDigit);
-        console.log(`[${asset}] Streak Analysis:`, streakAnalysis);
 
         // Step 5: Calculate total score
         const signal = this.calculateTotalSignalScore(
             asset, fractalAnalysis, fibConfluence, concentrationAnalysis, streakAnalysis
         );
-        console.log(`[${asset}] Signal:`, signal);
 
         // Log periodically
         if (history.length % 150 === 0) {
