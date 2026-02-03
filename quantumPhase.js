@@ -248,6 +248,7 @@ class QuantumPhaseReversalBot {
         this.totalWins = 0;
         this.totalLosses = 0;
         this.netProfit = 0;
+        this.ticks = 0;
 
         // Per-asset metadata
         this.lastSignalDigit = {};
@@ -443,12 +444,14 @@ class QuantumPhaseReversalBot {
         const d = this.getLastDigit(tick.quote, asset);
         const h = this.histories[asset];
 
+        this.ticks++;
+
         h.push(d);
         if (h.length > this.config.requiredHistoryLength) h.shift();
 
         this.ticksSinceLastTrade[asset]++;
 
-        if (h.length % 200 === 0) {
+        if (this.ticks % 20 === 0) {
             console.log(`📈 [${asset}] Tick #${h.length} | Digit: ${d}`);
             console.log(`   Last 10: ${h.slice(-10).join(', ')}`);
         }
@@ -590,9 +593,9 @@ class QuantumPhaseReversalBot {
         }
 
         const ok = (reason === null);
-        if (!ok && len % 500 === 0) {
+        if (!ok && this.ticks % 20 === 0) {
             console.log(`${logPrefix}=false → ${reason}`);
-        } else if (ok && len % 500 === 0) {
+        } else if (ok && this.ticks % 20 === 0) {
             console.log(`${logPrefix}=true | len=${len}, consecLosses=${this.consecutiveLosses}, net=${this.netProfit.toFixed(2)}`);
         }
         return ok;
@@ -614,7 +617,7 @@ class QuantumPhaseReversalBot {
         const { dom1, dom2, dominance1, dominance2, dominanceIncrease } = phase;
 
         // Log occasionally
-        if (len % 400 === 0) {
+        if (this.ticks % 20 === 0) {
             console.log(
                 `[${asset}] PHASE dom1=${dom1} (${(dominance1 * 100).toFixed(1)}%) ` +
                 `dom2=${dom2} (${(dominance2 * 100).toFixed(1)}%) ` +
@@ -629,7 +632,7 @@ class QuantumPhaseReversalBot {
 
         if (!(condPhaseShift && condDom2Strong && condIncrease)) {
             // Too strict to log every tick; log occasionally
-            if (len % 400 === 0) {
+            if (this.ticks % 20 === 0) {
                 console.log(
                     `[${asset}] PHASE REJECT ` +
                     `shift=${condPhaseShift} dom2Strong=${condDom2Strong} incOK=${condIncrease}`
@@ -643,7 +646,7 @@ class QuantumPhaseReversalBot {
         if (!zConf) return;
         const { avgZ } = zConf;
 
-        if (len % 400 === 0) {
+        if (this.ticks % 20 === 0) {
             console.log(
                 `[${asset}] ZCONF digit=${dom2} avgZ=${avgZ.toFixed(2)} ` +
                 `(min=${cfg.minAvgZ})`
@@ -651,7 +654,7 @@ class QuantumPhaseReversalBot {
         }
 
         if (avgZ < cfg.minAvgZ) {
-            if (len % 400 === 0) console.log(`[${asset}] ZCONF REJECT avgZ too low`);
+            if (this.ticks % 20 === 0) console.log(`[${asset}] ZCONF REJECT avgZ too low`);
             return;
         }
 
@@ -660,7 +663,7 @@ class QuantumPhaseReversalBot {
         if (!vol) return;
         const { conc } = vol;
 
-        if (len % 400 === 0) {
+        if (this.ticks % 20 === 0) {
             console.log(
                 `[${asset}] VOL conc=${conc.toFixed(4)} ` +
                 `(min=${cfg.minConcentration})`
@@ -668,13 +671,13 @@ class QuantumPhaseReversalBot {
         }
 
         if (conc < cfg.minConcentration) {
-            if (len % 400 === 0) console.log(`[${asset}] VOL REJECT conc too low`);
+            if (this.ticks % 20 === 0) console.log(`[${asset}] VOL REJECT conc too low`);
             return;
         }
 
         // --- RECENT APPEARANCE ---
         const inRecent = h.slice(-9).includes(dom2);
-        if (len % 400 === 0) {
+        if (this.ticks % 20 === 0) {
             console.log(
                 `[${asset}] RECENT digit=${dom2} inRecent=${inRecent}`
             );
@@ -682,7 +685,7 @@ class QuantumPhaseReversalBot {
         if (!inRecent) return;
 
         // --- SAME DIGIT COOLDOWN ---
-        if (this.lastSignalDigit[asset] === dom2 && len % 400 === 0) {
+        if (this.lastSignalDigit[asset] === dom2 && this.ticks % 20 === 0) {
             console.log(
                 `[${asset}] REJECT same digit as last signal: ${dom2}`
             );
