@@ -75,7 +75,7 @@ class QuantumPhaseReversalBot {
                     phase1Len: 300,
                     phase2Len: 200,
 
-                    minDominance2: 0.16,          // ≥ 28% (≈56/200) → very strong phase dominance
+                    minDominance2: 0.15,          // ≥ 28% (≈56/200) → very strong phase dominance
                     minDominanceIncrease: 0.036,   // at least +6 points vs phase1
 
                     zWindows: [55, 144, 233, 377],
@@ -96,7 +96,7 @@ class QuantumPhaseReversalBot {
                     phase1Len: 300,
                     phase2Len: 200,
 
-                    minDominance2: 0.16,          // ≥ 29% (≈58/200)
+                    minDominance2: 0.15,          // ≥ 29% (≈58/200)
                     minDominanceIncrease: 0.037,   // +7 points vs phase1
 
                     zWindows: [55, 144, 233, 377],
@@ -118,7 +118,7 @@ class QuantumPhaseReversalBot {
                     phase1Len: 300,
                     phase2Len: 200,
 
-                    minDominance2: 0.18,          // ≥ 30% (≈60/200)
+                    minDominance2: 0.16,          // ≥ 30% (≈60/200)
                     minDominanceIncrease: 0.038,   // +8 points vs phase1
 
                     zWindows: [55, 144, 233, 377],
@@ -141,7 +141,7 @@ class QuantumPhaseReversalBot {
                     phase1Len: 300,
                     phase2Len: 200,
 
-                    minDominance2: 0.17,
+                    minDominance2: 0.15,
                     minDominanceIncrease: 0.037,
 
                     zWindows: [55, 144, 233, 377],
@@ -159,7 +159,7 @@ class QuantumPhaseReversalBot {
                     phase1Len: 300,
                     phase2Len: 200,
 
-                    minDominance2: 0.17,
+                    minDominance2: 0.15,
                     minDominanceIncrease: 0.037,
 
                     zWindows: [55, 144, 233, 377],
