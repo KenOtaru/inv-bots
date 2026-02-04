@@ -604,7 +604,7 @@ class QuantumPhaseReversalBot {
             if (this.ticks % 20 === 0) {
                 console.log(
                     `[${asset}] PHASE REJECT ` +
-                    `shift=${condPhaseShift} dom2Strong=${condDom2Strong}(${dominance2}|${cfg.minDominance2}) incOK=${condIncrease}(${dominanceIncrease.toFixed(2)}|${cfg.minDominanceIncrease})`
+                    `shift=${condPhaseShift} dom2Strong=${condDom2Strong}(${dominance2}|${cfg.minDominance2}) incOK=${condIncrease}(${dominanceIncrease.toFixed(3)}|${cfg.minDominanceIncrease})`
                 );
             }
             return;
