@@ -35,11 +35,11 @@ class QuantumPhaseReversalBot {
                     phase1Len: 300,         // first phase length
                     phase2Len: 200,         // second phase length
 
-                    minDominance2: 0.26,          // ≥ 26% of last 200 ticks are this digit (≈52/200)
-                    minDominanceIncrease: 0.05,   // phase2 dominance ≥ phase1 + 5 percentage points
+                    minDominance2: 0.16,          // ≥ 26% of last 200 ticks are this digit (≈52/200)
+                    minDominanceIncrease: 0.035,   // phase2 dominance ≥ phase1 + 5 percentage points
 
                     zWindows: [55, 144, 233, 377],
-                    minAvgZ: 2.4,                 // strong but not ultra‑extreme saturation
+                    minAvgZ: 1.4,                 // strong but not ultra‑extreme saturation
 
                     minConcentration: 0.055,      // entropy-based concentration
 
@@ -53,11 +53,11 @@ class QuantumPhaseReversalBot {
                     phase1Len: 300,         // first phase length
                     phase2Len: 200,         // second phase length
 
-                    minDominance2: 0.26,          // ≥ 26% of last 200 ticks are this digit (≈52/200)
-                    minDominanceIncrease: 0.06,   // phase2 dominance ≥ phase1 + 5 percentage points
+                    minDominance2: 0.16,          // ≥ 26% of last 200 ticks are this digit (≈52/200)
+                    minDominanceIncrease: 0.036,   // phase2 dominance ≥ phase1 + 5 percentage points
 
                     zWindows: [55, 144, 233, 377],
-                    minAvgZ: 2.4,                 // strong but not ultra‑extreme saturation
+                    minAvgZ: 1.4,                 // strong but not ultra‑extreme saturation
 
                     minConcentration: 0.055,      // entropy-based concentration
 
@@ -75,15 +75,15 @@ class QuantumPhaseReversalBot {
                     phase1Len: 300,
                     phase2Len: 200,
 
-                    minDominance2: 0.28,          // ≥ 28% (≈56/200) → very strong phase dominance
-                    minDominanceIncrease: 0.06,   // at least +6 points vs phase1
+                    minDominance2: 0.18,          // ≥ 28% (≈56/200) → very strong phase dominance
+                    minDominanceIncrease: 0.036,   // at least +6 points vs phase1
 
                     zWindows: [55, 144, 233, 377],
-                    minAvgZ: 2.8,                 // strong multi‑window saturation
+                    minAvgZ: 1.8,                 // strong multi‑window saturation
 
                     minConcentration: 0.070,      // clearly skewed digit distribution
 
-                    weight: 1.0
+                    weight: 1.1
                 },
 
                 // -----------------------------------------------------
@@ -96,15 +96,15 @@ class QuantumPhaseReversalBot {
                     phase1Len: 300,
                     phase2Len: 200,
 
-                    minDominance2: 0.29,          // ≥ 29% (≈58/200)
-                    minDominanceIncrease: 0.07,   // +7 points vs phase1
+                    minDominance2: 0.19,          // ≥ 29% (≈58/200)
+                    minDominanceIncrease: 0.037,   // +7 points vs phase1
 
                     zWindows: [55, 144, 233, 377],
-                    minAvgZ: 3.0,                 // very strong saturation
+                    minAvgZ: 2.0,                 // very strong saturation
 
                     minConcentration: 0.075,
 
-                    weight: 0.9                    // slightly down‑weighted vs R_50
+                    weight: 1.0                    // slightly down‑weighted vs R_50
                 },
 
                 // -----------------------------------------------------
@@ -118,15 +118,15 @@ class QuantumPhaseReversalBot {
                     phase1Len: 300,
                     phase2Len: 200,
 
-                    minDominance2: 0.30,          // ≥ 30% (≈60/200)
-                    minDominanceIncrease: 0.08,   // +8 points vs phase1
+                    minDominance2: 0.20,          // ≥ 30% (≈60/200)
+                    minDominanceIncrease: 0.038,   // +8 points vs phase1
 
                     zWindows: [55, 144, 233, 377],
-                    minAvgZ: 3.2,                 // extreme saturation across windows
+                    minAvgZ: 2.2,                 // extreme saturation across windows
 
                     minConcentration: 0.080,
 
-                    weight: 0.8                    // a bit more conservative in scoring
+                    weight: 0.9                    // a bit more conservative in scoring
                 },
 
                 // -----------------------------------------------------
@@ -141,15 +141,15 @@ class QuantumPhaseReversalBot {
                     phase1Len: 300,
                     phase2Len: 200,
 
-                    minDominance2: 0.29,
-                    minDominanceIncrease: 0.07,
+                    minDominance2: 0.19,
+                    minDominanceIncrease: 0.037,
 
                     zWindows: [55, 144, 233, 377],
-                    minAvgZ: 3.0,
+                    minAvgZ: 2.0,
 
                     minConcentration: 0.075,
 
-                    weight: 0.8                    // slightly cautious, they can be noisier
+                    weight: 0.9                    // slightly cautious, they can be noisier
                 },
 
                 'RDBEAR': {
@@ -159,15 +159,15 @@ class QuantumPhaseReversalBot {
                     phase1Len: 300,
                     phase2Len: 200,
 
-                    minDominance2: 0.29,
-                    minDominanceIncrease: 0.07,
+                    minDominance2: 0.19,
+                    minDominanceIncrease: 0.037,
 
                     zWindows: [55, 144, 233, 377],
-                    minAvgZ: 3.0,
+                    minAvgZ: 2.0,
 
                     minConcentration: 0.075,
 
-                    weight: 0.8
+                    weight: 0.9
                 },
             },
 
