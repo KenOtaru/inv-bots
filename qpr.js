@@ -24,37 +24,6 @@ class QuantumPhaseReversalBot {
         // ====== CONFIG ======
         this.config = {
             assets: {
-                // Tuned primarily for phase behavior & digit extraction
-                'R_50': {
-                    decimals: 4,
-                    digitIndex: 3,
-                    phaseWindow: 500,       // total window
-                    phase1Len: 300,         // first phase length
-                    phase2Len: 200,         // second phase length
-                    minDominance2: 0.24,    // last 200: at least 24% same digit
-                    minDominanceIncrease: 0.04, // dom2 - dom1 >= 4%
-                    zWindows: [55, 144, 233],
-                    minAvgZ: 1.2,           // minimum average Z-score
-                    minConcentration: 0.020,// entropy-based concentration
-                    weight: 1.0,            // relative priority
-                },
-                'R_25': {
-                    decimals: 3,
-                    digitIndex: 2,
-                    phaseWindow: 500,
-                    phase1Len: 300,
-                    phase2Len: 200,
-                    minDominance2: 0.24,
-                    minDominanceIncrease: 0.04,
-                    zWindows: [55, 144, 233],
-                    minAvgZ: 1.2,
-                    minConcentration: 0.018,
-                    weight: 1.0,
-                },
-
-            },
-
-            assets: {
                 // -----------------------------------------------------
                 // R_10 — Lowest volatility index, digits from 3rd decimal
                 // ~Moderate thresholds: will generate rare but solid signals
@@ -199,7 +168,7 @@ class QuantumPhaseReversalBot {
                     minConcentration: 0.075,
 
                     weight: 0.8
-                }
+                },
             },
 
             requiredHistoryLength: 1500,   // how many ticks to load per asset
