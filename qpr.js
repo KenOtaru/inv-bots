@@ -741,7 +741,7 @@ class QuantumPhaseReversalBot {
         this.ws.on('close', () => {
             this.connected = false;
             this.wsReady = false;
-            if (!this.isReconnecting && this.reconnectAttempts < this.maxReconnectAttempts) {
+            if (!this.isReconnecting && this.reconnectAttempts < this.maxReconnectAttempts && !this.endOfDay) {
                 this.reconnect();
             }
         });
@@ -862,6 +862,7 @@ class QuantumPhaseReversalBot {
     disconnect() {
         console.log('🛑 Disconnecting...');
         this.saveState();
+        this.endOfDay = true;
         if (this.ws) this.ws.close();
     }
 

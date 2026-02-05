@@ -1136,7 +1136,7 @@ class ZeroGravityUltimate {
         this.ws.on('close', () => {
             this.connected = false;
             this.wsReady = false;
-            if (!this.isReconnecting && this.reconnectAttempts < this.maxReconnectAttempts) {
+            if (!this.isReconnecting && this.reconnectAttempts < this.maxReconnectAttempts && !this.endOfDay) {
                 this.reconnect();
             }
         });
@@ -1245,6 +1245,7 @@ class ZeroGravityUltimate {
     disconnect() {
         console.log('🛑 Disconnecting...');
         this.saveState();
+        this.endOfDay = true;
         if (this.ws) this.ws.close();
     }
 
