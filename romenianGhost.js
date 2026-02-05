@@ -225,7 +225,7 @@ class RomanianGhostUltimate {
                 weightedConc < this.config.maxConcentration,
             streakInfo,
             hurst,
-            isMeanReverting: hurst < 0.45
+            isMeanReverting: hurst < 0.47
         };
     }
 
@@ -361,7 +361,7 @@ class RomanianGhostUltimate {
             avgZScore: best.avgZScore,
             participation: best.participation,
             inRecent,
-            isValid: totalScore >= 60 && inRecent  // Minimum 60 points to trade
+            isValid: totalScore >= 65 && inRecent  // Minimum 60 points to trade
         };
     }
 
@@ -422,11 +422,11 @@ class RomanianGhostUltimate {
         if (recentWinRate < 0.90) {
             // Increase thresholds if win rate dropping
             minScore = 70;
-            minZScore = 2.3;
+            minZScore = 2.6;
         } else if (recentWinRate > 0.97) {
             // Can slightly relax if performing well
-            minScore = 55;
-            minZScore = 1.8;
+            minScore = 60;
+            minZScore = 2.0;
         }
 
         return { minScore, minZScore };
@@ -455,8 +455,8 @@ class RomanianGhostUltimate {
         // LOG EVERY 30 SECONDS
         const now = Date.now();
         if (now - this.lastTickLogTime2[asset] >= 30000 && signal) {
-            console.log(`[${asset}] Score=${signal.totalScore.toFixed(1)} | AvgZ=${signal.avgZScore.toFixed(2)} | Digit=${signal.digit} | Conc=${volAnalysis.concentration.toFixed(4)} | Ultra=${volAnalysis.isUltraLow} | Recent=${signal.inRecent} | Cooldown=${this.ticksSinceLastTrade[asset]}`);
-            console.log(`Analysis: ${JSON.stringify(volAnalysis, null, 2)}`);
+            console.log(`[${asset}] Score=${signal.totalScore.toFixed(1)} | AvgZ=${signal.avgZScore.toFixed(2)} | Digit=${signal.digit} | Conc=${volAnalysis.concentration.toFixed(4)} | Ultra=${volAnalysis.isUltraLow} | Hurst=${volAnalysis.hurst.toFixed(4)} | Recent=${signal.inRecent} | Cooldown=${this.ticksSinceLastTrade[asset]}`);
+            // console.log(`Analysis: ${JSON.stringify(volAnalysis, null, 2)}`);
             this.lastTickLogTime2[asset] = now;
         }
 
@@ -466,7 +466,7 @@ class RomanianGhostUltimate {
         if (signal.totalScore < thresholds.minScore) return;
         if (signal.avgZScore < thresholds.minZScore) return;
         if (volAnalysis.concentration < thresholds.minConcentration) return;
-        if (!volAnalysis.isUltraLow || !volAnalysis.isMeanReverting || !volAnalysis.streakInfo.isExhausted) return;
+        if (!volAnalysis.isUltraLow || !volAnalysis.isMeanReverting) return;
 
         // Step 6: Check if different from last trade
         if (signal.digit === this.lastTradeDigit[asset]) {
@@ -475,13 +475,13 @@ class RomanianGhostUltimate {
         }
 
         // Step 7: Execute trade
-        this.placeTrade(asset, signal.digit, signal.totalScore, signal.avgZScore, volAnalysis.concentration);
+        this.placeTrade(asset, signal.digit, signal.totalScore, signal.avgZScore, volAnalysis);
     }
 
     // ========================================================================
     // TRADE EXECUTION
     // ========================================================================
-    placeTrade(asset, digit, score, zScore, concentration) {
+    placeTrade(asset, digit, score, zScore, volAnalysis) {
         if (this.tradeInProgress) return;
 
         this.tradeInProgress = true;
@@ -493,7 +493,7 @@ class RomanianGhostUltimate {
         console.log(`   Digit: ${digit}`);
         console.log(`   Score: ${score.toFixed(1)}`);
         console.log(`   Avg Z-Score: ${zScore.toFixed(2)}`);
-        console.log(`   Concentration: ${concentration.toFixed(4)}`);
+        console.log(`   Concentration: ${volAnalysis.concentration.toFixed(4)}`);
         console.log(`   Stake: $${this.stake.toFixed(2)}`);
 
         this.sendRequest({
@@ -519,7 +519,8 @@ class RomanianGhostUltimate {
             last10Digits: ${this.histories[asset].slice(-10).join(',')}
             📈 Score: ${score.toFixed(1)}
             📉 Avg Z: ${zScore.toFixed(2)}
-            🔬 Conc: ${concentration.toFixed(4)}
+            🔬 Conc: ${volAnalysis.concentration.toFixed(4)}
+            📉 Hurst: ${volAnalysis.hurst.toFixed(4)}
             💰 Stake: $${this.stake.toFixed(2)}
             📊 Losses: ${this.consecutiveLosses}
         `.trim());
