@@ -14,7 +14,7 @@ const TOKEN = "0P94g4WdSrSrzir";
 const TELEGRAM_TOKEN = "8288121368:AAHYRb0Stk5dWUWN1iTYbdO3fyIEwIuZQR8";
 const CHAT_ID = "752497117";
 
-const STATE_FILE = path.join(__dirname, 'ghost92-state.json');
+const STATE_FILE = path.join(__dirname, 'ghost92-0001-state.json');
 
 class RomanianGhostUltimate {
     constructor() {
@@ -44,9 +44,9 @@ class RomanianGhostUltimate {
 
             // Money management
             baseStake: 2.20,
-            firstLossMultiplier: 1.8,
+            firstLossMultiplier: 11.3,
             subsequentMultiplier: 11.3,
-            maxConsecutiveLosses: 4,
+            maxConsecutiveLosses: 6,
             takeProfit: 10000,
             stopLoss: -500,
 

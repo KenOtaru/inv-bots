@@ -471,7 +471,7 @@ class MoneyManagementEngine {
             let stake;
             if (losses === 0) stake = this.baseStake;
             else if (losses === 1) stake = this.baseStake * this.firstLossMultiplier;
-            else stake = this.baseStake * Math.pow(this.subsequentMultiplier, losses - 1);
+            else stake = this.baseStake * this.baseStake * this.firstLossMultiplier;
 
             progression.push({
                 losses,
@@ -486,7 +486,7 @@ class MoneyManagementEngine {
 // STATE PERSISTENCE
 // ============================================================================
 
-const STATE_FILE = path.join(__dirname, 'kclaude-000012-state.json');
+const STATE_FILE = path.join(__dirname, 'kclaude-000013-state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -1310,7 +1310,7 @@ class FibonacciZScoreBot {
 // ============================================================================
 
 const bot = new FibonacciZScoreBot('0P94g4WdSrSrzir', {
-    baseStake: 1.2,
+    baseStake: 0.61,
     minHistoryLength: 2000,
     maxHistoryLength: 3000,
     telegramToken: '',      // Add your Telegram bot token

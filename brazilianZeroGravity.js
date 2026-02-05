@@ -40,7 +40,7 @@ class ZeroGravityUltimate {
                 'R_50': {
                     decimals: 4,
                     digitIndex: 3,
-                    hurstThreshold: 0.50,   // was 0.40
+                    hurstThreshold: 0.48,   // was 0.40
                     entropyThreshold: 0.055,//0.065
                     minDominance: 0.28,
                     weight: 0.9
@@ -48,7 +48,7 @@ class ZeroGravityUltimate {
                 'R_75': {
                     decimals: 4,
                     digitIndex: 3,
-                    hurstThreshold: 0.52,   // was 0.42
+                    hurstThreshold: 0.47,   // was 0.42
                     entropyThreshold: 0.060,//0.070
                     minDominance: 0.27,
                     weight: 0.8
@@ -56,7 +56,7 @@ class ZeroGravityUltimate {
                 'R_100': {
                     decimals: 2,
                     digitIndex: 1,
-                    hurstThreshold: 0.50,
+                    hurstThreshold: 0.47,
                     entropyThreshold: 0.055,
                     minDominance: 0.28,
                     weight: 0.8
