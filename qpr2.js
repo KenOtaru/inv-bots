@@ -4,20 +4,24 @@
 // Structure similar to your other advanced bots (WebSocket + Telegram + State)
 // ============================================================================
 
+'use strict';
+
 const WebSocket = require('ws');
 const TelegramBot = require('node-telegram-bot-api');
 const fs = require('fs');
 const path = require('path');
 
-const TOKEN = "0P94g4WdSrSrzir";
-const TELEGRAM_TOKEN = "8218636914:AAGvaKFh8MT769-_9eOEiU4XKufL0aHRhZ4";
-const CHAT_ID = "752497117";
+// ========== CONFIGURE THESE ==========
+const TOKEN = '0P94g4WdSrSrzir';                // Deriv token
+const TELEGRAM_TOKEN = '8218636914:AAGvaKFh8MT769-_9eOEiU4XKufL0aHRhZ4';   // Telegram bot token
+const CHAT_ID = '752497117';                    // Your chat id
+// =====================================
 
 const STATE_FILE = path.join(__dirname, 'qpr-state.json');
 
 class QuantumPhaseReversalBot {
     constructor() {
-        // ====== CONFIGURATION ======
+        // ====== CONFIG ======
         this.config = {
             assets: {
                 // -----------------------------------------------------
@@ -185,78 +189,255 @@ class QuantumPhaseReversalBot {
             avoidMinutesAroundHour: 3,
         };
 
-        // ====== TRADING STATE ======
-        this.histories = {};
+        // ====== STATE ======
         this.assetList = Object.keys(this.config.assets);
-        this.assetList.forEach(a => this.histories[a] = []);
 
-
-
-        // Trading state
-        this.stake = this.config.baseStake;
-        this.consecutiveLosses = 0;
-        this.totalTrades = 0;
-        this.totalWins = 0;
-        this.x2 = 0; this.x3 = 0; this.x4 = 0; this.x5 = 0;
-        this.netProfit = 0;
-        this.ticks = 0;
-
-        // Per-asset state
-        this.lastTradeDigit = {};
-        this.lastTradeTime = {};
-        this.ticksSinceLastTrade = {};
-        this.tradesThisHour = {};
-        this.assetConsecutiveLosses = {};
-        this.suspendedAssets = {};
-        // Per-asset metadata
-        this.lastSignalDigit = {};
+        this.histories = {};
+        this.historyLoaded = {};
         this.assetList.forEach(a => {
-            this.lastTradeDigit[a] = null;
-            this.lastTradeTime[a] = 0;
-            this.lastSignalDigit[a] = null;
-            this.ticksSinceLastTrade[a] = 999;
-            this.tradesThisHour[a] = 0;
-            this.assetConsecutiveLosses[a] = 0;
-            this.suspendedAssets[a] = false;
+            this.histories[a] = [];
+            this.historyLoaded[a] = false;
         });
+
+        this.ws = null;
+        this.connected = false;
+        this.wsReady = false;
 
         this.tradeInProgress = false;
         this.currentTradingAsset = null;
 
-        // Performance tracking
-        this.recentTrades = [];
-        this.assetPerformance = {};
+        // Trading stats
+        this.stake = this.config.baseStake;
+        this.consecutiveLosses = 0;
+        this.x2 = 0;
+        this.x3 = 0;
+        this.x4 = 0;
+        this.x5 = 0;
+        this.totalTrades = 0;
+        this.totalWins = 0;
+        this.totalLosses = 0;
+        this.netProfit = 0;
+        this.ticks = 0;
+
+        // Per-asset metadata
+        this.lastSignalDigit = {};
+        this.ticksSinceLastTrade = {};
         this.assetList.forEach(a => {
-            this.assetPerformance[a] = { trades: 0, wins: 0, losses: 0, pnl: 0 };
+            this.lastSignalDigit[a] = null;
+            this.ticksSinceLastTrade[a] = 999;
         });
 
-        // Hourly stats
-        this.hourly = { trades: 0, wins: 0, losses: 0, pnl: 0 };
-
-        // WebSocket
-        this.ws = null;
-        this.connected = false;
-        this.wsReady = false;
-        this.historyLoaded = {};
-        this.assetList.forEach(a => this.historyLoaded[a] = false);
-
-        // Reconnection
-        this.reconnectAttempts = 0;
-        this.maxReconnectAttempts = 50;
-        this.reconnectDelay = 5000;
-        this.isReconnecting = false;
-
         // Telegram
-        this.telegramBot = new TelegramBot(TELEGRAM_TOKEN, { polling: false });
+        this.telegramBot = TELEGRAM_TOKEN
+            ? new TelegramBot(TELEGRAM_TOKEN, { polling: false })
+            : null;
 
-        // Initialize
+        // Load state & connect
         this.loadState();
         this.connect();
         this.startHourlySummary();
-        this.startHourlyReset();
         this.startAutoSave();
     }
 
+    // ========================================================================
+    // STATE PERSISTENCE
+    // ========================================================================
+    saveState() {
+        try {
+            const data = {
+                savedAt: Date.now(),
+                stake: this.stake,
+                consecutiveLosses: this.consecutiveLosses,
+                totalTrades: this.totalTrades,
+                totalWins: this.totalWins,
+                x2: this.x2, x3: this.x3, x4: this.x4, x5: this.x5,
+                totalLosses: this.totalLosses,
+                netProfit: this.netProfit,
+            };
+            fs.writeFileSync(STATE_FILE, JSON.stringify(data, null, 2));
+        } catch (e) {
+            console.error('State save error:', e.message);
+        }
+    }
+
+    loadState() {
+        try {
+            if (!fs.existsSync(STATE_FILE)) return;
+            const data = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+            const age = (Date.now() - data.savedAt) / 60000;
+            if (age > 60) {
+                console.log(`⚠️ Old state (${age.toFixed(1)} min), ignoring`);
+                return;
+            }
+            this.stake = data.stake ?? this.stake;
+            this.consecutiveLosses = data.consecutiveLosses ?? 0;
+            this.totalTrades = data.totalTrades ?? 0;
+            this.totalWins = data.totalWins ?? 0;
+            this.x2 = data.x2 ?? 0;
+            this.x3 = data.x3 ?? 0;
+            this.x4 = data.x4 ?? 0;
+            this.x5 = data.x5 ?? 0;
+            this.totalLosses = data.totalLosses ?? 0;
+            this.netProfit = data.netProfit ?? 0;
+            console.log('✅ State restored:', {
+                totalTrades: this.totalTrades,
+                totalWins: this.totalWins,
+                totalLosses: this.totalLosses,
+                netProfit: this.netProfit.toFixed(2),
+                stake: this.stake.toFixed(2),
+            });
+        } catch (e) {
+            console.error('State load error:', e.message);
+        }
+    }
+
+    startAutoSave() {
+        setInterval(() => this.saveState(), 5000);
+        console.log('💾 Auto-save every 5s enabled');
+    }
+
+    // ========================================================================
+    // WEBSOCKET / CONNECTION
+    // ========================================================================
+    connect() {
+        console.log('🔌 Connecting to Deriv API...');
+        this.ws = new WebSocket('wss://ws.derivws.com/websockets/v3?app_id=1089');
+
+        this.ws.on('open', () => {
+            console.log('✅ WebSocket connected');
+            this.connected = true;
+            this.reconnectAttempts = 0;
+            this.sendRequest({ authorize: TOKEN });
+        });
+
+        this.ws.on('message', (data) => {
+            try {
+                const msg = JSON.parse(data);
+                this.handleMessage(msg);
+            } catch (e) {
+                console.error('Parse error:', e.message);
+            }
+        });
+
+        this.ws.on('close', () => {
+            console.log('⚠️ WebSocket closed');
+            this.connected = false;
+            this.wsReady = false;
+            // simple reconnect
+            setTimeout(() => this.connect(), 5000);
+        });
+
+        this.ws.on('error', (e) => {
+            console.error('WS error:', e.message);
+        });
+    }
+
+    sendRequest(req) {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify(req));
+        }
+    }
+
+    handleMessage(msg) {
+        if (msg.error) {
+            console.error('API Error:', msg.error.message);
+            if (msg.msg_type === 'buy') this.tradeInProgress = false;
+            return;
+        }
+
+        switch (msg.msg_type) {
+            case 'authorize':
+                this.handleAuthorize(msg);
+                break;
+            case 'history':
+                this.handleTickHistory(msg);
+                break;
+            case 'tick':
+                this.handleTickUpdate(msg.tick);
+                break;
+            case 'buy':
+                this.handleBuy(msg);
+                break;
+            case 'proposal_open_contract':
+                if (msg.proposal_open_contract?.is_sold) {
+                    this.handleTradeResult(msg.proposal_open_contract);
+                }
+                break;
+        }
+    }
+
+    handleAuthorize(msg) {
+        console.log('✅ Authenticated as', msg.authorize.loginid);
+        this.wsReady = true;
+        this.initializeSubscriptions();
+        this.sendTelegram(`
+            🚀 <b>Quantum Phase Reversal Bot Started</b>
+            Account: ${msg.authorize.loginid}
+            Balance: $${parseFloat(msg.authorize.balance).toFixed(2)}
+            Assets: ${this.assetList.join(', ')}
+        `.trim());
+    }
+
+    initializeSubscriptions() {
+        console.log('📊 Initializing subscriptions...');
+        this.assetList.forEach(asset => {
+            console.log(`   Requesting history for ${asset}...`);
+            this.sendRequest({
+                ticks_history: asset,
+                adjust_start_time: 1,
+                count: this.config.requiredHistoryLength,
+                end: 'latest',
+                start: 1,
+                style: 'ticks',
+            });
+            this.sendRequest({ ticks: asset, subscribe: 1 });
+        });
+    }
+
+    // ========================================================================
+    // TICKS & HISTORY
+    // ========================================================================
+    handleTickHistory(msg) {
+        const asset = msg.echo_req.ticks_history;
+        const prices = msg.history?.prices || [];
+        this.histories[asset] = prices.map(p => this.getLastDigit(p, asset));
+        this.historyLoaded[asset] = true;
+        console.log(`📊 Loaded ${this.histories[asset].length} ticks for ${asset}`);
+        console.log(`   Last 10: ${this.histories[asset].slice(-10).join(', ')}`);
+    }
+
+    handleTickUpdate(tick) {
+        const asset = tick.symbol;
+        if (!this.assetList.includes(asset)) return;
+
+        const d = this.getLastDigit(tick.quote, asset);
+        const h = this.histories[asset];
+
+        this.ticks++;
+
+        h.push(d);
+        if (h.length > this.config.requiredHistoryLength) h.shift();
+
+        this.ticksSinceLastTrade[asset]++;
+
+        if (this.ticks % 20 === 0) {
+            console.log(`📈 [${asset}] Tick #${h.length} | Digit: ${d}`);
+            console.log(`   Last 10: ${h.slice(-10).join(', ')}`);
+        }
+
+        if (this.historyLoaded[asset] && !this.tradeInProgress) {
+            this.scanForSignal(asset);
+        }
+    }
+
+    getLastDigit(quote, asset) {
+        const str = quote.toString();
+        const [, dec = ''] = str.split('.');
+        const cfg = this.config.assets[asset];
+        if (!cfg) return 0;
+        if (dec.length <= cfg.digitIndex) return 0;
+        return +dec[cfg.digitIndex];
+    }
 
     // ========================================================================
     // CORE: PHASE ANALYSIS + Z-SCORE + VOLATILITY
@@ -346,7 +527,9 @@ class QuantumPhaseReversalBot {
         return { conc, entropy, freq };
     }
 
-
+    // ========================================================================
+    // TRADE FILTERS
+    // ========================================================================
     canTrade(asset) {
         const h = this.histories[asset];
         const len = h.length;
@@ -359,61 +542,34 @@ class QuantumPhaseReversalBot {
         else if (!this.historyLoaded[asset]) reason = 'historyNotLoaded';
         else if (len < this.config.minHistoryForTrading)
             reason = `notEnoughHistory(${len}/${this.config.minHistoryForTrading})`;
-        else if (this.suspendedAssets[asset]) reason = 'assetSuspended';
         else if (this.consecutiveLosses >= this.config.maxConsecutiveLosses)
             reason = `maxConsecLosses(${this.consecutiveLosses})`;
         else if (this.netProfit <= this.config.stopLoss)
-            reason = `stopLossReached(${this.netProfit.toFixed(2)})`;
+            reason = `stopLossReached(${this.netProfit.toFixed(2)}`;
         else {
             const ticksSinceLast = this.ticksSinceLastTrade[asset];
-            let requiredCooldown = this.config.cooldownTicks;
-
-            if (this.consecutiveLosses > 0) {
-                requiredCooldown = this.config.cooldownAfterLoss;
-            }
-            if (this.assetConsecutiveLosses[asset] >= 2) {
-                requiredCooldown = this.config.suspensionAfterDoubleLoss;
-            }
-
+            const requiredCooldown = this.config.cooldownTicks;
             if (ticksSinceLast < requiredCooldown) {
                 reason = `cooldown(${ticksSinceLast}/${requiredCooldown})`;
-            } else if (this.tradesThisHour[asset] >= this.config.maxTradesPerHour) {
-                reason = `maxTradesPerHour(${this.tradesThisHour[asset]})`;
             }
             // else {
             //     const now = new Date();
-            //     const minute = now.getMinutes();
-            //     if (minute < this.config.avoidMinutesAroundHour ||
-            //         minute > (60 - this.config.avoidMinutesAroundHour)) {
-            //         reason = `timeFilter(min=${minute})`;
+            //     const m = now.getMinutes();
+            //     if (m < this.config.avoidMinutesAroundHour ||
+            //         m > (60 - this.config.avoidMinutesAroundHour)) {
+            //         reason = `timeFilter(minute=${m})`;
             //     }
             // }
         }
 
         const ok = (reason === null);
-
-        if (!ok && len > 0 && len % 500 === 0) {
+        if (!ok && this.ticks % 20 === 0) {
             console.log(`${logPrefix}=false → ${reason}`);
-        } else if (ok && len > 0 && len % 500 === 0) {
-            // console.log(
-            //     `${logPrefix}=true | len=${len}, consecLosses=${this.consecutiveLosses}, net=${this.netProfit.toFixed(2)}`
-            // );
+        } else if (ok && this.ticks % 20 === 0) {
+            console.log(`${logPrefix}=true | len=${len}, consecLosses=${this.consecutiveLosses}, net=${this.netProfit.toFixed(2)}`);
         }
-
         return ok;
     }
-
-    suspendAsset(asset) {
-        this.suspendedAssets[asset] = true;
-        console.log(`🚫 ${asset} suspended for ${this.config.suspensionDuration / 1000}s`);
-
-        setTimeout(() => {
-            this.suspendedAssets[asset] = false;
-            this.assetConsecutiveLosses[asset] = 0;
-            console.log(`✅ ${asset} reactivated`);
-        }, this.config.suspensionDuration);
-    }
-
 
     // ========================================================================
     // MAIN SIGNAL SCAN
@@ -516,28 +672,20 @@ class QuantumPhaseReversalBot {
     }
 
     // ========================================================================
-    // TRADE EXECUTION
+    // TRADE EXECUTION & RESULT
     // ========================================================================
     placeTrade(asset, digit, analysis) {
         if (this.tradeInProgress) return;
 
-        // Calculate stake with cap
-        let tradeStake = this.stake;
-        if (tradeStake > this.config.maxStake) {
-            tradeStake = this.config.maxStake;
-            console.log(`⚠️ Stake capped at $${this.config.maxStake}`);
-        }
-
         this.tradeInProgress = true;
         this.currentTradingAsset = asset;
-        this.lastTradeDigit[asset] = digit;
-        this.lastTradeTime[asset] = Date.now();
         this.ticksSinceLastTrade[asset] = 0;
-        this.tradesThisHour[asset]++;
+
+        const stake = this.stake;
 
         console.log(`\n🎯 QUANTUM PHASE REVERSAL SIGNAL — ${asset}`);
         console.log(`   Digit: ${digit}`);
-        console.log(`   Stake: $${tradeStake.toFixed(2)}`);
+        console.log(`   Stake: $${stake.toFixed(2)}`);
         console.log(`   Phase: dom1=${analysis.phase.dom1} (${(analysis.phase.dominance1 * 100).toFixed(1)}%), ` +
             `dom2=${analysis.phase.dom2} (${(analysis.phase.dominance2 * 100).toFixed(1)}%), ` +
             `inc=${(analysis.phase.dominanceIncrease * 100).toFixed(1)}%`);
@@ -546,16 +694,16 @@ class QuantumPhaseReversalBot {
 
         this.sendRequest({
             buy: 1,
-            price: tradeStake,
+            price: stake,
             parameters: {
-                amount: tradeStake,
+                amount: stake,
                 basis: "stake",
                 contract_type: "DIGITDIFF",
                 currency: "USD",
                 duration: 1,
                 duration_unit: "t",
                 symbol: asset,
-                barrier: signal.targetDigit.toString()
+                barrier: digit.toString(),
             }
         });
 
@@ -565,8 +713,7 @@ class QuantumPhaseReversalBot {
             📊 Asset: ${asset}
             🔢 Digit (differ): ${digit}
             🔢 Last 10 Digits: ${this.histories[asset].slice(-10).join(',')}
-            💰 Stake: $${tradeStake.toFixed(2)}
-            📊 Losses: ${this.consecutiveLosses}
+            💰 Stake: $${stake.toFixed(2)}
 
             <code>Phase:
             dom1=${analysis.phase.dom1} (${(analysis.phase.dominance1 * 100).toFixed(1)}%)
@@ -577,102 +724,86 @@ class QuantumPhaseReversalBot {
         `.trim());
     }
 
-    // ========================================================================
-    // TRADE RESULT HANDLING
-    // ========================================================================
+    handleBuy(msg) {
+        if (msg.error) {
+            console.error('❌ Buy error:', msg.error.message);
+            this.tradeInProgress = false;
+            return;
+        }
+        this.sendRequest({
+            proposal_open_contract: 1,
+            contract_id: msg.buy.contract_id,
+            subscribe: 1
+        });
+    }
+
     handleTradeResult(contract) {
-        const won = contract.status === "won";
-        const profit = parseFloat(contract.profit);
         const asset = contract.underlying;
+        const won = contract.status === 'won';
+        const profit = parseFloat(contract.profit);
         const exitDigit = this.getLastDigit(contract.exit_tick_display_value, asset);
 
         this.totalTrades++;
-        this.hourly.trades++;
-        this.hourly.pnl += profit;
+        if (won) this.totalWins++;
+        else this.totalLosses++;
         this.netProfit += profit;
 
-        // Asset performance tracking
-        this.assetPerformance[asset].trades++;
-        this.assetPerformance[asset].pnl += profit;
-
-        // Track for adaptive thresholds
-        this.recentTrades.push({ won, profit, asset, time: Date.now() });
-        if (this.recentTrades.length > this.config.recentTradesForAdaptation) {
-            this.recentTrades.shift();
-        }
-
         console.log(`\n${won ? '✅ WIN' : '❌ LOSS'} — ${asset}`);
-        console.log(`   Exit Digit: ${exitDigit}`);
+        console.log(`   Exit digit: ${exitDigit}`);
         console.log(`   Profit: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}`);
-        console.log(`   Net P&L: $${this.netProfit.toFixed(2)}`);
+        console.log(`   Total: ${this.totalTrades}, W/L=${this.totalWins}/${this.totalLosses}, Net=$${this.netProfit.toFixed(2)}`);
 
+        // Money management
         if (won) {
-            this.totalWins++;
-            this.hourly.wins++;
-            this.assetPerformance[asset].wins++;
             this.consecutiveLosses = 0;
-            this.assetConsecutiveLosses[asset] = 0;
             this.stake = this.config.baseStake;
         } else {
-            this.hourly.losses++;
-            this.assetPerformance[asset].losses++;
             this.consecutiveLosses++;
-            this.assetConsecutiveLosses[asset]++;
 
             if (this.consecutiveLosses === 2) this.x2++;
             if (this.consecutiveLosses === 3) this.x3++;
             if (this.consecutiveLosses === 4) this.x4++;
             if (this.consecutiveLosses === 5) this.x5++;
-
-            // Money management (modified for safety)
             // if (this.consecutiveLosses === 1) {
             //     this.stake = this.config.baseStake * this.config.firstLossMultiplier;
             // } else {
-            //     this.stake = this.config.baseStake *
-            //         Math.pow(this.config.subsequentMultiplier, this.consecutiveLosses - 1);
+            //     this.stake = this.stake * this.config.subsequentMultiplier;
             // }
-            // this.stake = Math.min(Math.round(this.stake * 100) / 100, this.config.maxStake);
+            // this.stake = Math.round(this.stake * 100) / 100;
 
             if (this.consecutiveLosses === 2) {
                 this.stake = this.config.baseStake;
             } else {
                 this.stake = Math.ceil(this.stake * this.config.firstLossMultiplier * 100) / 100;
             }
-
-            // Asset suspension check
-            if (this.assetConsecutiveLosses[asset] >= this.config.suspendAssetAfterLosses) {
-                this.suspendAsset(asset);
-            }
         }
 
-        // Trade alert
         this.sendTelegram(`
-            ${won ? '✅' : '❌'} <b>${won ? 'WIN' : 'LOSS'} — ATHENA v9</b>
+            ${won ? '✅ WIN' : '❌ LOSS'} — <b>QUANTUM PHASE REVERSAL</b>
 
             📊 Asset: ${asset}
-            🔢 Exit: ${exitDigit}
-            last10Digits: ${this.histories[asset].slice(-10).join(',')}
+            🔢 Exit digit: ${exitDigit}
             💸 P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}
-            📈 Total: ${this.totalTrades} | W/L: ${this.totalWins}/${this.totalTrades - this.totalWins}
+
+            📈 Trades: ${this.totalTrades}
+            ✅/❌: ${this.totalWins}/${this.totalLosses}
             🔢 x2-x5: ${this.x2}/${this.x3}/${this.x4}/${this.x5}
-            📈 Win Rate: ${this.totalWins / this.totalTrades * 100}%
-            💰 Next: $${this.stake.toFixed(2)}
             💵 Net: $${this.netProfit.toFixed(2)}
-            ${this.assetConsecutiveLosses[asset] >= 2 ? `\n🚫 ${asset} SUSPENDED` : ''}
+            🔢 Next Stake: $${this.stake.toFixed(2)}
         `.trim());
 
         // Stop conditions
-        if (this.consecutiveLosses >= this.config.maxConsecutiveLosses || this.netProfit <= this.config.stopLoss) {
-            console.log('🛑 Max consecutive losses reached');
-            this.sendTelegram(`🛑 <b>MAX LOSSES!</b>\nFinal P&L: $${this.netProfit.toFixed(2)}`);
+        if (this.consecutiveLosses >= this.config.maxConsecutiveLosses ||
+            this.netProfit <= this.config.stopLoss) {
+            console.log('🛑 Max losses/stop loss reached, disconnecting');
+            this.sendTelegram(`🛑 <b>Stopping QUANTUM PHASE REVERSAL bot</b> — P&L: $${this.netProfit.toFixed(2)}`);
             this.disconnect();
             return;
         }
 
-        // Take profit
         if (this.netProfit >= this.config.takeProfit) {
-            console.log('🎉 Take profit reached!');
-            this.sendTelegram(`🎉 <b>TAKE PROFIT!</b>\nFinal P&L: $${this.netProfit.toFixed(2)}`);
+            console.log('🎉 Take profit reached, disconnecting');
+            this.sendTelegram(`🎉 <b>Take profit reached</b> — P&L: $${this.netProfit.toFixed(2)}`);
             this.disconnect();
             return;
         }
@@ -682,263 +813,49 @@ class QuantumPhaseReversalBot {
     }
 
     // ========================================================================
-    // TICK HANDLING
+    // HOURLY SUMMARY
     // ========================================================================
-    handleTickUpdate(tick) {
-        const asset = tick.symbol;
-        if (!this.assetList.includes(asset)) return;
+    startHourlySummary() {
+        setInterval(() => {
+            if (this.totalTrades === 0) return;
+            const winRate = this.totalTrades > 0
+                ? (this.totalWins / this.totalTrades * 100).toFixed(1)
+                : '0.0';
 
-        const lastDigit = this.getLastDigit(tick.quote, asset);
+            this.sendTelegram(`
+            ⏰ <b>QUANTUM PHASE REVERSAL Hourly Summary</b>
 
-        this.ticks = this.ticks + 1;
-
-        this.histories[asset].push(lastDigit);
-        if (this.histories[asset].length > this.config.requiredHistoryLength) {
-            this.histories[asset].shift();
-        }
-
-        // Increment cooldown counter
-        this.ticksSinceLastTrade[asset]++;
-
-        // Log periodically
-        if (this.tradeInProgress) {
-            console.log(` 📈 [${asset}] Last 10: ${this.histories[asset].slice(-10).join(', ')}`);
-        }
-
-        // Scan for signals
-        if (this.historyLoaded[asset] && !this.tradeInProgress && !this.suspendedAssets[asset]) {
-            this.scanForSignal(asset);
-        }
+            Trades: ${this.totalTrades}
+            W/L: ${this.totalWins}/${this.totalLosses}
+            Win rate: ${winRate}%
+            x2-x5: ${this.x2}/${this.x3}/${this.x4}/${this.x5}
+            Current Stake: $${this.stake.toFixed(2)}
+            Net P&L: $${this.netProfit.toFixed(2)}
+            `.trim());
+        }, 60 * 60 * 1000);
     }
 
     // ========================================================================
-    // WEBSOCKET & UTILITIES
+    // TELEGRAM WRAPPER & CLEANUP
     // ========================================================================
-    connect() {
-        console.log('🔌 Connecting to Deriv API...');
-        this.ws = new WebSocket('wss://ws.derivws.com/websockets/v3?app_id=1089');
-
-        this.ws.on('open', () => {
-            console.log('✅ Connected');
-            this.connected = true;
-            this.reconnectAttempts = 0;
-            this.sendRequest({ authorize: TOKEN });
-        });
-
-        this.ws.on('message', (data) => {
-            try {
-                this.handleMessage(JSON.parse(data));
-            } catch (e) {
-                console.error('Parse error:', e.message);
-            }
-        });
-
-        this.ws.on('close', () => {
-            this.connected = false;
-            this.wsReady = false;
-            if (!this.isReconnecting && this.reconnectAttempts < this.maxReconnectAttempts) {
-                this.reconnect();
-            }
-        });
-
-        this.ws.on('error', (e) => console.error('WS Error:', e.message));
-    }
-
-    reconnect() {
-        this.isReconnecting = true;
-        this.reconnectAttempts++;
-        const delay = Math.min(this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1), 30000);
-        console.log(`🔄 Reconnecting in ${(delay / 1000).toFixed(1)}s...`);
-        setTimeout(() => {
-            this.isReconnecting = false;
-            this.connect();
-        }, delay);
-    }
-
-    handleMessage(msg) {
-        if (msg.error) {
-            console.error('API Error:', msg.error.message);
-            if (msg.msg_type === 'buy') {
-                this.tradeInProgress = false;
-            }
-            return;
-        }
-
-        switch (msg.msg_type) {
-            case 'authorize':
-                console.log('✅ Authenticated');
-                this.wsReady = true;
-                this.initializeSubscriptions();
-                this.sendTelegram(`
-                    🚀 <b>QUANTUM PHASE REVERSAL BOT STARTED</b>
-
-                    📊 Assets: ${this.assetList.join(', ')}
-                    💰 Base Stake: $${this.config.baseStake}
-                    🎯 Min Score: ${this.config.minTotalScore}
-                    ⚠️ Max Stake: $${this.config.maxStake}
-                `.trim());
-                break;
-            case 'history':
-                this.handleTickHistory(msg);
-                break;
-            case 'tick':
-                this.handleTickUpdate(msg.tick);
-                break;
-            case 'buy':
-                if (!msg.error) {
-                    this.sendRequest({
-                        proposal_open_contract: 1,
-                        contract_id: msg.buy.contract_id,
-                        subscribe: 1
-                    });
-                } else {
-                    this.tradeInProgress = false;
-                }
-                break;
-            case 'proposal_open_contract':
-                if (msg.proposal_open_contract?.is_sold) {
-                    this.handleTradeResult(msg.proposal_open_contract);
-                }
-                break;
-        }
-    }
-
-    initializeSubscriptions() {
-        console.log('📊 Initializing subscriptions...');
-        this.assetList.forEach(asset => {
-            console.log(`   Subscribing to ${asset}...`);
-            this.sendRequest({
-                ticks_history: asset,
-                adjust_start_time: 1,
-                count: this.config.requiredHistoryLength,
-                end: 'latest',
-                start: 1,
-                style: 'ticks'
-            });
-            this.sendRequest({ ticks: asset, subscribe: 1 });
-        });
-    }
-
-    handleTickHistory(msg) {
-        const asset = msg.echo_req.ticks_history;
-        const prices = msg.history?.prices || [];
-        this.histories[asset] = prices.map(p => this.getLastDigit(p, asset));
-        this.historyLoaded[asset] = true;
-        console.log(`📊 Loaded ${this.histories[asset].length} ticks for ${asset}`);
-    }
-
-    // getLastDigit(quote, asset) {
-    //     const str = quote.toString();
-    //     const [, dec = ''] = str.split('.');
-    //     const assetConfig = this.config.assets[asset];
-    //     if (!assetConfig) return 0;
-    //     return dec.length > assetConfig.digitIndex ? +dec[assetConfig.digitIndex] : 0;
-    // }
-
-    getLastDigit(quote, asset) {
-        const str = quote.toString();
-        const [, dec = ''] = str.split('.');
-        const cfg = this.config.assets[asset];
-        if (!cfg) return 0;
-        if (dec.length <= cfg.digitIndex) return 0;
-        return +dec[cfg.digitIndex];
-    }
-
-    sendRequest(req) {
-        if (this.ws?.readyState === WebSocket.OPEN) {
-            this.ws.send(JSON.stringify(req));
-        }
-    }
-
     sendTelegram(text) {
-        this.telegramBot.sendMessage(CHAT_ID, text, { parse_mode: "HTML" }).catch(() => { });
+        if (!this.telegramBot) return;
+        this.telegramBot.sendMessage(CHAT_ID, text, { parse_mode: 'HTML' })
+            .catch(err => console.error('Telegram error:', err.message));
     }
 
     disconnect() {
-        console.log('🛑 Disconnecting...');
+        console.log('🛑 Disconnecting bot...');
         this.saveState();
-        if (this.ws) this.ws.close();
-    }
-
-    // State persistence
-    saveState() {
-        try {
-            fs.writeFileSync(STATE_FILE, JSON.stringify({
-                savedAt: Date.now(),
-                stake: this.stake,
-                consecutiveLosses: this.consecutiveLosses,
-                totalTrades: this.totalTrades,
-                totalWins: this.totalWins,
-                x2: this.x2, x3: this.x3, x4: this.x4, x5: this.x5,
-                netProfit: this.netProfit,
-                recentTrades: this.recentTrades,
-                assetPerformance: this.assetPerformance
-            }, null, 2));
-        } catch (e) { }
-    }
-
-    loadState() {
-        try {
-            if (!fs.existsSync(STATE_FILE)) return;
-            const data = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
-            if (Date.now() - data.savedAt > 30 * 60 * 1000) return;
-            Object.assign(this, data);
-            console.log('✅ State restored');
-        } catch (e) { }
-    }
-
-    startAutoSave() {
-        setInterval(() => this.saveState(), 5000);
-    }
-
-    startHourlyReset() {
-        setInterval(() => {
-            this.assetList.forEach(a => {
-                this.tradesThisHour[a] = 0;
-            });
-            console.log('🔄 Hourly trade counters reset');
-        }, 3600000);
-    }
-
-    startHourlySummary() {
-        setInterval(() => {
-            if (this.hourly.trades === 0) return;
-            const winRate = ((this.hourly.wins / this.hourly.trades) * 100).toFixed(1);
-
-            let assetBreakdown = '';
-            this.assetList.forEach(a => {
-                const perf = this.assetPerformance[a];
-                if (perf.trades > 0) {
-                    const aWR = ((perf.wins / perf.trades) * 100).toFixed(0);
-                    assetBreakdown += `\n├ ${a}: ${perf.trades}T ${aWR}% $${perf.pnl.toFixed(2)}`;
-                }
-            });
-
-            this.sendTelegram(`
-⏰ <b>HOURLY — QUANTUM PHASE REVERSAL BOT</b>
-
-📊 Trades: ${this.hourly.trades}
-✅/❌ W/L: ${this.hourly.wins}/${this.hourly.losses}
-📈 Win Rate: ${winRate}%
-💰 P&L: ${this.hourly.pnl >= 0 ? '+' : ''}$${this.hourly.pnl.toFixed(2)}
-
-<b>By Asset:</b>${assetBreakdown}
-
-<b>Session:</b>
-├ Total: ${this.totalTrades}
-├ W/L: ${this.totalWins}/${this.totalTrades - this.totalWins}
-├ x2-x5: ${this.x2}/${this.x3}/${this.x4}/${this.x5}
-└ Net: $${this.netProfit.toFixed(2)}
-            `.trim());
-            this.hourly = { trades: 0, wins: 0, losses: 0, pnl: 0 };
-        }, 3600000);
+        if (this.ws) {
+            try { this.ws.close(); } catch (e) { }
+        }
     }
 }
 
 // START
 console.log('═══════════════════════════════════════════════════');
-console.log('  QUANTUM PHASE REVERSAL BOT');
-console.log('  Multi-Asset + Advanced Fractal + Weighted Fibonacci');
+console.log('  QUANTUM PHASE REVERSAL BOT — GERMAN-SWISS STYLE');
 console.log('═══════════════════════════════════════════════════');
 console.log(`  Started: ${new Date().toLocaleString()}`);
 console.log('═══════════════════════════════════════════════════\n');
