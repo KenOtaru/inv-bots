@@ -39,21 +39,21 @@ const CONFIG = {
 
   // Trading Settings
   asset: 'frxXAUUSD',
-  multiplier: 100,
-  timeFrame: 60,
+  multiplier: 100,//x100 Assest Specific Multiplier
+  timeFrame: 300,//300 seconds
   stake: 1,
 
   // Take Profit / Stop Loss
   takeProfit: 100,
-  stopLoss: 0,
+  stopLoss: 124,
   dailyLossLimit: 0,
   maxDrawdown: 0, // Percentage
-  maxConsecutiveLosses: 6,
+  maxConsecutiveLosses: 7,
 
   // Martingale Settings
   martingale: true,
   martingaleMultiplier: 2,
-  martingaleSteps: 6,
+  martingaleSteps: 7,
 
   // Cooldown
   cooldownAfterLoss: 0, // seconds
