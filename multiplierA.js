@@ -45,11 +45,11 @@ const CONFIG = {
   stake: 1,
 
   // Take Profit / Stop Loss
-  takeProfit: 100,
+  takeProfit: 1000,
   stopLoss: 124,
   dailyLossLimit: 0,
   maxDrawdown: 0, // Percentage
-  maxConsecutiveLosses: 20,
+  maxConsecutiveLosses: 10,
 
   // Martingale Settings
   martingale: true,
