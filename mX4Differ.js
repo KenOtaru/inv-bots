@@ -611,8 +611,8 @@ class x4DifferBot {
 
         if (
             this.lastPrediction === history[history.length - 2] &&
-            // this.lastPrediction === history[history.length - 3] &&
-            // this.lastPrediction === history[history.length - 4] &&
+            this.lastPrediction === history[history.length - 3] &&
+            this.lastPrediction === history[history.length - 4] &&
             // this.lastPrediction === history[history.length - 5] &&
             volatility.level === 'ultra-low' &&
             (this.volatilityLevel === 'low' || this.volatilityLevel === 'medium')
