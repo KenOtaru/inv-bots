@@ -54,7 +54,7 @@ const CONFIG = {
   // Martingale Settings
   martingale: true,
   martingaleMultiplier: 1,
-  lossesB4Multiplier: 5,
+  lossesB4Multiplier: 4,
   martingaleSteps: 10,
 
   // Cooldown
