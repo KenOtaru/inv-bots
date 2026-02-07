@@ -6,7 +6,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'will_riseFall1-state.json');
+const STATE_FILE = path.join(__dirname, 'will_riseFall2-state.json');
 const STATE_SAVE_INTERVAL = 5000; // Save every 5 seconds
 
 class StatePersistence {
@@ -46,9 +46,12 @@ class StatePersistence {
                 const asset = state.assets[symbol];
                 persistableState.assets[symbol] = {
                     // Save last few closed candles for continuity
-                    closedCandles: asset.closedCandles.slice(-20),
+                    closedCandles: asset.closedCandles.slice(-100),
                     lastProcessedCandleOpenTime: asset.lastProcessedCandleOpenTime,
-                    candlesLoaded: asset.candlesLoaded
+                    candlesLoaded: asset.candlesLoaded,
+                    // WPR State
+                    wpr: asset.wpr,
+                    prevWpr: asset.prevWpr
                 };
             });
 
@@ -127,6 +130,10 @@ class StatePersistence {
                         // FIX: Restore critical fields
                         asset.lastProcessedCandleOpenTime = saved.lastProcessedCandleOpenTime || 0;
                         asset.candlesLoaded = saved.candlesLoaded || false;
+
+                        // FIX: Restore WPR State
+                        asset.wpr = saved.wpr || -50;
+                        asset.prevWpr = saved.prevWpr || -50;
                     }
                 });
             }
@@ -375,6 +382,34 @@ class CandleAnalyzer {
 }
 
 // ============================================
+// TECHNICAL INDICATORS
+// ============================================
+class TechnicalIndicators {
+    /**
+     * Calculate Williams Percent Range (WPR) - ONLY on closed candles
+     */
+    static calculateWPR(candles, period = 80) {
+        if (!candles || candles.length < period) {
+            return -50;
+        }
+
+        const recentCandles = candles.slice(-period);
+        const highs = recentCandles.map(c => c.high);
+        const lows = recentCandles.map(c => c.low);
+        const currentClose = recentCandles[recentCandles.length - 1].close;
+
+        const highestHigh = Math.max(...highs);
+        const lowestLow = Math.min(...lows);
+        const range = highestHigh - lowestLow;
+
+        if (range === 0) return -50;
+
+        const wpr = ((highestHigh - currentClose) / range) * -100;
+        return wpr;
+    }
+}
+
+// ============================================
 // CONFIGURATION
 // ============================================
 const CONFIG = {
@@ -395,7 +430,12 @@ const CONFIG = {
     GRANULARITY: 60, // 60 seconds = 1 minute candles
     TIMEFRAME_LABEL: '1m',
     MAX_CANDLES_STORED: 100,
-    CANDLES_TO_LOAD: 50,
+    CANDLES_TO_LOAD: 100, // Increased for WPR period
+
+    // WPR Settings
+    WPR_PERIOD: 80,
+    WPR_OVERBOUGHT: -20,
+    WPR_OVERSOLD: -80,
 
     // Trade Duration Settings
     DURATION: 54,
@@ -404,23 +444,21 @@ const CONFIG = {
     // Trade Settings
     MAX_OPEN_POSITIONS: 1, // One at a time for alternating strategy
     TRADE_DELAY: 1000, // 2 seconds delay between trades
-    MARTINGALE_MULTIPLIER: 1,
-    MARTINGALE_MULTIPLIER2: 2,
+    MARTINGALE_MULTIPLIER: 2,
+    MARTINGALE_MULTIPLIER2: 2.3,
     MARTINGALE_MULTIPLIER3: 2.5,
     MARTINGALE_MULTIPLIER4: 2.3,
     MARTINGALE_MULTIPLIER5: 3,
-    MAX_MARTINGALE_STEPS: 10,
-    System: 1, // 1 = Continue same direction on Win and Switch direction on Loss, 
-    // 2 = Switch direction on Win and Continue same direction on Loss, 
-    // 3 = Switch direction every trade, 4 = Same direction every trade
-    iDirection: 'RISE', //Set initial direction 'RISE' or 'FALL'
+    MAX_MARTINGALE_STEPS: 7,
+    System: 1,
+    iDirection: 'RISE',
 
     // Debug
     DEBUG_MODE: true,
 
     // Telegram Settings
     TELEGRAM_ENABLED: true,
-    TELEGRAM_BOT_TOKEN: '7683695132:AAGA9_4uDcyZWEOAwv1_zj7Nnz5Oy0gVw04',
+    TELEGRAM_BOT_TOKEN: '8306232249:AAGMwjFngs68Lcq27oGmqewQgthXTJJRxP0',
     TELEGRAM_CHAT_ID: '752497117',
 };
 
@@ -464,7 +502,7 @@ const state = {
         dailyLosses: 0,
         activePositions: []
     },
-    lastTradeDirection: null, // 'CALL' or 'PUT'
+    lastTradeDirection: null, // 'CALLE' or 'PUTE'
     lastTradeWasWin: null, // NEW: track if last trade won
     martingaleLevel: 0,
     hourlyStats: {
@@ -674,7 +712,10 @@ class ConnectionManager {
                     closedCandles: [],
                     currentFormingCandle: null,
                     lastProcessedCandleOpenTime: null,
-                    candlesLoaded: false
+                    candlesLoaded: false,
+                    // WPR Initialization
+                    wpr: -50,
+                    prevWpr: -50
                 };
                 LOGGER.info(`📊 Initialized asset: ${symbol}`);
             } else {
@@ -1049,9 +1090,10 @@ class DerivBot {
         console.log(`🎯 Session Target: $${CONFIG.SESSION_PROFIT_TARGET} | Stop Loss: $${CONFIG.SESSION_STOP_LOSS}`);
         console.log(`📱 Telegram: ${CONFIG.TELEGRAM_ENABLED ? 'ENABLED' : 'DISABLED'}`);
         console.log('═'.repeat(80));
-        console.log('📋 Strategy: Trade based on previous candle direction');
-        console.log('    🟢 Bullish Candle → RISE trade');
-        console.log('    🔴 Bearish Candle → FALL trade');
+        console.log('📋 Strategy: WPR Cross + Recovery System');
+        console.log('    🟢 Buy: WPR Cross > -20 + Bullish Candle');
+        console.log('    🔴 Sell: WPR Cross < -80 + Bearish Candle');
+        console.log('    🔄 Recovery: Alternate on Loss');
         console.log('═'.repeat(80) + '\n');
 
         // Initialize assets
@@ -1102,6 +1144,7 @@ class DerivBot {
 
         // Use symbol parameter or default to first asset
         const tradeSymbol = symbol || ACTIVE_ASSETS[0];
+        const assetState = state.assets[tradeSymbol];
         const stake = state.currentStake;
 
         if (state.capital < stake) {
@@ -1113,25 +1156,69 @@ class DerivBot {
             return;
         }
 
-        // Determine direction based on last closed candle
-        let direction;
+        // 1. Calculate WPR
+        const currentWPR = TechnicalIndicators.calculateWPR(assetState.closedCandles, CONFIG.WPR_PERIOD);
 
-        if (lastClosedCandle) {
-            // Trade based on candle pattern
-            if (CandleAnalyzer.isBullish(lastClosedCandle)) {
-                direction = 'PUT'; // Buy if previous candle was bullish
-                LOGGER.trade(`📈 Last candle was BULLISH (Close > Open) → Executing FALL trade`);
-            } else if (CandleAnalyzer.isBearish(lastClosedCandle)) {
-                direction = 'CALL'; // Sell if previous candle was bearish
-                LOGGER.trade(`📉 Last candle was BEARISH (Close < Open) → Executing RISE trade`);
+        // 2. Determing logic based on Trading State (Loss Recovery or Normal)
+        let direction = null;
+        let signalReason = '';
+
+        const isRecoveryMode = state.lastTradeWasWin === false; // If last trade was LOSS, we are in recovery
+
+        if (isRecoveryMode) {
+            // RECOVERY MODE: Alternate direction
+            // "If the trade was a loss, on new Candle open, bot should open a Sell trade" (if prev was Buy)
+            // "If the trade was a loss, on new Candle open, bot should open a Buy trade" (if prev was Sell)
+
+            if (state.lastTradeDirection === 'CALLE') {
+                direction = 'PUTE'; // Prev was Rise, now Fall
+                signalReason = 'Recovery (Prev LOSS on RISE)';
+            } else {
+                direction = 'CALLE'; // Prev was Fall, now Rise
+                signalReason = 'Recovery (Prev LOSS on FALL)';
             }
+            LOGGER.trade(`� RECOVERY MODE: Switching direction. ${signalReason}`);
+
+        } else {
+            // NORMAL MODE: Check WPR Signals
+            // Store previous WPR to detect crossing
+            const prevWpr = assetState.prevWpr;
+
+            // Buy Signal: WPR crosses ABOVE -20 and Previous Candle Bullish
+            const wprCrossAbove = prevWpr <= CONFIG.WPR_OVERBOUGHT && currentWPR > CONFIG.WPR_OVERBOUGHT;
+            if (wprCrossAbove && CandleAnalyzer.isBullish(lastClosedCandle)) {
+                direction = 'CALLE'; // RISE
+                signalReason = `WPR Cross Above ${CONFIG.WPR_OVERBOUGHT} (${prevWpr.toFixed(2)} -> ${currentWPR.toFixed(2)}) + Bullish Candle`;
+            }
+
+            // Sell Signal: WPR crosses BELOW -80 and Previous Candle Bearish
+            const wprCrossBelow = prevWpr >= CONFIG.WPR_OVERSOLD && currentWPR < CONFIG.WPR_OVERSOLD;
+            if (wprCrossBelow && CandleAnalyzer.isBearish(lastClosedCandle)) {
+                direction = 'PUTE'; // FALL
+                signalReason = `WPR Cross Below ${CONFIG.WPR_OVERSOLD} (${prevWpr.toFixed(2)} -> ${currentWPR.toFixed(2)}) + Bearish Candle`;
+            }
+
+            if (direction) {
+                LOGGER.trade(`⚡ SIGNAL DETECTED: ${signalReason}`);
+            }
+        }
+
+        // Update WPR state for next check (Crucial for crossing detection)
+        assetState.prevWpr = currentWPR;
+        // Save state to persist prevWpr
+        StatePersistence.saveState();
+
+        if (!direction) {
+            // LOGGER.info(`${tradeSymbol} WPR: ${currentWPR.toFixed(2)} | No Signal`);
+            return;
         }
 
         state.canTrade = false; // Prevent multiple trades
         state.lastTradeDirection = direction;
 
-        LOGGER.trade(`🎯 Executing ${direction === 'CALL' ? 'RISE' : 'FALL'} trade on ${tradeSymbol}`);
+        LOGGER.trade(`🎯 Executing ${direction === 'CALLE' ? 'RISE' : 'FALL'} trade on ${tradeSymbol}`);
         LOGGER.trade(`   Stake: $${stake.toFixed(2)} | Duration: ${CONFIG.DURATION} ${CONFIG.DURATION_UNIT} | Martingale Level: ${state.martingaleLevel}`);
+        LOGGER.trade(`   Reason: ${signalReason} | WPR: ${currentWPR.toFixed(2)}`);
 
         const position = {
             symbol: tradeSymbol,
@@ -1245,10 +1332,10 @@ class DerivBot {
         const sessionStats = SessionManager.getSessionStats();
 
         const nextDirection = state.lastTradeWasWin === null
-            ? 'CALL (First trade)'
+            ? 'CALLE (First trade)'
             : state.lastTradeWasWin
                 ? state.lastTradeDirection // Same if won
-                : (state.lastTradeDirection === 'CALL' ? 'PUT' : 'CALL'); // Switch if lost
+                : (state.lastTradeDirection === 'CALLE' ? 'PUTE' : 'CALLE'); // Switch if lost
 
         return {
             connected: state.isConnected,
@@ -1328,7 +1415,7 @@ console.log('\n🚀 Initializing...\n');
 bot.connection.connect();
 
 // FIX: Start the time-based disconnect/reconnect checker
-bot.checkTimeForDisconnectReconnect();
+// bot.checkTimeForDisconnectReconnect();
 
 // Status display every 30 seconds
 setInterval(() => {
