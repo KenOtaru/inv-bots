@@ -392,13 +392,13 @@ const CONFIG = {
     SESSION_STOP_LOSS: -250,
 
     // Candle Settings
-    GRANULARITY: 120, // 60 seconds = 1 minute candles
-    TIMEFRAME_LABEL: '2m',
+    GRANULARITY: 60, // 60 seconds = 1 minute candles
+    TIMEFRAME_LABEL: '1m',
     MAX_CANDLES_STORED: 100,
     CANDLES_TO_LOAD: 50,
 
     // Trade Duration Settings
-    DURATION: 116,
+    DURATION: 54,
     DURATION_UNIT: 's', // t=ticks, s=seconds, m=minutes
 
     // Trade Settings
