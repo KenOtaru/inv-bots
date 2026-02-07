@@ -7,7 +7,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'mX4Differ-state000002.json');
+const STATE_FILE = path.join(__dirname, 'mX4Differ-state000003.json');
 const STATE_SAVE_INTERVAL = 5000; // Save every 5 seconds
 
 class StatePersistence {
@@ -17,6 +17,7 @@ class StatePersistence {
                 savedAt: Date.now(),
                 config: {
                     initialStake: bot.config.initialStake,
+                    initialStake2: bot.config.initialStake2,
                     multiplier: bot.config.multiplier,
                     maxConsecutiveLosses: bot.config.maxConsecutiveLosses,
                     stopLoss: bot.config.stopLoss,
@@ -33,6 +34,8 @@ class StatePersistence {
                     x3Losses: bot.x3Losses,
                     x4Losses: bot.x4Losses,
                     x5Losses: bot.x5Losses,
+                    sys2: bot.sys2,
+                    sys2WinCount: bot.sys2WinCount,
                     totalProfitLoss: bot.totalProfitLoss,
                     lastPrediction: bot.lastPrediction,
                     actualDigit: bot.actualDigit,
@@ -98,7 +101,7 @@ class StatePersistence {
     }
 }
 
-class AIWeightedEnsembleBot {
+class x4DifferBot {
     constructor(token, config = {}) {
         this.token = token;
         this.ws = null;
@@ -109,6 +112,7 @@ class AIWeightedEnsembleBot {
 
         this.config = {
             initialStake: config.initialStake || 0.61,
+            initialStake2: config.initialStake2 || 1.00,
             multiplier: config.multiplier || 11.3,
             maxConsecutiveLosses: config.maxConsecutiveLosses || 3,
             stopLoss: config.stopLoss || 129,
@@ -135,6 +139,8 @@ class AIWeightedEnsembleBot {
         this.isWinTrade = false;
         this.lastPrediction = null;
         this.actualDigit = null;
+        this.sys2WinCount = 0;
+        this.sys2 = false;
 
         // Reconnection logic
         this.reconnectAttempts = 0;
@@ -803,7 +809,17 @@ class AIWeightedEnsembleBot {
         if (won) {
             this.totalWins++;
             this.consecutiveLosses = 0;
-            this.currentStake = this.config.initialStake;
+            if (this.sys2) {
+                this.currentStake = this.config.initialStake2;
+                this.sys2WinCount++;
+                if (this.sys2WinCount === 60) {
+                    this.currentStake = this.config.initialStake;
+                    this.sys2WinCount = 0;
+                    this.sys2 = false;
+                }
+            } else {
+                this.currentStake = this.config.initialStake;
+            }
             this.isWinTrade = true;
         } else {
             this.isWinTrade = false;
@@ -816,7 +832,11 @@ class AIWeightedEnsembleBot {
             if (this.consecutiveLosses === 5) this.x5Losses++;
 
             if (this.consecutiveLosses === 2) {
-                this.currentStake = this.config.initialStake;
+                if (this.sys2) {
+                    this.consecutiveLosses = 4
+                };
+                this.sys2 = true
+                this.currentStake = this.config.initialStake2;
             } else {
                 this.currentStake = Math.ceil(this.currentStake * this.config.multiplier * 100) / 100;
             }
@@ -1073,11 +1093,12 @@ class AIWeightedEnsembleBot {
 }
 
 // Initialize and start bot
-const bot = new AIWeightedEnsembleBot('0P94g4WdSrSrzir', {
+const bot = new x4DifferBot('0P94g4WdSrSrzir', {
     initialStake: 2.2,
+    initialStake: 5.2,
     multiplier: 11.3,
     maxConsecutiveLosses: 4,
-    stopLoss: 65,
+    stopLoss: 95,
     takeProfit: 5000,
     requiredHistoryLength: 3000,
     minWaitTime: 1000,
