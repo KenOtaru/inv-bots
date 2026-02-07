@@ -7,7 +7,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'mX4Differ-state000005.json');
+const STATE_FILE = path.join(__dirname, 'mX4Differ-state000007.json');
 const STATE_SAVE_INTERVAL = 5000; // Save every 5 seconds
 
 class StatePersistence {
@@ -611,8 +611,8 @@ class x4DifferBot {
 
         if (
             this.lastPrediction === history[history.length - 2] &&
-            this.lastPrediction === history[history.length - 3] &&
-            this.lastPrediction === history[history.length - 4] &&
+            // this.lastPrediction === history[history.length - 3] &&
+            // this.lastPrediction === history[history.length - 4] &&
             // this.lastPrediction === history[history.length - 5] &&
             volatility.level === 'ultra-low' &&
             (this.volatilityLevel === 'low' || this.volatilityLevel === 'medium')
@@ -1095,7 +1095,7 @@ class x4DifferBot {
 // Initialize and start bot
 const bot = new x4DifferBot('0P94g4WdSrSrzir', {
     initialStake: 2.2,
-    initialStake: 5.2,
+    initialStake2: 5.2,
     multiplier: 11.3,
     maxConsecutiveLosses: 4,
     stopLoss: 95,
