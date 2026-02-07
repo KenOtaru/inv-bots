@@ -389,7 +389,7 @@ const CONFIG = {
 
     // Session Targets
     SESSION_PROFIT_TARGET: 5000,
-    SESSION_STOP_LOSS: -100,
+    SESSION_STOP_LOSS: -250,
 
     // Candle Settings
     GRANULARITY: 120, // 60 seconds = 1 minute candles
@@ -427,7 +427,7 @@ const CONFIG = {
 
 let ACTIVE_ASSETS = [
     // 'R_75', 'R_100', '1HZ25V', '1HZ50V', '1HZ100V' 'stpRNG',
-    'stpRNG'
+    'R_100'
 ];
 
 // ============================================
