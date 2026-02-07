@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 /**
- * Deriv Multiplier Trading Bot - Production-Grade Node.js Version
+ * Deriv Rise/Fall Trading Bot - Production-Grade Node.js Version
  * 
  * Features:
  * - Candle-based trading strategy (Buy on bullish, Sell on bearish)
@@ -38,10 +38,10 @@ const CONFIG = {
   wsUrl: 'wss://ws.derivws.com/websockets/v3?app_id=1089',
 
   // Trading Settings
-  asset: 'R_100',//frxXAUUSD, frxEURUSD, frxGBPUSD, frxUSDCAD, frxUSDCHF, frxUSDJPY, frxNZDUS
-  // 'R_75', 'R_100', '1HZ25V', '1HZ50V', '1HZ100V' 'stpRNG',
+  asset: 'R_50', //frxXAUUSD, frxEURUSD, frxGBPUSD, frxUSDCAD, frxUSDCHF, frxUSDJPY, frxNZDUSD
   multiplier: 100,//x100 Assest Specific Multiplier
-  timeFrame: 180,//300 seconds
+  timeFrame: 300,//300 seconds
+  DURATION_UNIT: 's', // s = seconds, m = minutes, h = hours, d = days
   stake: 1,
 
   // Take Profit / Stop Loss
@@ -49,13 +49,12 @@ const CONFIG = {
   stopLoss: 124,
   dailyLossLimit: 0,
   maxDrawdown: 0, // Percentage
-  maxConsecutiveLosses: 20,
+  maxConsecutiveLosses: 7,
 
   // Martingale Settings
   martingale: true,
-  martingaleMultiplier: 1,
-  lossesB4Multiplier: 5,
-  martingaleSteps: 10,
+  martingaleMultiplier: 2,
+  martingaleSteps: 7,
 
   // Cooldown
   cooldownAfterLoss: 0, // seconds
@@ -760,10 +759,12 @@ function openTrade(direction) {
     proposal: 1,
     amount: currentStake,
     basis: 'stake',
-    contract_type: direction === 'buy' ? 'MULTUP' : 'MULTDOWN',
+    contract_type: direction === 'buy' ? 'CALL' : 'PUT',
     currency: 'USD',
     symbol: CONFIG.asset,
-    multiplier: CONFIG.multiplier,
+    duration: CONFIG.timeFrame - 6, // 6 seconds before candle close
+    duration_unit: CONFIG.DURATION_UNIT,
+    // multiplier: CONFIG.multiplier,
   });
 
   log(`Requesting ${direction.toUpperCase()} proposal: ${CONFIG.asset} @ $${currentStake.toFixed(2)} x${CONFIG.multiplier}`, 'trade');
@@ -801,10 +802,6 @@ function calculateNextStake(lastProfit) {
   if (lastProfit >= 0) {
     martingaleCount = 0;
     return CONFIG.stake;
-  }
-
-  if (CONFIG.martingale && martingaleCount >= CONFIG.lossesB4Multiplier) {
-    CONFIG.martingaleMultiplier = 2;
   }
 
   if (CONFIG.martingale && martingaleCount < CONFIG.martingaleSteps) {
