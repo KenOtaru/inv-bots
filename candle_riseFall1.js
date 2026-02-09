@@ -475,7 +475,12 @@ const state = {
         lastHour: new Date().getHours()
     },
     requestId: 1,
-    canTrade: false
+    canTrade: false,
+    // NEW: Tick data storage for live ticks
+    tickData: {
+        lastTick: null,
+        lastDigit: null
+    }
 };
 
 // ============================================
@@ -683,6 +688,15 @@ class ConnectionManager {
         });
     }
 
+    // NEW: Subscribe to live ticks for Odd/Even checking
+    subscribeToTicks(symbol) {
+        LOGGER.info(`📊 Subscribing to live ticks for ${symbol}...`);
+        this.send({
+            ticks: symbol,
+            subscribe: 1
+        });
+    }
+
     // FIX: Add method to restore subscriptions after reconnection
     restoreSubscriptions() {
         LOGGER.info('📊 Restoring subscriptions after reconnection...');
@@ -762,6 +776,10 @@ class ConnectionManager {
 
         if (response.msg_type === 'candles') {
             this.handleCandlesHistory(response);
+        }
+
+        if (response.msg_type === 'tick') {
+            this.handleTickUpdate(response.tick);
         }
 
         if (response.msg_type === 'buy') {
@@ -962,6 +980,34 @@ class ConnectionManager {
 
     }
 
+    // NEW: Handle live tick updates for Odd/Even checking
+    // NEW: Handle live tick updates for Odd/Even checking
+    handleTickUpdate(tick) {
+        const asset = tick.symbol;
+        const lastDigit = this.getLastDigit(tick.quote, asset);
+
+        state.tickData.lastTick = tick;
+        state.tickData.lastDigit = lastDigit;
+
+        LOGGER.debug(`[${asset}] Tick: ${tick.quote} | Last Digit: ${lastDigit} (${lastDigit % 2 === 0 ? 'EVEN' : 'ODD'})`);
+    }
+
+    // NEW: Get last digit from quote based on asset type (from mX4Differ.js)
+    getLastDigit(quote, asset) {
+        const quoteString = quote.toString();
+        const [, fractionalPart = ''] = quoteString.split('.');
+
+        if (['RDBULL', 'RDBEAR', 'R_75', 'R_50'].includes(asset)) {
+            return fractionalPart.length >= 4 ? parseInt(fractionalPart[3]) : 0;
+        } else if (['R_10', 'R_25', '1HZ15V', '1HZ30V', '1HZ90V'].includes(asset)) {
+            return fractionalPart.length >= 3 ? parseInt(fractionalPart[2]) : 0;
+        } else if (['stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'].includes(asset)) {
+            return fractionalPart.length >= 1 ? parseInt(fractionalPart[0]) : 0;
+        } else {
+            return fractionalPart.length >= 2 ? parseInt(fractionalPart[1]) : 0;
+        }
+    }
+
     onError(error) {
         LOGGER.error(`WebSocket error: ${error.message}`);
     }
@@ -1052,6 +1098,7 @@ class DerivBot {
         console.log('📋 Strategy: Trade based on previous candle direction');
         console.log('    🟢 Bullish Candle → RISE trade');
         console.log('    🔴 Bearish Candle → FALL trade');
+        console.log('📋 NEW: Live Tick Filter - Only trade when last digit is ODD');
         console.log('═'.repeat(80) + '\n');
 
         // Initialize assets
@@ -1060,6 +1107,8 @@ class DerivBot {
         // Subscribe to candles for each asset
         ACTIVE_ASSETS.forEach(symbol => {
             this.subscribeToCandles(symbol);
+            // NEW: Subscribe to live ticks for Odd/Even checking
+            this.connection.subscribeToTicks(symbol);
         });
 
         TelegramService.sendStartupMessage();
@@ -1095,13 +1144,6 @@ class DerivBot {
         });
     }
 
-    handleTickUpdate(tick) {
-        const asset = tick.symbol;
-        const lastDigit = this.getLastDigit(tick.quote, asset);
-
-        this.lastDigit = lastDigit;
-    }
-
     executeNextTrade(symbol, lastClosedCandle) {
         if (!state.canTrade) return;
         if (!SessionManager.isSessionActive()) return;
@@ -1119,6 +1161,22 @@ class DerivBot {
             }
             return;
         }
+
+        // NEW: Check if last digit is Odd before trading
+        const lastDigit = state.tickData.lastDigit;
+        if (lastDigit === null) {
+            LOGGER.warn(`⚠️ No tick data available yet, skipping trade for ${tradeSymbol}`);
+            return;
+        }
+
+        const isOdd = lastDigit % 2 !== 0;
+        if (!isOdd) {
+            LOGGER.info(`🚫 Skipping trade on ${tradeSymbol} - Last digit ${lastDigit} is EVEN (Odd required)`);
+            state.canTrade = false;
+            return;
+        }
+
+        LOGGER.info(`✅ Last digit ${lastDigit} is ODD - Proceeding with trade on ${tradeSymbol}`);
 
         // Determine direction based on last closed candle
         let direction;
