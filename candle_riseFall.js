@@ -6,7 +6,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'candleRF0009-state.json');
+const STATE_FILE = path.join(__dirname, 'candleRF00010-state.json');
 const STATE_SAVE_INTERVAL = 5000; // Save every 5 seconds
 
 class StatePersistence {
@@ -385,7 +385,7 @@ const CONFIG = {
 
     // Capital Settings
     INITIAL_CAPITAL: 500,
-    STAKE: 10,
+    STAKE: 1,
 
     // Session Targets
     SESSION_PROFIT_TARGET: 500,
@@ -409,7 +409,7 @@ const CONFIG = {
     MARTINGALE_MULTIPLIER3: 1,
     MARTINGALE_MULTIPLIER4: 2.3,
     MARTINGALE_MULTIPLIER5: 3,
-    MAX_MARTINGALE_STEPS: 10,
+    MAX_MARTINGALE_STEPS: 100,
     System: 1, // 1 = Continue same direction on Win and Switch direction on Loss, 
     // 2 = Switch direction on Win and Continue same direction on Loss, 
     // 3 = Switch direction every trade, 4 = Same direction every trade

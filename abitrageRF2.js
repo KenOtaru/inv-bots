@@ -23,10 +23,10 @@ const path = require('path');
 // YOUR JOB: Run this and let the data prove it either way.
 // ============================================
 
-const STATE_FILE = path.join(__dirname, 'stprng-verify-state4.json');
-const TRADE_LOG_FILE = path.join(__dirname, 'stprng-verify-trades4.csv');
-const PAYOUT_LOG_FILE = path.join(__dirname, 'stprng-verify-payouts4.csv');
-const RESULTS_FILE = path.join(__dirname, 'stprng-verify-results4.json');
+const STATE_FILE = path.join(__dirname, 'stprng-verify-state02.json');
+const TRADE_LOG_FILE = path.join(__dirname, 'stprng-verify-trades02.csv');
+const PAYOUT_LOG_FILE = path.join(__dirname, 'stprng-verify-payouts02.csv');
+const RESULTS_FILE = path.join(__dirname, 'stprng-verify-results02.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
@@ -55,7 +55,7 @@ const CONFIG = {
 
     // Capital Settings
     INITIAL_CAPITAL: 500,
-    STAKE: 0.35, // Small stake to maximize trade count on demo
+    STAKE: 1, // Small stake to maximize trade count on demo
 
     // Session limits
     SESSION_PROFIT_TARGET: 99999,
@@ -63,7 +63,7 @@ const CONFIG = {
 
     // Duration settings — odd ticks only as per the claim
     DURATION_UNIT: 't',
-    ODD_TICK_DURATIONS: [2],//[5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25],
+    ODD_TICK_DURATIONS: [5],//[5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25],
 
     // The REAL Step Index symbol on Deriv
     // NOTE: 'STP10', 'STP2', 'STP' are FAKE symbols from the scam document
