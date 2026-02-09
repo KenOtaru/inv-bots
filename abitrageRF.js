@@ -22,9 +22,9 @@ const path = require('path');
 //   3. Net P&L over the full sample
 // ============================================
 
-const STATE_FILE = path.join(__dirname, 'stepindex-experiment-state.json');
-const TRADE_LOG_FILE = path.join(__dirname, 'stepindex-experiment-trades.csv');
-const RESULTS_FILE = path.join(__dirname, 'stepindex-experiment-results.json');
+const STATE_FILE = path.join(__dirname, 'stepindex-experiment2-state.json');
+const TRADE_LOG_FILE = path.join(__dirname, 'stepindex-experiment2-trades.csv');
+const RESULTS_FILE = path.join(__dirname, 'stepindex-experiment2-results.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
@@ -64,7 +64,7 @@ const CONFIG = {
     DURATION_UNIT: 't', // TICKS — this is critical
 
     // Odd tick durations to cycle through (as per the claim)
-    ODD_TICK_DURATIONS: [5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25],
+    ODD_TICK_DURATIONS: [2],//[5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25],
 
     // Current duration index (cycles through ODD_TICK_DURATIONS)
     CURRENT_DURATION_INDEX: 0,
@@ -97,7 +97,7 @@ let ACTIVE_ASSETS = [
     'stpRNG',          // Step Index (classic)
     // Uncomment below if these symbols exist on your account:
     // 'stpRNG2',       // Step Index v2 (verify actual symbol)
-    // 'stpRNG01',      // Step Index 0.1 (verify actual symbol)
+    // 'stpRNG3',      // Step Index v3 (verify actual symbol)
 ];
 
 // ============================================
