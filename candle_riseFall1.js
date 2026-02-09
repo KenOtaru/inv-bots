@@ -6,7 +6,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'candleRF00007-state.json');
+const STATE_FILE = path.join(__dirname, 'candleRF00009-state.json');
 const STATE_SAVE_INTERVAL = 5000; // Save every 5 seconds
 
 class StatePersistence {
@@ -388,8 +388,8 @@ const CONFIG = {
     STAKE: 10,
 
     // Session Targets
-    SESSION_PROFIT_TARGET: 5,
-    SESSION_STOP_LOSS: -5,
+    SESSION_PROFIT_TARGET: 500,
+    SESSION_STOP_LOSS: -250,
 
     // Candle Settings
     GRANULARITY: 60, // 60 seconds = 1 minute candles
@@ -398,8 +398,8 @@ const CONFIG = {
     CANDLES_TO_LOAD: 50,
 
     // Trade Duration Settings
-    DURATION: 2,
-    DURATION_UNIT: 't', // t=ticks, s=seconds, m=minutes
+    DURATION: 60,
+    DURATION_UNIT: 's', // t=ticks, s=seconds, m=minutes
 
     // Trade Settings
     MAX_OPEN_POSITIONS: 1, // One at a time for alternating strategy
@@ -426,7 +426,7 @@ const CONFIG = {
 
 
 let ACTIVE_ASSETS = [
-    // 'R_75', 'R_100', '1HZ25V', '1HZ50V', '1HZ100V' 'stpRNG',
+    // 'R_75', 'R_100', '1HZ25V', '1HZ50V', '1HZ100V' 'stpRNG', 'RDBULL', 'RDBEAR',
     'stpRNG'
 ];
 
@@ -1119,11 +1119,11 @@ class DerivBot {
         if (lastClosedCandle) {
             // Trade based on candle pattern
             if (CandleAnalyzer.isBullish(lastClosedCandle)) {
-                direction = 'PUT'; // Sell if previous candle was bullish
-                LOGGER.trade(`📈 Last candle was BEARISH (Close < Open) → Executing FALL trade`);
+                direction = 'CALL'; // Buy if previous candle was bullish
+                LOGGER.trade(`📈 Last candle was BEARISH (Close > Open) → Executing RISE trade`);
             } else if (CandleAnalyzer.isBearish(lastClosedCandle)) {
-                direction = 'CALL'; // Buy if previous candle was bearish
-                LOGGER.trade(`📉 Last candle was BULLISH (Close > Open) → Executing RISE trade`);
+                direction = 'PUT'; // Sell if previous candle was bearish
+                LOGGER.trade(`📉 Last candle was BULLISH (Close < Open) → Executing FALL trade`);
             }
         }
 
