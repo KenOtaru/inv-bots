@@ -1084,12 +1084,12 @@ class ConnectionManager {
             // Trade if percentage >= 60% and current digit is the one being analyzed
             if (countTotal >= 10) {
                 CONFIG.highestPercentageDigit = currentDigit;
-                LOGGER.trade(`🎯 STRATEGY SIGNAL: Digit ${CONFIG.highestPercentageDigit} is the most frequent digit`);
+                // LOGGER.trade(`🎯 STRATEGY SIGNAL: Digit ${CONFIG.highestPercentageDigit} is the most frequent digit`);
             }
 
             // if (countTotal < 4 && !state.portfolio.activePositions.length) {
             if ((currentDigit === (CONFIG.highestPercentageDigit - 1)) && last5TicksTrendHigh && !state.portfolio.activePositions.length) {
-                LOGGER.trade(`🎯 STRATEGY SIGNAL: Digit ${CONFIG.highestPercentageDigit} | ${currentDigit} Trend High: ${last5TicksTrendHigh} (${history.slice(-5).join(' > ')})`);
+                LOGGER.trade(`STRATEGY SIGNAL: Digit ${CONFIG.highestPercentageDigit} | ${currentDigit} Trend High: ${last5TicksTrendHigh} (${history.slice(-5).join(' > ')})`);
                 state.canTrade = true;
                 bot.executeNextTrade(asset);
             }
