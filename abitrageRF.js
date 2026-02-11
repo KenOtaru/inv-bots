@@ -1072,26 +1072,31 @@ class ConnectionManager {
         if (countTotal > 0) {
             const percentage = (countRepeat / countTotal) * 100;
 
+            const last5TicksTrendHigh = history[history.length - 1] < history[history.length - 2] && history[history.length - 2] < history[history.length - 3];
+
             // Log analysis periodically or if high
             // if (percentage >= 50) {
             LOGGER.debug(`[${asset}] Digit ${currentDigit} Analysis: Total=${countTotal}, Repeats=${countRepeat}, Percentage=${percentage.toFixed(2)}%`);
+            LOGGER.debug(`[${asset}] Trend High: ${last5TicksTrendHigh} (${history[history.length - 1]} < ${history[history.length - 2]} < ${history[history.length - 3]})`);
             // }
 
+            this.ticksCount++;
             // Trade if percentage >= 60% and current digit is the one being analyzed
-            if (countTotal >= 13 && CONFIG.highestPercentageDigit === null) {
+            if (countTotal >= 10) {
                 CONFIG.highestPercentageDigit = currentDigit;
-                LOGGER.trade(`🎯 STRATEGY SIGNAL: Digit ${CONFIG.highestPercentageDigit} is the most frequent digit`);
+                // LOGGER.trade(`🎯 STRATEGY SIGNAL: Digit ${CONFIG.highestPercentageDigit} is the most frequent digit`);
             }
 
             // if (countTotal < 4 && !state.portfolio.activePositions.length) {
-            if ((currentDigit === (CONFIG.highestPercentageDigit - 1)) && !state.portfolio.activePositions.length) {
-                LOGGER.trade(`🎯 STRATEGY SIGNAL: Digit ${CONFIG.highestPercentageDigit} | ${currentDigit} repeat rate is ${percentage.toFixed(2)}%!`);
+            if ((currentDigit === (CONFIG.highestPercentageDigit - 1)) && last5TicksTrendHigh && !state.portfolio.activePositions.length) {
+                LOGGER.trade(`STRATEGY SIGNAL: Digit ${CONFIG.highestPercentageDigit} | ${currentDigit} Trend High: ${last5TicksTrendHigh} (${history.slice(-5).join(' > ')})`);
                 state.canTrade = true;
                 bot.executeNextTrade(asset);
             }
-            // else {
-            //     CONFIG.highestPercentageDigit = null;
-            // }
+            if (this.ticksCount > 10) {
+                CONFIG.highestPercentageDigit = null;
+                this.ticksCount = 0;
+            }
         }
     }
 
@@ -1279,7 +1284,7 @@ class DerivBot {
         //     return;
         // }
 
-        LOGGER.info(`✅ Last digit ${lastDigit} is ODD - Proceeding with trade on ${tradeSymbol}`);
+        // LOGGER.info(`✅ Last digit ${lastDigit} is ODD - Proceeding with trade on ${tradeSymbol}`);
 
         // Determine direction based on last closed candle or system logic
         let direction;
@@ -1304,7 +1309,7 @@ class DerivBot {
         // } else {
         //     direction = state.lastTradeDirection === 'CALL' ? 'PUT' : 'CALL'; // Switch if lost
         // }
-        LOGGER.info(`🔄 No candle context - Using system direction: ${direction}`);
+        // LOGGER.info(`🔄 No candle context - Using system direction: ${direction}`);
         // }
 
         state.canTrade = false; // Prevent multiple trades
