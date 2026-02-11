@@ -1078,16 +1078,18 @@ class ConnectionManager {
             // }
 
             // Trade if percentage >= 60% and current digit is the one being analyzed
-            if (countTotal >= 12 && CONFIG.highestPercentageDigit === null) {
+            if (countTotal >= 13 && CONFIG.highestPercentageDigit === null) {
                 CONFIG.highestPercentageDigit = currentDigit;
                 LOGGER.trade(`🎯 STRATEGY SIGNAL: Digit ${CONFIG.highestPercentageDigit} is the most frequent digit`);
             }
 
             // if (countTotal < 4 && !state.portfolio.activePositions.length) {
-            if (currentDigit === CONFIG.highestPercentageDigit - 1 && !state.portfolio.activePositions.length) {
+            if ((currentDigit === (CONFIG.highestPercentageDigit - 1)) && !state.portfolio.activePositions.length) {
                 LOGGER.trade(`🎯 STRATEGY SIGNAL: Digit ${CONFIG.highestPercentageDigit} | ${currentDigit} repeat rate is ${percentage.toFixed(2)}%!`);
                 state.canTrade = true;
                 bot.executeNextTrade(asset);
+            } else {
+                CONFIG.highestPercentageDigit = null;
             }
         }
     }
