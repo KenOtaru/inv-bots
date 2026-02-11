@@ -1082,7 +1082,7 @@ class ConnectionManager {
 
             this.ticksCount++;
             // Trade if percentage >= 60% and current digit is the one being analyzed
-            if (countTotal >= 15 && percentage >= 60) {
+            if (countTotal >= 12 && percentage >= 80) {
                 CONFIG.highestPercentageDigit = currentDigit;
                 // LOGGER.trade(`🎯 STRATEGY SIGNAL: Digit ${CONFIG.highestPercentageDigit} is the most frequent digit`);
             }
