@@ -63,7 +63,7 @@ const CONFIG = {
 
     // Duration settings — odd ticks only as per the claim
     DURATION_UNIT: 't',
-    ODD_TICK_DURATIONS: [4],//[5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25],
+    ODD_TICK_DURATIONS: [2],//[5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25],
 
     // The REAL Step Index symbol on Deriv
     // NOTE: 'STP10', 'STP2', 'STP' are FAKE symbols from the scam document
