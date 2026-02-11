@@ -6,7 +6,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'candleRF000012-state.json');
+const STATE_FILE = path.join(__dirname, 'abitrageRF001-state.json');
 const STATE_SAVE_INTERVAL = 5000; // Save every 5 seconds
 
 class StatePersistence {
@@ -386,7 +386,7 @@ class CandleAnalyzer {
 // ============================================
 const CONFIG = {
     // API Settings
-    API_TOKEN: 'Dz2V2KvRf4Uukt3',
+    API_TOKEN: '0P94g4WdSrSrzir',
     APP_ID: '1089',
     WS_URL: 'wss://ws.derivws.com/websockets/v3',
 
@@ -395,7 +395,7 @@ const CONFIG = {
     STAKE: 1,
 
     // Session Targets
-    totalTradesN: 300,
+    totalTradesN: 1000,
     SESSION_PROFIT_TARGET: 500,
     SESSION_STOP_LOSS: -250,
 
@@ -428,7 +428,7 @@ const CONFIG = {
 
     // Telegram Settings
     TELEGRAM_ENABLED: true,
-    TELEGRAM_BOT_TOKEN: '8588380880:AAH8tOl8dxvjJ4qfWf3yr-i7FS_qlew-8t0',
+    TELEGRAM_BOT_TOKEN: '8356265372:AAELmgFj-xJP3EJNPR5G_D2R2fke-T9wxBA',
     TELEGRAM_CHAT_ID: '752497117',
 };
 
@@ -948,7 +948,7 @@ class ConnectionManager {
                 const candleType = CandleAnalyzer.getCandleDirection(closedCandle);
                 const candleEmoji = candleType === 'BULLISH' ? '🟢' : candleType === 'BEARISH' ? '🔴' : '⚪';
 
-                LOGGER.info(`${symbol} ${candleEmoji} CANDLE CLOSED [${closeTime}] ${candleType}: O:${closedCandle.open.toFixed(5)} H:${closedCandle.high.toFixed(5)} L:${closedCandle.low.toFixed(5)} C:${closedCandle.close.toFixed(5)}`);
+                // LOGGER.info(`${symbol} ${candleEmoji} CANDLE CLOSED [${closeTime}] ${candleType}: O:${closedCandle.open.toFixed(5)} H:${closedCandle.high.toFixed(5)} L:${closedCandle.low.toFixed(5)} C:${closedCandle.close.toFixed(5)}`);
 
                 // TRIGGER TRADE AFTER CANDLE CLOSE
                 // setTimeout(() => {
@@ -1075,7 +1075,7 @@ class ConnectionManager {
             // }
 
             // Trade if percentage >= 60% and current digit is the one being analyzed
-            if (percentage >= 60 && !state.portfolio.activePositions.length) {
+            if (percentage >= 65 && !state.portfolio.activePositions.length) {
                 LOGGER.trade(`🎯 STRATEGY SIGNAL: Digit ${currentDigit} repeat rate is ${percentage.toFixed(2)}%!`);
                 state.canTrade = true;
                 bot.executeNextTrade(asset);
@@ -1272,28 +1272,28 @@ class DerivBot {
         // Determine direction based on last closed candle or system logic
         let direction;
 
-        if (lastClosedCandle) {
-            const isOdd = lastDigit % 2 !== 0;
-            // Trade based on candle pattern
-            if (!isOdd) {
-                direction = 'PUT';
-                LOGGER.trade(`📈 Last Digit ${lastDigit} (EVEN) → Executing FALL trade`);
-            } else {
-                direction = 'CALL';
-                LOGGER.trade(`� Last Digit ${lastDigit} (ODD) → Executing RISE trade`);
-            }
+        // if (lastClosedCandle) {
+        //     const isOdd = lastDigit % 2 !== 0;
+        //     // Trade based on candle pattern
+        //     if (!isOdd) {
+        //         direction = 'PUT';
+        //         LOGGER.trade(`📈 Last Digit ${lastDigit} (EVEN) → Executing FALL trade`);
+        //     } else {
+        //         direction = 'CALL';
+        //         LOGGER.trade(`� Last Digit ${lastDigit} (ODD) → Executing RISE trade`);
+        //     }
+        // } else {
+        // No candle provided (triggered by tick analysis)
+        // Use System Logic for direction
+        if (state.lastTradeWasWin === null) {
+            direction = 'CALL'; // Default first trade
+        } else if (state.lastTradeWasWin) {
+            direction = state.lastTradeDirection; // Same if won
         } else {
-            // No candle provided (triggered by tick analysis)
-            // Use System Logic for direction
-            if (state.lastTradeWasWin === null) {
-                direction = 'CALL'; // Default first trade
-            } else if (state.lastTradeWasWin) {
-                direction = state.lastTradeDirection; // Same if won
-            } else {
-                direction = state.lastTradeDirection === 'CALL' ? 'PUT' : 'CALL'; // Switch if lost
-            }
-            LOGGER.info(`🔄 No candle context - Using system direction: ${direction}`);
+            direction = state.lastTradeDirection === 'CALL' ? 'PUT' : 'CALL'; // Switch if lost
         }
+        LOGGER.info(`🔄 No candle context - Using system direction: ${direction}`);
+        // }
 
         state.canTrade = false; // Prevent multiple trades
         state.lastTradeDirection = direction;
