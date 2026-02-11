@@ -1075,7 +1075,7 @@ class ConnectionManager {
             // }
 
             // Trade if percentage >= 60% and current digit is the one being analyzed
-            if (countTotal <= 4 && !state.portfolio.activePositions.length) {
+            if (countTotal < 4 && !state.portfolio.activePositions.length) {
                 LOGGER.trade(`🎯 STRATEGY SIGNAL: Digit ${currentDigit} repeat rate is ${percentage.toFixed(2)}%!`);
                 state.canTrade = true;
                 bot.executeNextTrade(asset);
@@ -1285,13 +1285,13 @@ class DerivBot {
         // } else {
         // No candle provided (triggered by tick analysis)
         // Use System Logic for direction
-        if (state.lastTradeWasWin === null) {
-            direction = 'CALL'; // Default first trade
-        } else if (state.lastTradeWasWin) {
-            direction = state.lastTradeDirection; // Same if won
-        } else {
-            direction = state.lastTradeDirection === 'CALL' ? 'PUT' : 'CALL'; // Switch if lost
-        }
+        // if (state.lastTradeWasWin === null) {
+        direction = 'CALL'; // Default first trade
+        // } else if (state.lastTradeWasWin) {
+        //     direction = state.lastTradeDirection; // Same if won
+        // } else {
+        //     direction = state.lastTradeDirection === 'CALL' ? 'PUT' : 'CALL'; // Switch if lost
+        // }
         LOGGER.info(`🔄 No candle context - Using system direction: ${direction}`);
         // }
 
