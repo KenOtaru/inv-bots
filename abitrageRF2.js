@@ -870,7 +870,7 @@ class ConnectionManager {
 
     handleOpenContract(response) {
         if (response.error) {
-            LOGGER.error(`Contract error: ${response.error.message}`);
+            // LOGGER.error(`Contract error: ${response.error.message}`);
             return;
         }
 
@@ -1072,7 +1072,7 @@ class ConnectionManager {
         if (countTotal > 0) {
             const percentage = (countRepeat / countTotal) * 100;
 
-            const last5TicksTrendHigh = history[history.length - 1] < history[history.length - 2] && history[history.length - 2] < history[history.length - 3];
+            const last5TicksTrendHigh = history[history.length - 1] > history[history.length - 2] && history[history.length - 2] > history[history.length - 3];
 
             // Log analysis periodically or if high
             // if (percentage >= 50) {
@@ -1089,7 +1089,7 @@ class ConnectionManager {
 
             // if (countTotal < 4 && !state.portfolio.activePositions.length) {
             if ((currentDigit === (CONFIG.highestPercentageDigit - 1)) && last5TicksTrendHigh && !state.portfolio.activePositions.length) {
-                LOGGER.trade(`STRATEGY SIGNAL: Digit ${CONFIG.highestPercentageDigit} | ${currentDigit} Trend High: ${last5TicksTrendHigh} (${history.slice(-5).join(' > ')})`);
+                LOGGER.trade(`STRATEGY SIGNAL: Digit ${CONFIG.highestPercentageDigit} | ${currentDigit} Trend High: ${last5TicksTrendHigh} (${history.slice(-3).join(' > ')})`);
                 state.canTrade = true;
                 bot.executeNextTrade(asset);
             }
