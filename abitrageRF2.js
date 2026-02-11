@@ -983,17 +983,6 @@ class ConnectionManager {
             }
         }
 
-        // Also check for the FAKE symbols from the scam document
-        const fakeSymbols = ['STP10', 'STP2', 'STP', 'Step Index 0.1', 'Step Index v2'];
-        fakeSymbols.forEach(fake => {
-            const found = symbols.find(s => s.symbol === fake);
-            if (found) {
-                LOGGER.experiment(`✅ "${fake}" EXISTS as: ${found.display_name}`);
-            } else {
-                LOGGER.experiment(`❌ "${fake}" DOES NOT EXIST on Deriv — confirming it's fabricated`);
-            }
-        });
-
         state.symbolValidationDone = true;
         bot.start();
     }
