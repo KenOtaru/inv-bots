@@ -1049,54 +1049,319 @@ class ConnectionManager {
     }
 
     // NEW: analyzeTicks method to check for 60% repeat rate
+    // =============================================
+    // COMPLETE NEW APPROACH: Market State Detection
+    // Detects momentum vs oscillation to predict non-repeat probability
+    // =============================================
     analyzeTicks(asset) {
         const assetState = state.assets[asset];
-        if (!assetState || !assetState.tickHistory || assetState.tickHistory.length < 100) return;
+        if (!assetState || !assetState.tickHistory || assetState.tickHistory.length < 200) return;
+        if (state.portfolio.activePositions.length > 0) return;
 
-        const history = assetState.tickHistory.slice(-100);
-        const currentDigit = assetState.lastDigit;
+        const history = assetState.tickHistory;
+        const histLen = history.length;
+        const recent = history.slice(-30);
+        const recentLen = recent.length;
 
-        // Check amount of times and percentage each digit repeats (as first and third)
-        let countTotal = 0;
-        let countRepeat = 0;
+        // =============================================
+        // DETECTOR 1: Oscillation Detection
+        // Count how many times digit bounced (A→B→A) in recent ticks
+        // High bounce rate = HIGH repeat risk = DO NOT TRADE
+        // =============================================
+        let bounceCount = 0;
+        let totalTriplets = 0;
 
-        for (let i = 0; i < history.length - 2; i++) {
-            if (history[i] === currentDigit) {
-                countTotal++;
-                if (history[i + 2] === currentDigit) {
-                    countRepeat++;
+        for (let i = 0; i < recentLen - 2; i++) {
+            totalTriplets++;
+            if (recent[i] === recent[i + 2]) {
+                bounceCount++;
+            }
+        }
+
+        const bounceRate = (bounceCount / totalTriplets) * 100;
+        const isOscillating = bounceRate > 40; // More than 40% bouncing = oscillation
+
+        // =============================================
+        // DETECTOR 2: Consecutive Direction Detection
+        // Count how many ticks in a row moved in same direction
+        // High streak = MOMENTUM = low repeat risk
+        // =============================================
+        let currentStreak = 0;
+        let streakDirection = 0; // 1=ascending, -1=descending
+
+        for (let i = recentLen - 1; i > 0; i--) {
+            const diff = recent[i] - recent[i - 1];
+            if (diff === 0) break;
+
+            const dir = diff > 0 ? 1 : -1;
+
+            if (currentStreak === 0) {
+                streakDirection = dir;
+                currentStreak = 1;
+            } else if (dir === streakDirection) {
+                currentStreak++;
+            } else {
+                break;
+            }
+        }
+
+        const hasMomentum = currentStreak >= 3;
+
+        // =============================================
+        // DETECTOR 3: Unique Digit Ratio in Last 6 Ticks
+        // If many unique digits = price is moving = low repeat risk
+        // If few unique digits = price is stuck = high repeat risk
+        // =============================================
+        const last6 = history.slice(-6);
+        const uniqueDigits = new Set(last6).size;
+        const isSpread = uniqueDigits >= 4; // At least 4 different digits in last 6
+
+        // =============================================
+        // DETECTOR 4: Transition Pattern Detection
+        // Look for pattern where oscillation just broke
+        // Example: 1,2,1,2,3 → the "3" broke the oscillation
+        // This means next ticks likely continue momentum (3→4→5)
+        // =============================================
+        let oscillationBroken = false;
+        let breakoutDirection = 0; // 1=upward breakout, -1=downward breakout
+
+        if (recentLen >= 6) {
+            // Check if there was oscillation in ticks [-6 to -2]
+            const priorSegment = recent.slice(-6, -1);
+            let priorBounces = 0;
+            for (let i = 0; i < priorSegment.length - 2; i++) {
+                if (priorSegment[i] === priorSegment[i + 2]) {
+                    priorBounces++;
+                }
+            }
+            const priorBounceRate = priorBounces / (priorSegment.length - 2);
+
+            // Check if the last 2-3 ticks broke out of that oscillation
+            const lastDigit = recent[recentLen - 1];
+            const prevDigit = recent[recentLen - 2];
+            const prev2Digit = recent[recentLen - 3];
+
+            // Was oscillating, now moving consistently
+            if (priorBounceRate >= 0.4) {
+                // Check if last 3 ticks are monotonically moving
+                if (lastDigit > prevDigit && prevDigit > prev2Digit) {
+                    oscillationBroken = true;
+                    breakoutDirection = 1; // Upward breakout
+                } else if (lastDigit < prevDigit && prevDigit < prev2Digit) {
+                    oscillationBroken = true;
+                    breakoutDirection = -1; // Downward breakout
                 }
             }
         }
 
-        if (countTotal > 0) {
-            const percentage = (countRepeat / countTotal) * 100;
+        // =============================================
+        // DETECTOR 5: Historical Non-Repeat Rate for Current State
+        // Given the current last 3 digits pattern, how often did
+        // positions +1 and +3 differ in history?
+        // =============================================
+        const pattern3 = history.slice(-3);
+        const pattern3Str = pattern3.join(',');
 
-            const last5TicksTrendHigh = (history[history.length - 1] > history[history.length - 2] && history[history.length - 2] > history[history.length - 3] || history[history.length - 1] > history[history.length - 2] && history[history.length - 2] > history[history.length - 3]);
+        let patternMatches = 0;
+        let patternNonRepeats = 0;
 
-            // Log analysis periodically or if high
-            // if (percentage >= 50) {
-            LOGGER.debug(`[${asset}] Digit ${currentDigit} Analysis: Total=${countTotal}, Repeats=${countRepeat}, Percentage=${percentage.toFixed(2)}%`);
-            LOGGER.debug(`[${asset}] Trend High: ${last5TicksTrendHigh} (${history[history.length - 1]} < ${history[history.length - 2]} < ${history[history.length - 3]})`);
-            // }
+        for (let i = 3; i < histLen - 3; i++) {
+            const historicalPattern = history.slice(i - 3, i);
+            const historicalPatternStr = historicalPattern.join(',');
 
-            this.ticksCount++;
-            // Trade if percentage >= 60% and current digit is the one being analyzed
-            if (countTotal >= 12 && percentage >= 80) {
-                CONFIG.highestPercentageDigit = currentDigit;
-                // LOGGER.trade(`🎯 STRATEGY SIGNAL: Digit ${CONFIG.highestPercentageDigit} is the most frequent digit`);
+            if (historicalPatternStr === pattern3Str) {
+                patternMatches++;
+                const futureDigit1 = history[i];     // Tick+1 after pattern
+                const futureDigit3 = history[i + 2]; // Tick+3 after pattern
+                if (futureDigit1 !== futureDigit3) {
+                    patternNonRepeats++;
+                }
             }
+        }
 
-            // if (countTotal < 4 && !state.portfolio.activePositions.length) {
-            if ((currentDigit === (CONFIG.highestPercentageDigit - 1)) && last5TicksTrendHigh && !state.portfolio.activePositions.length) {
-                LOGGER.trade(`STRATEGY SIGNAL: Digit ${CONFIG.highestPercentageDigit} | ${currentDigit} Trend High: ${last5TicksTrendHigh} (${history.slice(-3).join(' > ')})`);
-                state.canTrade = true;
-                bot.executeNextTrade(asset);
+        const patternNonRepeatRate = patternMatches >= 5
+            ? (patternNonRepeats / patternMatches) * 100
+            : -1; // Not enough data
+
+        // =============================================
+        // DETECTOR 6: Global Non-Repeat Base Rate
+        // Overall how often do position i+1 and i+3 differ?
+        // This gives us the market's natural non-repeat tendency
+        // =============================================
+        let globalTotal = 0;
+        let globalNonRepeats = 0;
+        const sampleRange = history.slice(-200);
+
+        for (let i = 0; i < sampleRange.length - 3; i++) {
+            globalTotal++;
+            if (sampleRange[i + 1] !== sampleRange[i + 3]) {
+                globalNonRepeats++;
             }
-            if (this.ticksCount > 10) {
-                CONFIG.highestPercentageDigit = null;
-                this.ticksCount = 0;
+        }
+
+        const globalNonRepeatRate = globalTotal > 0
+            ? (globalNonRepeats / globalTotal) * 100
+            : 50;
+
+        // =============================================
+        // SCORING: Combine all detectors into final score
+        // =============================================
+        let nonRepeatScore = 0;
+        let maxScore = 0;
+        let scoreBreakdown = [];
+
+        // Score 1: Low bounce rate (weight: 25)
+        maxScore += 25;
+        if (bounceRate < 20) {
+            nonRepeatScore += 25;
+            scoreBreakdown.push(`Bounce: +25 (${bounceRate.toFixed(1)}% < 20%)`);
+        } else if (bounceRate < 30) {
+            nonRepeatScore += 18;
+            scoreBreakdown.push(`Bounce: +18 (${bounceRate.toFixed(1)}% < 30%)`);
+        } else if (bounceRate < 40) {
+            nonRepeatScore += 10;
+            scoreBreakdown.push(`Bounce: +10 (${bounceRate.toFixed(1)}% < 40%)`);
+        } else {
+            nonRepeatScore += 0;
+            scoreBreakdown.push(`Bounce: +0 (${bounceRate.toFixed(1)}% ≥ 40% OSCILLATION)`);
+        }
+
+        // Score 2: Momentum streak (weight: 20)
+        maxScore += 20;
+        if (currentStreak >= 5) {
+            nonRepeatScore += 20;
+            scoreBreakdown.push(`Streak: +20 (${currentStreak} ticks, dir=${streakDirection > 0 ? '↑' : '↓'})`);
+        } else if (currentStreak >= 4) {
+            nonRepeatScore += 16;
+            scoreBreakdown.push(`Streak: +16 (${currentStreak} ticks)`);
+        } else if (currentStreak >= 3) {
+            nonRepeatScore += 12;
+            scoreBreakdown.push(`Streak: +12 (${currentStreak} ticks)`);
+        } else {
+            nonRepeatScore += 0;
+            scoreBreakdown.push(`Streak: +0 (${currentStreak} ticks, no momentum)`);
+        }
+
+        // Score 3: Unique digit spread (weight: 15)
+        maxScore += 15;
+        if (uniqueDigits >= 5) {
+            nonRepeatScore += 15;
+            scoreBreakdown.push(`Spread: +15 (${uniqueDigits} unique in last 6)`);
+        } else if (uniqueDigits >= 4) {
+            nonRepeatScore += 12;
+            scoreBreakdown.push(`Spread: +12 (${uniqueDigits} unique in last 6)`);
+        } else if (uniqueDigits >= 3) {
+            nonRepeatScore += 6;
+            scoreBreakdown.push(`Spread: +6 (${uniqueDigits} unique in last 6)`);
+        } else {
+            nonRepeatScore += 0;
+            scoreBreakdown.push(`Spread: +0 (${uniqueDigits} unique, too narrow)`);
+        }
+
+        // Score 4: Oscillation breakout (weight: 15)
+        maxScore += 15;
+        if (oscillationBroken) {
+            nonRepeatScore += 15;
+            scoreBreakdown.push(`Breakout: +15 (${breakoutDirection > 0 ? '↑ UPWARD' : '↓ DOWNWARD'})`);
+        } else {
+            nonRepeatScore += 0;
+            scoreBreakdown.push(`Breakout: +0 (no breakout detected)`);
+        }
+
+        // Score 5: Pattern-specific non-repeat rate (weight: 15)
+        maxScore += 15;
+        if (patternNonRepeatRate >= 80) {
+            nonRepeatScore += 15;
+            scoreBreakdown.push(`Pattern: +15 (${patternNonRepeatRate.toFixed(1)}% non-repeat, ${patternMatches} samples)`);
+        } else if (patternNonRepeatRate >= 65) {
+            nonRepeatScore += 10;
+            scoreBreakdown.push(`Pattern: +10 (${patternNonRepeatRate.toFixed(1)}% non-repeat, ${patternMatches} samples)`);
+        } else if (patternNonRepeatRate >= 0) {
+            nonRepeatScore += 3;
+            scoreBreakdown.push(`Pattern: +3 (${patternNonRepeatRate.toFixed(1)}% non-repeat, ${patternMatches} samples)`);
+        } else {
+            nonRepeatScore += 5; // Neutral if not enough data
+            scoreBreakdown.push(`Pattern: +5 (insufficient data, neutral)`);
+        }
+
+        // Score 6: Global non-repeat rate boost (weight: 10)
+        maxScore += 10;
+        if (globalNonRepeatRate >= 70) {
+            nonRepeatScore += 10;
+            scoreBreakdown.push(`Global: +10 (${globalNonRepeatRate.toFixed(1)}% market non-repeat)`);
+        } else if (globalNonRepeatRate >= 55) {
+            nonRepeatScore += 6;
+            scoreBreakdown.push(`Global: +6 (${globalNonRepeatRate.toFixed(1)}% market non-repeat)`);
+        } else {
+            nonRepeatScore += 0;
+            scoreBreakdown.push(`Global: +0 (${globalNonRepeatRate.toFixed(1)}% market too repetitive)`);
+        }
+
+        // =============================================
+        // FINAL DECISION
+        // =============================================
+        const finalProbability = (nonRepeatScore / maxScore) * 100;
+
+        // Log every 5th tick to avoid spam
+        this.ticksCount = (this.ticksCount || 0) + 1;
+
+        if (this.ticksCount % 5 === 0 || finalProbability >= 75) {
+            LOGGER.debug(`[${asset}] ═══════════ MARKET STATE ANALYSIS ═══════════`);
+            LOGGER.debug(`[${asset}] Last 6 digits: [${last6.join(', ')}]`);
+            LOGGER.debug(`[${asset}] Bounce Rate: ${bounceRate.toFixed(1)}% | Streak: ${currentStreak} ${streakDirection > 0 ? '↑' : streakDirection < 0 ? '↓' : '→'} | Unique: ${uniqueDigits}/6`);
+            LOGGER.debug(`[${asset}] Oscillation Broken: ${oscillationBroken} | Breakout: ${breakoutDirection > 0 ? 'UP' : breakoutDirection < 0 ? 'DOWN' : 'NONE'}`);
+            LOGGER.debug(`[${asset}] Pattern [${pattern3Str}] NonRepeat: ${patternNonRepeatRate >= 0 ? patternNonRepeatRate.toFixed(1) + '%' : 'N/A'} (${patternMatches} samples)`);
+            LOGGER.debug(`[${asset}] Global NonRepeat: ${globalNonRepeatRate.toFixed(1)}%`);
+            LOGGER.debug(`[${asset}] ────────────────────────────────────────────`);
+            scoreBreakdown.forEach(s => LOGGER.debug(`[${asset}]   ${s}`));
+            LOGGER.debug(`[${asset}] ────────────────────────────────────────────`);
+            LOGGER.debug(`[${asset}] 📊 FINAL NON-REPEAT PROBABILITY: ${nonRepeatScore}/${maxScore} = ${finalProbability.toFixed(1)}%`);
+            LOGGER.debug(`[${asset}] ═══════════════════════════════════════════`);
+        }
+
+        // =============================================
+        // TRADE EXECUTION GATE
+        // =============================================
+        const TRADE_THRESHOLD = 80; // Only trade when 80%+ non-repeat probability
+
+        // HARD BLOCKS: Never trade during these conditions
+        if (isOscillating && !oscillationBroken) {
+            if (finalProbability >= 75) {
+                LOGGER.debug(`[${asset}] 🚫 HARD BLOCK: Active oscillation detected (bounce ${bounceRate.toFixed(1)}%), even with score ${finalProbability.toFixed(1)}%`);
             }
+            return;
+        }
+
+        // Check if last 4 ticks show A-B-A-B pattern (worst case oscillation)
+        if (recentLen >= 4) {
+            const a = recent[recentLen - 4];
+            const b = recent[recentLen - 3];
+            const c = recent[recentLen - 2];
+            const d = recent[recentLen - 1];
+            if (a === c && b === d && a !== b) {
+                LOGGER.debug(`[${asset}] 🚫 HARD BLOCK: ABAB oscillation [${a},${b},${a},${b}] detected`);
+                return;
+            }
+        }
+
+        // Check if last 2 digits are the same (likely to bounce back = repeat risk)
+        if (recentLen >= 2 && recent[recentLen - 1] === recent[recentLen - 2]) {
+            LOGGER.debug(`[${asset}] 🚫 HARD BLOCK: Last 2 digits identical [${recent[recentLen - 1]},${recent[recentLen - 2]}]`);
+            return;
+        }
+
+        // TRADE if score meets threshold AND momentum exists
+        if (finalProbability >= TRADE_THRESHOLD && (hasMomentum || oscillationBroken)) {
+            LOGGER.trade(`══════════════════════════════════════════════`);
+            LOGGER.trade(`✅ TRADE SIGNAL: ${asset}`);
+            LOGGER.trade(`   Non-Repeat Probability: ${finalProbability.toFixed(1)}% ≥ ${TRADE_THRESHOLD}%`);
+            LOGGER.trade(`   Market State: ${oscillationBroken ? 'BREAKOUT' : 'MOMENTUM'} ${streakDirection > 0 ? '↑' : '↓'}`);
+            LOGGER.trade(`   Streak: ${currentStreak} | Bounce: ${bounceRate.toFixed(1)}% | Spread: ${uniqueDigits}/6`);
+            LOGGER.trade(`   Last digits: [${recent.slice(-8).join(', ')}]`);
+            LOGGER.trade(`══════════════════════════════════════════════`);
+
+            state.canTrade = true;
+            bot.executeNextTrade(asset);
         }
     }
 
