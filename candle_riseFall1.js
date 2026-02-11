@@ -1175,7 +1175,7 @@ class DerivBot {
             return;
         }
 
-        const isOdd = lastDigit % 2 !== 0;
+        // const isOdd = lastDigit % 2 !== 0;
         // if (isOdd) {
         //     LOGGER.info(`🚫 Skipping trade on ${tradeSymbol} - Last digit ${lastDigit} is ODD (Even required)`);
         //     state.canTrade = false;
@@ -1188,6 +1188,7 @@ class DerivBot {
         let direction;
 
         if (lastClosedCandle) {
+            const isOdd = lastDigit % 2 !== 0;
             // Trade based on candle pattern
             // if (CandleAnalyzer.isBullish(lastClosedCandle)) {
             if (!isOdd) {
