@@ -63,7 +63,7 @@ const CONFIG = {
 
     // Duration settings — odd ticks only as per the claim
     DURATION_UNIT: 't',
-    ODD_TICK_DURATIONS: [5],//[5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25],
+    ODD_TICK_DURATIONS: [4],//[5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25],
 
     // The REAL Step Index symbol on Deriv
     // NOTE: 'STP10', 'STP2', 'STP' are FAKE symbols from the scam document
@@ -364,21 +364,21 @@ class ExperimentStats {
         d.bySymbol[symbol].trades++;
 
         // Log to CSV
-        TradeDataLogger.logTrade({
-            tradeNumber: d.totalTrades,
-            symbol: tradeData.symbol,
-            direction: tradeData.direction,
-            durationTicks: tradeData.durationTicks,
-            stake: tradeData.stake,
-            buyPrice: tradeData.buyPrice || tradeData.stake,
-            sellPrice: tradeData.sellPrice || (tradeData.stake + tradeData.profit),
-            profit: tradeData.profit,
-            result: isWin ? 'WIN' : (isTie ? 'TIE' : 'LOSS'),
-            payoutRatio: isWin ? ((tradeData.stake + tradeData.profit) / tradeData.stake) : (isTie ? 1.0 : 0),
-            preTradePayoutPct: tradeData.preTradePayoutPct || 0,
-            cumulativePnl: d.totalProfit,
-            winRateSoFar: d.totalTrades > 0 ? d.wins / d.totalTrades : 0
-        });
+        // TradeDataLogger.logTrade({
+        //     tradeNumber: d.totalTrades,
+        //     symbol: tradeData.symbol,
+        //     direction: tradeData.direction,
+        //     durationTicks: tradeData.durationTicks,
+        //     stake: tradeData.stake,
+        //     buyPrice: tradeData.buyPrice || tradeData.stake,
+        //     sellPrice: tradeData.sellPrice || (tradeData.stake + tradeData.profit),
+        //     profit: tradeData.profit,
+        //     result: isWin ? 'WIN' : (isTie ? 'TIE' : 'LOSS'),
+        //     payoutRatio: isWin ? ((tradeData.stake + tradeData.profit) / tradeData.stake) : (isTie ? 1.0 : 0),
+        //     preTradePayoutPct: tradeData.preTradePayoutPct || 0,
+        //     cumulativePnl: d.totalProfit,
+        //     winRateSoFar: d.totalTrades > 0 ? d.wins / d.totalTrades : 0
+        // });
 
         // Print analysis every 100 trades
         if (d.totalTrades % 100 === 0) {
@@ -747,31 +747,31 @@ class StatePersistence {
             state.portfolio.activePositions = savedData.portfolio.activePositions || [];
             state.validatedSymbols = savedData.validatedSymbols || [];
 
-            if (savedData.experimentStats) {
-                // Restore experiment stats but ensure arrays exist
-                const restored = savedData.experimentStats;
-                ExperimentStats.data = {
-                    ...ExperimentStats.data,
-                    ...restored,
-                    payoutRatios: restored.payoutRatios || [],
-                    winPayoutRatios: restored.winPayoutRatios || [],
-                    allPayoutsObserved: restored.allPayoutsObserved || [],
-                    payoutsByDuration: restored.payoutsByDuration || {},
-                    payoutsByHour: restored.payoutsByHour || {},
-                    payoutsBySymbol: restored.payoutsBySymbol || {},
-                    byDuration: restored.byDuration || {},
-                    byHour: restored.byHour || {},
-                    bySymbol: restored.bySymbol || {},
-                    startTime: restored.startTime || Date.now()
-                };
+            // if (savedData.experimentStats) {
+            //     // Restore experiment stats but ensure arrays exist
+            //     const restored = savedData.experimentStats;
+            //     ExperimentStats.data = {
+            //         ...ExperimentStats.data,
+            //         ...restored,
+            //         payoutRatios: restored.payoutRatios || [],
+            //         winPayoutRatios: restored.winPayoutRatios || [],
+            //         allPayoutsObserved: restored.allPayoutsObserved || [],
+            //         payoutsByDuration: restored.payoutsByDuration || {},
+            //         payoutsByHour: restored.payoutsByHour || {},
+            //         payoutsBySymbol: restored.payoutsBySymbol || {},
+            //         byDuration: restored.byDuration || {},
+            //         byHour: restored.byHour || {},
+            //         bySymbol: restored.bySymbol || {},
+            //         startTime: restored.startTime || Date.now()
+            //     };
 
-                // Ensure payoutsReceived arrays exist in byDuration
-                Object.keys(ExperimentStats.data.byDuration).forEach(dur => {
-                    if (!ExperimentStats.data.byDuration[dur].payoutsReceived) {
-                        ExperimentStats.data.byDuration[dur].payoutsReceived = [];
-                    }
-                });
-            }
+            //     // Ensure payoutsReceived arrays exist in byDuration
+            //     Object.keys(ExperimentStats.data.byDuration).forEach(dur => {
+            //         if (!ExperimentStats.data.byDuration[dur].payoutsReceived) {
+            //             ExperimentStats.data.byDuration[dur].payoutsReceived = [];
+            //         }
+            //     });
+            // }
 
             LOGGER.info(`✅ State restored! ${ExperimentStats.data.totalTrades} trades, $${state.capital.toFixed(2)}`);
             return true;
@@ -1218,10 +1218,10 @@ class DerivBot {
         const remaining = CONFIG.TARGET_TRADE_COUNT - ExperimentStats.data.totalTrades;
         LOGGER.experiment(`Progress: ${ExperimentStats.data.totalTrades}/${CONFIG.TARGET_TRADE_COUNT} (${remaining} remaining)`);
 
-        if (ExperimentStats.data.totalTrades >= CONFIG.TARGET_TRADE_COUNT) {
-            ExperimentStats.printFinalConclusion();
-            return;
-        }
+        // if (ExperimentStats.data.totalTrades >= CONFIG.TARGET_TRADE_COUNT) {
+        //     ExperimentStats.printFinalConclusion();
+        //     return;
+        // }
 
         TradeDataLogger.initialize();
         PayoutLogger.initialize();
