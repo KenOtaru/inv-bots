@@ -1212,13 +1212,13 @@ class ConnectionManager {
 
         // Score 1: Low bounce rate (weight: 25)
         maxScore += 25;
-        if (bounceRate < 20) {
+        if (bounceRate < 40) {
             nonRepeatScore += 25;
             scoreBreakdown.push(`Bounce: +25 (${bounceRate.toFixed(1)}% < 20%)`);
-        } else if (bounceRate < 30) {
+        } else if (bounceRate < 50) {
             nonRepeatScore += 18;
             scoreBreakdown.push(`Bounce: +18 (${bounceRate.toFixed(1)}% < 30%)`);
-        } else if (bounceRate < 40) {
+        } else if (bounceRate < 60) {
             nonRepeatScore += 10;
             scoreBreakdown.push(`Bounce: +10 (${bounceRate.toFixed(1)}% < 40%)`);
         } else {
@@ -1228,13 +1228,13 @@ class ConnectionManager {
 
         // Score 2: Momentum streak (weight: 20)
         maxScore += 20;
-        if (currentStreak >= 5) {
+        if (currentStreak >= 4) {
             nonRepeatScore += 20;
             scoreBreakdown.push(`Streak: +20 (${currentStreak} ticks, dir=${streakDirection > 0 ? '↑' : '↓'})`);
-        } else if (currentStreak >= 4) {
+        } else if (currentStreak >= 3) {
             nonRepeatScore += 16;
             scoreBreakdown.push(`Streak: +16 (${currentStreak} ticks)`);
-        } else if (currentStreak >= 3) {
+        } else if (currentStreak >= 2) {
             nonRepeatScore += 12;
             scoreBreakdown.push(`Streak: +12 (${currentStreak} ticks)`);
         } else {
@@ -1244,13 +1244,13 @@ class ConnectionManager {
 
         // Score 3: Unique digit spread (weight: 15)
         maxScore += 15;
-        if (uniqueDigits >= 5) {
+        if (uniqueDigits >= 4) {
             nonRepeatScore += 15;
             scoreBreakdown.push(`Spread: +15 (${uniqueDigits} unique in last 6)`);
-        } else if (uniqueDigits >= 4) {
+        } else if (uniqueDigits >= 3) {
             nonRepeatScore += 12;
             scoreBreakdown.push(`Spread: +12 (${uniqueDigits} unique in last 6)`);
-        } else if (uniqueDigits >= 3) {
+        } else if (uniqueDigits >= 2) {
             nonRepeatScore += 6;
             scoreBreakdown.push(`Spread: +6 (${uniqueDigits} unique in last 6)`);
         } else {
@@ -1270,10 +1270,10 @@ class ConnectionManager {
 
         // Score 5: Pattern-specific non-repeat rate (weight: 15)
         maxScore += 15;
-        if (patternNonRepeatRate >= 80) {
+        if (patternNonRepeatRate >= 70) {
             nonRepeatScore += 15;
             scoreBreakdown.push(`Pattern: +15 (${patternNonRepeatRate.toFixed(1)}% non-repeat, ${patternMatches} samples)`);
-        } else if (patternNonRepeatRate >= 65) {
+        } else if (patternNonRepeatRate >= 55) {
             nonRepeatScore += 10;
             scoreBreakdown.push(`Pattern: +10 (${patternNonRepeatRate.toFixed(1)}% non-repeat, ${patternMatches} samples)`);
         } else if (patternNonRepeatRate >= 0) {
@@ -1322,7 +1322,7 @@ class ConnectionManager {
         // =============================================
         // TRADE EXECUTION GATE
         // =============================================
-        const TRADE_THRESHOLD = 80; // Only trade when 80%+ non-repeat probability
+        const TRADE_THRESHOLD = 60; // Only trade when 80%+ non-repeat probability
 
         // HARD BLOCKS: Never trade during these conditions
         if (isOscillating && !oscillationBroken) {
