@@ -1297,13 +1297,13 @@ class DerivBot {
         // } else {
         // No candle provided (triggered by tick analysis)
         // Use System Logic for direction
-        if (state.lastTradeWasWin === null) {
-            direction = 'CALL'; // Default first trade
-        } else if (state.lastTradeWasWin) {
-            direction = state.lastTradeDirection; // Same if won
-        } else {
-            direction = state.lastTradeDirection === 'CALL' ? 'PUT' : 'CALL'; // Switch if lost
-        }
+        // if (state.lastTradeWasWin === null) {
+        direction = 'CALL'; // Default first trade
+        // } else if (state.lastTradeWasWin) {
+        //     direction = state.lastTradeDirection; // Same if won
+        // } else {
+        //     direction = state.lastTradeDirection === 'CALL' ? 'PUT' : 'CALL'; // Switch if lost
+        // }
         LOGGER.info(`🔄 No candle context - Using system direction: ${direction}`);
         // }
 
