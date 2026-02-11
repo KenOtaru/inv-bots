@@ -1072,9 +1072,12 @@ class ConnectionManager {
         if (countTotal > 0) {
             const percentage = (countRepeat / countTotal) * 100;
 
+            const last5TicksTrendHigh = history[history.length - 1] > history[history.length - 2] && history[history.length - 2] > history[history.length - 3] && history[history.length - 3] > history[history.length - 4] && history[history.length - 4] > history[history.length - 5];
+
             // Log analysis periodically or if high
             // if (percentage >= 50) {
             LOGGER.debug(`[${asset}] Digit ${currentDigit} Analysis: Total=${countTotal}, Repeats=${countRepeat}, Percentage=${percentage.toFixed(2)}%`);
+            LOGGER.debug(`[${asset}] Last 5 Ticks Trend High: ${last5TicksTrendHigh} (${history.slice(-5).join(' > ')})`);
             // }
 
             // Trade if percentage >= 60% and current digit is the one being analyzed
@@ -1083,12 +1086,9 @@ class ConnectionManager {
                 LOGGER.trade(`🎯 STRATEGY SIGNAL: Digit ${CONFIG.highestPercentageDigit} is the most frequent digit`);
             }
 
-            const last5TicksTrendHigh = history[history.length - 1] > history[history.length - 2] && history[history.length - 2] > history[history.length - 3] && history[history.length - 3] > history[history.length - 4] && history[history.length - 4] > history[history.length - 5];
-            // const last5TicksTrendLow = history[history.length - 1] < history[history.length - 2] && history[history.length - 2] < history[history.length - 3] && history[history.length - 3] < history[history.length - 4] && history[history.length - 4] < history[history.length - 5];
-
             // if (countTotal < 4 && !state.portfolio.activePositions.length) {
             if ((currentDigit === (CONFIG.highestPercentageDigit - 1)) && last5TicksTrendHigh && !state.portfolio.activePositions.length) {
-                LOGGER.trade(`🎯 STRATEGY SIGNAL: Digit ${CONFIG.highestPercentageDigit} Trend High: ${last5TicksTrendHigh} (${history.slice(-5).join(' > ')})`);
+                LOGGER.trade(`🎯 STRATEGY SIGNAL: Digit ${CONFIG.highestPercentageDigit} | ${currentDigit} Trend High: ${last5TicksTrendHigh} (${history.slice(-5).join(' > ')})`);
                 state.canTrade = true;
                 bot.executeNextTrade(asset);
             }
