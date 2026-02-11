@@ -447,6 +447,7 @@ const state = {
     capital: CONFIG.INITIAL_CAPITAL,
     accountBalance: 0,
     currentStake: CONFIG.STAKE,
+    predictedDirection: null,  // NEW: Predicted trade direction from pattern analysis
     session: {
         profit: 0,
         loss: 0,
@@ -688,19 +689,21 @@ class ConnectionManager {
 
     initializeAssets() {
         ACTIVE_ASSETS.forEach(symbol => {
-            // Only initialize if not already present (to preserve loaded state)
             if (!state.assets[symbol]) {
                 state.assets[symbol] = {
                     candles: [],
                     closedCandles: [],
-                    tickHistory: [],
+                    tickHistory: [],          // Keep for digits
+                    priceHistory: [],         // NEW: Raw prices
+                    movementHistory: [],      // NEW: Movement directions (1=UP, -1=DOWN, 0=SAME)
+                    lastTick: null,
+                    lastDigit: null,
+                    lastPrice: null,          // NEW
                     currentFormingCandle: null,
                     lastProcessedCandleOpenTime: null,
                     candlesLoaded: false
                 };
                 LOGGER.info(`📊 Initialized asset: ${symbol}`);
-            } else {
-                LOGGER.info(`📊 Asset ${symbol} already initialized (state restored)`);
             }
         });
     }
@@ -1023,114 +1026,176 @@ class ConnectionManager {
     // NEW: Handle live tick updates for Odd/Even checking
     handleTickUpdate(tick) {
         const asset = tick.symbol;
+        const price = parseFloat(tick.quote);
         const lastDigit = this.getLastDigit(tick.quote, asset);
 
         if (!state.assets[asset]) return;
 
         const assetState = state.assets[asset];
+        const prevPrice = assetState.lastPrice;
+
+        // Update basic state
         assetState.lastTick = tick;
         assetState.lastDigit = lastDigit;
+        assetState.lastPrice = price;
 
         // Update global tickData for compatibility
         state.tickData.lastTick = tick;
         state.tickData.lastDigit = lastDigit;
 
-        // Maintain 1000 tickHistory
+        // Maintain digit history (keep for logging)
         if (!assetState.tickHistory) assetState.tickHistory = [];
         assetState.tickHistory.push(lastDigit);
         if (assetState.tickHistory.length > 1000) {
             assetState.tickHistory.shift();
         }
 
-        LOGGER.debug(`[${asset}] Tick: ${tick.quote} | Last Digit: ${lastDigit} (${lastDigit % 2 === 0 ? 'EVEN' : 'ODD'})`);
+        // NEW: Maintain price history
+        if (!assetState.priceHistory) assetState.priceHistory = [];
+        assetState.priceHistory.push(price);
+        if (assetState.priceHistory.length > 1000) {
+            assetState.priceHistory.shift();
+        }
 
-        // Analyze ticks for strategy
-        this.analyzeTicks(asset);
+        // NEW: Calculate and store movement direction
+        if (!assetState.movementHistory) assetState.movementHistory = [];
+        if (prevPrice !== null) {
+            let movement;
+            if (price > prevPrice) {
+                movement = 1;  // UP
+            } else if (price < prevPrice) {
+                movement = -1; // DOWN
+            } else {
+                movement = 0;  // SAME
+            }
+            assetState.movementHistory.push(movement);
+            if (assetState.movementHistory.length > 1000) {
+                assetState.movementHistory.shift();
+            }
+        }
+
+        LOGGER.debug(`[${asset}] Tick: ${tick.quote} | Digit: ${lastDigit} | Move: ${prevPrice ? (price > prevPrice ? '↑' : price < prevPrice ? '↓' : '→') : 'N/A'}`);
+
+        // Analyze and potentially trade
+        this.analyzeForTrade(asset);
     }
 
-    // NEW: analyzeTicks method to check for 60% repeat rate
-    // NEW: analyzeTicks method - Only trade when 80% probability of NO repeat at position 1 & 3
-    analyzeTicks(asset) {
+
+    // =============================================
+    // NEW: Pattern-based price movement prediction
+    // =============================================
+    analyzeForTrade(asset) {
         const assetState = state.assets[asset];
-        if (!assetState || !assetState.tickHistory || assetState.tickHistory.length < 100) return;
 
-        const history = assetState.tickHistory.slice(-100);
-        const currentDigit = assetState.lastDigit;
-        const histLen = history.length;
-
-        // =============================================
-        // PART 1: Track the highest-percentage digit
-        // =============================================
-        let countTotal = 0;
-        let countRepeat = 0;
-
-        for (let i = 0; i < histLen - 2; i++) {
-            if (history[i] === currentDigit) {
-                countTotal++;
-                if (history[i + 2] === currentDigit) {
-                    countRepeat++;
-                }
-            }
+        // Need enough history
+        if (!assetState.movementHistory || assetState.movementHistory.length < 50) {
+            return;
         }
 
-        if (countTotal > 0) {
-            const percentage = (countRepeat / countTotal) * 100;
+        // Don't analyze if we have an active position
+        if (state.portfolio.activePositions.length > 0) {
+            return;
+        }
 
-            const last3Trend = history[histLen - 1] < history[histLen - 2] &&
-                history[histLen - 2] < history[histLen - 3];
+        const movements = assetState.movementHistory;
+        const prices = assetState.priceHistory;
+        const histLen = movements.length;
 
-            LOGGER.debug(`[${asset}] Digit ${currentDigit} Analysis: Total=${countTotal}, Repeats=${countRepeat}, Percentage=${percentage.toFixed(2)}%`);
-            LOGGER.debug(`[${asset}] Trend High: ${last3Trend} (${history[histLen - 1]} < ${history[histLen - 2]} < ${history[histLen - 3]})`);
+        // =============================================
+        // PATTERN CONFIGURATION
+        // =============================================
+        const PATTERN_LENGTH = 3;           // Look at last N movements as pattern
+        const MIN_SAMPLES = 10;             // Minimum historical matches required
+        const WIN_PROBABILITY_THRESHOLD = 40; // Minimum % for trade execution
+        const DURATION_TICKS = 2;           // Your trade duration
 
-            this.ticksCount++;
+        // Need enough data for pattern + outcome check
+        if (histLen < PATTERN_LENGTH + DURATION_TICKS + 50) {
+            return;
+        }
 
-            // Mark the most frequently appearing digit (needs 15+ occurrences)
-            if (countTotal >= 15) {
-                CONFIG.highestPercentageDigit = currentDigit;
-            }
+        // =============================================
+        // EXTRACT CURRENT PATTERN
+        // =============================================
+        const currentPattern = movements.slice(-PATTERN_LENGTH);
+        const currentPatternStr = currentPattern.join(',');
 
-            // =============================================
-            // PART 2: Predict 1st & 3rd digit non-repeat
-            // =============================================
-            // When we're about to trade, the CURRENT tick becomes the entry tick.
-            // Tick+1 (1st after) and Tick+3 (3rd after) are what we need to check.
-            //
-            // We analyze: after every occurrence of the current pattern (trend high + 
-            // currentDigit == highestPercentageDigit - 1), how often did position+1 
-            // and position+3 have the SAME digit? If repeat rate < 20%, 
-            // then non-repeat probability >= 80%.
+        // =============================================
+        // SCAN HISTORY FOR MATCHING PATTERNS
+        // =============================================
+        let matchCount = 0;
+        let upCount = 0;
+        let downCount = 0;
+        let sameCount = 0;
 
-            if ((currentDigit === (CONFIG.highestPercentageDigit - 1)) &&
-                // last3Trend &&
-                !state.portfolio.activePositions.length) {
+        // Scan through history (leaving room for pattern and outcome)
+        for (let i = PATTERN_LENGTH; i < histLen - DURATION_TICKS - 1; i++) {
+            // Extract historical pattern at position i
+            const historicalPattern = movements.slice(i - PATTERN_LENGTH, i);
+            const historicalPatternStr = historicalPattern.join(',');
 
-                // Calculate the 1st & 3rd post-entry digit repeat probability
-                const repeatAnalysis = this.analyzePostEntryRepeat(asset, currentDigit, history);
+            // Check if patterns match
+            if (historicalPatternStr === currentPatternStr) {
+                matchCount++;
 
-                if (repeatAnalysis === null) {
-                    LOGGER.debug(`[${asset}] ⏳ Not enough pattern samples for repeat analysis, skipping trade`);
-                    return;
-                }
+                // Check what happened DURATION_TICKS later
+                const entryPrice = prices[i];
+                const exitPrice = prices[i + DURATION_TICKS];
 
-                const { sampleCount, repeatCount, repeatPct, nonRepeatPct } = repeatAnalysis;
-
-                LOGGER.trade(`REPEAT ANALYSIS: Samples=${sampleCount}, Repeats=${repeatCount}, RepeatPct=${repeatPct.toFixed(1)}%, NonRepeatPct=${nonRepeatPct.toFixed(1)}%`);
-
-                if (nonRepeatPct >= 80) {
-                    LOGGER.trade(`✅ NON-REPEAT >= 80% (${nonRepeatPct.toFixed(1)}%) — TRADE APPROVED`);
-                    LOGGER.trade(`STRATEGY SIGNAL: Digit ${CONFIG.highestPercentageDigit} | ${currentDigit} Trend High: ${last3Trend} (${history.slice(-3).join(' > ')})`);
-                    state.canTrade = true;
-                    bot.executeNextTrade(asset);
+                if (exitPrice > entryPrice) {
+                    upCount++;
+                } else if (exitPrice < entryPrice) {
+                    downCount++;
                 } else {
-                    LOGGER.debug(`[${asset}] ❌ Non-repeat only ${nonRepeatPct.toFixed(1)}% (need ≥80%), skipping trade`);
+                    sameCount++;
                 }
             }
-
-            if (this.ticksCount > 10) {
-                CONFIG.highestPercentageDigit = null;
-                this.ticksCount = 0;
-            }
         }
+
+        // =============================================
+        // DECISION LOGIC
+        // =============================================
+        if (matchCount < MIN_SAMPLES) {
+            LOGGER.debug(`[${asset}] Pattern [${currentPatternStr}] found only ${matchCount}/${MIN_SAMPLES} matches, waiting...`);
+            return;
+        }
+
+        const upPct = (upCount / matchCount) * 100;
+        const downPct = (downCount / matchCount) * 100;
+        const samePct = (sameCount / matchCount) * 100;
+
+        LOGGER.debug(`[${asset}] ═══════════════════════════════════════════`);
+        LOGGER.debug(`[${asset}] Pattern Analysis: [${this.formatPattern(currentPattern)}]`);
+        LOGGER.debug(`[${asset}] Matches: ${matchCount} | UP: ${upCount} (${upPct.toFixed(1)}%) | DOWN: ${downCount} (${downPct.toFixed(1)}%) | SAME: ${sameCount} (${samePct.toFixed(1)}%)`);
+        LOGGER.debug(`[${asset}] ═══════════════════════════════════════════`);
+
+        // Determine trade direction
+        let tradeDirection = null;
+        let winProbability = 0;
+
+        if (upPct >= WIN_PROBABILITY_THRESHOLD && downPct <= 0) {
+            tradeDirection = 'CALL';
+            winProbability = upPct;
+        } else if (downPct >= WIN_PROBABILITY_THRESHOLD && upPct <= 0) {
+            tradeDirection = 'CALL';
+            winProbability = downPct;
+        }
+
+        if (tradeDirection) {
+            LOGGER.trade(`✅ SIGNAL FOUND on ${asset}`);
+            LOGGER.trade(`   Pattern: [${this.formatPattern(currentPattern)}]`);
+            LOGGER.trade(`   Direction: ${tradeDirection} | Win Probability: ${winProbability.toFixed(1)}%`);
+            LOGGER.trade(`   Based on ${matchCount} historical matches`);
+
+            state.canTrade = true;
+            state.predictedDirection = tradeDirection;
+            bot.executeNextTrade(asset);
+        }
+    }
+
+    // Helper: Format movement pattern for display
+    formatPattern(pattern) {
+        return pattern.map(m => m === 1 ? '↑' : m === -1 ? '↓' : '→').join(' ');
     }
 
     // NEW: Analyze the probability that 1st and 3rd digits after a pattern entry will NOT repeat
@@ -1341,66 +1406,37 @@ class DerivBot {
         if (!SessionManager.isSessionActive()) return;
         if (state.portfolio.activePositions.length >= CONFIG.MAX_OPEN_POSITIONS) return;
 
-        // Use symbol parameter or default to first asset
         const tradeSymbol = symbol || ACTIVE_ASSETS[0];
         const stake = state.currentStake;
 
         if (state.capital < stake) {
-            LOGGER.error(`Insufficient capital for stake: $${state.capital.toFixed(2)} (Needed: $${stake.toFixed(2)})`);
+            LOGGER.error(`Insufficient capital: $${state.capital.toFixed(2)} (Need: $${stake.toFixed(2)})`);
             if (state.martingaleLevel > 0) {
-                LOGGER.info('Resetting Martingale level due to insufficient capital.');
                 state.martingaleLevel = 0;
             }
             return;
         }
 
-        // NEW: Check if last digit is Odd before trading
-        const lastDigit = state.tickData.lastDigit;
-        if (lastDigit === null) {
-            LOGGER.warn(`⚠️ No tick data available yet, skipping trade for ${tradeSymbol}`);
-            return;
-        }
-
-        // const isOdd = lastDigit % 2 !== 0;
-        // if (isOdd) {
-        //     LOGGER.info(`🚫 Skipping trade on ${tradeSymbol} - Last digit ${lastDigit} is ODD (Even required)`);
-        //     state.canTrade = false;
-        //     return;
-        // }
-
-        // LOGGER.info(`✅ Last digit ${lastDigit} is ODD - Proceeding with trade on ${tradeSymbol}`);
-
-        // Determine direction based on last closed candle or system logic
+        // =============================================
+        // NEW: Use predicted direction from analysis
+        // =============================================
         let direction;
 
-        // if (lastClosedCandle) {
-        //     const isOdd = lastDigit % 2 !== 0;
-        //     // Trade based on candle pattern
-        //     if (!isOdd) {
-        //         direction = 'PUT';
-        //         LOGGER.trade(`📈 Last Digit ${lastDigit} (EVEN) → Executing FALL trade`);
-        //     } else {
-        //         direction = 'CALL';
-        //         LOGGER.trade(`� Last Digit ${lastDigit} (ODD) → Executing RISE trade`);
-        //     }
-        // } else {
-        // No candle provided (triggered by tick analysis)
-        // Use System Logic for direction
-        // if (state.lastTradeWasWin === null) {
-        direction = 'PUT'; // Default first trade
-        // } else if (state.lastTradeWasWin) {
-        //     direction = state.lastTradeDirection; // Same if won
-        // } else {
-        //     direction = state.lastTradeDirection === 'CALL' ? 'PUT' : 'CALL'; // Switch if lost
-        // }
-        // LOGGER.info(`🔄 No candle context - Using system direction: ${direction}`);
-        // }
+        if (state.predictedDirection) {
+            direction = state.predictedDirection;
+            LOGGER.trade(`📊 Using pattern-predicted direction: ${direction}`);
+        } else {
+            // Fallback to previous logic if needed
+            direction = 'CALL';
+            LOGGER.trade(`📊 Using fallback direction: ${direction}`);
+        }
 
-        state.canTrade = false; // Prevent multiple trades
+        state.canTrade = false;
+        state.predictedDirection = null; // Reset after use
         state.lastTradeDirection = direction;
 
         LOGGER.trade(`🎯 Executing ${direction === 'CALL' ? 'RISE' : 'FALL'} trade on ${tradeSymbol}`);
-        LOGGER.trade(`   Stake: $${stake.toFixed(2)} | Duration: ${CONFIG.DURATION} ${CONFIG.DURATION_UNIT} | Martingale Level: ${state.martingaleLevel}`);
+        LOGGER.trade(`   Stake: $${stake.toFixed(2)} | Duration: ${CONFIG.DURATION} ${CONFIG.DURATION_UNIT} | Martingale: ${state.martingaleLevel}`);
 
         const position = {
             symbol: tradeSymbol,
