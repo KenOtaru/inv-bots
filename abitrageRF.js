@@ -436,7 +436,7 @@ const CONFIG = {
 
 let ACTIVE_ASSETS = [
     // 'R_75', 'R_100', '1HZ25V', '1HZ50V', '1HZ100V' 'stpRNG', 'RDBULL', 'RDBEAR',
-    'stpRNG'
+    'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'
 ];
 
 // ============================================
@@ -1174,7 +1174,7 @@ class ConnectionManager {
         let winProbability = 0;
 
         if (upPct >= WIN_PROBABILITY_THRESHOLD && downPct <= 0) {
-            tradeDirection = 'PUT';
+            tradeDirection = 'CALL';
             winProbability = upPct;
         } else if (downPct >= WIN_PROBABILITY_THRESHOLD && upPct <= 0) {
             tradeDirection = 'PUT';
