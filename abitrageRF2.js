@@ -1212,13 +1212,13 @@ class ConnectionManager {
 
         // Score 1: Low bounce rate (weight: 25)
         maxScore += 25;
-        if (bounceRate < 40) {
+        if (bounceRate < 45) {
             nonRepeatScore += 25;
             scoreBreakdown.push(`Bounce: +25 (${bounceRate.toFixed(1)}% < 20%)`);
-        } else if (bounceRate < 50) {
+        } else if (bounceRate < 55) {
             nonRepeatScore += 18;
             scoreBreakdown.push(`Bounce: +18 (${bounceRate.toFixed(1)}% < 30%)`);
-        } else if (bounceRate < 60) {
+        } else if (bounceRate < 65) {
             nonRepeatScore += 10;
             scoreBreakdown.push(`Bounce: +10 (${bounceRate.toFixed(1)}% < 40%)`);
         } else {
@@ -1270,7 +1270,7 @@ class ConnectionManager {
 
         // Score 5: Pattern-specific non-repeat rate (weight: 15)
         maxScore += 15;
-        if (patternNonRepeatRate >= 70) {
+        if (patternNonRepeatRate >= 75) {
             nonRepeatScore += 15;
             scoreBreakdown.push(`Pattern: +15 (${patternNonRepeatRate.toFixed(1)}% non-repeat, ${patternMatches} samples)`);
         } else if (patternNonRepeatRate >= 55) {
