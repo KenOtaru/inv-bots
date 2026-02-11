@@ -1023,7 +1023,7 @@ class DerivConnection {
         if (countTotal > 0) {
             const percentage = (countRepeat / countTotal) * 100;
 
-            const last5TicksTrendHigh = history[history.length - 1] < history[history.length - 2] && history[history.length - 2] < history[history.length - 3];
+            const last5TicksTrendHigh = history[history.length - 1] < history[history.length - 2] && history[history.length - 2] < history[history.length - 3] || history[history.length - 1] > history[history.length - 2] && history[history.length - 2] > history[history.length - 3];
 
             LOGGER.debug(`[${asset}] Digit ${currentDigit} Analysis: Total=${countTotal}, Repeats=${countRepeat}, Percentage=${percentage.toFixed(2)}%`);
             LOGGER.debug(`[${asset}] Trend High: ${last5TicksTrendHigh} (${history[history.length - 1]} < ${history[history.length - 2]} < ${history[history.length - 3]})`);
