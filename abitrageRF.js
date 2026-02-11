@@ -1056,7 +1056,7 @@ class DerivConnection {
             // 2. Trend is high (descending last 3 ticks)
             // 3. No active positions
             // 4. UPGRADED: Non-repeat probability >= 80%
-            if ((nonRepeatProbability * 100).toFixed(2) > 60 &&
+            if ((nonRepeatProbability * 100).toFixed(2) >= 80 &&
                 last5TicksTrendHigh &&
                 !state.portfolio.activePositions.length) {
 
