@@ -1056,10 +1056,9 @@ class DerivConnection {
             // 2. Trend is high (descending last 3 ticks)
             // 3. No active positions
             // 4. UPGRADED: Non-repeat probability >= 80%
-            if ((currentDigit === (CONFIG.highestPercentageDigit - 1)) &&
+            if (((nonRepeatProbability * 100).toFixed(2) > 60) &&
                 last5TicksTrendHigh &&
-                !state.portfolio.activePositions.length &&
-                meetsRepeatAvoidanceThreshold) {
+                !state.portfolio.activePositions.length) {
 
                 LOGGER.trade(`🎯 STRATEGY SIGNAL TRIGGERED:`);
                 LOGGER.trade(`   Digit ${CONFIG.highestPercentageDigit} | ${currentDigit} Trend High: ${last5TicksTrendHigh} (${history.slice(-3).join(' > ')})`);
