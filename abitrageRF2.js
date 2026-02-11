@@ -1072,12 +1072,12 @@ class ConnectionManager {
         if (countTotal > 0) {
             const percentage = (countRepeat / countTotal) * 100;
 
-            const last5TicksTrendHigh = history[history.length - 1] > history[history.length - 2] && history[history.length - 2] > history[history.length - 3];
+            const last5TicksTrendHigh = history[history.length - 1] < history[history.length - 2] && history[history.length - 2] < history[history.length - 3];
 
             // Log analysis periodically or if high
             // if (percentage >= 50) {
             LOGGER.debug(`[${asset}] Digit ${currentDigit} Analysis: Total=${countTotal}, Repeats=${countRepeat}, Percentage=${percentage.toFixed(2)}%`);
-            LOGGER.debug(`[${asset}] Trend High: ${last5TicksTrendHigh} (${history[history.length - 1]} > ${history[history.length - 2]} > ${history[history.length - 3]})`);
+            LOGGER.debug(`[${asset}] Trend High: ${last5TicksTrendHigh} (${history[history.length - 1]} < ${history[history.length - 2]} < ${history[history.length - 3]})`);
             // }
 
             this.ticksCount++;
@@ -1284,7 +1284,7 @@ class DerivBot {
         //     return;
         // }
 
-        LOGGER.info(`✅ Last digit ${lastDigit} is ODD - Proceeding with trade on ${tradeSymbol}`);
+        // LOGGER.info(`✅ Last digit ${lastDigit} is ODD - Proceeding with trade on ${tradeSymbol}`);
 
         // Determine direction based on last closed candle or system logic
         let direction;
@@ -1309,7 +1309,7 @@ class DerivBot {
         // } else {
         //     direction = state.lastTradeDirection === 'CALL' ? 'PUT' : 'CALL'; // Switch if lost
         // }
-        LOGGER.info(`🔄 No candle context - Using system direction: ${direction}`);
+        // LOGGER.info(`🔄 No candle context - Using system direction: ${direction}`);
         // }
 
         state.canTrade = false; // Prevent multiple trades
