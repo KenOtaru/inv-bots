@@ -1072,7 +1072,7 @@ class ConnectionManager {
         if (countTotal > 0) {
             const percentage = (countRepeat / countTotal) * 100;
 
-            const last5TicksTrendHigh = history[history.length - 1] > history[history.length - 2] && history[history.length - 2] > history[history.length - 3];
+            const last5TicksTrendHigh = (history[history.length - 1] > history[history.length - 2] && history[history.length - 2] > history[history.length - 3] || history[history.length - 1] > history[history.length - 2] && history[history.length - 2] > history[history.length - 3]);
 
             // Log analysis periodically or if high
             // if (percentage >= 50) {
@@ -1082,7 +1082,7 @@ class ConnectionManager {
 
             this.ticksCount++;
             // Trade if percentage >= 60% and current digit is the one being analyzed
-            if (countTotal >= 10) {
+            if (countTotal >= 15 && percentage >= 60) {
                 CONFIG.highestPercentageDigit = currentDigit;
                 // LOGGER.trade(`🎯 STRATEGY SIGNAL: Digit ${CONFIG.highestPercentageDigit} is the most frequent digit`);
             }
