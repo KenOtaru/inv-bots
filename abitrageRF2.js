@@ -1212,13 +1212,13 @@ class ConnectionManager {
 
         // Score 1: Low bounce rate (weight: 25)
         maxScore += 25;
-        if (bounceRate < 45) {
+        if (bounceRate < 50) {
             nonRepeatScore += 25;
             scoreBreakdown.push(`Bounce: +25 (${bounceRate.toFixed(1)}% < 20%)`);
-        } else if (bounceRate < 55) {
+        } else if (bounceRate < 60) {
             nonRepeatScore += 18;
             scoreBreakdown.push(`Bounce: +18 (${bounceRate.toFixed(1)}% < 30%)`);
-        } else if (bounceRate < 65) {
+        } else if (bounceRate < 70) {
             nonRepeatScore += 10;
             scoreBreakdown.push(`Bounce: +10 (${bounceRate.toFixed(1)}% < 40%)`);
         } else {
@@ -1228,13 +1228,13 @@ class ConnectionManager {
 
         // Score 2: Momentum streak (weight: 20)
         maxScore += 20;
-        if (currentStreak >= 4) {
+        if (currentStreak >= 5) {
             nonRepeatScore += 20;
             scoreBreakdown.push(`Streak: +20 (${currentStreak} ticks, dir=${streakDirection > 0 ? '↑' : '↓'})`);
-        } else if (currentStreak >= 3) {
+        } else if (currentStreak >= 4) {
             nonRepeatScore += 16;
             scoreBreakdown.push(`Streak: +16 (${currentStreak} ticks)`);
-        } else if (currentStreak >= 2) {
+        } else if (currentStreak >= 3) {
             nonRepeatScore += 12;
             scoreBreakdown.push(`Streak: +12 (${currentStreak} ticks)`);
         } else {
