@@ -6,7 +6,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'abitrageRF001-state.json');
+const STATE_FILE = path.join(__dirname, 'abitrageRF00001-state.json');
 const STATE_SAVE_INTERVAL = 5000; // Save every 5 seconds
 
 class StatePersistence {
@@ -398,6 +398,7 @@ const CONFIG = {
     totalTradesN: 300,
     SESSION_PROFIT_TARGET: 500,
     SESSION_STOP_LOSS: -250,
+    highestPercentageDigit: null,
 
     // Candle Settings
     GRANULARITY: 60, // 60 seconds = 1 minute candles
@@ -628,6 +629,8 @@ class SessionManager {
                 LOGGER.trade(`❌ LOSS: -$${Math.abs(profit).toFixed(2)} | Direction: ${direction} | Next Martingale Level: ${state.martingaleLevel}`);
             }
         }
+
+        CONFIG.highestPercentageDigit = null;
     }
 }
 
@@ -1075,12 +1078,20 @@ class ConnectionManager {
             // }
 
             // Trade if percentage >= 60% and current digit is the one being analyzed
+            if (countTotal >= 13 && CONFIG.highestPercentageDigit === null) {
+                CONFIG.highestPercentageDigit = currentDigit;
+                LOGGER.trade(`🎯 STRATEGY SIGNAL: Digit ${CONFIG.highestPercentageDigit} is the most frequent digit`);
+            }
+
             // if (countTotal < 4 && !state.portfolio.activePositions.length) {
-            if (percentage >= 88 && !state.portfolio.activePositions.length) {
-                LOGGER.trade(`🎯 STRATEGY SIGNAL: Digit ${currentDigit} repeat rate is ${percentage.toFixed(2)}%!`);
+            if ((currentDigit === (CONFIG.highestPercentageDigit - 1)) && !state.portfolio.activePositions.length) {
+                LOGGER.trade(`🎯 STRATEGY SIGNAL: Digit ${CONFIG.highestPercentageDigit} | ${currentDigit} repeat rate is ${percentage.toFixed(2)}%!`);
                 state.canTrade = true;
                 bot.executeNextTrade(asset);
             }
+            // else {
+            //     CONFIG.highestPercentageDigit = null;
+            // }
         }
     }
 
@@ -1286,13 +1297,13 @@ class DerivBot {
         // } else {
         // No candle provided (triggered by tick analysis)
         // Use System Logic for direction
-        // if (state.lastTradeWasWin === null) {
-        direction = 'CALL'; // Default first trade
-        // } else if (state.lastTradeWasWin) {
-        //     direction = state.lastTradeDirection; // Same if won
-        // } else {
-        //     direction = state.lastTradeDirection === 'CALL' ? 'PUT' : 'CALL'; // Switch if lost
-        // }
+        if (state.lastTradeWasWin === null) {
+            direction = 'CALL'; // Default first trade
+        } else if (state.lastTradeWasWin) {
+            direction = state.lastTradeDirection; // Same if won
+        } else {
+            direction = state.lastTradeDirection === 'CALL' ? 'PUT' : 'CALL'; // Switch if lost
+        }
         LOGGER.info(`🔄 No candle context - Using system direction: ${direction}`);
         // }
 
