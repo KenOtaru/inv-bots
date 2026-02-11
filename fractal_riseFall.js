@@ -7,7 +7,7 @@ const path = require('path');
 // STATE PERSISTENCE MANAGER
 // ============================================
 const STATE_FILE = path.join(__dirname, 'fractal_riseFall-state.json');
-const STATE_SAVE_INTERVAL = 5000; // Save every 5 seconds
+const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
     static saveState() {
@@ -41,14 +41,13 @@ class StatePersistence {
                 assets: {}
             };
 
-            // Save essential asset state for each symbol
             Object.keys(state.assets).forEach(symbol => {
                 const asset = state.assets[symbol];
                 persistableState.assets[symbol] = {
                     closedCandles: asset.closedCandles.slice(-100),
                     lastProcessedCandleOpenTime: asset.lastProcessedCandleOpenTime,
                     candlesLoaded: asset.candlesLoaded,
-                    // Fractal State (replaces WPR)
+                    // Fractal State
                     lastFractalHigh: asset.lastFractalHigh,
                     lastFractalLow: asset.lastFractalLow
                 };
@@ -71,7 +70,9 @@ class StatePersistence {
             const ageMinutes = (Date.now() - savedData.savedAt) / 60000;
 
             if (ageMinutes > 30) {
-                LOGGER.warn(`⚠️ Saved state is ${ageMinutes.toFixed(1)} minutes old, starting fresh`);
+                LOGGER.warn(
+                    `⚠️ Saved state is ${ageMinutes.toFixed(1)} minutes old, starting fresh`
+                );
                 fs.unlinkSync(STATE_FILE);
                 return false;
             }
@@ -91,13 +92,19 @@ class StatePersistence {
             state.portfolio.dailyWins = savedData.portfolio.dailyWins;
             state.portfolio.dailyLosses = savedData.portfolio.dailyLosses;
 
-            state.portfolio.activePositions = (savedData.portfolio.activePositions || []).map(pos => ({
+            state.portfolio.activePositions = (
+                savedData.portfolio.activePositions || []
+            ).map(pos => ({
                 ...pos,
                 entryTime: pos.entryTime || Date.now()
             }));
 
-            state.lastTradeDirection = savedData.lastTradeDirection || null;
-            state.lastTradeWasWin = savedData.lastTradeWasWin !== undefined ? savedData.lastTradeWasWin : null;
+            state.lastTradeDirection =
+                savedData.lastTradeDirection || null;
+            state.lastTradeWasWin =
+                savedData.lastTradeWasWin !== undefined
+                    ? savedData.lastTradeWasWin
+                    : null;
             state.martingaleLevel = savedData.martingaleLevel || 0;
             state.hourlyStats = savedData.hourlyStats || {
                 trades: 0,
@@ -107,36 +114,58 @@ class StatePersistence {
                 lastHour: new Date().getHours()
             };
 
-            // Restore asset states
             if (savedData.assets) {
                 Object.keys(savedData.assets).forEach(symbol => {
                     if (state.assets[symbol]) {
                         const saved = savedData.assets[symbol];
                         const asset = state.assets[symbol];
 
-                        if (saved.closedCandles && saved.closedCandles.length > 0) {
+                        if (
+                            saved.closedCandles &&
+                            saved.closedCandles.length > 0
+                        ) {
                             asset.closedCandles = saved.closedCandles;
-                            LOGGER.info(`  📊 Restored ${saved.closedCandles.length} closed candles for ${symbol}`);
+                            LOGGER.info(
+                                `  📊 Restored ${saved.closedCandles.length} closed candles for ${symbol}`
+                            );
                         }
 
-                        asset.lastProcessedCandleOpenTime = saved.lastProcessedCandleOpenTime || 0;
-                        asset.candlesLoaded = saved.candlesLoaded || false;
+                        asset.lastProcessedCandleOpenTime =
+                            saved.lastProcessedCandleOpenTime || 0;
+                        asset.candlesLoaded =
+                            saved.candlesLoaded || false;
 
-                        // Restore Fractal State (replaces WPR)
-                        asset.lastFractalHigh = saved.lastFractalHigh || null;
-                        asset.lastFractalLow = saved.lastFractalLow || null;
+                        // Restore Fractal State
+                        asset.lastFractalHigh =
+                            saved.lastFractalHigh || null;
+                        asset.lastFractalLow =
+                            saved.lastFractalLow || null;
                     }
                 });
             }
 
             LOGGER.info(`✅ State restored successfully!`);
-            LOGGER.info(`   💰 Capital: $${state.capital.toFixed(2)}`);
-            LOGGER.info(`   📊 Session P/L: $${state.session.netPL.toFixed(2)}`);
-            LOGGER.info(`   🎯 Trades: ${state.session.tradesCount} (W:${state.session.winsCount} L:${state.session.lossesCount})`);
-            LOGGER.info(`   📉 Loss Stats: x2:${state.session.x2Losses} x3:${state.session.x3Losses} x4:${state.session.x4Losses} x5:${state.session.x5Losses} x6:${state.session.x6Losses} x7:${state.session.x7Losses}`);
-            LOGGER.info(`   🚀 Active Positions: ${state.portfolio.activePositions.length}`);
-            LOGGER.info(`   🔄 Last Direction: ${state.lastTradeDirection || 'None'}`);
-            LOGGER.info(`   📈 Martingale Level: ${state.martingaleLevel}`);
+            LOGGER.info(
+                `   💰 Capital: $${state.capital.toFixed(2)}`
+            );
+            LOGGER.info(
+                `   📊 Session P/L: $${state.session.netPL.toFixed(2)}`
+            );
+            LOGGER.info(
+                `   🎯 Trades: ${state.session.tradesCount} (W:${state.session.winsCount} L:${state.session.lossesCount})`
+            );
+            LOGGER.info(
+                `   📉 Loss Stats: x2:${state.session.x2Losses} x3:${state.session.x3Losses} x4:${state.session.x4Losses} x5:${state.session.x5Losses} x6:${state.session.x6Losses} x7:${state.session.x7Losses}`
+            );
+            LOGGER.info(
+                `   🚀 Active Positions: ${state.portfolio.activePositions.length}`
+            );
+            LOGGER.info(
+                `   🔄 Last Direction: ${state.lastTradeDirection || 'None'}`
+            );
+            LOGGER.info(
+                `   📈 Martingale Level: ${state.martingaleLevel}`
+            );
 
             return true;
         } catch (error) {
@@ -152,7 +181,9 @@ class StatePersistence {
                 this.saveState();
             }
         }, STATE_SAVE_INTERVAL);
-        LOGGER.info(`💾 Auto-save enabled (every ${STATE_SAVE_INTERVAL / 1000}s)`);
+        LOGGER.info(
+            `💾 Auto-save enabled (every ${STATE_SAVE_INTERVAL / 1000}s)`
+        );
     }
 
     static clearState() {
@@ -190,9 +221,9 @@ class TelegramService {
             };
 
             return new Promise((resolve, reject) => {
-                const req = https.request(url, options, (res) => {
+                const req = https.request(url, options, res => {
                     let body = '';
-                    res.on('data', (chunk) => body += chunk);
+                    res.on('data', chunk => (body += chunk));
                     res.on('end', () => {
                         if (res.statusCode === 200) {
                             resolve(true);
@@ -201,19 +232,34 @@ class TelegramService {
                         }
                     });
                 });
-                req.on('error', (error) => {
+                req.on('error', error => {
                     reject(error);
                 });
                 req.write(data);
                 req.end();
             });
         } catch (error) {
-            LOGGER.error(`Failed to send Telegram message: ${error.message}`);
+            LOGGER.error(
+                `Failed to send Telegram message: ${error.message}`
+            );
         }
     }
 
-    static async sendTradeAlert(type, symbol, direction, stake, duration, durationUnit, details = {}) {
-        const emoji = type === 'OPEN' ? '🚀' : (type === 'WIN' ? '✅' : '❌');
+    static async sendTradeAlert(
+        type,
+        symbol,
+        direction,
+        stake,
+        duration,
+        durationUnit,
+        details = {}
+    ) {
+        const emoji =
+            type === 'OPEN'
+                ? '🚀'
+                : type === 'WIN'
+                    ? '✅'
+                    : '❌';
         const stats = SessionManager.getSessionStats();
         const message = `
             ${emoji} <b>${type} TRADE ALERT</b>
@@ -222,11 +268,14 @@ class TelegramService {
             Stake: $${stake.toFixed(2)}
             Duration: ${duration} (${durationUnit == 't' ? 'Ticks' : durationUnit == 's' ? 'Seconds' : 'Minutes'})
             Martingale Level: ${state.martingaleLevel}
-            ${details.profit !== undefined ? `Profit: $${details.profit.toFixed(2)}
+            ${details.profit !== undefined
+                ? `Profit: $${details.profit.toFixed(2)}
             Total P&L: $${state.session.netPL.toFixed(2)}
             Wins: ${state.session.winsCount}/${state.session.lossesCount}
             Win Rate: ${stats.winRate}%
-            ` : ''}
+            `
+                : ''
+            }
         `.trim();
         await this.sendMessage(message);
     }
@@ -249,7 +298,7 @@ class TelegramService {
     static async sendStartupMessage() {
         const message = `
             🤖 <b>DERIV RISE/FALL BOT STARTED</b>
-            Strategy: Fractal Breakout
+            Strategy: Fractal Breakout (MT5 Logic)
             Capital: $${CONFIG.INITIAL_CAPITAL}
             Stake: $${CONFIG.STAKE}
             Duration: ${CONFIG.DURATION} ${CONFIG.DURATION_UNIT}
@@ -264,16 +313,22 @@ class TelegramService {
         const statsSnapshot = { ...state.hourlyStats };
 
         if (statsSnapshot.trades === 0) {
-            LOGGER.info('📱 Telegram: Skipping hourly summary (no trades this hour)');
+            LOGGER.info(
+                '📱 Telegram: Skipping hourly summary (no trades this hour)'
+            );
             return;
         }
 
         const totalTrades = statsSnapshot.wins + statsSnapshot.losses;
-        const winRate = totalTrades > 0
-            ? ((statsSnapshot.wins / totalTrades) * 100).toFixed(1)
-            : 0;
+        const winRate =
+            totalTrades > 0
+                ? ((statsSnapshot.wins / totalTrades) * 100).toFixed(1)
+                : 0;
         const pnlEmoji = statsSnapshot.pnl >= 0 ? '🟢' : '🔴';
-        const pnlStr = (statsSnapshot.pnl >= 0 ? '+' : '') + '$' + statsSnapshot.pnl.toFixed(2);
+        const pnlStr =
+            (statsSnapshot.pnl >= 0 ? '+' : '') +
+            '$' +
+            statsSnapshot.pnl.toFixed(2);
 
         const message = `
             ⏰ <b>Rise/Fall Bot Hourly Summary</b>
@@ -287,7 +342,7 @@ class TelegramService {
             📈 <b>Daily Totals</b>
             ├ Total Trades: ${state.session.tradesCount}
             ├ Total W/L: ${state.session.winsCount}/${state.session.lossesCount}
-            ├ Daily P&L: ${(state.session.netPL >= 0 ? '+' : '')}$${state.session.netPL.toFixed(2)}
+            ├ Daily P&L: ${state.session.netPL >= 0 ? '+' : ''}$${state.session.netPL.toFixed(2)}
             └ Current Capital: $${state.capital.toFixed(2)}
 
             ⏰ ${new Date().toLocaleString()}
@@ -296,9 +351,13 @@ class TelegramService {
         try {
             await this.sendMessage(message);
             LOGGER.info('📱 Telegram: Hourly Summary sent');
-            LOGGER.info(`   📊 Hour Stats: ${statsSnapshot.trades} trades, ${statsSnapshot.wins}W/${statsSnapshot.losses}L, ${pnlStr}`);
+            LOGGER.info(
+                `   📊 Hour Stats: ${statsSnapshot.trades} trades, ${statsSnapshot.wins}W/${statsSnapshot.losses}L, ${pnlStr}`
+            );
         } catch (error) {
-            LOGGER.error(`❌ Telegram hourly summary failed: ${error.message}`);
+            LOGGER.error(
+                `❌ Telegram hourly summary failed: ${error.message}`
+            );
         }
 
         state.hourlyStats = {
@@ -332,14 +391,29 @@ class TelegramService {
 // ============================================
 // LOGGER UTILITY
 // ============================================
-const getGMTTime = () => new Date().toISOString().split('T')[1].split('.')[0] + ' GMT';
+const getGMTTime = () =>
+    new Date().toISOString().split('T')[1].split('.')[0] + ' GMT';
 
 const LOGGER = {
-    info: (msg) => console.log(`[INFO] ${getGMTTime()} - ${msg}`),
-    trade: (msg) => console.log(`\x1b[32m[TRADE] ${getGMTTime()} - ${msg}\x1b[0m`),
-    warn: (msg) => console.warn(`\x1b[33m[WARN] ${getGMTTime()} - ${msg}\x1b[0m`),
-    error: (msg) => console.error(`\x1b[31m[ERROR] ${getGMTTime()} - ${msg}\x1b[0m`),
-    debug: (msg) => { if (CONFIG.DEBUG_MODE) console.log(`\x1b[90m[DEBUG] ${getGMTTime()} - ${msg}\x1b[0m`); }
+    info: msg => console.log(`[INFO] ${getGMTTime()} - ${msg}`),
+    trade: msg =>
+        console.log(
+            `\x1b[32m[TRADE] ${getGMTTime()} - ${msg}\x1b[0m`
+        ),
+    warn: msg =>
+        console.warn(
+            `\x1b[33m[WARN] ${getGMTTime()} - ${msg}\x1b[0m`
+        ),
+    error: msg =>
+        console.error(
+            `\x1b[31m[ERROR] ${getGMTTime()} - ${msg}\x1b[0m`
+        ),
+    debug: msg => {
+        if (CONFIG.DEBUG_MODE)
+            console.log(
+                `\x1b[90m[DEBUG] ${getGMTTime()} - ${msg}\x1b[0m`
+            );
+    }
 };
 
 // ============================================
@@ -356,10 +430,16 @@ class CandleAnalyzer {
 
     static getLastClosedCandle(symbol) {
         const assetState = state.assets[symbol];
-        if (!assetState || !assetState.closedCandles || assetState.closedCandles.length === 0) {
+        if (
+            !assetState ||
+            !assetState.closedCandles ||
+            assetState.closedCandles.length === 0
+        ) {
             return null;
         }
-        return assetState.closedCandles[assetState.closedCandles.length - 1];
+        return assetState.closedCandles[
+            assetState.closedCandles.length - 1
+        ];
     }
 
     static getCandleDirection(candle) {
@@ -374,60 +454,146 @@ class CandleAnalyzer {
 // ============================================
 class TechnicalIndicators {
     /**
-     * Find Williams Fractal levels from closed candles.
+     * MT5 Williams Fractals — exact replica.
      *
-     * A Fractal High is a candle whose HIGH is higher than the highs of
-     * the 2 candles before it AND the 2 candles after it (5-bar pattern).
+     * MT5 uses a classic 5-bar (n=2) fractal:
      *
-     * A Fractal Low is a candle whose LOW is lower than the lows of
-     * the 2 candles before it AND the 2 candles after it (5-bar pattern).
+     *   Fractal HIGH at bar [i] is confirmed when:
+     *     high[i] > high[i-1]
+     *     high[i] > high[i-2]
+     *     high[i] > high[i+1]
+     *     high[i] > high[i+2]
      *
-     * We need at least 5 candles. The most recent possible fractal is at
-     * index length-3 (because we need 2 candles after the pivot).
+     *   Fractal LOW at bar [i] is confirmed when:
+     *     low[i] < low[i-1]
+     *     low[i] < low[i-2]
+     *     low[i] < low[i+1]
+     *     low[i] < low[i+2]
      *
-     * Returns { fractalHigh: number|null, fractalLow: number|null }
-     *   — the most recent confirmed fractal high/low price levels.
+     * IMPORTANT: A fractal at bar [i] is only CONFIRMED once bar [i+2]
+     * has CLOSED. So when we have N closed candles (indices 0..N-1),
+     * the latest bar that CAN be a confirmed fractal pivot is N-3
+     * (because we need bars N-2 and N-1 as the two bars after it).
+     *
+     * We scan from the most recent possible pivot backwards and return
+     * the first (most recent) confirmed fractal high and fractal low.
+     *
+     * @param {Array} closedCandles - Array of CLOSED candle objects
+     *        with { open, high, low, close, epoch, open_time }
+     * @returns {{ fractalHigh: number|null, fractalLow: number|null,
+     *             fractalHighIndex: number|null, fractalLowIndex: number|null }}
      */
-    static findFractals(candles) {
-        const result = { fractalHigh: null, fractalLow: null };
+    static findFractals(closedCandles) {
+        const result = {
+            fractalHigh: null,
+            fractalLow: null,
+            fractalHighIndex: null,
+            fractalLowIndex: null
+        };
 
-        if (!candles || candles.length < 5) {
+        if (!closedCandles || closedCandles.length < 5) {
             return result;
         }
 
-        // Scan backwards to find the MOST RECENT fractal high and low.
-        // The latest possible pivot index is candles.length - 3
-        // (needs 2 bars on each side).
-        for (let i = candles.length - 3; i >= 2; i--) {
-            // Check Fractal High
-            if (
-                result.fractalHigh === null &&
-                candles[i].high > candles[i - 1].high &&
-                candles[i].high > candles[i - 2].high &&
-                candles[i].high > candles[i + 1].high &&
-                candles[i].high > candles[i + 2].high
-            ) {
-                result.fractalHigh = candles[i].high;
+        const len = closedCandles.length;
+
+        // The latest possible pivot is at index len-3
+        // (needs 2 bars before: i-2, i-1  and 2 bars after: i+1, i+2)
+        // i-2 >= 0  =>  i >= 2
+        // i+2 <= len-1  =>  i <= len-3
+
+        for (let i = len - 3; i >= 2; i--) {
+            const c = closedCandles;
+
+            // ---- Fractal HIGH (Resistance) ----
+            // MT5: high[i] must be STRICTLY greater than
+            // the highs of the 2 bars before and 2 bars after.
+            if (result.fractalHigh === null) {
+                if (
+                    c[i].high > c[i - 1].high &&
+                    c[i].high > c[i - 2].high &&
+                    c[i].high > c[i + 1].high &&
+                    c[i].high > c[i + 2].high
+                ) {
+                    result.fractalHigh = c[i].high;
+                    result.fractalHighIndex = i;
+                }
             }
 
-            // Check Fractal Low
-            if (
-                result.fractalLow === null &&
-                candles[i].low < candles[i - 1].low &&
-                candles[i].low < candles[i - 2].low &&
-                candles[i].low < candles[i + 1].low &&
-                candles[i].low < candles[i + 2].low
-            ) {
-                result.fractalLow = candles[i].low;
+            // ---- Fractal LOW (Support) ----
+            // MT5: low[i] must be STRICTLY less than
+            // the lows of the 2 bars before and 2 bars after.
+            if (result.fractalLow === null) {
+                if (
+                    c[i].low < c[i - 1].low &&
+                    c[i].low < c[i - 2].low &&
+                    c[i].low < c[i + 1].low &&
+                    c[i].low < c[i + 2].low
+                ) {
+                    result.fractalLow = c[i].low;
+                    result.fractalLowIndex = i;
+                }
             }
 
-            // Stop early if both found
-            if (result.fractalHigh !== null && result.fractalLow !== null) {
+            // Stop early once both are found
+            if (
+                result.fractalHigh !== null &&
+                result.fractalLow !== null
+            ) {
                 break;
             }
         }
 
         return result;
+    }
+
+    /**
+     * Find ALL confirmed fractal levels (for debugging/logging).
+     * Returns arrays of all fractal highs and lows with their indices.
+     */
+    static findAllFractals(closedCandles) {
+        const highs = [];
+        const lows = [];
+
+        if (!closedCandles || closedCandles.length < 5) {
+            return { highs, lows };
+        }
+
+        const len = closedCandles.length;
+
+        for (let i = 2; i <= len - 3; i++) {
+            const c = closedCandles;
+
+            // Fractal HIGH
+            if (
+                c[i].high > c[i - 1].high &&
+                c[i].high > c[i - 2].high &&
+                c[i].high > c[i + 1].high &&
+                c[i].high > c[i + 2].high
+            ) {
+                highs.push({
+                    price: c[i].high,
+                    index: i,
+                    time: c[i].epoch
+                });
+            }
+
+            // Fractal LOW
+            if (
+                c[i].low < c[i - 1].low &&
+                c[i].low < c[i - 2].low &&
+                c[i].low < c[i + 1].low &&
+                c[i].low < c[i + 2].low
+            ) {
+                lows.push({
+                    price: c[i].low,
+                    index: i,
+                    time: c[i].epoch
+                });
+            }
+        }
+
+        return { highs, lows };
     }
 }
 
@@ -449,14 +615,14 @@ const CONFIG = {
     SESSION_STOP_LOSS: -250,
 
     // Candle Settings
-    GRANULARITY: 60, // 60 seconds = 1 minute candles
+    GRANULARITY: 60,
     TIMEFRAME_LABEL: '1m',
     MAX_CANDLES_STORED: 100,
     CANDLES_TO_LOAD: 100,
 
     // Trade Duration Settings
     DURATION: 54,
-    DURATION_UNIT: 's', // t=ticks, s=seconds, m=minutes
+    DURATION_UNIT: 's',
 
     // Trade Settings
     MAX_OPEN_POSITIONS: 1,
@@ -476,13 +642,10 @@ const CONFIG = {
     // Telegram Settings
     TELEGRAM_ENABLED: true,
     TELEGRAM_BOT_TOKEN: '7683695132:AAGA9_4uDcyZWEOAwv1_zj7Nnz5Oy0gVw04',
-    TELEGRAM_CHAT_ID: '752497117',
+    TELEGRAM_CHAT_ID: '752497117'
 };
 
-
-let ACTIVE_ASSETS = [
-    'R_100'
-];
+let ACTIVE_ASSETS = ['R_100'];
 
 // ============================================
 // STATE MANAGEMENT
@@ -544,13 +707,20 @@ class SessionManager {
         const netPL = state.session.netPL;
 
         if (netPL >= CONFIG.SESSION_PROFIT_TARGET) {
-            LOGGER.trade(`🎯 SESSION PROFIT TARGET REACHED! Net P/L: $${netPL.toFixed(2)}`);
+            LOGGER.trade(
+                `🎯 SESSION PROFIT TARGET REACHED! Net P/L: $${netPL.toFixed(2)}`
+            );
             this.endSession('PROFIT_TARGET');
             return true;
         }
 
-        if (netPL <= CONFIG.SESSION_STOP_LOSS || state.martingaleLevel >= CONFIG.MAX_MARTINGALE_STEPS) {
-            LOGGER.error(`🛑 SESSION STOP LOSS REACHED! Net P/L: $${netPL.toFixed(2)}`);
+        if (
+            netPL <= CONFIG.SESSION_STOP_LOSS ||
+            state.martingaleLevel >= CONFIG.MAX_MARTINGALE_STEPS
+        ) {
+            LOGGER.error(
+                `🛑 SESSION STOP LOSS REACHED! Net P/L: $${netPL.toFixed(2)}`
+            );
             this.endSession('STOP_LOSS');
             return true;
         }
@@ -575,9 +745,14 @@ class SessionManager {
             trades: state.session.tradesCount,
             wins: state.session.winsCount,
             losses: state.session.lossesCount,
-            winRate: state.session.tradesCount > 0
-                ? ((state.session.winsCount / state.session.tradesCount) * 100).toFixed(1) + '%'
-                : '0%',
+            winRate:
+                state.session.tradesCount > 0
+                    ? (
+                        (state.session.winsCount /
+                            state.session.tradesCount) *
+                        100
+                    ).toFixed(1) + '%'
+                    : '0%',
             x2Losses: state.session.x2Losses,
             x3Losses: state.session.x3Losses,
             x4Losses: state.session.x4Losses,
@@ -591,7 +766,9 @@ class SessionManager {
     static recordTradeResult(profit, direction) {
         const currentHour = new Date().getHours();
         if (currentHour !== state.hourlyStats.lastHour) {
-            LOGGER.warn(`⏰ Hour changed detected (${state.hourlyStats.lastHour} → ${currentHour}), resetting hourly stats`);
+            LOGGER.warn(
+                `⏰ Hour changed detected (${state.hourlyStats.lastHour} → ${currentHour}), resetting hourly stats`
+            );
             state.hourlyStats = {
                 trades: 0,
                 wins: 0,
@@ -618,7 +795,9 @@ class SessionManager {
             state.lastTradeWasWin = true;
             state.currentStake = CONFIG.STAKE;
 
-            LOGGER.trade(`✅ WIN: +$${profit.toFixed(2)} | Direction: ${direction} | Martingale Reset`);
+            LOGGER.trade(
+                `✅ WIN: +$${profit.toFixed(2)} | Direction: ${direction} | Martingale Reset`
+            );
         } else {
             state.session.lossesCount++;
             state.session.loss += Math.abs(profit);
@@ -629,34 +808,83 @@ class SessionManager {
             state.martingaleLevel++;
             state.lastTradeWasWin = false;
 
-            if (state.martingaleLevel === 2) state.session.x2Losses++;
-            if (state.martingaleLevel === 3) state.session.x3Losses++;
-            if (state.martingaleLevel === 4) state.session.x4Losses++;
-            if (state.martingaleLevel === 5) state.session.x5Losses++;
-            if (state.martingaleLevel === 6) state.session.x6Losses++;
-            if (state.martingaleLevel === 7) state.session.x7Losses++;
+            if (state.martingaleLevel === 2)
+                state.session.x2Losses++;
+            if (state.martingaleLevel === 3)
+                state.session.x3Losses++;
+            if (state.martingaleLevel === 4)
+                state.session.x4Losses++;
+            if (state.martingaleLevel === 5)
+                state.session.x5Losses++;
+            if (state.martingaleLevel === 6)
+                state.session.x6Losses++;
+            if (state.martingaleLevel === 7)
+                state.session.x7Losses++;
 
             if (state.martingaleLevel <= 3) {
-                state.currentStake = Math.ceil(state.currentStake * CONFIG.MARTINGALE_MULTIPLIER * 100) / 100;
+                state.currentStake =
+                    Math.ceil(
+                        state.currentStake *
+                        CONFIG.MARTINGALE_MULTIPLIER *
+                        100
+                    ) / 100;
             }
-            if (state.martingaleLevel >= 4 && state.martingaleLevel <= 10) {
-                state.currentStake = Math.ceil(state.currentStake * CONFIG.MARTINGALE_MULTIPLIER2 * 100) / 100;
+            if (
+                state.martingaleLevel >= 4 &&
+                state.martingaleLevel <= 10
+            ) {
+                state.currentStake =
+                    Math.ceil(
+                        state.currentStake *
+                        CONFIG.MARTINGALE_MULTIPLIER2 *
+                        100
+                    ) / 100;
             }
-            if (state.martingaleLevel >= 11 && state.martingaleLevel <= 15) {
-                state.currentStake = Math.ceil(state.currentStake * CONFIG.MARTINGALE_MULTIPLIER3 * 100) / 100;
+            if (
+                state.martingaleLevel >= 11 &&
+                state.martingaleLevel <= 15
+            ) {
+                state.currentStake =
+                    Math.ceil(
+                        state.currentStake *
+                        CONFIG.MARTINGALE_MULTIPLIER3 *
+                        100
+                    ) / 100;
             }
-            if (state.martingaleLevel >= 16 && state.martingaleLevel <= 20) {
-                state.currentStake = Math.ceil(state.currentStake * CONFIG.MARTINGALE_MULTIPLIER4 * 100) / 100;
+            if (
+                state.martingaleLevel >= 16 &&
+                state.martingaleLevel <= 20
+            ) {
+                state.currentStake =
+                    Math.ceil(
+                        state.currentStake *
+                        CONFIG.MARTINGALE_MULTIPLIER4 *
+                        100
+                    ) / 100;
             }
-            if (state.martingaleLevel >= 21 && state.martingaleLevel <= 25) {
-                state.currentStake = Math.ceil(state.currentStake * CONFIG.MARTINGALE_MULTIPLIER5 * 100) / 100;
+            if (
+                state.martingaleLevel >= 21 &&
+                state.martingaleLevel <= 25
+            ) {
+                state.currentStake =
+                    Math.ceil(
+                        state.currentStake *
+                        CONFIG.MARTINGALE_MULTIPLIER5 *
+                        100
+                    ) / 100;
             }
 
-            if (state.martingaleLevel >= CONFIG.MAX_MARTINGALE_STEPS) {
-                LOGGER.warn(`⚠️ Maximum Martingale step reached (${CONFIG.MAX_MARTINGALE_STEPS}), resetting level to 0`);
+            if (
+                state.martingaleLevel >= CONFIG.MAX_MARTINGALE_STEPS
+            ) {
+                LOGGER.warn(
+                    `⚠️ Maximum Martingale step reached (${CONFIG.MAX_MARTINGALE_STEPS}), resetting level to 0`
+                );
                 state.martingaleLevel = 0;
             } else {
-                LOGGER.trade(`❌ LOSS: -$${Math.abs(profit).toFixed(2)} | Direction: ${direction} | Next Martingale Level: ${state.martingaleLevel}`);
+                LOGGER.trade(
+                    `❌ LOSS: -$${Math.abs(profit).toFixed(2)} | Direction: ${direction} | Next Martingale Level: ${state.martingaleLevel}`
+                );
             }
         }
     }
@@ -686,11 +914,13 @@ class ConnectionManager {
         LOGGER.info('🔌 Connecting to Deriv API...');
         this.cleanup();
 
-        this.ws = new WebSocket(`${CONFIG.WS_URL}?app_id=${CONFIG.APP_ID}`);
+        this.ws = new WebSocket(
+            `${CONFIG.WS_URL}?app_id=${CONFIG.APP_ID}`
+        );
 
         this.ws.on('open', () => this.onOpen());
-        this.ws.on('message', (data) => this.onMessage(data));
-        this.ws.on('error', (error) => this.onError(error));
+        this.ws.on('message', data => this.onMessage(data));
+        this.ws.on('error', error => this.onError(error));
         this.ws.on('close', () => this.onClose());
 
         return this.ws;
@@ -721,22 +951,28 @@ class ConnectionManager {
                     currentFormingCandle: null,
                     lastProcessedCandleOpenTime: null,
                     candlesLoaded: false,
-                    // Fractal State (replaces WPR)
+                    // Fractal State
                     lastFractalHigh: null,
                     lastFractalLow: null
                 };
                 LOGGER.info(`📊 Initialized asset: ${symbol}`);
             } else {
-                LOGGER.info(`📊 Asset ${symbol} already initialized (state restored)`);
+                LOGGER.info(
+                    `📊 Asset ${symbol} already initialized (state restored)`
+                );
             }
         });
     }
 
     restoreSubscriptions() {
-        LOGGER.info('📊 Restoring subscriptions after reconnection...');
+        LOGGER.info(
+            '📊 Restoring subscriptions after reconnection...'
+        );
         state.portfolio.activePositions.forEach(pos => {
             if (pos.contractId) {
-                LOGGER.info(`  ✅ Re-subscribing to contract ${pos.contractId}`);
+                LOGGER.info(
+                    `  ✅ Re-subscribing to contract ${pos.contractId}`
+                );
                 this.send({
                     proposal_open_contract: 1,
                     contract_id: pos.contractId,
@@ -749,7 +985,10 @@ class ConnectionManager {
     cleanup() {
         if (this.ws) {
             this.ws.removeAllListeners();
-            if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+            if (
+                this.ws.readyState === WebSocket.OPEN ||
+                this.ws.readyState === WebSocket.CONNECTING
+            ) {
                 try {
                     this.ws.close();
                 } catch (e) {
@@ -765,19 +1004,27 @@ class ConnectionManager {
             const response = JSON.parse(data);
             this.handleResponse(response);
         } catch (error) {
-            LOGGER.error(`Error parsing message: ${error.message}`);
+            LOGGER.error(
+                `Error parsing message: ${error.message}`
+            );
         }
     }
 
     handleResponse(response) {
         if (response.msg_type === 'authorize') {
             if (response.error) {
-                LOGGER.error(`Authorization failed: ${response.error.message}`);
+                LOGGER.error(
+                    `Authorization failed: ${response.error.message}`
+                );
                 return;
             }
             LOGGER.info('🔐 Authorized successfully');
-            LOGGER.info(`👤 Account: ${response.authorize.loginid}`);
-            LOGGER.info(`💰 Balance: ${response.authorize.balance} ${response.authorize.currency}`);
+            LOGGER.info(
+                `👤 Account: ${response.authorize.loginid}`
+            );
+            LOGGER.info(
+                `💰 Balance: ${response.authorize.balance} ${response.authorize.currency}`
+            );
 
             state.isAuthorized = true;
             state.accountBalance = response.authorize.balance;
@@ -788,8 +1035,13 @@ class ConnectionManager {
 
             this.send({ balance: 1, subscribe: 1 });
 
-            if (this.reconnectAttempts > 0 || state.portfolio.activePositions.length > 0) {
-                LOGGER.info('🔄 Reconnection detected, restoring subscriptions...');
+            if (
+                this.reconnectAttempts > 0 ||
+                state.portfolio.activePositions.length > 0
+            ) {
+                LOGGER.info(
+                    '🔄 Reconnection detected, restoring subscriptions...'
+                );
                 this.restoreSubscriptions();
             }
 
@@ -819,13 +1071,21 @@ class ConnectionManager {
 
     handleBuyResponse(response) {
         if (response.error) {
-            LOGGER.error(`Trade error: ${response.error.message}`);
+            LOGGER.error(
+                `Trade error: ${response.error.message}`
+            );
 
             const reqId = response.echo_req?.req_id;
             if (reqId) {
-                const posIndex = state.portfolio.activePositions.findIndex(p => p.reqId === reqId);
+                const posIndex =
+                    state.portfolio.activePositions.findIndex(
+                        p => p.reqId === reqId
+                    );
                 if (posIndex >= 0) {
-                    state.portfolio.activePositions.splice(posIndex, 1);
+                    state.portfolio.activePositions.splice(
+                        posIndex,
+                        1
+                    );
                 }
             }
 
@@ -833,10 +1093,15 @@ class ConnectionManager {
         }
 
         const contract = response.buy;
-        LOGGER.trade(`✅ Position opened: Contract ${contract.contract_id}, Buy Price: $${contract.buy_price}`);
+        LOGGER.trade(
+            `✅ Position opened: Contract ${contract.contract_id}, Buy Price: $${contract.buy_price}`
+        );
 
         const reqId = response.echo_req.req_id;
-        const position = state.portfolio.activePositions.find(p => p.reqId === reqId);
+        const position =
+            state.portfolio.activePositions.find(
+                p => p.reqId === reqId
+            );
 
         if (position) {
             position.contractId = contract.contract_id;
@@ -861,27 +1126,40 @@ class ConnectionManager {
 
     handleOpenContract(response) {
         if (response.error) {
-            LOGGER.error(`Contract error: ${response.error.message}`);
+            LOGGER.error(
+                `Contract error: ${response.error.message}`
+            );
             return;
         }
 
         const contract = response.proposal_open_contract;
         const contractId = contract.contract_id;
-        const posIndex = state.portfolio.activePositions.findIndex(
-            p => p.contractId === contractId
-        );
+        const posIndex =
+            state.portfolio.activePositions.findIndex(
+                p => p.contractId === contractId
+            );
 
         if (posIndex < 0) return;
 
-        const position = state.portfolio.activePositions[posIndex];
+        const position =
+            state.portfolio.activePositions[posIndex];
         position.currentProfit = contract.profit;
 
-        if (contract.is_sold || contract.is_expired || contract.status === 'sold') {
+        if (
+            contract.is_sold ||
+            contract.is_expired ||
+            contract.status === 'sold'
+        ) {
             const profit = contract.profit;
 
-            LOGGER.trade(`Contract ${contractId} closed: ${profit >= 0 ? 'WIN' : 'LOSS'} $${profit.toFixed(2)}`);
+            LOGGER.trade(
+                `Contract ${contractId} closed: ${profit >= 0 ? 'WIN' : 'LOSS'} $${profit.toFixed(2)}`
+            );
 
-            SessionManager.recordTradeResult(profit, position.direction);
+            SessionManager.recordTradeResult(
+                profit,
+                position.direction
+            );
 
             TelegramService.sendTradeAlert(
                 profit >= 0 ? 'WIN' : 'LOSS',
@@ -909,8 +1187,10 @@ class ConnectionManager {
         if (!state.assets[symbol]) return;
 
         const assetState = state.assets[symbol];
-        const calculatedOpenTime = ohlc.open_time ||
-            Math.floor(ohlc.epoch / CONFIG.GRANULARITY) * CONFIG.GRANULARITY;
+        const calculatedOpenTime =
+            ohlc.open_time ||
+            Math.floor(ohlc.epoch / CONFIG.GRANULARITY) *
+            CONFIG.GRANULARITY;
 
         const incomingCandle = {
             open: parseFloat(ohlc.open),
@@ -921,28 +1201,92 @@ class ConnectionManager {
             open_time: calculatedOpenTime
         };
 
-        const currentOpenTime = assetState.currentFormingCandle?.open_time;
-        const isNewCandle = currentOpenTime && incomingCandle.open_time !== currentOpenTime;
+        const currentOpenTime =
+            assetState.currentFormingCandle?.open_time;
+        const isNewCandle =
+            currentOpenTime &&
+            incomingCandle.open_time !== currentOpenTime;
 
         if (isNewCandle) {
-            const closedCandle = { ...assetState.currentFormingCandle };
-            closedCandle.epoch = closedCandle.open_time + CONFIG.GRANULARITY;
+            const closedCandle = {
+                ...assetState.currentFormingCandle
+            };
+            closedCandle.epoch =
+                closedCandle.open_time + CONFIG.GRANULARITY;
 
-            if (closedCandle.open_time !== assetState.lastProcessedCandleOpenTime) {
+            if (
+                closedCandle.open_time !==
+                assetState.lastProcessedCandleOpenTime
+            ) {
                 assetState.closedCandles.push(closedCandle);
 
-                if (assetState.closedCandles.length > CONFIG.MAX_CANDLES_STORED) {
-                    assetState.closedCandles = assetState.closedCandles.slice(-CONFIG.MAX_CANDLES_STORED);
+                if (
+                    assetState.closedCandles.length >
+                    CONFIG.MAX_CANDLES_STORED
+                ) {
+                    assetState.closedCandles =
+                        assetState.closedCandles.slice(
+                            -CONFIG.MAX_CANDLES_STORED
+                        );
                 }
 
-                assetState.lastProcessedCandleOpenTime = closedCandle.open_time;
+                assetState.lastProcessedCandleOpenTime =
+                    closedCandle.open_time;
 
-                const closeTime = new Date(closedCandle.epoch * 1000).toISOString();
-                const candleType = CandleAnalyzer.getCandleDirection(closedCandle);
-                const candleEmoji = candleType === 'BULLISH' ? '🟢' : candleType === 'BEARISH' ? '🔴' : '⚪';
+                const closeTime = new Date(
+                    closedCandle.epoch * 1000
+                ).toISOString();
+                const candleType =
+                    CandleAnalyzer.getCandleDirection(
+                        closedCandle
+                    );
+                const candleEmoji =
+                    candleType === 'BULLISH'
+                        ? '🟢'
+                        : candleType === 'BEARISH'
+                            ? '🔴'
+                            : '⚪';
 
-                LOGGER.info(`${symbol} ${candleEmoji} CANDLE CLOSED [${closeTime}] ${candleType}: O:${closedCandle.open.toFixed(5)} H:${closedCandle.high.toFixed(5)} L:${closedCandle.low.toFixed(5)} C:${closedCandle.close.toFixed(5)}`);
+                LOGGER.info(
+                    `${symbol} ${candleEmoji} CANDLE CLOSED [${closeTime}] ${candleType}: O:${closedCandle.open.toFixed(5)} H:${closedCandle.high.toFixed(5)} L:${closedCandle.low.toFixed(5)} C:${closedCandle.close.toFixed(5)}`
+                );
 
+                // ===================================================
+                // UPDATE FRACTAL LEVELS after every new closed candle
+                // so breakout levels are always current
+                // ===================================================
+                const fractals =
+                    TechnicalIndicators.findFractals(
+                        assetState.closedCandles
+                    );
+
+                const prevHigh = assetState.lastFractalHigh;
+                const prevLow = assetState.lastFractalLow;
+
+                if (fractals.fractalHigh !== null) {
+                    assetState.lastFractalHigh =
+                        fractals.fractalHigh;
+                }
+                if (fractals.fractalLow !== null) {
+                    assetState.lastFractalLow =
+                        fractals.fractalLow;
+                }
+
+                // Log if fractal levels changed
+                if (
+                    assetState.lastFractalHigh !== prevHigh ||
+                    assetState.lastFractalLow !== prevLow
+                ) {
+                    LOGGER.info(
+                        `${symbol} 🔄 FRACTAL LEVELS UPDATED — Resistance: ${assetState.lastFractalHigh !== null ? assetState.lastFractalHigh.toFixed(5) : 'N/A'} (was ${prevHigh !== null ? prevHigh.toFixed(5) : 'N/A'}) | Support: ${assetState.lastFractalLow !== null ? assetState.lastFractalLow.toFixed(5) : 'N/A'} (was ${prevLow !== null ? prevLow.toFixed(5) : 'N/A'})`
+                    );
+                } else {
+                    LOGGER.debug(
+                        `${symbol} Fractals unchanged — R: ${assetState.lastFractalHigh !== null ? assetState.lastFractalHigh.toFixed(5) : 'N/A'} | S: ${assetState.lastFractalLow !== null ? assetState.lastFractalLow.toFixed(5) : 'N/A'}`
+                    );
+                }
+
+                // TRIGGER TRADE ANALYSIS
                 state.canTrade = true;
                 bot.executeNextTrade(symbol, closedCandle);
             }
@@ -951,7 +1295,9 @@ class ConnectionManager {
         assetState.currentFormingCandle = incomingCandle;
 
         const candles = assetState.candles;
-        const existingIndex = candles.findIndex(c => c.open_time === incomingCandle.open_time);
+        const existingIndex = candles.findIndex(
+            c => c.open_time === incomingCandle.open_time
+        );
         if (existingIndex >= 0) {
             candles[existingIndex] = incomingCandle;
         } else {
@@ -959,13 +1305,17 @@ class ConnectionManager {
         }
 
         if (candles.length > CONFIG.MAX_CANDLES_STORED) {
-            assetState.candles = candles.slice(-CONFIG.MAX_CANDLES_STORED);
+            assetState.candles = candles.slice(
+                -CONFIG.MAX_CANDLES_STORED
+            );
         }
     }
 
     handleCandlesHistory(response) {
         if (response.error) {
-            LOGGER.error(`Error fetching candles: ${response.error.message}`);
+            LOGGER.error(
+                `Error fetching candles: ${response.error.message}`
+            );
             return;
         }
 
@@ -973,7 +1323,11 @@ class ConnectionManager {
         if (!state.assets[symbol]) return;
 
         const candles = response.candles.map(c => {
-            const openTime = Math.floor((c.epoch - CONFIG.GRANULARITY) / CONFIG.GRANULARITY) * CONFIG.GRANULARITY;
+            const openTime =
+                Math.floor(
+                    (c.epoch - CONFIG.GRANULARITY) /
+                    CONFIG.GRANULARITY
+                ) * CONFIG.GRANULARITY;
             return {
                 open: parseFloat(c.open),
                 high: parseFloat(c.high),
@@ -985,7 +1339,9 @@ class ConnectionManager {
         });
 
         if (candles.length === 0) {
-            LOGGER.warn(`${symbol}: No historical candles received`);
+            LOGGER.warn(
+                `${symbol}: No historical candles received`
+            );
             return;
         }
 
@@ -993,17 +1349,41 @@ class ConnectionManager {
         state.assets[symbol].closedCandles = [...candles];
 
         const lastCandle = candles[candles.length - 1];
-        state.assets[symbol].lastProcessedCandleOpenTime = lastCandle.open_time;
+        state.assets[symbol].lastProcessedCandleOpenTime =
+            lastCandle.open_time;
         state.assets[symbol].currentFormingCandle = null;
 
         // Calculate initial fractal levels from historical data
-        const fractals = TechnicalIndicators.findFractals(candles);
-        state.assets[symbol].lastFractalHigh = fractals.fractalHigh;
-        state.assets[symbol].lastFractalLow = fractals.fractalLow;
+        const fractals =
+            TechnicalIndicators.findFractals(candles);
+        state.assets[symbol].lastFractalHigh =
+            fractals.fractalHigh;
+        state.assets[symbol].lastFractalLow =
+            fractals.fractalLow;
 
-        LOGGER.info(`📊 Loaded ${candles.length} ${CONFIG.TIMEFRAME_LABEL} candles for ${symbol}`);
-        LOGGER.info(`   🔺 Initial Fractal High: ${fractals.fractalHigh ? fractals.fractalHigh.toFixed(5) : 'N/A'}`);
-        LOGGER.info(`   🔻 Initial Fractal Low:  ${fractals.fractalLow ? fractals.fractalLow.toFixed(5) : 'N/A'}`);
+        LOGGER.info(
+            `📊 Loaded ${candles.length} ${CONFIG.TIMEFRAME_LABEL} candles for ${symbol}`
+        );
+        LOGGER.info(
+            `   🔺 Fractal Resistance (High): ${fractals.fractalHigh !== null ? fractals.fractalHigh.toFixed(5) : 'N/A'}${fractals.fractalHighIndex !== null ? ` [bar ${fractals.fractalHighIndex}/${candles.length - 1}]` : ''}`
+        );
+        LOGGER.info(
+            `   🔻 Fractal Support    (Low):  ${fractals.fractalLow !== null ? fractals.fractalLow.toFixed(5) : 'N/A'}${fractals.fractalLowIndex !== null ? ` [bar ${fractals.fractalLowIndex}/${candles.length - 1}]` : ''}`
+        );
+
+        // Log recent fractals for verification
+        if (CONFIG.DEBUG_MODE) {
+            const allFractals =
+                TechnicalIndicators.findAllFractals(candles);
+            const recentHighs = allFractals.highs.slice(-5);
+            const recentLows = allFractals.lows.slice(-5);
+            LOGGER.debug(
+                `   Recent Fractal Highs: ${recentHighs.map(f => f.price.toFixed(2)).join(', ') || 'None'}`
+            );
+            LOGGER.debug(
+                `   Recent Fractal Lows:  ${recentLows.map(f => f.price.toFixed(2)).join(', ') || 'None'}`
+            );
+        }
     }
 
     onError(error) {
@@ -1019,19 +1399,33 @@ class ConnectionManager {
         StatePersistence.saveState();
 
         if (this.isReconnecting) {
-            LOGGER.info('Already handling disconnect, skipping...');
+            LOGGER.info(
+                'Already handling disconnect, skipping...'
+            );
             return;
         }
 
-        if (this.reconnectAttempts < this.maxReconnectAttempts) {
+        if (
+            this.reconnectAttempts < this.maxReconnectAttempts
+        ) {
             this.isReconnecting = true;
             this.reconnectAttempts++;
-            const delay = Math.min(this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1), 30000);
+            const delay = Math.min(
+                this.reconnectDelay *
+                Math.pow(1.5, this.reconnectAttempts - 1),
+                30000
+            );
 
-            LOGGER.info(`🔄 Reconnecting in ${(delay / 1000).toFixed(1)}s... (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
-            LOGGER.info(`📊 Preserved state - Trades: ${state.session.tradesCount}, P&L: $${state.session.netPL.toFixed(2)}`);
+            LOGGER.info(
+                `🔄 Reconnecting in ${(delay / 1000).toFixed(1)}s... (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`
+            );
+            LOGGER.info(
+                `📊 Preserved state - Trades: ${state.session.tradesCount}, P&L: $${state.session.netPL.toFixed(2)}`
+            );
 
-            TelegramService.sendMessage(`⚠️ <b>CONNECTION LOST - RECONNECTING</b>\n📊 Attempt: ${this.reconnectAttempts}/${this.maxReconnectAttempts}\n⏱️ Retrying in ${(delay / 1000).toFixed(1)}s\n💾 State preserved: ${state.session.tradesCount} trades, $${state.session.netPL.toFixed(2)} P&L`);
+            TelegramService.sendMessage(
+                `⚠️ <b>CONNECTION LOST - RECONNECTING</b>\n📊 Attempt: ${this.reconnectAttempts}/${this.maxReconnectAttempts}\n⏱️ Retrying in ${(delay / 1000).toFixed(1)}s\n💾 State preserved: ${state.session.tradesCount} trades, $${state.session.netPL.toFixed(2)} P&L`
+            );
 
             setTimeout(() => {
                 this.isReconnecting = false;
@@ -1039,7 +1433,9 @@ class ConnectionManager {
             }, delay);
         } else {
             LOGGER.error('Max reconnection attempts reached.');
-            TelegramService.sendMessage(`🛑 <b>BOT STOPPED</b>\nMax reconnection attempts reached.\nFinal P&L: $${state.session.netPL.toFixed(2)}`);
+            TelegramService.sendMessage(
+                `🛑 <b>BOT STOPPED</b>\nMax reconnection attempts reached.\nFinal P&L: $${state.session.netPL.toFixed(2)}`
+            );
             process.exit(1);
         }
     }
@@ -1080,20 +1476,46 @@ class DerivBot {
 
     async start() {
         console.log('\n' + '═'.repeat(80));
-        console.log(' DERIV RISE/FALL FRACTAL BREAKOUT BOT');
+        console.log(
+            ' DERIV RISE/FALL FRACTAL BREAKOUT BOT (MT5 Logic)'
+        );
         console.log('═'.repeat(80));
         console.log(`💰 Initial Capital: $${state.capital}`);
-        console.log(`📊 Active Assets: ${ACTIVE_ASSETS.join(', ')}`);
+        console.log(
+            `📊 Active Assets: ${ACTIVE_ASSETS.join(', ')}`
+        );
         console.log(`💵 Stake: $${CONFIG.STAKE}`);
-        console.log(`⏱️ Duration: ${CONFIG.DURATION} ${CONFIG.DURATION_UNIT}`);
-        console.log(`🕯️ Candle Timeframe: ${CONFIG.TIMEFRAME_LABEL}`);
-        console.log(`🎯 Session Target: $${CONFIG.SESSION_PROFIT_TARGET} | Stop Loss: $${CONFIG.SESSION_STOP_LOSS}`);
-        console.log(`📱 Telegram: ${CONFIG.TELEGRAM_ENABLED ? 'ENABLED' : 'DISABLED'}`);
+        console.log(
+            `⏱️ Duration: ${CONFIG.DURATION} ${CONFIG.DURATION_UNIT}`
+        );
+        console.log(
+            `🕯️ Candle Timeframe: ${CONFIG.TIMEFRAME_LABEL}`
+        );
+        console.log(
+            `🎯 Session Target: $${CONFIG.SESSION_PROFIT_TARGET} | Stop Loss: $${CONFIG.SESSION_STOP_LOSS}`
+        );
+        console.log(
+            `📱 Telegram: ${CONFIG.TELEGRAM_ENABLED ? 'ENABLED' : 'DISABLED'}`
+        );
         console.log('═'.repeat(80));
-        console.log('📋 Strategy: Fractal Breakout + Recovery System');
-        console.log('    🟢 RISE: Close breaks ABOVE most recent Fractal High');
-        console.log('    🔴 FALL: Close breaks BELOW most recent Fractal Low');
-        console.log('    🔄 Recovery: Alternate direction on Loss');
+        console.log(
+            '📋 Strategy: MT5 Fractal Breakout + Recovery System'
+        );
+        console.log(
+            '    🔺 Fractal = 5-bar pattern (2 left + pivot + 2 right)'
+        );
+        console.log(
+            '    🟢 RISE: Candle CLOSE breaks ABOVE Fractal Resistance'
+        );
+        console.log(
+            '    🔴 FALL: Candle CLOSE breaks BELOW Fractal Support'
+        );
+        console.log(
+            '    🔄 Recovery: Alternate direction on Loss'
+        );
+        console.log(
+            '    📐 Levels update every candle close'
+        );
         console.log('═'.repeat(80) + '\n');
 
         this.connection.initializeAssets();
@@ -1109,7 +1531,9 @@ class DerivBot {
     }
 
     subscribeToCandles(symbol) {
-        LOGGER.info(`📊 Subscribing to ${CONFIG.TIMEFRAME_LABEL} candles for ${symbol}...`);
+        LOGGER.info(
+            `📊 Subscribing to ${CONFIG.TIMEFRAME_LABEL} candles for ${symbol}...`
+        );
 
         this.connection.send({
             ticks_history: symbol,
@@ -1133,99 +1557,141 @@ class DerivBot {
         });
     }
 
+    /**
+     * =========================================================
+     * TRADE EXECUTION — FRACTAL BREAKOUT LOGIC
+     * =========================================================
+     *
+     * NORMAL MODE (no recovery):
+     *   • RISE trade when the just-closed candle's CLOSE > latest Fractal High (Resistance)
+     *   • FALL trade when the just-closed candle's CLOSE < latest Fractal Low  (Support)
+     *   • No trade if close is between Support and Resistance
+     *
+     * RECOVERY MODE (last trade was a loss):
+     *   • Alternate direction from the previous losing trade
+     *
+     * Fractal levels are recalculated BEFORE this method is called
+     * (in handleOHLC after every candle close), so they are always
+     * up-to-date with the latest confirmed 5-bar fractals.
+     */
     executeNextTrade(symbol, lastClosedCandle) {
         if (!state.canTrade) return;
         if (!SessionManager.isSessionActive()) return;
-        if (state.portfolio.activePositions.length >= CONFIG.MAX_OPEN_POSITIONS) return;
+        if (
+            state.portfolio.activePositions.length >=
+            CONFIG.MAX_OPEN_POSITIONS
+        )
+            return;
 
         const tradeSymbol = symbol || ACTIVE_ASSETS[0];
         const assetState = state.assets[tradeSymbol];
         const stake = state.currentStake;
 
         if (state.capital < stake) {
-            LOGGER.error(`Insufficient capital for stake: $${state.capital.toFixed(2)} (Needed: $${stake.toFixed(2)})`);
+            LOGGER.error(
+                `Insufficient capital for stake: $${state.capital.toFixed(2)} (Needed: $${stake.toFixed(2)})`
+            );
             if (state.martingaleLevel > 0) {
-                LOGGER.info('Resetting Martingale level due to insufficient capital.');
+                LOGGER.info(
+                    'Resetting Martingale level due to insufficient capital.'
+                );
                 state.martingaleLevel = 0;
             }
             return;
         }
 
         // =============================================
-        // FRACTAL BREAKOUT ANALYSIS (replaces WPR)
+        // GET CURRENT FRACTAL LEVELS
+        // (Already updated in handleOHLC before this call)
         // =============================================
-
-        // 1. Recalculate fractal levels from ALL closed candles
-        const fractals = TechnicalIndicators.findFractals(assetState.closedCandles);
-
-        // Update stored fractal levels
-        if (fractals.fractalHigh !== null) {
-            assetState.lastFractalHigh = fractals.fractalHigh;
-        }
-        if (fractals.fractalLow !== null) {
-            assetState.lastFractalLow = fractals.fractalLow;
-        }
-
-        const fractalHigh = assetState.lastFractalHigh;
-        const fractalLow = assetState.lastFractalLow;
+        const resistance = assetState.lastFractalHigh; // Fractal High = Resistance
+        const support = assetState.lastFractalLow; // Fractal Low  = Support
         const closePrice = lastClosedCandle.close;
 
-        LOGGER.debug(`${tradeSymbol} Fractals — High: ${fractalHigh ? fractalHigh.toFixed(5) : 'N/A'} | Low: ${fractalLow ? fractalLow.toFixed(5) : 'N/A'} | Close: ${closePrice.toFixed(5)}`);
+        // Need both levels to trade
+        if (resistance === null || support === null) {
+            LOGGER.info(
+                `${tradeSymbol} ⏳ Waiting for fractal levels to form — Resistance: ${resistance !== null ? resistance.toFixed(5) : 'PENDING'} | Support: ${support !== null ? support.toFixed(5) : 'PENDING'}`
+            );
+            return;
+        }
 
-        // 2. Determine direction based on trading state
+        LOGGER.info(
+            `${tradeSymbol} 📐 Fractal Levels — Resistance: ${resistance.toFixed(5)} | Support: ${support.toFixed(5)} | Close: ${closePrice.toFixed(5)}`
+        );
+
+        // =============================================
+        // DETERMINE TRADE DIRECTION
+        // =============================================
         let direction = null;
         let signalReason = '';
 
         const isRecoveryMode = state.lastTradeWasWin === false;
 
         if (isRecoveryMode) {
-            // RECOVERY MODE: Alternate direction
+            // RECOVERY MODE: Alternate direction from last losing trade
             if (state.lastTradeDirection === 'CALLE') {
                 direction = 'PUTE';
-                signalReason = 'Recovery (Prev LOSS on RISE → now FALL)';
+                signalReason =
+                    'Recovery (Prev LOSS on RISE → now FALL)';
             } else {
                 direction = 'CALLE';
-                signalReason = 'Recovery (Prev LOSS on FALL → now RISE)';
+                signalReason =
+                    'Recovery (Prev LOSS on FALL → now RISE)';
             }
-            LOGGER.trade(`🔄 RECOVERY MODE: Switching direction. ${signalReason}`);
-
+            LOGGER.trade(
+                `🔄 RECOVERY MODE: ${signalReason}`
+            );
         } else {
-            // NORMAL MODE: Check Fractal Breakout Signals
+            // NORMAL MODE: Check fractal breakout
 
-            // Breakout UP: Close breaks above the most recent Fractal High → RISE
-            if (fractalHigh !== null && closePrice > fractalHigh) {
+            // BREAKOUT UP: Close is ABOVE Fractal Resistance → RISE
+            if (closePrice > resistance) {
                 direction = 'CALLE'; // RISE
-                signalReason = `Breakout UP — Close ${closePrice.toFixed(5)} > Fractal High ${fractalHigh.toFixed(5)}`;
+                signalReason = `BREAKOUT UP — Close ${closePrice.toFixed(5)} > Resistance ${resistance.toFixed(5)} (diff: +${(closePrice - resistance).toFixed(5)})`;
             }
-
-            // Breakout DOWN: Close breaks below the most recent Fractal Low → FALL
-            if (fractalLow !== null && closePrice < fractalLow) {
+            // BREAKOUT DOWN: Close is BELOW Fractal Support → FALL
+            else if (closePrice < support) {
                 direction = 'PUTE'; // FALL
-                signalReason = `Breakout DOWN — Close ${closePrice.toFixed(5)} < Fractal Low ${fractalLow.toFixed(5)}`;
+                signalReason = `BREAKOUT DOWN — Close ${closePrice.toFixed(5)} < Support ${support.toFixed(5)} (diff: -${(support - closePrice).toFixed(5)})`;
+            }
+            // NO BREAKOUT: Price is between Support and Resistance
+            else {
+                LOGGER.info(
+                    `${tradeSymbol} ⏸️ No breakout — Close ${closePrice.toFixed(5)} is between Support ${support.toFixed(5)} and Resistance ${resistance.toFixed(5)}`
+                );
             }
 
-            // If both breakout conditions are somehow met (unlikely), prioritise
-            // the one matching candle direction
             if (direction) {
-                LOGGER.trade(`⚡ SIGNAL DETECTED: ${signalReason}`);
+                LOGGER.trade(
+                    `⚡ FRACTAL SIGNAL: ${signalReason}`
+                );
             }
         }
 
-        // Save state to persist fractal levels
+        // Save fractal state
         StatePersistence.saveState();
 
         if (!direction) {
-            LOGGER.debug(`${tradeSymbol} No breakout signal. Close ${closePrice.toFixed(5)} between Fractal Low ${fractalLow ? fractalLow.toFixed(5) : 'N/A'} and Fractal High ${fractalHigh ? fractalHigh.toFixed(5) : 'N/A'}`);
             return;
         }
 
+        // =============================================
+        // EXECUTE TRADE
+        // =============================================
         state.canTrade = false;
         state.lastTradeDirection = direction;
 
-        LOGGER.trade(`🎯 Executing ${direction === 'CALLE' ? 'RISE' : 'FALL'} trade on ${tradeSymbol}`);
-        LOGGER.trade(`   Stake: $${stake.toFixed(2)} | Duration: ${CONFIG.DURATION} ${CONFIG.DURATION_UNIT} | Martingale Level: ${state.martingaleLevel}`);
+        LOGGER.trade(
+            `🎯 Executing ${direction === 'CALLE' ? 'RISE' : 'FALL'} trade on ${tradeSymbol}`
+        );
+        LOGGER.trade(
+            `   Stake: $${stake.toFixed(2)} | Duration: ${CONFIG.DURATION} ${CONFIG.DURATION_UNIT} | Martingale Level: ${state.martingaleLevel}`
+        );
         LOGGER.trade(`   Reason: ${signalReason}`);
-        LOGGER.trade(`   Fractal High: ${fractalHigh ? fractalHigh.toFixed(5) : 'N/A'} | Fractal Low: ${fractalLow ? fractalLow.toFixed(5) : 'N/A'}`);
+        LOGGER.trade(
+            `   Fractal Resistance: ${resistance.toFixed(5)} | Fractal Support: ${support.toFixed(5)} | Close: ${closePrice.toFixed(5)}`
+        );
 
         const position = {
             symbol: tradeSymbol,
@@ -1274,37 +1740,59 @@ class DerivBot {
     checkTimeForDisconnectReconnect() {
         setInterval(() => {
             const now = new Date();
-            const gmtPlus1Time = new Date(now.getTime() + (1 * 60 * 60 * 1000));
+            const gmtPlus1Time = new Date(
+                now.getTime() + 1 * 60 * 60 * 1000
+            );
             const currentDay = gmtPlus1Time.getUTCDay();
             const currentHours = gmtPlus1Time.getUTCHours();
-            const currentMinutes = gmtPlus1Time.getUTCMinutes();
+            const currentMinutes =
+                gmtPlus1Time.getUTCMinutes();
 
-            const isWeekend = (currentDay === 0) ||
+            const isWeekend =
+                currentDay === 0 ||
                 (currentDay === 6 && currentHours >= 23) ||
                 (currentDay === 1 && currentHours < 2);
 
             if (isWeekend) {
                 if (state.session.isActive) {
-                    LOGGER.info("Weekend trading suspension (Saturday 11pm - Monday 2am). Disconnecting...");
+                    LOGGER.info(
+                        'Weekend trading suspension (Saturday 11pm - Monday 2am). Disconnecting...'
+                    );
                     TelegramService.sendHourlySummary();
-                    if (this.connection.ws) this.connection.ws.close();
+                    if (this.connection.ws)
+                        this.connection.ws.close();
                     state.session.isActive = false;
                 }
                 return;
             }
 
-            if (!state.session.isActive && currentHours === 2 && currentMinutes >= 0) {
-                LOGGER.info("It's 2:00 AM GMT+1, reconnecting the bot.");
+            if (
+                !state.session.isActive &&
+                currentHours === 2 &&
+                currentMinutes >= 0
+            ) {
+                LOGGER.info(
+                    "It's 2:00 AM GMT+1, reconnecting the bot."
+                );
                 this.resetDailyStats();
                 state.session.isActive = true;
                 this.connection.connect();
             }
 
-            if (state.lastTradeWasWin && state.session.isActive) {
-                if (currentHours >= 23 && currentMinutes >= 0) {
-                    LOGGER.info("It's past 23:00 PM GMT+1 after a win trade, disconnecting the bot.");
+            if (
+                state.lastTradeWasWin &&
+                state.session.isActive
+            ) {
+                if (
+                    currentHours >= 23 &&
+                    currentMinutes >= 0
+                ) {
+                    LOGGER.info(
+                        "It's past 23:00 PM GMT+1 after a win trade, disconnecting the bot."
+                    );
                     TelegramService.sendHourlySummary();
-                    if (this.connection.ws) this.connection.ws.close();
+                    if (this.connection.ws)
+                        this.connection.ws.close();
                     state.session.isActive = false;
                 }
             }
@@ -1334,11 +1822,14 @@ class DerivBot {
     getStatus() {
         const sessionStats = SessionManager.getSessionStats();
 
-        const nextDirection = state.lastTradeWasWin === null
-            ? 'CALLE (First trade)'
-            : state.lastTradeWasWin
-                ? state.lastTradeDirection
-                : (state.lastTradeDirection === 'CALLE' ? 'PUTE' : 'CALLE');
+        const nextDirection =
+            state.lastTradeWasWin === null
+                ? 'Waiting for signal'
+                : state.lastTradeWasWin
+                    ? 'Waiting for fractal breakout'
+                    : state.lastTradeDirection === 'CALLE'
+                        ? 'PUTE (Recovery)'
+                        : 'CALLE (Recovery)';
 
         return {
             connected: state.isConnected,
@@ -1349,15 +1840,17 @@ class DerivBot {
             lastDirection: state.lastTradeDirection,
             lastWasWin: state.lastTradeWasWin,
             nextDirection: nextDirection,
-            activePositionsCount: state.portfolio.activePositions.length,
-            activePositions: state.portfolio.activePositions.map(pos => ({
-                symbol: pos.symbol,
-                direction: pos.direction,
-                stake: pos.stake,
-                duration: `${pos.duration} ${pos.durationUnit}`,
-                profit: pos.currentProfit,
-                contractId: pos.contractId
-            }))
+            activePositionsCount:
+                state.portfolio.activePositions.length,
+            activePositions:
+                state.portfolio.activePositions.map(pos => ({
+                    symbol: pos.symbol,
+                    direction: pos.direction,
+                    stake: pos.stake,
+                    duration: `${pos.duration} ${pos.durationUnit}`,
+                    profit: pos.currentProfit,
+                    contractId: pos.contractId
+                }))
         };
     }
 }
@@ -1381,41 +1874,70 @@ process.on('SIGTERM', () => {
 const stateLoaded = StatePersistence.loadState();
 
 if (stateLoaded) {
-    LOGGER.info('🔄 Bot will resume from saved state after connection');
+    LOGGER.info(
+        '🔄 Bot will resume from saved state after connection'
+    );
 } else {
     LOGGER.info('🆕 Bot will start with fresh state');
 }
 
 if (CONFIG.API_TOKEN === 'YOUR_API_TOKEN_HERE') {
     console.log('═'.repeat(80));
-    console.log(' DERIV RISE/FALL FRACTAL BREAKOUT BOT');
+    console.log(
+        ' DERIV RISE/FALL FRACTAL BREAKOUT BOT (MT5 Logic)'
+    );
     console.log('═'.repeat(80));
     console.log('\n⚠️ API Token not configured!\n');
     console.log('Usage:');
-    console.log(' API_TOKEN=xxx DURATION=5 DURATION_UNIT=t node risefall-bot.js');
+    console.log(
+        ' API_TOKEN=xxx DURATION=5 DURATION_UNIT=t node risefall-bot.js'
+    );
     console.log('\nEnvironment Variables:');
-    console.log(' API_TOKEN - Deriv API token (required)');
-    console.log(' CAPITAL - Initial capital (default: 1000)');
-    console.log(' STAKE - Stake per trade (default: 1)');
-    console.log(' DURATION - Contract duration (default: 1)');
-    console.log(' DURATION_UNIT - t=ticks, s=seconds, m=minutes (default: t)');
-    console.log(' PROFIT_TARGET - Session profit target (default: 1000)');
-    console.log(' STOP_LOSS - Session stop loss (default: -500)');
-    console.log(' TELEGRAM_ENABLED - Enable Telegram (default: false)');
-    console.log(' TELEGRAM_BOT_TOKEN - Telegram bot token');
+    console.log(
+        ' API_TOKEN - Deriv API token (required)'
+    );
+    console.log(
+        ' CAPITAL - Initial capital (default: 1000)'
+    );
+    console.log(
+        ' STAKE - Stake per trade (default: 1)'
+    );
+    console.log(
+        ' DURATION - Contract duration (default: 1)'
+    );
+    console.log(
+        ' DURATION_UNIT - t=ticks, s=seconds, m=minutes (default: t)'
+    );
+    console.log(
+        ' PROFIT_TARGET - Session profit target (default: 1000)'
+    );
+    console.log(
+        ' STOP_LOSS - Session stop loss (default: -500)'
+    );
+    console.log(
+        ' TELEGRAM_ENABLED - Enable Telegram (default: false)'
+    );
+    console.log(
+        ' TELEGRAM_BOT_TOKEN - Telegram bot token'
+    );
     console.log(' TELEGRAM_CHAT_ID - Telegram chat ID');
     console.log('═'.repeat(80));
     process.exit(1);
 }
 
 console.log('═'.repeat(80));
-console.log(' DERIV RISE/FALL FRACTAL BREAKOUT BOT');
-console.log(` Duration: ${CONFIG.DURATION} ${CONFIG.DURATION_UNIT} | Stake: $${CONFIG.STAKE}`);
+console.log(
+    ' DERIV RISE/FALL FRACTAL BREAKOUT BOT (MT5 Logic)'
+);
+console.log(
+    ` Duration: ${CONFIG.DURATION} ${CONFIG.DURATION_UNIT} | Stake: $${CONFIG.STAKE}`
+);
 console.log('═'.repeat(80));
 console.log('\n🚀 Initializing...\n');
 
 bot.connection.connect();
 
+// Status display every 30 seconds
 setInterval(() => {
     if (state.isAuthorized) {
         const status = bot.getStatus();
@@ -1426,11 +1948,15 @@ setInterval(() => {
         ACTIVE_ASSETS.forEach(sym => {
             const a = state.assets[sym];
             if (a) {
-                fractalInfo += ` | ${sym} FH:${a.lastFractalHigh ? a.lastFractalHigh.toFixed(2) : 'N/A'} FL:${a.lastFractalLow ? a.lastFractalLow.toFixed(2) : 'N/A'}`;
+                fractalInfo += ` | ${sym} R:${a.lastFractalHigh !== null ? a.lastFractalHigh.toFixed(2) : '---'} S:${a.lastFractalLow !== null ? a.lastFractalLow.toFixed(2) : '---'}`;
             }
         });
 
-        console.log(`\n📊 ${getGMTTime()} | ${status.session.trades} trades | ${status.session.winRate} | $${status.session.netPL.toFixed(2)} | ${status.activePositions.length} active${fractalInfo}`);
-        console.log(`📉 Loss Stats: x2:${s.x2Losses} x3:${s.x3Losses} x4:${s.x4Losses} x5:${s.x5Losses} x6:${s.x6Losses} x7:${s.x7Losses} | Level: ${state.martingaleLevel}`);
+        console.log(
+            `\n📊 ${getGMTTime()} | ${status.session.trades} trades | ${status.session.winRate} | $${status.session.netPL.toFixed(2)} | ${status.activePositions.length} active${fractalInfo}`
+        );
+        console.log(
+            `📉 Loss Stats: x2:${s.x2Losses} x3:${s.x3Losses} x4:${s.x4Losses} x5:${s.x5Losses} x6:${s.x6Losses} x7:${s.x7Losses} | Level: ${state.martingaleLevel} | Next: ${status.nextDirection}`
+        );
     }
 }, 30000);
