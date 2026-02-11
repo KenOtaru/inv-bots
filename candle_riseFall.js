@@ -388,6 +388,7 @@ const CONFIG = {
     STAKE: 1,
 
     // Session Targets
+    totalTradesN: 300,
     SESSION_PROFIT_TARGET: 500,
     SESSION_STOP_LOSS: -250,
 
@@ -407,8 +408,8 @@ const CONFIG = {
     MARTINGALE_MULTIPLIER: 1,
     MARTINGALE_MULTIPLIER2: 1,
     MARTINGALE_MULTIPLIER3: 1,
-    MARTINGALE_MULTIPLIER4: 2.3,
-    MARTINGALE_MULTIPLIER5: 3,
+    MARTINGALE_MULTIPLIER4: 1,
+    MARTINGALE_MULTIPLIER5: 2.2,
     MAX_MARTINGALE_STEPS: 100,
     System: 1, // 1 = Continue same direction on Win and Switch direction on Loss, 
     // 2 = Switch direction on Win and Continue same direction on Loss, 
@@ -503,6 +504,12 @@ class SessionManager {
         if (netPL <= CONFIG.SESSION_STOP_LOSS || state.martingaleLevel >= CONFIG.MAX_MARTINGALE_STEPS) {
             LOGGER.error(`🛑 SESSION STOP LOSS REACHED! Net P/L: $${netPL.toFixed(2)}`);
             this.endSession('STOP_LOSS');
+            return true;
+        }
+
+        if (state.session.tradesCount >= CONFIG.totalTradesN) {
+            LOGGER.info(`⏸️ Session ended (reached total trades Net P/L: $${netPL.toFixed(2)}).`);
+            this.endSession('TOTAL_TRADES');
             return true;
         }
 
