@@ -1088,9 +1088,10 @@ class ConnectionManager {
                 LOGGER.trade(`🎯 STRATEGY SIGNAL: Digit ${CONFIG.highestPercentageDigit} | ${currentDigit} repeat rate is ${percentage.toFixed(2)}%!`);
                 state.canTrade = true;
                 bot.executeNextTrade(asset);
-            } else {
-                CONFIG.highestPercentageDigit = null;
             }
+            // else {
+            //     CONFIG.highestPercentageDigit = null;
+            // }
         }
     }
 
