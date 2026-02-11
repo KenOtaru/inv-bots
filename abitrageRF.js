@@ -1056,7 +1056,7 @@ class DerivConnection {
             // 2. Trend is high (descending last 3 ticks)
             // 3. No active positions
             // 4. UPGRADED: Non-repeat probability >= 80%
-            if ((nonRepeatProbability * 100).toFixed(2) >= 80 &&
+            if ((nonRepeatProbability * 100).toFixed(2) >= 100 &&
                 last5TicksTrendHigh &&
                 !state.portfolio.activePositions.length) {
 
@@ -1067,14 +1067,15 @@ class DerivConnection {
 
                 state.canTrade = true;
                 bot.executeNextTrade(asset);
-            } else if ((currentDigit === (CONFIG.highestPercentageDigit - 1)) &&
-                last5TicksTrendHigh &&
-                !state.portfolio.activePositions.length &&
-                !meetsRepeatAvoidanceThreshold) {
-                // Log when signal would have triggered but didn't meet the 80% threshold
-                LOGGER.debug(`[${asset}] ⚠️ SIGNAL BLOCKED: Non-Repeat Probability ${(nonRepeatProbability * 100).toFixed(2)}% < 80% threshold`);
-                LOGGER.debug(`   Repeat rate too high: ${countRepeat}/${countTotal} = ${(repeatProbability * 100).toFixed(2)}%`);
             }
+            // else if ((currentDigit === (CONFIG.highestPercentageDigit - 1)) &&
+            //     last5TicksTrendHigh &&
+            //     !state.portfolio.activePositions.length &&
+            //     !meetsRepeatAvoidanceThreshold) {
+            //     // Log when signal would have triggered but didn't meet the 80% threshold
+            //     LOGGER.debug(`[${asset}] ⚠️ SIGNAL BLOCKED: Non-Repeat Probability ${(nonRepeatProbability * 100).toFixed(2)}% < 80% threshold`);
+            //     LOGGER.debug(`   Repeat rate too high: ${countRepeat}/${countTotal} = ${(repeatProbability * 100).toFixed(2)}%`);
+            // }
 
             if (this.ticksCount > 10) {
                 CONFIG.highestPercentageDigit = null;
