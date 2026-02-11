@@ -1076,7 +1076,7 @@ class ConnectionManager {
 
             // Trade if percentage >= 60% and current digit is the one being analyzed
             // if (countTotal < 4 && !state.portfolio.activePositions.length) {
-            if (percentage >= 80 && !state.portfolio.activePositions.length) {
+            if (percentage >= 88 && !state.portfolio.activePositions.length) {
                 LOGGER.trade(`🎯 STRATEGY SIGNAL: Digit ${currentDigit} repeat rate is ${percentage.toFixed(2)}%!`);
                 state.canTrade = true;
                 bot.executeNextTrade(asset);
