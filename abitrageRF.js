@@ -399,7 +399,7 @@ const CONFIG = {
     SESSION_PROFIT_TARGET: 500,
     SESSION_STOP_LOSS: -250,
     highestPercentageDigit: null,
-    REPEAT_AVOIDANCE_THRESHOLD: 0.6,
+    REPEAT_AVOIDANCE_THRESHOLD: 0.55,
 
     // Candle Settings
     GRANULARITY: 60, // 60 seconds = 1 minute candles
