@@ -1083,9 +1083,12 @@ class ConnectionManager {
                 LOGGER.trade(`🎯 STRATEGY SIGNAL: Digit ${CONFIG.highestPercentageDigit} is the most frequent digit`);
             }
 
+            const last5TicksTrendHigh = history[history.length - 1] > history[history.length - 2] && history[history.length - 2] > history[history.length - 3] && history[history.length - 3] > history[history.length - 4] && history[history.length - 4] > history[history.length - 5];
+            // const last5TicksTrendLow = history[history.length - 1] < history[history.length - 2] && history[history.length - 2] < history[history.length - 3] && history[history.length - 3] < history[history.length - 4] && history[history.length - 4] < history[history.length - 5];
+
             // if (countTotal < 4 && !state.portfolio.activePositions.length) {
-            if ((currentDigit === (CONFIG.highestPercentageDigit - 1)) && !state.portfolio.activePositions.length) {
-                LOGGER.trade(`🎯 STRATEGY SIGNAL: Digit ${CONFIG.highestPercentageDigit} | ${currentDigit} repeat rate is ${percentage.toFixed(2)}%!`);
+            if ((currentDigit === (CONFIG.highestPercentageDigit - 1)) && last5TicksTrendHigh && !state.portfolio.activePositions.length) {
+                LOGGER.trade(`🎯 STRATEGY SIGNAL: Digit ${CONFIG.highestPercentageDigit} Trend High: ${last5TicksTrendHigh} (${history.slice(-5).join(' > ')})`);
                 state.canTrade = true;
                 bot.executeNextTrade(asset);
             }
