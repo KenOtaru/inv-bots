@@ -1069,15 +1069,22 @@ class ConnectionManager {
         if (countTotal > 0) {
             const percentage = (countRepeat / countTotal) * 100;
 
+            let highestPercentageDigit = null;
+
             // Log analysis periodically or if high
             // if (percentage >= 50) {
             LOGGER.debug(`[${asset}] Digit ${currentDigit} Analysis: Total=${countTotal}, Repeats=${countRepeat}, Percentage=${percentage.toFixed(2)}%`);
             // }
 
             // Trade if percentage >= 60% and current digit is the one being analyzed
+            if (countTotal >= 12) {
+                highestPercentageDigit = currentDigit;
+                LOGGER.trade(`🎯 STRATEGY SIGNAL: Digit ${highestPercentageDigit} is the most frequent digit`);
+            }
+
             // if (countTotal < 4 && !state.portfolio.activePositions.length) {
-            if (percentage >= 88 && !state.portfolio.activePositions.length) {
-                LOGGER.trade(`🎯 STRATEGY SIGNAL: Digit ${currentDigit} repeat rate is ${percentage.toFixed(2)}%!`);
+            if (currentDigit === highestPercentageDigit - 1 && !state.portfolio.activePositions.length) {
+                LOGGER.trade(`🎯 STRATEGY SIGNAL: Digit ${highestPercentageDigit} | ${currentDigit} repeat rate is ${percentage.toFixed(2)}%!`);
                 state.canTrade = true;
                 bot.executeNextTrade(asset);
             }
