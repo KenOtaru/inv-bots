@@ -398,7 +398,7 @@ const CONFIG = {
     CANDLES_TO_LOAD: 50,
 
     // Trade Duration Settings
-    DURATION: 2,
+    DURATION: 4,
     DURATION_UNIT: 't', // t=ticks, s=seconds, m=minutes
 
     // Trade Settings
@@ -1170,25 +1170,37 @@ class DerivBot {
         }
 
         const isOdd = lastDigit % 2 !== 0;
-        if (isOdd) {
-            LOGGER.info(`🚫 Skipping trade on ${tradeSymbol} - Last digit ${lastDigit} is ODD (Even required)`);
-            state.canTrade = false;
-            return;
-        }
+        // if (isOdd) {
+        //     LOGGER.info(`🚫 Skipping trade on ${tradeSymbol} - Last digit ${lastDigit} is ODD (Even required)`);
+        //     state.canTrade = false;
+        //     return;
+        // }
 
         LOGGER.info(`✅ Last digit ${lastDigit} is ODD - Proceeding with trade on ${tradeSymbol}`);
 
         // Determine direction based on last closed candle
         let direction;
 
+        // if (lastClosedCandle) {
+        //     // Trade based on candle pattern
+        //     if (CandleAnalyzer.isBullish(lastClosedCandle)) {
+        //         direction = 'CALL'; // Buy if previous candle was bullish
+        //         LOGGER.trade(`📈 Last candle was BULLISH (Close > Open) → Executing RISE trade`);
+        //     } else if (CandleAnalyzer.isBearish(lastClosedCandle)) {
+        //         direction = 'PUT'; // Sell if previous candle was bearish
+        //         LOGGER.trade(`📉 Last candle was BEARISH (Close < Open) → Executing FALL trade`);
+        //     }
+        // }
+
         if (lastClosedCandle) {
             // Trade based on candle pattern
-            if (CandleAnalyzer.isBullish(lastClosedCandle)) {
-                direction = 'CALL'; // Buy if previous candle was bullish
-                LOGGER.trade(`📈 Last candle was BULLISH (Close > Open) → Executing RISE trade`);
-            } else if (CandleAnalyzer.isBearish(lastClosedCandle)) {
-                direction = 'PUT'; // Sell if previous candle was bearish
-                LOGGER.trade(`📉 Last candle was BEARISH (Close < Open) → Executing FALL trade`);
+            // if (CandleAnalyzer.isBullish(lastClosedCandle)) {
+            if (isOdd) {
+                direction = 'PUT'; // Sell if previous candle was bullish
+                LOGGER.trade(`📈 Last candle was BEARISH (Close < Open) → Executing FALL trade`);
+            } else { //else if (CandleAnalyzer.isBearish(lastClosedCandle)) {
+                direction = 'CALL'; // Buy if previous candle was bearish
+                LOGGER.trade(`📉 Last candle was BULLISH (Close > Open) → Executing RISE trade`);
             }
         }
 
