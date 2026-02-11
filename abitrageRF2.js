@@ -1101,7 +1101,7 @@ class ConnectionManager {
             // then non-repeat probability >= 80%.
 
             if ((currentDigit === (CONFIG.highestPercentageDigit - 1)) &&
-                last3Trend &&
+                // last3Trend &&
                 !state.portfolio.activePositions.length) {
 
                 // Calculate the 1st & 3rd post-entry digit repeat probability
