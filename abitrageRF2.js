@@ -1049,18 +1049,22 @@ class ConnectionManager {
     }
 
     // NEW: analyzeTicks method to check for 60% repeat rate
+    // NEW: analyzeTicks method - Only trade when 80% probability of NO repeat at position 1 & 3
     analyzeTicks(asset) {
         const assetState = state.assets[asset];
         if (!assetState || !assetState.tickHistory || assetState.tickHistory.length < 100) return;
 
         const history = assetState.tickHistory.slice(-100);
         const currentDigit = assetState.lastDigit;
+        const histLen = history.length;
 
-        // Check amount of times and percentage each digit repeats (as first and third)
+        // =============================================
+        // PART 1: Track the highest-percentage digit
+        // =============================================
         let countTotal = 0;
         let countRepeat = 0;
 
-        for (let i = 0; i < history.length - 2; i++) {
+        for (let i = 0; i < histLen - 2; i++) {
             if (history[i] === currentDigit) {
                 countTotal++;
                 if (history[i + 2] === currentDigit) {
@@ -1072,32 +1076,112 @@ class ConnectionManager {
         if (countTotal > 0) {
             const percentage = (countRepeat / countTotal) * 100;
 
-            const last5TicksTrendHigh = history[history.length - 1] < history[history.length - 2] && history[history.length - 2] < history[history.length - 3];
+            const last3Trend = history[histLen - 1] < history[histLen - 2] &&
+                history[histLen - 2] < history[histLen - 3];
 
-            // Log analysis periodically or if high
-            // if (percentage >= 50) {
             LOGGER.debug(`[${asset}] Digit ${currentDigit} Analysis: Total=${countTotal}, Repeats=${countRepeat}, Percentage=${percentage.toFixed(2)}%`);
-            LOGGER.debug(`[${asset}] Trend High: ${last5TicksTrendHigh} (${history[history.length - 1]} < ${history[history.length - 2]} < ${history[history.length - 3]})`);
-            // }
+            LOGGER.debug(`[${asset}] Trend High: ${last3Trend} (${history[histLen - 1]} < ${history[histLen - 2]} < ${history[histLen - 3]})`);
 
             this.ticksCount++;
-            // Trade if percentage >= 60% and current digit is the one being analyzed
+
+            // Mark the most frequently appearing digit (needs 15+ occurrences)
             if (countTotal >= 15) {
                 CONFIG.highestPercentageDigit = currentDigit;
-                // LOGGER.trade(`🎯 STRATEGY SIGNAL: Digit ${CONFIG.highestPercentageDigit} is the most frequent digit`);
             }
 
-            // if (countTotal < 4 && !state.portfolio.activePositions.length) {
-            if ((currentDigit === (CONFIG.highestPercentageDigit - 1)) && last5TicksTrendHigh && !state.portfolio.activePositions.length) {
-                LOGGER.trade(`STRATEGY SIGNAL: Digit ${CONFIG.highestPercentageDigit} | ${currentDigit} Trend High: ${last5TicksTrendHigh} (${history.slice(-3).join(' > ')})`);
-                state.canTrade = true;
-                bot.executeNextTrade(asset);
+            // =============================================
+            // PART 2: Predict 1st & 3rd digit non-repeat
+            // =============================================
+            // When we're about to trade, the CURRENT tick becomes the entry tick.
+            // Tick+1 (1st after) and Tick+3 (3rd after) are what we need to check.
+            //
+            // We analyze: after every occurrence of the current pattern (trend high + 
+            // currentDigit == highestPercentageDigit - 1), how often did position+1 
+            // and position+3 have the SAME digit? If repeat rate < 20%, 
+            // then non-repeat probability >= 80%.
+
+            if ((currentDigit === (CONFIG.highestPercentageDigit - 1)) &&
+                last3Trend &&
+                !state.portfolio.activePositions.length) {
+
+                // Calculate the 1st & 3rd post-entry digit repeat probability
+                const repeatAnalysis = this.analyzePostEntryRepeat(asset, currentDigit, history);
+
+                if (repeatAnalysis === null) {
+                    LOGGER.debug(`[${asset}] ⏳ Not enough pattern samples for repeat analysis, skipping trade`);
+                    return;
+                }
+
+                const { sampleCount, repeatCount, repeatPct, nonRepeatPct } = repeatAnalysis;
+
+                LOGGER.trade(`REPEAT ANALYSIS: Samples=${sampleCount}, Repeats=${repeatCount}, RepeatPct=${repeatPct.toFixed(1)}%, NonRepeatPct=${nonRepeatPct.toFixed(1)}%`);
+
+                if (nonRepeatPct >= 80) {
+                    LOGGER.trade(`✅ NON-REPEAT >= 80% (${nonRepeatPct.toFixed(1)}%) — TRADE APPROVED`);
+                    LOGGER.trade(`STRATEGY SIGNAL: Digit ${CONFIG.highestPercentageDigit} | ${currentDigit} Trend High: ${last3Trend} (${history.slice(-3).join(' > ')})`);
+                    state.canTrade = true;
+                    bot.executeNextTrade(asset);
+                } else {
+                    LOGGER.debug(`[${asset}] ❌ Non-repeat only ${nonRepeatPct.toFixed(1)}% (need ≥80%), skipping trade`);
+                }
             }
+
             if (this.ticksCount > 10) {
                 CONFIG.highestPercentageDigit = null;
                 this.ticksCount = 0;
             }
         }
+    }
+
+    // NEW: Analyze the probability that 1st and 3rd digits after a pattern entry will NOT repeat
+    analyzePostEntryRepeat(asset, entryDigit, history) {
+        const histLen = history.length;
+
+        // We need at least 3 ticks after each pattern occurrence to check positions +1 and +3
+        // So we scan up to histLen - 4 (to ensure indices +1, +2, +3 exist)
+
+        let sampleCount = 0;
+        let repeatCount = 0;
+
+        // Look for all past occurrences of the SAME entry conditions:
+        // Pattern: 3 consecutive descending digits ending at position i, 
+        // where history[i] === entryDigit
+        // AND history[i] < history[i-1] < history[i-2] (trend high)
+
+        for (let i = 2; i < histLen - 3; i++) {
+            // Check if this position matches our entry pattern
+            if (history[i] === entryDigit &&
+                history[i] < history[i - 1] &&
+                history[i - 1] < history[i - 2]) {
+
+                // This is a pattern match — now check what happened at positions +1 and +3
+                const digit1 = history[i + 1]; // 1st digit after entry
+                const digit3 = history[i + 3]; // 3rd digit after entry
+
+                sampleCount++;
+
+                if (digit1 === digit3) {
+                    repeatCount++;
+                }
+            }
+        }
+
+        // Need minimum 5 samples for statistical relevance
+        if (sampleCount < 5) {
+            return null;
+        }
+
+        const repeatPct = (repeatCount / sampleCount) * 100;
+        const nonRepeatPct = 100 - repeatPct;
+
+        LOGGER.debug(`[${asset}] Post-Entry Repeat Analysis: ${sampleCount} samples, ${repeatCount} repeats (${repeatPct.toFixed(1)}%), Non-repeat: ${nonRepeatPct.toFixed(1)}%`);
+
+        return {
+            sampleCount,
+            repeatCount,
+            repeatPct,
+            nonRepeatPct
+        };
     }
 
     // NEW: Get last digit from quote based on asset type (from mX4Differ.js)
