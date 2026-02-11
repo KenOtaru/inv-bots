@@ -399,7 +399,6 @@ const CONFIG = {
     SESSION_PROFIT_TARGET: 500,
     SESSION_STOP_LOSS: -250,
     highestPercentageDigit: null,
-    REPEAT_AVOIDANCE_THRESHOLD: 0.55,
 
     // Candle Settings
     GRANULARITY: 60, // 60 seconds = 1 minute candles
@@ -1050,180 +1049,54 @@ class ConnectionManager {
     }
 
     // NEW: analyzeTicks method to check for 60% repeat rate
-    // ============================================
-    // IMPROVED: PREDICTIVE analyzeTicks METHOD
-    // ============================================
     analyzeTicks(asset) {
         const assetState = state.assets[asset];
-        if (!assetState || !assetState.tickHistory || assetState.tickHistory.length < 150) return;
+        if (!assetState || !assetState.tickHistory || assetState.tickHistory.length < 100) return;
 
-        const history = assetState.tickHistory.slice(-150);
+        const history = assetState.tickHistory.slice(-100);
         const currentDigit = assetState.lastDigit;
 
-        // ============================================
-        // PREDICTIVE ANALYSIS FOR POST-TRADE DIGITS
-        // ============================================
+        // Check amount of times and percentage each digit repeats (as first and third)
+        let countTotal = 0;
+        let countRepeat = 0;
 
-        // We need to predict what happens AFTER trade execution:
-        // Trade executes at position 0 (current)
-        // Position 1 will be the NEXT tick (unknown)
-        // Position 3 will be 2 ticks after next (unknown)
-        // We need to predict if digit at position 1 will equal digit at position 3
-
-        // STEP 1: Analyze transition patterns - what digit typically follows current digit
-        const transitionMap = {}; // Maps: currentDigit -> {nextDigit: count}
-        for (let i = 0; i < history.length - 1; i++) {
-            const from = history[i];
-            const to = history[i + 1];
-            if (!transitionMap[from]) transitionMap[from] = {};
-            transitionMap[from][to] = (transitionMap[from][to] || 0) + 1;
-        }
-
-        // Get most likely next digits after current digit
-        const possibleNextDigits = transitionMap[currentDigit] || {};
-        const totalTransitions = Object.values(possibleNextDigits).reduce((a, b) => a + b, 0);
-
-        if (totalTransitions < 10) {
-            LOGGER.debug(`[${asset}] Insufficient transition data for digit ${currentDigit}`);
-            return;
-        }
-
-        // STEP 2: For each possible next digit, calculate probability of (pos1 == pos3) pattern
-        let totalWeightedRiskScore = 0;
-        let totalWeight = 0;
-
-        const predictions = [];
-
-        for (const [nextDigit, transitionCount] of Object.entries(possibleNextDigits)) {
-            const digit1 = parseInt(nextDigit);
-            const transitionProbability = transitionCount / totalTransitions;
-
-            // Now analyze: if position 1 is digit1, what's the probability position 3 is also digit1?
-            // Look at historical patterns where position 1 was this digit
-            let pos1Occurrences = 0;
-            let pos1_equals_pos3 = 0;
-
-            for (let i = 0; i < history.length - 3; i++) {
-                if (history[i + 1] === digit1) {
-                    pos1Occurrences++;
-                    if (history[i + 3] === digit1) {
-                        pos1_equals_pos3++;
-                    }
+        for (let i = 0; i < history.length - 2; i++) {
+            if (history[i] === currentDigit) {
+                countTotal++;
+                if (history[i + 2] === currentDigit) {
+                    countRepeat++;
                 }
             }
-
-            const repeatProbability = pos1Occurrences > 0 ? pos1_equals_pos3 / pos1Occurrences : 0;
-            const nonRepeatProbability = 1 - repeatProbability;
-
-            // Weight this by how likely this digit is to appear next
-            const weightedRisk = repeatProbability * transitionProbability;
-            const weightedSafety = nonRepeatProbability * transitionProbability;
-
-            totalWeightedRiskScore += weightedRisk;
-            totalWeight += transitionProbability;
-
-            predictions.push({
-                nextDigit: digit1,
-                transitionProb: transitionProbability,
-                repeatProb: repeatProbability,
-                nonRepeatProb: nonRepeatProbability,
-                occurrences: pos1Occurrences
-            });
         }
 
-        // STEP 3: Calculate overall non-repeat probability (weighted average)
-        const overallRepeatProbability = totalWeightedRiskScore;
-        const overallNonRepeatProbability = 1 - overallRepeatProbability;
+        if (countTotal > 0) {
+            const percentage = (countRepeat / countTotal) * 100;
 
-        // STEP 4: Additional pattern analysis - check recent trend stability
-        const last5TicksTrendHigh = history[history.length - 1] < history[history.length - 2] &&
-            history[history.length - 2] < history[history.length - 3];
+            const last5TicksTrendHigh = (history[history.length - 1] > history[history.length - 2] && history[history.length - 2] > history[history.length - 3] || history[history.length - 1] > history[history.length - 2] && history[history.length - 2] > history[history.length - 3]);
 
-        // STEP 5: Analyze volatility - rapid digit changes indicate instability
-        let digitChanges = 0;
-        for (let i = history.length - 10; i < history.length - 1; i++) {
-            if (history[i] !== history[i + 1]) digitChanges++;
-        }
-        const volatility = digitChanges / 9; // 0 to 1 scale
-        const isStable = volatility < 0.6; // Less than 60% changes = stable
+            // Log analysis periodically or if high
+            // if (percentage >= 50) {
+            LOGGER.debug(`[${asset}] Digit ${currentDigit} Analysis: Total=${countTotal}, Repeats=${countRepeat}, Percentage=${percentage.toFixed(2)}%`);
+            LOGGER.debug(`[${asset}] Trend High: ${last5TicksTrendHigh} (${history[history.length - 1]} < ${history[history.length - 2]} < ${history[history.length - 3]})`);
+            // }
 
-        // STEP 6: Check if current digit is in a "cold streak" (appears less frequently)
-        const recentHistory = history.slice(-30);
-        const currentDigitFreq = recentHistory.filter(d => d === currentDigit).length / 30;
-        const isColdDigit = currentDigitFreq < 0.15; // Less than 15% frequency = cold
-
-        // Enhanced logging
-        LOGGER.debug(`[${asset}] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-        LOGGER.debug(`[${asset}] Current Digit: ${currentDigit} | Trend High: ${last5TicksTrendHigh}`);
-        LOGGER.debug(`[${asset}] 📊 PREDICTIVE ANALYSIS:`);
-
-        // Log top 3 most likely next digits
-        predictions.sort((a, b) => b.transitionProb - a.transitionProb).slice(0, 3).forEach(pred => {
-            LOGGER.debug(`[${asset}]   Next=${pred.nextDigit}: ${(pred.transitionProb * 100).toFixed(1)}% likely, ` +
-                `Repeat=${(pred.repeatProb * 100).toFixed(1)}%, NonRepeat=${(pred.nonRepeatProb * 100).toFixed(1)}%`);
-        });
-
-        LOGGER.debug(`[${asset}] 🎯 OVERALL: Repeat Risk=${(overallRepeatProbability * 100).toFixed(2)}% | ` +
-            `NonRepeat Safety=${(overallNonRepeatProbability * 100).toFixed(2)}%`);
-        LOGGER.debug(`[${asset}] 📈 Volatility: ${(volatility * 100).toFixed(1)}% | Stable: ${isStable}`);
-        LOGGER.debug(`[${asset}] ❄️  Cold Digit: ${isColdDigit} | Freq: ${(currentDigitFreq * 100).toFixed(1)}%`);
-
-        // STEP 7: Update highest percentage digit tracker
-        this.ticksCount++;
-        if (totalTransitions >= 15) {
-            CONFIG.highestPercentageDigit = currentDigit;
-        }
-
-        // STEP 8: MULTI-FACTOR DECISION MAKING
-        const meetsNonRepeatThreshold = overallNonRepeatProbability >= CONFIG.REPEAT_AVOIDANCE_THRESHOLD;
-        const meetsStabilityCheck = isStable;
-        const meetsTrendCheck = last5TicksTrendHigh;
-        const meetsPositionCheck = currentDigit === (CONFIG.highestPercentageDigit - 1);
-        const noActivePositions = !state.portfolio.activePositions.length;
-
-        // Enhanced decision matrix
-        const allConditionsMet = meetsPositionCheck &&
-            meetsTrendCheck &&
-            noActivePositions &&
-            meetsNonRepeatThreshold
-        // &&
-        // meetsStabilityCheck;
-
-        LOGGER.debug(`[${asset}] ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-        LOGGER.debug(`[${asset}] 🎯 TRADE CONDITIONS:`);
-        LOGGER.debug(`[${asset}]   ✓ Position Check (${currentDigit} == ${CONFIG.highestPercentageDigit}-1): ${meetsPositionCheck}`);
-        LOGGER.debug(`[${asset}]   ✓ Trend Check (descending): ${meetsTrendCheck}`);
-        LOGGER.debug(`[${asset}]   ✓ No Active Positions: ${noActivePositions}`);
-        LOGGER.debug(`[${asset}]   ✓ NonRepeat ≥80%: ${meetsNonRepeatThreshold} (${(overallNonRepeatProbability * 100).toFixed(2)}%)`);
-        LOGGER.debug(`[${asset}]   ✓ Stability Check: ${meetsStabilityCheck} (volatility ${(volatility * 100).toFixed(1)}%)`);
-        LOGGER.debug(`[${asset}]   ➜ ALL CONDITIONS MET: ${allConditionsMet}`);
-
-        if (allConditionsMet) {
-            LOGGER.trade(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-            LOGGER.trade(`🎯 STRATEGY SIGNAL TRIGGERED:`);
-            LOGGER.trade(`   Digit ${CONFIG.highestPercentageDigit} | ${currentDigit} Trend High: ${last5TicksTrendHigh}`);
-            LOGGER.trade(`   ✅ Predictive NonRepeat Safety: ${(overallNonRepeatProbability * 100).toFixed(2)}%`);
-            LOGGER.trade(`   ✅ Pattern Stability: ${isStable} (volatility ${(volatility * 100).toFixed(1)}%)`);
-            LOGGER.trade(`   📊 Weighted Analysis across ${predictions.length} possible next digits`);
-            LOGGER.trade(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-
-            state.canTrade = true;
-            bot.executeNextTrade(asset);
-        } else if (meetsPositionCheck && meetsTrendCheck && noActivePositions) {
-            // Log why signal was blocked
-            const reasons = [];
-            if (!meetsNonRepeatThreshold) {
-                reasons.push(`NonRepeat too low (${(overallNonRepeatProbability * 100).toFixed(2)}% < 80%)`);
+            this.ticksCount++;
+            // Trade if percentage >= 60% and current digit is the one being analyzed
+            if (countTotal >= 12 && percentage >= 80) {
+                CONFIG.highestPercentageDigit = currentDigit;
+                // LOGGER.trade(`🎯 STRATEGY SIGNAL: Digit ${CONFIG.highestPercentageDigit} is the most frequent digit`);
             }
-            if (!meetsStabilityCheck) {
-                reasons.push(`Too volatile (${(volatility * 100).toFixed(1)}% > 60%)`);
-            }
-            LOGGER.debug(`[${asset}] ⚠️ SIGNAL BLOCKED: ${reasons.join(', ')}`);
-        }
 
-        if (this.ticksCount > 10) {
-            CONFIG.highestPercentageDigit = null;
-            this.ticksCount = 0;
+            // if (countTotal < 4 && !state.portfolio.activePositions.length) {
+            if ((currentDigit === (CONFIG.highestPercentageDigit - 1)) && last5TicksTrendHigh && !state.portfolio.activePositions.length) {
+                LOGGER.trade(`STRATEGY SIGNAL: Digit ${CONFIG.highestPercentageDigit} | ${currentDigit} Trend High: ${last5TicksTrendHigh} (${history.slice(-3).join(' > ')})`);
+                state.canTrade = true;
+                bot.executeNextTrade(asset);
+            }
+            if (this.ticksCount > 10) {
+                CONFIG.highestPercentageDigit = null;
+                this.ticksCount = 0;
+            }
         }
     }
 
