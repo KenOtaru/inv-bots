@@ -1137,7 +1137,7 @@ class ConnectionManager {
 
         const successRate = matches >= 8 ? (successes / matches) * 100 : 0;
 
-        LOGGER.trade(`ELITE BREAKOUT → ${dirName} | Oscillation ${oscLength} ticks (${oscA}-${oscB}) → ${breakoutDir} | Historical: ${successes}/${matches} = ${prob}%`);
+        LOGGER.trade(`Scanning → Oscillation ${oscLength} ticks (${oscA}-${oscB}) | Historical: ${successes}/${matches} = ${prob}%`);
 
         // ==================================================================
         // FINAL EXECUTION — ONLY THE HIGHEST CONFIDENCE BREAKOUTS
