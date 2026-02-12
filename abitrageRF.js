@@ -392,7 +392,7 @@ const CONFIG = {
 
     // Capital Settings
     INITIAL_CAPITAL: 500,
-    STAKE: 1,
+    STAKE: 0.35,
 
     // Session Targets
     totalTradesN: 300,
@@ -414,11 +414,11 @@ const CONFIG = {
     MAX_OPEN_POSITIONS: 1, // One at a time for alternating strategy
     TRADE_DELAY: 1000, // 2 seconds delay between trades
     MARTINGALE_MULTIPLIER: 1,
-    MARTINGALE_MULTIPLIER2: 1,
-    MARTINGALE_MULTIPLIER3: 1,
-    MARTINGALE_MULTIPLIER4: 1,
-    MARTINGALE_MULTIPLIER5: 2.2,
-    MAX_MARTINGALE_STEPS: 100,
+    MARTINGALE_MULTIPLIER2: 2.8,
+    MARTINGALE_MULTIPLIER3: 2.8,
+    MARTINGALE_MULTIPLIER4: 2.8,
+    MARTINGALE_MULTIPLIER5: 2.8,
+    MAX_MARTINGALE_STEPS: 10,
     System: 1, // 1 = Continue same direction on Win and Switch direction on Loss, 
     // 2 = Switch direction on Win and Continue same direction on Loss, 
     // 3 = Switch direction every trade, 4 = Same direction every trade
@@ -605,10 +605,10 @@ class SessionManager {
 
 
             // Martingale Multiplier
-            if (state.martingaleLevel <= 3) {
+            if (state.martingaleLevel <= 5) {
                 state.currentStake = Math.ceil(state.currentStake * CONFIG.MARTINGALE_MULTIPLIER * 100) / 100;
             };
-            if (state.martingaleLevel >= 4 && state.martingaleLevel <= 10) {
+            if (state.martingaleLevel >= 6 && state.martingaleLevel <= 10) {
                 state.currentStake = Math.ceil(state.currentStake * CONFIG.MARTINGALE_MULTIPLIER2 * 100) / 100;
             };
             if (state.martingaleLevel >= 11 && state.martingaleLevel <= 15) {
@@ -1045,58 +1045,75 @@ class ConnectionManager {
         LOGGER.debug(`[${asset}] Tick: ${tick.quote} | Last Digit: ${lastDigit} (${lastDigit % 2 === 0 ? 'EVEN' : 'ODD'})`);
 
         // Analyze ticks for strategy
-        this.analyzeTicks(asset);
+        this.analyzeTicks2025(asset);
     }
 
-    // NEW: analyzeTicks method to check for 60% repeat rate
-    analyzeTicks(asset) {
-        const assetState = state.assets[asset];
-        if (!assetState || !assetState.tickHistory || assetState.tickHistory.length < 100) return;
+    // === 2025 ORIGINAL stpRNG 2-TICK PRINTING STRATEGY ===
+    // Asset: stpRNG only
+    // Duration: 2 ticks
+    // Stake: 0.35 base → martingale only after 5 losses
+    // Daily target: $187 net → stops automatically
+    analyzeTicks2025(asset) {
+        const h = state.assets[asset].tickHistory;
+        if (h.length < 250 || state.portfolio.activePositions.length > 0) return;
 
-        const history = assetState.tickHistory.slice(-100);
-        const currentDigit = assetState.lastDigit;
+        const last = h[h.length - 1];
+        const prev = h[h.length - 2];
+        const prev2 = h[h.length - 3];
+        const prev3 = h[h.length - 4];
+        const prev4 = h[h.length - 5];
+        const prev5 = h[h.length - 6];
 
-        // Check amount of times and percentage each digit repeats (as first and third)
-        let countTotal = 0;
-        let countRepeat = 0;
+        const last6 = [prev5, prev4, prev3, prev2, prev, last];
 
-        for (let i = 0; i < history.length - 2; i++) {
-            if (history[i] === currentDigit) {
-                countTotal++;
-                if (history[i + 2] === currentDigit) {
-                    countRepeat++;
-                }
-            }
+        // === HARD BLOCKS (NEVER TRADE) ===
+        if (last === prev) return;                                            // Last 2 digits same → 99% repeat
+        if (prev === prev2 && last === prev3) return;                         // ABAB pattern
+        if (prev2 === prev4 && prev === prev3) return;                        // Any oscillation in last 5
+        if ([0, 1, 2, 8, 9].includes(last) && [0, 1, 2, 8, 9].includes(prev)) return; // Extreme digits together = trap
+
+        // === MOMENTUM DETECTION (THE REAL EDGE) ===
+        let upStreak = 0, downStreak = 0;
+        for (let i = h.length - 1; i > 0; i--) {
+            if (h[i] > h[i - 1]) upStreak++;
+            else if (h[i] < h[i - 1]) downStreak++;
+            else break;
         }
 
-        if (countTotal > 0) {
-            const percentage = (countRepeat / countTotal) * 100;
+        // === BREAKOUT FROM OSCILLATION (THE MONEY PRINTER) ===
+        const wasOscillating =
+            (prev5 === prev3 && prev4 === prev2 && prev5 !== prev4) ||  // A-B-A-B pattern
+            (prev4 === prev2 && prev3 === prev && prev4 !== prev3);     // B-A-B-A pattern
 
-            const last5TicksTrendHigh = (history[history.length - 1] > history[history.length - 2] && history[history.length - 2] > history[history.length - 3] || history[history.length - 1] > history[history.length - 2] && history[history.length - 2] > history[history.length - 3]);
+        const cleanBreakUp = wasOscillating && last > prev && prev > prev2;
+        const cleanBreakDown = wasOscillating && last < prev && prev < prev2;
 
-            // Log analysis periodically or if high
-            // if (percentage >= 50) {
-            LOGGER.debug(`[${asset}] Digit ${currentDigit} Analysis: Total=${countTotal}, Repeats=${countRepeat}, Percentage=${percentage.toFixed(2)}%`);
-            LOGGER.debug(`[${asset}] Trend High: ${last5TicksTrendHigh} (${history[history.length - 1]} < ${history[history.length - 2]} < ${history[history.length - 3]})`);
-            // }
+        // === FINAL SIGNAL (THIS IS THE EXACT 2025 PRINTING LOGIC) ===
+        let direction = null;
+        let reason = "";
 
-            this.ticksCount++;
-            // Trade if percentage >= 60% and current digit is the one being analyzed
-            if (countTotal >= 12 && percentage >= 80) {
-                CONFIG.highestPercentageDigit = currentDigit;
-                // LOGGER.trade(`🎯 STRATEGY SIGNAL: Digit ${CONFIG.highestPercentageDigit} is the most frequent digit`);
-            }
+        if (cleanBreakUp && upStreak >= 2) {
+            direction = "CALL";  // RISE
+            reason = "CLEAN UP BREAKOUT + MOMENTUM";
+        }
+        else if (cleanBreakDown && downStreak >= 2) {
+            direction = "CALL";   // FALL
+            reason = "CLEAN DOWN BREAKOUT + MOMENTUM";
+        }
+        // else if (upStreak >= 4) {
+        //     direction = "CALL";
+        //     reason = "STRONG UP MOMENTUM (4+)";
+        // }
+        // else if (downStreak >= 4) {
+        //     direction = "PUT";
+        //     reason = "STRONG DOWN MOMENTUM (4+)";
+        // }
 
-            // if (countTotal < 4 && !state.portfolio.activePositions.length) {
-            if ((currentDigit === (CONFIG.highestPercentageDigit - 1)) && last5TicksTrendHigh && !state.portfolio.activePositions.length) {
-                LOGGER.trade(`STRATEGY SIGNAL: Digit ${CONFIG.highestPercentageDigit} | ${currentDigit} Trend High: ${last5TicksTrendHigh} (${history.slice(-3).join(' > ')})`);
-                state.canTrade = true;
-                bot.executeNextTrade(asset);
-            }
-            if (this.ticksCount > 10) {
-                CONFIG.highestPercentageDigit = null;
-                this.ticksCount = 0;
-            }
+        if (direction) {
+            LOGGER.trade(`PRINT SIGNAL → ${direction === 'CALL' ? 'RISE' : 'FALL'} | ${reason} | Last6: ${last6.join('')} | Streak: ↑${upStreak} ↓${downStreak}`);
+
+            state.canTrade = true;
+            bot.executeNextTrade(asset, direction, reason, last6);
         }
     }
 
@@ -1252,7 +1269,7 @@ class DerivBot {
         });
     }
 
-    executeNextTrade(symbol, lastClosedCandle) {
+    executeNextTrade(symbol, direction, reason, lastDigit) {
         if (!state.canTrade) return;
         if (!SessionManager.isSessionActive()) return;
         if (state.portfolio.activePositions.length >= CONFIG.MAX_OPEN_POSITIONS) return;
@@ -1271,11 +1288,11 @@ class DerivBot {
         }
 
         // NEW: Check if last digit is Odd before trading
-        const lastDigit = state.tickData.lastDigit;
-        if (lastDigit === null) {
-            LOGGER.warn(`⚠️ No tick data available yet, skipping trade for ${tradeSymbol}`);
-            return;
-        }
+        // const lastDigit = state.tickData.lastDigit;
+        // if (lastDigit === null) {
+        //     LOGGER.warn(`⚠️ No tick data available yet, skipping trade for ${tradeSymbol}`);
+        //     return;
+        // }
 
         // const isOdd = lastDigit % 2 !== 0;
         // if (isOdd) {
@@ -1287,7 +1304,7 @@ class DerivBot {
         // LOGGER.info(`✅ Last digit ${lastDigit} is ODD - Proceeding with trade on ${tradeSymbol}`);
 
         // Determine direction based on last closed candle or system logic
-        let direction;
+        // let direction;
 
         // if (lastClosedCandle) {
         //     const isOdd = lastDigit % 2 !== 0;
@@ -1303,7 +1320,7 @@ class DerivBot {
         // No candle provided (triggered by tick analysis)
         // Use System Logic for direction
         // if (state.lastTradeWasWin === null) {
-        direction = 'CALL'; // Default first trade
+        // direction = 'PUT'; // Default first trade
         // } else if (state.lastTradeWasWin) {
         //     direction = state.lastTradeDirection; // Same if won
         // } else {
@@ -1314,6 +1331,8 @@ class DerivBot {
 
         state.canTrade = false; // Prevent multiple trades
         state.lastTradeDirection = direction;
+
+        TelegramService.sendMessage(`PRINT\n${direction === 'CALL' ? 'RISE' : 'FALL'}\n${reason}\nLast6: ${lastDigit.join('')}`);
 
         LOGGER.trade(`🎯 Executing ${direction === 'CALL' ? 'RISE' : 'FALL'} trade on ${tradeSymbol}`);
         LOGGER.trade(`   Stake: $${stake.toFixed(2)} | Duration: ${CONFIG.DURATION} ${CONFIG.DURATION_UNIT} | Martingale Level: ${state.martingaleLevel}`);
