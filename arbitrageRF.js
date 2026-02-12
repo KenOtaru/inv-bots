@@ -1138,6 +1138,7 @@ class ConnectionManager {
         }
 
         const successRate = matches >= 8 ? (successes / matches) * 100 : 0;
+        const prob = successRate.toFixed(1);
 
         LOGGER.trade(`Scanning → Oscillation ${oscLength} ticks (${oscA}-${oscB}) | Historical: ${successes}/${matches} = ${prob}%`);
 
@@ -1147,7 +1148,6 @@ class ConnectionManager {
         if (successRate >= 80 && oscLength >= 10) {
             const direction = brokeUp ? "CALL" : "CALL";
             const dirName = brokeUp ? "RISE" : "RISE";
-            const prob = successRate.toFixed(1);
 
             LOGGER.trade(`ELITE BREAKOUT → ${dirName} | Oscillation ${oscLength} ticks (${oscA}-${oscB}) → ${breakoutDir} | Historical: ${successes}/${matches} = ${prob}%`);
 
