@@ -1112,6 +1112,7 @@ class ConnectionManager {
         if (direction) {
             LOGGER.trade(`PRINT SIGNAL → ${direction === 'CALL' ? 'RISE' : 'FALL'} | ${reason} | Last6: ${last6.join('')} | Streak: ↑${upStreak} ↓${downStreak}`);
 
+            state.canTrade = true;
             bot.executeNextTrade(asset, direction);
         }
     }
