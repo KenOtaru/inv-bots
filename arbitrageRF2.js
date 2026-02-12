@@ -1137,12 +1137,15 @@ class ConnectionManager {
 
         const successRate = matches >= 8 ? (successes / matches) * 100 : 0;
 
+        LOGGER.trade(`ELITE BREAKOUT → ${dirName} | Oscillation ${oscLength} ticks (${oscA}-${oscB}) → ${breakoutDir} | Historical: ${successes}/${matches} = ${prob}%`);
+
+
         // ==================================================================
         // FINAL EXECUTION — ONLY THE HIGHEST CONFIDENCE BREAKOUTS
         // ==================================================================
         if (successRate >= 80 && oscLength >= 10) {
-            const direction = brokeUp ? "CALL" : "PUT";
-            const dirName = brokeUp ? "RISE" : "FALL";
+            const direction = brokeUp ? "PUT" : "PUT";
+            const dirName = brokeUp ? "FALL" : "FALL";
             const prob = successRate.toFixed(1);
 
             LOGGER.trade(`ELITE BREAKOUT → ${dirName} | Oscillation ${oscLength} ticks (${oscA}-${oscB}) → ${breakoutDir} | Historical: ${successes}/${matches} = ${prob}%`);
