@@ -1101,11 +1101,11 @@ class ConnectionManager {
         //     reason = "CLEAN DOWN BREAKOUT + MOMENTUM";
         // }
         // else 
-        if (upStreak >= 4) {
+        if (upStreak >= 4 && cleanBreakUp) {
             direction = "PUT";
             reason = "STRONG UP MOMENTUM (4+)";
         }
-        else if (downStreak >= 4) {
+        else if (downStreak >= 4 && cleanBreakDown) {
             direction = "PUT";
             reason = "STRONG DOWN MOMENTUM (4+)";
         }
