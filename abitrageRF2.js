@@ -1092,22 +1092,23 @@ class ConnectionManager {
         let direction = null;
         let reason = "";
 
-        if (cleanBreakUp && upStreak >= 2) {
-            direction = "PUT";  // RISE
-            reason = "CLEAN UP BREAKOUT + MOMENTUM";
-        }
-        else if (cleanBreakDown && downStreak >= 2) {
-            direction = "PUT";   // FALL
-            reason = "CLEAN DOWN BREAKOUT + MOMENTUM";
-        }
-        // else if (upStreak >= 4) {
-        //     direction = "CALL";
-        //     reason = "STRONG UP MOMENTUM (4+)";
+        // if (cleanBreakUp && upStreak >= 2) {
+        //     direction = "PUT";  // RISE
+        //     reason = "CLEAN UP BREAKOUT + MOMENTUM";
         // }
-        // else if (downStreak >= 4) {
-        //     direction = "PUT";
-        //     reason = "STRONG DOWN MOMENTUM (4+)";
+        // else if (cleanBreakDown && downStreak >= 2) {
+        //     direction = "PUT";   // FALL
+        //     reason = "CLEAN DOWN BREAKOUT + MOMENTUM";
         // }
+        // else 
+        if (upStreak >= 4) {
+            direction = "PUT";
+            reason = "STRONG UP MOMENTUM (4+)";
+        }
+        else if (downStreak >= 4) {
+            direction = "PUT";
+            reason = "STRONG DOWN MOMENTUM (4+)";
+        }
 
         if (direction) {
             LOGGER.trade(`PRINT SIGNAL → ${direction === 'CALL' ? 'RISE' : 'FALL'} | ${reason} | Last6: ${last6.join('')} | Streak: ↑${upStreak} ↓${downStreak}`);
