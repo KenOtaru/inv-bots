@@ -1097,6 +1097,7 @@ class ConnectionManager {
         }
 
         // Need at least 8-tick clean oscillation (4 full cycles)
+        LOGGER.trade(`OSCILLATION LENGTH: ${oscLength}`);
         if (oscLength < 8) return;
 
         // ==================================================================
@@ -1104,6 +1105,8 @@ class ConnectionManager {
         // ==================================================================
         const brokeUp = last > prev && prev > prev2;
         const brokeDown = last < prev && prev < prev2;
+
+        LOGGER.trade(`BREAKOUT DETECTED → ${brokeUp ? 'UP' : 'DOWN'} | Oscillation ${oscLength} ticks (${oscA}-${oscB})`);
 
         if (!brokeUp && !brokeDown) return;
 
