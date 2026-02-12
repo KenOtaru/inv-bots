@@ -414,11 +414,11 @@ const CONFIG = {
     MAX_OPEN_POSITIONS: 1, // One at a time for alternating strategy
     TRADE_DELAY: 1000, // 2 seconds delay between trades
     MARTINGALE_MULTIPLIER: 1,
-    MARTINGALE_MULTIPLIER2: 2.8,
-    MARTINGALE_MULTIPLIER3: 2.8,
-    MARTINGALE_MULTIPLIER4: 2.8,
-    MARTINGALE_MULTIPLIER5: 2.8,
-    MAX_MARTINGALE_STEPS: 10,
+    MARTINGALE_MULTIPLIER2: 1,
+    MARTINGALE_MULTIPLIER3: 1,
+    MARTINGALE_MULTIPLIER4: 1,
+    MARTINGALE_MULTIPLIER5: 1,
+    MAX_MARTINGALE_STEPS: 100,
     System: 1, // 1 = Continue same direction on Win and Switch direction on Loss, 
     // 2 = Switch direction on Win and Continue same direction on Loss, 
     // 3 = Switch direction every trade, 4 = Same direction every trade
@@ -1101,11 +1101,11 @@ class ConnectionManager {
         //     reason = "CLEAN DOWN BREAKOUT + MOMENTUM";
         // }
         // else 
-        if (upStreak >= 4 && cleanBreakUp) {
+        if (upStreak >= 3) {
             direction = "PUT";
             reason = "STRONG UP MOMENTUM (4+)";
         }
-        else if (downStreak >= 4 && cleanBreakDown) {
+        else if (downStreak >= 3) {
             direction = "PUT";
             reason = "STRONG DOWN MOMENTUM (4+)";
         }
