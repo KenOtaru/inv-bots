@@ -1113,7 +1113,7 @@ class ConnectionManager {
             LOGGER.trade(`PRINT SIGNAL → ${direction === 'CALL' ? 'RISE' : 'FALL'} | ${reason} | Last6: ${last6.join('')} | Streak: ↑${upStreak} ↓${downStreak}`);
 
             state.canTrade = true;
-            bot.executeNextTrade(asset, direction);
+            bot.executeNextTrade(asset, direction, reason);
         }
     }
 
@@ -1269,7 +1269,7 @@ class DerivBot {
         });
     }
 
-    executeNextTrade(symbol, direction) {
+    executeNextTrade(symbol, direction, reason) {
         if (!state.canTrade) return;
         if (!SessionManager.isSessionActive()) return;
         if (state.portfolio.activePositions.length >= CONFIG.MAX_OPEN_POSITIONS) return;
