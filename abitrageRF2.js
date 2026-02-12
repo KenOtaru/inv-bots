@@ -850,14 +850,14 @@ class ConnectionManager {
             position.contractId = contract.contract_id;
             position.buyPrice = contract.buy_price;
 
-            TelegramService.sendTradeAlert(
-                'OPEN',
-                position.symbol,
-                position.direction,
-                position.stake,
-                position.duration,
-                position.durationUnit
-            );
+            // TelegramService.sendTradeAlert(
+            //     'OPEN',
+            //     position.symbol,
+            //     position.direction,
+            //     position.stake,
+            //     position.duration,
+            //     position.durationUnit
+            // );
         }
 
         // Subscribe to contract updates
@@ -893,15 +893,15 @@ class ConnectionManager {
 
             SessionManager.recordTradeResult(profit, position.direction);
 
-            TelegramService.sendTradeAlert(
-                profit >= 0 ? 'WIN' : 'LOSS',
-                position.symbol,
-                position.direction,
-                position.stake,
-                position.duration,
-                position.durationUnit,
-                { profit }
-            );
+            // TelegramService.sendTradeAlert(
+            //     profit >= 0 ? 'WIN' : 'LOSS',
+            //     position.symbol,
+            //     position.direction,
+            //     position.stake,
+            //     position.duration,
+            //     position.durationUnit,
+            //     { profit }
+            // );
 
             state.portfolio.activePositions.splice(posIndex, 1);
 
@@ -1333,7 +1333,7 @@ class DerivBot {
         state.canTrade = false; // Prevent multiple trades
         state.lastTradeDirection = direction;
 
-        TelegramService.sendMessage(`PRINT\n${direction === 'CALL' ? 'RISE' : 'FALL'}\n${reason}\nLast6: ${lastDigit.join('')}`);
+        // TelegramService.sendMessage(`PRINT\n${direction === 'CALL' ? 'RISE' : 'FALL'}\n${reason}\nLast6: ${lastDigit.join('')}`);
 
         LOGGER.trade(`🎯 Executing ${direction === 'CALL' ? 'RISE' : 'FALL'} trade on ${tradeSymbol}`);
         LOGGER.trade(`   Stake: $${stake.toFixed(2)} | Duration: ${CONFIG.DURATION} ${CONFIG.DURATION_UNIT} | Martingale Level: ${state.martingaleLevel}`);
