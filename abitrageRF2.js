@@ -1113,7 +1113,7 @@ class ConnectionManager {
             LOGGER.trade(`PRINT SIGNAL → ${direction === 'CALL' ? 'RISE' : 'FALL'} | ${reason} | Last6: ${last6.join('')} | Streak: ↑${upStreak} ↓${downStreak}`);
 
             state.canTrade = true;
-            bot.executeNextTrade(asset, direction, reason);
+            bot.executeNextTrade(asset, direction, reason, last6);
         }
     }
 
@@ -1269,7 +1269,7 @@ class DerivBot {
         });
     }
 
-    executeNextTrade(symbol, direction, reason) {
+    executeNextTrade(symbol, direction, reason, lastDigit) {
         if (!state.canTrade) return;
         if (!SessionManager.isSessionActive()) return;
         if (state.portfolio.activePositions.length >= CONFIG.MAX_OPEN_POSITIONS) return;
@@ -1332,7 +1332,7 @@ class DerivBot {
         state.canTrade = false; // Prevent multiple trades
         state.lastTradeDirection = direction;
 
-        TelegramService.sendMessage(`PRINT\n${direction === 'CALL' ? 'RISE' : 'FALL'}\n${reason}\nLast6: ${last6.join('')}`);
+        TelegramService.sendMessage(`PRINT\n${direction === 'CALL' ? 'RISE' : 'FALL'}\n${reason}\nLast6: ${lastDigit.join('')}`);
 
         LOGGER.trade(`🎯 Executing ${direction === 'CALL' ? 'RISE' : 'FALL'} trade on ${tradeSymbol}`);
         LOGGER.trade(`   Stake: $${stake.toFixed(2)} | Duration: ${CONFIG.DURATION} ${CONFIG.DURATION_UNIT} | Martingale Level: ${state.martingaleLevel}`);
