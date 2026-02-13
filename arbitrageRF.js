@@ -1146,7 +1146,7 @@ class ConnectionManager {
         // ==================================================================
         // FINAL EXECUTION — ONLY THE HIGHEST CONFIDENCE BREAKOUTS
         // ==================================================================
-        if (successRate >= 80 && oscLength >= 10) {
+        if (successRate >= 60 && oscLength >= 6) {
             const direction = brokeUp ? "CALL" : "CALL";
             const dirName = brokeUp ? "RISE" : "RISE";
 
