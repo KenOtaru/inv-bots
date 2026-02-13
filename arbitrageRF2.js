@@ -6,7 +6,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'abitrageRF0001-state.json');
+const STATE_FILE = path.join(__dirname, 'abitrageRF0007-state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -1172,8 +1172,8 @@ class ConnectionManager {
         // ══════════════════════════════════════════
         if (successRate >= CONFIG.MIN_BREAKOUT_CONFIDENCE) {
 
-            const direction = breakoutUp ? 'CALL' : 'PUT';
-            const dirName = breakoutUp ? 'RISE' : 'FALL';
+            const direction = breakoutUp ? 'PUT' : 'PUT';
+            const dirName = breakoutUp ? 'FALL' : 'FALL';
             const oscInfo = `${bestOscA}-${bestOscB} (${bestOscLength}t, ended ${ticksAfterOsc}t ago)`;
 
             LOGGER.trade(`═══════════════════════════════════════════════════════════`);
