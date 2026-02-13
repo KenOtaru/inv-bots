@@ -1098,7 +1098,7 @@ class ConnectionManager {
 
         // Need at least 8-tick clean oscillation (4 full cycles)
         LOGGER.trade(`OSCILLATION LENGTH: ${oscLength}`);
-        if (oscLength < 8) return;
+        if (oscLength < 6) return;
 
         // ==================================================================
         // STEP 2: Check if we just broke out cleanly
