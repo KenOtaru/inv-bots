@@ -1106,9 +1106,9 @@ class ConnectionManager {
         const brokeUp = last > prev && prev > prev2;
         const brokeDown = last < prev && prev < prev2;
 
-        LOGGER.trade(`BREAKOUT DETECTED → ${brokeUp ? 'UP' : 'DOWN'} | Oscillation ${oscLength} ticks (${oscA}-${oscB})`);
-
+        LOGGER.trade(`isBREAKOUT? → ${brokeUp} | ${brokeDown}`);
         if (!brokeUp && !brokeDown) return;
+        LOGGER.trade(`BREAKOUT DETECTED → ${brokeUp ? 'UP' : 'DOWN'} | Oscillation ${oscLength} ticks (${oscA}-${oscB})`);
 
         // ==================================================================
         // STEP 3: HISTORICAL SUCCESS RATE OF THIS EXACT BREAKOUT
