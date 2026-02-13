@@ -1138,7 +1138,7 @@ class ConnectionManager {
             }
         }
 
-        const successRate = matches >= 6 ? (successes / matches) * 100 : 0;
+        const successRate = matches >= 5 ? (successes / matches) * 100 : 0;
         const prob = successRate.toFixed(1);
 
         LOGGER.trade(`Scanning → Oscillation ${oscLength} ticks (${oscA}-${oscB}) | Historical: ${successes}/${matches} = ${prob}%`);
