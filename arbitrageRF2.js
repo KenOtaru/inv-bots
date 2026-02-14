@@ -1157,7 +1157,7 @@ class ConnectionManager {
     // ════════════════════════════════════════════════════════════════
     analyzeTicks2025(asset) {
         const h = state.assets[asset].tickHistory;
-        if (!h || h.length < 200) return;
+        if (!h || h.length < 10) return;
         if (state.portfolio.activePositions.length > 0) return;
         if (!state.session.isActive) return;
 
