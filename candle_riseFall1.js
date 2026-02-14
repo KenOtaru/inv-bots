@@ -1193,10 +1193,10 @@ class DerivBot {
             // if (CandleAnalyzer.isBullish(lastClosedCandle)) {
             if (!isOdd) {
                 direction = 'PUT'; // Sell if previous candle was bullish
-                LOGGER.trade(`📈 Last candle was BEARISH (Close < Open) → Executing FALL trade`);
+                LOGGER.trade(`📉 Last candle was BEARISH (Close < Open) → Executing FALL trade`);
             } else { //else if (CandleAnalyzer.isBearish(lastClosedCandle)) {
                 direction = 'PUT'; // Sell if previous candle was bullish
-                LOGGER.trade(`📈 Last candle was BEARISH (Close < Open) → Executing FALL trade`);
+                LOGGER.trade(`📉 Last candle was BEARISH (Close < Open) → Executing FALL trade`);
             }
         }
 
