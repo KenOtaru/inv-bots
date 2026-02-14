@@ -388,7 +388,7 @@ const CONFIG = {
     MIN_TREND_CONFIDENCE: 20,      // Minimum historical success rate
     MIN_TREND_MATCHES: 5,          // Minimum historical samples needed
 
-    OSC_TARGET_RATIO: 0.95,      // Trigger at 85% of max oscillation length
+    OSC_TARGET_RATIO: 1,      // Trigger at 85% of max oscillation length
     MIN_OSC_EVENTS: 0,           // Need at least 5 historical osc→trend events
     MIN_CONFIDENCE: 70,          // Minimum confidence to trade
     MAX_OSC_MULTIPLIER: 1.5,     // Skip if oscillation > 150% of max (anomaly)
