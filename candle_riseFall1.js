@@ -428,7 +428,7 @@ const CONFIG = {
 
 let ACTIVE_ASSETS = [
     // 'R_75', 'R_100', '1HZ25V', '1HZ50V', '1HZ100V' 'stpRNG', 'RDBULL', 'RDBEAR',
-    'stpRNG3'
+    'stpRNG4'
 ];
 
 // ============================================
