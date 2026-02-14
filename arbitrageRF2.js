@@ -370,7 +370,7 @@ const CONFIG = {
     MAX_CANDLES_STORED: 100,
     CANDLES_TO_LOAD: 50,
 
-    TOTAL_TICK_HISTORY: 5000,
+    TOTAL_TICK_HISTORY: 100,
 
     // Trade Duration Settings
     DURATION: 2,
@@ -388,7 +388,7 @@ const CONFIG = {
     MIN_TREND_CONFIDENCE: 20,      // Minimum historical success rate
     MIN_TREND_MATCHES: 5,          // Minimum historical samples needed
 
-    OSC_TARGET_RATIO: 0.9,      // Trigger at 85% of max oscillation length
+    OSC_TARGET_RATIO: 0.95,      // Trigger at 85% of max oscillation length
     MIN_OSC_EVENTS: 5,           // Need at least 5 historical osc→trend events
     MIN_CONFIDENCE: 60,          // Minimum confidence to trade
     MAX_OSC_MULTIPLIER: 1.5,     // Skip if oscillation > 150% of max (anomaly)
