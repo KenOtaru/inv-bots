@@ -1002,7 +1002,7 @@ class ConnectionManager {
         LOGGER.debug(`[${asset}] Tick: ${tick.quote} | Digit: ${lastDigit}`);
 
         if (state.canTrade && lastDigit % 2 === 0) {
-            bot.executeNextTrade(symbol);
+            bot.executeNextTrade(asset);
         }
     }
 
