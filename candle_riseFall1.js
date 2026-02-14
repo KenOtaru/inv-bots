@@ -1001,7 +1001,9 @@ class ConnectionManager {
 
         LOGGER.debug(`[${asset}] Tick: ${tick.quote} | Digit: ${lastDigit}`);
 
-        if (state.canTrade && lastDigit % 2 === 0) {
+        const odd = lastDigit % 2 === 0;
+
+        if (state.canTrade && !odd) {
             bot.executeNextTrade(asset);
         }
     }
