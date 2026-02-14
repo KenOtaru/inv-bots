@@ -370,7 +370,7 @@ const CONFIG = {
     MAX_CANDLES_STORED: 100,
     CANDLES_TO_LOAD: 50,
 
-    TOTAL_TICK_HISTORY: 100,
+    TOTAL_TICK_HISTORY: 50,
 
     // Trade Duration Settings
     DURATION: 2,
