@@ -1289,7 +1289,7 @@ class ConnectionManager {
         // ══════════════════════════════════════════
         let currentOscLength = 0;
         let lastDirection = 0;
-        const recent50 = directions.slice(-50);
+        const recent50 = directions.slice(-20);
 
         // Walk backwards from the end to count current oscillation
         for (let r = recent50.length - 1; r >= 0; r--) {
