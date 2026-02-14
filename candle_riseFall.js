@@ -930,7 +930,7 @@ class ConnectionManager {
                 // TRIGGER TRADE AFTER CANDLE CLOSE
                 // setTimeout(() => {
                 state.canTrade = true;
-                bot.executeNextTrade(symbol, closedCandle);
+                // bot.executeNextTrade(symbol, closedCandle);
                 // }, 500); // Small delay to ensure candle is fully processed
             }
         }
@@ -988,15 +988,23 @@ class ConnectionManager {
     }
 
     // NEW: Handle live tick updates for Odd/Even checking
-    // NEW: Handle live tick updates for Odd/Even checking
     handleTickUpdate(tick) {
         const asset = tick.symbol;
         const lastDigit = this.getLastDigit(tick.quote, asset);
+        if (!state.assets[asset]) return;
+
+        const assetState = state.assets[asset];
+        assetState.lastTick = tick;
+        assetState.lastDigit = lastDigit;
 
         state.tickData.lastTick = tick;
         state.tickData.lastDigit = lastDigit;
 
-        LOGGER.debug(`[${asset}] Tick: ${tick.quote} | Last Digit: ${lastDigit} (${lastDigit % 2 === 0 ? 'EVEN' : 'ODD'})`);
+        LOGGER.debug(`[${asset}] Tick: ${tick.quote} | Digit: ${lastDigit}`);
+
+        if (state.canTrade && lastDigit % 2 === 0) {
+            bot.executeNextTrade(symbol);
+        }
     }
 
     // NEW: Get last digit from quote based on asset type (from mX4Differ.js)
@@ -1199,18 +1207,19 @@ class DerivBot {
         //     }
         // }
 
-        if (lastClosedCandle) {
-            const isOdd = lastDigit % 2 !== 0;
-            // Trade based on candle pattern
-            // if (CandleAnalyzer.isBullish(lastClosedCandle)) {
-            if (isOdd) {
-                direction = 'CALL'; // Sell if previous candle was bullish
-                LOGGER.trade(`📈 Last candle was BULLISH (Close > Open) → Executing RISE trade`);
-            } else { //else if (CandleAnalyzer.isBearish(lastClosedCandle)) {
-                direction = 'CALL'; // Sell if previous candle was bullish
-                LOGGER.trade(`📈 Last candle was BULLISH (Close > Open) → Executing RISE trade`);
-            }
-        }
+        // if (lastClosedCandle) {
+        //     const isOdd = lastDigit % 2 !== 0;
+        // Trade based on candle pattern
+        // if (CandleAnalyzer.isBullish(lastClosedCandle)) {
+        // if (!isOdd) {
+        direction = 'CALL'; // Sell if previous candle was bullish
+        LOGGER.trade(`📈 Last candle was BULLISH (Close > Open) → Executing RISE trade`);
+        // }
+        // else { //else if (CandleAnalyzer.isBearish(lastClosedCandle)) {
+        //     direction = 'CALL'; // Sell if previous candle was bullish
+        //     LOGGER.trade(`📈 Last candle was BULLISH (Close > Open) → Executing RISE trade`);
+        // }
+        // }
 
         state.canTrade = false; // Prevent multiple trades
         state.lastTradeDirection = direction;
