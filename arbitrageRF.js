@@ -390,7 +390,7 @@ const CONFIG = {
 
     OSC_TARGET_RATIO: 1,      // Trigger at 85% of max oscillation length
     MIN_OSC_EVENTS: 0,           // Need at least 5 historical osc→trend events
-    MIN_CONFIDENCE: 70,          // Minimum confidence to trade
+    MIN_CONFIDENCE: 60,          // Minimum confidence to trade
     MAX_OSC_MULTIPLIER: 1.5,     // Skip if oscillation > 150% of max (anomaly)
 
     // Martingale Settings
