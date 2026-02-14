@@ -6,7 +6,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'candleRF000019-state.json');
+const STATE_FILE = path.join(__dirname, 'candleRF000021-state.json');
 const STATE_SAVE_INTERVAL = 5000; // Save every 5 seconds
 
 class StatePersistence {
@@ -399,7 +399,7 @@ const CONFIG = {
     CANDLES_TO_LOAD: 50,
 
     // Trade Duration Settings
-    DURATION: 6,
+    DURATION: 2,
     DURATION_UNIT: 't', // t=ticks, s=seconds, m=minutes
 
     // Trade Settings
@@ -428,7 +428,7 @@ const CONFIG = {
 
 let ACTIVE_ASSETS = [
     // 'R_75', 'R_100', '1HZ25V', '1HZ50V', '1HZ100V' 'stpRNG', 'RDBULL', 'RDBEAR',
-    'stpRNG'
+    'stpRNG2'
 ];
 
 // ============================================
