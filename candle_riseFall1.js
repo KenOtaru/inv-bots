@@ -405,8 +405,8 @@ const CONFIG = {
     // Trade Settings
     MAX_OPEN_POSITIONS: 1, // One at a time for alternating strategy
     TRADE_DELAY: 1000, // 2 seconds delay between trades
-    MARTINGALE_MULTIPLIER: 1,
-    MARTINGALE_MULTIPLIER2: 4,
+    MARTINGALE_MULTIPLIER: 4,
+    MARTINGALE_MULTIPLIER2: 5,
     MARTINGALE_MULTIPLIER3: 5,
     MARTINGALE_MULTIPLIER4: 1,
     MARTINGALE_MULTIPLIER5: 2.2,

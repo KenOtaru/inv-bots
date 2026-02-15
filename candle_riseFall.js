@@ -405,8 +405,8 @@ const CONFIG = {
     // Trade Settings
     MAX_OPEN_POSITIONS: 1, // One at a time for alternating strategy
     TRADE_DELAY: 1000, // 2 seconds delay between trades
-    MARTINGALE_MULTIPLIER: 1,
-    MARTINGALE_MULTIPLIER2: 4,
+    MARTINGALE_MULTIPLIER: 4,
+    MARTINGALE_MULTIPLIER2: 5,
     MARTINGALE_MULTIPLIER3: 5,
     MARTINGALE_MULTIPLIER4: 1,
     MARTINGALE_MULTIPLIER5: 2.2,
@@ -421,7 +421,7 @@ const CONFIG = {
 
     // Telegram Settings
     TELEGRAM_ENABLED: true,
-    TELEGRAM_BOT_TOKEN: '8356265372:AAELmgFj-xJP3EJNPR5G_D2R2fke-T9wxBA',
+    TELEGRAM_BOT_TOKEN: '8588380880:AAH8tOl8dxvjJ4qfWf3yr-i7FS_qlew-8t0',
     TELEGRAM_CHAT_ID: '752497117',
 };
 
