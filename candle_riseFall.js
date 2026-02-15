@@ -399,8 +399,8 @@ const CONFIG = {
     CANDLES_TO_LOAD: 50,
 
     // Trade Duration Settings
-    DURATION: 12,
-    DURATION_UNIT: 't', // t=ticks, s=seconds, m=minutes
+    DURATION: 20,
+    DURATION_UNIT: 's', // t=ticks, s=seconds, m=minutes
 
     // Trade Settings
     MAX_OPEN_POSITIONS: 1, // One at a time for alternating strategy
