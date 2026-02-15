@@ -411,9 +411,7 @@ const CONFIG = {
     MARTINGALE_MULTIPLIER4: 1,
     MARTINGALE_MULTIPLIER5: 2.2,
     MAX_MARTINGALE_STEPS: 5,
-    System: 1, // 1 = Continue same direction on Win and Switch direction on Loss, 
-    // 2 = Switch direction on Win and Continue same direction on Loss, 
-    // 3 = Switch direction every trade, 4 = Same direction every trade
+
     iDirection: 'RISE', //Set initial direction 'RISE' or 'FALL'
 
     // Debug
