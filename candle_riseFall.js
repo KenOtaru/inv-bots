@@ -6,7 +6,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'candleRF00023-state.json');
+const STATE_FILE = path.join(__dirname, 'candleRF00024-state.json');
 const STATE_SAVE_INTERVAL = 5000; // Save every 5 seconds
 
 class StatePersistence {
@@ -385,7 +385,7 @@ const CONFIG = {
 
     // Capital Settings
     INITIAL_CAPITAL: 500,
-    STAKE: 0.5,
+    STAKE: 1,
 
     // Session Targets
     totalTradesN: 30000000,
@@ -1181,9 +1181,9 @@ class DerivBot {
 
         let direction;
 
-        CONFIG.iDirection = 'RISE' ? direction = 'CALLE' : direction = 'PUTE';
+        CONFIG.iDirection === 'RISE' ? direction = 'CALLE' : direction = 'PUTE';
 
-        if (direction = 'CALLE') {
+        if (direction === 'CALLE') {
             // direction = 'PUTE'; // Sell if previous candle was bearish
             LOGGER.trade(`📈 Last candle was BULLISH (Close > Open) → Executing RISE trade`);
             CONFIG.iDirection = 'FALL';
