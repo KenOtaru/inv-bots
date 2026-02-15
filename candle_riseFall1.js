@@ -1197,17 +1197,24 @@ class DerivBot {
         // Determine direction based on last closed candle
         let direction;
 
-        // if (lastClosedCandle) {
-        //     const isOdd = lastDigit % 2 !== 0;
-        // Trade based on candle pattern
-        // if (CandleAnalyzer.isBullish(lastClosedCandle)) {
-        if (!isOdd) {
-            direction = 'PUTE'; // Sell if previous candle was bearish
-            LOGGER.trade(`📉 Last candle was BEARISH (Close < Open) → Executing FALL trade`);
-        }
-        else { //else if (CandleAnalyzer.isBearish(lastClosedCandle)) {
-            direction = 'CALLE'; // Sell if previous candle was bullish
-            LOGGER.trade(`📈 Last candle was BULLISH (Close > Open) → Executing RISE trade`);
+        if (state.lastTradeDirection = 'CALLE') {
+            if (isOdd) {
+                direction = 'PUTE'; // Sell if previous candle was bearish
+                LOGGER.trade(`📉 Last candle was BEARISH (Close < Open) → Executing FALL trade`);
+            }
+            else { //else if (CandleAnalyzer.isBearish(lastClosedCandle)) {
+                direction = 'CALLE'; // Sell if previous candle was bullish
+                LOGGER.trade(`📈 Last candle was BULLISH (Close > Open) → Executing RISE trade`);
+            }
+        } else {
+            if (!isOdd) {
+                direction = 'PUTE'; // Sell if previous candle was bearish
+                LOGGER.trade(`📉 Last candle was BEARISH (Close < Open) → Executing FALL trade`);
+            }
+            else { //else if (CandleAnalyzer.isBearish(lastClosedCandle)) {
+                direction = 'CALLE'; // Sell if previous candle was bullish
+                LOGGER.trade(`📈 Last candle was BULLISH (Close > Open) → Executing RISE trade`);
+            }
         }
 
         state.canTrade = false; // Prevent multiple trades
