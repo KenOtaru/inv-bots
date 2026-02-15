@@ -6,7 +6,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'candleRF00022-state.json');
+const STATE_FILE = path.join(__dirname, 'candleRF00023-state.json');
 const STATE_SAVE_INTERVAL = 5000; // Save every 5 seconds
 
 class StatePersistence {
@@ -385,10 +385,10 @@ const CONFIG = {
 
     // Capital Settings
     INITIAL_CAPITAL: 500,
-    STAKE: 1,
+    STAKE: 0.5,
 
     // Session Targets
-    totalTradesN: 300000,
+    totalTradesN: 30000000,
     SESSION_PROFIT_TARGET: 500,
     SESSION_STOP_LOSS: -250,
 
@@ -617,7 +617,7 @@ class SessionManager {
 
             if (state.martingaleLevel >= CONFIG.MAX_MARTINGALE_STEPS) {
                 LOGGER.warn(`⚠️ Maximum Martingale step reached (${CONFIG.MAX_MARTINGALE_STEPS}), resetting level to 0`);
-                state.martingaleLevel = 0;
+                // state.martingaleLevel = 0;
             } else {
                 LOGGER.trade(`❌ LOSS: -$${Math.abs(profit).toFixed(2)} | Direction: ${direction} | Next Martingale Level: ${state.martingaleLevel}`);
             }
