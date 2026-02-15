@@ -406,11 +406,11 @@ const CONFIG = {
     MAX_OPEN_POSITIONS: 1, // One at a time for alternating strategy
     TRADE_DELAY: 1000, // 2 seconds delay between trades
     MARTINGALE_MULTIPLIER: 1,
-    MARTINGALE_MULTIPLIER2: 1,
-    MARTINGALE_MULTIPLIER3: 1,
+    MARTINGALE_MULTIPLIER2: 4,
+    MARTINGALE_MULTIPLIER3: 5,
     MARTINGALE_MULTIPLIER4: 1,
     MARTINGALE_MULTIPLIER5: 2.2,
-    MAX_MARTINGALE_STEPS: 100,
+    MAX_MARTINGALE_STEPS: 5,
     System: 1, // 1 = Continue same direction on Win and Switch direction on Loss, 
     // 2 = Switch direction on Win and Continue same direction on Loss, 
     // 3 = Switch direction every trade, 4 = Same direction every trade
@@ -598,13 +598,13 @@ class SessionManager {
 
 
             // Martingale Multiplier
-            if (state.martingaleLevel <= 3) {
+            if (state.martingaleLevel <= 1) {
                 state.currentStake = Math.ceil(state.currentStake * CONFIG.MARTINGALE_MULTIPLIER * 100) / 100;
             };
-            if (state.martingaleLevel >= 4 && state.martingaleLevel <= 10) {
+            if (state.martingaleLevel >= 2 && state.martingaleLevel <= 2) {
                 state.currentStake = Math.ceil(state.currentStake * CONFIG.MARTINGALE_MULTIPLIER2 * 100) / 100;
             };
-            if (state.martingaleLevel >= 11 && state.martingaleLevel <= 15) {
+            if (state.martingaleLevel >= 3 && state.martingaleLevel <= 3) {
                 state.currentStake = Math.ceil(state.currentStake * CONFIG.MARTINGALE_MULTIPLIER3 * 100) / 100;
             };
             if (state.martingaleLevel >= 16 && state.martingaleLevel <= 20) {
