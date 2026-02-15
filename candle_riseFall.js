@@ -399,7 +399,7 @@ const CONFIG = {
     CANDLES_TO_LOAD: 50,
 
     // Trade Duration Settings
-    DURATION: 20,
+    DURATION: 12,
     DURATION_UNIT: 's', // t=ticks, s=seconds, m=minutes
 
     // Trade Settings
