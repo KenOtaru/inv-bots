@@ -414,7 +414,7 @@ const CONFIG = {
     System: 1, // 1 = Continue same direction on Win and Switch direction on Loss, 
     // 2 = Switch direction on Win and Continue same direction on Loss, 
     // 3 = Switch direction every trade, 4 = Same direction every trade
-    iDirection: 'RISE', //Set initial direction 'RISE' or 'FALL'
+    iDirection: 'FALL', //Set initial direction 'RISE' or 'FALL'
 
     // Debug
     DEBUG_MODE: true,
@@ -1178,43 +1178,18 @@ class DerivBot {
             return;
         }
 
-        // NEW: Check if last digit is Odd before trading
-        const lastDigit = state.tickData.lastDigit;
-        if (lastDigit === null) {
-            LOGGER.warn(`⚠️ No tick data available yet, skipping trade for ${tradeSymbol}`);
-            return;
-        }
-
-        // const isOdd = lastDigit % 2 !== 0;
-        // if (isOdd) {
-        //     LOGGER.info(`🚫 Skipping trade on ${tradeSymbol} - Last digit ${lastDigit} is ODD (Even required)`);
-        //     state.canTrade = false;
-        //     return;
-        // }
-
-        LOGGER.info(`✅ Last digit ${lastDigit} is ODD - Proceeding with trade on ${tradeSymbol}`);
-
-        // Determine direction based on last closed candle
         let direction;
 
-        if (state.lastTradeDirection = 'CALLE') {
-            if (isOdd) {
-                direction = 'PUTE'; // Sell if previous candle was bearish
-                LOGGER.trade(`📉 Last candle was BEARISH (Close < Open) → Executing FALL trade`);
-            }
-            else { //else if (CandleAnalyzer.isBearish(lastClosedCandle)) {
-                direction = 'CALLE'; // Sell if previous candle was bullish
-                LOGGER.trade(`📈 Last candle was BULLISH (Close > Open) → Executing RISE trade`);
-            }
+        CONFIG.iDirection = 'RISE' ? direction = 'CALLE' : direction = 'PUTE';
+
+        if (direction = 'CALLE') {
+            // direction = 'PUTE'; // Sell if previous candle was bearish
+            LOGGER.trade(`📈 Last candle was BULLISH (Close > Open) → Executing RISE trade`);
+            CONFIG.iDirection = 'FALL';
         } else {
-            if (!isOdd) {
-                direction = 'PUTE'; // Sell if previous candle was bearish
-                LOGGER.trade(`📉 Last candle was BEARISH (Close < Open) → Executing FALL trade`);
-            }
-            else { //else if (CandleAnalyzer.isBearish(lastClosedCandle)) {
-                direction = 'CALLE'; // Sell if previous candle was bullish
-                LOGGER.trade(`📈 Last candle was BULLISH (Close > Open) → Executing RISE trade`);
-            }
+            // direction = 'PUTE'; // Sell if previous candle was bearish
+            LOGGER.trade(`📉 Last candle was BEARISH (Close < Open) → Executing FALL trade`);
+            CONFIG.iDirection = 'RISE';
         }
 
         state.canTrade = false; // Prevent multiple trades
