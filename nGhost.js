@@ -89,6 +89,11 @@ const STATE = {
     candlesLoaded: false,
     ticksReady: false,
     awaitingResult: false,
+    // Track intervals and subscription status to prevent rate limits
+    intervals: {
+        candles: null
+    },
+    subscribed: false
 };
 
 // ============================================================================
@@ -600,13 +605,18 @@ class FiboDiffBot {
 
         console.log(`${C.GREEN}✅ Authorized: ${data.fullname} | Balance: $${STATE.currentBalance.toFixed(2)}${C.RESET}`);
 
+        // Initial setup - only if not already subscribed or upon re-authorization
+        // Deriv cancels subscriptions on disconnect, so we should always re-subscribe
+        // but we must clear previous intervals to avoid rate limits
+        this.clearBotintervals();
+
         // Subscribe to balance updates
         this.send({ balance: 1, subscribe: 1, req_id: this.nextReqId() });
 
         // Subscribe to transaction updates
         this.send({ transaction: 1, subscribe: 1, req_id: this.nextReqId() });
 
-        // Request candle history
+        // Request candle history (once, then it will refresh via interval)
         this.requestCandles();
 
         // Subscribe to ticks
@@ -614,6 +624,13 @@ class FiboDiffBot {
 
         // Request initial tick history
         this.requestTickHistory();
+    }
+
+    clearBotintervals() {
+        if (STATE.intervals.candles) {
+            clearInterval(STATE.intervals.candles);
+            STATE.intervals.candles = null;
+        }
     }
 
     onBalance(data) {
@@ -652,8 +669,11 @@ class FiboDiffBot {
             console.log(`${C.CYAN}   Swing High: ${STATE.fibLevels.swingHigh.toFixed(4)} | Swing Low: ${STATE.fibLevels.swingLow.toFixed(4)}${C.RESET}`);
         }
 
-        // Refresh candles every 60 seconds
-        setInterval(() => this.requestCandles(), 60000);
+        // FIXED: Removed the setInterval from here to prevent exponential growth of requests
+        // The interval is now managed in a way that it only runs once
+        if (!STATE.intervals.candles) {
+            STATE.intervals.candles = setInterval(() => this.requestCandles(), 60000);
+        }
     }
 
     // Request tick history
