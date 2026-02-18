@@ -26,7 +26,7 @@ const CONFIG = {
 
     // Analysis Parameters
     analysis_window: 30,
-    frequency_threshold: 7,
+    frequency_threshold: 9,
 
     // Ghost Trading Parameters
     ghost_enabled: true,
@@ -551,8 +551,9 @@ function analyzeDigits() {
 
     logAnalysis(`Frequencies: {${freqDisplay}} | Target: ${C.BOLD}${targetDigit}${C.RESET} (${maxFreq}x, expected ${expectedFreq.toFixed(1)}, confidence: ${analysisConfidence})`);
 
-    if (analysisConfidence === 'LOW') {
+    if (analysisConfidence === 'LOW' || analysisConfidence === 'MEDIUM') {
         logAnalysis(`${C.YELLOW}⚠️ Low confidence - digit distribution is relatively even${C.RESET}`);
+        return;
     }
 }
 
