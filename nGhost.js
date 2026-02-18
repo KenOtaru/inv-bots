@@ -18,8 +18,8 @@ const CONFIG = {
     API_TOKEN: '0P94g4WdSrSrzir',  // <-- PUT YOUR REAL TOKEN
     SYMBOL: 'R_75',                           // R_75 = Vol75, R_100 = Vol100
     BASE_STAKE: 0.75,
-    MARTINGALE_MULTIPLIER: 5.87,
-    MAX_MARTINGALE_STEPS: 10,
+    MARTINGALE_MULTIPLIER: 2.3,
+    MAX_MARTINGALE_STEPS: 7,
     PAUSE_AFTER_MAX_LOSS_MS: 30 * 60 * 1000,  // 30 minutes
     TICK_HISTORY_SIZE: 12,
     CANDLE_COUNT: 120,
@@ -27,7 +27,7 @@ const CONFIG = {
     FIBO_PROXIMITY_PIPS: 12,
     WEIGHT_DIFF_FACTOR: 2.73,
     WEIGHT_TREND_FACTOR: 1.89,
-    SIGNAL_THRESHOLD: 4.8,
+    SIGNAL_THRESHOLD: 3.8, //4.8
     CONTRACT_DURATION: 1,
     CONTRACT_DURATION_UNIT: 't',
     CONTRACT_TYPE_OVER: 'DIGITOVER',
@@ -184,8 +184,10 @@ class FibonacciEngine {
             }
         }
 
-        const pipSize = CONFIG.SYMBOL === 'R_75' ? 0.01 : 0.01;
+        const pipSize = CONFIG.SYMBOL === 'R_75' ? 18 : 10;
         const distanceInPips = closestDistance / pipSize;
+
+        console.log(`Closest level: ${closestName} at ${closestLevel}, Distance: ${distanceInPips}/${CONFIG.FIBO_PROXIMITY_PIPS}`);
 
         return {
             near: distanceInPips <= CONFIG.FIBO_PROXIMITY_PIPS,
@@ -364,16 +366,16 @@ class DisplayEngine {
         console.log('');
 
         // Fibonacci levels
-        console.log(`${C.BLUE}${C.BRIGHT}╔══════════════════════════════════════════════════════════════════╗${C.RESET}`);
-        console.log(`${C.BLUE}║${C.WHITE}  FIBONACCI RETRACEMENT LEVELS (Last ${CONFIG.FIBO_CANDLE_LOOKBACK} candles)                   ${C.BLUE}║${C.RESET}`);
-        console.log(`${C.BLUE}╠══════════════════════════════════════════════════════════════════╣${C.RESET}`);
+        // console.log(`${C.BLUE}${C.BRIGHT}╔══════════════════════════════════════════════════════════════════╗${C.RESET}`);
+        // console.log(`${C.BLUE}║${C.WHITE}  FIBONACCI RETRACEMENT LEVELS (Last ${CONFIG.FIBO_CANDLE_LOOKBACK} candles)                   ${C.BLUE}║${C.RESET}`);
+        // console.log(`${C.BLUE}╠══════════════════════════════════════════════════════════════════╣${C.RESET}`);
 
         if (state.fibLevels) {
             const fl = state.fibLevels;
             const trendIcon = fl.isUptrend ? '📈 UPTREND' : '📉 DOWNTREND';
-            console.log(`${C.BLUE}║${C.WHITE}  Swing High: ${C.GREEN}${fl.swingHigh.toFixed(4).padEnd(14)}${C.WHITE} Swing Low: ${C.RED}${fl.swingLow.toFixed(4).padEnd(14)}${C.WHITE} ${trendIcon} ${C.BLUE}║${C.RESET}`);
-            console.log(`${C.BLUE}║${C.WHITE}  Range: ${C.YELLOW}${fl.range.toFixed(4)}                                                  ${C.BLUE}║${C.RESET}`);
-            console.log(`${C.BLUE}╠──────────────────────────────────────────────────────────────────╣${C.RESET}`);
+            // console.log(`${C.BLUE}║${C.WHITE}  Swing High: ${C.GREEN}${fl.swingHigh.toFixed(4).padEnd(14)}${C.WHITE} Swing Low: ${C.RED}${fl.swingLow.toFixed(4).padEnd(14)}${C.WHITE} ${trendIcon} ${C.BLUE}║${C.RESET}`);
+            // console.log(`${C.BLUE}║${C.WHITE}  Range: ${C.YELLOW}${fl.range.toFixed(4)}                                                  ${C.BLUE}║${C.RESET}`);
+            // console.log(`${C.BLUE}╠──────────────────────────────────────────────────────────────────╣${C.RESET}`);
 
             const importantLevels = ['0.0%', '23.6%', '38.2%', '50.0%', '61.8%', '78.6%', '88.6%', '100.0%', '161.8%', '261.8%'];
             const entryLevelNames = ['61.8%', '78.6%', '88.6%'];
@@ -394,21 +396,21 @@ class DisplayEngine {
                 }
 
                 const line = `${C.BLUE}║  ${color}  ${levelName.padEnd(8)} = ${price.toFixed(4).padEnd(14)} ${marker}`.padEnd(80);
-                console.log(`${line}${C.BLUE}║${C.RESET}`);
+                // console.log(`${line}${C.BLUE}║${C.RESET}`);
             }
 
             // Current price proximity
             if (fibCheck) {
                 const proxColor = fibCheck.near ? C.GREEN : C.RED;
                 const proxStatus = fibCheck.near ? '✅ IN ZONE' : '❌ OUT OF ZONE';
-                console.log(`${C.BLUE}╠──────────────────────────────────────────────────────────────────╣${C.RESET}`);
-                console.log(`${C.BLUE}║${C.WHITE}  Nearest Entry: ${C.YELLOW}${(fibCheck.level || 'N/A').padEnd(8)}${C.WHITE} Distance: ${proxColor}${(fibCheck.distanceInPips || 0).toFixed(1)} pips ${proxStatus}          ${C.BLUE}║${C.RESET}`);
+                // console.log(`${C.BLUE}╠──────────────────────────────────────────────────────────────────╣${C.RESET}`);
+                // console.log(`${C.BLUE}║${C.WHITE}  Nearest Entry: ${C.YELLOW}${(fibCheck.level || 'N/A').padEnd(8)}${C.WHITE} Distance: ${proxColor}${(fibCheck.distanceInPips || 0).toFixed(1)} pips ${proxStatus}          ${C.BLUE}║${C.RESET}`);
             }
         } else {
             console.log(`${C.BLUE}║${C.YELLOW}  ⏳ Loading candle data...                                       ${C.BLUE}║${C.RESET}`);
         }
-        console.log(`${C.BLUE}╚══════════════════════════════════════════════════════════════════╝${C.RESET}`);
-        console.log('');
+        // console.log(`${C.BLUE}╚══════════════════════════════════════════════════════════════════╝${C.RESET}`);
+        // console.log('');
 
         // Digit Differ prediction
         console.log(`${C.MAGENTA}${C.BRIGHT}╔══════════════════════════════════════════════════════════════════╗${C.RESET}`);
@@ -450,20 +452,20 @@ class DisplayEngine {
                 state.martingaleStep <= 6 ? C.RED :
                     `${C.BG_RED}${C.WHITE}`;
 
-        console.log(`${C.RED}${C.BRIGHT}╔══════════════════════════════════════════════════════════════════╗${C.RESET}`);
-        console.log(`${C.RED}║${C.WHITE}  MARTINGALE ENGINE                                               ${C.RED}║${C.RESET}`);
-        console.log(`${C.RED}╠══════════════════════════════════════════════════════════════════╣${C.RESET}`);
-        console.log(`${C.RED}║${C.WHITE}  Current Step:  ${mgColor}${C.BRIGHT}${state.martingaleStep}/${CONFIG.MAX_MARTINGALE_STEPS}${C.RESET}${C.WHITE}    Current Stake: ${C.YELLOW}$${state.currentStake.toFixed(2)}                  ${C.RED}║${C.RESET}`);
-        console.log(`${C.RED}║${C.WHITE}  Base Stake:    ${C.GREEN}$${CONFIG.BASE_STAKE.toFixed(2)}${C.WHITE}     Multiplier:   ${C.YELLOW}×${CONFIG.MARTINGALE_MULTIPLIER}                   ${C.RED}║${C.RESET}`);
-        console.log(`${C.RED}║${C.WHITE}  Consec Losses: ${C.RED}${state.consecutiveLosses}${C.WHITE}          Max Drawdown: ${C.RED}$${state.maxDrawdown.toFixed(2)}                  ${C.RED}║${C.RESET}`);
+        // console.log(`${C.RED}${C.BRIGHT}╔══════════════════════════════════════════════════════════════════╗${C.RESET}`);
+        // console.log(`${C.RED}║${C.WHITE}  MARTINGALE ENGINE                                               ${C.RED}║${C.RESET}`);
+        // console.log(`${C.RED}╠══════════════════════════════════════════════════════════════════╣${C.RESET}`);
+        // console.log(`${C.RED}║${C.WHITE}  Current Step:  ${mgColor}${C.BRIGHT}${state.martingaleStep}/${CONFIG.MAX_MARTINGALE_STEPS}${C.RESET}${C.WHITE}    Current Stake: ${C.YELLOW}$${state.currentStake.toFixed(2)}                  ${C.RED}║${C.RESET}`);
+        // console.log(`${C.RED}║${C.WHITE}  Base Stake:    ${C.GREEN}$${CONFIG.BASE_STAKE.toFixed(2)}${C.WHITE}     Multiplier:   ${C.YELLOW}×${CONFIG.MARTINGALE_MULTIPLIER}                   ${C.RED}║${C.RESET}`);
+        // console.log(`${C.RED}║${C.WHITE}  Consec Losses: ${C.RED}${state.consecutiveLosses}${C.WHITE}          Max Drawdown: ${C.RED}$${state.maxDrawdown.toFixed(2)}                  ${C.RED}║${C.RESET}`);
 
         if (state.isPaused) {
             const remainMs = state.pauseUntil - Date.now();
             const remainMin = Math.ceil(remainMs / 60000);
             console.log(`${C.RED}║${C.BG_RED}${C.WHITE}  ⚠️  PAUSED - ${remainMin} minutes remaining (max martingale hit)        ${C.RESET}${C.RED}║${C.RESET}`);
         }
-        console.log(`${C.RED}╚══════════════════════════════════════════════════════════════════╝${C.RESET}`);
-        console.log('');
+        // console.log(`${C.RED}╚══════════════════════════════════════════════════════════════════╝${C.RESET}`);
+        // console.log('');
 
         // TP target
         if (tpTarget) {
