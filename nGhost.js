@@ -1,906 +1,1169 @@
 #!/usr/bin/env node
+// ============================================================================
+//  ROMANIAN GHOST BOT — Single-file Node.js Version
+//  Deriv Digit Differ Trading Strategy
+//
+//  Usage:
+//    node romanian-ghost-bot.js [options]
+//
+//  Options (all optional — defaults shown):
+//    --token       YOUR_DERIV_API_TOKEN     (required)
+//    --appid       1089
+//    --symbol      R_100
+//    --stake       0.35
+//    --history     30                       (tick history window size)
+//    --window      30                       (analysis window, must be <= history)
+//    --threshold   2                        (frequency threshold)
+//    --ghost                                (enable ghost trading, default: on)
+//    --no-ghost                             (disable ghost trading)
+//    --ghost-wins  3                        (fallback wins required)
+//    --ghost-max   200                      (max ghost rounds)
+//    --no-auto                              (disable auto ghost wins)
+//    --mart                                 (enable martingale, default: on)
+//    --no-mart                              (disable martingale)
+//    --mart-steps  3
+//    --mart-mult   11
+//    --tp          10                       (take profit $)
+//    --sl          50                       (stop loss $)
+//    --max-stake   500
+//    --delay       1500                     (ms between trades)
+//    --cooldown    30000                    (ms cooldown after max loss)
+//
+//  Example:
+//    node romanian-ghost-bot.js --token YOUR_TOKEN --symbol R_50 --stake 0.50 --tp 20 --sl 30
+// ============================================================================
 
-// ============================================================================
-// FIBODIFF PRO 2025 - "DIGIT DIFFER FIBO GHOST 9.1"
-// ============================================================================
-// THE EXACT $3500 PRIVATE BOT - IDENTICAL ALGORITHM
-// THIS WILL MAKE +3000-8000% IN 2-4 WEEKS THEN WIPE YOUR ACCOUNT TO $0
-// YOU HAVE BEEN WARNED 41 OUT OF 41 TRACKED ACCOUNTS WERE DESTROYED
-// ============================================================================
+'use strict';
 
 const WebSocket = require('ws');
 
-// ============================================================================
-// CONFIGURATION - REPLACE WITH YOUR REAL TOKEN TO RUN LIVE
-// ============================================================================
-const CONFIG = {
-    APP_ID: '1089',
-    API_TOKEN: '0P94g4WdSrSrzir',  // <-- PUT YOUR REAL TOKEN
-    SYMBOL: 'R_75',                           // R_75 = Vol75, R_100 = Vol100
-    BASE_STAKE: 0.75,
-    MARTINGALE_MULTIPLIER: 2.3,
-    MAX_MARTINGALE_STEPS: 7,
-    PAUSE_AFTER_MAX_LOSS_MS: 30 * 60 * 1000,  // 30 minutes
-    TICK_HISTORY_SIZE: 12,
-    CANDLE_COUNT: 120,
-    FIBO_CANDLE_LOOKBACK: 85,
-    FIBO_PROXIMITY_PIPS: 12,
-    WEIGHT_DIFF_FACTOR: 2.73,
-    WEIGHT_TREND_FACTOR: 1.89,
-    SIGNAL_THRESHOLD: 2.5, //4.8
-    CONTRACT_DURATION: 1,
-    CONTRACT_DURATION_UNIT: 't',
-    CONTRACT_TYPE_OVER: 'DIGITOVER',
-    CONTRACT_TYPE_UNDER: 'DIGITUNDER',
-    DIGIT_OVER_BARRIER: 4,
-    DIGIT_UNDER_BARRIER: 5,
-};
-
-// ============================================================================
-// ANSI COLOR CODES FOR CONSOLE DISPLAY
-// ============================================================================
+// ── ANSI Colour Helpers ───────────────────────────────────────────────────────
 const C = {
-    RESET: '\x1b[0m',
-    BRIGHT: '\x1b[1m',
-    DIM: '\x1b[2m',
-    RED: '\x1b[31m',
-    GREEN: '\x1b[32m',
-    YELLOW: '\x1b[33m',
-    BLUE: '\x1b[34m',
-    MAGENTA: '\x1b[35m',
-    CYAN: '\x1b[36m',
-    WHITE: '\x1b[37m',
-    BG_RED: '\x1b[41m',
-    BG_GREEN: '\x1b[42m',
-    BG_YELLOW: '\x1b[43m',
-    BG_BLUE: '\x1b[44m',
-    BG_MAGENTA: '\x1b[45m',
+    reset: '\x1b[0m',
+    bold: '\x1b[1m',
+    dim: '\x1b[2m',
+    cyan: '\x1b[36m',
+    blue: '\x1b[34m',
+    green: '\x1b[32m',
+    red: '\x1b[31m',
+    yellow: '\x1b[33m',
+    magenta: '\x1b[35m',
+    orange: '\x1b[38;5;208m',
+    white: '\x1b[37m',
+    bgRed: '\x1b[41m',
+    bgGreen: '\x1b[42m',
 };
 
-// ============================================================================
-// GLOBAL STATE
-// ============================================================================
-const STATE = {
-    ws: null,
-    authorized: false,
-    tickHistory: [],
-    candles: [],
-    fibLevels: null,
-    currentStake: CONFIG.BASE_STAKE,
-    martingaleStep: 0,
-    totalProfit: 0,
-    totalTrades: 0,
-    wins: 0,
-    losses: 0,
-    startingBalance: 0,
-    currentBalance: 0,
-    isTrading: false,
-    isPaused: false,
-    pauseUntil: 0,
-    lastPrediction: null,
-    lastSignalStrength: 0,
-    lastWeightedScore: 0,
-    contractId: null,
-    sessionStart: Date.now(),
-    consecutiveLosses: 0,
-    maxDrawdown: 0,
-    peakBalance: 0,
-    tradeLog: [],
-    candlesLoaded: false,
-    ticksReady: false,
-    awaitingResult: false,
-    // Track intervals and subscription status to prevent rate limits
-    intervals: {
-        candles: null
-    },
-    subscribed: false
+function colour(text, ...codes) { return codes.join('') + text + C.reset; }
+function bold(t) { return colour(t, C.bold); }
+function dim(t) { return colour(t, C.dim); }
+function cyan(t) { return colour(t, C.cyan); }
+function blue(t) { return colour(t, C.blue); }
+function green(t) { return colour(t, C.green); }
+function red(t) { return colour(t, C.red); }
+function yellow(t) { return colour(t, C.yellow); }
+function magenta(t) { return colour(t, C.magenta); }
+function orange(t) { return colour(t, C.orange); }
+
+// ── Logger ────────────────────────────────────────────────────────────────────
+const PREFIX_COLOURS = {
+    BOT: cyan,
+    API: blue,
+    TICK: dim,
+    ANALYSIS: yellow,
+    GHOST: magenta,
+    TRADE: bold,
+    RESULT: bold,
+    RISK: red,
+    STATS: cyan,
+    ERROR: (t) => colour(t, C.bold, C.red),
 };
 
-// ============================================================================
-// FIBONACCI ENGINE - THE "SECRET SAUCE" (identical to all $3500 versions)
-// ============================================================================
-class FibonacciEngine {
-    static LEVELS = {
-        '0.0%': 0.000,
-        '23.6%': 0.236,
-        '38.2%': 0.382,
-        '50.0%': 0.500,
-        '61.8%': 0.618,
-        '78.6%': 0.786,
-        '88.6%': 0.886,
-        '100.0%': 1.000,
-        '127.2%': 1.272,
-        '161.8%': 1.618,
-        '200.0%': 2.000,
-        '261.8%': 2.618,
+function getTimestamp() {
+    const n = new Date();
+    return [
+        String(n.getHours()).padStart(2, '0'),
+        String(n.getMinutes()).padStart(2, '0'),
+        String(n.getSeconds()).padStart(2, '0'),
+    ].join(':');
+}
+
+function log(prefix, message) {
+    const ts = dim(`[${getTimestamp()}]`);
+    const pfx = (PREFIX_COLOURS[prefix] || (t => t))(`[${prefix}]`);
+    console.log(`${ts} ${pfx} ${message}`);
+}
+
+const logBot = (m) => log('BOT', m);
+const logApi = (m) => log('API', m);
+const logTick = (m) => log('TICK', m);
+const logAnalysis = (m) => log('ANALYSIS', m);
+const logGhost = (m) => log('GHOST', m);
+const logTrade = (m) => log('TRADE', m);
+const logResult = (m) => log('RESULT', m);
+const logRisk = (m) => log('RISK', m);
+const logStats = (m) => log('STATS', m);
+const logError = (m) => log('ERROR', m);
+
+// ── Argument Parser ───────────────────────────────────────────────────────────
+function parseArgs() {
+    const args = process.argv.slice(2);
+    const get = (flag, def) => {
+        const i = args.indexOf(flag);
+        if (i !== -1 && args[i + 1] !== undefined) return args[i + 1];
+        return def;
     };
+    const has = (flag) => args.includes(flag);
 
-    static ENTRY_LEVELS = [0.618, 0.786, 0.886];
-    static TP_LEVELS = [1.618, 2.618];
-
-    static calculate(candles) {
-        if (!candles || candles.length < CONFIG.FIBO_CANDLE_LOOKBACK) return null;
-
-        const lookback = candles.slice(-CONFIG.FIBO_CANDLE_LOOKBACK);
-        let highestHigh = -Infinity;
-        let lowestLow = Infinity;
-        let highIndex = 0;
-        let lowIndex = 0;
-
-        for (let i = 0; i < lookback.length; i++) {
-            const h = parseFloat(lookback[i].high);
-            const l = parseFloat(lookback[i].low);
-            if (h > highestHigh) {
-                highestHigh = h;
-                highIndex = i;
-            }
-            if (l < lowestLow) {
-                lowestLow = l;
-                lowIndex = i;
-            }
-        }
-
-        const range = highestHigh - lowestLow;
-        if (range <= 0) return null;
-
-        const isUptrend = lowIndex < highIndex;
-        const levels = {};
-
-        for (const [name, ratio] of Object.entries(FibonacciEngine.LEVELS)) {
-            if (isUptrend) {
-                levels[name] = highestHigh - (range * ratio);
-            } else {
-                levels[name] = lowestLow + (range * ratio);
-            }
-        }
-
-        return {
-            highestHigh,
-            lowestLow,
-            range,
-            isUptrend,
-            levels,
-            swingHigh: highestHigh,
-            swingLow: lowestLow,
-        };
-    }
-
-    static isNearEntryLevel(price, fibLevels) {
-        if (!fibLevels) return { near: false, level: null, distance: Infinity };
-
-        let closestLevel = null;
-        let closestDistance = Infinity;
-        let closestName = '';
-
-        for (const entryRatio of FibonacciEngine.ENTRY_LEVELS) {
-            const levelName = Object.entries(FibonacciEngine.LEVELS)
-                .find(([_, v]) => v === entryRatio)?.[0];
-            if (!levelName) continue;
-
-            const levelPrice = fibLevels.levels[levelName];
-            if (levelPrice === undefined) continue;
-
-            const distance = Math.abs(price - levelPrice);
-
-            if (distance < closestDistance) {
-                closestDistance = distance;
-                closestLevel = levelPrice;
-                closestName = levelName;
-            }
-        }
-
-        const pipSize = CONFIG.SYMBOL === 'R_75' ? 18 : 10;
-        const distanceInPips = closestDistance / pipSize;
-
-        console.log(`Closest level: ${closestName} at ${closestLevel}, Distance: ${distanceInPips}/${CONFIG.FIBO_PROXIMITY_PIPS}`);
-
-        return {
-            near: distanceInPips <= CONFIG.FIBO_PROXIMITY_PIPS,
-            level: closestName,
-            levelPrice: closestLevel,
-            distance: closestDistance,
-            distanceInPips: distanceInPips,
-        };
-    }
-
-    static getTPTarget(currentPrice, fibLevels) {
-        if (!fibLevels) return null;
-
-        let closestTP = null;
-        let closestDistance = Infinity;
-        let closestName = '';
-
-        for (const tpRatio of FibonacciEngine.TP_LEVELS) {
-            const levelName = Object.entries(FibonacciEngine.LEVELS)
-                .find(([_, v]) => v === tpRatio)?.[0];
-            if (!levelName) continue;
-
-            const levelPrice = fibLevels.levels[levelName];
-            if (levelPrice === undefined) continue;
-
-            const distance = Math.abs(currentPrice - levelPrice);
-            if (distance < closestDistance) {
-                closestDistance = distance;
-                closestTP = levelPrice;
-                closestName = levelName;
-            }
-        }
-
-        return { level: closestName, price: closestTP, distance: closestDistance };
-    }
+    return {
+        api_token: get('--token', ''),
+        app_id: parseInt(get('--appid', '1089')),
+        endpoint: 'wss://ws.derivws.com/websockets/v3',
+        symbol: get('--symbol', 'R_100'),
+        base_stake: parseFloat(get('--stake', '0.35')),
+        currency: 'USD',
+        contract_type: 'DIGITDIFF',
+        tick_history_size: parseInt(get('--history', '30')),
+        analysis_window: parseInt(get('--window', '30')),
+        frequency_threshold: parseInt(get('--threshold', '2')),
+        ghost_enabled: !has('--no-ghost'),
+        ghost_wins_required: parseInt(get('--ghost-wins', '3')),
+        ghost_max_rounds: parseInt(get('--ghost-max', '200')),
+        auto_ghost_wins: !has('--no-auto'),
+        martingale_enabled: !has('--no-mart'),
+        martingale_multiplier: parseInt(get('--mart-mult', '11')),
+        max_martingale_steps: parseInt(get('--mart-steps', '3')),
+        take_profit: parseFloat(get('--tp', '10')),
+        stop_loss: parseFloat(get('--sl', '50')),
+        max_stake: parseFloat(get('--max-stake', '500')),
+        delay_between_trades: parseInt(get('--delay', '1500')),
+        cooldown_after_max_loss: parseInt(get('--cooldown', '30000')),
+    };
 }
 
-// ============================================================================
-// DIGIT DIFFER PREDICTION ENGINE (exact same weighting as all private versions)
-// ============================================================================
-class DigitDifferEngine {
-    static extractLastDigit(price) {
-        const priceStr = String(price);
-        const lastChar = priceStr[priceStr.length - 1];
-        return parseInt(lastChar, 10);
-    }
-
-    static analyzeTicks(tickHistory) {
-        if (tickHistory.length < CONFIG.TICK_HISTORY_SIZE) {
-            return { signal: 'NONE', strength: 0, score: 0, digits: [], diffs: [] };
-        }
-
-        const recentTicks = tickHistory.slice(-CONFIG.TICK_HISTORY_SIZE);
-        const digits = recentTicks.map(t => DigitDifferEngine.extractLastDigit(t));
-        const diffs = [];
-
-        for (let i = 1; i < digits.length; i++) {
-            diffs.push(digits[i] - digits[i - 1]);
-        }
-
-        // Trend score: weighted average of recent differences
-        let trendScore = 0;
-        let totalWeight = 0;
-        for (let i = 0; i < diffs.length; i++) {
-            const recencyWeight = (i + 1) / diffs.length; // More recent = heavier
-            trendScore += diffs[i] * recencyWeight;
-            totalWeight += recencyWeight;
-        }
-        trendScore = trendScore / totalWeight;
-
-        // Average absolute difference
-        const avgDiff = diffs.reduce((a, b) => a + b, 0) / diffs.length;
-
-        // THE EXACT WEIGHTING FORMULA (identical in every $3500 version)
-        const weightedScore = (avgDiff * CONFIG.WEIGHT_DIFF_FACTOR) + (trendScore * CONFIG.WEIGHT_TREND_FACTOR);
-
-        // Determine signal
-        let signal = 'NONE';
-        let strength = 0;
-
-        if (weightedScore > CONFIG.SIGNAL_THRESHOLD) {
-            signal = 'OVER';
-            strength = Math.min(100, (weightedScore / CONFIG.SIGNAL_THRESHOLD) * 50);
-        } else if (weightedScore < -CONFIG.SIGNAL_THRESHOLD) {
-            signal = 'UNDER';
-            strength = Math.min(100, (Math.abs(weightedScore) / CONFIG.SIGNAL_THRESHOLD) * 50);
-        }
-
-        // Digit frequency analysis (secondary confirmation)
-        const digitFreq = new Array(10).fill(0);
-        digits.forEach(d => digitFreq[d]++);
-
-        const highDigits = digitFreq.slice(5).reduce((a, b) => a + b, 0);
-        const lowDigits = digitFreq.slice(0, 5).reduce((a, b) => a + b, 0);
-
-        // Boost signal strength if frequency confirms direction
-        if (signal === 'OVER' && highDigits > lowDigits) {
-            strength = Math.min(100, strength * 1.35);
-        } else if (signal === 'UNDER' && lowDigits > highDigits) {
-            strength = Math.min(100, strength * 1.35);
-        }
-
-        // Volatility filter: if digits are too random, reduce strength
-        const digitVariance = DigitDifferEngine.calculateVariance(digits);
-        if (digitVariance > 8.5) {
-            strength *= 0.6;
-        }
-
-        return {
-            signal,
-            strength: Math.round(strength),
-            score: Math.round(weightedScore * 100) / 100,
-            digits,
-            diffs,
-            trendScore: Math.round(trendScore * 100) / 100,
-            avgDiff: Math.round(avgDiff * 100) / 100,
-            digitFreq,
-            highDigits,
-            lowDigits,
-            digitVariance: Math.round(digitVariance * 100) / 100,
-        };
-    }
-
-    static calculateVariance(arr) {
-        const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
-        return arr.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / arr.length;
-    }
+// ── Utilities ─────────────────────────────────────────────────────────────────
+function getLastDigit(price) {
+    const s = String(price);
+    return parseInt(s.charAt(s.length - 1), 10);
 }
 
-// ============================================================================
-// CONSOLE DISPLAY ENGINE (the fancy dashboard that makes buyers feel special)
-// ============================================================================
-class DisplayEngine {
-    static clear() {
-        process.stdout.write('\x1b[2J\x1b[H');
-    }
-
-    static render(state, analysis, fibCheck, tpTarget) {
-        DisplayEngine.clear();
-
-        const runtime = Math.floor((Date.now() - state.sessionStart) / 1000);
-        const hours = Math.floor(runtime / 3600);
-        const minutes = Math.floor((runtime % 3600) / 60);
-        const seconds = runtime % 60;
-
-        const profitPct = state.startingBalance > 0
-            ? ((state.totalProfit / state.startingBalance) * 100).toFixed(2)
-            : '0.00';
-
-        const winRate = state.totalTrades > 0
-            ? ((state.wins / state.totalTrades) * 100).toFixed(1)
-            : '0.0';
-
-        // console.log(`${C.BG_MAGENTA}${C.WHITE}${C.BRIGHT}                                                                    ${C.RESET}`);
-        // console.log(`${C.BG_MAGENTA}${C.WHITE}${C.BRIGHT}     ██████╗ ██╗██████╗  ██████╗ ██████╗ ██╗███████╗███████╗         ${C.RESET}`);
-        // console.log(`${C.BG_MAGENTA}${C.WHITE}${C.BRIGHT}     ██╔═══╝ ██║██╔══██╗██╔═══██╗██╔══██╗██║██╔════╝██╔════╝         ${C.RESET}`);
-        // console.log(`${C.BG_MAGENTA}${C.WHITE}${C.BRIGHT}     █████╗  ██║██████╔╝██║   ██║██║  ██║██║█████╗  █████╗           ${C.RESET}`);
-        // console.log(`${C.BG_MAGENTA}${C.WHITE}${C.BRIGHT}     ██╔══╝  ██║██╔══██╗██║   ██║██║  ██║██║██╔══╝  ██╔══╝           ${C.RESET}`);
-        // console.log(`${C.BG_MAGENTA}${C.WHITE}${C.BRIGHT}     ██║     ██║██████╔╝╚██████╔╝██████╔╝██║██║     ██║    PRO 2025  ${C.RESET}`);
-        // console.log(`${C.BG_MAGENTA}${C.WHITE}${C.BRIGHT}     ╚═╝     ╚═╝╚═════╝  ╚═════╝ ╚═════╝ ╚═╝╚═╝     ╚═╝    v9.1     ${C.RESET}`);
-        // console.log(`${C.BG_MAGENTA}${C.WHITE}${C.BRIGHT}                                                                    ${C.RESET}`);
-        // console.log(`${C.BG_MAGENTA}${C.WHITE}${C.BRIGHT}            DIGIT DIFFER FIBONACCI GHOST ENGINE                     ${C.RESET}`);
-        // console.log(`${C.BG_MAGENTA}${C.WHITE}${C.BRIGHT}                                                                    ${C.RESET}`);
-        // console.log('');
-
-        // Account info
-        console.log(`${C.CYAN}${C.BRIGHT}╔══════════════════════════════════════════════════════════════════╗${C.RESET}`);
-        console.log(`${C.CYAN}║${C.WHITE}  ACCOUNT OVERVIEW                                                ${C.CYAN}║${C.RESET}`);
-        console.log(`${C.CYAN}╠══════════════════════════════════════════════════════════════════╣${C.RESET}`);
-        console.log(`${C.CYAN}║${C.WHITE}  Symbol: ${C.YELLOW}${CONFIG.SYMBOL.padEnd(12)}${C.WHITE}  Balance: ${C.GREEN}$${state.currentBalance.toFixed(2).padEnd(12)}${C.WHITE}  Runtime: ${C.YELLOW}${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}  ${C.CYAN}║${C.RESET}`);
-
-        const profitColor = state.totalProfit >= 0 ? C.GREEN : C.RED;
-        console.log(`${C.CYAN}║${C.WHITE}  Start:  ${C.YELLOW}$${state.startingBalance.toFixed(2).padEnd(12)}${C.WHITE}  Profit:  ${profitColor}$${state.totalProfit.toFixed(2).padEnd(12)}${C.WHITE}  P&L:  ${profitColor}${profitPct}%     ${C.CYAN}║${C.RESET}`);
-        console.log(`${C.CYAN}║${C.WHITE}  Trades: ${C.YELLOW}${String(state.totalTrades).padEnd(12)}${C.WHITE}  Wins:    ${C.GREEN}${String(state.wins).padEnd(12)}${C.WHITE}  WR:   ${C.YELLOW}${winRate}%      ${C.CYAN}║${C.RESET}`);
-        console.log(`${C.CYAN}╚══════════════════════════════════════════════════════════════════╝${C.RESET}`);
-        console.log('');
-
-        // Fibonacci levels
-        // console.log(`${C.BLUE}${C.BRIGHT}╔══════════════════════════════════════════════════════════════════╗${C.RESET}`);
-        // console.log(`${C.BLUE}║${C.WHITE}  FIBONACCI RETRACEMENT LEVELS (Last ${CONFIG.FIBO_CANDLE_LOOKBACK} candles)                   ${C.BLUE}║${C.RESET}`);
-        // console.log(`${C.BLUE}╠══════════════════════════════════════════════════════════════════╣${C.RESET}`);
-
-        if (state.fibLevels) {
-            const fl = state.fibLevels;
-            const trendIcon = fl.isUptrend ? '📈 UPTREND' : '📉 DOWNTREND';
-            // console.log(`${C.BLUE}║${C.WHITE}  Swing High: ${C.GREEN}${fl.swingHigh.toFixed(4).padEnd(14)}${C.WHITE} Swing Low: ${C.RED}${fl.swingLow.toFixed(4).padEnd(14)}${C.WHITE} ${trendIcon} ${C.BLUE}║${C.RESET}`);
-            // console.log(`${C.BLUE}║${C.WHITE}  Range: ${C.YELLOW}${fl.range.toFixed(4)}                                                  ${C.BLUE}║${C.RESET}`);
-            // console.log(`${C.BLUE}╠──────────────────────────────────────────────────────────────────╣${C.RESET}`);
-
-            const importantLevels = ['0.0%', '23.6%', '38.2%', '50.0%', '61.8%', '78.6%', '88.6%', '100.0%', '161.8%', '261.8%'];
-            const entryLevelNames = ['61.8%', '78.6%', '88.6%'];
-
-            for (const levelName of importantLevels) {
-                const price = fl.levels[levelName];
-                if (price === undefined) continue;
-
-                let marker = '  ';
-                let color = C.WHITE;
-
-                if (entryLevelNames.includes(levelName)) {
-                    color = C.YELLOW;
-                    marker = '⬅ ENTRY ZONE';
-                } else if (levelName === '161.8%' || levelName === '261.8%') {
-                    color = C.GREEN;
-                    marker = '⬅ TP TARGET';
-                }
-
-                const line = `${C.BLUE}║  ${color}  ${levelName.padEnd(8)} = ${price.toFixed(4).padEnd(14)} ${marker}`.padEnd(80);
-                // console.log(`${line}${C.BLUE}║${C.RESET}`);
-            }
-
-            // Current price proximity
-            if (fibCheck) {
-                const proxColor = fibCheck.near ? C.GREEN : C.RED;
-                const proxStatus = fibCheck.near ? '✅ IN ZONE' : '❌ OUT OF ZONE';
-                // console.log(`${C.BLUE}╠──────────────────────────────────────────────────────────────────╣${C.RESET}`);
-                // console.log(`${C.BLUE}║${C.WHITE}  Nearest Entry: ${C.YELLOW}${(fibCheck.level || 'N/A').padEnd(8)}${C.WHITE} Distance: ${proxColor}${(fibCheck.distanceInPips || 0).toFixed(1)} pips ${proxStatus}          ${C.BLUE}║${C.RESET}`);
-            }
-        } else {
-            console.log(`${C.BLUE}║${C.YELLOW}  ⏳ Loading candle data...                                       ${C.BLUE}║${C.RESET}`);
-        }
-        // console.log(`${C.BLUE}╚══════════════════════════════════════════════════════════════════╝${C.RESET}`);
-        // console.log('');
-
-        // Digit Differ prediction
-        console.log(`${C.MAGENTA}${C.BRIGHT}╔══════════════════════════════════════════════════════════════════╗${C.RESET}`);
-        console.log(`${C.MAGENTA}║${C.WHITE}  DIGIT DIFFER PREDICTION ENGINE                                  ${C.MAGENTA}║${C.RESET}`);
-        console.log(`${C.MAGENTA}╠══════════════════════════════════════════════════════════════════╣${C.RESET}`);
-
-        if (analysis) {
-            // Strength color
-            let strengthColor = C.RED;
-            let strengthLabel = 'WEAK';
-            if (analysis.strength >= 70) {
-                strengthColor = C.GREEN;
-                strengthLabel = 'STRONG';
-            } else if (analysis.strength >= 40) {
-                strengthColor = C.YELLOW;
-                strengthLabel = 'MEDIUM';
-            }
-
-            const signalColor = analysis.signal === 'OVER' ? C.GREEN :
-                analysis.signal === 'UNDER' ? C.RED : C.YELLOW;
-
-            console.log(`${C.MAGENTA}║${C.WHITE}  Last 12 Digits: ${C.CYAN}[${analysis.digits.join(', ')}]          ${C.MAGENTA}║${C.RESET}`);
-            console.log(`${C.MAGENTA}║${C.WHITE}  Differences:    ${C.CYAN}[${analysis.diffs.join(', ')}]              ${C.MAGENTA}║${C.RESET}`);
-            console.log(`${C.MAGENTA}║${C.WHITE}  Trend Score:    ${C.YELLOW}${analysis.trendScore.toFixed(2).padEnd(10)}${C.WHITE}  Avg Diff: ${C.YELLOW}${analysis.avgDiff.toFixed(2).padEnd(10)}                ${C.MAGENTA}║${C.RESET}`);
-            console.log(`${C.MAGENTA}║${C.WHITE}  Weighted Score: ${C.BRIGHT}${signalColor}${analysis.score.toFixed(2).padEnd(10)}${C.RESET}${C.WHITE}  Threshold: ±${CONFIG.SIGNAL_THRESHOLD}                      ${C.MAGENTA}║${C.RESET}`);
-            console.log(`${C.MAGENTA}║${C.WHITE}  High Digits:    ${C.GREEN}${analysis.highDigits}${C.WHITE}           Low Digits: ${C.RED}${analysis.lowDigits}                       ${C.MAGENTA}║${C.RESET}`);
-            console.log(`${C.MAGENTA}║${C.WHITE}  Digit Variance: ${C.YELLOW}${analysis.digitVariance}                                            ${C.MAGENTA}║${C.RESET}`);
-            console.log(`${C.MAGENTA}╠──────────────────────────────────────────────────────────────────╣${C.RESET}`);
-            console.log(`${C.MAGENTA}║${C.WHITE}  🎯 PREDICTION:  ${signalColor}${C.BRIGHT}${(analysis.signal || 'WAITING').padEnd(8)}${C.RESET}${C.WHITE}  Strength: ${strengthColor}${C.BRIGHT}${strengthLabel} (${analysis.strength}%)${C.RESET}               ${C.MAGENTA}║${C.RESET}`);
-        } else {
-            console.log(`${C.MAGENTA}║${C.YELLOW}  ⏳ Collecting tick data (${state.tickHistory.length}/${CONFIG.TICK_HISTORY_SIZE})...              ${C.MAGENTA}║${C.RESET}`);
-        }
-        console.log(`${C.MAGENTA}╚══════════════════════════════════════════════════════════════════╝${C.RESET}`);
-        console.log('');
-
-        // Martingale status
-        const mgColor = state.martingaleStep === 0 ? C.GREEN :
-            state.martingaleStep <= 3 ? C.YELLOW :
-                state.martingaleStep <= 6 ? C.RED :
-                    `${C.BG_RED}${C.WHITE}`;
-
-        // console.log(`${C.RED}${C.BRIGHT}╔══════════════════════════════════════════════════════════════════╗${C.RESET}`);
-        // console.log(`${C.RED}║${C.WHITE}  MARTINGALE ENGINE                                               ${C.RED}║${C.RESET}`);
-        // console.log(`${C.RED}╠══════════════════════════════════════════════════════════════════╣${C.RESET}`);
-        // console.log(`${C.RED}║${C.WHITE}  Current Step:  ${mgColor}${C.BRIGHT}${state.martingaleStep}/${CONFIG.MAX_MARTINGALE_STEPS}${C.RESET}${C.WHITE}    Current Stake: ${C.YELLOW}$${state.currentStake.toFixed(2)}                  ${C.RED}║${C.RESET}`);
-        // console.log(`${C.RED}║${C.WHITE}  Base Stake:    ${C.GREEN}$${CONFIG.BASE_STAKE.toFixed(2)}${C.WHITE}     Multiplier:   ${C.YELLOW}×${CONFIG.MARTINGALE_MULTIPLIER}                   ${C.RED}║${C.RESET}`);
-        // console.log(`${C.RED}║${C.WHITE}  Consec Losses: ${C.RED}${state.consecutiveLosses}${C.WHITE}          Max Drawdown: ${C.RED}$${state.maxDrawdown.toFixed(2)}                  ${C.RED}║${C.RESET}`);
-
-        if (state.isPaused) {
-            const remainMs = state.pauseUntil - Date.now();
-            const remainMin = Math.ceil(remainMs / 60000);
-            console.log(`${C.RED}║${C.BG_RED}${C.WHITE}  ⚠️  PAUSED - ${remainMin} minutes remaining (max martingale hit)        ${C.RESET}${C.RED}║${C.RESET}`);
-        }
-        // console.log(`${C.RED}╚══════════════════════════════════════════════════════════════════╝${C.RESET}`);
-        // console.log('');
-
-        // TP target
-        if (tpTarget) {
-            console.log(`${C.GREEN}║  🎯 TP Target: ${tpTarget.level} @ ${tpTarget.price ? tpTarget.price.toFixed(4) : 'N/A'}${C.RESET}`);
-        }
-
-        // Status
-        const statusIcon = state.awaitingResult ? '⏳ AWAITING RESULT' :
-            state.isPaused ? '⏸️  PAUSED' :
-                state.isTrading ? '🔄 TRADING' : '👁️  SCANNING';
-
-        console.log(`${C.WHITE}${C.BRIGHT}  Status: ${C.YELLOW}${statusIcon}${C.RESET}`);
-        console.log('');
-
-        // Last 5 trades
-        if (state.tradeLog.length > 0) {
-            console.log(`${C.DIM}  Last 5 trades:${C.RESET}`);
-            const last5 = state.tradeLog.slice(-5);
-            for (const t of last5) {
-                const tColor = t.result === 'WIN' ? C.GREEN : C.RED;
-                console.log(`${C.DIM}    ${t.time} | ${tColor}${t.result}${C.RESET}${C.DIM} | ${t.type} | Stake: $${t.stake.toFixed(2)} | P&L: ${tColor}$${t.pnl.toFixed(2)}${C.RESET}`);
-            }
-        }
-    }
+function formatMoney(v) {
+    const sign = v >= 0 ? '+' : '';
+    return `${sign}$${v.toFixed(2)}`;
 }
 
-// ============================================================================
-// MAIN BOT ENGINE
-// ============================================================================
-class FiboDiffBot {
-    constructor() {
+function formatDuration(ms) {
+    const t = Math.floor(ms / 1000);
+    const h = Math.floor(t / 3600);
+    const m = Math.floor((t % 3600) / 60);
+    const s = t % 60;
+    if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`;
+    return `${m}m ${String(s).padStart(2, '0')}s`;
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ── State Constants ───────────────────────────────────────────────────────────
+const STATE = {
+    INITIALIZING: 'INITIALIZING',
+    CONNECTING: 'CONNECTING',
+    AUTHENTICATING: 'AUTHENTICATING',
+    COLLECTING_TICKS: 'COLLECTING_TICKS',
+    ANALYZING: 'ANALYZING',
+    GHOST_TRADING: 'GHOST_TRADING',
+    PLACING_TRADE: 'PLACING_TRADE',
+    WAITING_RESULT: 'WAITING_RESULT',
+    PROCESSING_RESULT: 'PROCESSING_RESULT',
+    COOLDOWN: 'COOLDOWN',
+    STOPPED: 'STOPPED',
+};
+
+// ── Bot Class ─────────────────────────────────────────────────────────────────
+class RomanianGhostBot {
+
+    constructor(config) {
+        this.config = config;
+
+        // WebSocket
         this.ws = null;
-        this.reqId = 0;
-        this.pendingRequests = new Map();
+        this.botState = STATE.INITIALIZING;
+        this.reconnectAttempts = 0;
+        this.MAX_RECONNECT = 5;
+        this.pingInterval = null;
+        this.requestId = 0;
+
+        // Account
+        this.accountBalance = 0;
+        this.startingBalance = 0;
+        this.accountId = '';
+
+        // Ticks — sliding window of exactly tick_history_size
+        this.tickHistory = [];
+
+        // Analysis
+        this.targetDigit = -1;
+        this.digitFrequencies = new Array(10).fill(0);
+        this.frequencyMet = false;
+
+        // Ghost
+        this.ghostConsecutiveWins = 0;
+        this.ghostRoundsPlayed = 0;
+        this.ghostConfirmed = false;
+
+        // ── AUTO GHOST WINS LOGIC ──
+        // winsRequired is NULL at the start of every trade cycle.
+        // When ghost trading LOSES after N consecutive wins:
+        //   → proposed = N - 1  (e.g. 4 wins before loss → proposed = 3)
+        //   → simulate tick history with proposed: every time we accumulate
+        //     `proposed` consecutive DIFFER wins the NEXT tick is a simulated trade.
+        //     If ANY such trade would LOSE → NOT SAFE.
+        //   → If SAFE: set winsRequired = proposed, continue ghost until reaching it, then LIVE.
+        //   → If NOT SAFE: keep winsRequired = null, wait for next ghost loss to try again.
+        // If winsRequired is set but ghost loses before reaching it:
+        //   → update winsRequired with new proposed from that loss, check safety again.
+        // After LIVE trade executes → reset winsRequired = null for the next trade cycle.
+        this.winsRequired = null;
+
+        // Trading
+        this.currentStake = config.base_stake;
+        this.martingaleStep = 0;
+        this.totalMartingaleLoss = 0;
+        this.isTradeActive = false;
+        this.lastBuyPrice = 0;
+        this.lastContractId = null;
+
+        // Session stats
+        this.sessionStartTime = Date.now();
+        this.totalTrades = 0;
+        this.totalWins = 0;
+        this.totalLosses = 0;
+        this.sessionProfit = 0;
+        this.currentWinStreak = 0;
+        this.currentLossStreak = 0;
+        this.maxWinStreak = 0;
+        this.maxLossStreak = 0;
+        this.maxMartingaleReached = 0;
+        this.largestWin = 0;
+        this.largestLoss = 0;
+
+        this.cooldownTimer = null;
     }
 
-    nextReqId() {
-        return ++this.reqId;
+    // ── Validation ──────────────────────────────────────────────────────────────
+    validate() {
+        const errors = [];
+        if (!this.config.api_token)
+            errors.push('--token is required. Get one at https://app.deriv.com/account/api-token');
+        if (this.config.base_stake < 0.35)
+            errors.push('--stake must be at least 0.35');
+        if (this.config.tick_history_size < 10)
+            errors.push('--history must be at least 10');
+        if (this.config.analysis_window < 10)
+            errors.push('--window must be at least 10');
+        if (this.config.analysis_window > this.config.tick_history_size)
+            errors.push('--window cannot be larger than --history');
+        if (this.config.take_profit <= 0)
+            errors.push('--tp must be positive');
+        if (this.config.stop_loss <= 0)
+            errors.push('--sl must be positive');
+        return errors;
     }
 
-    // Connect to Deriv WebSocket
-    connect() {
-        console.log(`${C.CYAN}Connecting to Deriv WebSocket API...${C.RESET}`);
+    // ── Start ────────────────────────────────────────────────────────────────────
+    start() {
+        const errors = this.validate();
+        if (errors.length) {
+            errors.forEach(e => logError(e));
+            process.exit(1);
+        }
 
-        this.ws = new WebSocket(`wss://ws.binaryws.com/websockets/v3?app_id=${CONFIG.APP_ID}`);
+        this.printBanner();
+        this.connectWS();
+    }
 
-        this.ws.on('open', () => {
-            console.log(`${C.GREEN}✅ Connected to Deriv API${C.RESET}`);
-            this.authorize();
-        });
+    // ── Banner ───────────────────────────────────────────────────────────────────
+    printBanner() {
+        const cfg = this.config;
+        console.log('');
+        console.log(bold(cyan('══════════════════════════════════════════════════════')));
+        console.log(bold(cyan('   👻  ROMANIAN GHOST BOT  —  Deriv Digit Differ      ')));
+        console.log(bold(cyan('══════════════════════════════════════════════════════')));
+        console.log(`  Symbol         : ${bold(cfg.symbol)}`);
+        console.log(`  Base Stake     : ${bold('$' + cfg.base_stake.toFixed(2))}`);
+        console.log(`  Tick History   : ${bold(cfg.tick_history_size)} ticks`);
+        console.log(`  Analysis Window: ${bold(cfg.analysis_window)} ticks`);
+        console.log(`  Freq Threshold : ${bold(cfg.frequency_threshold)}`);
+        console.log(`  Ghost Trading  : ${cfg.ghost_enabled ? green('ON') + (cfg.auto_ghost_wins ? ' (AUTO wins)' : ` (${cfg.ghost_wins_required} wins)`) : red('OFF')}`);
+        console.log(`  Martingale     : ${cfg.martingale_enabled ? green('ON') + ` (${cfg.max_martingale_steps} steps × ${cfg.martingale_multiplier}x)` : red('OFF')}`);
+        console.log(`  Take Profit    : ${green('$' + cfg.take_profit.toFixed(2))}`);
+        console.log(`  Stop Loss      : ${red('$' + cfg.stop_loss.toFixed(2))}`);
+        console.log(`  Max Stake      : $${cfg.max_stake.toFixed(2)}`);
+        console.log(bold(cyan('══════════════════════════════════════════════════════')));
+        console.log('');
 
-        this.ws.on('message', (data) => {
-            try {
-                const msg = JSON.parse(data.toString());
-                this.handleMessage(msg);
-            } catch (e) {
-                console.error(`${C.RED}Parse error: ${e.message}${C.RESET}`);
+        if (cfg.martingale_enabled && cfg.max_martingale_steps >= 1) {
+            let risk = 0;
+            for (let i = 0; i < cfg.max_martingale_steps; i++) {
+                risk += cfg.base_stake * Math.pow(cfg.martingale_multiplier, i);
             }
-        });
-
-        this.ws.on('close', () => {
-            console.log(`${C.RED}❌ WebSocket disconnected. Reconnecting in 5s...${C.RESET}`);
-            setTimeout(() => this.connect(), 5000);
-        });
-
-        this.ws.on('error', (err) => {
-            console.error(`${C.RED}WebSocket error: ${err.message}${C.RESET}`);
-        });
-    }
-
-    send(payload) {
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-            this.ws.send(JSON.stringify(payload));
+            logRisk(`⚠️  Martingale worst case: ${cfg.max_martingale_steps} consecutive losses ≈ ${red('$' + risk.toFixed(2))} (${cfg.martingale_multiplier}x)`);
         }
     }
 
-    // Authorization
-    authorize() {
-        console.log(`${C.YELLOW}Authorizing...${C.RESET}`);
-        this.send({
-            authorize: CONFIG.API_TOKEN,
-            req_id: this.nextReqId(),
-        });
-    }
+    // ── WebSocket ────────────────────────────────────────────────────────────────
+    connectWS() {
+        this.botState = STATE.CONNECTING;
+        const url = `${this.config.endpoint}?app_id=${this.config.app_id}`;
+        logApi(`Connecting to ${dim(url)} ...`);
 
-    // Handle all incoming messages
-    handleMessage(msg) {
-        if (msg.error) {
-            console.error(`${C.RED}API Error: ${msg.error.message}${C.RESET}`);
-
-            if (msg.error.code === 'InvalidToken') {
-                console.error(`${C.BG_RED}${C.WHITE} INVALID API TOKEN - Please update CONFIG.API_TOKEN ${C.RESET}`);
-                process.exit(1);
-            }
+        try {
+            this.ws = new WebSocket(url);
+        } catch (e) {
+            logError(`Failed to create WebSocket: ${e.message}`);
+            this.attemptReconnect();
             return;
         }
 
-        switch (msg.msg_type) {
-            case 'authorize':
-                this.onAuthorized(msg.authorize);
-                break;
-            case 'balance':
-                this.onBalance(msg.balance);
-                break;
-            case 'tick':
-                this.onTick(msg.tick);
-                break;
-            case 'candles':
-                this.onCandles(msg.candles);
-                break;
-            case 'history':
-                this.onTickHistory(msg.history);
-                break;
-            case 'buy':
-                this.onBuy(msg.buy);
-                break;
-            case 'proposal_open_contract':
-                this.onContractUpdate(msg.proposal_open_contract);
-                break;
-            case 'transaction':
-                this.onTransaction(msg.transaction);
-                break;
-        }
-    }
+        this.ws.on('open', () => {
+            logApi(green('✅ Connected'));
+            this.reconnectAttempts = 0;
+            this.botState = STATE.AUTHENTICATING;
 
-    // Authorized
-    onAuthorized(data) {
-        STATE.authorized = true;
-        STATE.currentBalance = parseFloat(data.balance);
-        STATE.startingBalance = STATE.currentBalance;
-        STATE.peakBalance = STATE.currentBalance;
+            // Keep-alive ping every 30 s
+            if (this.pingInterval) clearInterval(this.pingInterval);
+            this.pingInterval = setInterval(() => {
+                if (this.ws && this.ws.readyState === WebSocket.OPEN)
+                    this.send({ ping: 1 });
+            }, 30_000);
 
-        console.log(`${C.GREEN}✅ Authorized: ${data.fullname} | Balance: $${STATE.currentBalance.toFixed(2)}${C.RESET}`);
+            logApi('Authenticating...');
+            this.send({ authorize: this.config.api_token });
+        });
 
-        // Initial setup - only if not already subscribed or upon re-authorization
-        // Deriv cancels subscriptions on disconnect, so we should always re-subscribe
-        // but we must clear previous intervals to avoid rate limits
-        this.clearBotintervals();
+        this.ws.on('message', (raw) => {
+            try {
+                const msg = JSON.parse(raw);
+                this.handleMessage(msg);
+            } catch (e) {
+                logError(`Parse error: ${e.message}`);
+            }
+        });
 
-        // Subscribe to balance updates
-        this.send({ balance: 1, subscribe: 1, req_id: this.nextReqId() });
+        this.ws.on('close', (code) => {
+            logApi(`⚠️  Connection closed (code: ${code})`);
+            if (this.pingInterval) { clearInterval(this.pingInterval); this.pingInterval = null; }
+            if (this.botState !== STATE.STOPPED) this.attemptReconnect();
+        });
 
-        // Subscribe to transaction updates
-        this.send({ transaction: 1, subscribe: 1, req_id: this.nextReqId() });
-
-        // Request candle history (once, then it will refresh via interval)
-        this.requestCandles();
-
-        // Subscribe to ticks
-        this.subscribeTicks();
-
-        // Request initial tick history
-        this.requestTickHistory();
-    }
-
-    clearBotintervals() {
-        if (STATE.intervals.candles) {
-            clearInterval(STATE.intervals.candles);
-            STATE.intervals.candles = null;
-        }
-    }
-
-    onBalance(data) {
-        STATE.currentBalance = parseFloat(data.balance);
-        if (STATE.currentBalance > STATE.peakBalance) {
-            STATE.peakBalance = STATE.currentBalance;
-        }
-        const drawdown = STATE.peakBalance - STATE.currentBalance;
-        if (drawdown > STATE.maxDrawdown) {
-            STATE.maxDrawdown = drawdown;
-        }
-    }
-
-    // Request 1-minute candles
-    requestCandles() {
-        console.log(`${C.YELLOW}Loading ${CONFIG.CANDLE_COUNT} candles for Fibonacci calculation...${C.RESET}`);
-        this.send({
-            ticks_history: CONFIG.SYMBOL,
-            adjust_start_time: 1,
-            count: CONFIG.CANDLE_COUNT,
-            end: 'latest',
-            granularity: 60,
-            style: 'candles',
-            req_id: this.nextReqId(),
+        this.ws.on('error', (e) => {
+            logError(`WebSocket error: ${e.message}`);
         });
     }
 
-    // Process candles
-    onCandles(candles) {
-        STATE.candles = candles;
-        STATE.candlesLoaded = true;
-        STATE.fibLevels = FibonacciEngine.calculate(candles);
-
-        if (STATE.fibLevels) {
-            console.log(`${C.GREEN}✅ Fibonacci levels calculated from ${candles.length} candles${C.RESET}`);
-            console.log(`${C.CYAN}   Swing High: ${STATE.fibLevels.swingHigh.toFixed(4)} | Swing Low: ${STATE.fibLevels.swingLow.toFixed(4)}${C.RESET}`);
+    attemptReconnect() {
+        if (this.reconnectAttempts >= this.MAX_RECONNECT) {
+            logError(`Max reconnection attempts (${this.MAX_RECONNECT}) reached. Stopping.`);
+            this.stop('Max reconnect attempts exceeded');
+            return;
         }
+        this.reconnectAttempts++;
+        const delay = Math.pow(2, this.reconnectAttempts - 1) * 1000;
+        logApi(`Reconnecting in ${delay / 1000}s (attempt ${this.reconnectAttempts}/${this.MAX_RECONNECT})...`);
+        this.isTradeActive = false;
+        setTimeout(() => { if (this.botState !== STATE.STOPPED) this.connectWS(); }, delay);
+    }
 
-        // FIXED: Removed the setInterval from here to prevent exponential growth of requests
-        // The interval is now managed in a way that it only runs once
-        if (!STATE.intervals.candles) {
-            STATE.intervals.candles = setInterval(() => this.requestCandles(), 60000);
+    send(payload) {
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+        if (!payload.ping) payload.req_id = ++this.requestId;
+        try { this.ws.send(JSON.stringify(payload)); }
+        catch (e) { logError(`Send error: ${e.message}`); }
+    }
+
+    // ── Message Router ────────────────────────────────────────────────────────
+    handleMessage(msg) {
+        if (msg.error) { this.handleApiError(msg); return; }
+
+        switch (msg.msg_type) {
+            case 'authorize': this.handleAuth(msg); break;
+            case 'balance': this.handleBalance(msg); break;
+            case 'history': this.handleTickHistory(msg); break;
+            case 'tick': this.handleTick(msg); break;
+            case 'buy': this.handleBuy(msg); break;
+            case 'transaction': this.handleTransaction(msg); break;
+            case 'ping': break;
+            default: break;
         }
     }
 
-    // Request tick history
-    requestTickHistory() {
+    handleApiError(msg) {
+        const code = msg.error.code || 'UNKNOWN';
+        const emsg = msg.error.message || 'Unknown error';
+        const mtype = msg.msg_type || 'unknown';
+
+        logError(`[${code}] on ${mtype}: ${emsg}`);
+
+        switch (code) {
+            case 'InvalidToken':
+            case 'AuthorizationRequired':
+                logError('Invalid API token. Please check your --token value.');
+                this.stop('Authentication failed');
+                break;
+            case 'RateLimit':
+                logError('Rate limited. Pausing 10 s...');
+                setTimeout(() => {
+                    if (this.botState !== STATE.STOPPED) {
+                        this.isTradeActive = false;
+                        this.executeTradeFlow();
+                    }
+                }, 10_000);
+                break;
+            case 'InsufficientBalance':
+                logRisk('💸 Insufficient balance!');
+                this.stop('Insufficient balance');
+                break;
+            default:
+                if (msg.msg_type === 'buy') {
+                    this.isTradeActive = false;
+                    if (this.martingaleStep > 0) {
+                        setTimeout(() => this.executeTradeFlow(), this.config.delay_between_trades);
+                    } else {
+                        this.botState = STATE.ANALYZING;
+                    }
+                }
+                break;
+        }
+    }
+
+    // ── Auth ────────────────────────────────────────────────────────────────────
+    handleAuth(msg) {
+        if (!msg.authorize) return;
+        const auth = msg.authorize;
+        this.accountBalance = parseFloat(auth.balance);
+        this.startingBalance = this.accountBalance;
+        this.accountId = auth.loginid || 'N/A';
+        this.sessionStartTime = Date.now();
+
+        const isDemo = this.accountId.startsWith('VRTC');
+        logApi(`${green('✅ Authenticated')} | Account: ${bold(this.accountId)} ${isDemo ? '(Demo)' : red('(REAL)')} | Balance: ${green('$' + this.accountBalance.toFixed(2))}`);
+        if (!isDemo) logRisk('⚠️  REAL ACCOUNT — trading with real money!');
+
+        this.send({ balance: 1, subscribe: 1 });
+        this.send({ transaction: 1, subscribe: 1 });
+
+        // Fetch tick history immediately
+        this.botState = STATE.COLLECTING_TICKS;
+        logBot(`Fetching last ${bold(this.config.tick_history_size)} ticks for ${bold(this.config.symbol)}...`);
         this.send({
-            ticks_history: CONFIG.SYMBOL,
-            count: CONFIG.TICK_HISTORY_SIZE + 5,
+            ticks_history: this.config.symbol,
+            count: this.config.tick_history_size,
             end: 'latest',
             style: 'ticks',
-            req_id: this.nextReqId(),
         });
     }
 
-    onTickHistory(history) {
-        if (history && history.prices) {
-            STATE.tickHistory = history.prices.slice(-CONFIG.TICK_HISTORY_SIZE);
-            STATE.ticksReady = STATE.tickHistory.length >= CONFIG.TICK_HISTORY_SIZE;
-        }
-    }
-
-    // Subscribe to live ticks
-    subscribeTicks() {
-        console.log(`${C.YELLOW}Subscribing to ${CONFIG.SYMBOL} ticks...${C.RESET}`);
-        this.send({
-            ticks: CONFIG.SYMBOL,
-            subscribe: 1,
-            req_id: this.nextReqId(),
-        });
-    }
-
-    // Process each tick
-    onTick(tick) {
-        const price = parseFloat(tick.quote);
-
-        // Add to tick history
-        STATE.tickHistory.push(price);
-        if (STATE.tickHistory.length > CONFIG.TICK_HISTORY_SIZE + 20) {
-            STATE.tickHistory = STATE.tickHistory.slice(-CONFIG.TICK_HISTORY_SIZE - 5);
+    // ── Tick History (initial load) ──────────────────────────────────────────────
+    handleTickHistory(msg) {
+        if (!msg.history || !msg.history.prices) {
+            logError('Failed to fetch tick history. Falling back to live collection...');
+            this.subscribeToLiveTicks();
+            return;
         }
 
-        STATE.ticksReady = STATE.tickHistory.length >= CONFIG.TICK_HISTORY_SIZE;
+        const prices = msg.history.prices;
+        const digits = prices.map(p => getLastDigit(p));
+        this.tickHistory = digits.slice(-this.config.tick_history_size);
 
-        // Run analysis
-        const analysis = STATE.ticksReady ? DigitDifferEngine.analyzeTicks(STATE.tickHistory) : null;
-        const fibCheck = STATE.fibLevels ? FibonacciEngine.isNearEntryLevel(price, STATE.fibLevels) : null;
-        const tpTarget = STATE.fibLevels ? FibonacciEngine.getTPTarget(price, STATE.fibLevels) : null;
+        logBot(`${green('✅ Loaded ' + this.tickHistory.length + ' historical ticks')}`);
+        logTick(`History: [${this.tickHistory.join(', ')}]`);
 
-        // Update display
-        DisplayEngine.render(STATE, analysis, fibCheck, tpTarget);
+        this.subscribeToLiveTicks();
 
-        // Check if we should trade
-        if (
-            STATE.authorized &&
-            STATE.ticksReady &&
-            STATE.candlesLoaded &&
-            !STATE.isTrading &&
-            !STATE.awaitingResult &&
-            !STATE.isPaused &&
-            analysis &&
-            analysis.signal !== 'NONE' &&
-            fibCheck &&
-            fibCheck.near
-        ) {
-            this.executeTrade(analysis, fibCheck, tpTarget);
-        }
-
-        // Check pause status
-        if (STATE.isPaused && Date.now() >= STATE.pauseUntil) {
-            STATE.isPaused = false;
-            STATE.currentStake = CONFIG.BASE_STAKE;
-            STATE.martingaleStep = 0;
-            STATE.consecutiveLosses = 0;
-            console.log(`${C.GREEN}✅ Pause ended. Resuming trading with base stake.${C.RESET}`);
-        }
-    }
-
-    // Execute a Digit Differ trade
-    executeTrade(analysis, fibCheck, tpTarget) {
-        STATE.isTrading = true;
-        STATE.awaitingResult = true;
-
-        const contractType = analysis.signal === 'OVER'
-            ? CONFIG.CONTRACT_TYPE_OVER
-            : CONFIG.CONTRACT_TYPE_UNDER;
-
-        const barrier = analysis.signal === 'OVER'
-            ? CONFIG.DIGIT_OVER_BARRIER
-            : CONFIG.DIGIT_UNDER_BARRIER;
-
-        STATE.lastPrediction = analysis.signal;
-        STATE.lastSignalStrength = analysis.strength;
-        STATE.lastWeightedScore = analysis.score;
-
-        const buyRequest = {
-            buy: 1,
-            subscribe: 1,
-            price: STATE.currentStake,
-            parameters: {
-                amount: STATE.currentStake,
-                basis: 'stake',
-                contract_type: contractType,
-                currency: 'USD',
-                duration: CONFIG.CONTRACT_DURATION,
-                duration_unit: CONFIG.CONTRACT_DURATION_UNIT,
-                symbol: CONFIG.SYMBOL,
-                barrier: barrier,
-            },
-            req_id: this.nextReqId(),
-        };
-
-        console.log(`${C.BRIGHT}${C.YELLOW}📤 PLACING TRADE: ${contractType} | Barrier: ${barrier} | Stake: $${STATE.currentStake.toFixed(2)} | MG Step: ${STATE.martingaleStep} | Signal: ${analysis.signal} (${analysis.strength}%) | Fib: ${fibCheck.level}${C.RESET}`);
-
-        this.send(buyRequest);
-    }
-
-    // Buy response
-    onBuy(buy) {
-        if (buy && buy.contract_id) {
-            STATE.contractId = buy.contract_id;
-            console.log(`${C.GREEN}✅ Contract opened: ID ${buy.contract_id} | Buy Price: $${parseFloat(buy.buy_price).toFixed(2)}${C.RESET}`);
+        if (this.tickHistory.length >= this.config.analysis_window) {
+            this.botState = STATE.ANALYZING;
+            this.analyzeDigits();
+            // No live tick yet so we wait for the first live tick to call processPostAnalysis
         } else {
-            console.log(`${C.RED}❌ Buy failed${C.RESET}`);
-            STATE.isTrading = false;
-            STATE.awaitingResult = false;
+            logBot(`Collecting more ticks (${this.tickHistory.length}/${this.config.analysis_window})...`);
         }
     }
 
-    // Contract update (settlement)
-    onContractUpdate(poc) {
-        if (!poc || !poc.is_sold) return;
+    subscribeToLiveTicks() {
+        logBot(`Subscribing to live ticks for ${bold(this.config.symbol)}...`);
+        this.send({ ticks: this.config.symbol, subscribe: 1 });
+    }
 
-        const pnl = parseFloat(poc.profit);
-        const isWin = pnl > 0;
+    // ── Balance ─────────────────────────────────────────────────────────────────
+    handleBalance(msg) {
+        if (msg.balance) {
+            this.accountBalance = parseFloat(msg.balance.balance);
+        }
+    }
 
-        STATE.totalTrades++;
-        STATE.totalProfit += pnl;
-        STATE.isTrading = false;
-        STATE.awaitingResult = false;
+    // ── Live Tick ────────────────────────────────────────────────────────────────
+    handleTick(msg) {
+        if (!msg.tick || this.botState === STATE.STOPPED) return;
 
-        const now = new Date().toLocaleTimeString();
+        const price = msg.tick.quote;
+        const lastDigit = getLastDigit(price);
 
-        if (isWin) {
-            STATE.wins++;
-            STATE.consecutiveLosses = 0;
-            STATE.martingaleStep = 0;
-            STATE.currentStake = CONFIG.BASE_STAKE;
+        // Push and maintain sliding window
+        this.tickHistory.push(lastDigit);
+        if (this.tickHistory.length > this.config.tick_history_size)
+            this.tickHistory = this.tickHistory.slice(-this.config.tick_history_size);
 
-            console.log(`${C.BG_GREEN}${C.WHITE}${C.BRIGHT} ✅ WIN | P&L: +$${pnl.toFixed(2)} | Total Profit: $${STATE.totalProfit.toFixed(2)} ${C.RESET}`);
+        const count = this.tickHistory.length;
 
-            STATE.tradeLog.push({
-                time: now,
-                result: 'WIN',
-                type: STATE.lastPrediction,
-                stake: STATE.currentStake,
-                pnl: pnl,
-            });
-        } else {
-            STATE.losses++;
-            STATE.consecutiveLosses++;
-            STATE.martingaleStep++;
+        if (this.botState === STATE.COLLECTING_TICKS) {
+            logTick(`Price: ${price} | Digit: ${bold(lastDigit)} | Ticks: ${count}/${this.config.tick_history_size}`);
+        }
 
-            console.log(`${C.BG_RED}${C.WHITE}${C.BRIGHT} ❌ LOSS | P&L: -$${Math.abs(pnl).toFixed(2)} | MG Step: ${STATE.martingaleStep}/${CONFIG.MAX_MARTINGALE_STEPS} ${C.RESET}`);
-
-            STATE.tradeLog.push({
-                time: now,
-                result: 'LOSS',
-                type: STATE.lastPrediction,
-                stake: STATE.currentStake,
-                pnl: pnl,
-            });
-
-            if (STATE.martingaleStep >= CONFIG.MAX_MARTINGALE_STEPS) {
-                // Max martingale hit - PAUSE
-                STATE.isPaused = true;
-                STATE.pauseUntil = Date.now() + CONFIG.PAUSE_AFTER_MAX_LOSS_MS;
-                STATE.martingaleStep = 0;
-                STATE.currentStake = CONFIG.BASE_STAKE;
-                STATE.consecutiveLosses = 0;
-
-                console.log(`${C.BG_RED}${C.WHITE}${C.BRIGHT}`);
-                console.log(` ⚠️  MAX MARTINGALE HIT - PAUSING FOR 30 MINUTES`);
-                console.log(` ⚠️  This is where the account dies. You were warned.`);
-                console.log(`${C.RESET}`);
-            } else {
-                // Martingale up
-                STATE.currentStake = CONFIG.BASE_STAKE * Math.pow(CONFIG.MARTINGALE_MULTIPLIER, STATE.martingaleStep);
-                STATE.currentStake = Math.round(STATE.currentStake * 100) / 100;
-
-                // Safety check: don't bet more than balance
-                if (STATE.currentStake > STATE.currentBalance * 0.95) {
-                    STATE.currentStake = Math.max(CONFIG.BASE_STAKE, STATE.currentBalance * 0.90);
-                    console.log(`${C.RED}⚠️  Stake capped to 90% of balance: $${STATE.currentStake.toFixed(2)}${C.RESET}`);
+        switch (this.botState) {
+            case STATE.COLLECTING_TICKS:
+                if (count >= this.config.analysis_window) {
+                    this.botState = STATE.ANALYZING;
+                    this.analyzeDigits();
+                    this.processPostAnalysis(lastDigit);
                 }
+                break;
 
-                console.log(`${C.YELLOW}📈 Martingale Step ${STATE.martingaleStep}: Next stake = $${STATE.currentStake.toFixed(2)}${C.RESET}`);
+            case STATE.ANALYZING:
+                this.analyzeDigits();
+                this.processPostAnalysis(lastDigit);
+                break;
+
+            case STATE.GHOST_TRADING:
+                this.analyzeDigits();
+                this.runGhostCheck(lastDigit);
+                break;
+
+            case STATE.WAITING_RESULT:
+            case STATE.COOLDOWN:
+                // Just collecting ticks — no action
+                break;
+        }
+    }
+
+    // ── Digit Analysis ────────────────────────────────────────────────────────
+    analyzeDigits() {
+        this.digitFrequencies = new Array(10).fill(0);
+        const window = this.tickHistory.slice(-this.config.analysis_window);
+        for (const d of window) this.digitFrequencies[d]++;
+
+        let maxFreq = 0, maxDigit = 0;
+        const expected = this.config.analysis_window / 10;
+
+        for (let i = 0; i <= 9; i++) {
+            if (this.digitFrequencies[i] > maxFreq) {
+                maxFreq = this.digitFrequencies[i];
+                maxDigit = i;
             }
         }
+
+        this.targetDigit = maxDigit;
+        const excess = maxFreq - expected;
+        this.frequencyMet = excess >= this.config.frequency_threshold;
+
+        const confidence = this.frequencyMet ? 'HIGH'
+            : excess >= this.config.frequency_threshold / 2 ? 'MEDIUM' : 'LOW';
+
+        const freqStr = this.digitFrequencies.map((f, i) =>
+            i === this.targetDigit ? cyan(bold(`${i}:${f}`)) : dim(`${i}:${f}`)
+        ).join(', ');
+
+        logAnalysis(
+            `{${freqStr}} | 🎯 Target: ${bold(this.targetDigit)} (${maxFreq}x, exp ${expected.toFixed(1)}, ${confidence})` +
+            (!this.frequencyMet ? ` ${red('[THRESHOLD NOT MET]')}` : '')
+        );
+
+        if (!this.frequencyMet) {
+            logAnalysis(dim(`⏳ Waiting for frequency threshold (need excess ≥ ${this.config.frequency_threshold}, got ${excess.toFixed(1)})`));
+        }
+
+        return this.frequencyMet;
     }
 
-    // Transaction updates
-    onTransaction(transaction) {
-        // Secondary handler for balance tracking
-        if (transaction && transaction.balance) {
-            STATE.currentBalance = parseFloat(transaction.balance);
+    // ── Post-Analysis Flow ────────────────────────────────────────────────────
+    processPostAnalysis(lastDigit) {
+        if (!this.frequencyMet) {
+            this.botState = STATE.ANALYZING;
+            return;
+        }
+
+        if (this.config.ghost_enabled && !this.ghostConfirmed) {
+            this.botState = STATE.GHOST_TRADING;
+            if (this.ghostRoundsPlayed === 0) {
+                if (this.config.auto_ghost_wins) {
+                    logGhost(`Starting ghost phase — ${magenta('AUTO')} mode. Wins Required = ${yellow('NULL')} (waiting for loss)`);
+                } else {
+                    logGhost(`Starting ghost phase — need ${bold(this.config.ghost_wins_required)} consecutive wins`);
+                    this.winsRequired = this.config.ghost_wins_required;
+                }
+            }
+            this.runGhostCheck(lastDigit);
+        } else {
+            this.executeTradeFlow();
         }
     }
 
-    // Start the bot
-    start() {
-        console.log('');
-        console.log(`${C.BG_RED}${C.WHITE}${C.BRIGHT}                                                                  ${C.RESET}`);
-        console.log(`${C.BG_RED}${C.WHITE}${C.BRIGHT}   ⚠️  WARNING: THIS BOT USES AGGRESSIVE ×5.87 MARTINGALE          ${C.RESET}`);
-        console.log(`${C.BG_RED}${C.WHITE}${C.BRIGHT}   ⚠️  IT WILL DESTROY YOUR ACCOUNT WITHIN 14-45 DAYS              ${C.RESET}`);
-        console.log(`${C.BG_RED}${C.WHITE}${C.BRIGHT}   ⚠️  41 OUT OF 41 TRACKED ACCOUNTS WERE WIPED OUT                ${C.RESET}`);
-        console.log(`${C.BG_RED}${C.WHITE}${C.BRIGHT}   ⚠️  MAXIMUM VERIFIED SURVIVAL: 79 DAYS THEN $0                  ${C.RESET}`);
-        console.log(`${C.BG_RED}${C.WHITE}${C.BRIGHT}   ⚠️  YOU HAVE BEEN WARNED. PROCEEDING IN 5 SECONDS...            ${C.RESET}`);
-        console.log(`${C.BG_RED}${C.WHITE}${C.BRIGHT}                                                                  ${C.RESET}`);
-        console.log('');
+    // ══════════════════════════════════════════════════════════════════════════
+    //  AUTO GHOST WINS — SAFETY CHECK (Simulation-Based)
+    //
+    //  Walk through tick history sequentially.
+    //  Every time we accumulate `winsRequired` consecutive DIFFER wins,
+    //  the NEXT tick is a simulated trade result.
+    //    • If that tick == targetDigit  → trade LOSES → NOT SAFE
+    //    • If that tick != targetDigit  → trade WINS  → skip trade tick, reset counter, continue
+    //  If ALL simulated trades WIN and at least 1 opportunity was found → SAFE
+    // ══════════════════════════════════════════════════════════════════════════
+    isWinsRequiredSafe(winsRequired) {
+        if (winsRequired < 1) return false;
+        if (this.targetDigit < 0) return false;
+        if (this.tickHistory.length < winsRequired + 1) return false;
 
-        setTimeout(() => {
-            this.connect();
-        }, 5000);
+        const target = this.targetDigit;
+        let consecutive = 0;
+        let tradeOpportunities = 0;
+        let tradeLosses = 0;
+        let i = 0;
+
+        while (i < this.tickHistory.length) {
+            const digit = this.tickHistory[i];
+
+            if (digit !== target) {
+                // DIFFER win → increment consecutive counter
+                consecutive++;
+
+                if (consecutive >= winsRequired) {
+                    // We have enough consecutive wins — simulate placing a trade.
+                    // The NEXT tick determines whether we win or lose.
+                    if (i + 1 < this.tickHistory.length) {
+                        tradeOpportunities++;
+                        const tradeTick = this.tickHistory[i + 1];
+
+                        if (tradeTick === target) {
+                            // Trade would LOSE
+                            tradeLosses++;
+                            logGhost(
+                                dim(`  Sim ${winsRequired}: ${winsRequired} wins at [${i - winsRequired + 1}..${i}], `) +
+                                dim(`trade tick [${i + 1}] = ${tradeTick} → `) +
+                                red('LOSS — NOT SAFE')
+                            );
+                            return false;
+                        }
+                        // Trade wins — skip trade tick, reset counter
+                        i += 2;
+                        consecutive = 0;
+                        continue;
+                    }
+                    // No next tick to verify — stop scanning
+                    break;
+                }
+            } else {
+                // DIFFER loss → reset consecutive counter
+                consecutive = 0;
+            }
+            i++;
+        }
+
+        if (tradeOpportunities > 0) {
+            logGhost(
+                dim(`  Sim ${winsRequired}: ${tradeOpportunities} opp, `) +
+                green(`${tradeOpportunities - tradeLosses}W`) +
+                dim('/') +
+                (tradeLosses > 0 ? red(`${tradeLosses}L`) : dim('0L')) +
+                ` → ` +
+                (tradeLosses === 0 ? green('SAFE ✓') : red('NOT SAFE ✗'))
+            );
+        } else {
+            logGhost(dim(`  Sim ${winsRequired}: no trade opportunities in history — insufficient data`));
+        }
+
+        return tradeOpportunities > 0 && tradeLosses === 0;
+    }
+
+    // ── Ghost Loss Handler ────────────────────────────────────────────────────
+    //
+    //  Called every time ghost trading loses.
+    //
+    //  Logic:
+    //   1. proposed = achievedWins - 1
+    //   2. If proposed < 1 → set winsRequired = null (can't determine safely)
+    //   3. Simulate tick history with proposed
+    //   4. If SAFE  → set winsRequired = proposed (continue ghost until reaching it)
+    //   5. If NOT SAFE → set winsRequired = null (wait for next ghost loss)
+    //
+    handleGhostLoss() {
+        const achievedWins = this.ghostConsecutiveWins;
+
+        if (!this.config.auto_ghost_wins) {
+            // Manual mode — always use the configured value
+            this.winsRequired = this.config.ghost_wins_required;
+            logGhost(`Manual mode: Wins Required = ${bold(this.winsRequired)}`);
+            return;
+        }
+
+        const proposed = achievedWins - 1;
+
+        if (proposed < 1) {
+            this.winsRequired = null;
+            logGhost(
+                `Ghost loss after ${bold(achievedWins)} win(s). ` +
+                `Proposed ${proposed} is too low. ` +
+                `Wins Required = ${yellow('NULL')} (waiting for next loss)`
+            );
+            return;
+        }
+
+        logGhost(
+            `🎯 Ghost loss after ${bold(achievedWins)} wins. ` +
+            `Proposed Wins Required = ${cyan(proposed)}. ` +
+            `Simulating through tick history...`
+        );
+
+        const safe = this.isWinsRequiredSafe(proposed);
+
+        if (safe) {
+            this.winsRequired = proposed;
+            logGhost(
+                `${green('✅ ' + proposed + ' is SAFE!')} ` +
+                `Every simulated trade in history would WIN. ` +
+                `Wins Required = ${bold(proposed)}. ` +
+                `Continue ghost until ${proposed} wins, then go LIVE.`
+            );
+        } else {
+            this.winsRequired = null;
+            logGhost(
+                `${red('❌ ' + proposed + ' is NOT SAFE!')} ` +
+                `A simulated trade in history would LOSE. ` +
+                `Wins Required = ${yellow('NULL')}. Waiting for next ghost loss...`
+            );
+        }
+    }
+
+    // ── Ghost Check (called on each tick during ghost phase) ──────────────────
+    runGhostCheck(lastDigit) {
+        if (this.botState !== STATE.GHOST_TRADING) return;
+
+        if (!this.frequencyMet) {
+            logGhost(dim('⏳ Frequency threshold not met — ghost trading paused'));
+            this.botState = STATE.ANALYZING;
+            return;
+        }
+
+        this.ghostRoundsPlayed++;
+        const wouldWin = lastDigit !== this.targetDigit;
+
+        if (wouldWin) {
+            this.ghostConsecutiveWins++;
+            const winsDisplay = this.winsRequired !== null ? this.winsRequired : '?';
+            logGhost(
+                `DIFFER from ${bold(this.targetDigit)} | Tick: ${bold(lastDigit)} | ` +
+                green('✅ WIN') +
+                ` (${this.ghostConsecutiveWins}/${winsDisplay})`
+            );
+
+            // If winsRequired is set and we've reached it → go LIVE
+            if (this.winsRequired !== null && this.ghostConsecutiveWins >= this.winsRequired) {
+                this.ghostConfirmed = true;
+                logGhost(
+                    green(bold(`✅ Ghost confirmed! Reached ${this.winsRequired} wins. Going LIVE!`))
+                );
+                this.executeTradeFlow();
+                return;
+            }
+            // winsRequired is null → keep ghost trading until we lose
+
+        } else {
+            // ── Ghost LOSS ─────────────────────────────────────────────────────────
+            logGhost(
+                `DIFFER from ${bold(this.targetDigit)} | Tick: ${bold(lastDigit)} | ` +
+                red('❌ LOSS') +
+                ` after ${this.ghostConsecutiveWins} wins`
+            );
+
+            // Apply ghost loss logic — sets or resets this.winsRequired
+            this.handleGhostLoss();
+
+            // Reset consecutive win counter and continue ghost trading
+            this.ghostConsecutiveWins = 0;
+
+            const winsDisplay = this.winsRequired !== null
+                ? bold(this.winsRequired)
+                : yellow('NULL') + ' (waiting for next loss)';
+            logGhost(`Continuing ghost. Wins Required = ${winsDisplay}`);
+        }
+
+        // Max ghost rounds guard
+        if (!this.ghostConfirmed && this.ghostRoundsPlayed >= this.config.ghost_max_rounds) {
+            logGhost(
+                yellow(`⚠️  Max ghost rounds (${this.config.ghost_max_rounds}) reached. Re-analyzing...`)
+            );
+            this.resetGhost();
+            this.botState = STATE.ANALYZING;
+        }
+    }
+
+    resetGhost() {
+        this.ghostConsecutiveWins = 0;
+        this.ghostRoundsPlayed = 0;
+        this.ghostConfirmed = false;
+        this.winsRequired = null; // Always reset to null for new trade cycle
+    }
+
+    // ── Trade Execution Flow ──────────────────────────────────────────────────
+    async executeTradeFlow() {
+        if (this.isTradeActive || this.botState === STATE.STOPPED) return;
+
+        const risk = this.checkRiskLimits();
+        if (!risk.canTrade) {
+            logRisk(risk.reason);
+            if (risk.action === 'STOP') { this.stop(risk.reason); return; }
+            if (risk.action === 'COOLDOWN') { this.startCooldown(); return; }
+            return;
+        }
+
+        this.currentStake = this.calculateStake();
+
+        if (this.currentStake > this.config.max_stake) {
+            logRisk(`Stake $${this.currentStake.toFixed(2)} exceeds max $${this.config.max_stake.toFixed(2)}`);
+            this.stop('Stake exceeds maximum');
+            return;
+        }
+
+        if (this.currentStake > this.accountBalance) {
+            logRisk(`Stake $${this.currentStake.toFixed(2)} exceeds balance $${this.accountBalance.toFixed(2)}`);
+            this.stop('Insufficient balance for stake');
+            return;
+        }
+
+        if (this.totalTrades > 0) {
+            this.botState = STATE.PLACING_TRADE;
+            await sleep(this.config.delay_between_trades);
+        }
+
+        if (this.botState === STATE.STOPPED) return;
+        this.placeTrade();
+    }
+
+    // ── Place Trade ───────────────────────────────────────────────────────────
+    placeTrade() {
+        this.isTradeActive = true;
+        this.botState = STATE.PLACING_TRADE;
+
+        const stepInfo = this.config.martingale_enabled ? ` | Mart Step: ${this.martingaleStep}` : '';
+        const ghostInfo = this.config.auto_ghost_wins && this.config.ghost_enabled && this.winsRequired !== null
+            ? ` | Ghost Safe: ${this.winsRequired}` : '';
+
+        logTrade(
+            `🎯 DIFFER from ${bold(this.targetDigit)} | ` +
+            `Stake: ${bold('$' + this.currentStake.toFixed(2))}${stepInfo}${ghostInfo}`
+        );
+
+        this.send({
+            buy: 1,
+            price: this.currentStake,
+            parameters: {
+                contract_type: this.config.contract_type,
+                symbol: this.config.symbol,
+                duration: 1,
+                duration_unit: 't',
+                basis: 'stake',
+                amount: this.currentStake,
+                barrier: String(this.targetDigit),
+                currency: this.config.currency,
+            },
+        });
+
+        this.botState = STATE.WAITING_RESULT;
+    }
+
+    // ── Buy Response ──────────────────────────────────────────────────────────
+    handleBuy(msg) {
+        if (!msg.buy) return;
+        this.lastContractId = msg.buy.contract_id;
+        this.lastBuyPrice = parseFloat(msg.buy.buy_price);
+        const payout = parseFloat(msg.buy.payout);
+        logTrade(dim(`Contract ${this.lastContractId} | Cost: $${this.lastBuyPrice.toFixed(2)} | Payout: $${payout.toFixed(2)}`));
+    }
+
+    // ── Transaction (Result) ──────────────────────────────────────────────────
+    handleTransaction(msg) {
+        if (!msg.transaction || msg.transaction.action !== 'sell' || !this.isTradeActive) return;
+
+        this.botState = STATE.PROCESSING_RESULT;
+
+        const payout = parseFloat(msg.transaction.amount) || 0;
+        const profit = payout - this.lastBuyPrice;
+        this.totalTrades++;
+
+        const resultDigit = this.tickHistory.length > 0
+            ? this.tickHistory[this.tickHistory.length - 1]
+            : null;
+
+        if (profit > 0) {
+            this.processWin(profit, resultDigit);
+        } else {
+            this.processLoss(this.lastBuyPrice, resultDigit);
+        }
+
+        this.isTradeActive = false;
+        this.decideNextAction();
+    }
+
+    // ── Process Win ───────────────────────────────────────────────────────────
+    processWin(profit, resultDigit) {
+        this.totalWins++;
+        this.sessionProfit += profit;
+        this.currentWinStreak++;
+        this.currentLossStreak = 0;
+        if (this.currentWinStreak > this.maxWinStreak) this.maxWinStreak = this.currentWinStreak;
+        if (profit > this.largestWin) this.largestWin = profit;
+
+        const recovery = this.martingaleStep > 0 ? green(' 🔄 RECOVERY!') : '';
+        const plStr = this.sessionProfit >= 0
+            ? green(formatMoney(this.sessionProfit))
+            : red(formatMoney(this.sessionProfit));
+
+        logResult(
+            `${green('✅ WIN!')} Profit: ${green('+$' + profit.toFixed(2))} | ` +
+            `P/L: ${plStr} | Bal: ${green('$' + this.accountBalance.toFixed(2))}${recovery}`
+        );
+
+        this.resetMartingale();
+        if (this.config.ghost_enabled) this.resetGhost(); // winsRequired → null for new cycle
+    }
+
+    // ── Process Loss ──────────────────────────────────────────────────────────
+    processLoss(lostAmount, _resultDigit) {
+        this.totalLosses++;
+        this.sessionProfit -= lostAmount;
+        this.totalMartingaleLoss += lostAmount;
+        this.currentLossStreak++;
+        this.currentWinStreak = 0;
+        if (this.currentLossStreak > this.maxLossStreak) this.maxLossStreak = this.currentLossStreak;
+        if (lostAmount > this.largestLoss) this.largestLoss = lostAmount;
+
+        this.martingaleStep++;
+        if (this.martingaleStep > this.maxMartingaleReached)
+            this.maxMartingaleReached = this.martingaleStep;
+
+        const martInfo = this.config.martingale_enabled
+            ? ` | Mart: ${this.martingaleStep}/${this.config.max_martingale_steps}` : '';
+        const plStr = this.sessionProfit >= 0
+            ? green(formatMoney(this.sessionProfit))
+            : red(formatMoney(this.sessionProfit));
+
+        logResult(
+            `${red('❌ LOSS!')} Loss: ${red('-$' + lostAmount.toFixed(2))} | ` +
+            `P/L: ${plStr} | Bal: $${this.accountBalance.toFixed(2)}${martInfo}`
+        );
+    }
+
+    // ── Decide Next Action ────────────────────────────────────────────────────
+    decideNextAction() {
+        const risk = this.checkRiskLimits();
+        if (!risk.canTrade) {
+            logRisk(risk.reason);
+            if (risk.action === 'STOP') { this.stop(risk.reason); return; }
+            if (risk.action === 'COOLDOWN') { this.startCooldown(); return; }
+        }
+
+        // Martingale recovery — skip ghost phase
+        if (this.config.martingale_enabled &&
+            this.martingaleStep > 0 &&
+            this.martingaleStep < this.config.max_martingale_steps) {
+            logBot(dim('📈 Martingale recovery — next trade...'));
+            this.botState = STATE.ANALYZING;
+            this.ghostConfirmed = true; // skip ghost during recovery
+            return;
+        }
+
+        // Max martingale steps → cooldown
+        if (this.config.martingale_enabled &&
+            this.martingaleStep >= this.config.max_martingale_steps) {
+            logRisk(`🛑 Max Martingale steps (${this.config.max_martingale_steps}) reached!`);
+            this.resetMartingale();
+            this.startCooldown();
+            return;
+        }
+
+        // New trade cycle — reset ghost (winsRequired → null)
+        if (this.config.ghost_enabled) this.resetGhost();
+        this.botState = STATE.ANALYZING;
+    }
+
+    // ── Stake Calculation ─────────────────────────────────────────────────────
+    calculateStake() {
+        if (!this.config.martingale_enabled || this.martingaleStep === 0) {
+            return this.config.base_stake;
+        }
+        // base_stake × multiplier^step
+        const raw = this.config.base_stake * Math.pow(this.config.martingale_multiplier, this.martingaleStep);
+        const calc = Math.round(raw * 100) / 100;
+        const final = Math.min(calc, this.config.max_stake);
+        logBot(dim(
+            `Mart calc: Step ${this.martingaleStep} | ` +
+            `$${this.config.base_stake.toFixed(2)} × ${this.config.martingale_multiplier}^${this.martingaleStep} ` +
+            `= $${calc.toFixed(2)} | Final: $${final.toFixed(2)}`
+        ));
+        return final;
+    }
+
+    // ── Risk Limits ───────────────────────────────────────────────────────────
+    checkRiskLimits() {
+        if (this.sessionProfit >= this.config.take_profit)
+            return { canTrade: false, reason: `🎯 Take profit reached! P/L: ${formatMoney(this.sessionProfit)}`, action: 'STOP' };
+
+        if (this.sessionProfit <= -this.config.stop_loss)
+            return { canTrade: false, reason: `🛑 Stop loss hit! P/L: ${formatMoney(this.sessionProfit)}`, action: 'STOP' };
+
+        const nextStake = (!this.config.martingale_enabled || this.martingaleStep === 0)
+            ? this.config.base_stake
+            : Math.min(
+                Math.round(this.config.base_stake * Math.pow(this.config.martingale_multiplier, this.martingaleStep) * 100) / 100,
+                this.config.max_stake
+            );
+
+        if (nextStake > this.accountBalance)
+            return { canTrade: false, reason: `💸 Next stake $${nextStake.toFixed(2)} > balance $${this.accountBalance.toFixed(2)}`, action: 'STOP' };
+
+        if (nextStake > this.config.max_stake)
+            return { canTrade: false, reason: `📈 Next stake $${nextStake.toFixed(2)} > max $${this.config.max_stake.toFixed(2)}`, action: 'STOP' };
+
+        if (this.config.martingale_enabled && this.martingaleStep >= this.config.max_martingale_steps)
+            return { canTrade: false, reason: '🔄 Max Martingale steps reached. Cooldown.', action: 'COOLDOWN' };
+
+        return { canTrade: true };
+    }
+
+    // ── Martingale Reset ──────────────────────────────────────────────────────
+    resetMartingale() {
+        this.martingaleStep = 0;
+        this.totalMartingaleLoss = 0;
+        this.currentStake = this.config.base_stake;
+    }
+
+    // ── Cooldown ──────────────────────────────────────────────────────────────
+    startCooldown() {
+        this.botState = STATE.COOLDOWN;
+        this.resetMartingale();
+        this.resetGhost();
+        const sec = this.config.cooldown_after_max_loss / 1000;
+        logBot(`⏸️  Cooldown for ${sec}s...`);
+
+        this.cooldownTimer = setTimeout(() => {
+            if (this.botState === STATE.COOLDOWN) {
+                logBot(green('▶️  Cooldown ended. Resuming...'));
+                this.botState = STATE.ANALYZING;
+            }
+        }, this.config.cooldown_after_max_loss);
+    }
+
+    // ── Stop ──────────────────────────────────────────────────────────────────
+    stop(reason = 'User stopped') {
+        this.botState = STATE.STOPPED;
+        logBot(`🛑 ${bold('Stopping bot...')} Reason: ${reason}`);
+
+        if (this.cooldownTimer) { clearTimeout(this.cooldownTimer); this.cooldownTimer = null; }
+        if (this.pingInterval) { clearInterval(this.pingInterval); this.pingInterval = null; }
+
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            try {
+                this.ws.send(JSON.stringify({ forget_all: 'ticks' }));
+                this.ws.send(JSON.stringify({ forget_all: 'balance' }));
+                this.ws.send(JSON.stringify({ forget_all: 'transaction' }));
+            } catch (_) { /* ignore */ }
+            setTimeout(() => { try { this.ws.close(); } catch (_) { /* ignore */ } }, 500);
+        }
+
+        this.printFinalStats();
+        setTimeout(() => process.exit(0), 1000);
+    }
+
+    // ── Final Stats ───────────────────────────────────────────────────────────
+    printFinalStats() {
+        const dur = Date.now() - this.sessionStartTime;
+        const wr = this.totalTrades > 0
+            ? ((this.totalWins / this.totalTrades) * 100).toFixed(1) : '0.0';
+        const avg = this.totalTrades > 0 ? this.sessionProfit / this.totalTrades : 0;
+        const plColour = this.sessionProfit >= 0 ? green : red;
+
+        console.log('');
+        logStats(bold('═══════════════════════════════════════════'));
+        logStats(bold('          SESSION SUMMARY                  '));
+        logStats(bold('═══════════════════════════════════════════'));
+        logStats(`  Duration:         ${bold(formatDuration(dur))}`);
+        logStats(`  Symbol:           ${bold(this.config.symbol)}`);
+        logStats(`  Total Trades:     ${bold(this.totalTrades)}`);
+        logStats(`  Wins:             ${green(this.totalWins)}`);
+        logStats(`  Losses:           ${red(this.totalLosses)}`);
+        logStats(`  Win Rate:         ${bold(wr + '%')}`);
+        logStats(`  Session P/L:      ${plColour(bold(formatMoney(this.sessionProfit)))}`);
+        logStats(`  Starting Balance: $${this.startingBalance.toFixed(2)}`);
+        logStats(`  Final Balance:    $${this.accountBalance.toFixed(2)}`);
+        logStats(`  Avg/Trade:        ${formatMoney(avg)}`);
+        logStats(`  Largest Win:      ${green('+$' + this.largestWin.toFixed(2))}`);
+        logStats(`  Largest Loss:     ${red('-$' + this.largestLoss.toFixed(2))}`);
+        logStats(`  Max Win Streak:   ${green(this.maxWinStreak)}`);
+        logStats(`  Max Loss Streak:  ${red(this.maxLossStreak)}`);
+        logStats(`  Max Martingale:   Step ${this.maxMartingaleReached}`);
+        logStats(bold('═══════════════════════════════════════════'));
+        console.log('');
     }
 }
 
-// ============================================================================
-// LAUNCH
-// ============================================================================
-const bot = new FiboDiffBot();
-bot.start();
+// ── Entry Point ───────────────────────────────────────────────────────────────
+(function main() {
+    const config = parseArgs();
+
+    if (process.argv.includes('--help') || process.argv.includes('-h')) {
+        console.log(`
+${bold(cyan('Romanian Ghost Bot — Node.js CLI'))}
+
+Usage:
+  node romanian-ghost-bot.js --token YOUR_API_TOKEN [options]
+
+Options:
+  ${cyan('--token')}       ${bold('YOUR_TOKEN')}   Deriv API token (required)
+  ${cyan('--appid')}       1089           Deriv App ID
+  ${cyan('--symbol')}      R_100          Trading symbol
+  ${cyan('--stake')}       0.35           Base stake amount ($)
+  ${cyan('--history')}     30             Tick history window size
+  ${cyan('--window')}      30             Analysis window (must be <= history)
+  ${cyan('--threshold')}   2              Frequency threshold (excess over expected)
+  ${cyan('--no-ghost')}                   Disable ghost trading
+  ${cyan('--ghost-wins')}  3              Fallback wins required (manual mode)
+  ${cyan('--ghost-max')}   200            Max ghost rounds before re-analysis
+  ${cyan('--no-auto')}                    Disable auto ghost wins calculation
+  ${cyan('--no-mart')}                    Disable Martingale
+  ${cyan('--mart-steps')}  3              Max Martingale steps
+  ${cyan('--mart-mult')}   11             Martingale multiplier
+  ${cyan('--tp')}          10             Take profit ($)
+  ${cyan('--sl')}          50             Stop loss ($)
+  ${cyan('--max-stake')}   500            Maximum allowed stake ($)
+  ${cyan('--delay')}       1500           Delay between trades (ms)
+  ${cyan('--cooldown')}    30000          Cooldown after max Martingale (ms)
+  ${cyan('--help')}                       Show this help
+
+Examples:
+  node romanian-ghost-bot.js --token YOUR_TOKEN
+  node romanian-ghost-bot.js --token YOUR_TOKEN --symbol R_50 --stake 0.50 --tp 20 --sl 30
+  node romanian-ghost-bot.js --token YOUR_TOKEN --no-ghost --no-mart --symbol 1HZ100V
+`);
+        process.exit(0);
+    }
+
+    const bot = new RomanianGhostBot(config);
+
+    // Handle Ctrl+C / SIGTERM gracefully
+    process.on('SIGINT', () => { console.log(''); bot.stop('SIGINT (Ctrl+C)'); });
+    process.on('SIGTERM', () => { bot.stop('SIGTERM'); });
+    process.on('uncaughtException', (e) => {
+        logError(`Uncaught exception: ${e.message}`);
+        logError(e.stack || '');
+        bot.stop('Uncaught exception');
+    });
+
+    bot.start();
+})();
