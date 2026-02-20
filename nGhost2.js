@@ -97,7 +97,7 @@ function parseArgs() {
 
         // Regime detection thresholds
         repeat_threshold: 8,           // Raw per-digit repeat % gate
-        repeat_confidence: 0.98,        // Bayesian P(repeat | observations) required
+        repeat_confidence: 98,        // Bayesian P(repeat | observations) required
         hmm_nonrep_confidence: 0.98,   // Bayesian P(NON-REP) required
         min_regime_persistence: 8,     // Ticks current regime must have lasted
         cusum_threshold: 4.5,          // CUSUM alarm threshold (regime shift detector)
@@ -610,7 +610,7 @@ class HMMRegimeDetector {
             rawRepeatProb[targetDigit] < threshold &&
             ewmaRepeat[targetDigit] < threshold &&
             !cusumAlarm &&
-            safetyScore >= this.cfg.repeat_confidence * 100
+            safetyScore >= this.cfg.repeat_confidence
         );
 
         return {
