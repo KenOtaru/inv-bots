@@ -1,12 +1,14 @@
 #!/usr/bin/env node
 // ============================================================================
 //  ROMANIAN GHOST BOT — Single-file Node.js Version
-//  Deriv Digit Differ — Repetition Pattern Strategy
+//  Deriv Digit Differ — Advanced Regime Detection Strategy
+//
+//  Analysis: HMM-inspired regime segmentation + EWMA + Transition Matrix
+//            + Non-rep run exhaustion + Composite safety score
 //
 //  Usage:
 //    node romanian-ghost-bot.js --token YOUR_DERIV_API_TOKEN [options]
-//
-//  Run with --help to see all options.
+//    node romanian-ghost-bot.js --help
 // ============================================================================
 
 'use strict';
@@ -38,7 +40,7 @@ const red = t => col(t, C.red);
 const yellow = t => col(t, C.yellow);
 const magenta = t => col(t, C.magenta);
 
-// ── Logger ────────────────────────────────────────────────────────────────────
+// ── Logger ─────────────────────────────────────────────────────────────────────
 const PREFIX_COLOURS = {
     BOT: cyan,
     API: blue,
@@ -96,11 +98,11 @@ function parseArgs() {
         base_stake: 0.61,
         currency: 'USD',
         contract_type: 'DIGITDIFF',
-        tick_history_size: 300,
-        analysis_window: 300,
-        repeat_threshold: 5,
+        tick_history_size: 5000,
+        analysis_window: 5000,
+        repeat_threshold: 8,
         ghost_enabled: true,
-        ghost_wins_required: 3,
+        ghost_wins_required: 1,
         ghost_max_rounds: 20000000000,
         martingale_enabled: true,
         martingale_multiplier: 11.3,
@@ -115,21 +117,15 @@ function parseArgs() {
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
-/**
- * Asset-aware last digit extractor.
- * Mirrors the web bot's getLastDigit(price, asset) function exactly.
- */
 function getLastDigit(price, asset) {
     const quoteString = price.toString();
     const parts = quoteString.split('.');
     const fractionalPart = parts.length > 1 ? parts[1] : '';
-
     if (['RDBULL', 'RDBEAR', 'R_75', 'R_50'].includes(asset)) {
         return fractionalPart.length >= 4 ? parseInt(fractionalPart[3], 10) : 0;
     } else if (['R_10', 'R_25', '1HZ15V', '1HZ30V', '1HZ90V'].includes(asset)) {
         return fractionalPart.length >= 3 ? parseInt(fractionalPart[2], 10) : 0;
     } else {
-        // Default: R_100, 1HZ10V, 1HZ25V, 1HZ50V, 1HZ75V, 1HZ100V, etc.
         return fractionalPart.length >= 2 ? parseInt(fractionalPart[1], 10) : 0;
     }
 }
@@ -147,10 +143,20 @@ function formatDuration(ms) {
     return `${m}m ${String(s).padStart(2, '0')}s`;
 }
 
-function avgRunLength(runs) {
-    if (runs.length === 0) return 0;
-    return runs.reduce((a, b) => a + b, 0) / runs.length;
+function medianArr(arr) {
+    if (arr.length === 0) return 0;
+    const sorted = [...arr].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
+
+function avgArr(arr) {
+    if (arr.length === 0) return 0;
+    return arr.reduce((a, b) => a + b, 0) / arr.length;
+}
+
+// ── EWMA decay factor ──────────────────────────────────────────────────────────
+const EWMA_ALPHA = 0.15;
 
 // ── State Constants ───────────────────────────────────────────────────────────
 const STATE = {
@@ -185,60 +191,44 @@ class RomanianGhostBot {
         this.startingBalance = 0;
         this.accountId = '';
 
-        // ── Ticks — sliding window of exactly tick_history_size ───────────────
+        // Ticks — sliding window
         this.tickHistory = [];
 
-        // ── Regime-based repetition analysis ─────────────────────────────────
-        this.digitRepeatRates = new Array(10).fill(0);
-        this.digitCounts = new Array(10).fill(0);
-        this.repTransitions = new Array(10).fill(0);
-        this.totalTransitions = new Array(10).fill(0);
-        this.repRunLengths = Array.from({ length: 10 }, () => []);
-        this.nonRepRunLengths = Array.from({ length: 10 }, () => []);
-        this.currentRunDigit = -1;
-        this.currentRunLength = 0;
-        this.currentRegime = 'non-rep';
+        // Regime analysis result
+        this.regime = null;
 
-        // ── Signal / Target ───────────────────────────────────────────────────
-        // targetDigit: locked when signal fires, does NOT change during ghost phase
-        // signalActive: true when targetDigit's repeat prob < repeat_threshold
+        // Signal / Target
         this.targetDigit = -1;
         this.targetRepeatRate = 0;
         this.signalActive = false;
 
-        // ── Ghost state ───────────────────────────────────────────────────────
-        // Ghost trading is a TWO-TICK process per round:
+        // Ghost state — TWO-TICK model
         //
         //  Tick A: currentDigit === targetDigit
-        //          → Target digit appeared. This is the trigger.
-        //          → If (ghostConsecutiveWins + 1) >= wins_required → fire LIVE trade NOW.
-        //          → Otherwise set ghostAwaitingResult = true, wait for Tick B.
+        //    → If (wins + 1) >= wins_required → fire LIVE trade NOW.
+        //    → Else set ghostAwaitingResult = true, wait for Tick B.
         //
         //  Tick B: (immediately after Tick A)
-        //          → ghostAwaitingResult = true
-        //          → currentDigit !== targetDigit → Ghost WIN (didn't repeat). Increment wins.
-        //          → currentDigit === targetDigit → Ghost LOSS (repeated). Reset wins to 0.
-        //          → Set ghostAwaitingResult = false, continue ghost phase.
+        //    → ghostAwaitingResult = true
+        //    → currentDigit !== targetDigit → Ghost WIN (didn't repeat). Wins++.
+        //    → currentDigit === targetDigit → Ghost LOSS (repeated). Wins = 0.
         //
         // After LIVE TRADE LOSS → ghostConsecutiveWins = 0, ghostConfirmed = false.
-        // Bot must re-satisfy ghost phase before next trade (even martingale).
         this.ghostConsecutiveWins = 0;
         this.ghostRoundsPlayed = 0;
         this.ghostConfirmed = false;
-        this.ghostAwaitingResult = false; // true when waiting for next-tick result
+        this.ghostAwaitingResult = false;
 
-        // ── Trading ───────────────────────────────────────────────────────────
+        // Trading
         this.currentStake = config.base_stake;
         this.martingaleStep = 0;
         this.totalMartingaleLoss = 0;
         this.isTradeActive = false;
         this.lastBuyPrice = 0;
         this.lastContractId = null;
-
-        // Pending trade flag (set outside tick handler; fires on next matching tick)
         this.pendingTrade = false;
 
-        // ── Session stats ─────────────────────────────────────────────────────
+        // Session stats
         this.sessionStartTime = Date.now();
         this.totalTrades = 0;
         this.totalWins = 0;
@@ -255,7 +245,7 @@ class RomanianGhostBot {
         this.cooldownTimer = null;
     }
 
-    // ── Validation ─────────────────────────────────────────────────────────────
+    // ── Validation ──────────────────────────────────────────────────────────────
     validate() {
         const errors = [];
         const c = this.config;
@@ -280,7 +270,7 @@ class RomanianGhostBot {
         return errors;
     }
 
-    // ── Start ──────────────────────────────────────────────────────────────────
+    // ── Start ───────────────────────────────────────────────────────────────────
     start() {
         const errors = this.validate();
         if (errors.length) {
@@ -291,19 +281,20 @@ class RomanianGhostBot {
         this.connectWS();
     }
 
-    // ── Banner ─────────────────────────────────────────────────────────────────
+    // ── Banner ──────────────────────────────────────────────────────────────────
     printBanner() {
         const c = this.config;
         console.log('');
         console.log(bold(cyan('═══════════════════════════════════════════════════════════')));
         console.log(bold(cyan('   👻  ROMANIAN GHOST BOT  —  Deriv Digit Differ           ')));
-        console.log(bold(cyan('        Repetition Pattern Strategy                        ')));
+        console.log(bold(cyan('   Advanced Regime Detection Strategy                      ')));
+        console.log(bold(cyan('   HMM-inspired + EWMA + Transition Matrix + Safety Score  ')));
         console.log(bold(cyan('═══════════════════════════════════════════════════════════')));
         console.log(`  Symbol           : ${bold(c.symbol)}`);
         console.log(`  Base Stake       : ${bold('$' + c.base_stake.toFixed(2))}`);
         console.log(`  Tick History     : ${bold(c.tick_history_size)} ticks`);
         console.log(`  Analysis Window  : ${bold(c.analysis_window)} ticks`);
-        console.log(`  Repeat Threshold : ${bold(c.repeat_threshold + '%')} — trade when digit repeat prob < this`);
+        console.log(`  Repeat Threshold : ${bold(c.repeat_threshold + '%')} — signal when raw+EWMA < threshold, regime=non-rep, score≥50`);
         console.log(`  Ghost Trading    : ${c.ghost_enabled
             ? green('ON') + ` | Wins Required: ${bold(c.ghost_wins_required)} | Max Rounds: ${c.ghost_max_rounds}`
             : red('OFF')}`);
@@ -313,7 +304,6 @@ class RomanianGhostBot {
         console.log(`  Take Profit      : ${green('$' + c.take_profit.toFixed(2))}`);
         console.log(`  Stop Loss        : ${red('$' + c.stop_loss.toFixed(2))}`);
         console.log(`  Max Stake        : $${c.max_stake.toFixed(2)}`);
-        console.log(`  Trade Delay      : ${c.delay_between_trades}ms`);
         console.log(bold(cyan('═══════════════════════════════════════════════════════════')));
         console.log('');
 
@@ -322,17 +312,295 @@ class RomanianGhostBot {
             for (let i = 0; i < c.max_martingale_steps; i++) {
                 risk += c.base_stake * Math.pow(c.martingale_multiplier, i);
             }
-            logRisk(`⚠️  Martingale worst case: ${c.max_martingale_steps} consecutive losses ≈ ${red('-$' + risk.toFixed(2))} (${c.martingale_multiplier}x multiplier)`);
+            logRisk(`⚠️  Martingale worst case: ${c.max_martingale_steps} consecutive losses ≈ ${red('-$' + risk.toFixed(2))}`);
         }
 
         if (c.ghost_enabled) {
-            logBot(`👻 Ghost mode: Target digit must appear ${bold(c.ghost_wins_required)} time(s) consecutively before LIVE trade fires.`);
+            logBot(`👻 Ghost mode: target digit must appear ${bold(c.ghost_wins_required)} time(s) before LIVE trade.`);
             logBot(`   After any LIVE trade loss → ghost wins reset to 0. Must re-accumulate before next trade.`);
         }
         console.log('');
     }
 
-    // ── WebSocket ──────────────────────────────────────────────────────────────
+    // ══════════════════════════════════════════════════════════════════════════
+    //  ADVANCED REGIME DETECTION ENGINE
+    //
+    //  Combines four signals into a composite safety score (0-100):
+    //
+    //  1. TRANSITION PROBABILITY (raw): P(d→d) from full history
+    //  2. EWMA REPEAT RATE: exponentially weighted, α=0.15 (~13-tick half-life)
+    //     Detects recent regime shifts faster than simple average.
+    //  3. REGIME SEGMENTATION: run-length encoding of tick history.
+    //     Tracks rep/non-rep run lengths per digit.
+    //     Computes P(non-rep→rep) transition probability from regime sequence.
+    //  4. NON-REP RUN EXHAUSTION: currentRegimeDuration / avgNonRepRunLen
+    //     High exhaustion → non-rep regime may be about to flip → lower safety.
+    //
+    //  COMPOSITE SAFETY SCORE:
+    //    A) Raw repeat prob below threshold:   up to 30 pts
+    //    B) EWMA rate below threshold:          up to 30 pts
+    //    C) Non-rep run not exhausted:          up to 20 pts
+    //    D) Low P(non-rep→rep) flip prob:       up to 20 pts
+    //    Hard gates: score=0 if in rep regime OR raw≥threshold OR EWMA≥threshold
+    //
+    //  SIGNAL CONDITION (ALL must hold):
+    //    a) Current regime for digit = 'non-rep'
+    //    b) Raw repeat prob < repeat_threshold
+    //    c) EWMA rate < repeat_threshold
+    //    d) Safety score >= 50
+    // ══════════════════════════════════════════════════════════════════════════
+    analyzeRegime() {
+        const window = this.tickHistory.slice(-this.config.analysis_window);
+        const len = window.length;
+        if (len < 2) return null;
+
+        const appearances = new Array(10).fill(0);
+        const repeatCount = new Array(10).fill(0);
+        const transCount = new Array(10).fill(0);
+        const ewma = new Array(10).fill(0);
+        const ewmaInit = new Array(10).fill(false);
+
+        const repRunLengths = Array.from({ length: 10 }, () => []);
+        const nonRepRunLengths = Array.from({ length: 10 }, () => []);
+        const regimeSeq = Array.from({ length: 10 }, () => []);
+
+        // ── Pass 1: EWMA + transition counts ────────────────────────────────
+        for (let i = 0; i < len; i++) {
+            const d = window[i];
+            appearances[d]++;
+            const isRepeat = i > 0 && window[i] === window[i - 1];
+
+            if (!ewmaInit[d]) {
+                ewma[d] = isRepeat ? 100 : 0;
+                ewmaInit[d] = true;
+            } else {
+                ewma[d] = EWMA_ALPHA * (isRepeat ? 100 : 0) + (1 - EWMA_ALPHA) * ewma[d];
+            }
+
+            if (i + 1 < len) {
+                transCount[d]++;
+                if (window[i + 1] === d) repeatCount[d]++;
+            }
+        }
+
+        // ── Pass 2: Run-length encoding + regime segmentation ───────────────
+        let totalRegimeShifts = 0;
+        let i = 0;
+        while (i < len) {
+            const d = window[i];
+            let runLen = 1;
+            while (i + runLen < len && window[i + runLen] === d) runLen++;
+
+            if (runLen >= 2) {
+                repRunLengths[d].push(runLen);
+                regimeSeq[d].push({ type: 'rep', len: runLen });
+            } else {
+                let gapLen = 0;
+                let j = i + 1;
+                while (j < len && window[j] !== d) { gapLen++; j++; }
+                nonRepRunLengths[d].push(gapLen + 1);
+                regimeSeq[d].push({ type: 'non-rep', len: gapLen + 1 });
+            }
+            i += runLen;
+        }
+
+        // Count global regime shifts (rep↔non-rep at tick level)
+        const tickLabels = new Array(len).fill(0);
+        for (let k = 1; k < len; k++) {
+            tickLabels[k] = window[k] === window[k - 1] ? 1 : 0;
+        }
+        for (let k = 1; k < len; k++) {
+            if (tickLabels[k] !== tickLabels[k - 1]) totalRegimeShifts++;
+        }
+
+        // ── Pass 3: Per-digit statistics ─────────────────────────────────────
+        const repeatProb = new Array(10).fill(0);
+        const nonRepToRepProb = new Array(10).fill(0);
+        const avgNonRepRunLen = new Array(10).fill(0);
+        const medNonRepRunLen = new Array(10).fill(0);
+        const maxNonRepRunLen = new Array(10).fill(0);
+        const currentRegimeArr = new Array(10).fill('non-rep');
+        const currentRegimeDur = new Array(10).fill(0);
+        const nonRepRunExhaust = new Array(10).fill(0);
+        const safetyScore = new Array(10).fill(0);
+
+        const threshold = this.config.repeat_threshold;
+
+        for (let d = 0; d <= 9; d++) {
+            repeatProb[d] = transCount[d] > 0 ? (repeatCount[d] / transCount[d]) * 100 : 0;
+
+            const nrLens = nonRepRunLengths[d];
+            if (nrLens.length > 0) {
+                avgNonRepRunLen[d] = avgArr(nrLens);
+                medNonRepRunLen[d] = medianArr(nrLens);
+                maxNonRepRunLen[d] = Math.max(...nrLens);
+            }
+
+            // P(non-rep → rep)
+            const seq = regimeSeq[d];
+            let nonRepToRep = 0, nonRepTotal = 0;
+            for (let s = 0; s < seq.length - 1; s++) {
+                if (seq[s].type === 'non-rep') {
+                    nonRepTotal++;
+                    if (seq[s + 1].type === 'rep') nonRepToRep++;
+                }
+            }
+            nonRepToRepProb[d] = nonRepTotal > 0 ? (nonRepToRep / nonRepTotal) * 100 : 50;
+
+            // Current regime from tail of regimeSeq
+            if (seq.length > 0) {
+                const last = seq[seq.length - 1];
+                currentRegimeArr[d] = last.type;
+                currentRegimeDur[d] = last.len;
+            }
+
+            // Non-rep run exhaustion
+            const avgLen = avgNonRepRunLen[d] > 0 ? avgNonRepRunLen[d] : 10;
+            if (currentRegimeArr[d] === 'non-rep') {
+                nonRepRunExhaust[d] = Math.min(100, (currentRegimeDur[d] / avgLen) * 100);
+            } else {
+                nonRepRunExhaust[d] = 100;
+            }
+
+            // ── Composite Safety Score (0–100) ──────────────────────────────
+            const rawBelow = repeatProb[d] < threshold;
+            const ewmaBelow = ewma[d] < threshold;
+
+            const rawMargin = rawBelow ? Math.min(30, ((threshold - repeatProb[d]) / threshold) * 30) : 0;
+            const ewmaMargin = ewmaBelow ? Math.min(30, ((threshold - ewma[d]) / threshold) * 30) : 0;
+            const exhaustScore = currentRegimeArr[d] === 'non-rep'
+                ? Math.max(0, 20 - (nonRepRunExhaust[d] / 100) * 20)
+                : 0;
+            const flipScore = Math.max(0, 20 - (nonRepToRepProb[d] / 100) * 20);
+
+            safetyScore[d] = Math.round(rawMargin + ewmaMargin + exhaustScore + flipScore);
+
+            // Hard gates
+            if (currentRegimeArr[d] === 'rep' || !rawBelow || !ewmaBelow) {
+                safetyScore[d] = 0;
+            }
+        }
+
+        // ── Tail analysis ────────────────────────────────────────────────────
+        let tailLen = 1;
+        const tailDig = window[len - 1];
+        while (tailLen < len && window[len - 1 - tailLen] === tailDig) tailLen++;
+        const tailRegime = tailLen >= 2 ? 'rep' : 'non-rep';
+
+        return {
+            repeatProb,
+            ewmaRepeatRate: ewma,
+            currentRegime: currentRegimeArr,
+            currentRegimeDuration: currentRegimeDur,
+            nonRepToRepProb,
+            avgNonRepRunLen,
+            medNonRepRunLen,
+            maxNonRepRunLen,
+            nonRepRunExhaustion: nonRepRunExhaust,
+            safetyScore,
+            repRunLengths,
+            nonRepRunLengths,
+            tailDigit: tailDig,
+            tailLength: tailLen,
+            tailRegime,
+            totalRegimeShifts,
+            digitCounts: appearances,
+        };
+    }
+
+    // ── checkSignal ─────────────────────────────────────────────────────────────
+    // ANALYZING: check if currentDigit meets ALL signal conditions.
+    checkSignal(currentDigit) {
+        this.targetDigit = currentDigit;
+        if (!this.regime) { this.signalActive = false; return; }
+
+        const r = this.regime;
+        const d = currentDigit;
+        this.targetRepeatRate = r.repeatProb[d];
+
+        const inNonRep = r.currentRegime[d] === 'non-rep';
+        const rawOk = r.repeatProb[d] < this.config.repeat_threshold;
+        const ewmaOk = r.ewmaRepeatRate[d] < this.config.repeat_threshold;
+        const safeOk = r.safetyScore[d] >= 50;
+
+        this.signalActive = inNonRep && rawOk && ewmaOk && safeOk;
+    }
+
+    // ── refreshSignalForLockedTarget ─────────────────────────────────────────────
+    // GHOST: re-evaluate signal for locked targetDigit WITHOUT changing it.
+    refreshSignalForLockedTarget() {
+        const d = this.targetDigit;
+        if (d < 0 || !this.regime) return;
+
+        const r = this.regime;
+        this.targetRepeatRate = r.repeatProb[d];
+
+        const inNonRep = r.currentRegime[d] === 'non-rep';
+        const rawOk = r.repeatProb[d] < this.config.repeat_threshold;
+        const ewmaOk = r.ewmaRepeatRate[d] < this.config.repeat_threshold;
+        const safeOk = r.safetyScore[d] >= 50;
+
+        this.signalActive = inNonRep && rawOk && ewmaOk && safeOk;
+    }
+
+    // ── logRegimeAnalysis ────────────────────────────────────────────────────────
+    logRegimeAnalysis(currentDigit) {
+        if (!this.regime) return;
+        const r = this.regime;
+        const threshold = this.config.repeat_threshold;
+
+        // Compact rate display: raw/EWMA(score) for each digit
+        const rateStr = r.repeatProb.map((rp, i) => {
+            const ew = r.ewmaRepeatRate[i].toFixed(0);
+            const raw = rp.toFixed(0);
+            const safe = r.safetyScore[i] >= 50;
+            const isTarget = i === currentDigit;
+            if (isTarget) return (safe ? green : red)(`${i}:${raw}%/${ew}%🄴(${r.safetyScore[i]})`);
+            return dim(`${i}:${raw}%`);
+        }).join(' ');
+
+        logAnalysis(`Rates [raw/EWMA(score)]: [${rateStr}]`);
+
+        // Per-digit regime detail for target digit
+        const d = currentDigit;
+        const nrLens = r.nonRepRunLengths[d];
+        const regStr = r.currentRegime[d] === 'non-rep' ? green('NON-REP') : yellow('REP');
+        const exhaustCol = r.nonRepRunExhaustion[d] > 70 ? red : green;
+        const flipCol = r.nonRepToRepProb[d] > 40 ? red : green;
+
+        logAnalysis(
+            `Digit ${bold(d)} | ` +
+            `Regime: ${regStr} (${r.currentRegimeDuration[d]} ticks) | ` +
+            `Non-rep runs: ${nrLens.length} avg:${r.avgNonRepRunLen[d].toFixed(1)} ` +
+            `med:${r.medNonRepRunLen[d].toFixed(1)} max:${r.maxNonRepRunLen[d]} | ` +
+            `Exhaust: ${exhaustCol(r.nonRepRunExhaustion[d].toFixed(0) + '%')} | ` +
+            `P(flip→rep): ${flipCol(r.nonRepToRepProb[d].toFixed(0) + '%')}`
+        );
+
+        logAnalysis(
+            `Tail: ${bold(r.tailLength + '× digit ' + r.tailDigit)} ` +
+            `(${r.tailRegime === 'non-rep' ? green('✅ non-rep') : yellow('🔁 rep')}) | ` +
+            `Regime shifts: ${dim(r.totalRegimeShifts)} | ` +
+            `Threshold: ${bold(threshold + '%')}`
+        );
+
+        if (this.signalActive) {
+            logAnalysis(green(
+                `✅ SIGNAL — digit ${d} | ` +
+                `raw:${r.repeatProb[d].toFixed(1)}% EWMA:${r.ewmaRepeatRate[d].toFixed(1)}% ` +
+                `score:${r.safetyScore[d]}/100 regime:${r.currentRegime[d]} → DIFFER`
+            ));
+        } else {
+            const reasons = [];
+            if (r.currentRegime[d] !== 'non-rep') reasons.push('in REP regime');
+            if (r.repeatProb[d] >= threshold) reasons.push(`raw ${r.repeatProb[d].toFixed(1)}%≥${threshold}%`);
+            if (r.ewmaRepeatRate[d] >= threshold) reasons.push(`EWMA ${r.ewmaRepeatRate[d].toFixed(1)}%≥${threshold}%`);
+            if (r.safetyScore[d] < 50) reasons.push(`score ${r.safetyScore[d]}<50`);
+            logAnalysis(red(`⛔ NO SIGNAL — digit ${d}: ${reasons.join(', ')} → WAIT`));
+        }
+    }
+
+    // ── WebSocket ────────────────────────────────────────────────────────────────
     connectWS() {
         this.botState = STATE.CONNECTING;
         const url = `${this.config.endpoint}?app_id=${this.config.app_id}`;
@@ -433,7 +701,6 @@ class RomanianGhostBot {
                 setTimeout(() => {
                     if (this.botState !== STATE.STOPPED) {
                         this.isTradeActive = false;
-                        // Queue for next matching tick
                         this.executeTradeFlow(false);
                     }
                 }, 10_000);
@@ -451,7 +718,7 @@ class RomanianGhostBot {
         }
     }
 
-    // ── Auth ───────────────────────────────────────────────────────────────────
+    // ── Auth ─────────────────────────────────────────────────────────────────────
     handleAuth(msg) {
         if (!msg.authorize) return;
         const auth = msg.authorize;
@@ -471,7 +738,6 @@ class RomanianGhostBot {
         this.send({ balance: 1, subscribe: 1 });
         this.send({ transaction: 1, subscribe: 1 });
 
-        // Fetch tick history immediately
         this.botState = STATE.COLLECTING_TICKS;
         logBot(`Fetching last ${bold(this.config.tick_history_size)} ticks for ${bold(this.config.symbol)}...`);
         this.send({
@@ -482,7 +748,7 @@ class RomanianGhostBot {
         });
     }
 
-    // ── Tick History (initial load) ────────────────────────────────────────────
+    // ── Tick History ─────────────────────────────────────────────────────────────
     handleTickHistory(msg) {
         if (!msg.history || !msg.history.prices) {
             logError('Failed to fetch tick history. Falling back to live collection...');
@@ -501,10 +767,10 @@ class RomanianGhostBot {
 
         if (this.tickHistory.length >= this.config.analysis_window) {
             this.botState = STATE.ANALYZING;
-            this.analyzeRepetitionPattern();
+            this.regime = this.analyzeRegime();
             const lastDigit = this.tickHistory[this.tickHistory.length - 1];
             this.checkSignal(lastDigit);
-            this.logRepetitionAnalysis(lastDigit);
+            this.logRegimeAnalysis(lastDigit);
         } else {
             logBot(`Collecting more ticks (${this.tickHistory.length}/${this.config.analysis_window})...`);
         }
@@ -515,168 +781,14 @@ class RomanianGhostBot {
         this.send({ ticks: this.config.symbol, subscribe: 1 });
     }
 
-    // ── Balance ────────────────────────────────────────────────────────────────
+    // ── Balance ───────────────────────────────────────────────────────────────────
     handleBalance(msg) {
         if (msg.balance) {
             this.accountBalance = parseFloat(msg.balance.balance);
         }
     }
 
-    // ════════════════════════════════════════════════════════════════════════════
-    //  REGIME-BASED REPETITION PATTERN ANALYSIS
-    //
-    //  Pass 1: For each digit d, compute:
-    //    repeatProbability(d) = (times d was followed by d) / (total transitions from d) × 100
-    //
-    //  Pass 2: Segment tick history into consecutive runs of the same digit.
-    //    Track repRunLengths[d] and nonRepRunLengths[d] for regime analysis.
-    //
-    //  Tail: Detect the current run at the end of tick history.
-    //    currentRunDigit, currentRunLength, currentRegime ('rep' | 'non-rep')
-    // ════════════════════════════════════════════════════════════════════════════
-    analyzeRepetitionPattern() {
-        const window = this.tickHistory.slice(-this.config.analysis_window);
-        const len = window.length;
-        if (len < 2) return;
-
-        this.repTransitions = new Array(10).fill(0);
-        this.totalTransitions = new Array(10).fill(0);
-        this.repRunLengths = Array.from({ length: 10 }, () => []);
-        this.nonRepRunLengths = Array.from({ length: 10 }, () => []);
-
-        const appearances = new Array(10).fill(0);
-        const repeats = new Array(10).fill(0);
-
-        // Pass 1: transition counts
-        for (let i = 0; i < len; i++) {
-            const d = window[i];
-            appearances[d]++;
-            if (i + 1 < len) {
-                this.totalTransitions[d]++;
-                if (window[i + 1] === d) {
-                    this.repTransitions[d]++;
-                    repeats[d]++;
-                }
-            }
-        }
-
-        this.digitCounts = appearances;
-        for (let d = 0; d <= 9; d++) {
-            this.digitRepeatRates[d] = appearances[d] === 0
-                ? 0
-                : (repeats[d] / appearances[d]) * 100;
-        }
-
-        // Pass 2: regime segmentation
-        let i = 0;
-        while (i < len) {
-            const d = window[i];
-            let runLen = 1;
-            while (i + runLen < len && window[i + runLen] === d) runLen++;
-            if (runLen > 1) this.repRunLengths[d].push(runLen);
-
-            const afterStart = i + runLen;
-            let nonRepLen = 0;
-            let j = afterStart;
-            while (j < len && window[j] !== d) { nonRepLen++; j++; }
-            if (nonRepLen > 0) this.nonRepRunLengths[d].push(nonRepLen);
-
-            i += runLen;
-        }
-
-        // Tail analysis
-        let tailLen = 1;
-        const tailDigit = window[len - 1];
-        while (tailLen < len && window[len - 1 - tailLen] === tailDigit) tailLen++;
-        this.currentRunDigit = tailDigit;
-        this.currentRunLength = tailLen;
-        this.currentRegime = tailLen >= 2 ? 'rep' : 'non-rep';
-    }
-
-    // ── checkSignal ─────────────────────────────────────────────────────────────
-    // ANALYZING state: evaluate whether currentDigit's repeat rate < threshold.
-    // If yes, lock targetDigit = currentDigit and activate signal.
-    // Do NOT call during GHOST_TRADING — targetDigit must stay locked.
-    checkSignal(currentDigit) {
-        this.targetDigit = currentDigit;
-        const tot = this.totalTransitions[currentDigit];
-        const rep = this.repTransitions[currentDigit];
-        const repeatProb = tot > 0 ? (rep / tot) * 100 : this.digitRepeatRates[currentDigit];
-        this.targetRepeatRate = repeatProb;
-        this.signalActive = repeatProb < this.config.repeat_threshold;
-    }
-
-    // ── refreshSignalForLockedTarget ────────────────────────────────────────────
-    // GHOST_TRADING: targetDigit is already locked.
-    // Re-evaluates signalActive WITHOUT changing targetDigit.
-    refreshSignalForLockedTarget() {
-        const d = this.targetDigit;
-        if (d < 0) return;
-        const tot = this.totalTransitions[d];
-        const rep = this.repTransitions[d];
-        const repeatProb = tot > 0 ? (rep / tot) * 100 : this.digitRepeatRates[d];
-        this.targetRepeatRate = repeatProb;
-        this.signalActive = repeatProb < this.config.repeat_threshold;
-    }
-
-    logRepetitionAnalysis(currentDigit) {
-        const threshold = this.config.repeat_threshold;
-
-        const rateStr = this.digitRepeatRates.map((r, i) => {
-            const isTarget = i === currentDigit;
-            const below = r < threshold;
-            if (isTarget) return (below ? green : red)(`${i}:${r.toFixed(0)}%`);
-            return dim(`${i}:${r.toFixed(0)}%`);
-        }).join(' ');
-
-        logAnalysis(`Repeat rates: [${rateStr}]`);
-
-        const d = currentDigit;
-        const avgRepRun = avgRunLength(this.repRunLengths[d]);
-        const avgNonRep = avgRunLength(this.nonRepRunLengths[d]);
-        const repCount = this.repRunLengths[d].length;
-        const nonRepCount = this.nonRepRunLengths[d].length;
-
-        logAnalysis(
-            `Digit ${bold(d)} regime: ` +
-            `Rep runs: ${repCount} (avg ${avgRepRun.toFixed(1)}) | ` +
-            `Non-rep runs: ${nonRepCount} (avg ${avgNonRep.toFixed(1)}) | ` +
-            `Tail: ${this.currentRunLength}× digit ${this.currentRunDigit} ` +
-            `(${this.currentRegime === 'rep' ? yellow('🔁 rep') : green('✅ non-rep')})`
-        );
-
-        if (this.signalActive) {
-            logAnalysis(green(`✅ SIGNAL — digit ${d} repeat prob ${this.targetRepeatRate.toFixed(1)}% < ${threshold}% → DIFFER`));
-        } else {
-            logAnalysis(red(`⛔ NO SIGNAL — digit ${d} repeat prob ${this.targetRepeatRate.toFixed(1)}% ≥ ${threshold}% → WAIT`));
-        }
-    }
-
-    // ════════════════════════════════════════════════════════════════════════════
-    //  LIVE TICK HANDLER
-    //
-    //  TRADE EXECUTION RULES:
-    //  ─────────────────────
-    //  • Signal fires when repeatProbability(currentDigit) < repeat_threshold.
-    //    → targetDigit is locked to currentDigit.
-    //
-    //  • Both ghost and live trades execute ONLY when:
-    //      currentDigit === targetDigit
-    //    (The target digit just appeared, making it unlikely to repeat.)
-    //
-    //  • Ghost counts how many consecutive times targetDigit appeared.
-    //    When count reaches ghost_wins_required on the SAME tick where
-    //    currentDigit === targetDigit → fire LIVE DIFFER trade immediately.
-    //
-    //  • After a LIVE TRADE LOSS → ghostConsecutiveWins = 0, ghostConfirmed = false.
-    //    Bot must re-satisfy ghost phase before next trade (even martingale).
-    //
-    //  Flow per tick:
-    //  1. Push digit to sliding window
-    //  2. Log last 5 digits + current live digit
-    //  3. If pendingTrade → check if currentDigit === targetDigit; fire if yes
-    //  4. Run state machine
-    // ════════════════════════════════════════════════════════════════════════════
+    // ── Live Tick Handler ─────────────────────────────────────────────────────────
     handleTick(msg) {
         if (!msg.tick || this.botState === STATE.STOPPED) return;
 
@@ -691,7 +803,7 @@ class RomanianGhostBot {
 
         const count = this.tickHistory.length;
 
-        // Tick display: last 5 history + current
+        // Tick display: last 5 + current
         const histLen = this.tickHistory.length;
         const last5 = histLen >= 2
             ? this.tickHistory.slice(Math.max(0, histLen - 6), histLen - 1)
@@ -710,63 +822,52 @@ class RomanianGhostBot {
             (stateHint ? `  ${dim(stateHint)}` : '')
         );
 
-        // ── Pending trade: fires only when currentDigit === targetDigit ────────
-        // Used for martingale recovery queued outside tick handler.
+        // ── Pending trade: fires only when currentDigit === targetDigit ─────
         if (this.pendingTrade && !this.isTradeActive && this.botState !== STATE.STOPPED) {
             if (currentDigit === this.targetDigit) {
                 this.pendingTrade = false;
                 this.placeTrade();
                 return;
             } else {
-                logGhost(
-                    dim(`⏳ Waiting for target digit ${bold(this.targetDigit)} — current: ${currentDigit}`)
-                );
+                logGhost(dim(`⏳ Waiting for target digit ${bold(this.targetDigit)} — current: ${currentDigit}`));
                 return;
             }
         }
 
-        // ── State machine ──────────────────────────────────────────────────────
+        // ── State machine ────────────────────────────────────────────────────
         switch (this.botState) {
             case STATE.COLLECTING_TICKS:
                 if (count >= this.config.analysis_window) {
                     this.botState = STATE.ANALYZING;
-                    this.analyzeRepetitionPattern();
+                    this.regime = this.analyzeRegime();
                     this.checkSignal(currentDigit);
-                    this.logRepetitionAnalysis(currentDigit);
+                    this.logRegimeAnalysis(currentDigit);
                     this.processSignal(currentDigit);
                 }
                 break;
 
             case STATE.ANALYZING:
-                this.analyzeRepetitionPattern();
+                this.regime = this.analyzeRegime();
                 this.checkSignal(currentDigit);
-                this.logRepetitionAnalysis(currentDigit);
+                this.logRegimeAnalysis(currentDigit);
                 if (this.signalActive) this.processSignal(currentDigit);
                 break;
 
             case STATE.GHOST_TRADING:
-                // Keep analysis fresh but do NOT change targetDigit — it stays locked
-                this.analyzeRepetitionPattern();
+                // Keep regime fresh but do NOT change targetDigit
+                this.regime = this.analyzeRegime();
                 this.refreshSignalForLockedTarget();
                 this.runGhostCheck(currentDigit);
                 break;
 
             case STATE.WAITING_RESULT:
             case STATE.COOLDOWN:
-                // Passively keep analysis data fresh
-                this.analyzeRepetitionPattern();
+                this.regime = this.analyzeRegime();
                 break;
         }
     }
 
-    // ════════════════════════════════════════════════════════════════════════════
-    //  processSignal
-    //
-    //  Called when signal fires (signalActive = true, targetDigit = currentDigit).
-    //  • Ghost enabled → enter GHOST_TRADING, run ghost check immediately
-    //    (since currentDigit === targetDigit on this signal tick)
-    //  • Ghost disabled → fire trade immediately on this tick
-    // ════════════════════════════════════════════════════════════════════════════
+    // ── processSignal ─────────────────────────────────────────────────────────────
     processSignal(currentDigit) {
         if (!this.signalActive) {
             this.botState = STATE.ANALYZING;
@@ -775,46 +876,39 @@ class RomanianGhostBot {
 
         if (this.config.ghost_enabled && !this.ghostConfirmed) {
             this.botState = STATE.GHOST_TRADING;
+            const r = this.regime;
             logGhost(
-                `👻 Ghost phase started. Target digit locked: ${bold(cyan(this.targetDigit))} ` +
-                `(repeat rate ${this.targetRepeatRate.toFixed(1)}%). ` +
-                `Need ${bold(this.config.ghost_wins_required)} confirmed non-repeat(s) before going LIVE.`
+                `👻 Ghost phase started. Target locked: ${bold(cyan(this.targetDigit))} ` +
+                `(raw:${r ? r.repeatProb[this.targetDigit].toFixed(1) : '?'}% ` +
+                `EWMA:${r ? r.ewmaRepeatRate[this.targetDigit].toFixed(1) : '?'}% ` +
+                `score:${r ? r.safetyScore[this.targetDigit] : '?'}/100). ` +
+                `Need ${bold(this.config.ghost_wins_required)} confirmed non-repeat(s).`
             );
-            // Signal fired because currentDigit === targetDigit (Tick A in two-tick model).
-            // Run ghost check now — handles the first appearance correctly.
             this.runGhostCheck(currentDigit);
         } else {
-            // Ghost disabled or already confirmed — fire immediately
             this.executeTradeFlow(true);
         }
     }
 
-    // ════════════════════════════════════════════════════════════════════════════
-    //  GHOST TRADING
+    // ══════════════════════════════════════════════════════════════════════════
+    //  GHOST TRADING — TWO-TICK MODEL
     //
-    //  Ghost WIN  = currentDigit === targetDigit
-    //    (Target digit appeared → unlikely to repeat → good omen for DIFFER trade)
-    //  Ghost LOSS = currentDigit !== targetDigit
-    //    (Target digit not seen → reset counter, keep waiting)
+    //  Tick A: currentDigit === targetDigit
+    //    → wins+1 >= wins_required → fire LIVE trade NOW
+    //    → else set ghostAwaitingResult = true
     //
-    //  When ghostConsecutiveWins >= ghost_wins_required AND currentDigit === targetDigit:
-    //    → Fire LIVE DIFFER trade on THIS SAME TICK (immediate = true)
+    //  Tick B: (after Tick A)
+    //    → currentDigit !== targetDigit → Ghost WIN (didn't repeat). Wins++.
+    //    → currentDigit === targetDigit → Ghost LOSS (repeated). Wins = 0.
     //
-    //  After ghost LOSS: reset counter, re-check signal for locked digit.
-    //    If signal lost → back to ANALYZING.
-    //
-    //  After LIVE TRADE LOSS: ghostConsecutiveWins = 0, ghostConfirmed = false
-    //    → bot re-enters ghost phase (set in processLoss / decideNextAction)
-    // ════════════════════════════════════════════════════════════════════════════
+    //  Other ticks (currentDigit !== targetDigit, not awaiting result):
+    //    → Skip silently, keep waiting.
+    // ══════════════════════════════════════════════════════════════════════════
     runGhostCheck(currentDigit) {
         if (this.botState !== STATE.GHOST_TRADING) return;
 
-        // If signal is gone for the locked target → pause and re-analyze
         if (!this.signalActive) {
-            logGhost(
-                dim(`⏳ Signal lost for digit ${this.targetDigit} `) +
-                dim(`(${this.targetRepeatRate.toFixed(1)}% ≥ ${this.config.repeat_threshold}%) — re-analyzing...`)
-            );
+            logGhost(dim(`⏳ Signal lost for digit ${this.targetDigit} — re-analyzing...`));
             this.resetGhost();
             this.botState = STATE.ANALYZING;
             return;
@@ -822,33 +916,17 @@ class RomanianGhostBot {
 
         this.ghostRoundsPlayed++;
 
-        // ══════════════════════════════════════════════════════════════════════
-        //  TWO-TICK GHOST LOGIC
-        //
-        //  ghostAwaitingResult = false (normal / watching state):
-        //    • currentDigit === targetDigit → target appeared (Tick A)
-        //        If (wins + 1) >= wins_required → fire LIVE trade NOW on this tick.
-        //        Else → set ghostAwaitingResult = true, wait for Tick B.
-        //    • currentDigit !== targetDigit → skip, keep watching.
-        //
-        //  ghostAwaitingResult = true (Tick B — checking if target repeated):
-        //    • currentDigit !== targetDigit → Ghost WIN (didn't repeat). Wins++.
-        //    • currentDigit === targetDigit → Ghost LOSS (repeated). Wins = 0.
-        // ══════════════════════════════════════════════════════════════════════
-
         if (this.ghostAwaitingResult) {
             // ── Tick B: check if target digit repeated ─────────────────────────
             this.ghostAwaitingResult = false;
 
             if (currentDigit !== this.targetDigit) {
-                // ✅ Ghost WIN — did NOT repeat
                 this.ghostConsecutiveWins++;
                 logGhost(
                     `👻 ${green(`✅ Ghost WIN ${this.ghostConsecutiveWins}/${this.config.ghost_wins_required}`)} — ` +
                     `digit ${bold(cyan(this.targetDigit))} did NOT repeat (next: ${bold(currentDigit)})`
                 );
             } else {
-                // ❌ Ghost LOSS — DID repeat
                 const hadWins = this.ghostConsecutiveWins;
                 this.ghostConsecutiveWins = 0;
                 logGhost(
@@ -858,51 +936,41 @@ class RomanianGhostBot {
             }
 
         } else {
-            // ── Normal state: watching for target digit to appear ──────────────
+            // ── Watching for target digit ──────────────────────────────────────
             if (currentDigit === this.targetDigit) {
-                // Target digit appeared (Tick A)
                 const winsIfConfirmed = this.ghostConsecutiveWins + 1;
 
                 if (winsIfConfirmed >= this.config.ghost_wins_required) {
-                    // ── Wins requirement reached — fire LIVE trade on this tick ────
+                    // Wins requirement reached → fire LIVE trade NOW
                     this.ghostConsecutiveWins = winsIfConfirmed;
                     this.ghostConfirmed = true;
                     logGhost(
                         `👻 Target digit ${bold(cyan(this.targetDigit))} appeared! ` +
-                        green(`✅ Ghost WIN ${this.ghostConsecutiveWins}/${this.config.ghost_wins_required}`) +
-                        ` | repeat rate ${this.targetRepeatRate.toFixed(1)}%`
+                        green(`✅ Ghost WIN ${this.ghostConsecutiveWins}/${this.config.ghost_wins_required}`)
                     );
-                    logGhost(
-                        green(bold(
-                            `✅ Ghost confirmed! ${this.ghostConsecutiveWins}/${this.config.ghost_wins_required} wins reached. ` +
-                            `Executing LIVE DIFFER trade on digit ${this.targetDigit} NOW!`
-                        ))
-                    );
-                    // Fire on THIS SAME TICK
+                    logGhost(green(bold(
+                        `✅ Ghost confirmed! Executing LIVE DIFFER trade on digit ${this.targetDigit} NOW!`
+                    )));
                     this.executeTradeFlow(true);
                 } else {
-                    // ── Target appeared but wins not yet met — wait for Tick B ─────
+                    // Set awaiting — next tick resolves WIN or LOSS
                     this.ghostAwaitingResult = true;
                     logGhost(
                         `👻 Target digit ${bold(cyan(this.targetDigit))} appeared | ` +
-                        `Wins so far: ${this.ghostConsecutiveWins}/${this.config.ghost_wins_required} | ` +
-                        dim(`Waiting for next tick to confirm (checking if it repeats)...`)
+                        `Wins: ${this.ghostConsecutiveWins}/${this.config.ghost_wins_required} | ` +
+                        dim(`Awaiting next tick to confirm non-repeat...`)
                     );
                 }
             } else {
                 // Not the target digit — skip silently
-                logGhost(
-                    dim(`⏳ Digit ${currentDigit} — waiting for target digit ${bold(this.targetDigit)} ` +
-                        `(${this.ghostConsecutiveWins}/${this.config.ghost_wins_required} wins so far)`)
-                );
+                logGhost(dim(
+                    `⏳ Digit ${currentDigit} — waiting for target ${bold(this.targetDigit)} ` +
+                    `(${this.ghostConsecutiveWins}/${this.config.ghost_wins_required})`
+                ));
 
-                // Re-evaluate signal for locked targetDigit
                 this.refreshSignalForLockedTarget();
                 if (!this.signalActive) {
-                    logGhost(
-                        dim(`Locked digit ${this.targetDigit} repeat rate now ` +
-                            `${this.targetRepeatRate.toFixed(1)}% ≥ ${this.config.repeat_threshold}% — signal lost, returning to ANALYZING`)
-                    );
+                    logGhost(dim(`Digit ${this.targetDigit} signal lost — returning to ANALYZING`));
                     this.resetGhost();
                     this.botState = STATE.ANALYZING;
                     return;
@@ -927,14 +995,7 @@ class RomanianGhostBot {
         this.signalActive = false;
     }
 
-    // ════════════════════════════════════════════════════════════════════════════
-    //  TRADE EXECUTION
-    //
-    //  immediate = true  → called from inside handleTick; call placeTrade() NOW
-    //  immediate = false → called outside tick handler; set pendingTrade flag.
-    //                      placeTrade() fires on next tick where
-    //                      currentDigit === targetDigit.
-    // ════════════════════════════════════════════════════════════════════════════
+    // ── Trade Execution ───────────────────────────────────────────────────────────
     executeTradeFlow(immediate) {
         if (this.isTradeActive || this.pendingTrade || this.botState === STATE.STOPPED) return;
 
@@ -964,27 +1025,27 @@ class RomanianGhostBot {
             this.placeTrade();
         } else {
             this.pendingTrade = true;
-            this.botState = STATE.GHOST_TRADING; // stay in ghost state, waiting for target digit
-            logBot(
-                `⚡ Recovery trade queued — waiting for digit ${bold(cyan(this.targetDigit))} ` +
-                `| Stake: ${bold('$' + this.currentStake.toFixed(2))}`
-            );
+            this.botState = STATE.GHOST_TRADING;
+            logBot(`⚡ Recovery trade queued — waiting for digit ${bold(cyan(this.targetDigit))} | Stake: ${bold('$' + this.currentStake.toFixed(2))}`);
         }
     }
 
-    // ── Place Trade ───────────────────────────────────────────────────────────
+    // ── Place Trade ───────────────────────────────────────────────────────────────
     placeTrade() {
         this.isTradeActive = true;
         this.botState = STATE.PLACING_TRADE;
 
         const stepInfo = this.config.martingale_enabled
             ? ` | Mart Step: ${this.martingaleStep}/${this.config.max_martingale_steps}` : '';
+        const r = this.regime;
+        const score = r ? r.safetyScore[this.targetDigit] : 0;
 
         logTrade(
             `🎯 DIFFER from ${bold(cyan(this.targetDigit))} | ` +
             `Stake: ${bold('$' + this.currentStake.toFixed(2))}${stepInfo} | ` +
-            `Repeat Rate: ${this.targetRepeatRate.toFixed(1)}% | ` +
-            `Ghost wins: ${this.ghostConsecutiveWins}/${this.config.ghost_wins_required}`
+            `Rate: ${this.targetRepeatRate.toFixed(1)}% | ` +
+            `Score: ${score}/100 | ` +
+            `Ghost: ${this.ghostConsecutiveWins}/${this.config.ghost_wins_required}`
         );
 
         this.send({
@@ -1005,7 +1066,7 @@ class RomanianGhostBot {
         this.botState = STATE.WAITING_RESULT;
     }
 
-    // ── Buy Response ───────────────────────────────────────────────────────────
+    // ── Buy Response ──────────────────────────────────────────────────────────────
     handleBuy(msg) {
         if (!msg.buy) return;
         this.lastContractId = msg.buy.contract_id;
@@ -1014,7 +1075,7 @@ class RomanianGhostBot {
         logTrade(dim(`Contract ${this.lastContractId} | Cost: $${this.lastBuyPrice.toFixed(2)} | Payout: $${payout.toFixed(2)}`));
     }
 
-    // ── Transaction (Result) ───────────────────────────────────────────────────
+    // ── Transaction (Result) ──────────────────────────────────────────────────────
     handleTransaction(msg) {
         if (!msg.transaction || msg.transaction.action !== 'sell' || !this.isTradeActive) return;
 
@@ -1038,7 +1099,7 @@ class RomanianGhostBot {
         this.decideNextAction();
     }
 
-    // ── Process Win ────────────────────────────────────────────────────────────
+    // ── Process Win ───────────────────────────────────────────────────────────────
     processWin(profit, resultDigit) {
         this.totalWins++;
         this.sessionProfit += profit;
@@ -1058,18 +1119,14 @@ class RomanianGhostBot {
         );
 
         if (resultDigit !== null) {
-            logResult(dim(
-                `  Target digit: ${this.targetDigit} | Result digit: ${resultDigit} | ` +
-                `Ghost wins: ${this.ghostConsecutiveWins}/${this.config.ghost_wins_required}`
-            ));
+            logResult(dim(`  Target: ${this.targetDigit} | Result: ${resultDigit} | Ghost: ${this.ghostConsecutiveWins}/${this.config.ghost_wins_required}`));
         }
 
         this.resetMartingale();
-        // Reset ghost fully after win — next trade cycle starts fresh
         this.resetGhost();
     }
 
-    // ── Process Loss ───────────────────────────────────────────────────────────
+    // ── Process Loss ──────────────────────────────────────────────────────────────
     processLoss(lostAmount, resultDigit) {
         this.totalLosses++;
         this.sessionProfit -= lostAmount;
@@ -1096,26 +1153,24 @@ class RomanianGhostBot {
 
         if (resultDigit !== null) {
             logResult(dim(
-                `  Target digit: ${this.targetDigit} | Result digit: ${resultDigit} ` +
-                `(${resultDigit === this.targetDigit ? red('REPEATED — loss as expected') : green('different — unexpected loss')})`
+                `  Target: ${this.targetDigit} | Result: ${resultDigit} ` +
+                `(${resultDigit === this.targetDigit ? red('REPEATED') : green('different — unexpected loss')})`
             ));
         }
 
-        // ── Reset ghost wins after every LIVE TRADE LOSS ──────────────────────
-        // Ghost counter resets to 0. targetDigit stays locked for martingale
-        // recovery. Bot re-enters GHOST_TRADING and waits for
-        // ghost_wins_required confirmed non-repeats before the next live trade.
+        // Reset ghost after live trade loss — targetDigit stays locked for martingale
         this.ghostConsecutiveWins = 0;
         this.ghostConfirmed = false;
         this.ghostRoundsPlayed = 0;
         this.ghostAwaitingResult = false;
-        logBot(
-            dim(`Ghost wins reset to 0 after live trade loss. `) +
-            dim(`Waiting for digit ${bold(this.targetDigit)} to appear then confirm ${this.config.ghost_wins_required} non-repeat(s) before next trade.`)
-        );
+        logBot(dim(
+            `Ghost wins reset to 0 after live trade loss. ` +
+            `Waiting for digit ${bold(this.targetDigit)} ` +
+            `(${this.config.ghost_wins_required} ghost win(s) required).`
+        ));
     }
 
-    // ── Decide Next Action ─────────────────────────────────────────────────────
+    // ── Decide Next Action ─────────────────────────────────────────────────────────
     decideNextAction() {
         const risk = this.checkRiskLimits();
         if (!risk.canTrade) {
@@ -1124,25 +1179,21 @@ class RomanianGhostBot {
             if (risk.action === 'COOLDOWN') { this.startCooldown(); return; }
         }
 
-        // Martingale recovery: keep targetDigit locked, re-enter ghost phase
         if (this.config.martingale_enabled &&
             this.martingaleStep > 0 &&
             this.martingaleStep < this.config.max_martingale_steps) {
-            logBot(
-                dim(`📈 Martingale recovery step ${this.martingaleStep}/${this.config.max_martingale_steps} — `) +
-                dim(`going through ghost phase again (need ${this.config.ghost_wins_required} ghost win(s) on digit ${this.targetDigit})...`)
-            );
+            logBot(dim(
+                `📈 Martingale recovery step ${this.martingaleStep}/${this.config.max_martingale_steps} — ` +
+                `going through ghost phase again (need ${this.config.ghost_wins_required} ghost win(s) on digit ${this.targetDigit})...`
+            ));
             if (this.config.ghost_enabled) {
-                // Re-enter ghost trading — targetDigit stays locked, ghost wins = 0
                 this.botState = STATE.GHOST_TRADING;
             } else {
-                // Ghost disabled: queue trade, fires when targetDigit appears
                 this.executeTradeFlow(false);
             }
             return;
         }
 
-        // Max martingale steps → cooldown
         if (this.config.martingale_enabled &&
             this.martingaleStep >= this.config.max_martingale_steps) {
             logRisk(`🛑 Max Martingale steps (${this.config.max_martingale_steps}) reached!`);
@@ -1151,16 +1202,14 @@ class RomanianGhostBot {
             return;
         }
 
-        // Normal cycle after win or no-martingale loss: back to analyzing
         this.botState = STATE.ANALYZING;
     }
 
-    // ── Stake Calculation ──────────────────────────────────────────────────────
+    // ── Stake Calculation ──────────────────────────────────────────────────────────
     calculateStake() {
         if (!this.config.martingale_enabled || this.martingaleStep === 0) {
             return this.config.base_stake;
         }
-        // base_stake × multiplier^step
         const raw = this.config.base_stake * Math.pow(this.config.martingale_multiplier, this.martingaleStep);
         const calc = Math.round(raw * 100) / 100;
         const final = Math.min(calc, this.config.max_stake);
@@ -1172,7 +1221,7 @@ class RomanianGhostBot {
         return final;
     }
 
-    // ── Risk Limits ────────────────────────────────────────────────────────────
+    // ── Risk Limits ────────────────────────────────────────────────────────────────
     checkRiskLimits() {
         if (this.sessionProfit >= this.config.take_profit)
             return { canTrade: false, reason: `🎯 Take profit reached! P/L: ${formatMoney(this.sessionProfit)}`, action: 'STOP' };
@@ -1199,14 +1248,14 @@ class RomanianGhostBot {
         return { canTrade: true };
     }
 
-    // ── Martingale Reset ───────────────────────────────────────────────────────
+    // ── Martingale Reset ───────────────────────────────────────────────────────────
     resetMartingale() {
         this.martingaleStep = 0;
         this.totalMartingaleLoss = 0;
         this.currentStake = this.config.base_stake;
     }
 
-    // ── Cooldown ───────────────────────────────────────────────────────────────
+    // ── Cooldown ───────────────────────────────────────────────────────────────────
     startCooldown() {
         this.botState = STATE.COOLDOWN;
         this.resetMartingale();
@@ -1222,7 +1271,7 @@ class RomanianGhostBot {
         }, this.config.cooldown_after_max_loss);
     }
 
-    // ── Stop ───────────────────────────────────────────────────────────────────
+    // ── Stop ───────────────────────────────────────────────────────────────────────
     stop(reason = 'User stopped') {
         this.botState = STATE.STOPPED;
         logBot(`🛑 ${bold('Stopping bot...')} Reason: ${reason}`);
@@ -1244,7 +1293,7 @@ class RomanianGhostBot {
         setTimeout(() => process.exit(0), 1200);
     }
 
-    // ── Final Stats ────────────────────────────────────────────────────────────
+    // ── Final Stats ────────────────────────────────────────────────────────────────
     printFinalStats() {
         const dur = Date.now() - this.sessionStartTime;
         const wr = this.totalTrades > 0
@@ -1282,7 +1331,8 @@ class RomanianGhostBot {
 function printHelp() {
     console.log(`
 ${bold(cyan('Romanian Ghost Bot — Node.js CLI'))}
-${dim('Deriv Digit Differ — Repetition Pattern Strategy')}
+${dim('Deriv Digit Differ — Advanced Regime Detection Strategy')}
+${dim('HMM-inspired + EWMA + Transition Matrix + Composite Safety Score')}
 
 ${bold('Usage:')}
   node romanian-ghost-bot.js ${cyan('--token')} YOUR_API_TOKEN [options]
@@ -1295,60 +1345,70 @@ ${bold('Connection:')}
 
 ${bold('Trading:')}
   ${cyan('--symbol')}        R_100         Trading symbol
-                              ${dim('R_10, R_25, R_50, R_75, R_100')}
-                              ${dim('1HZ10V, 1HZ25V, 1HZ50V, 1HZ75V, 1HZ100V')}
+                            ${dim('R_10, R_25, R_50, R_75, R_100')}
+                            ${dim('1HZ10V, 1HZ25V, 1HZ50V, 1HZ75V, 1HZ100V')}
   ${cyan('--stake')}         0.35          Base stake amount ($, min 0.35)
 
 ${bold('Analysis:')}
   ${cyan('--history')}       300           Tick history window size (sliding)
   ${cyan('--window')}        300           Analysis window (must be ≤ history)
   ${cyan('--threshold')}     10            Repeat probability threshold (%)
-                              ${dim('Trade when digit repeat % is below this value')}
-                              ${dim('Lower = stricter signal')}
+                            ${dim('Signal fires when:')}
+                            ${dim('  • Raw transition prob < threshold')}
+                            ${dim('  • EWMA repeat rate < threshold')}
+                            ${dim('  • Current regime = non-rep')}
+                            ${dim('  • Composite safety score ≥ 50/100')}
 
 ${bold('Ghost Trading:')}
   ${cyan('--no-ghost')}                    Disable ghost trading (default: enabled)
   ${cyan('--ghost-wins')}    3             Wins required before going LIVE
-                              ${dim('Target digit must appear N consecutive times')}
-                              ${dim('After any live trade loss, ghost resets to 0')}
+                            ${dim('Two-tick model:')}
+                            ${dim('  Tick A: target digit appears → trigger')}
+                            ${dim('  Tick B: if next ≠ target → ghost WIN')}
+                            ${dim('         if next = target → ghost LOSS (reset)')}
+                            ${dim('  When wins = required → LIVE trade fires on Tick A')}
+                            ${dim('  After LIVE trade loss → ghost wins reset to 0')}
   ${cyan('--ghost-max')}     500           Max ghost rounds before re-analyzing
 
 ${bold('Martingale:')}
   ${cyan('--no-mart')}                     Disable Martingale (default: enabled)
   ${cyan('--mart-steps')}    3             Max Martingale steps
-  ${cyan('--mart-mult')}     11            Martingale multiplier (stake × mult^step)
+  ${cyan('--mart-mult')}     11            Multiplier: stake × mult^step
 
 ${bold('Risk Management:')}
   ${cyan('--tp')}            10            Take profit ($)
   ${cyan('--sl')}            50            Stop loss ($)
   ${cyan('--max-stake')}     500           Maximum allowed stake ($)
-  ${cyan('--delay')}         1500          Delay between trades (ms, for non-immediate)
   ${cyan('--cooldown')}      30000         Cooldown after max Martingale (ms)
 
 ${bold('Examples:')}
   ${dim('# Basic usage')}
   node romanian-ghost-bot.js --token YOUR_TOKEN
 
-  ${dim('# Custom symbol and stake')}
-  node romanian-ghost-bot.js --token YOUR_TOKEN --symbol R_50 --stake 0.50 --tp 20 --sl 30
-
   ${dim('# Strict signal (5% threshold), 5 ghost wins required')}
   node romanian-ghost-bot.js --token YOUR_TOKEN --threshold 5 --ghost-wins 5
+
+  ${dim('# Custom symbol, larger history window')}
+  node romanian-ghost-bot.js --token YOUR_TOKEN --symbol R_50 --history 500 --window 500
 
   ${dim('# No ghost, no martingale (pure signal trading)')}
   node romanian-ghost-bot.js --token YOUR_TOKEN --no-ghost --no-mart
 
-  ${dim('# Large history window for better analysis')}
-  node romanian-ghost-bot.js --token YOUR_TOKEN --history 500 --window 500 --threshold 8
-
-  ${dim('# Aggressive martingale')}
+  ${dim('# Aggressive martingale recovery')}
   node romanian-ghost-bot.js --token YOUR_TOKEN --mart-steps 5 --mart-mult 3 --max-stake 1000
+
+${bold('Regime Detection:')}
+  The bot uses 4 signals combined into a safety score (0-100):
+  1. ${bold('Raw transition prob')}:  P(d→d) from full history (up to 30 pts)
+  2. ${bold('EWMA repeat rate')}:     α=0.15 weighting (~13-tick half-life) (up to 30 pts)
+  3. ${bold('Non-rep exhaustion')}:   How far into the non-rep run duration (up to 20 pts)
+  4. ${bold('Flip probability')}:     P(non-rep→rep) from regime sequences (up to 20 pts)
+  Score ≥ 50 = valid signal. Hard gates: must be non-rep regime + both rates below threshold.
 
 ${bold('Notes:')}
   • Bot fetches ${bold('tick history')} on startup (no waiting for live ticks to fill window)
-  • Trades execute on the ${bold('current live tick')} — zero delay when signal fires
-  • After a live trade loss, ${bold('ghost wins reset to 0')} — must re-accumulate before next trade
-  • Use ${bold('Ctrl+C')} to stop the bot gracefully (prints session summary)
+  • Trades execute ${bold('immediately')} on the current tick when signal+ghost fire together
+  • Use ${bold('Ctrl+C')} to stop gracefully (prints session summary)
   • Token requires: Read, Trade, Payments permissions
   • Get token at: ${cyan('https://app.deriv.com/account/api-token')}
 `);
@@ -1374,7 +1434,6 @@ ${bold('Notes:')}
 
     const bot = new RomanianGhostBot(config);
 
-    // Graceful shutdown
     process.on('SIGINT', () => { console.log(''); bot.stop('SIGINT (Ctrl+C)'); });
     process.on('SIGTERM', () => { bot.stop('SIGTERM'); });
     process.on('uncaughtException', e => {
