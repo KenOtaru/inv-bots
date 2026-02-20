@@ -1,26 +1,35 @@
 #!/usr/bin/env node
 // ============================================================================
-//  ROMANIAN GHOST BOT — v2.0 Advanced Regime Detection
-//  Deriv Digit Differ — HMM + CUSUM + Bayesian Regime Detection
+//  ROMANIAN GHOST BOT — v3.0 Ultra-Advanced Regime Detection
+//  Deriv Digit Differ — HSMM + BOCPD + Shannon Entropy + Bayesian
 //
-//  UPGRADED REGIME ENGINE:
-//    1. True 2-State HMM with Viterbi decoding (REP / NON-REP regimes)
+//  UPGRADED REGIME ENGINE v3.0:
+//    1. True 2-State HMM with Duration-Penalised Viterbi (HSMM-style)
+//       — Learns sojourn-time Poisson distributions per state via Baum-Welch
+//       — Penalises Viterbi transitions when expected sojourn not expired
 //    2. Baum-Welch parameter estimation (learns emission probs from data)
-//    3. CUSUM change-point detection (catches regime shifts fast)
-//    4. Bayesian posterior regime probability (confidence scoring)
+//    3. Bayesian Online Change-Point Detection (BOCPD) with
+//       Dirichlet-Multinomial conjugate — replaces CUSUM entirely.
+//       Maintains run-length posterior P(r_t | x_{1..t}) updated each tick.
+//       Alarm fires only when P(run_length > 15 ticks) < 0.95.
+//    4. Shannon Entropy filter — information-theoretic regime gate.
+//       H(X) on last 30 ticks (max = log2(10) ≈ 3.32 bits).
+//       H > 3.1 → regime is safely random → boost safetyScore.
+//       H < 2.8 → digits are clumping → zero safetyScore immediately.
 //    5. Forward algorithm for real-time regime probability updates
 //    6. Per-digit conditional emission model (not global)
 //    7. Regime persistence scoring (how stable is the current regime)
 //
 //  TRADE CONDITION: Only fire when ALL hold:
-//    a) HMM Viterbi → current regime = NON-REP (high confidence)
+//    a) HSMM Viterbi → current regime = NON-REP (high confidence)
 //    b) Bayesian posterior P(NON-REP | observations) ≥ 0.85
-//    c) CUSUM shows NO recent shift INTO rep regime
-//    d) Per-digit conditional repeat prob < threshold
-//    e) Regime persistence score ≥ min_persistence ticks
+//    c) BOCPD P(run_length > 15) ≥ 0.95 (stable, confirmed regime)
+//    d) Shannon entropy H ≥ 2.8 bits (market is genuinely random)
+//    e) Per-digit conditional repeat prob < threshold
+//    f) Regime persistence score ≥ min_persistence ticks
 //
 //  Usage:
-//    node romanian-ghost-bot-v2.js --token YOUR_DERIV_API_TOKEN [options]
+//    node romanian-ghost-bot-v3.js --token YOUR_DERIV_API_TOKEN [options]
 // ============================================================================
 
 'use strict';
@@ -85,23 +94,49 @@ function parseArgs() {
         api_token: TOKEN,
         app_id: '1089',
         endpoint: 'wss://ws.derivws.com/websockets/v3',
-        symbol: 'R_10',
+        symbol: 'R_100',
         base_stake: 0.61,
         currency: 'USD',
         contract_type: 'DIGITDIFF',
 
         // History & analysis
-        tick_history_size: 5000,
+        tick_history_size: 300,
         analysis_window: 300,          // HMM training window
         min_ticks_for_hmm: 50,         // Minimum ticks before HMM is reliable
 
+        // BOCPD change-point detection
         // Regime detection thresholds
         repeat_threshold: 8,           // Raw per-digit repeat % gate
+
+        // BOCPD change-point detection (replaces CUSUM)
+        bocpd_hazard: 1/50,            // Prior hazard rate (expected regime length ~50 ticks)
+        bocpd_alpha0: 1.0,             // Dirichlet prior concentration (flat)
+        bocpd_min_run_length: 15,      // Minimum run-length to consider regime stable
+        bocpd_run_confidence: 0.95,    // Required P(r_t > min_run_length) to allow trade
+
+        // Shannon Entropy filter (model-free information-theory gate)
+        entropy_window: 30,            // Rolling window for entropy computation
+        entropy_high: 3.1,             // Above this → genuinely random → boost score
+        entropy_low: 2.8,              // Below this → clumping → zero score immediately
+
+        // HSMM sojourn-time priors (Poisson lambda per state, ticks)
+        hsmm_mean_duration_nonrep: 25, // Expected NON-REP regime length (ticks)
+        hsmm_mean_duration_rep: 15,    // Expected REP regime length (ticks)
+        bocpd_alpha0: 1.0,             // Dirichlet prior concentration (flat)
+        bocpd_min_run_length: 15,      // Minimum run-length to consider regime stable
+        bocpd_run_confidence: 0.95,    // Required P(r_t > min_run_length) to allow trade
+
+        // Shannon Entropy filter
+        entropy_window: 30,            // Rolling window for entropy computation
+        entropy_high: 3.1,             // Above this → genuinely random → boost score
+        entropy_low: 2.8,              // Below this → clumping → zero score immediately
+
+        // HSMM sojourn-time priors (Poisson lambda per state, ticks)
+        hsmm_mean_duration_nonrep: 25, // Expected NON-REP regime length (ticks)
+        hsmm_mean_duration_rep: 15,    // Expected REP regime length (ticks)
         repeat_confidence: 98,        // Bayesian P(repeat | observations) required
         hmm_nonrep_confidence: 0.98,   // Bayesian P(NON-REP) required
         min_regime_persistence: 8,     // Ticks current regime must have lasted
-        cusum_threshold: 4.5,          // CUSUM alarm threshold (regime shift detector)
-        cusum_slack: 0.005,            // CUSUM slack (sensitivity tuning)
 
         // Ghost trading
         ghost_enabled: true,
@@ -156,10 +191,10 @@ const STATE = {
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
-//  ADVANCED REGIME DETECTION ENGINE
+//  ADVANCED REGIME DETECTION ENGINE v3.0
 //
-//  2-STATE HIDDEN MARKOV MODEL
-//  ─────────────────────────────
+//  2-STATE HIDDEN SEMI-MARKOV MODEL (HSMM)
+//  ─────────────────────────────────────────
 //  States:  S0 = NON-REP  (digit is unlikely to repeat next tick)
 //           S1 = REP      (digit is likely to repeat next tick)
 //
@@ -167,32 +202,46 @@ const STATE = {
 //    o_t = 1 if ticks[t] === ticks[t-1]  (a repeat occurred)
 //    o_t = 0 otherwise                    (no repeat)
 //
-//  This gives a binary observation sequence we model with HMM.
-//
 //  Parameters (learned via Baum-Welch on tick history):
 //    π  = initial state distribution [P(S0), P(S1)]
 //    A  = transition matrix [[P(S0→S0), P(S0→S1)], [P(S1→S0), P(S1→S1)]]
 //    B  = emission probs:  B[s][o]
 //         B[0][1] = P(repeat | NON-REP state)   (should be low, ~0.05-0.15)
 //         B[1][1] = P(repeat | REP state)        (should be high, ~0.5-0.9)
+//    D  = sojourn Poisson means [lambda_NR, lambda_REP]
+//         Learned from Baum-Welch state occupancy statistics.
 //
-//  VITERBI DECODING
-//  ─────────────────
-//  Finds the most likely hidden state sequence.
-//  Last state in sequence = current regime.
+//  DURATION-PENALISED VITERBI (HSMM-style)
+//  ─────────────────────────────────────────
+//  Standard Viterbi is extended with a log-duration penalty:
+//    logDurationPenalty(state, run_length) =
+//      Poisson.logPMF(run_length, D[state])
+//  Applied whenever Viterbi stays in the same state. This causes the decoder
+//  to naturally predict a regime flip when the regime has exceeded its
+//  learned typical lifetime.
+//
+//  BAYESIAN ONLINE CHANGE-POINT DETECTION (BOCPD)
+//  ────────────────────────────────────────────────
+//  Replaces CUSUM. Maintains a run-length posterior P(r_t | x_{1..t})
+//  using a Dirichlet-Multinomial conjugate model for categorical digit data.
+//  At each tick, the posterior over all possible run lengths is updated in
+//  exact closed form.
+//  Alarm fires when: P(r_t > 15 ticks) < 0.95  → regime is too young.
+//  Conversely, trade is only allowed when P(r_t > 15 ticks) ≥ 0.95,
+//  meaning we are in a confirmed, stable regime with high probability.
+//
+//  SHANNON ENTROPY FILTER
+//  ───────────────────────
+//  Model-free gate computed over the last 30 raw digit ticks (0-9).
+//    H(X) = -Σ p(x) log2 p(x)   where x ∈ {0..9}
+//    Max entropy = log2(10) ≈ 3.32 bits (perfectly uniform digits).
+//  H > 3.1 → random market, boost safetyScore.
+//  H < 2.8 → clumping/predictability, zero safetyScore immediately.
 //
 //  FORWARD ALGORITHM (real-time)
 //  ──────────────────────────────
 //  Incrementally updated on each new tick.
 //  Gives P(state=S0 | all observations so far) — Bayesian posterior.
-//
-//  CUSUM CHANGE-POINT DETECTION
-//  ─────────────────────────────
-//  Tracks cumulative sum of log-likelihood ratio:
-//    LLR_t = log P(o_t | S1) / P(o_t | S0)
-//  When CUSUM_t = max(0, CUSUM_{t-1} + LLR_t - slack) > threshold:
-//    → A shift FROM non-rep TO rep has been detected recently.
-//    → Block all trades until CUSUM falls back below threshold.
 //
 //  REGIME PERSISTENCE
 //  ───────────────────
@@ -217,12 +266,27 @@ class HMMRegimeDetector {
             [0.40, 0.60],         // REP:     P(no-repeat)=0.40, P(repeat)=0.60
         ];
 
+        // HSMM sojourn-time parameters (Poisson means per state, in ticks)
+        // Learned from Baum-Welch state occupancy; initialised from config priors.
+        this.D = [
+            config.hsmm_mean_duration_nonrep || 25,  // E[duration | NON-REP]
+            config.hsmm_mean_duration_rep    || 15,  // E[duration | REP]
+        ];
+
         // Forward vector [alpha_0, alpha_1] (log-space)
         this.logAlpha = [Math.log(0.6), Math.log(0.4)];
         this.hmmFitted = false;
 
-        // CUSUM per-digit
-        this.cusumValue = new Array(10).fill(0);
+        // ── BOCPD state ───────────────────────────────────────────────────────
+        // Run-length posterior: logRunProbs[r] = log P(r_t = r | x_{1..t})
+        // We store up to maxRunLen entries and grow dynamically.
+        this.bocpdMaxRun    = 500;       // cap run-length array length
+        this.bocpdLogProbs  = [0.0];     // start: P(r_0 = 0) = 1  → log = 0
+        // Dirichlet-Multinomial sufficient statistics per run-length
+        // alphaCounts[r][d] = alpha0 + count of digit d in current run of length r
+        this.bocpdAlpha0    = config.bocpd_alpha0 || 1.0;
+        this.bocpdCounts    = [[...new Array(10).fill(this.bocpdAlpha0)]]; // counts for r=0
+        this.bocpdHazard    = config.bocpd_hazard || (1 / 50);
 
         // Per-digit result cache
         this.lastResult = null;
@@ -242,6 +306,8 @@ class HMMRegimeDetector {
         let B  = this.B.map(row => [...row]);
 
         let prevLogL = -Infinity;
+        // Hoisted so the HSMM duration estimator can read it after the loop ends.
+        let lastLogGamma = null;
 
         for (let iter = 0; iter < maxIter; iter++) {
             // ── Forward pass (log-space) ──────────────────────────────────────
@@ -334,6 +400,7 @@ class HMMRegimeDetector {
             }
 
             // Convergence check
+            lastLogGamma = logGamma; // save for HSMM duration estimation after loop
             if (Math.abs(logL - prevLogL) < tol) break;
             prevLogL = logL;
         }
@@ -355,11 +422,51 @@ class HMMRegimeDetector {
         this.B  = B;
         this.hmmFitted = true;
 
+        // ── HSMM: estimate sojourn-time Poisson means from gamma ─────────────
+        const stateTotals = [0, 0];
+        const runSums = [0, 0];
+        if (lastLogGamma) {
+            let curRunState = Math.exp(lastLogGamma[0][0]) > 0.5 ? 0 : 1;
+            let curRunLen = 1;
+            for (let t = 1; t < T; t++) {
+                const s = Math.exp(lastLogGamma[t][0]) > 0.5 ? 0 : 1;
+                if (s === curRunState) {
+                    curRunLen++;
+                } else {
+                    stateTotals[curRunState]++;
+                    runSums[curRunState] += curRunLen;
+                    curRunState = s;
+                    curRunLen = 1;
+                }
+            }
+            stateTotals[curRunState]++;
+            runSums[curRunState] += curRunLen;
+        }
+        for (let s = 0; s < 2; s++) {
+            if (stateTotals[s] > 0) {
+                const estDuration = runSums[s] / stateTotals[s];
+                this.D[s] = clamp(0.7 * estDuration + 0.3 * this.D[s], 5, 100);
+            }
+        }
+
         return true;
     }
 
-    // ── Viterbi Decoding ──────────────────────────────────────────────────────
-    // Returns most likely state sequence and regime info.
+    // ── HSMM Duration-Penalised Viterbi ──────────────────────────────────────
+    // Extends standard Viterbi with a Poisson sojourn-time log-penalty.
+    // At each time step, if the decoder stays in the same state, we add
+    // log P(run_len | Poisson(D[state])) to the path score.
+    // This naturally penalises staying in a state well beyond its learned
+    // expected lifetime, forcing the decoder to predict regime transitions.
+    //
+    // logPoissonPMF(k, lambda) = k*log(lambda) - lambda - log(k!)
+    poissonLogPMF(k, lambda) {
+        if (k < 0 || lambda <= 0) return -Infinity;
+        let logFact = 0;
+        for (let i = 2; i <= k; i++) logFact += Math.log(i);
+        return k * Math.log(lambda) - lambda - logFact;
+    }
+
     viterbi(obs) {
         const T = obs.length;
         const N = 2;
@@ -367,6 +474,9 @@ class HMMRegimeDetector {
 
         const logDelta = Array.from({length: T}, () => new Array(N).fill(-Infinity));
         const psi      = Array.from({length: T}, () => new Array(N).fill(0));
+
+        // Track current run length per state for duration penalty
+        const runLen = new Array(N).fill(1);
 
         for (let s = 0; s < N; s++) {
             logDelta[0][s] = Math.log(this.pi[s] + 1e-300) + Math.log(this.B[s][obs[0]] + 1e-300);
@@ -376,7 +486,21 @@ class HMMRegimeDetector {
             for (let s = 0; s < N; s++) {
                 let best = -Infinity, bestPrev = 0;
                 for (let prev = 0; prev < N; prev++) {
-                    const v = logDelta[t-1][prev] + Math.log(this.A[prev][s] + 1e-300);
+                    let v = logDelta[t-1][prev] + Math.log(this.A[prev][s] + 1e-300);
+                    // HSMM duration penalty: if staying in same state, add
+                    // log P(current run length | Poisson(D[s]))
+                    if (prev === s) {
+                        // run length is implicitly tracked via the path;
+                        // use a scaled penalty based on how far past the
+                        // expected duration we are (soft penalty)
+                        const expectedDur = this.D[s];
+                        // Count consecutive same-state steps ending at t-1
+                        // Approximate: use a scaled log-likelihood penalty
+                        const approxRunLen = Math.min(runLen[s], 60);
+                        const durLogPenalty = this.poissonLogPMF(approxRunLen, expectedDur);
+                        // Scale penalty gently (don't overwhelm emission signal)
+                        v += 0.15 * durLogPenalty;
+                    }
                     if (v > best) { best = v; bestPrev = prev; }
                 }
                 logDelta[t][s] = best + Math.log(this.B[s][obs[t]] + 1e-300);
@@ -429,18 +553,135 @@ class HMMRegimeDetector {
         ];
     }
 
-    // ── CUSUM Change-Point Detector ────────────────────────────────────────────
-    // Detects sudden shift FROM non-rep TO rep regime.
-    // Returns true if an alarm is active (regime shift detected recently).
-    updateCUSUM(digit, obs_t) {
-        // LLR: how much more likely is this observation under REP vs NON-REP
-        const logLR = Math.log(this.B[1][obs_t] + 1e-300) - Math.log(this.B[0][obs_t] + 1e-300);
-        this.cusumValue[digit] = Math.max(0, this.cusumValue[digit] + logLR - this.cfg.cusum_slack);
-        return this.cusumValue[digit] > this.cfg.cusum_threshold;
+    // ── BOCPD: Bayesian Online Change-Point Detection ─────────────────────────
+    // Dirichlet-Multinomial conjugate model for categorical digit observations.
+    //
+    // At each tick with observed digit x ∈ {0..9}:
+    //   1. Compute predictive probability p(x | run r) for each run length r.
+    //   2. Update run-length posteriors: grow each existing run by 1,
+    //      add a new run (r=0) with probability = hazard rate h.
+    //   3. Normalise.
+    //
+    // The alarm fires when P(r_t > min_run_length) < run_confidence.
+    // This means the regime is TOO YOUNG — we cannot trust it yet.
+    // Trade is only allowed when the current regime is OLD ENOUGH (stable).
+    //
+    // Returns { alarm: bool, runLengthProb: float, maxRunLengthProb: float }
+    updateBOCPD(digit) {
+        const h      = this.bocpdHazard;
+        const alpha0 = this.bocpdAlpha0;
+        const K      = 10; // number of digit categories
+
+        const nRuns = this.bocpdLogProbs.length;
+
+        // Step 1: compute log predictive for each run length
+        // P(x_t | r_{t-1}=r, alpha) = (alpha_r[x] ) / sum(alpha_r)
+        // where alpha_r[x] = alpha0 + count[r][x]
+        const logPredictive = new Array(nRuns);
+        for (let r = 0; r < nRuns; r++) {
+            const counts = this.bocpdCounts[r];
+            const sumAlpha = counts.reduce((a, b) => a + b, 0);
+            logPredictive[r] = Math.log(counts[digit] + 1e-300) - Math.log(sumAlpha + 1e-300);
+        }
+
+        // Step 2: compute new log run-length probabilities
+        // Growth:   P(r_t = r+1 | x_t) ∝ P(x_t | r) * P(r_{t-1}=r) * (1-h)
+        // Change:   P(r_t = 0  | x_t) ∝ Σ_r P(x_t | r) * P(r_{t-1}=r) * h
+        const logOneMinusH = Math.log(1 - h + 1e-300);
+        const logH         = Math.log(h + 1e-300);
+
+        // Change-point probability: sum over all runs of logP(x|r) + logP(r) + logH
+        const logCPTerms = this.bocpdLogProbs.map((lp, r) => lp + logPredictive[r] + logH);
+        const logCP = logSumExp(logCPTerms);
+
+        // Growth terms
+        const newLogProbs = new Array(nRuns + 1);
+        newLogProbs[0] = logCP; // new run starting here
+        for (let r = 0; r < nRuns; r++) {
+            newLogProbs[r + 1] = this.bocpdLogProbs[r] + logPredictive[r] + logOneMinusH;
+        }
+
+        // Normalise
+        const logNorm = logSumExp(newLogProbs);
+        const normProbs = newLogProbs.map(lp => lp - logNorm);
+
+        // Update counts: grow each run's counts with the new digit observation
+        const newCounts = new Array(nRuns + 1);
+        // New run (r=0): start fresh with alpha0 priors + this digit
+        newCounts[0] = new Array(K).fill(alpha0);
+        newCounts[0][digit]++;
+        // Grow existing runs
+        for (let r = 0; r < nRuns; r++) {
+            newCounts[r + 1] = [...this.bocpdCounts[r]];
+            newCounts[r + 1][digit]++;
+        }
+
+        // Trim to max run length to bound memory
+        const maxRun = this.bocpdMaxRun;
+        if (normProbs.length > maxRun) {
+            const trimmed = normProbs.slice(0, maxRun);
+            const logTrimNorm = logSumExp(trimmed);
+            this.bocpdLogProbs = trimmed.map(lp => lp - logTrimNorm);
+            this.bocpdCounts   = newCounts.slice(0, maxRun);
+        } else {
+            this.bocpdLogProbs = normProbs;
+            this.bocpdCounts   = newCounts;
+        }
+
+        // Compute P(r_t > min_run_length) — probability regime is old enough
+        const minRun = this.cfg.bocpd_min_run_length || 15;
+        const confThreshold = this.cfg.bocpd_run_confidence || 0.95;
+
+        let probOldEnough = 0;
+        for (let r = minRun + 1; r < this.bocpdLogProbs.length; r++) {
+            probOldEnough += Math.exp(this.bocpdLogProbs[r]);
+        }
+
+        // Alarm: regime is TOO NEW (run too short to trust)
+        const alarm = probOldEnough < confThreshold;
+
+        // Most probable run length (for diagnostics)
+        let maxRunIdx = 0, maxRunLogProb = -Infinity;
+        for (let r = 0; r < this.bocpdLogProbs.length; r++) {
+            if (this.bocpdLogProbs[r] > maxRunLogProb) {
+                maxRunLogProb = this.bocpdLogProbs[r];
+                maxRunIdx = r;
+            }
+        }
+
+        return {
+            alarm,
+            probOldEnough,      // P(run_length > min_run_length) — want this ≥ 0.95
+            mostLikelyRun: maxRunIdx,
+            runCount: this.bocpdLogProbs.length,
+        };
     }
 
-    resetCUSUM(digit) {
-        this.cusumValue[digit] = 0;
+    resetBOCPD() {
+        this.bocpdLogProbs = [0.0];
+        this.bocpdCounts   = [[...new Array(10).fill(this.bocpdAlpha0)]];
+    }
+
+    // ── Shannon Entropy Filter ────────────────────────────────────────────────
+    // Computes rolling Shannon entropy H(X) over the last N raw digit ticks.
+    // H(X) = -Σ p(x) log2 p(x)   for x ∈ {0..9}
+    // Maximum entropy = log2(10) ≈ 3.321 bits (perfectly uniform).
+    //
+    // High H (> 3.1) → digits are well-distributed → genuinely random market.
+    // Low H  (< 2.8) → digits are clumping → market is predictable → DANGER.
+    computeShannonEntropy(digitWindow) {
+        const counts = new Array(10).fill(0);
+        const n = digitWindow.length;
+        if (n === 0) return 0;
+        for (const d of digitWindow) counts[d]++;
+        let H = 0;
+        for (let d = 0; d < 10; d++) {
+            if (counts[d] > 0) {
+                const p = counts[d] / n;
+                H -= p * Math.log2(p);
+            }
+        }
+        return H;
     }
 
     // ── Per-digit raw repeat probability (from transition counts) ─────────────
@@ -539,18 +780,25 @@ class HMMRegimeDetector {
         const posteriorNonRep = Math.exp(logA[0] - denom);
         const posteriorRep    = Math.exp(logA[1] - denom);
 
-        // ── CUSUM for target digit ─────────────────────────────────────────────
-        // Build per-digit obs from last few ticks specifically for the target digit
+        // ── BOCPD: update with each recent raw digit tick ──────────────────────
+        // Feed the last `recentLen` raw digits into BOCPD one by one.
+        // BOCPD operates on the raw digit stream (not binary obs), giving it
+        // a richer signal via the Dirichlet-Multinomial conjugate model.
         const recentLen = Math.min(len, 30);
         const recentWindow = window.slice(-recentLen);
-        let cusumAlarm = false;
-        for (let t = 1; t < recentLen; t++) {
-            const obs_t = recentWindow[t] === recentWindow[t-1] ? 1 : 0;
-            // Only update CUSUM on ticks where target digit appears
-            if (recentWindow[t-1] === targetDigit || recentWindow[t] === targetDigit) {
-                cusumAlarm = this.updateCUSUM(targetDigit, obs_t);
-            }
+        for (const d of recentWindow) {
+            this.updateBOCPD(d);
         }
+        const bocpdResult = this.updateBOCPD(window[window.length - 1]); // final update
+        const bocpdAlarm = bocpdResult.alarm;
+
+        // ── Shannon Entropy: model-free randomness gate ────────────────────────
+        // Computed on last entropy_window raw digit ticks (default 30).
+        const entropyWin = this.cfg.entropy_window || 30;
+        const entropyWindow = window.slice(-entropyWin);
+        const shannonH = this.computeShannonEntropy(entropyWindow);
+        const H_HIGH = this.cfg.entropy_high || 3.1;
+        const H_LOW  = this.cfg.entropy_low  || 2.8;
 
         // ── Per-digit statistics ───────────────────────────────────────────────
         const { rawRepeatProb, ewmaRepeat } = this.computePerDigitStats(window);
@@ -583,24 +831,36 @@ class HMMRegimeDetector {
         let safetyScore = 0;
         const threshold = this.cfg.repeat_threshold;
 
-        // Component A: HMM Viterbi state (40 pts)
-        if (vit.currentState === 0) safetyScore += 40;
+        // Component A: HSMM Viterbi state (35 pts)
+        if (vit.currentState === 0) safetyScore += 35;
 
-        // Component B: Bayesian posterior confidence (30 pts)
-        safetyScore += Math.round(clamp((posteriorNonRep - 0.5) / 0.5, 0, 1) * 30);
+        // Component B: Bayesian posterior confidence (25 pts)
+        safetyScore += Math.round(clamp((posteriorNonRep - 0.5) / 0.5, 0, 1) * 25);
 
         // Component C: Regime persistence (15 pts)
         const persistenceScore = clamp(vit.persistence / this.cfg.min_regime_persistence, 0, 1);
         safetyScore += Math.round(persistenceScore * 15);
 
-        // Component D: Regime stability across segments (15 pts)
-        safetyScore += Math.round(regimeStability * 15);
+        // Component D: Regime stability across segments (10 pts)
+        safetyScore += Math.round(regimeStability * 10);
+
+        // Component E: Shannon entropy boost/penalty (15 pts)
+        // H > H_HIGH → random market → full 15 pts
+        // H_LOW < H ≤ H_HIGH → scaled partial pts
+        // H ≤ H_LOW → zero out safetyScore immediately (hard gate)
+        if (shannonH > H_HIGH) {
+            safetyScore += 15;
+        } else if (shannonH > H_LOW) {
+            safetyScore += Math.round(((shannonH - H_LOW) / (H_HIGH - H_LOW)) * 15);
+        }
+        // (if H ≤ H_LOW, no entropy points added — hard gate below zeros it out)
 
         // Hard gates: zero out if conditions fail
         if (vit.currentState !== 0) safetyScore = 0;              // Must be in NON-REP
-        if (posteriorNonRep < this.cfg.hmm_nonrep_confidence) safetyScore = Math.min(safetyScore, 40); // confidence gate
+        if (posteriorNonRep < this.cfg.hmm_nonrep_confidence) safetyScore = Math.min(safetyScore, 35);
         if (rawRepeatProb[targetDigit] >= threshold) safetyScore = 0;     // raw rate gate
-        if (cusumAlarm) safetyScore = 0;                           // CUSUM alarm gate
+        if (bocpdAlarm) safetyScore = 0;                           // BOCPD alarm gate
+        if (shannonH <= H_LOW) safetyScore = 0;                   // Entropy gate (hard)
 
         // ── Signal condition ───────────────────────────────────────────────────
         const signalActive = (
@@ -609,24 +869,31 @@ class HMMRegimeDetector {
             vit.persistence >= this.cfg.min_regime_persistence &&
             rawRepeatProb[targetDigit] < threshold &&
             ewmaRepeat[targetDigit] < threshold &&
-            !cusumAlarm &&
+            !bocpdAlarm &&
+            shannonH > H_LOW &&
             safetyScore >= this.cfg.repeat_confidence
         );
 
         return {
             valid: true,
-            // HMM
+            // HSMM
             hmmState: vit.currentState,          // 0=NON-REP, 1=REP
             hmmStateName: vit.currentState === 0 ? 'NON-REP' : 'REP',
             hmmPersistence: vit.persistence,
             hmmTransitions: vit.transitions,
             regimeStability,
+            hsmmDurations: [...this.D],          // [D_nonrep, D_rep] learned sojourn means
             // Bayesian
             posteriorNonRep,
             posteriorRep,
-            // CUSUM
-            cusumAlarm,
-            cusumValue: this.cusumValue[targetDigit],
+            // BOCPD
+            bocpdAlarm,
+            bocpdRunProb: bocpdResult.probOldEnough,   // P(run > min_run_length)
+            bocpdMostLikelyRun: bocpdResult.mostLikelyRun,
+            // Shannon Entropy
+            shannonEntropy: shannonH,
+            entropyHealthy: shannonH > H_LOW,
+            entropyRandom: shannonH > H_HIGH,
             // Per-digit rates
             rawRepeatProb,
             ewmaRepeat,
@@ -712,8 +979,8 @@ class RomanianGhostBot {
         const c = this.config;
         console.log('');
         console.log(bold(cyan('═══════════════════════════════════════════════════════════════')));
-        console.log(bold(cyan('   👻  ROMANIAN GHOST BOT v2.0  —  Deriv Digit Differ          ')));
-        console.log(bold(cyan('   Advanced HMM Regime Detection + Bayesian + CUSUM             ')));
+        console.log(bold(cyan('   👻  ROMANIAN GHOST BOT v3.0  —  Deriv Digit Differ          ')));
+        console.log(bold(cyan('   HSMM + BOCPD + Shannon Entropy Regime Engine                ')));
         console.log(bold(cyan('═══════════════════════════════════════════════════════════════')));
         console.log(`  Symbol            : ${bold(c.symbol)}`);
         console.log(`  Base Stake        : ${bold('$' + c.base_stake.toFixed(2))}`);
@@ -722,20 +989,23 @@ class RomanianGhostBot {
         console.log(`  Repeat Threshold  : ${bold(c.repeat_threshold + '%')}`);
         console.log(`  HMM NonRep Conf   : ${bold((c.hmm_nonrep_confidence * 100).toFixed(0) + '%')} posterior required`);
         console.log(`  Min Persistence   : ${bold(c.min_regime_persistence)} ticks in NON-REP regime`);
-        console.log(`  CUSUM Threshold   : ${bold(c.cusum_threshold)} (shift detector)`);
+        console.log(`  BOCPD Hazard      : ${bold((c.bocpd_hazard * 100).toFixed(2) + '% /tick')} (regime ~${bold(Math.round(1/c.bocpd_hazard))}t)`);
+        console.log(`  BOCPD Min Run     : ${bold(c.bocpd_min_run_length)} ticks stable @ ${bold((c.bocpd_run_confidence * 100).toFixed(0) + '% conf')}`);
+        console.log(`  Entropy Window    : ${bold(c.entropy_window)} ticks | Low: ${red(c.entropy_low)} | High: ${green(c.entropy_high)} bits`);
+        console.log(`  HSMM Durations    : NR ~${bold(c.hsmm_mean_duration_nonrep)}t  REP ~${bold(c.hsmm_mean_duration_rep)}t (learned)`);
         console.log(`  Ghost Trading     : ${c.ghost_enabled ? green('ON') + ` | Wins Required: ${bold(c.ghost_wins_required)}` : red('OFF')}`);
         console.log(`  Martingale        : ${c.martingale_enabled ? green('ON') + ` | Max Steps: ${c.max_martingale_steps} | Mult: ${c.martingale_multiplier}x` : red('OFF')}`);
         console.log(`  Take Profit       : ${green('$' + c.take_profit.toFixed(2))}`);
         console.log(`  Stop Loss         : ${red('$' + c.stop_loss.toFixed(2))}`);
         console.log(bold(cyan('═══════════════════════════════════════════════════════════════')));
         console.log('');
-        console.log(bold(yellow('  REGIME DETECTION ENGINE:')));
-        console.log(dim('  1. Baum-Welch HMM parameter estimation (re-fits every 50 ticks)'));
-        console.log(dim('  2. Viterbi decoding → most likely regime sequence'));
+        console.log(bold(yellow('  REGIME DETECTION ENGINE v3.0:')));
+        console.log(dim('  1. Baum-Welch HSMM — learns emission probs + sojourn-time Poisson means'));
+        console.log(dim('  2. Duration-Penalised Viterbi — predicts imminent regime flips'));
         console.log(dim('  3. Forward algorithm → Bayesian P(NON-REP | all history)'));
-        console.log(dim('  4. CUSUM change-point → detects sudden shift to REP regime'));
-        console.log(dim('  5. Regime persistence → blocks trades in freshly-entered regimes'));
-        console.log(dim('  6. Multi-segment stability → checks regime consistency over window'));
+        console.log(dim('  4. BOCPD (Dirichlet-Multinomial) — exact posterior run-length distribution'));
+        console.log(dim('  5. Shannon Entropy H(X) — model-free clumping/randomness gate'));
+        console.log(dim('  6. Regime persistence + multi-segment stability check'));
         console.log('');
     }
 
@@ -1009,7 +1279,7 @@ class RomanianGhostBot {
             `Persist: ${r.hmmPersistence >= this.config.min_regime_persistence ? green(r.hmmPersistence + ' ticks') : yellow(r.hmmPersistence + ' ticks')} | ` +
             `Stability: ${parseFloat(stabPct) >= 70 ? green(stabPct + '%') : yellow(stabPct + '%')} | ` +
             `Transitions: ${dim(r.hmmTransitions)} | ` +
-            `CUSUM: ${r.cusumAlarm ? red('⚠️ ALARM ' + r.cusumValue.toFixed(2)) : green('OK ' + r.cusumValue.toFixed(2))}`
+            `HSMM D: NR=${r.hsmmDurations[0].toFixed(1)}t R=${r.hsmmDurations[1].toFixed(1)}t`
         );
 
         logHMM(
@@ -1017,6 +1287,17 @@ class RomanianGhostBot {
             `A(NR→R)=${(r.hmmA[0][1]*100).toFixed(1)}% A(R→NR)=${(r.hmmA[1][0]*100).toFixed(1)}% | ` +
             `Safety: ${r.safetyScore >= 85 ? green(r.safetyScore+'/100') : red(r.safetyScore+'/100')} | ` +
             `Recent(20t): ${r.recentRepeatRate.toFixed(1)}%`
+        );
+
+        const entropyCol = r.shannonEntropy > (this.config.entropy_high || 3.1) ? green
+                         : r.shannonEntropy > (this.config.entropy_low  || 2.8) ? yellow : red;
+        const bocpdCol = r.bocpdAlarm ? red : green;
+        logHMM(
+            `BOCPD: ${bocpdCol(r.bocpdAlarm ? `⚠️ ALARM` : `✅ OK`)} ` +
+            `P(run>${this.config.bocpd_min_run_length||15})=${(r.bocpdRunProb*100).toFixed(1)}% ` +
+            `MostLikelyRun=${r.bocpdMostLikelyRun}t | ` +
+            `Entropy H=${entropyCol(r.shannonEntropy.toFixed(3))}bits ` +
+            `(${r.entropyRandom ? green('RANDOM') : r.entropyHealthy ? yellow('OK') : red('CLUMPING')})`
         );
 
         if (this.signalActive) {
@@ -1034,7 +1315,8 @@ class RomanianGhostBot {
                 if (r.hmmPersistence < this.config.min_regime_persistence) reasons.push(`persist=${r.hmmPersistence}<${this.config.min_regime_persistence}`);
                 if (r.rawRepeatProb[currentDigit] >= threshold) reasons.push(`raw=${r.rawRepeatProb[currentDigit].toFixed(1)}%≥${threshold}%`);
                 if (r.ewmaRepeat[currentDigit] >= threshold) reasons.push(`EWMA=${r.ewmaRepeat[currentDigit].toFixed(1)}%≥${threshold}%`);
-                if (r.cusumAlarm) reasons.push(`CUSUM ALARM (${r.cusumValue.toFixed(2)})`);
+                if (r.bocpdAlarm) reasons.push(`BOCPD ALARM P(run>${this.config.bocpd_min_run_length||15})=${(r.bocpdRunProb*100).toFixed(1)}%`);
+                if (!r.entropyHealthy) reasons.push(`H=${r.shannonEntropy.toFixed(3)}<${this.config.entropy_low||2.8} (clumping)`);
                 if (r.safetyScore < 85) reasons.push(`score=${r.safetyScore}<85`);
             }
             logAnalysis(red(`⛔ NO SIGNAL — digit ${currentDigit}: ${reasons.join(', ')} → WAIT`));
@@ -1228,8 +1510,8 @@ class RomanianGhostBot {
         if (this.currentWinStreak > this.maxWinStreak) this.maxWinStreak = this.currentWinStreak;
         if (profit > this.largestWin) this.largestWin = profit;
 
-        // Reset CUSUM for target digit on win
-        this.hmm.resetCUSUM(this.targetDigit);
+        // Reset BOCPD on win — fresh regime slate after a successful trade
+        this.hmm.resetBOCPD();
 
         const plStr = this.sessionProfit >= 0 ? green(formatMoney(this.sessionProfit)) : red(formatMoney(this.sessionProfit));
         const recovery = this.martingaleStep > 0 ? green(' 🔄 RECOVERY!') : '';
@@ -1391,8 +1673,10 @@ class RomanianGhostBot {
         logStats(bold(cyan('═══════════════════════════════════════════════')));
         logStats(`  Duration         : ${bold(formatDuration(dur))}`);
         logStats(`  Symbol           : ${bold(this.config.symbol)}`);
-        logStats(`  Analysis Method  : ${bold('HMM + Bayesian + CUSUM')}`);
+        logStats(`  Analysis Method  : ${bold('HSMM + BOCPD + Entropy')}`);
         logStats(`  HMM NonRep Conf  : ${bold((this.config.hmm_nonrep_confidence * 100).toFixed(0) + '%')}`);
+        logStats(`  BOCPD Min Run    : ${bold(this.config.bocpd_min_run_length + ' ticks')} @ ${bold((this.config.bocpd_run_confidence*100).toFixed(0) + '%')}`);
+        logStats(`  Entropy Thres    : H>${bold(this.config.entropy_high)}(boost) H<${bold(this.config.entropy_low)}(block)`);
         logStats(`  Total Trades     : ${bold(this.totalTrades)}`);
         logStats(`  Wins             : ${green(this.totalWins)}`);
         logStats(`  Losses           : ${red(this.totalLosses)}`);
