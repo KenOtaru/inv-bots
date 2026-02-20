@@ -107,7 +107,7 @@ function parseArgs() {
         analysis_window: 25,
         repeat_threshold: 8,
         ghost_enabled: true,
-        ghost_wins_required: 2,
+        ghost_wins_required: 1,
         ghost_max_rounds: 20000000000,
         martingale_enabled: true,
         martingale_multiplier: 11.3,
@@ -529,7 +529,7 @@ class RomanianGhostBot {
         const inNonRep = r.currentRegime[d] === 'non-rep';
         const rawOk = r.repeatProb[d] < this.config.repeat_threshold;
         const ewmaOk = r.ewmaRepeatRate[d] < this.config.repeat_threshold;
-        const safeOk = r.safetyScore[d] >= 50;
+        const safeOk = r.safetyScore[d] >= 98;
 
         this.signalActive = inNonRep && rawOk && ewmaOk && safeOk;
     }
