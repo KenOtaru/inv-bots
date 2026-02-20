@@ -100,8 +100,8 @@ function parseArgs() {
         analysis_window: 300,
         repeat_threshold: 5,
         ghost_enabled: true,
-        ghost_wins_required: 1,
-        ghost_max_rounds: 50000000000,
+        ghost_wins_required: 3,
+        ghost_max_rounds: 20000000000,
         martingale_enabled: true,
         martingale_multiplier: 11.3,
         max_martingale_steps: 3,
@@ -207,19 +207,25 @@ class RomanianGhostBot {
         this.signalActive = false;
 
         // ── Ghost state ───────────────────────────────────────────────────────
-        // Ghost WIN  = currentDigit === targetDigit
-        //   (target digit appeared → unlikely to repeat → count this observation)
-        // Ghost LOSS = currentDigit !== targetDigit
-        //   (target digit not seen → reset counter, keep waiting)
+        // Ghost trading is a TWO-TICK process per round:
         //
-        // Trade fires when ghostConsecutiveWins >= ghost_wins_required
-        // AND currentDigit === targetDigit on the SAME tick.
+        //  Tick A: currentDigit === targetDigit
+        //          → Target digit appeared. This is the trigger.
+        //          → If (ghostConsecutiveWins + 1) >= wins_required → fire LIVE trade NOW.
+        //          → Otherwise set ghostAwaitingResult = true, wait for Tick B.
         //
-        // After LIVE TRADE LOSS → ghostConsecutiveWins = 0, ghostConfirmed = false
-        // Bot must re-accumulate ghost wins before next trade (even martingale).
+        //  Tick B: (immediately after Tick A)
+        //          → ghostAwaitingResult = true
+        //          → currentDigit !== targetDigit → Ghost WIN (didn't repeat). Increment wins.
+        //          → currentDigit === targetDigit → Ghost LOSS (repeated). Reset wins to 0.
+        //          → Set ghostAwaitingResult = false, continue ghost phase.
+        //
+        // After LIVE TRADE LOSS → ghostConsecutiveWins = 0, ghostConfirmed = false.
+        // Bot must re-satisfy ghost phase before next trade (even martingale).
         this.ghostConsecutiveWins = 0;
         this.ghostRoundsPlayed = 0;
         this.ghostConfirmed = false;
+        this.ghostAwaitingResult = false; // true when waiting for next-tick result
 
         // ── Trading ───────────────────────────────────────────────────────────
         this.currentStake = config.base_stake;
@@ -772,9 +778,10 @@ class RomanianGhostBot {
             logGhost(
                 `👻 Ghost phase started. Target digit locked: ${bold(cyan(this.targetDigit))} ` +
                 `(repeat rate ${this.targetRepeatRate.toFixed(1)}%). ` +
-                `Need ${bold(this.config.ghost_wins_required)} appearance(s) before going LIVE.`
+                `Need ${bold(this.config.ghost_wins_required)} confirmed non-repeat(s) before going LIVE.`
             );
-            // Run ghost check immediately — currentDigit === targetDigit on this tick
+            // Signal fired because currentDigit === targetDigit (Tick A in two-tick model).
+            // Run ghost check now — handles the first appearance correctly.
             this.runGhostCheck(currentDigit);
         } else {
             // Ghost disabled or already confirmed — fire immediately
@@ -815,51 +822,91 @@ class RomanianGhostBot {
 
         this.ghostRoundsPlayed++;
 
-        const isTargetDigit = currentDigit === this.targetDigit;
+        // ══════════════════════════════════════════════════════════════════════
+        //  TWO-TICK GHOST LOGIC
+        //
+        //  ghostAwaitingResult = false (normal / watching state):
+        //    • currentDigit === targetDigit → target appeared (Tick A)
+        //        If (wins + 1) >= wins_required → fire LIVE trade NOW on this tick.
+        //        Else → set ghostAwaitingResult = true, wait for Tick B.
+        //    • currentDigit !== targetDigit → skip, keep watching.
+        //
+        //  ghostAwaitingResult = true (Tick B — checking if target repeated):
+        //    • currentDigit !== targetDigit → Ghost WIN (didn't repeat). Wins++.
+        //    • currentDigit === targetDigit → Ghost LOSS (repeated). Wins = 0.
+        // ══════════════════════════════════════════════════════════════════════
 
-        if (isTargetDigit) {
-            // ── Ghost WIN ──────────────────────────────────────────────────────
-            this.ghostConsecutiveWins++;
-            logGhost(
-                `👻 Target digit ${bold(cyan(this.targetDigit))} appeared! ` +
-                green(`✅ Ghost WIN ${this.ghostConsecutiveWins}/${this.config.ghost_wins_required}`) +
-                ` | repeat rate ${this.targetRepeatRate.toFixed(1)}%`
-            );
+        if (this.ghostAwaitingResult) {
+            // ── Tick B: check if target digit repeated ─────────────────────────
+            this.ghostAwaitingResult = false;
 
-            if (this.ghostConsecutiveWins >= this.config.ghost_wins_required) {
-                this.ghostConfirmed = true;
+            if (currentDigit !== this.targetDigit) {
+                // ✅ Ghost WIN — did NOT repeat
+                this.ghostConsecutiveWins++;
                 logGhost(
-                    green(bold(
-                        `✅ Ghost confirmed! ${this.ghostConsecutiveWins}/${this.config.ghost_wins_required} wins. ` +
-                        `Digit ${this.targetDigit} appeared ${this.ghostConsecutiveWins} time(s). ` +
-                        `Executing LIVE DIFFER trade NOW!`
-                    ))
+                    `👻 ${green(`✅ Ghost WIN ${this.ghostConsecutiveWins}/${this.config.ghost_wins_required}`)} — ` +
+                    `digit ${bold(cyan(this.targetDigit))} did NOT repeat (next: ${bold(currentDigit)})`
                 );
-                // Fire on THIS SAME TICK
-                this.executeTradeFlow(true);
+            } else {
+                // ❌ Ghost LOSS — DID repeat
+                const hadWins = this.ghostConsecutiveWins;
+                this.ghostConsecutiveWins = 0;
+                logGhost(
+                    `👻 ${red(`❌ Ghost LOSS — digit ${bold(cyan(this.targetDigit))} REPEATED`)} ` +
+                    `(had ${hadWins} win${hadWins !== 1 ? 's' : ''}) — reset to 0/${this.config.ghost_wins_required}`
+                );
             }
 
         } else {
-            // ── Ghost LOSS ─────────────────────────────────────────────────────
-            const prevWins = this.ghostConsecutiveWins;
-            this.ghostConsecutiveWins = 0;
-            logGhost(
-                `👻 Digit ${bold(currentDigit)} ≠ target ${bold(this.targetDigit)} — ` +
-                red(`❌ Ghost LOSS`) +
-                ` (had ${prevWins} win${prevWins !== 1 ? 's' : ''}) — ` +
-                `reset to 0/${this.config.ghost_wins_required}. Waiting for digit ${bold(this.targetDigit)}...`
-            );
+            // ── Normal state: watching for target digit to appear ──────────────
+            if (currentDigit === this.targetDigit) {
+                // Target digit appeared (Tick A)
+                const winsIfConfirmed = this.ghostConsecutiveWins + 1;
 
-            // Re-evaluate signal for the same locked targetDigit
-            this.refreshSignalForLockedTarget();
-            if (!this.signalActive) {
+                if (winsIfConfirmed >= this.config.ghost_wins_required) {
+                    // ── Wins requirement reached — fire LIVE trade on this tick ────
+                    this.ghostConsecutiveWins = winsIfConfirmed;
+                    this.ghostConfirmed = true;
+                    logGhost(
+                        `👻 Target digit ${bold(cyan(this.targetDigit))} appeared! ` +
+                        green(`✅ Ghost WIN ${this.ghostConsecutiveWins}/${this.config.ghost_wins_required}`) +
+                        ` | repeat rate ${this.targetRepeatRate.toFixed(1)}%`
+                    );
+                    logGhost(
+                        green(bold(
+                            `✅ Ghost confirmed! ${this.ghostConsecutiveWins}/${this.config.ghost_wins_required} wins reached. ` +
+                            `Executing LIVE DIFFER trade on digit ${this.targetDigit} NOW!`
+                        ))
+                    );
+                    // Fire on THIS SAME TICK
+                    this.executeTradeFlow(true);
+                } else {
+                    // ── Target appeared but wins not yet met — wait for Tick B ─────
+                    this.ghostAwaitingResult = true;
+                    logGhost(
+                        `👻 Target digit ${bold(cyan(this.targetDigit))} appeared | ` +
+                        `Wins so far: ${this.ghostConsecutiveWins}/${this.config.ghost_wins_required} | ` +
+                        dim(`Waiting for next tick to confirm (checking if it repeats)...`)
+                    );
+                }
+            } else {
+                // Not the target digit — skip silently
                 logGhost(
-                    dim(`Locked digit ${this.targetDigit} repeat rate now ` +
-                        `${this.targetRepeatRate.toFixed(1)}% ≥ ${this.config.repeat_threshold}% — signal lost, returning to ANALYZING`)
+                    dim(`⏳ Digit ${currentDigit} — waiting for target digit ${bold(this.targetDigit)} ` +
+                        `(${this.ghostConsecutiveWins}/${this.config.ghost_wins_required} wins so far)`)
                 );
-                this.resetGhost();
-                this.botState = STATE.ANALYZING;
-                return;
+
+                // Re-evaluate signal for locked targetDigit
+                this.refreshSignalForLockedTarget();
+                if (!this.signalActive) {
+                    logGhost(
+                        dim(`Locked digit ${this.targetDigit} repeat rate now ` +
+                            `${this.targetRepeatRate.toFixed(1)}% ≥ ${this.config.repeat_threshold}% — signal lost, returning to ANALYZING`)
+                    );
+                    this.resetGhost();
+                    this.botState = STATE.ANALYZING;
+                    return;
+                }
             }
         }
 
@@ -875,6 +922,7 @@ class RomanianGhostBot {
         this.ghostConsecutiveWins = 0;
         this.ghostRoundsPlayed = 0;
         this.ghostConfirmed = false;
+        this.ghostAwaitingResult = false;
         this.targetDigit = -1;
         this.signalActive = false;
     }
@@ -1053,16 +1101,17 @@ class RomanianGhostBot {
             ));
         }
 
-        // ── KEY: Reset ghost wins after every loss ─────────────────────────────
-        // Ghost must be re-satisfied before the next trade, even during martingale.
-        // We do NOT reset targetDigit here — it stays locked for martingale recovery
-        // so the pending trade waits for the same digit to reappear.
+        // ── Reset ghost wins after every LIVE TRADE LOSS ──────────────────────
+        // Ghost counter resets to 0. targetDigit stays locked for martingale
+        // recovery. Bot re-enters GHOST_TRADING and waits for
+        // ghost_wins_required confirmed non-repeats before the next live trade.
         this.ghostConsecutiveWins = 0;
         this.ghostConfirmed = false;
         this.ghostRoundsPlayed = 0;
+        this.ghostAwaitingResult = false;
         logBot(
-            dim(`Ghost wins reset to 0 after loss. `) +
-            dim(`Must reach ${this.config.ghost_wins_required} ghost win(s) before next trade.`)
+            dim(`Ghost wins reset to 0 after live trade loss. `) +
+            dim(`Waiting for digit ${bold(this.targetDigit)} to appear then confirm ${this.config.ghost_wins_required} non-repeat(s) before next trade.`)
         );
     }
 
