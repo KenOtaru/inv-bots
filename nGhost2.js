@@ -106,13 +106,13 @@ function parseArgs() {
 
         // BOCPD change-point detection
         // Regime detection thresholds
-        repeat_threshold: 8,           // Raw per-digit repeat % gate
+        repeat_threshold: 9,           // Raw per-digit repeat % gate
 
         // BOCPD change-point detection (replaces CUSUM)
         bocpd_hazard: 1/50,            // Prior hazard rate (expected regime length ~50 ticks)
         bocpd_alpha0: 1.0,             // Dirichlet prior concentration (flat)
         bocpd_min_run_length: 15,      // Minimum run-length to consider regime stable
-        bocpd_run_confidence: 0.95,    // Required P(r_t > min_run_length) to allow trade
+        bocpd_run_confidence: 0.85,    // Required P(r_t > min_run_length) to allow trade
 
         // Shannon Entropy filter (model-free information-theory gate)
         entropy_window: 30,            // Rolling window for entropy computation
@@ -124,7 +124,7 @@ function parseArgs() {
         hsmm_mean_duration_rep: 15,    // Expected REP regime length (ticks)
         bocpd_alpha0: 1.0,             // Dirichlet prior concentration (flat)
         bocpd_min_run_length: 15,      // Minimum run-length to consider regime stable
-        bocpd_run_confidence: 0.95,    // Required P(r_t > min_run_length) to allow trade
+        bocpd_run_confidence: 0.85,    // Required P(r_t > min_run_length) to allow trade
 
         // Shannon Entropy filter
         entropy_window: 30,            // Rolling window for entropy computation
