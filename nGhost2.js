@@ -163,7 +163,7 @@ function parseArgs() {
         min_hmm_persistence:  6,       // Min consecutive NON-REP ticks (Viterbi)
 
         // CUSUM
-        cusum_threshold:      12.0,
+        cusum_threshold:      4.5,
         cusum_slack:          0.04,
 
         // Binary segmentation
