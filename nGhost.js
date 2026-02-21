@@ -85,7 +85,7 @@ function parseArgs() {
         api_token: TOKEN,
         app_id: '1089',
         endpoint: 'wss://ws.derivws.com/websockets/v3',
-        symbol: 'R_10',
+        symbol: 'R_75',
         base_stake: 0.61,
         currency: 'USD',
         contract_type: 'DIGITDIFF',
@@ -96,12 +96,12 @@ function parseArgs() {
         min_ticks_for_hmm: 50,         // Minimum ticks before HMM is reliable
 
         // Regime detection thresholds
-        repeat_threshold: 8,           // Raw per-digit repeat % gate
+        repeat_threshold: 9,           // Raw per-digit repeat % gate
         repeat_confidence: 98,        // Bayesian P(repeat | observations) required
         hmm_nonrep_confidence: 0.98,   // Bayesian P(NON-REP) required
         min_regime_persistence: 8,     // Ticks current regime must have lasted
-        cusum_threshold: 4.5,          // CUSUM alarm threshold (regime shift detector)
-        cusum_slack: 0.005,            // CUSUM slack (sensitivity tuning)
+        cusum_threshold: 15.5,          // CUSUM alarm threshold (regime shift detector)
+        cusum_slack: 0.055,            // CUSUM slack (sensitivity tuning)
 
         // Ghost trading
         ghost_enabled: true,

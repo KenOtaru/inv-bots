@@ -134,8 +134,8 @@ function parseArgs() {
         // HSMM sojourn-time priors (Poisson lambda per state, ticks)
         hsmm_mean_duration_nonrep: 25, // Expected NON-REP regime length (ticks)
         hsmm_mean_duration_rep: 15,    // Expected REP regime length (ticks)
-        repeat_confidence: 98,        // Bayesian P(repeat | observations) required
-        hmm_nonrep_confidence: 0.98,   // Bayesian P(NON-REP) required
+        repeat_confidence: 85,        // Bayesian P(repeat | observations) required
+        hmm_nonrep_confidence: 0.85,   // Bayesian P(NON-REP) required
         min_regime_persistence: 8,     // Ticks current regime must have lasted
 
         // Ghost trading
