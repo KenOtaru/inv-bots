@@ -123,9 +123,9 @@ function parseArgs() {
 
         // ── Regime detection thresholds ───────────────────────────────────────
         repeat_threshold: 9,           // Hard gate: raw repeat % per digit
-        hmm_nonrep_confidence: 0.88,   // Bayesian P(NON-REP) required from HMM
-        bocpd_nonrep_confidence: 0.85, // BOCPD P(NON-REP) required
-        min_regime_persistence: 10,    // Min consecutive ticks in NON-REP (HMM)
+        hmm_nonrep_confidence: 0.80,   //0.88 Bayesian P(NON-REP) required from HMM
+        bocpd_nonrep_confidence: 0.80, //0.85 BOCPD P(NON-REP) required
+        min_regime_persistence: 8,    // Min consecutive ticks in NON-REP (HMM)
         acf_lag1_threshold: 0.12,      // Lag-1 ACF gate (< threshold = ok)
         ewma_trend_threshold: 1.5,     // EWMA trend gate (short-long, %)
         cusum_up_threshold: 4.5,       // Up-CUSUM alarm (rep regime shift)
