@@ -118,8 +118,8 @@ function parseArgs() {
 
         // History
         tick_history_size: 5000,
-        analysis_window: 3000,
-        min_ticks_for_analysis: 100,
+        analysis_window: 5000,
+        min_ticks_for_analysis: 50,
 
         // ── Regime detection thresholds ───────────────────────────────────────
         repeat_threshold: 9,           // Hard gate: raw repeat % per digit
