@@ -679,14 +679,14 @@ class RomanianGhostBot {
 
         this.send({
             buy: 1,
-            price: this.currentStake,
+            price: this.currentStake.toFixed(2),
             parameters: {
                 contract_type: this.config.contract_type,
                 symbol: this.config.symbol,
                 duration: 1,
                 duration_unit: 't',
                 basis: 'stake',
-                amount: this.currentStake,
+                amount: this.currentStake.toFixed(2),
                 barrier: String(this.targetDigit),
                 currency: this.config.currency,
             },

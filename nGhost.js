@@ -27,6 +27,7 @@
 
 const WebSocket = require('ws');
 const TelegramBot = require('node-telegram-bot-api');
+const { stubFalse } = require('lodash');
 
 const TOKEN = "0P94g4WdSrSrzir";
 const TELEGRAM_TOKEN = "8288121368:AAHYRb0Stk5dWUWN1iTYbdO3fyIEwIuZQR8";
@@ -96,15 +97,15 @@ function parseArgs() {
         min_ticks_for_hmm: 50,         // Minimum ticks before HMM is reliable
 
         // Regime detection thresholds
-        repeat_threshold: 9,           // Raw per-digit repeat % gate
+        repeat_threshold: 6,           // Raw per-digit repeat % gate
         repeat_confidence: 98,        // Bayesian P(repeat | observations) required
         hmm_nonrep_confidence: 0.98,   // Bayesian P(NON-REP) required
         min_regime_persistence: 8,     // Ticks current regime must have lasted
-        cusum_threshold: 15.5,          // CUSUM alarm threshold (regime shift detector)
-        cusum_slack: 0.055,            // CUSUM slack (sensitivity tuning)
+        cusum_threshold: 4.5,          // CUSUM alarm threshold (regime shift detector)
+        cusum_slack: 0.005,            // CUSUM slack (sensitivity tuning)
 
         // Ghost trading
-        ghost_enabled: true,
+        ghost_enabled: stubFalse,
         ghost_wins_required: 1,
         ghost_max_rounds: 20000000000,
 

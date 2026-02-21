@@ -1534,12 +1534,12 @@ class RomanianGhostBot {
             📈 ${this.totalTrades}T | ${this.totalWins}W/${this.totalLosses}L | P&L:${this.sessionProfit>=0?'+':''}$${this.sessionProfit.toFixed(2)}`.trim());
 
         this.send({
-            buy: 1, price: this.currentStake.toFixed(2),
+            buy: 1, price: this.currentStake,
             parameters: {
                 contract_type: this.config.contract_type,
                 symbol:        this.config.symbol,
                 duration:      1, duration_unit: 't',
-                basis:         'stake', amount: this.currentStake.toFixed(2),
+                basis:         'stake', amount: this.currentStake,
                 barrier:       String(this.targetDigit),
                 currency:      this.config.currency,
             },
