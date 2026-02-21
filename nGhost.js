@@ -1146,11 +1146,12 @@ class RomanianGhostBot {
         }
         if (immediate) {
             this.placeTrade();
-        } else {
-            this.pendingTrade = true;
-            this.botState = STATE.GHOST_TRADING;
-            logBot(`⚡ Recovery trade queued — waiting for digit ${bold(cyan(this.targetDigit))}`);
-        }
+        } 
+        // else {
+        //     this.pendingTrade = true;
+        //     this.botState = STATE.GHOST_TRADING;
+        //     logBot(`⚡ Recovery trade queued — waiting for digit ${bold(cyan(this.targetDigit))}`);
+        // }
     }
 
     placeTrade() {
