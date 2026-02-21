@@ -1525,21 +1525,21 @@ class RomanianGhostBot {
             `Ghost:${this.ghostConsecutiveWins}/${this.config.ghost_wins_required}`
         );
         this.sendTelegram(`
-🎯 <b>GHOST TRADE</b>
-📊 ${this.config.symbol} | d${this.targetDigit}
-Last 5: ${this.tickHistory.slice(-5).join(', ')}
-💰 Stake: $${this.currentStake.toFixed(2)}${mart}
-🔬 Bayes:${pnr} Score:${score}/100
-👻 Ghost:${this.ghostConsecutiveWins}/${this.config.ghost_wins_required}
-📈 ${this.totalTrades}T | ${this.totalWins}W/${this.totalLosses}L | P&L:${this.sessionProfit>=0?'+':''}$${this.sessionProfit.toFixed(2)}`.trim());
+            🎯 <b>GHOST TRADE</b>
+            📊 ${this.config.symbol} | d${this.targetDigit}
+            Last 5: ${this.tickHistory.slice(-5).join(', ')}
+            💰 Stake: $${this.currentStake.toFixed(2)}${mart}
+            🔬 Bayes:${pnr} Score:${score}/100
+            👻 Ghost:${this.ghostConsecutiveWins}/${this.config.ghost_wins_required}
+            📈 ${this.totalTrades}T | ${this.totalWins}W/${this.totalLosses}L | P&L:${this.sessionProfit>=0?'+':''}$${this.sessionProfit.toFixed(2)}`.trim());
 
         this.send({
-            buy: 1, price: this.currentStake,
+            buy: 1, price: this.currentStake.toFixed(2),
             parameters: {
                 contract_type: this.config.contract_type,
                 symbol:        this.config.symbol,
                 duration:      1, duration_unit: 't',
-                basis:         'stake', amount: this.currentStake,
+                basis:         'stake', amount: this.currentStake.toFixed(2),
                 barrier:       String(this.targetDigit),
                 currency:      this.config.currency,
             },
