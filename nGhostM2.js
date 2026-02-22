@@ -231,7 +231,7 @@ class HMMRegimeDetector {
   }
 
   // ── Full regime analysis ───────────────────────────────────────────────────
-  analyze(asset, tickHistory, targetDigit, tickCount) {
+  analyze(tickHistory, targetDigit, tickCount, asset) {
     const window = tickHistory.slice(-this.cfg.analysis_window);
     const len    = window.length;
     if (len < this.cfg.min_ticks_for_hmm)
@@ -370,7 +370,7 @@ class RomanianGhostUltimate {
 
             // ====== HMM REGIME DETECTION SETTINGS ======
             min_ticks_for_hmm:      50,
-            repeat_threshold:       7,
+            repeat_threshold:       11,
             hmm_nonrep_confidence:  0.93,
             min_safety_score:       90,
             min_regime_persistence: 8,
@@ -1080,9 +1080,9 @@ class RomanianGhostUltimate {
 
         this.tickCount++;
         // Analyze current regime using HMM 
-        const regime = hmm.analyze(asset, history, history[history.length - 1], this.tickCount);
+        const regime = hmm.analyze(history, history[history.length - 1], this.tickCount, asset);
 
-        if (this.tickCount > 30) {
+        if (this.tickCount > 50) {
           this.tickCount = 0;
         }
         
