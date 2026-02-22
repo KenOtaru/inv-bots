@@ -11,6 +11,11 @@
 'use strict';
 
 const WebSocket = require('ws');
+const TelegramBot = require('node-telegram-bot-api');
+
+const TOKEN = "0P94g4WdSrSrzir";
+const TELEGRAM_TOKEN = "8288121368:AAHYRb0Stk5dWUWN1iTYbdO3fyIEwIuZQR8";
+const CHAT_ID = "752497117";
 
 // ── ANSI Colours ──────────────────────────────────────────────────────────────
 const C = {
@@ -542,6 +547,9 @@ class RomanianGhostBot {
     this.assetStates = new Map(); // symbol → AssetState
     this.assetHMMs   = new Map(); // symbol → HMMRegimeDetector
 
+    // Telegram
+    this.telegramBot = new TelegramBot(TELEGRAM_TOKEN, { polling: false });
+
     // Global trade state
     this.isTradeActive       = false;
     this.activeTradeAsset    = null;
@@ -689,6 +697,10 @@ class RomanianGhostBot {
     if (!payload.ping) payload.req_id = ++this.requestId;
     try { this.ws.send(JSON.stringify(payload)); }
     catch (e) { logError(`Send error: ${e.message}`); }
+  }
+
+  sendTelegram(text) {
+    this.telegramBot.sendMessage(CHAT_ID, text, { parse_mode: "HTML" }).catch(() => {});
   }
 
   // ── Message router ─────────────────────────────────────────────────────────
@@ -1053,6 +1065,20 @@ class RomanianGhostBot {
       `Ghost: ${st.ghostConsecutiveWins}/${this.config.ghost_wins_required}`
     );
 
+    this.sendTelegram(`
+      🎯 <b>GHOST TRADE</b>
+
+      📊 Symbol: ${st.symbol}
+      🔢 Target Digit: ${st.targetDigit}
+      💰 Stake: $${this.currentStake.toFixed(2)}${stepInfo}
+      📈 Rate: ${st.targetRepeatRate.toFixed(1)}%
+      🔬 Score: ${snapScore}/100 | P(NR): ${(snapPNR*100).toFixed(1)}%
+      👻 Ghost: ${st.ghostConsecutiveWins}/${this.config.ghost_wins_required}
+      📊 Session: ${this.totalTrades} trades | ${this.totalWins}W/${this.totalLosses}L
+      💵 P&L: ${this.sessionProfit >= 0 ? '+' : ''}$${this.sessionProfit.toFixed(2)}
+      ⏰ ${new Date().toLocaleString()}
+    `.trim());
+
     this.send({
       buy: 1,
       price: this.currentStake,
@@ -1120,6 +1146,19 @@ class RomanianGhostBot {
     if (resultDigit !== null && st)
       logResult(dim(`  Target: ${st.targetDigit} | Result: ${resultDigit} | Ghost: ${st.ghostConsecutiveWins}/${this.config.ghost_wins_required}`));
 
+    this.sendTelegram(`
+      ✅ <b>WIN!</b>
+
+      📊 Symbol: ${sym}
+      🎯 Target: ${st ? st.targetDigit : '?'}
+      🔢 Result: ${resultDigit !== null ? resultDigit : 'N/A'}
+      💰 Profit: +$${profit.toFixed(2)}
+      💵 P&L: ${this.sessionProfit >= 0 ? '+' : ''}$${this.sessionProfit.toFixed(2)}
+      📊 Balance: $${this.accountBalance.toFixed(2)}
+      📈 Record: ${this.totalWins}W/${this.totalLosses}L | Streak: ${this.currentWinStreak}W
+      ⏰ ${new Date().toLocaleString()}
+    `.trim());
+
     this.logSessionLine();
     this.resetMartingale();
     this.resetAllAssetGhosts();
@@ -1147,6 +1186,19 @@ class RomanianGhostBot {
     );
     if (resultDigit !== null && st)
       logResult(dim(`  Target: ${st ? st.targetDigit : '?'} | Result: ${resultDigit} (${resultDigit === (st ? st.targetDigit : -1) ? red('REPEATED') : green('different — unexpected')})`));
+
+    this.sendTelegram(`
+      ❌ <b>LOSS!</b>
+
+      📊 Symbol: ${sym}
+      🎯 Target: ${st ? st.targetDigit : '?'}
+      🔢 Result: ${resultDigit !== null ? resultDigit : 'N/A'} ${resultDigit === (st ? st.targetDigit : -1) ? red('(REPEATED)') : '(different)'}
+      💸 Lost: -$${lostAmount.toFixed(2)}
+      💵 P&L: ${this.sessionProfit >= 0 ? '+' : ''}$${this.sessionProfit.toFixed(2)}
+      📊 Balance: $${this.accountBalance.toFixed(2)}
+      📈 Record: ${this.totalWins}W/${this.totalLosses}L | Streak: ${this.currentLossStreak}L${martInfo}
+      ⏰ ${new Date().toLocaleString()}
+    `.trim());
 
     this.logSessionLine();
     // Reset ALL asset ghost states after a loss
@@ -1246,10 +1298,14 @@ class RomanianGhostBot {
 
   // ── Risk limits ────────────────────────────────────────────────────────────
   checkRiskLimits() {
-    if (this.sessionProfit >= this.config.take_profit)
+    if (this.sessionProfit >= this.config.take_profit) {
+      this.sendTelegram(`🎉 <b>TAKE PROFIT!</b>\n\nFinal P&L: $${this.sessionProfit.toFixed(2)}\n\nSession end at ${new Date().toLocaleString()}`);
       return { canTrade: false, reason: `🎯 Take profit! P/L: ${formatMoney(this.sessionProfit)}`, action: 'STOP' };
-    if (this.sessionProfit <= -this.config.stop_loss)
+    }
+    if (this.sessionProfit <= -this.config.stop_loss) {
+      this.sendTelegram(`🛑 <b>STOP LOSS!</b>\n\nFinal P&L: $${this.sessionProfit.toFixed(2)}\n\nSession end at ${new Date().toLocaleString()}`);
       return { canTrade: false, reason: `🛑 Stop loss! P/L: ${formatMoney(this.sessionProfit)}`, action: 'STOP' };
+    }
     const ns = (!this.config.martingale_enabled || this.martingaleStep === 0)
       ? this.config.base_stake
       : Math.min(
@@ -1299,6 +1355,7 @@ class RomanianGhostBot {
       } catch (_) {}
       setTimeout(() => { try { this.ws.close(); } catch (_) {} }, 500);
     }
+    this.sendTelegram(`🛑 <b>SESSION STOPPED</b>\n\nReason: ${reason}\n\nFinal P&L: $${this.sessionProfit.toFixed(2)}`);
     this.printFinalStats();
     setTimeout(() => process.exit(0), 1200);
   }
