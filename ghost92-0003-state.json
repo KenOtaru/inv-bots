@@ -1,0 +1,40 @@
+{
+  "savedAt": 1771780937100,
+  "stake": 2.2,
+  "consecutiveLosses": 0,
+  "totalTrades": 0,
+  "totalWins": 0,
+  "x2": 0,
+  "x3": 0,
+  "x4": 0,
+  "x5": 0,
+  "netProfit": 0,
+  "recentTrades": [],
+  "lastTradeDigit": {
+    "R_10": null,
+    "R_25": null,
+    "R_50": null,
+    "R_75": null,
+    "R_100": null,
+    "RDBULL": null,
+    "RDBEAR": null
+  },
+  "lastTradeTime": {
+    "R_10": 0,
+    "R_25": 0,
+    "R_50": 0,
+    "R_75": 0,
+    "R_100": 0,
+    "RDBULL": 0,
+    "RDBEAR": 0
+  },
+  "ticksSinceLastTrade": {
+    "R_10": 1204,
+    "R_25": 1204,
+    "R_50": 1204,
+    "R_75": 1204,
+    "R_100": 1204,
+    "RDBULL": 1204,
+    "RDBEAR": 1204
+  }
+}

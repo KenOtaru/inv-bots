@@ -17,6 +17,48 @@ const CHAT_ID = "752497117";
 const STATE_FILE = path.join(__dirname, 'ghost92-0003-state.json');
 
 // ══════════════════════════════════════════════════════════════════════════════
+//  UTILITY FUNCTIONS
+// ══════════════════════════════════════════════════════════════════════════════
+function clamp(v, lo, hi) {
+  return Math.max(lo, Math.min(hi, v));
+}
+
+function logSumExp(arr) {
+  const m = Math.max(...arr);
+  if (!isFinite(m)) return -Infinity;
+  return m + Math.log(arr.reduce((s, x) => s + Math.exp(x - m), 0));
+}
+
+function formatMoney(v) {
+  return `${v >= 0 ? '+' : ''}$${v.toFixed(2)}`;
+}
+
+// ── Logger helpers ─────────────────────────────────────────────────────────
+function getTimestamp() {
+  const n = new Date();
+  return [
+    String(n.getHours()).padStart(2,'0'),
+    String(n.getMinutes()).padStart(2,'0'),
+    String(n.getSeconds()).padStart(2,'0'),
+  ].join(':');
+}
+
+const logHMM = (msg) => {
+  const ts = `[${getTimestamp()}]`;
+  console.log(`${ts} [HMM] ${msg}`);
+};
+
+const logBot = (msg) => {
+  const ts = `[${getTimestamp()}]`;
+  console.log(`${ts} [BOT] ${msg}`);
+};
+
+const logAnalysis = (msg) => {
+  const ts = `[${getTimestamp()}]`;
+  console.log(`${ts} [ANALYSIS] ${msg}`);
+};
+
+// ══════════════════════════════════════════════════════════════════════════════
 //  HMM REGIME DETECTOR — one instance per asset
 //  2-State HMM: State 0 = NON-REP, State 1 = REP
 // ══════════════════════════════════════════════════════════════════════════════
@@ -323,8 +365,18 @@ class RomanianGhostUltimate {
             assets: [
                 'R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'RDBULL', 'RDBEAR',
             ],  // Multi-asset support
-            requiredHistoryLength: 3000,
-            minHistoryForTrading: 2000,
+            requiredHistoryLength: 5000,
+            minHistoryForTrading: 5000,
+
+            // ====== HMM REGIME DETECTION SETTINGS ======
+            min_ticks_for_hmm:      50,
+            repeat_threshold:       6,
+            hmm_nonrep_confidence:  0.93,
+            min_safety_score:       90,
+            min_regime_persistence: 8,
+            cusum_threshold:        4.5,
+            cusum_slack:            0.005,
+            analysis_window:        5000,
 
             // Z-Score thresholds (CORRECTED - uses AVERAGE not sum)
             minAvgZScore: 2.0,           // Average Z-score per window
@@ -413,7 +465,7 @@ class RomanianGhostUltimate {
         this.connect();
         this.startHourlySummary();
         this.startAutoSave();
-        this.checkTimeForDisconnectReconnect();
+        // this.checkTimeForDisconnectReconnect();
     }
 
     // ========================================================================
@@ -735,55 +787,82 @@ class RomanianGhostUltimate {
     }
 
     // ========================================================================
-    // MAIN SIGNAL SCANNER (ENHANCED)
+    // MAIN SIGNAL SCANNER (ENHANCED WITH HMM REGIME DETECTION)
     // ========================================================================
     scanForSignal(asset) {
         if (!this.canTrade(asset)) return;
 
         const history = this.histories[asset];
+        if (history.length < 50) return;
 
-        // Step 1: Calculate Z-Score analysis
-        const zAnalysis = this.calculateZScoreAnalysis(history);
+        // Get HMM instance for this asset
+        const hmm = this.assetHMMs.get(asset);
+        if (!hmm) return;
 
-        // Step 2: Calculate volatility analysis
-        const volAnalysis = this.calculateVolatilityAnalysis(history);
+        // Analyze current regime using HMM (REPLACING Z-Score analysis)
+        const regime = hmm.analyze(history, history[history.length - 1], history.length);
+        
+        if (!regime.valid) return;
+        if (!regime.signalActive) return;
 
-        // Step 3: Calculate signal score
-        const signal = this.calculateSignalScore(zAnalysis, volAnalysis, history);
+        // Extract HMM signal data
+        const targetDigit = history[history.length - 1];
+        const safetyScore = regime.safetyScore;
+        const hmmState = regime.hmmStateName;
+        const confidence = regime.posteriorNonRep;
 
-        // Step 4: Get adaptive thresholds
+        // Get adaptive thresholds based on recent performance
         const thresholds = this.getAdaptiveThresholds();
 
-        // LOG EVERY 30 SECONDS
+        // LOG EVERY 30 SECONDS FOR DEBUGGING
         const now = Date.now();
-        if (now - this.lastTickLogTime2[asset] >= 30000 && signal) {
-            console.log(`[${asset}] Score=${signal.totalScore.toFixed(1)} | AvgZ=${signal.avgZScore.toFixed(2)} | Digit=${signal.digit} | Conc=${volAnalysis.concentration.toFixed(4)} | Ultra=${volAnalysis.isUltraLow} | Hurst=${volAnalysis.hurst.toFixed(4)} | Recent=${signal.inRecent} | Cooldown=${this.ticksSinceLastTrade[asset]}`);
-            // console.log(`Analysis: ${JSON.stringify(volAnalysis, null, 2)}`);
+        if (now - this.lastTickLogTime2[asset] >= 30000) {
+            console.log(
+                `[${asset}] HMM=${hmmState} | Safety=${safetyScore} | ` +
+                `Conf=${(confidence*100).toFixed(1)}% | Persist=${regime.hmmPersistence} | ` +
+                `RepRate=${regime.rawRepeatProb[targetDigit].toFixed(1)}% | CUSUM=${regime.cusumAlarm ? '⚠️' : '✓'}`
+            );
             this.lastTickLogTime2[asset] = now;
         }
 
-        // Step 5: Check if signal is valid
-        if (!signal || !signal.isValid) return;
-
-        if (signal.totalScore < thresholds.minScore) return;
-        if (signal.avgZScore < thresholds.minZScore) return;
-        if (volAnalysis.concentration < thresholds.minConcentration) return;
-        if (!volAnalysis.isUltraLow || !volAnalysis.isMeanReverting) return;
-
-        // Step 6: Check if different from last trade
-        if (signal.digit === this.lastTradeDigit[asset]) {
-            // Same digit - require higher score
-            if (signal.totalScore < thresholds.minScore + 15) return;
+        // Gating conditions (from HMM)
+        if (hmmState !== 'NON-REP') {
+            if (now - this.lastTickLogTime2[asset] >= 30000) {
+                console.log(`[${asset}] Blocked - Not in NON-REP regime (${hmmState})`);
+            }
+            return;
+        }
+        if (safetyScore < thresholds.minScore) {
+            if (now - this.lastTickLogTime2[asset] >= 30000) {
+                console.log(`[${asset}] Blocked - Safety score too low (${safetyScore} < ${thresholds.minScore})`);
+            }
+            return;
+        }
+        if (regime.cusumAlarm) {
+            if (now - this.lastTickLogTime2[asset] >= 30000) {
+                console.log(`[${asset}] Blocked - CUSUM alarm active`);
+            }
+            return;
         }
 
-        // Step 7: Execute trade
-        this.placeTrade(asset, signal.digit, signal.totalScore, signal.avgZScore, volAnalysis);
+        // Check if same digit as last trade (require higher score for repeats)
+        if (targetDigit === this.lastTradeDigit[asset]) {
+            if (safetyScore < thresholds.minScore + 15) {
+                if (now - this.lastTickLogTime2[asset] >= 30000) {
+                    console.log(`[${asset}] Blocked - Same digit repeat requires higher score`);
+                }
+                return;
+            }
+        }
+
+        // Execute trade with HMM regime data
+        this.placeTrade(asset, targetDigit, safetyScore, regime);
     }
 
     // ========================================================================
     // TRADE EXECUTION
     // ========================================================================
-    placeTrade(asset, digit, score, zScore, volAnalysis) {
+    placeTrade(asset, digit, safetyScore, regime) {
         if (this.tradeInProgress) return;
 
         this.tradeInProgress = true;
@@ -793,9 +872,10 @@ class RomanianGhostUltimate {
 
         console.log(`\n🎯 TRADE SIGNAL — ${asset}`);
         console.log(`   Digit: ${digit}`);
-        console.log(`   Score: ${score.toFixed(1)}`);
-        console.log(`   Avg Z-Score: ${zScore.toFixed(2)}`);
-        console.log(`   Concentration: ${volAnalysis.concentration.toFixed(4)}`);
+        console.log(`   Safety Score: ${safetyScore}`);
+        console.log(`   HMM State: ${regime.hmmStateName}`);
+        console.log(`   Confidence: ${(regime.posteriorNonRep*100).toFixed(1)}%`);
+        console.log(`   Persistence: ${regime.hmmPersistence}`);
         console.log(`   Stake: $${this.stake.toFixed(2)}`);
 
         this.sendRequest({
@@ -814,22 +894,22 @@ class RomanianGhostUltimate {
         });
 
         this.sendTelegram(`
-            🎯 <b>GHOST 9.2 TRADE</b>
+            🎯 <b>GHOST TRADE</b>
 
             📊 Asset: ${asset}
-            🔢 Digit: ${digit}
-            last10Digits: ${this.histories[asset].slice(-10).join(',')}
-            📈 Score: ${score.toFixed(1)}
-            📉 Avg Z: ${zScore.toFixed(2)}
-            🔬 Conc: ${volAnalysis.concentration.toFixed(4)}
-            📉 Hurst: ${volAnalysis.hurst.toFixed(4)}
+            🔢 Target Digit: ${digit}
+            📈 Last 10: ${this.histories[asset].slice(-10).join(',')}
+            🎯 Safety Score: ${safetyScore}
+            🔍 Regime: ${regime.hmmStateName}
+            💯 Confidence: ${(regime.posteriorNonRep*100).toFixed(1)}%
+            ⏱️ Persistence: ${regime.hmmPersistence}
             💰 Stake: $${this.stake.toFixed(2)}
             📊 Losses: ${this.consecutiveLosses}
         `.trim());
     }
 
     // ========================================================================
-    // TRADE RESULT HANDLING (ENHANCED)
+    // TRADE RESULT HANDLING (ENHANCED WITH REGIME ANALYSIS)
     // ========================================================================
     handleTradeResult(contract) {
         const won = contract.status === "won";
@@ -848,7 +928,17 @@ class RomanianGhostUltimate {
             this.recentTrades.shift();
         }
 
-        console.log(`\n${won ? '✅ WIN' : '❌ LOSS'} — ${asset}`);
+        // Get HMM regime data for this asset
+        const hmm = this.assetHMMs.get(asset);
+        const history = this.histories[asset];
+        let regime = null;
+        if (hmm && history.length >= 50) {
+            regime = hmm.analyze(history, exitDigit, history.length);
+        }
+
+        const resultMessage = won ? '✅ WIN' : '❌ LOSS';
+        console.log(`\n${resultMessage} — ${asset}`);
+        console.log(`   Target: ${this.lastTradeDigit[asset]}`);
         console.log(`   Exit Digit: ${exitDigit}`);
         console.log(`   Profit: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}`);
         console.log(`   Net P&L: $${this.netProfit.toFixed(2)}`);
@@ -879,21 +969,38 @@ class RomanianGhostUltimate {
             this.stake = Math.round(this.stake * 100) / 100;
         }
 
-        // Result Alert
-        this.sendTelegram(`
-            ${won ? '✅ WIN' : '❌ LOSS'}
+        // Enhanced Telegram Alert with regime data
+        let telegramContent = `
+            ${won ? '✅ <b>MULTI-BOT WIN!</b>' : '❌ <b>MULTI-BOT LOSS!</b>'}
 
-            📊 Asset: ${asset}
+            📊 Symbol: ${asset}
+            🎯 Target: ${this.lastTradeDigit[asset]}
             🔢 Exit: ${exitDigit}
-            last10Digits: ${this.histories[asset].slice(-10).join(',')}
-            💸 P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}
-            📈 Total: ${this.totalTrades} | W/L: ${this.totalWins}/${this.totalTrades - this.totalWins}
-            🔢 x2-x5: ${this.x2}/${this.x3}/${this.x4}/${this.x5}
-            💰 Next Stake: $${this.stake.toFixed(2)}
-            💵 Net P&L: $${this.netProfit.toFixed(2)}
+            📈 Last 5: ${history.slice(-5).join(', ')}
+            💰 P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}
+            💵 Balance: $${this.netProfit.toFixed(2)}
+            📊 Record: ${this.totalWins}W/${this.totalTrades - this.totalWins}L | Losses: ${this.consecutiveLosses}${this.consecutiveLosses > 1 ? ` (x${this.consecutiveLosses})` : ''}
+            💲 Next Stake: $${this.stake.toFixed(2)}
+        `;
 
+        // Add regime info if available
+        if (regime && regime.valid) {
+            telegramContent += `
+            
+            📈 <b>Regime Analysis:</b>
+            🔍 State: ${regime.hmmStateName}
+            💯 Confidence: ${(regime.posteriorNonRep*100).toFixed(1)}%
+            ⏱️ Persistence: ${regime.hmmPersistence}
+            📊 SafetyScore: ${regime.safetyScore}
+            ⚠️ CUSUM: ${regime.cusumAlarm ? '🚨 ALARM' : '✓ OK'}
+            `;
+        }
+
+        telegramContent += `
             ⏰ ${new Date().toLocaleString()}
-        `.trim());
+        `;
+
+        this.sendTelegram(telegramContent.trim());
 
         // Stop conditions
         if (this.consecutiveLosses >= this.config.maxConsecutiveLosses) {
@@ -1052,7 +1159,23 @@ class RomanianGhostUltimate {
         const prices = msg.history?.prices || [];
         this.histories[asset] = prices.map(p => this.getLastDigit(p, asset));
         this.historyLoaded[asset] = true;
-        console.log(`📊 Loaded ${this.histories[asset].length} ticks for ${asset}`);
+        
+        // Initialize HMM detector for this asset with user settings
+        if (!this.assetHMMs.has(asset)) {
+            const cfg = {
+                analysis_window: this.config.analysis_window,
+                min_ticks_for_hmm: this.config.min_ticks_for_hmm,
+                repeat_threshold: this.config.repeat_threshold,
+                min_regime_persistence: this.config.min_regime_persistence,
+                hmm_nonrep_confidence: this.config.hmm_nonrep_confidence,
+                min_safety_score: this.config.min_safety_score,
+                cusum_threshold: this.config.cusum_threshold,
+                cusum_slack: this.config.cusum_slack
+            };
+            this.assetHMMs.set(asset, new HMMRegimeDetector(cfg));
+        }
+        
+        console.log(`📊 Loaded ${this.histories[asset].length} ticks for ${asset} | HMM initialized`);
     }
 
     getLastDigit(quote, asset) {
@@ -1088,7 +1211,8 @@ class RomanianGhostUltimate {
     // State persistence
     saveState() {
         try {
-            fs.writeFileSync(STATE_FILE, JSON.stringify({
+            // Enhanced state persistence with regime tracking
+            const stateData = {
                 savedAt: Date.now(),
                 stake: this.stake,
                 consecutiveLosses: this.consecutiveLosses,
@@ -1096,19 +1220,59 @@ class RomanianGhostUltimate {
                 totalWins: this.totalWins,
                 x2: this.x2, x3: this.x3, x4: this.x4, x5: this.x5,
                 netProfit: this.netProfit,
-                recentTrades: this.recentTrades
-            }, null, 2));
-        } catch (e) { }
+                recentTrades: this.recentTrades,
+                
+                // Add regime tracking for analysis
+                lastTradeDigit: this.lastTradeDigit,
+                lastTradeTime: this.lastTradeTime,
+                ticksSinceLastTrade: this.ticksSinceLastTrade,
+                
+                // Extended session stats
+                accountBalance: this.accountBalance,
+                startingBalance: this.startingBalance,
+                sessionStartTime: this.sessionStartTime
+            };
+            fs.writeFileSync(STATE_FILE, JSON.stringify(stateData, null, 2));
+        } catch (e) { 
+            console.error('Error saving state:', e.message);
+        }
     }
 
     loadState() {
         try {
             if (!fs.existsSync(STATE_FILE)) return;
             const data = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+            
+            // Only restore if state is recent (within 30 minutes)
             if (Date.now() - data.savedAt > 30 * 60 * 1000) return;
-            Object.assign(this, data);
-            console.log('✅ State restored');
-        } catch (e) { }
+            
+            // Restore basic stats
+            this.stake = data.stake || this.stake;
+            this.consecutiveLosses = data.consecutiveLosses || 0;
+            this.totalTrades = data.totalTrades || 0;
+            this.totalWins = data.totalWins || 0;
+            this.x2 = data.x2 || 0;
+            this.x3 = data.x3 || 0;
+            this.x4 = data.x4 || 0;
+            this.x5 = data.x5 || 0;
+            this.netProfit = data.netProfit || 0;
+            this.recentTrades = data.recentTrades || [];
+            
+            // Restore regime tracking if available
+            if (data.lastTradeDigit) {
+                this.lastTradeDigit = data.lastTradeDigit;
+            }
+            if (data.lastTradeTime) {
+                this.lastTradeTime = data.lastTradeTime;
+            }
+            if (data.ticksSinceLastTrade) {
+                this.ticksSinceLastTrade = data.ticksSinceLastTrade;
+            }
+            
+            console.log('✅ State restored from ' + new Date(data.savedAt).toLocaleString());
+        } catch (e) { 
+            console.error('Error loading state:', e.message);
+        }
     }
 
     startAutoSave() {
