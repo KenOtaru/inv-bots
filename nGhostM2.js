@@ -242,8 +242,9 @@ class HMMRegimeDetector {
     for (let t = 1; t < len; t++) obs[t-1] = window[t] === window[t-1] ? 1 : 0;
 
     // Re-fit HMM every 50 ticks
-    if (!this.hmmFitted || tickCount >= 30) {
+    // if (!this.hmmFitted || tickCount >= 30) {
       const ok = this.baumWelch(obs);
+    if (!this.hmmFitted || tickCount >= 30) {
       if (ok) {
         logHMM(
           `[${asset}] HMM refitted | ` +
@@ -1082,7 +1083,7 @@ class RomanianGhostUltimate {
         // Analyze current regime using HMM 
         const regime = hmm.analyze(history, history[history.length - 1], this.tickCount, asset);
 
-        if (this.tickCount > 50) {
+        if (this.tickCount > 30) {
           this.tickCount = 0;
         }
         
