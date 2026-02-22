@@ -231,7 +231,7 @@ class HMMRegimeDetector {
   }
 
   // ── Full regime analysis ───────────────────────────────────────────────────
-  analyze(tickHistory, targetDigit, tickCount) {
+  analyze(asset, tickHistory, targetDigit, tickCount) {
     const window = tickHistory.slice(-this.cfg.analysis_window);
     const len    = window.length;
     if (len < this.cfg.min_ticks_for_hmm)
@@ -246,7 +246,7 @@ class HMMRegimeDetector {
       const ok = this.baumWelch(obs);
       if (ok) {
         logHMM(
-          `HMM refitted | ` +
+          `[${asset}] HMM refitted | ` +
           `A[NR→NR]=${(this.A[0][0]*100).toFixed(1)}% A[NR→R]=${(this.A[0][1]*100).toFixed(1)}% ` +
           `A[R→NR]=${(this.A[1][0]*100).toFixed(1)}% A[R→R]=${(this.A[1][1]*100).toFixed(1)}% | ` +
           `B(rep|NR)=${(this.B[0][1]*100).toFixed(1)}% B(rep|R)=${(this.B[1][1]*100).toFixed(1)}%`
@@ -1080,7 +1080,7 @@ class RomanianGhostUltimate {
 
         this.tickCount++;
         // Analyze current regime using HMM 
-        const regime = hmm.analyze(history, history[history.length - 1], history.length);
+        const regime = hmm.analyze(asset, history, history[history.length - 1], history.length);
 
         if (this.tickCount > 50) {
           this.tickCount = 0;
