@@ -175,7 +175,7 @@ ${bold('Examples:')}
     process.exit(0);
   }
 
-  const token = get('--token', '');
+  const token = '0P94g4WdSrSrzir';
   if (!token) {
     console.error(red('ERROR: --token is required. Run with --help for usage.'));
     process.exit(1);
@@ -200,8 +200,8 @@ ${bold('Examples:')}
     tick_history_size:      5000,
     analysis_window:        5000,
     min_ticks_for_hmm:      50,
-    repeat_threshold:       8,
-    hmm_nonrep_confidence:  0.90,
+    repeat_threshold:       7,
+    hmm_nonrep_confidence:  0.93,
     min_safety_score:       90,
     min_regime_persistence: 8,
     cusum_threshold:        4.5,
@@ -213,7 +213,7 @@ ${bold('Examples:')}
     martingale_multiplier:  11.3,
     max_martingale_steps:   3,
     max_stake:              500,
-    take_profit:            10,
+    take_profit:            10000,
     stop_loss:              50,
     cooldown_after_max_loss:30000,
   };
