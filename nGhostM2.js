@@ -436,6 +436,7 @@ class RomanianGhostUltimate {
         });
 
         this.assetHMMs   = new Map(); // symbol → HMMRegimeDetector
+        this.tickCount = 0;
 
         // Performance tracking (for adaptive thresholds)
         this.recentTrades = [];  // Last 50 trades for analysis
@@ -799,8 +800,13 @@ class RomanianGhostUltimate {
         const hmm = this.assetHMMs.get(asset);
         if (!hmm) return;
 
-        // Analyze current regime using HMM (REPLACING Z-Score analysis)
-        const regime = hmm.analyze(history, history[history.length - 1], history.length);
+        this.tickCount++;
+        // Analyze current regime using HMM 
+        const regime = hmm.analyze(history, history[history.length - 1], this.tickCount);
+
+        if (this.tickCount > 50) {
+          this.tickCount = 0;
+        }
         
         if (!regime.valid) return;
         if (!regime.signalActive) return;
