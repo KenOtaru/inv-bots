@@ -472,6 +472,282 @@ class RomanianGhostUltimate {
     }
 
     // ========================================================================
+    // WEBSOCKET & UTILITIES
+    // ========================================================================
+    connect() {
+        console.log('🔌 Connecting to Deriv API...');
+        this.ws = new WebSocket('wss://ws.derivws.com/websockets/v3?app_id=1089');
+
+        this.ws.on('open', () => {
+            console.log('✅ Connected');
+            this.connected = true;
+            this.reconnectAttempts = 0;
+            this.sendRequest({ authorize: TOKEN });
+        });
+
+        this.ws.on('message', (data) => {
+            try {
+                this.handleMessage(JSON.parse(data));
+            } catch (e) {
+                console.error('Parse error:', e.message);
+            }
+        });
+
+        this.ws.on('close', () => {
+            this.connected = false;
+            this.wsReady = false;
+            if (!this.isReconnecting && this.reconnectAttempts < this.maxReconnectAttempts && !this.endOfDay) {
+                this.reconnect();
+            }
+        });
+
+        this.ws.on('error', (e) => console.error('WS Error:', e.message));
+    }
+
+    reconnect() {
+        this.isReconnecting = true;
+        this.reconnectAttempts++;
+        const delay = Math.min(this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1), 30000);
+        console.log(`🔄 Reconnecting in ${(delay / 1000).toFixed(1)}s...`);
+        setTimeout(() => {
+            this.isReconnecting = false;
+            this.connect();
+        }, delay);
+    }
+
+    handleMessage(msg) {
+        if (msg.error) {
+            console.error('API Error:', msg.error.message);
+            return;
+        }
+
+        switch (msg.msg_type) {
+            case 'authorize':
+                console.log('✅ Authenticated');
+                this.wsReady = true;
+                this.initializeSubscriptions();
+                break;
+            case 'history':
+                this.handleTickHistory(msg);
+                break;
+            case 'tick':
+                this.handleTickUpdate(msg.tick);
+                break;
+            case 'buy':
+                if (!msg.error) {
+                    this.sendRequest({
+                        proposal_open_contract: 1,
+                        contract_id: msg.buy.contract_id,
+                        subscribe: 1
+                    });
+                } else {
+                    this.tradeInProgress = false;
+                }
+                break;
+            case 'proposal_open_contract':
+                if (msg.proposal_open_contract?.is_sold) {
+                    this.handleTradeResult(msg.proposal_open_contract);
+                }
+                break;
+        }
+    }
+
+    initializeSubscriptions() {
+        console.log('📊 Initializing subscriptions...');
+        this.config.assets.forEach(asset => {
+            this.sendRequest({
+                ticks_history: asset,
+                adjust_start_time: 1,
+                count: this.config.requiredHistoryLength,
+                end: 'latest',
+                start: 1,
+                style: 'ticks'
+            });
+            this.sendRequest({ ticks: asset, subscribe: 1 });
+        });
+    }
+
+    sendRequest(req) {
+        if (this.ws?.readyState === WebSocket.OPEN) {
+            this.ws.send(JSON.stringify(req));
+        }
+    }
+
+    sendTelegram(text) {
+        this.telegramBot.sendMessage(CHAT_ID, text, { parse_mode: "HTML" }).catch(() => { });
+    }
+
+    disconnect() {
+        console.log('🛑 Disconnecting...');
+        this.saveState();
+        this.endOfDay = true;
+        if (this.ws) this.ws.close();
+    }
+
+    // State persistence
+    saveState() {
+        try {
+            // Enhanced state persistence with regime tracking
+            const stateData = {
+                savedAt: Date.now(),
+                stake: this.stake,
+                consecutiveLosses: this.consecutiveLosses,
+                totalTrades: this.totalTrades,
+                totalWins: this.totalWins,
+                x2: this.x2, x3: this.x3, x4: this.x4, x5: this.x5,
+                netProfit: this.netProfit,
+                recentTrades: this.recentTrades,
+                
+                // Add regime tracking for analysis
+                lastTradeDigit: this.lastTradeDigit,
+                lastTradeTime: this.lastTradeTime,
+                ticksSinceLastTrade: this.ticksSinceLastTrade,
+                
+                // Extended session stats
+                accountBalance: this.accountBalance,
+                startingBalance: this.startingBalance,
+                sessionStartTime: this.sessionStartTime
+            };
+            fs.writeFileSync(STATE_FILE, JSON.stringify(stateData, null, 2));
+        } catch (e) { 
+            console.error('Error saving state:', e.message);
+        }
+    }
+
+    loadState() {
+        try {
+            if (!fs.existsSync(STATE_FILE)) return;
+            const data = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+            
+            // Only restore if state is recent (within 30 minutes)
+            if (Date.now() - data.savedAt > 30 * 60 * 1000) return;
+            
+            // Restore basic stats
+            this.stake = data.stake || this.stake;
+            this.consecutiveLosses = data.consecutiveLosses || 0;
+            this.totalTrades = data.totalTrades || 0;
+            this.totalWins = data.totalWins || 0;
+            this.x2 = data.x2 || 0;
+            this.x3 = data.x3 || 0;
+            this.x4 = data.x4 || 0;
+            this.x5 = data.x5 || 0;
+            this.netProfit = data.netProfit || 0;
+            this.recentTrades = data.recentTrades || [];
+            
+            // Restore regime tracking if available
+            if (data.lastTradeDigit) {
+                this.lastTradeDigit = data.lastTradeDigit;
+            }
+            if (data.lastTradeTime) {
+                this.lastTradeTime = data.lastTradeTime;
+            }
+            if (data.ticksSinceLastTrade) {
+                this.ticksSinceLastTrade = data.ticksSinceLastTrade;
+            }
+            
+            console.log('✅ State restored from ' + new Date(data.savedAt).toLocaleString());
+        } catch (e) { 
+            console.error('Error loading state:', e.message);
+        }
+    }
+
+    startAutoSave() {
+        setInterval(() => this.saveState(), 5000);
+    }
+
+    startHourlySummary() {
+        setInterval(() => {
+            if (this.hourly.trades === 0) return;
+            const winRate = ((this.hourly.wins / this.hourly.trades) * 100).toFixed(1);
+            this.sendTelegram(`
+            ⏰ <b>HOURLY — GHOST 9.2</b>
+
+            📊 Trades: ${this.hourly.trades}
+            ✅/❌ W/L: ${this.hourly.wins}/${this.hourly.losses}
+            📈 Win Rate: ${winRate}%
+            💰 P&L: ${this.hourly.pnl >= 0 ? '+' : ''}$${this.hourly.pnl.toFixed(2)}
+
+            📊 <b>Session</b>
+            ├ Total: ${this.totalTrades}
+            ├ W/L: ${this.totalWins}/${this.totalTrades - this.totalWins}
+            ├ x2-x5: ${this.x2}/${this.x3}/${this.x4}/${this.x5}
+            └ Net: $${this.netProfit.toFixed(2)}
+            `.trim());
+            this.hourly = { trades: 0, wins: 0, losses: 0, pnl: 0 };
+            this.hourly = { trades: 0, wins: 0, losses: 0, pnl: 0 };
+        }, 3600000);
+    }
+
+    // Extract last digit based on asset type (CORRECTED - handles fractional digits properly)
+    getLastDigit(quote, asset) {
+        const quoteString = quote.toString();
+        const [, fractionalPart = ''] = quoteString.split('.');
+
+        if (['RDBULL', 'RDBEAR', 'R_75', 'R_50'].includes(asset)) {
+            return fractionalPart.length >= 4 ? parseInt(fractionalPart[3]) : 0;
+        } else if (['R_10', 'R_25', '1HZ15V', '1HZ30V', '1HZ90V',].includes(asset)) {
+            return fractionalPart.length >= 3 ? parseInt(fractionalPart[2]) : 0;
+        } else {
+            return fractionalPart.length >= 2 ? parseInt(fractionalPart[1]) : 0;
+        }
+    }
+
+    handleTickHistory(msg) {
+        const asset = msg.echo_req.ticks_history;
+        const prices = msg.history?.prices || [];
+        this.histories[asset] = prices.map(p => this.getLastDigit(p, asset));
+        this.historyLoaded[asset] = true;
+        
+        // Initialize HMM detector for this asset with user settings
+        if (!this.assetHMMs.has(asset)) {
+            const cfg = {
+                analysis_window: this.config.analysis_window,
+                min_ticks_for_hmm: this.config.min_ticks_for_hmm,
+                repeat_threshold: this.config.repeat_threshold,
+                min_regime_persistence: this.config.min_regime_persistence,
+                hmm_nonrep_confidence: this.config.hmm_nonrep_confidence,
+                min_safety_score: this.config.min_safety_score,
+                cusum_threshold: this.config.cusum_threshold,
+                cusum_slack: this.config.cusum_slack
+            };
+            this.assetHMMs.set(asset, new HMMRegimeDetector(cfg));
+        }
+        
+        console.log(`📊 Loaded ${this.histories[asset].length} ticks for ${asset} | HMM initialized`);
+    }
+
+    // ========================================================================
+    // TICK HANDLING
+    // ========================================================================
+    handleTickUpdate(tick) {
+        const asset = tick.symbol;
+        if (!this.config.assets.includes(asset)) return;
+
+        const lastDigit = this.getLastDigit(tick.quote, asset);
+
+        this.histories[asset].push(lastDigit);
+        if (this.histories[asset].length > this.config.requiredHistoryLength) {
+            this.histories[asset].shift();
+        }
+
+        // Increment cooldown counter
+        this.ticksSinceLastTrade[asset]++;
+
+        // LOG EVERY 30 SECONDS
+        const now = Date.now();
+        if (now - this.lastTickLogTime[asset] >= 30000) {
+            console.log(`📈 [${asset}] Tick #${this.histories[asset].length} | Digit: ${lastDigit}`);
+            console.log(`   Last 10: ${this.histories[asset].slice(-10).join(', ')}`);
+            this.lastTickLogTime[asset] = now;
+        }
+
+        // Scan for signals
+        if (this.historyLoaded[asset] && !this.tradeInProgress) {
+            this.scanForSignal(asset);
+        }
+    }
+
+    // ========================================================================
     // ENHANCEMENT #1: MULTI-LAYER Z-SCORE WITH AVERAGE (FIXED)
     // ========================================================================
     calculateZScoreAnalysis(history) {
@@ -804,7 +1080,7 @@ class RomanianGhostUltimate {
 
         this.tickCount++;
         // Analyze current regime using HMM 
-        const regime = hmm.analyze(history, history[history.length - 1], this.tickCount);
+        const regime = hmm.analyze(history, history[history.length - 1], history.length);
 
         if (this.tickCount > 50) {
           this.tickCount = 0;
@@ -853,7 +1129,7 @@ class RomanianGhostUltimate {
 
         // Check if same digit as last trade (require higher score for repeats)
         if (targetDigit === this.lastTradeDigit[asset]) {
-            if (safetyScore < this.asset_safety_score + 1) { // Require 1 extra points for repeat digit
+            if (safetyScore < this.asset_safety_score + 0.1) { // Require 1 extra points for repeat digit
                 console.log(`[${asset}] Blocked - Same digit repeat requires higher score`);
                 return;
             }
@@ -871,7 +1147,7 @@ class RomanianGhostUltimate {
 
         this.tradeInProgress = true;
         this.lastTradeDigit[asset] = digit;
-        this.asset_safety_score[asset] = safetyScore;
+        this.asset_safety_score[asset] = (regime.posteriorNonRep*100).toFixed(1);
         this.lastTradeTime[asset] = Date.now();
         this.ticksSinceLastTrade[asset] = 0;
 
@@ -905,8 +1181,7 @@ class RomanianGhostUltimate {
             🔢 Target Digit: ${digit}
             📈 Last 10: ${this.histories[asset].slice(-10).join(',')}
             🛡️ Safety Score: ${safetyScore}
-            📊 P(RNR): ${(regime.posteriorNonRep*100).toFixed(1)}% | P(REP): ${(regime.posteriorRep*100).toFixed(1)}%
-            💯 Confidence: ${(regime.posteriorNonRep*100).toFixed(1)}%
+            💯 P(RNR): ${(regime.posteriorNonRep*100).toFixed(1)}% | P(REP): ${(regime.posteriorRep*100).toFixed(1)}%
             ⏱️ Persistence: ${regime.hmmPersistence}
             💰 Stake: $${this.stake.toFixed(2)}
             📊 Losses: ${this.consecutiveLosses}
@@ -987,11 +1262,8 @@ class RomanianGhostUltimate {
             💰 P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}
             💵 Balance: $${this.netProfit.toFixed(2)}
             📊 Record: ${this.totalWins}W/${this.totalTrades - this.totalWins}L | Losses: ${this.consecutiveLosses}${this.consecutiveLosses > 1 ? ` (x${this.consecutiveLosses})` : ''}
+            📊 WIN RATE: ${((this.totalWins / this.totalTrades) * 100).toFixed(1)}%
             💲 Next Stake: $${this.stake.toFixed(2)}
-        `;
-
-        telegramContent += `
-            ⏰ ${new Date().toLocaleString()}
         `;
 
         this.sendTelegram(telegramContent.trim());
@@ -1019,281 +1291,6 @@ class RomanianGhostUltimate {
         }
 
         this.tradeInProgress = false;
-    }
-
-    // ========================================================================
-    // TICK HANDLING
-    // ========================================================================
-    handleTickUpdate(tick) {
-        const asset = tick.symbol;
-        if (!this.config.assets.includes(asset)) return;
-
-        const lastDigit = this.getLastDigit(tick.quote, asset);
-
-        this.histories[asset].push(lastDigit);
-        if (this.histories[asset].length > this.config.requiredHistoryLength) {
-            this.histories[asset].shift();
-        }
-
-        // Increment cooldown counter
-        this.ticksSinceLastTrade[asset]++;
-
-        // LOG EVERY 30 SECONDS
-        const now = Date.now();
-        if (now - this.lastTickLogTime[asset] >= 30000) {
-            console.log(`📈 [${asset}] Tick #${this.histories[asset].length} | Digit: ${lastDigit}`);
-            console.log(`   Last 10: ${this.histories[asset].slice(-10).join(', ')}`);
-            this.lastTickLogTime[asset] = now;
-        }
-
-        // Scan for signals
-        if (this.historyLoaded[asset] && !this.tradeInProgress) {
-            this.scanForSignal(asset);
-        }
-    }
-
-    // ========================================================================
-    // WEBSOCKET & UTILITIES
-    // ========================================================================
-    connect() {
-        console.log('🔌 Connecting to Deriv API...');
-        this.ws = new WebSocket('wss://ws.derivws.com/websockets/v3?app_id=1089');
-
-        this.ws.on('open', () => {
-            console.log('✅ Connected');
-            this.connected = true;
-            this.reconnectAttempts = 0;
-            this.sendRequest({ authorize: TOKEN });
-        });
-
-        this.ws.on('message', (data) => {
-            try {
-                this.handleMessage(JSON.parse(data));
-            } catch (e) {
-                console.error('Parse error:', e.message);
-            }
-        });
-
-        this.ws.on('close', () => {
-            this.connected = false;
-            this.wsReady = false;
-            if (!this.isReconnecting && this.reconnectAttempts < this.maxReconnectAttempts && !this.endOfDay) {
-                this.reconnect();
-            }
-        });
-
-        this.ws.on('error', (e) => console.error('WS Error:', e.message));
-    }
-
-    reconnect() {
-        this.isReconnecting = true;
-        this.reconnectAttempts++;
-        const delay = Math.min(this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1), 30000);
-        console.log(`🔄 Reconnecting in ${(delay / 1000).toFixed(1)}s...`);
-        setTimeout(() => {
-            this.isReconnecting = false;
-            this.connect();
-        }, delay);
-    }
-
-    handleMessage(msg) {
-        if (msg.error) {
-            console.error('API Error:', msg.error.message);
-            return;
-        }
-
-        switch (msg.msg_type) {
-            case 'authorize':
-                console.log('✅ Authenticated');
-                this.wsReady = true;
-                this.initializeSubscriptions();
-                break;
-            case 'history':
-                this.handleTickHistory(msg);
-                break;
-            case 'tick':
-                this.handleTickUpdate(msg.tick);
-                break;
-            case 'buy':
-                if (!msg.error) {
-                    this.sendRequest({
-                        proposal_open_contract: 1,
-                        contract_id: msg.buy.contract_id,
-                        subscribe: 1
-                    });
-                } else {
-                    this.tradeInProgress = false;
-                }
-                break;
-            case 'proposal_open_contract':
-                if (msg.proposal_open_contract?.is_sold) {
-                    this.handleTradeResult(msg.proposal_open_contract);
-                }
-                break;
-        }
-    }
-
-    initializeSubscriptions() {
-        console.log('📊 Initializing subscriptions...');
-        this.config.assets.forEach(asset => {
-            this.sendRequest({
-                ticks_history: asset,
-                adjust_start_time: 1,
-                count: this.config.requiredHistoryLength,
-                end: 'latest',
-                start: 1,
-                style: 'ticks'
-            });
-            this.sendRequest({ ticks: asset, subscribe: 1 });
-        });
-    }
-
-    handleTickHistory(msg) {
-        const asset = msg.echo_req.ticks_history;
-        const prices = msg.history?.prices || [];
-        this.histories[asset] = prices.map(p => this.getLastDigit(p, asset));
-        this.historyLoaded[asset] = true;
-        
-        // Initialize HMM detector for this asset with user settings
-        if (!this.assetHMMs.has(asset)) {
-            const cfg = {
-                analysis_window: this.config.analysis_window,
-                min_ticks_for_hmm: this.config.min_ticks_for_hmm,
-                repeat_threshold: this.config.repeat_threshold,
-                min_regime_persistence: this.config.min_regime_persistence,
-                hmm_nonrep_confidence: this.config.hmm_nonrep_confidence,
-                min_safety_score: this.config.min_safety_score,
-                cusum_threshold: this.config.cusum_threshold,
-                cusum_slack: this.config.cusum_slack
-            };
-            this.assetHMMs.set(asset, new HMMRegimeDetector(cfg));
-        }
-        
-        console.log(`📊 Loaded ${this.histories[asset].length} ticks for ${asset} | HMM initialized`);
-    }
-
-    getLastDigit(quote, asset) {
-        const quoteString = quote.toString();
-        const [, fractionalPart = ''] = quoteString.split('.');
-
-        if (['RDBULL', 'RDBEAR', 'R_75', 'R_50'].includes(asset)) {
-            return fractionalPart.length >= 4 ? parseInt(fractionalPart[3]) : 0;
-        } else if (['R_10', 'R_25', '1HZ15V', '1HZ30V', '1HZ90V',].includes(asset)) {
-            return fractionalPart.length >= 3 ? parseInt(fractionalPart[2]) : 0;
-        } else {
-            return fractionalPart.length >= 2 ? parseInt(fractionalPart[1]) : 0;
-        }
-    }
-
-    sendRequest(req) {
-        if (this.ws?.readyState === WebSocket.OPEN) {
-            this.ws.send(JSON.stringify(req));
-        }
-    }
-
-    sendTelegram(text) {
-        this.telegramBot.sendMessage(CHAT_ID, text, { parse_mode: "HTML" }).catch(() => { });
-    }
-
-    disconnect() {
-        console.log('🛑 Disconnecting...');
-        this.saveState();
-        this.endOfDay = true;
-        if (this.ws) this.ws.close();
-    }
-
-    // State persistence
-    saveState() {
-        try {
-            // Enhanced state persistence with regime tracking
-            const stateData = {
-                savedAt: Date.now(),
-                stake: this.stake,
-                consecutiveLosses: this.consecutiveLosses,
-                totalTrades: this.totalTrades,
-                totalWins: this.totalWins,
-                x2: this.x2, x3: this.x3, x4: this.x4, x5: this.x5,
-                netProfit: this.netProfit,
-                recentTrades: this.recentTrades,
-                
-                // Add regime tracking for analysis
-                lastTradeDigit: this.lastTradeDigit,
-                lastTradeTime: this.lastTradeTime,
-                ticksSinceLastTrade: this.ticksSinceLastTrade,
-                
-                // Extended session stats
-                accountBalance: this.accountBalance,
-                startingBalance: this.startingBalance,
-                sessionStartTime: this.sessionStartTime
-            };
-            fs.writeFileSync(STATE_FILE, JSON.stringify(stateData, null, 2));
-        } catch (e) { 
-            console.error('Error saving state:', e.message);
-        }
-    }
-
-    loadState() {
-        try {
-            if (!fs.existsSync(STATE_FILE)) return;
-            const data = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
-            
-            // Only restore if state is recent (within 30 minutes)
-            if (Date.now() - data.savedAt > 30 * 60 * 1000) return;
-            
-            // Restore basic stats
-            this.stake = data.stake || this.stake;
-            this.consecutiveLosses = data.consecutiveLosses || 0;
-            this.totalTrades = data.totalTrades || 0;
-            this.totalWins = data.totalWins || 0;
-            this.x2 = data.x2 || 0;
-            this.x3 = data.x3 || 0;
-            this.x4 = data.x4 || 0;
-            this.x5 = data.x5 || 0;
-            this.netProfit = data.netProfit || 0;
-            this.recentTrades = data.recentTrades || [];
-            
-            // Restore regime tracking if available
-            if (data.lastTradeDigit) {
-                this.lastTradeDigit = data.lastTradeDigit;
-            }
-            if (data.lastTradeTime) {
-                this.lastTradeTime = data.lastTradeTime;
-            }
-            if (data.ticksSinceLastTrade) {
-                this.ticksSinceLastTrade = data.ticksSinceLastTrade;
-            }
-            
-            console.log('✅ State restored from ' + new Date(data.savedAt).toLocaleString());
-        } catch (e) { 
-            console.error('Error loading state:', e.message);
-        }
-    }
-
-    startAutoSave() {
-        setInterval(() => this.saveState(), 5000);
-    }
-
-    startHourlySummary() {
-        setInterval(() => {
-            if (this.hourly.trades === 0) return;
-            const winRate = ((this.hourly.wins / this.hourly.trades) * 100).toFixed(1);
-            this.sendTelegram(`
-            ⏰ <b>HOURLY — GHOST 9.2</b>
-
-            📊 Trades: ${this.hourly.trades}
-            ✅/❌ W/L: ${this.hourly.wins}/${this.hourly.losses}
-            📈 Win Rate: ${winRate}%
-            💰 P&L: ${this.hourly.pnl >= 0 ? '+' : ''}$${this.hourly.pnl.toFixed(2)}
-
-            📊 <b>Session</b>
-            ├ Total: ${this.totalTrades}
-            ├ W/L: ${this.totalWins}/${this.totalTrades - this.totalWins}
-            ├ x2-x5: ${this.x2}/${this.x3}/${this.x4}/${this.x5}
-            └ Net: $${this.netProfit.toFixed(2)}
-            `.trim());
-            this.hourly = { trades: 0, wins: 0, losses: 0, pnl: 0 };
-            this.hourly = { trades: 0, wins: 0, losses: 0, pnl: 0 };
-        }, 3600000);
     }
 
     checkTimeForDisconnectReconnect() {
