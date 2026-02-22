@@ -1078,18 +1078,13 @@ class RomanianGhostUltimate {
         const hmm = this.assetHMMs.get(asset);
         if (!hmm) return;
 
-        // LOG EVERY 30 SECONDS FOR DEBUGGING
-        const now = Date.now();
-        if (now - this.lastTickLogTime2[asset] >= 30000) {
-            this.tickCount = 30; // Refit HMM analysis every 30 seconds for visibility
-        }
-
+        this.tickCount++;
         // Analyze current regime using HMM 
         const regime = hmm.analyze(asset, history, history[history.length - 1], this.tickCount);
 
-        // if (this.tickCount > 10) {
-        //   this.tickCount = 0;
-        // }
+        if (this.tickCount > 50) {
+          this.tickCount = 0;
+        }
         
         if (!regime.valid) return;
         if (!regime.signalActive) return;
@@ -1104,36 +1099,32 @@ class RomanianGhostUltimate {
         const thresholds = this.getAdaptiveThresholds();
 
         // LOG EVERY 30 SECONDS FOR DEBUGGING
-        // const now = Date.now();
+        const now = Date.now();
         if (now - this.lastTickLogTime2[asset] >= 30000) {
             console.log(
                 `[${asset}] HMM=${hmmState} | Safety=${safetyScore} | ` +
                 `Conf=${(confidence*100).toFixed(1)}% | Persist=${regime.hmmPersistence} | ` +
                 `RepRate=${regime.rawRepeatProb[targetDigit].toFixed(1)}% | CUSUM=${regime.cusumAlarm ? '⚠️' : '✓'}`
             );
-         
-
-            // Gating conditions (from HMM)
-            if (hmmState !== 'NON-REP') {
-                // if (now - this.lastTickLogTime2[asset] >= 30000) {
-                    console.log(`[${asset}] Blocked - Not in NON-REP regime (${hmmState})`);
-                // }
-                return;
-            }
-            if (safetyScore < this.config.min_safety_score) {
-                // if (now - this.lastTickLogTime2[asset] >= 30000) {
-                    console.log(`[${asset}] Blocked - Safety score too low (${safetyScore} < ${this.config.min_safety_score})`);
-                // }
-                return;
-            }
-            if (regime.cusumAlarm) {
-                    console.log(`[${asset}] Blocked - CUSUM alarm active`);
-                return;
-            }
-
-            this.tickCount = 0;
-
             this.lastTickLogTime2[asset] = now;
+        }
+
+        // Gating conditions (from HMM)
+        if (hmmState !== 'NON-REP') {
+            // if (now - this.lastTickLogTime2[asset] >= 30000) {
+                console.log(`[${asset}] Blocked - Not in NON-REP regime (${hmmState})`);
+            // }
+            return;
+        }
+        if (safetyScore < this.config.min_safety_score) {
+            // if (now - this.lastTickLogTime2[asset] >= 30000) {
+                console.log(`[${asset}] Blocked - Safety score too low (${safetyScore} < ${this.config.min_safety_score})`);
+            // }
+            return;
+        }
+        if (regime.cusumAlarm) {
+                console.log(`[${asset}] Blocked - CUSUM alarm active`);
+            return;
         }
 
         // Check if same digit as last trade (require higher score for repeats)
