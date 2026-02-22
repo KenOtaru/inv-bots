@@ -1082,7 +1082,7 @@ class RomanianGhostUltimate {
         // Analyze current regime using HMM 
         const regime = hmm.analyze(asset, history, history[history.length - 1], this.tickCount);
 
-        if (this.tickCount > 50) {
+        if (this.tickCount > 30) {
           this.tickCount = 0;
         }
         
