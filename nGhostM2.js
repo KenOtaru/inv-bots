@@ -370,7 +370,7 @@ class RomanianGhostUltimate {
 
             // ====== HMM REGIME DETECTION SETTINGS ======
             min_ticks_for_hmm:      50,
-            repeat_threshold:       9,
+            repeat_threshold:       7,
             hmm_nonrep_confidence:  0.93,
             min_safety_score:       90,
             min_regime_persistence: 8,
@@ -1257,7 +1257,7 @@ class RomanianGhostUltimate {
             📊 Symbol: ${asset}
             🎯 Target: ${this.lastTradeDigit[asset]}
             🔢 Exit: ${exitDigit}
-            📈 Last 5: ${history.slice(-5).join(', ')}
+            📈 Last 5: ${history.slice(-10).join(', ')}
             🛡️ Confidece: ${this.asset_safety_score[asset]}
             💰 P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}
             💵 Balance: $${this.netProfit.toFixed(2)}

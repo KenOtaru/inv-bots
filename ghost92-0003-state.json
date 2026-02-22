@@ -1,0 +1,171 @@
+{
+  "savedAt": 1771789550753,
+  "stake": 2.2,
+  "consecutiveLosses": 0,
+  "totalTrades": 26,
+  "totalWins": 22,
+  "x2": 1,
+  "x3": 0,
+  "x4": 0,
+  "x5": 0,
+  "netProfit": -20.889999999999997,
+  "recentTrades": [
+    {
+      "won": true,
+      "profit": 0.19,
+      "time": 1771787670804
+    },
+    {
+      "won": true,
+      "profit": 0.19,
+      "time": 1771787698849
+    },
+    {
+      "won": true,
+      "profit": 0.19,
+      "time": 1771787742980
+    },
+    {
+      "won": true,
+      "profit": 0.19,
+      "time": 1771787772835
+    },
+    {
+      "won": true,
+      "profit": 0.19,
+      "time": 1771787802833
+    },
+    {
+      "won": true,
+      "profit": 0.21,
+      "time": 1771788006879
+    },
+    {
+      "won": true,
+      "profit": 0.21,
+      "time": 1771788050852
+    },
+    {
+      "won": false,
+      "profit": -2.2,
+      "time": 1771788096840
+    },
+    {
+      "won": true,
+      "profit": 2.4,
+      "time": 1771788213578
+    },
+    {
+      "won": true,
+      "profit": 0.21,
+      "time": 1771788379080
+    },
+    {
+      "won": true,
+      "profit": 0.21,
+      "time": 1771788634766
+    },
+    {
+      "won": true,
+      "profit": 0.21,
+      "time": 1771788658772
+    },
+    {
+      "won": true,
+      "profit": 0.21,
+      "time": 1771788814806
+    },
+    {
+      "won": true,
+      "profit": 0.21,
+      "time": 1771788906783
+    },
+    {
+      "won": true,
+      "profit": 0.21,
+      "time": 1771789025037
+    },
+    {
+      "won": true,
+      "profit": 0.21,
+      "time": 1771789054836
+    },
+    {
+      "won": true,
+      "profit": 0.21,
+      "time": 1771789126768
+    },
+    {
+      "won": true,
+      "profit": 0.21,
+      "time": 1771789182754
+    },
+    {
+      "won": false,
+      "profit": -2.2,
+      "time": 1771789296782
+    },
+    {
+      "won": false,
+      "profit": -24.86,
+      "time": 1771789308781
+    },
+    {
+      "won": true,
+      "profit": 2.16,
+      "time": 1771789358836
+    },
+    {
+      "won": true,
+      "profit": 0.19,
+      "time": 1771789390829
+    },
+    {
+      "won": false,
+      "profit": -2.2,
+      "time": 1771789424786
+    },
+    {
+      "won": true,
+      "profit": 2.16,
+      "time": 1771789472826
+    },
+    {
+      "won": true,
+      "profit": 0.21,
+      "time": 1771789486757
+    },
+    {
+      "won": true,
+      "profit": 0.19,
+      "time": 1771789500804
+    }
+  ],
+  "lastTradeDigit": {
+    "R_10": null,
+    "R_25": 8,
+    "R_50": 5,
+    "R_75": null,
+    "R_100": 9,
+    "RDBULL": 1,
+    "RDBEAR": null
+  },
+  "lastTradeTime": {
+    "R_10": 0,
+    "R_25": 1771789419747,
+    "R_50": 1771789481741,
+    "R_75": 0,
+    "R_100": 1771789495495,
+    "RDBULL": 1771789303059,
+    "RDBEAR": 0
+  },
+  "ticksSinceLastTrade": {
+    "R_10": 1930,
+    "R_25": 47,
+    "R_50": 16,
+    "R_75": 1930,
+    "R_100": 9,
+    "RDBULL": 106,
+    "RDBEAR": 1930
+  }
+}
