@@ -363,7 +363,7 @@ class RomanianGhostUltimate {
         // ====== CONFIGURATION ======
         this.config = {
             assets: [
-                'R_10', 'R_25', 'R_50', 'R_75', 'RDBULL', 'RDBEAR',
+                'R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'RDBULL', 'RDBEAR',
             ],  // Multi-asset support
             requiredHistoryLength: 5000,
             minHistoryForTrading: 5000,
@@ -1129,8 +1129,8 @@ class RomanianGhostUltimate {
 
         // Check if same digit as last trade (require higher score for repeats)
         if (targetDigit === this.lastTradeDigit[asset]) {
-            if (safetyScore < this.asset_safety_score + 0.1) { // Require 1 extra points for repeat digit
-                console.log(`[${asset}] Blocked - Same digit repeat requires higher score`);
+            if (this.asset_safety_score < this.asset_safety_score + 0.1) { // Require 1 extra points for repeat digit
+                console.log(`[${asset}] Blocked - Same digit repeat requires higher Confidence`);
                 return;
             }
         }
@@ -1258,7 +1258,7 @@ class RomanianGhostUltimate {
             🎯 Target: ${this.lastTradeDigit[asset]}
             🔢 Exit: ${exitDigit}
             📈 Last 5: ${history.slice(-5).join(', ')}
-            🛡️ Safety Score: ${this.asset_safety_score[asset]}
+            🛡️ Confidece: ${this.asset_safety_score[asset]}
             💰 P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}
             💵 Balance: $${this.netProfit.toFixed(2)}
             📊 Record: ${this.totalWins}W/${this.totalTrades - this.totalWins}L | Losses: ${this.consecutiveLosses}${this.consecutiveLosses > 1 ? ` (x${this.consecutiveLosses})` : ''}
