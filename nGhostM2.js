@@ -363,7 +363,7 @@ class RomanianGhostUltimate {
         // ====== CONFIGURATION ======
         this.config = {
             assets: [
-                'R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'RDBULL', 'RDBEAR',
+                'R_10', 'R_25', 'R_50', 'R_75', 'RDBULL', 'RDBEAR',
             ],  // Multi-asset support
             requiredHistoryLength: 5000,
             minHistoryForTrading: 5000,
@@ -906,7 +906,7 @@ class RomanianGhostUltimate {
             🔢 Target Digit: ${digit}
             📈 Last 10: ${this.histories[asset].slice(-10).join(',')}
             🎯 Safety Score: ${safetyScore}
-            🔍 Regime: ${regime.hmmStateName}
+            📊 P(RNR): ${(regime.posteriorNonRep*100).toFixed(1)}% | P(REP): ${(regime.posteriorRep*100).toFixed(1)}%
             💯 Confidence: ${(regime.posteriorNonRep*100).toFixed(1)}%
             ⏱️ Persistence: ${regime.hmmPersistence}
             💰 Stake: $${this.stake.toFixed(2)}
@@ -988,19 +988,6 @@ class RomanianGhostUltimate {
             📊 Record: ${this.totalWins}W/${this.totalTrades - this.totalWins}L | Losses: ${this.consecutiveLosses}${this.consecutiveLosses > 1 ? ` (x${this.consecutiveLosses})` : ''}
             💲 Next Stake: $${this.stake.toFixed(2)}
         `;
-
-        // Add regime info if available
-        if (regime && regime.valid) {
-            telegramContent += `
-            
-            📈 <b>Regime Analysis:</b>
-            🔍 State: ${regime.hmmStateName}
-            💯 Confidence: ${(regime.posteriorNonRep*100).toFixed(1)}%
-            ⏱️ Persistence: ${regime.hmmPersistence}
-            📊 SafetyScore: ${regime.safetyScore}
-            ⚠️ CUSUM: ${regime.cusumAlarm ? '🚨 ALARM' : '✓ OK'}
-            `;
-        }
 
         telegramContent += `
             ⏰ ${new Date().toLocaleString()}
@@ -1290,18 +1277,18 @@ class RomanianGhostUltimate {
             if (this.hourly.trades === 0) return;
             const winRate = ((this.hourly.wins / this.hourly.trades) * 100).toFixed(1);
             this.sendTelegram(`
-⏰ <b>HOURLY — GHOST 9.2</b>
+            ⏰ <b>HOURLY — GHOST 9.2</b>
 
-📊 Trades: ${this.hourly.trades}
-✅/❌ W/L: ${this.hourly.wins}/${this.hourly.losses}
-📈 Win Rate: ${winRate}%
-💰 P&L: ${this.hourly.pnl >= 0 ? '+' : ''}$${this.hourly.pnl.toFixed(2)}
+            📊 Trades: ${this.hourly.trades}
+            ✅/❌ W/L: ${this.hourly.wins}/${this.hourly.losses}
+            📈 Win Rate: ${winRate}%
+            💰 P&L: ${this.hourly.pnl >= 0 ? '+' : ''}$${this.hourly.pnl.toFixed(2)}
 
-📊 <b>Session</b>
-├ Total: ${this.totalTrades}
-├ W/L: ${this.totalWins}/${this.totalTrades - this.totalWins}
-├ x2-x5: ${this.x2}/${this.x3}/${this.x4}/${this.x5}
-└ Net: $${this.netProfit.toFixed(2)}
+            📊 <b>Session</b>
+            ├ Total: ${this.totalTrades}
+            ├ W/L: ${this.totalWins}/${this.totalTrades - this.totalWins}
+            ├ x2-x5: ${this.x2}/${this.x3}/${this.x4}/${this.x5}
+            └ Net: $${this.netProfit.toFixed(2)}
             `.trim());
             this.hourly = { trades: 0, wins: 0, losses: 0, pnl: 0 };
             this.hourly = { trades: 0, wins: 0, losses: 0, pnl: 0 };
