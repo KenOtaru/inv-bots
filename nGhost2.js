@@ -1574,14 +1574,15 @@ class RomanianGhostBot {
         );
 
         this.sendTelegram(`
-🎯 <b>TRADE</b>
+            🎯 <b>TRADE 2</b>
 
-📊 ${this.config.symbol} | Digit: ${this.targetDigit}
-💰 Stake: $${this.currentStake.toFixed(2)}${stepInfo}
-📈 Rate: ${this.targetRepeatRate.toFixed(1)}% | Score: ${score}/100
-🔬 P(NR): ${pnr} | BOCPD_RL: ${bocpdRL}t
-👻 Ghost: ${this.ghostConsecutiveWins}/${this.config.ghost_wins_required}
-📊 ${this.totalTrades} trades | ${this.totalWins}W/${this.totalLosses}L | P&L: ${this.sessionProfit>=0?'+':''}$${this.sessionProfit.toFixed(2)}
+            📊 ${this.config.symbol} | Digit: ${this.targetDigit}
+            last 5 ticks: ${this.tickHistory.slice(-5).join(', ')}
+            💰 Stake: $${this.currentStake.toFixed(2)}${stepInfo}
+            📈 Rate: ${this.targetRepeatRate.toFixed(1)}% | Score: ${score}/100
+            🔬 P(NR): ${pnr} | BOCPD_RL: ${bocpdRL}t
+            👻 Ghost: ${this.ghostConsecutiveWins}/${this.config.ghost_wins_required}
+            📊 ${this.totalTrades} trades | ${this.totalWins}W/${this.totalLosses}L | P&L: ${this.sessionProfit>=0?'+':''}$${this.sessionProfit.toFixed(2)}
         `.trim());
 
         this.send({
@@ -1628,7 +1629,7 @@ class RomanianGhostBot {
         const plStr=this.sessionProfit>=0?green(formatMoney(this.sessionProfit)):red(formatMoney(this.sessionProfit));
         logResult(`${green('✅ WIN!')} Profit: ${green('+$'+profit.toFixed(2))} | P/L: ${plStr} | Bal: ${green('$'+this.accountBalance.toFixed(2))}`);
         if (resultDigit!==null) logResult(dim(`  Target:${this.targetDigit} Result:${resultDigit} Ghost:${this.ghostConsecutiveWins}/${this.config.ghost_wins_required}`));
-        this.sendTelegram(`✅ <b>WIN!</b>\n\nTarget:${this.targetDigit} | Result:${resultDigit}\n💰 +$${profit.toFixed(2)} | P&L: ${this.sessionProfit>=0?'+':''}$${this.sessionProfit.toFixed(2)}\n📊 ${this.totalWins}W/${this.totalLosses}L\n${new Date().toLocaleString()}`);
+        this.sendTelegram(`✅ <b>WIN 2!</b>\n\nTarget:${this.targetDigit} | Result:${resultDigit}\n💰 +$${profit.toFixed(2)} | P&L: ${this.sessionProfit>=0?'+':''}$${this.sessionProfit.toFixed(2)}\n📊 ${this.totalWins}W/${this.totalLosses}L\n${new Date().toLocaleString()}`);
         this.resetMartingale(); this.resetGhost();
     }
 
@@ -1643,7 +1644,7 @@ class RomanianGhostBot {
         const plStr=this.sessionProfit>=0?green(formatMoney(this.sessionProfit)):red(formatMoney(this.sessionProfit));
         logResult(`${red('❌ LOSS!')} Lost: ${red('-$'+lostAmount.toFixed(2))} | P/L: ${plStr}${martInfo}`);
         if (resultDigit!==null) logResult(dim(`  Target:${this.targetDigit} Result:${resultDigit} ${resultDigit===this.targetDigit?red('REPEATED'):green('diff — unexpected')}`));
-        this.sendTelegram(`❌ <b>LOSS!</b>\n\nTarget:${this.targetDigit} | Result:${resultDigit}\n💸 -$${lostAmount.toFixed(2)} | P&L: ${this.sessionProfit>=0?'+':''}$${this.sessionProfit.toFixed(2)}\n📊 ${this.totalWins}W/${this.totalLosses}L${martInfo}\n${new Date().toLocaleString()}`);
+        this.sendTelegram(`❌ <b>LOSS 2!</b>\n\nTarget:${this.targetDigit} | Result:${resultDigit}\n💸 -$${lostAmount.toFixed(2)} | P&L: ${this.sessionProfit>=0?'+':''}$${this.sessionProfit.toFixed(2)}\n📊 ${this.totalWins}W/${this.totalLosses}L${martInfo}\n${new Date().toLocaleString()}`);
         this.ghostConsecutiveWins=0; this.ghostConfirmed=false; this.ghostRoundsPlayed=0; this.ghostAwaitingResult=false;
     }
 

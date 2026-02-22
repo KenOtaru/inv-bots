@@ -1739,13 +1739,13 @@ class RomanianGhostBot {
         );
 
         this.sendTelegram(`
-🎯 <b>TRADE</b>
-
-📊 Symbol: ${this.config.symbol}
-🔢 Target: ${this.targetDigit}
-💰 Stake: $${this.currentStake.toFixed(2)}
-🔬 Score: ${score}/100
-📈 Rate: ${this.targetRepeatRate.toFixed(1)}%
+            🎯 <b>TRADE 3</b>
+            📊 Symbol: ${this.config.symbol}
+            🔢 Target: ${this.targetDigit}
+            last 5 ticks: ${this.tickHistory.slice(-5).join(', ')}
+            💰 Stake: $${this.currentStake.toFixed(2)}
+            🔬 Score: ${score}/100
+            📈 Rate: ${this.targetRepeatRate.toFixed(1)}%
         `.trim());
 
         this.send({
@@ -1798,7 +1798,7 @@ class RomanianGhostBot {
         const plStr = this.sessionProfit >= 0 ? green(formatMoney(this.sessionProfit)) : red(formatMoney(this.sessionProfit));
         logResult(`${green('✅ WIN!')} +$${profit.toFixed(2)} | P/L: ${plStr} | Bal: ${green('$' + this.accountBalance.toFixed(2))}`);
 
-        this.sendTelegram(`✅ <b>WIN!</b>\n\n+$${profit.toFixed(2)}\nP/L: ${formatMoney(this.sessionProfit)}`);
+        this.sendTelegram(`✅ <b>WIN 3!</b>\n\n+$${profit.toFixed(2)}\nP/L: ${formatMoney(this.sessionProfit)}`);
 
         this.resetMartingale();
         this.resetGhost();
@@ -1818,7 +1818,7 @@ class RomanianGhostBot {
         const plStr = this.sessionProfit >= 0 ? green(formatMoney(this.sessionProfit)) : red(formatMoney(this.sessionProfit));
         logResult(`${red('❌ LOSS!')} -$${lostAmount.toFixed(2)} | P/L: ${plStr} | Mart: ${this.martingaleStep}/${this.config.max_martingale_steps}`);
 
-        this.sendTelegram(`❌ <b>LOSS!</b>\n\n-$${lostAmount.toFixed(2)}\nP/L: ${formatMoney(this.sessionProfit)}`);
+        this.sendTelegram(`❌ <b>LOSS 3!</b>\n\n-$${lostAmount.toFixed(2)}\nP/L: ${formatMoney(this.sessionProfit)}`);
 
         this.ghostConsecutiveWins = 0;
         this.ghostConfirmed = false;
