@@ -838,9 +838,9 @@ class RomanianGhostUltimate {
             }
             return;
         }
-        if (safetyScore < thresholds.minScore) {
+        if (safetyScore < this.config.min_safety_score) {
             if (now - this.lastTickLogTime2[asset] >= 30000) {
-                console.log(`[${asset}] Blocked - Safety score too low (${safetyScore} < ${thresholds.minScore})`);
+                console.log(`[${asset}] Blocked - Safety score too low (${safetyScore} < ${this.config.min_safety_score})`);
             }
             return;
         }
@@ -852,14 +852,14 @@ class RomanianGhostUltimate {
         }
 
         // Check if same digit as last trade (require higher score for repeats)
-        if (targetDigit === this.lastTradeDigit[asset]) {
-            if (safetyScore < thresholds.minScore + 15) {
-                if (now - this.lastTickLogTime2[asset] >= 30000) {
-                    console.log(`[${asset}] Blocked - Same digit repeat requires higher score`);
-                }
-                return;
-            }
-        }
+        // if (targetDigit === this.lastTradeDigit[asset]) {
+        //     if (safetyScore < thresholds.minScore + 15) {
+        //         if (now - this.lastTickLogTime2[asset] >= 30000) {
+        //             console.log(`[${asset}] Blocked - Same digit repeat requires higher score`);
+        //         }
+        //         return;
+        //     }
+        // }
 
         // Execute trade with HMM regime data
         this.placeTrade(asset, targetDigit, safetyScore, regime);
