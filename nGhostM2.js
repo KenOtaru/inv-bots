@@ -419,6 +419,7 @@ class RomanianGhostUltimate {
         this.netProfit = 0;
 
         this.lastTradeDigit = {};
+        this.asset_safety_score = {};
         this.lastTradeTime = {};
         this.ticksSinceLastTrade = {};
         this.lastTickLogTime = {};
@@ -429,6 +430,7 @@ class RomanianGhostUltimate {
 
         this.config.assets.forEach(a => {
             this.lastTradeDigit[a] = null;
+            this.asset_safety_score[a] = null;
             this.lastTradeTime[a] = 0;
             this.ticksSinceLastTrade[a] = 999;
             this.lastTickLogTime[a] = 0;
@@ -833,33 +835,29 @@ class RomanianGhostUltimate {
 
         // Gating conditions (from HMM)
         if (hmmState !== 'NON-REP') {
-            if (now - this.lastTickLogTime2[asset] >= 30000) {
+            // if (now - this.lastTickLogTime2[asset] >= 30000) {
                 console.log(`[${asset}] Blocked - Not in NON-REP regime (${hmmState})`);
-            }
+            // }
             return;
         }
         if (safetyScore < this.config.min_safety_score) {
-            if (now - this.lastTickLogTime2[asset] >= 30000) {
+            // if (now - this.lastTickLogTime2[asset] >= 30000) {
                 console.log(`[${asset}] Blocked - Safety score too low (${safetyScore} < ${this.config.min_safety_score})`);
-            }
+            // }
             return;
         }
         if (regime.cusumAlarm) {
-            if (now - this.lastTickLogTime2[asset] >= 30000) {
                 console.log(`[${asset}] Blocked - CUSUM alarm active`);
-            }
             return;
         }
 
         // Check if same digit as last trade (require higher score for repeats)
-        // if (targetDigit === this.lastTradeDigit[asset]) {
-        //     if (safetyScore < thresholds.minScore + 15) {
-        //         if (now - this.lastTickLogTime2[asset] >= 30000) {
-        //             console.log(`[${asset}] Blocked - Same digit repeat requires higher score`);
-        //         }
-        //         return;
-        //     }
-        // }
+        if (targetDigit === this.lastTradeDigit[asset]) {
+            if (safetyScore < this.asset_safety_score + 1) { // Require 1 extra points for repeat digit
+                console.log(`[${asset}] Blocked - Same digit repeat requires higher score`);
+                return;
+            }
+        }
 
         // Execute trade with HMM regime data
         this.placeTrade(asset, targetDigit, safetyScore, regime);
@@ -873,6 +871,7 @@ class RomanianGhostUltimate {
 
         this.tradeInProgress = true;
         this.lastTradeDigit[asset] = digit;
+        his.asset_safety_score[asset] = safetyScore;
         this.lastTradeTime[asset] = Date.now();
         this.ticksSinceLastTrade[asset] = 0;
 
@@ -905,7 +904,7 @@ class RomanianGhostUltimate {
             📊 Asset: ${asset}
             🔢 Target Digit: ${digit}
             📈 Last 10: ${this.histories[asset].slice(-10).join(',')}
-            🎯 Safety Score: ${safetyScore}
+            🛡️ Safety Score: ${safetyScore}
             📊 P(RNR): ${(regime.posteriorNonRep*100).toFixed(1)}% | P(REP): ${(regime.posteriorRep*100).toFixed(1)}%
             💯 Confidence: ${(regime.posteriorNonRep*100).toFixed(1)}%
             ⏱️ Persistence: ${regime.hmmPersistence}
@@ -945,6 +944,7 @@ class RomanianGhostUltimate {
         const resultMessage = won ? '✅ WIN' : '❌ LOSS';
         console.log(`\n${resultMessage} — ${asset}`);
         console.log(`   Target: ${this.lastTradeDigit[asset]}`);
+        console.log(`   Safty Score: ${this.asset_safety_score[asset]}`);
         console.log(`   Exit Digit: ${exitDigit}`);
         console.log(`   Profit: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}`);
         console.log(`   Net P&L: $${this.netProfit.toFixed(2)}`);
@@ -983,6 +983,7 @@ class RomanianGhostUltimate {
             🎯 Target: ${this.lastTradeDigit[asset]}
             🔢 Exit: ${exitDigit}
             📈 Last 5: ${history.slice(-5).join(', ')}
+            🛡️ Safety Score: ${this.asset_safety_score[asset]}
             💰 P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}
             💵 Balance: $${this.netProfit.toFixed(2)}
             📊 Record: ${this.totalWins}W/${this.totalTrades - this.totalWins}L | Losses: ${this.consecutiveLosses}${this.consecutiveLosses > 1 ? ` (x${this.consecutiveLosses})` : ''}
