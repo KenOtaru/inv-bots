@@ -205,7 +205,7 @@ ${bold('Examples:')}
     tick_history_size:      5000,
     analysis_window:        5000,
     min_ticks_for_hmm:      50,
-    repeat_threshold:       7,
+    repeat_threshold:       6,
     hmm_nonrep_confidence:  0.93,
     min_safety_score:       90,
     min_regime_persistence: 8,
@@ -1066,17 +1066,15 @@ class RomanianGhostBot {
     );
 
     this.sendTelegram(`
-      🎯 <b>GHOST TRADE</b>
+      🎯 <b>GHOST TRADE Multi-Bot</b>
 
       📊 Symbol: ${st.symbol}
       🔢 Target Digit: ${st.targetDigit}
+       Last 5 ticks: ${st.tickHistory.slice(-5).join(', ')}
       💰 Stake: $${this.currentStake.toFixed(2)}${stepInfo}
-      📈 Rate: ${st.targetRepeatRate.toFixed(1)}%
+      📈 Repeat Rate: ${st.targetRepeatRate.toFixed(1)}%
       🔬 Score: ${snapScore}/100 | P(NR): ${(snapPNR*100).toFixed(1)}%
       👻 Ghost: ${st.ghostConsecutiveWins}/${this.config.ghost_wins_required}
-      📊 Session: ${this.totalTrades} trades | ${this.totalWins}W/${this.totalLosses}L
-      💵 P&L: ${this.sessionProfit >= 0 ? '+' : ''}$${this.sessionProfit.toFixed(2)}
-      ⏰ ${new Date().toLocaleString()}
     `.trim());
 
     this.send({
@@ -1147,16 +1145,16 @@ class RomanianGhostBot {
       logResult(dim(`  Target: ${st.targetDigit} | Result: ${resultDigit} | Ghost: ${st.ghostConsecutiveWins}/${this.config.ghost_wins_required}`));
 
     this.sendTelegram(`
-      ✅ <b>WIN!</b>
+      ✅ <b>Multi-Bot WIN!</b>
 
       📊 Symbol: ${sym}
       🎯 Target: ${st ? st.targetDigit : '?'}
+       Last 5 ticks: ${st.tickHistory.slice(-5).join(', ')}
       🔢 Result: ${resultDigit !== null ? resultDigit : 'N/A'}
       💰 Profit: +$${profit.toFixed(2)}
       💵 P&L: ${this.sessionProfit >= 0 ? '+' : ''}$${this.sessionProfit.toFixed(2)}
       📊 Balance: $${this.accountBalance.toFixed(2)}
       📈 Record: ${this.totalWins}W/${this.totalLosses}L | Streak: ${this.currentWinStreak}W
-      ⏰ ${new Date().toLocaleString()}
     `.trim());
 
     this.logSessionLine();
@@ -1188,16 +1186,16 @@ class RomanianGhostBot {
       logResult(dim(`  Target: ${st ? st.targetDigit : '?'} | Result: ${resultDigit} (${resultDigit === (st ? st.targetDigit : -1) ? red('REPEATED') : green('different — unexpected')})`));
 
     this.sendTelegram(`
-      ❌ <b>LOSS!</b>
+      ❌ <b>Multi-Bot LOSS!</b>
 
       📊 Symbol: ${sym}
       🎯 Target: ${st ? st.targetDigit : '?'}
+       Last 5 ticks: ${st.tickHistory.slice(-5).join(', ')}
       🔢 Result: ${resultDigit !== null ? resultDigit : 'N/A'} ${resultDigit === (st ? st.targetDigit : -1) ? red('(REPEATED)') : '(different)'}
       💸 Lost: -$${lostAmount.toFixed(2)}
       💵 P&L: ${this.sessionProfit >= 0 ? '+' : ''}$${this.sessionProfit.toFixed(2)}
       📊 Balance: $${this.accountBalance.toFixed(2)}
       📈 Record: ${this.totalWins}W/${this.totalLosses}L | Streak: ${this.currentLossStreak}L${martInfo}
-      ⏰ ${new Date().toLocaleString()}
     `.trim());
 
     this.logSessionLine();

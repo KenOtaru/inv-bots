@@ -97,9 +97,9 @@ function parseArgs() {
         min_ticks_for_hmm: 50,         // Minimum ticks before HMM is reliable
 
         // Regime detection thresholds
-        repeat_threshold: 9,           // Raw per-digit repeat % gate
+        repeat_threshold: 7,           // Raw per-digit repeat % gate
         repeat_confidence: 90,        // Bayesian P(repeat | observations) required
-        hmm_nonrep_confidence: 0.90,   // Bayesian P(NON-REP) required
+        hmm_nonrep_confidence: 0.93,   // Bayesian P(NON-REP) required
         min_regime_persistence: 8,     // Ticks current regime must have lasted
         cusum_threshold: 4.5,          // CUSUM alarm threshold (regime shift detector)
         cusum_slack: 0.005,            // CUSUM slack (sensitivity tuning)
@@ -1175,13 +1175,12 @@ class RomanianGhostBot {
 
             📊 Symbol: ${this.config.symbol}
             🔢 Target Digit: ${this.targetDigit}
-            last 5 ticks: ${this.tickHistory.slice(-5).join(', ')}
+             Last 5 ticks: ${this.tickHistory.slice(-5).join(', ')}
             💰 Stake: $${this.currentStake.toFixed(2)}${stepInfo}
-            📈 Rate: ${this.targetRepeatRate.toFixed(1)}%
+            📈 Repeat Rate: ${this.targetRepeatRate.toFixed(1)}%
             🔬 Score: ${score}/100 | P(NR): ${pnr}
             👻 Ghost: ${this.ghostConsecutiveWins}/${this.config.ghost_wins_required}
             📊 Session: ${this.totalTrades} trades | ${this.totalWins}W/${this.totalLosses}L
-            💵 P&L: ${this.sessionProfit >= 0 ? '+' : ''}$${this.sessionProfit.toFixed(2)}
         `.trim());
 
         this.send({
@@ -1243,12 +1242,11 @@ class RomanianGhostBot {
 
             📊 Symbol: ${this.config.symbol}
             🎯 Target: ${this.targetDigit} | Result: ${resultDigit !== null ? resultDigit : 'N/A'}
-
+             Last 5 ticks: ${this.tickHistory.slice(-5).join(', ')}
             💰 Profit: +$${profit.toFixed(2)}
             💵 P&L: ${this.sessionProfit >= 0 ? '+' : ''}$${this.sessionProfit.toFixed(2)}
             📊 Balance: $${this.accountBalance.toFixed(2)}
             📈 Record: ${this.totalWins}W/${this.totalLosses}L | Streak: ${this.currentWinStreak}W
-            ⏰ ${new Date().toLocaleString()}
         `.trim());
 
         this.resetMartingale();
@@ -1277,13 +1275,12 @@ class RomanianGhostBot {
 
             📊 Symbol: ${this.config.symbol}
             🎯 Target: ${this.targetDigit} | Result: ${resultDigit !== null ? resultDigit : 'N/A'}
-            last 5 ticks: ${this.tickHistory.slice(-5).join(', ')}
+             Last 5 ticks: ${this.tickHistory.slice(-5).join(', ')}
             💸 Lost: -$${lostAmount.toFixed(2)}
             💵 P&L: ${this.sessionProfit >= 0 ? '+' : ''}$${this.sessionProfit.toFixed(2)}
             📊 Balance: $${this.accountBalance.toFixed(2)}
             📈 Record: ${this.totalWins}W/${this.totalLosses}L | Streak: ${this.currentLossStreak}L${martInfo}
             👻 Ghost: Reset to 0
-            ⏰ ${new Date().toLocaleString()}
         `.trim());
 
         this.ghostConsecutiveWins = 0;
