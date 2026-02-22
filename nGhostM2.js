@@ -370,7 +370,7 @@ class RomanianGhostUltimate {
 
             // ====== HMM REGIME DETECTION SETTINGS ======
             min_ticks_for_hmm:      50,
-            repeat_threshold:       7,
+            repeat_threshold:       9,
             hmm_nonrep_confidence:  0.93,
             min_safety_score:       90,
             min_regime_persistence: 8,
@@ -871,7 +871,7 @@ class RomanianGhostUltimate {
 
         this.tradeInProgress = true;
         this.lastTradeDigit[asset] = digit;
-        his.asset_safety_score[asset] = safetyScore;
+        this.asset_safety_score[asset] = safetyScore;
         this.lastTradeTime[asset] = Date.now();
         this.ticksSinceLastTrade[asset] = 0;
 
