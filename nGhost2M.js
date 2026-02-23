@@ -111,7 +111,7 @@ function parseArgs() {
         hmm_min_discrimination: 0.10,
 
         // Ensemble
-        repeat_confidence: 70,
+        repeat_confidence: 80,
 
         // Ghost
         ghost_enabled: false,
