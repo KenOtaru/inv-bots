@@ -356,7 +356,7 @@ const CONFIG = {
 
     // Capital Settings
     INITIAL_CAPITAL: 500,
-    STAKE: 4,
+    STAKE: 3,
 
     // Session Targets
     totalTradesN: 5000000,
