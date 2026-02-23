@@ -1965,7 +1965,7 @@ class RomanianGhostBotV4 {
             if (i === curDigit) return (rp < thr ? green : red)(`${i}:${rp.toFixed(0)}%`);
             return dim(`${i}:${rp.toFixed(0)}%`);
         }).join(' ');
-        logAnalysis(`[${sym}] Rates: [${rateStr}] recent=${r.recentRate.toFixed(1)}%`);
+        // logAnalysis(`[${sym}] Rates: [${rateStr}] recent=${r.recentRate.toFixed(1)}%`);
 
         const stateCol = r.hmmState === 0 ? green : yellow;
         const pnrPct = (r.posteriorNR * 100).toFixed(1);
