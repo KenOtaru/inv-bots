@@ -186,8 +186,8 @@ ${bold('Examples:')}
     process.exit(1);
   }
 
-  const assetsArg = get('--assets', 'R_10,R_25,R_50,R_75,R_100,RDBULL,RDBEAR');
-  const SUPPORTED = ['R_10','R_25','R_50','R_75','R_100','RDBULL','RDBEAR'];
+  const assetsArg = get('--assets', 'R_10,R_25,R_50,R_75,RDBULL,RDBEAR');
+  const SUPPORTED = ['R_10','R_25','R_50','R_75','RDBULL','RDBEAR'];
   const activeAssets = assetsArg.split(',').map(s => s.trim()).filter(s => SUPPORTED.includes(s));
   if (activeAssets.length === 0) {
     console.error(red('ERROR: No valid assets specified.'));
