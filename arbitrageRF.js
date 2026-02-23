@@ -1436,8 +1436,8 @@ class ConnectionManager {
         LOGGER.trade(`   Stake: $${state.currentStake.toFixed(2)} | Level: ${state.martingaleLevel}`);
         LOGGER.trade(`═══════════════════════════════════════════════════════════`);
 
-        state.lastSignalTime = now;
-        state.canTrade = true;
+        // state.lastSignalTime = now;
+        // state.canTrade = true;
 
         // bot.executeNextTrade(asset, direction, {
         //     reason: `OSC ${currentOscLength}/${targetOscLength} → ${dirName}`,
