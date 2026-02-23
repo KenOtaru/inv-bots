@@ -20,42 +20,42 @@ const STATE_FILE = path.join(__dirname, 'ghost92-0005-state.json');
 //  UTILITY FUNCTIONS
 // ══════════════════════════════════════════════════════════════════════════════
 function clamp(v, lo, hi) {
-  return Math.max(lo, Math.min(hi, v));
+    return Math.max(lo, Math.min(hi, v));
 }
 
 function logSumExp(arr) {
-  const m = Math.max(...arr);
-  if (!isFinite(m)) return -Infinity;
-  return m + Math.log(arr.reduce((s, x) => s + Math.exp(x - m), 0));
+    const m = Math.max(...arr);
+    if (!isFinite(m)) return -Infinity;
+    return m + Math.log(arr.reduce((s, x) => s + Math.exp(x - m), 0));
 }
 
 function formatMoney(v) {
-  return `${v >= 0 ? '+' : ''}$${v.toFixed(2)}`;
+    return `${v >= 0 ? '+' : ''}$${v.toFixed(2)}`;
 }
 
 // ── Logger helpers ─────────────────────────────────────────────────────────
 function getTimestamp() {
-  const n = new Date();
-  return [
-    String(n.getHours()).padStart(2,'0'),
-    String(n.getMinutes()).padStart(2,'0'),
-    String(n.getSeconds()).padStart(2,'0'),
-  ].join(':');
+    const n = new Date();
+    return [
+        String(n.getHours()).padStart(2, '0'),
+        String(n.getMinutes()).padStart(2, '0'),
+        String(n.getSeconds()).padStart(2, '0'),
+    ].join(':');
 }
 
 const logHMM = (msg) => {
-  const ts = `[${getTimestamp()}]`;
-  console.log(`${ts} [HMM] ${msg}`);
+    const ts = `[${getTimestamp()}]`;
+    console.log(`${ts} [HMM] ${msg}`);
 };
 
 const logBot = (msg) => {
-  const ts = `[${getTimestamp()}]`;
-  console.log(`${ts} [BOT] ${msg}`);
+    const ts = `[${getTimestamp()}]`;
+    console.log(`${ts} [BOT] ${msg}`);
 };
 
 const logAnalysis = (msg) => {
-  const ts = `[${getTimestamp()}]`;
-  console.log(`${ts} [ANALYSIS] ${msg}`);
+    const ts = `[${getTimestamp()}]`;
+    console.log(`${ts} [ANALYSIS] ${msg}`);
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -63,300 +63,300 @@ const logAnalysis = (msg) => {
 //  2-State HMM: State 0 = NON-REP, State 1 = REP
 // ══════════════════════════════════════════════════════════════════════════════
 class HMMRegimeDetector {
-  constructor(cfg) {
-    this.cfg = cfg;
-    // Initial HMM parameters (learned via Baum-Welch)
-    this.pi = [0.6, 0.4];
-    this.A  = [[0.90, 0.10], [0.25, 0.75]];
-    this.B  = [[0.92, 0.08], [0.40, 0.60]]; // [state][obs]: obs=1 means repeat
-    this.hmmFitted  = false;
-    this.cusumValue = new Array(10).fill(0); // per-digit CUSUM
-  }
+    constructor(cfg) {
+        this.cfg = cfg;
+        // Initial HMM parameters (learned via Baum-Welch)
+        this.pi = [0.6, 0.4];
+        this.A = [[0.90, 0.10], [0.25, 0.75]];
+        this.B = [[0.92, 0.08], [0.40, 0.60]]; // [state][obs]: obs=1 means repeat
+        this.hmmFitted = false;
+        this.cusumValue = new Array(10).fill(0); // per-digit CUSUM
+    }
 
-  // ── Baum-Welch EM parameter estimation ────────────────────────────────────
-  baumWelch(obs, maxIter = 20, tol = 1e-5) {
-    const T = obs.length;
-    if (T < 10) return false;
-    const N = 2;
-    let pi = [...this.pi];
-    let A  = this.A.map(r => [...r]);
-    let B  = this.B.map(r => [...r]);
-    let prevLogL = -Infinity;
+    // ── Baum-Welch EM parameter estimation ────────────────────────────────────
+    baumWelch(obs, maxIter = 20, tol = 1e-5) {
+        const T = obs.length;
+        if (T < 10) return false;
+        const N = 2;
+        let pi = [...this.pi];
+        let A = this.A.map(r => [...r]);
+        let B = this.B.map(r => [...r]);
+        let prevLogL = -Infinity;
 
-    for (let iter = 0; iter < maxIter; iter++) {
-      // Forward pass (log-space)
-      const logAlpha = Array.from({length: T}, () => new Array(N).fill(-Infinity));
-      for (let s = 0; s < N; s++)
-        logAlpha[0][s] = Math.log(pi[s] + 1e-300) + Math.log(B[s][obs[0]] + 1e-300);
-      for (let t = 1; t < T; t++)
-        for (let s = 0; s < N; s++) {
-          const inc = A.map((row, p) => logAlpha[t-1][p] + Math.log(row[s] + 1e-300));
-          logAlpha[t][s] = logSumExp(inc) + Math.log(B[s][obs[t]] + 1e-300);
+        for (let iter = 0; iter < maxIter; iter++) {
+            // Forward pass (log-space)
+            const logAlpha = Array.from({ length: T }, () => new Array(N).fill(-Infinity));
+            for (let s = 0; s < N; s++)
+                logAlpha[0][s] = Math.log(pi[s] + 1e-300) + Math.log(B[s][obs[0]] + 1e-300);
+            for (let t = 1; t < T; t++)
+                for (let s = 0; s < N; s++) {
+                    const inc = A.map((row, p) => logAlpha[t - 1][p] + Math.log(row[s] + 1e-300));
+                    logAlpha[t][s] = logSumExp(inc) + Math.log(B[s][obs[t]] + 1e-300);
+                }
+            const logL = logSumExp(logAlpha[T - 1]);
+
+            // Backward pass (log-space)
+            const logBeta = Array.from({ length: T }, () => new Array(N).fill(-Infinity));
+            for (let s = 0; s < N; s++) logBeta[T - 1][s] = 0;
+            for (let t = T - 2; t >= 0; t--)
+                for (let s = 0; s < N; s++) {
+                    const vals = A[s].map((a, nx) =>
+                        Math.log(a + 1e-300) + Math.log(B[nx][obs[t + 1]] + 1e-300) + logBeta[t + 1][nx]
+                    );
+                    logBeta[t][s] = logSumExp(vals);
+                }
+
+            // Gamma (state occupancy)
+            const logGamma = Array.from({ length: T }, () => new Array(N).fill(-Infinity));
+            for (let t = 0; t < T; t++) {
+                const den = logSumExp(logAlpha[t].map((la, s) => la + logBeta[t][s]));
+                for (let s = 0; s < N; s++) logGamma[t][s] = logAlpha[t][s] + logBeta[t][s] - den;
+            }
+
+            // Xi (transition occupancy)
+            const logXi = Array.from({ length: T - 1 }, () =>
+                Array.from({ length: N }, () => new Array(N).fill(-Infinity))
+            );
+            for (let t = 0; t < T - 1; t++) {
+                const den = logSumExp(logAlpha[t].map((la, s) => la + logBeta[t][s]));
+                for (let s = 0; s < N; s++)
+                    for (let nx = 0; nx < N; nx++)
+                        logXi[t][s][nx] = logAlpha[t][s] + Math.log(A[s][nx] + 1e-300) +
+                            Math.log(B[nx][obs[t + 1]] + 1e-300) + logBeta[t + 1][nx] - den;
+            }
+
+            // M-step: re-estimate pi, A, B
+            for (let s = 0; s < N; s++) pi[s] = Math.exp(logGamma[0][s]);
+            const piSum = pi.reduce((a, b) => a + b, 0);
+            pi = pi.map(v => v / piSum);
+
+            for (let s = 0; s < N; s++) {
+                const den = logSumExp(logGamma.slice(0, T - 1).map(g => g[s]));
+                for (let nx = 0; nx < N; nx++) {
+                    const num = logSumExp(logXi.map(xi => xi[s][nx]));
+                    A[s][nx] = Math.exp(num - den);
+                }
+                const rs = A[s].reduce((a, b) => a + b, 0);
+                A[s] = A[s].map(v => v / rs);
+            }
+            for (let s = 0; s < N; s++) {
+                const den = logSumExp(logGamma.map(g => g[s]));
+                for (let o = 0; o < 2; o++) {
+                    const num = logSumExp(logGamma.filter((_, t) => obs[t] === o).map(g => g[s]));
+                    B[s][o] = Math.exp(num - den);
+                }
+                const bs = B[s].reduce((a, b) => a + b, 0);
+                B[s] = B[s].map(v => v / bs);
+            }
+
+            if (Math.abs(logL - prevLogL) < tol) break;
+            prevLogL = logL;
         }
-      const logL = logSumExp(logAlpha[T-1]);
 
-      // Backward pass (log-space)
-      const logBeta = Array.from({length: T}, () => new Array(N).fill(-Infinity));
-      for (let s = 0; s < N; s++) logBeta[T-1][s] = 0;
-      for (let t = T-2; t >= 0; t--)
-        for (let s = 0; s < N; s++) {
-          const vals = A[s].map((a, nx) =>
-            Math.log(a + 1e-300) + Math.log(B[nx][obs[t+1]] + 1e-300) + logBeta[t+1][nx]
-          );
-          logBeta[t][s] = logSumExp(vals);
+        // Ensure State 0 = NON-REP (lower repeat emission)
+        if (B[0][1] > B[1][1]) {
+            [pi[0], pi[1]] = [pi[1], pi[0]];
+            [A[0], A[1]] = [A[1], A[0]];
+            A[0] = [A[0][1], A[0][0]];
+            A[1] = [A[1][1], A[1][0]];
+            [B[0], B[1]] = [B[1], B[0]];
         }
 
-      // Gamma (state occupancy)
-      const logGamma = Array.from({length: T}, () => new Array(N).fill(-Infinity));
-      for (let t = 0; t < T; t++) {
-        const den = logSumExp(logAlpha[t].map((la, s) => la + logBeta[t][s]));
-        for (let s = 0; s < N; s++) logGamma[t][s] = logAlpha[t][s] + logBeta[t][s] - den;
-      }
+        this.pi = pi; this.A = A; this.B = B;
+        this.hmmFitted = true;
+        return true;
+    }
 
-      // Xi (transition occupancy)
-      const logXi = Array.from({length: T-1}, () =>
-        Array.from({length: N}, () => new Array(N).fill(-Infinity))
-      );
-      for (let t = 0; t < T-1; t++) {
-        const den = logSumExp(logAlpha[t].map((la, s) => la + logBeta[t][s]));
+    // ── Viterbi decoding ───────────────────────────────────────────────────────
+    viterbi(obs) {
+        const T = obs.length, N = 2;
+        if (T === 0) return null;
+        const logDelta = Array.from({ length: T }, () => new Array(N).fill(-Infinity));
+        const psi = Array.from({ length: T }, () => new Array(N).fill(0));
         for (let s = 0; s < N; s++)
-          for (let nx = 0; nx < N; nx++)
-            logXi[t][s][nx] = logAlpha[t][s] + Math.log(A[s][nx] + 1e-300) +
-              Math.log(B[nx][obs[t+1]] + 1e-300) + logBeta[t+1][nx] - den;
-      }
+            logDelta[0][s] = Math.log(this.pi[s] + 1e-300) + Math.log(this.B[s][obs[0]] + 1e-300);
+        for (let t = 1; t < T; t++)
+            for (let s = 0; s < N; s++) {
+                let best = -Infinity, bestP = 0;
+                for (let p = 0; p < N; p++) {
+                    const v = logDelta[t - 1][p] + Math.log(this.A[p][s] + 1e-300);
+                    if (v > best) { best = v; bestP = p; }
+                }
+                logDelta[t][s] = best + Math.log(this.B[s][obs[t]] + 1e-300);
+                psi[t][s] = bestP;
+            }
+        const stateSeq = new Array(T);
+        stateSeq[T - 1] = logDelta[T - 1][0] >= logDelta[T - 1][1] ? 0 : 1;
+        for (let t = T - 2; t >= 0; t--) stateSeq[t] = psi[t + 1][stateSeq[t + 1]];
+        const curState = stateSeq[T - 1];
+        let persistence = 1;
+        for (let t = T - 2; t >= 0; t--) { if (stateSeq[t] === curState) persistence++; else break; }
+        let transitions = 0;
+        for (let t = 1; t < T; t++) if (stateSeq[t] !== stateSeq[t - 1]) transitions++;
+        return { stateSeq, currentState: curState, persistence, transitions };
+    }
 
-      // M-step: re-estimate pi, A, B
-      for (let s = 0; s < N; s++) pi[s] = Math.exp(logGamma[0][s]);
-      const piSum = pi.reduce((a, b) => a + b, 0);
-      pi = pi.map(v => v / piSum);
+    // ── CUSUM change-point detector ────────────────────────────────────────────
+    updateCUSUM(digit, obs_t) {
+        const llr = Math.log(this.B[1][obs_t] + 1e-300) - Math.log(this.B[0][obs_t] + 1e-300);
+        this.cusumValue[digit] = Math.max(0, this.cusumValue[digit] + llr - this.cfg.cusum_slack);
+        return this.cusumValue[digit] > this.cfg.cusum_threshold;
+    }
+    resetCUSUM(digit) { this.cusumValue[digit] = 0; }
+    getCUSUMValue(digit) { return this.cusumValue[digit]; }
 
-      for (let s = 0; s < N; s++) {
-        const den = logSumExp(logGamma.slice(0, T-1).map(g => g[s]));
-        for (let nx = 0; nx < N; nx++) {
-          const num = logSumExp(logXi.map(xi => xi[s][nx]));
-          A[s][nx] = Math.exp(num - den);
+    // ── Per-digit stats (raw prob + EWMA) ─────────────────────────────────────
+    computePerDigitStats(window) {
+        const len = window.length;
+        const ALPHA = 0.15;
+        const transFrom = new Array(10).fill(0);
+        const transRepeat = new Array(10).fill(0);
+        const ewmaRepeat = new Array(10).fill(null);
+        for (let i = 0; i < len; i++) {
+            const d = window[i];
+            const isRepeat = i > 0 && window[i] === window[i - 1];
+            if (ewmaRepeat[d] === null) ewmaRepeat[d] = isRepeat ? 100 : 0;
+            else ewmaRepeat[d] = ALPHA * (isRepeat ? 100 : 0) + (1 - ALPHA) * ewmaRepeat[d];
         }
-        const rs = A[s].reduce((a, b) => a + b, 0);
-        A[s] = A[s].map(v => v / rs);
-      }
-      for (let s = 0; s < N; s++) {
-        const den = logSumExp(logGamma.map(g => g[s]));
-        for (let o = 0; o < 2; o++) {
-          const num = logSumExp(logGamma.filter((_, t) => obs[t] === o).map(g => g[s]));
-          B[s][o] = Math.exp(num - den);
+        for (let i = 0; i < len - 1; i++) {
+            transFrom[window[i]]++;
+            if (window[i + 1] === window[i]) transRepeat[window[i]]++;
         }
-        const bs = B[s].reduce((a, b) => a + b, 0);
-        B[s] = B[s].map(v => v / bs);
-      }
-
-      if (Math.abs(logL - prevLogL) < tol) break;
-      prevLogL = logL;
-    }
-
-    // Ensure State 0 = NON-REP (lower repeat emission)
-    if (B[0][1] > B[1][1]) {
-      [pi[0], pi[1]] = [pi[1], pi[0]];
-      [A[0],  A[1]]  = [A[1],  A[0]];
-      A[0] = [A[0][1], A[0][0]];
-      A[1] = [A[1][1], A[1][0]];
-      [B[0],  B[1]]  = [B[1],  B[0]];
-    }
-
-    this.pi = pi; this.A = A; this.B = B;
-    this.hmmFitted = true;
-    return true;
-  }
-
-  // ── Viterbi decoding ───────────────────────────────────────────────────────
-  viterbi(obs) {
-    const T = obs.length, N = 2;
-    if (T === 0) return null;
-    const logDelta = Array.from({length: T}, () => new Array(N).fill(-Infinity));
-    const psi      = Array.from({length: T}, () => new Array(N).fill(0));
-    for (let s = 0; s < N; s++)
-      logDelta[0][s] = Math.log(this.pi[s] + 1e-300) + Math.log(this.B[s][obs[0]] + 1e-300);
-    for (let t = 1; t < T; t++)
-      for (let s = 0; s < N; s++) {
-        let best = -Infinity, bestP = 0;
-        for (let p = 0; p < N; p++) {
-          const v = logDelta[t-1][p] + Math.log(this.A[p][s] + 1e-300);
-          if (v > best) { best = v; bestP = p; }
+        const rawRepeatProb = new Array(10).fill(0);
+        for (let d = 0; d < 10; d++) {
+            rawRepeatProb[d] = transFrom[d] > 0 ? (transRepeat[d] / transFrom[d]) * 100 : 10;
+            if (ewmaRepeat[d] === null) ewmaRepeat[d] = 10;
         }
-        logDelta[t][s] = best + Math.log(this.B[s][obs[t]] + 1e-300);
-        psi[t][s] = bestP;
-      }
-    const stateSeq = new Array(T);
-    stateSeq[T-1] = logDelta[T-1][0] >= logDelta[T-1][1] ? 0 : 1;
-    for (let t = T-2; t >= 0; t--) stateSeq[t] = psi[t+1][stateSeq[t+1]];
-    const curState = stateSeq[T-1];
-    let persistence = 1;
-    for (let t = T-2; t >= 0; t--) { if (stateSeq[t] === curState) persistence++; else break; }
-    let transitions = 0;
-    for (let t = 1; t < T; t++) if (stateSeq[t] !== stateSeq[t-1]) transitions++;
-    return { stateSeq, currentState: curState, persistence, transitions };
-  }
-
-  // ── CUSUM change-point detector ────────────────────────────────────────────
-  updateCUSUM(digit, obs_t) {
-    const llr = Math.log(this.B[1][obs_t] + 1e-300) - Math.log(this.B[0][obs_t] + 1e-300);
-    this.cusumValue[digit] = Math.max(0, this.cusumValue[digit] + llr - this.cfg.cusum_slack);
-    return this.cusumValue[digit] > this.cfg.cusum_threshold;
-  }
-  resetCUSUM(digit) { this.cusumValue[digit] = 0; }
-  getCUSUMValue(digit) { return this.cusumValue[digit]; }
-
-  // ── Per-digit stats (raw prob + EWMA) ─────────────────────────────────────
-  computePerDigitStats(window) {
-    const len   = window.length;
-    const ALPHA = 0.15;
-    const transFrom   = new Array(10).fill(0);
-    const transRepeat = new Array(10).fill(0);
-    const ewmaRepeat  = new Array(10).fill(null);
-    for (let i = 0; i < len; i++) {
-      const d = window[i];
-      const isRepeat = i > 0 && window[i] === window[i-1];
-      if (ewmaRepeat[d] === null) ewmaRepeat[d] = isRepeat ? 100 : 0;
-      else ewmaRepeat[d] = ALPHA * (isRepeat ? 100 : 0) + (1 - ALPHA) * ewmaRepeat[d];
+        return { rawRepeatProb, ewmaRepeat };
     }
-    for (let i = 0; i < len - 1; i++) {
-      transFrom[window[i]]++;
-      if (window[i+1] === window[i]) transRepeat[window[i]]++;
-    }
-    const rawRepeatProb = new Array(10).fill(0);
-    for (let d = 0; d < 10; d++) {
-      rawRepeatProb[d] = transFrom[d] > 0 ? (transRepeat[d] / transFrom[d]) * 100 : 10;
-      if (ewmaRepeat[d] === null) ewmaRepeat[d] = 10;
-    }
-    return { rawRepeatProb, ewmaRepeat };
-  }
 
-  // ── Full regime analysis ───────────────────────────────────────────────────
-  analyze(tickHistory, targetDigit, tickCount, asset) {
-    const window = tickHistory.slice(-this.cfg.analysis_window);
-    const len    = window.length;
-    if (len < this.cfg.min_ticks_for_hmm)
-      return { valid: false, reason: `Insufficient data (${len}/${this.cfg.min_ticks_for_hmm})` };
+    // ── Full regime analysis ───────────────────────────────────────────────────
+    analyze(tickHistory, targetDigit, tickCount, asset) {
+        const window = tickHistory.slice(-this.cfg.analysis_window);
+        const len = window.length;
+        if (len < this.cfg.min_ticks_for_hmm)
+            return { valid: false, reason: `Insufficient data (${len}/${this.cfg.min_ticks_for_hmm})` };
 
-    // Binary observation: 1 = repeat, 0 = no repeat
-    const obs = new Array(len - 1);
-    for (let t = 1; t < len; t++) obs[t-1] = window[t] === window[t-1] ? 1 : 0;
+        // Binary observation: 1 = repeat, 0 = no repeat
+        const obs = new Array(len - 1);
+        for (let t = 1; t < len; t++) obs[t - 1] = window[t] === window[t - 1] ? 1 : 0;
 
-    // Re-fit HMM every 50 ticks
-    // if (!this.hmmFitted || tickCount >= 30) {
-      const ok = this.baumWelch(obs);
-    if (!this.hmmFitted || tickCount >= 30) {
-      if (ok) {
-        logHMM(
-          `[${asset}] HMM refitted | ` +
-          `A[NR→NR]=${(this.A[0][0]*100).toFixed(1)}% A[NR→R]=${(this.A[0][1]*100).toFixed(1)}% ` +
-          `A[R→NR]=${(this.A[1][0]*100).toFixed(1)}% A[R→R]=${(this.A[1][1]*100).toFixed(1)}% | ` +
-          `B(rep|NR)=${(this.B[0][1]*100).toFixed(1)}% B(rep|R)=${(this.B[1][1]*100).toFixed(1)}%`
+        // Re-fit HMM every 50 ticks
+        if (!this.hmmFitted || tickCount >= 50) {
+            const ok = this.baumWelch(obs);
+            // if (!this.hmmFitted || tickCount >= 30) {
+            if (ok) {
+                logHMM(
+                    `[${asset}] HMM refitted | ` +
+                    `A[NR→NR]=${(this.A[0][0] * 100).toFixed(1)}% A[NR→R]=${(this.A[0][1] * 100).toFixed(1)}% ` +
+                    `A[R→NR]=${(this.A[1][0] * 100).toFixed(1)}% A[R→R]=${(this.A[1][1] * 100).toFixed(1)}% | ` +
+                    `B(rep|NR)=${(this.B[0][1] * 100).toFixed(1)}% B(rep|R)=${(this.B[1][1] * 100).toFixed(1)}%`
+                );
+            }
+        }
+
+        // Viterbi
+        const vit = this.viterbi(obs);
+        if (!vit) return { valid: false, reason: 'Viterbi failed' };
+
+        // Forward (Bayesian posterior)
+        let logA = [
+            Math.log(this.pi[0] + 1e-300) + Math.log(this.B[0][obs[0]] + 1e-300),
+            Math.log(this.pi[1] + 1e-300) + Math.log(this.B[1][obs[0]] + 1e-300),
+        ];
+        for (let t = 1; t < obs.length; t++) {
+            const newA = [0, 0];
+            for (let s = 0; s < 2; s++) {
+                newA[s] = logSumExp([
+                    logA[0] + Math.log(this.A[0][s] + 1e-300),
+                    logA[1] + Math.log(this.A[1][s] + 1e-300),
+                ]) + Math.log(this.B[s][obs[t]] + 1e-300);
+            }
+            logA = newA;
+        }
+        const fwdDen = logSumExp(logA);
+        const posteriorNonRep = Math.exp(logA[0] - fwdDen);
+        const posteriorRep = Math.exp(logA[1] - fwdDen);
+
+        // CUSUM update for target digit on recent ticks
+        const recentLen = Math.min(len, 30);
+        const recentWin = window.slice(-recentLen);
+        let cusumAlarm = false;
+        for (let t = 1; t < recentLen; t++) {
+            const obs_t = recentWin[t] === recentWin[t - 1] ? 1 : 0;
+            if (recentWin[t - 1] === targetDigit || recentWin[t] === targetDigit)
+                cusumAlarm = this.updateCUSUM(targetDigit, obs_t);
+        }
+        const cusumValue = this.getCUSUMValue(targetDigit);
+
+        // Per-digit stats
+        const { rawRepeatProb, ewmaRepeat } = this.computePerDigitStats(window);
+
+        // Recent repeat rate (last 20 ticks)
+        const shortWin = window.slice(-20);
+        let rcRepeat = 0, rcTotal = 0;
+        for (let i = 1; i < shortWin.length; i++) {
+            if (shortWin[i - 1] === targetDigit || shortWin[i] === targetDigit) {
+                rcTotal++;
+                if (shortWin[i] === shortWin[i - 1]) rcRepeat++;
+            }
+        }
+        const recentRepeatRate = rcTotal > 0 ? (rcRepeat / rcTotal) * 100 : rawRepeatProb[targetDigit];
+
+        // Regime stability: 5-segment analysis
+        const seqLen = vit.stateSeq.length;
+        const segSize = Math.floor(seqLen / 5);
+        const segFracs = [];
+        for (let seg = 0; seg < 5 && seg * segSize < seqLen; seg++) {
+            const sl = vit.stateSeq.slice(seg * segSize, (seg + 1) * segSize);
+            segFracs.push(sl.filter(s => s === 0).length / sl.length);
+        }
+        const regimeStability = segFracs.reduce((a, b) => a + b, 0) / segFracs.length;
+
+        // Composite safety score (0-100)
+        const threshold = this.cfg.repeat_threshold;
+        let safetyScore = 0;
+        if (vit.currentState === 0) safetyScore += 40;
+        safetyScore += Math.round(clamp((posteriorNonRep - 0.5) / 0.5, 0, 1) * 30);
+        safetyScore += Math.round(clamp(vit.persistence / this.cfg.min_regime_persistence, 0, 1) * 15);
+        safetyScore += Math.round(regimeStability * 15);
+        // Hard gates
+        if (vit.currentState !== 0) safetyScore = 0;
+        if (posteriorNonRep < this.cfg.hmm_nonrep_confidence) safetyScore = Math.min(safetyScore, this.cfg.min_safety_score - 1);
+        if (rawRepeatProb[targetDigit] >= threshold) safetyScore = 0;
+        if (cusumAlarm) safetyScore = 0;
+
+        // Signal condition
+        const signalActive = (
+            vit.currentState === 0 &&
+            posteriorNonRep >= this.cfg.hmm_nonrep_confidence &&
+            vit.persistence >= this.cfg.min_regime_persistence &&
+            rawRepeatProb[targetDigit] < threshold &&
+            ewmaRepeat[targetDigit] < threshold &&
+            !cusumAlarm &&
+            safetyScore >= this.cfg.min_safety_score
         );
-      }
+
+        return {
+            valid: true,
+            hmmState: vit.currentState,
+            hmmStateName: vit.currentState === 0 ? 'NON-REP' : 'REP',
+            hmmPersistence: vit.persistence,
+            hmmTransitions: vit.transitions,
+            regimeStability,
+            posteriorNonRep,
+            posteriorRep,
+            cusumAlarm,
+            cusumValue,
+            rawRepeatProb,
+            ewmaRepeat,
+            recentRepeatRate,
+            hmmA: this.A,
+            hmmB: this.B,
+            safetyScore,
+            signalActive,
+        };
     }
-
-    // Viterbi
-    const vit = this.viterbi(obs);
-    if (!vit) return { valid: false, reason: 'Viterbi failed' };
-
-    // Forward (Bayesian posterior)
-    let logA = [
-      Math.log(this.pi[0] + 1e-300) + Math.log(this.B[0][obs[0]] + 1e-300),
-      Math.log(this.pi[1] + 1e-300) + Math.log(this.B[1][obs[0]] + 1e-300),
-    ];
-    for (let t = 1; t < obs.length; t++) {
-      const newA = [0, 0];
-      for (let s = 0; s < 2; s++) {
-        newA[s] = logSumExp([
-          logA[0] + Math.log(this.A[0][s] + 1e-300),
-          logA[1] + Math.log(this.A[1][s] + 1e-300),
-        ]) + Math.log(this.B[s][obs[t]] + 1e-300);
-      }
-      logA = newA;
-    }
-    const fwdDen       = logSumExp(logA);
-    const posteriorNonRep = Math.exp(logA[0] - fwdDen);
-    const posteriorRep    = Math.exp(logA[1] - fwdDen);
-
-    // CUSUM update for target digit on recent ticks
-    const recentLen = Math.min(len, 30);
-    const recentWin = window.slice(-recentLen);
-    let cusumAlarm = false;
-    for (let t = 1; t < recentLen; t++) {
-      const obs_t = recentWin[t] === recentWin[t-1] ? 1 : 0;
-      if (recentWin[t-1] === targetDigit || recentWin[t] === targetDigit)
-        cusumAlarm = this.updateCUSUM(targetDigit, obs_t);
-    }
-    const cusumValue = this.getCUSUMValue(targetDigit);
-
-    // Per-digit stats
-    const { rawRepeatProb, ewmaRepeat } = this.computePerDigitStats(window);
-
-    // Recent repeat rate (last 20 ticks)
-    const shortWin = window.slice(-20);
-    let rcRepeat = 0, rcTotal = 0;
-    for (let i = 1; i < shortWin.length; i++) {
-      if (shortWin[i-1] === targetDigit || shortWin[i] === targetDigit) {
-        rcTotal++;
-        if (shortWin[i] === shortWin[i-1]) rcRepeat++;
-      }
-    }
-    const recentRepeatRate = rcTotal > 0 ? (rcRepeat / rcTotal) * 100 : rawRepeatProb[targetDigit];
-
-    // Regime stability: 5-segment analysis
-    const seqLen  = vit.stateSeq.length;
-    const segSize = Math.floor(seqLen / 5);
-    const segFracs = [];
-    for (let seg = 0; seg < 5 && seg * segSize < seqLen; seg++) {
-      const sl = vit.stateSeq.slice(seg * segSize, (seg + 1) * segSize);
-      segFracs.push(sl.filter(s => s === 0).length / sl.length);
-    }
-    const regimeStability = segFracs.reduce((a, b) => a + b, 0) / segFracs.length;
-
-    // Composite safety score (0-100)
-    const threshold = this.cfg.repeat_threshold;
-    let safetyScore = 0;
-    if (vit.currentState === 0) safetyScore += 40;
-    safetyScore += Math.round(clamp((posteriorNonRep - 0.5) / 0.5, 0, 1) * 30);
-    safetyScore += Math.round(clamp(vit.persistence / this.cfg.min_regime_persistence, 0, 1) * 15);
-    safetyScore += Math.round(regimeStability * 15);
-    // Hard gates
-    if (vit.currentState !== 0)                           safetyScore = 0;
-    if (posteriorNonRep < this.cfg.hmm_nonrep_confidence) safetyScore = Math.min(safetyScore, this.cfg.min_safety_score - 1);
-    if (rawRepeatProb[targetDigit] >= threshold)          safetyScore = 0;
-    if (cusumAlarm)                                       safetyScore = 0;
-
-    // Signal condition
-    const signalActive = (
-      vit.currentState === 0 &&
-      posteriorNonRep >= this.cfg.hmm_nonrep_confidence &&
-      vit.persistence >= this.cfg.min_regime_persistence &&
-      rawRepeatProb[targetDigit] < threshold &&
-      ewmaRepeat[targetDigit] < threshold &&
-      !cusumAlarm &&
-      safetyScore >= this.cfg.min_safety_score
-    );
-
-    return {
-      valid: true,
-      hmmState:        vit.currentState,
-      hmmStateName:    vit.currentState === 0 ? 'NON-REP' : 'REP',
-      hmmPersistence:  vit.persistence,
-      hmmTransitions:  vit.transitions,
-      regimeStability,
-      posteriorNonRep,
-      posteriorRep,
-      cusumAlarm,
-      cusumValue,
-      rawRepeatProb,
-      ewmaRepeat,
-      recentRepeatRate,
-      hmmA: this.A,
-      hmmB: this.B,
-      safetyScore,
-      signalActive,
-    };
-  }
 }
 
 class RomanianGhostUltimate {
@@ -370,14 +370,14 @@ class RomanianGhostUltimate {
             minHistoryForTrading: 5000,
 
             // ====== HMM REGIME DETECTION SETTINGS ======
-            min_ticks_for_hmm:      50,
-            repeat_threshold:       8,
-            hmm_nonrep_confidence:  0.93,
-            min_safety_score:       90,
+            min_ticks_for_hmm: 50,
+            repeat_threshold: 8,
+            hmm_nonrep_confidence: 0.93,
+            min_safety_score: 90,
             min_regime_persistence: 8,
-            cusum_threshold:        4.5,
-            cusum_slack:            0.005,
-            analysis_window:        5000,
+            cusum_threshold: 4.5,
+            cusum_slack: 0.005,
+            analysis_window: 5000,
 
             // Z-Score thresholds (CORRECTED - uses AVERAGE not sum)
             minAvgZScore: 2.0,           // Average Z-score per window
@@ -438,7 +438,7 @@ class RomanianGhostUltimate {
             this.lastTickLogTime2[a] = 0;
         });
 
-        this.assetHMMs   = new Map(); // symbol → HMMRegimeDetector
+        this.assetHMMs = new Map(); // symbol → HMMRegimeDetector
         this.tickCount = 0;
 
         // Performance tracking (for adaptive thresholds)
@@ -598,19 +598,19 @@ class RomanianGhostUltimate {
                 x2: this.x2, x3: this.x3, x4: this.x4, x5: this.x5,
                 netProfit: this.netProfit,
                 recentTrades: this.recentTrades,
-                
+
                 // Add regime tracking for analysis
                 lastTradeDigit: this.lastTradeDigit,
                 lastTradeTime: this.lastTradeTime,
                 ticksSinceLastTrade: this.ticksSinceLastTrade,
-                
+
                 // Extended session stats
                 accountBalance: this.accountBalance,
                 startingBalance: this.startingBalance,
                 sessionStartTime: this.sessionStartTime
             };
             fs.writeFileSync(STATE_FILE, JSON.stringify(stateData, null, 2));
-        } catch (e) { 
+        } catch (e) {
             console.error('Error saving state:', e.message);
         }
     }
@@ -619,10 +619,10 @@ class RomanianGhostUltimate {
         try {
             if (!fs.existsSync(STATE_FILE)) return;
             const data = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
-            
+
             // Only restore if state is recent (within 30 minutes)
             if (Date.now() - data.savedAt > 30 * 60 * 1000) return;
-            
+
             // Restore basic stats
             this.stake = data.stake || this.stake;
             this.consecutiveLosses = data.consecutiveLosses || 0;
@@ -634,7 +634,7 @@ class RomanianGhostUltimate {
             this.x5 = data.x5 || 0;
             this.netProfit = data.netProfit || 0;
             this.recentTrades = data.recentTrades || [];
-            
+
             // Restore regime tracking if available
             if (data.lastTradeDigit) {
                 this.lastTradeDigit = data.lastTradeDigit;
@@ -645,9 +645,9 @@ class RomanianGhostUltimate {
             if (data.ticksSinceLastTrade) {
                 this.ticksSinceLastTrade = data.ticksSinceLastTrade;
             }
-            
+
             console.log('✅ State restored from ' + new Date(data.savedAt).toLocaleString());
-        } catch (e) { 
+        } catch (e) {
             console.error('Error loading state:', e.message);
         }
     }
@@ -698,7 +698,7 @@ class RomanianGhostUltimate {
         const prices = msg.history?.prices || [];
         this.histories[asset] = prices.map(p => this.getLastDigit(p, asset));
         this.historyLoaded[asset] = true;
-        
+
         // Initialize HMM detector for this asset with user settings
         if (!this.assetHMMs.has(asset)) {
             const cfg = {
@@ -713,7 +713,7 @@ class RomanianGhostUltimate {
             };
             this.assetHMMs.set(asset, new HMMRegimeDetector(cfg));
         }
-        
+
         console.log(`📊 Loaded ${this.histories[asset].length} ticks for ${asset} | HMM initialized`);
     }
 
@@ -1083,10 +1083,10 @@ class RomanianGhostUltimate {
         // Analyze current regime using HMM 
         const regime = hmm.analyze(history, history[history.length - 1], this.tickCount, asset);
 
-        if (this.tickCount > 30) {
-          this.tickCount = 0;
+        if (this.tickCount > 50) {
+            this.tickCount = 0;
         }
-        
+
         if (!regime.valid) return;
         if (!regime.signalActive) return;
 
@@ -1104,7 +1104,7 @@ class RomanianGhostUltimate {
         if (now - this.lastTickLogTime2[asset] >= 30000) {
             console.log(
                 `[${asset}] HMM=${hmmState} | Safety=${safetyScore} | ` +
-                `Conf=${(confidence*100).toFixed(1)}% | Persist=${regime.hmmPersistence} | ` +
+                `Conf=${(confidence * 100).toFixed(1)}% | Persist=${regime.hmmPersistence} | ` +
                 `RepRate=${regime.rawRepeatProb[targetDigit].toFixed(1)}% | CUSUM=${regime.cusumAlarm ? '⚠️' : '✓'}`
             );
             this.lastTickLogTime2[asset] = now;
@@ -1113,18 +1113,18 @@ class RomanianGhostUltimate {
         // Gating conditions (from HMM)
         if (hmmState !== 'NON-REP') {
             // if (now - this.lastTickLogTime2[asset] >= 30000) {
-                console.log(`[${asset}] Blocked - Not in NON-REP regime (${hmmState})`);
+            console.log(`[${asset}] Blocked - Not in NON-REP regime (${hmmState})`);
             // }
             return;
         }
         if (safetyScore < this.config.min_safety_score) {
             // if (now - this.lastTickLogTime2[asset] >= 30000) {
-                console.log(`[${asset}] Blocked - Safety score too low (${safetyScore} < ${this.config.min_safety_score})`);
+            console.log(`[${asset}] Blocked - Safety score too low (${safetyScore} < ${this.config.min_safety_score})`);
             // }
             return;
         }
         if (regime.cusumAlarm) {
-                console.log(`[${asset}] Blocked - CUSUM alarm active`);
+            console.log(`[${asset}] Blocked - CUSUM alarm active`);
             return;
         }
 
@@ -1148,7 +1148,7 @@ class RomanianGhostUltimate {
 
         this.tradeInProgress = true;
         this.lastTradeDigit[asset] = digit;
-        this.asset_safety_score[asset] = (regime.posteriorNonRep*100).toFixed(1);
+        this.asset_safety_score[asset] = (regime.posteriorNonRep * 100).toFixed(1);
         this.lastTradeTime[asset] = Date.now();
         this.ticksSinceLastTrade[asset] = 0;
 
@@ -1156,7 +1156,7 @@ class RomanianGhostUltimate {
         console.log(`   Digit: ${digit}`);
         console.log(`   Safety Score: ${safetyScore}`);
         console.log(`   HMM State: ${regime.hmmStateName}`);
-        console.log(`   Confidence: ${(regime.posteriorNonRep*100).toFixed(1)}%`);
+        console.log(`   Confidence: ${(regime.posteriorNonRep * 100).toFixed(1)}%`);
         console.log(`   Persistence: ${regime.hmmPersistence}`);
         console.log(`   Stake: $${this.stake.toFixed(2)}`);
 
@@ -1182,7 +1182,7 @@ class RomanianGhostUltimate {
             🔢 Target Digit: ${digit}
             📈 Last 10: ${this.histories[asset].slice(-10).join(',')}
             🛡️ Safety Score: ${safetyScore}
-            💯 P(RNR): ${(regime.posteriorNonRep*100).toFixed(1)}% | P(REP): ${(regime.posteriorRep*100).toFixed(1)}%
+            💯 P(RNR): ${(regime.posteriorNonRep * 100).toFixed(1)}% | P(REP): ${(regime.posteriorRep * 100).toFixed(1)}%
             ⏱️ Persistence: ${regime.hmmPersistence}
             💰 Stake: $${this.stake.toFixed(2)}
             📊 Losses: ${this.consecutiveLosses}

@@ -111,7 +111,7 @@ function parseArgs() {
         api_token: TOKEN,
         app_id: '1089',
         endpoint: 'wss://ws.derivws.com/websockets/v3',
-        symbol: 'R_75',
+        symbol: 'R_100',
         base_stake: 0.61,
         currency: 'USD',
         contract_type: 'DIGITDIFF',
@@ -122,9 +122,9 @@ function parseArgs() {
         min_ticks_for_analysis: 50,
 
         // ── Regime detection thresholds ───────────────────────────────────────
-        repeat_threshold: 9,           // Hard gate: raw repeat % per digit
-        hmm_nonrep_confidence: 0.80,   //0.88 Bayesian P(NON-REP) required from HMM
-        bocpd_nonrep_confidence: 0.80, //0.85 BOCPD P(NON-REP) required
+        repeat_threshold: 11,           // Hard gate: raw repeat % per digit
+        hmm_nonrep_confidence: 0.50,   //0.88 Bayesian P(NON-REP) required from HMM
+        bocpd_nonrep_confidence: 0.50, //0.85 BOCPD P(NON-REP) required
         min_regime_persistence: 8,    // Min consecutive ticks in NON-REP (HMM)
         acf_lag1_threshold: 0.12,      // Lag-1 ACF gate (< threshold = ok)
         ewma_trend_threshold: 1.5,     // EWMA trend gate (short-long, %)
