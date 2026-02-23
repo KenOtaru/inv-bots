@@ -123,8 +123,8 @@ function parseArgs() {
 
         // ── Regime detection thresholds ───────────────────────────────────────
         repeat_threshold: 11,           // Hard gate: raw repeat % per digit
-        hmm_nonrep_confidence: 0.75,   // Bayesian P(NON-REP) required from HMM forward
-        bocpd_nonrep_confidence: 0.72, // BOCPD P(NON-REP) required
+        hmm_nonrep_confidence: 0.85,   // Bayesian P(NON-REP) required from HMM forward
+        bocpd_nonrep_confidence: 0.82, // BOCPD P(NON-REP) required
         min_regime_persistence: 8,     // Min consecutive ticks in NON-REP (HMM Viterbi)
         acf_lag1_threshold: 0.15,      // Lag-1 ACF gate (< threshold = ok)
         ewma_trend_threshold: 2.0,     // EWMA trend gate (short-long, %)
@@ -148,7 +148,7 @@ function parseArgs() {
         hmm_min_discrimination: 0.10,  // Min B[1][1]-B[0][1] gap to accept BW update
 
         // Ensemble
-        repeat_confidence: 60,         // Final ensemble score gate (0–100)
+        repeat_confidence: 70,         // Final ensemble score gate (0–100)
 
         // Ghost
         ghost_enabled: false,
