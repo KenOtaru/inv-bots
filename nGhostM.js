@@ -1185,19 +1185,23 @@ class RomanianGhostBotV3 {
         if (this.currentWinStreak > this.maxWinStreak) this.maxWinStreak = this.currentWinStreak;
         if (profit > this.largestWin) this.largestWin = profit;
 
+        // Save trade data BEFORE resetting
+        const tradeTargetDigit = as.targetDigit;
+        const tradeTickHistory = [...as.tickHistory];
+
         as.hmm.resetCUSUM(as.targetDigit);
         this.resetMartingale();
         this.resetGhost(asset);
 
         const plStr = formatMoney(this.sessionProfit);
         logResult(`${green('✅ WIN!')} [${bold(asset)}] Profit:${green('+$'+profit.toFixed(2))} | P/L:${this.sessionProfit>=0?green(plStr):red(plStr)} | Bal:${green('$'+this.accountBalance.toFixed(2))}`);
-        logResult(dim(`  Target:${as.targetDigit} | History tail: [${as.tickHistory.slice(-5).join(',')}]`));
+        logResult(dim(`  Target:${tradeTargetDigit} | History tail: [${tradeTickHistory.slice(-5).join(',')}]`));
 
         this.sendTelegram(`
           ✅ <b>WIN!</b> — ${asset}
 
-          📊 Target Digit: ${as.targetDigit}
-          📜 Last 10: ${as.tickHistory.slice(-10).join(', ')}
+          📊 Target Digit: ${tradeTargetDigit}
+          📜 Last 10: ${tradeTickHistory.slice(-10).join(', ')}
           💰 Profit: +$${profit.toFixed(2)}
           💵 P&L: ${formatMoney(this.sessionProfit)}
           📊 Balance: $${this.accountBalance.toFixed(2)}
@@ -1217,6 +1221,10 @@ class RomanianGhostBotV3 {
         this.martingaleStep++;
         if (this.martingaleStep > this.maxMartingaleReached) this.maxMartingaleReached = this.martingaleStep;
 
+        // Save trade data BEFORE resetting
+        const tradeTargetDigit = as.targetDigit;
+        const tradeTickHistory = [...as.tickHistory];
+
         // Reset ghost wins for losing asset
         as.ghostConsecutiveWins = 0;
         as.ghostConfirmed       = false;
@@ -1232,8 +1240,8 @@ class RomanianGhostBotV3 {
         this.sendTelegram(`
           ❌ <b>LOSS!</b> — ${asset}
 
-          📊 Target Digit: ${as.targetDigit}
-          📜 Last 10: ${as.tickHistory.slice(-10).join(', ')}
+          📊 Target Digit: ${tradeTargetDigit}
+          📜 Last 10: ${tradeTickHistory.slice(-10).join(', ')}
           💸 Lost: -$${lostAmount.toFixed(2)}
           💵 P&L: ${formatMoney(this.sessionProfit)}
           📊 Balance: $${this.accountBalance.toFixed(2)}
