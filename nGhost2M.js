@@ -1287,7 +1287,7 @@ function parseArgs() {
         contract_type: 'DIGITDIFF',
 
         // ── Assets to monitor simultaneously ─────────────────────────────────
-        symbols: ['R_10', 'R_25', 'R_50', 'R_75'],
+        symbols: ['R_10', 'R_25', 'R_50', 'R_75', 'RDBEAR', 'RDBULL'],
 
         // ── History ───────────────────────────────────────────────────────────
         tick_history_size: 5000,
