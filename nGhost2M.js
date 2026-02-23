@@ -1663,7 +1663,7 @@ class RomanianGhostBot {
         if (this.currentStake > this.config.max_stake) { logRisk('Stake>max'); this.stop('Stake exceeds max'); return; }
         if (this.currentStake > this.accountBalance) { this.stop('Insufficient balance'); return; }
         if (immediate) this.placeTrade();
-        else { this.pendingTrade = true; this.botState = STATE.GHOST_TRADING; logBot(`⚡ Recovery trade queued — waiting for digit ${bold(cyan(this.targetDigit))}`); }
+        // else { this.pendingTrade = true; this.botState = STATE.GHOST_TRADING; logBot(`⚡ Recovery trade queued — waiting for digit ${bold(cyan(this.targetDigit))}`); }
     }
 
     placeTrade() {
