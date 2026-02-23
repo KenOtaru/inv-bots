@@ -499,7 +499,7 @@ function buildConfig() {
         min_ticks_for_hmm:   50,
 
         // Regime detection
-        repeat_threshold:        7,
+        repeat_threshold:        8,
         repeat_confidence:       90,
         hmm_nonrep_confidence:   0.93,
         min_regime_persistence:  8,
