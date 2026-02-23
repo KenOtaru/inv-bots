@@ -356,7 +356,7 @@ const CONFIG = {
 
     // Capital Settings
     INITIAL_CAPITAL: 500,
-    STAKE: 0.35,
+    STAKE: 0.5,
 
     // Session Targets
     totalTradesN: 50000000,
@@ -393,12 +393,12 @@ const CONFIG = {
     MAX_OSC_MULTIPLIER: 1.5,     // Skip if oscillation > 150% of max (anomaly)
 
     // Martingale Settings
-    MARTINGALE_MULTIPLIER: 1,
-    MARTINGALE_MULTIPLIER2: 1,
-    MARTINGALE_MULTIPLIER3: 1,
-    MARTINGALE_MULTIPLIER4: 1,
-    MARTINGALE_MULTIPLIER5: 1,
-    MAX_MARTINGALE_STEPS: 20,
+    MARTINGALE_MULTIPLIER: 4,
+    MARTINGALE_MULTIPLIER2: 5,
+    MARTINGALE_MULTIPLIER3: 5,
+    MARTINGALE_MULTIPLIER4: 5,
+    MARTINGALE_MULTIPLIER5: 5,
+    MAX_MARTINGALE_STEPS: 4,
 
     // Debug
     DEBUG_MODE: true,
@@ -1400,21 +1400,12 @@ class ConnectionManager {
         // ══════════════════════════════════════════
         // STEP 8: EXECUTE TRADE
         // ══════════════════════════════════════════
-        // const direction = predictedDir > 0 ? 'CALLE' : 'PUTE';
-        // const dirName = predictedDir > 0 ? 'RISE' : 'FALL';
-        // const trendEmoji = predictedDir > 0 ? '📈' : '📉';
-
-        // if (dirName === 'RISE') {
-        //     LOGGER.debug(`[${asset}] ⚠️ RISE direction not allowed`);
-        //     return;
-        // }
-
         const direction = predictedDir > 0 ? 'CALLE' : 'PUTE';
         const dirName = predictedDir > 0 ? 'RISE' : 'FALL';
         const trendEmoji = predictedDir > 0 ? '📈' : '📉';
 
-        if (dirName === 'FALL') {
-            LOGGER.debug(`[${asset}] ⚠️ FALL direction not allowed`);
+        if (dirName === 'RISE') {
+            LOGGER.debug(`[${asset}] ⚠️ RISE direction not allowed`);
             return;
         }
 
@@ -1598,7 +1589,7 @@ class DerivBot {
             return;
         }
 
-        const dirName = direction === 'CALLE' ? 'FALL' : 'RISE';
+        const dirName = direction === 'CALLE' ? 'RISE' : 'FALL';
         state.canTrade = false;
         state.lastTradeDirection = dirName;
 
@@ -1627,7 +1618,7 @@ class DerivBot {
             subscribe: 1,
             price: stake.toFixed(2),
             parameters: {
-                contract_type: 'PUT',
+                contract_type: direction,
                 symbol: tradeSymbol,
                 currency: 'USD',
                 amount: stake.toFixed(2),
