@@ -1101,14 +1101,14 @@ class RomanianGhostUltimate {
 
         // LOG EVERY 30 SECONDS FOR DEBUGGING
         const now = Date.now();
-        if (now - this.lastTickLogTime2[asset] >= 30000) {
-            console.log(
-                `[${asset}] HMM=${hmmState} | Safety=${safetyScore} | ` +
-                `Conf=${(confidence * 100).toFixed(1)}% | Persist=${regime.hmmPersistence} | ` +
-                `RepRate=${regime.rawRepeatProb[targetDigit].toFixed(1)}% | CUSUM=${regime.cusumAlarm ? '⚠️' : '✓'}`
-            );
-            this.lastTickLogTime2[asset] = now;
-        }
+        // if (now - this.lastTickLogTime2[asset] >= 30000) {
+        console.log(
+            `[${asset}] HMM=${hmmState} | Safety=${safetyScore} | ` +
+            `Conf=${(confidence * 100).toFixed(1)}% | Persist=${regime.hmmPersistence} | ` +
+            `RepRate=${regime.rawRepeatProb[targetDigit].toFixed(1)}% | CUSUM=${regime.cusumAlarm ? '⚠️' : '✓'}`
+        );
+        //     this.lastTickLogTime2[asset] = now;
+        // }
 
         // Gating conditions (from HMM)
         if (hmmState !== 'NON-REP') {

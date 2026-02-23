@@ -143,7 +143,7 @@ function parseArgs() {
         hmm_refit_every: 50,          // Refit Baum-Welch every N ticks
 
         // Ensemble
-        repeat_confidence: 82,        // Final ensemble score gate (0–100)
+        repeat_confidence: 52,        // Final ensemble score gate (0–100)
 
         // Ghost
         ghost_enabled: false,
