@@ -1148,11 +1148,11 @@ class StatePersistence {
                     largestLoss: bot.largestLoss,
                 },
                 // Save last 1 ticks per asset (enough to warm detectors quickly)
-                assets: Object.fromEntries(
-                    Object.entries(bot.channels).map(([sym, ch]) => [sym, {
-                        tickHistory: ch.tickHistory.slice(-1),
-                    }])
-                ),
+                // assets: Object.fromEntries(
+                //     Object.entries(bot.channels).map(([sym, ch]) => [sym, {
+                //         tickHistory: ch.tickHistory.slice(-1),
+                //     }])
+                // ),
             };
             fs.writeFileSync(STATE_FILE, JSON.stringify(payload));
         } catch (e) {
