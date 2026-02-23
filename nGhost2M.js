@@ -122,9 +122,9 @@ function parseArgs() {
         min_ticks_for_analysis: 50,
 
         // ── Regime detection thresholds ───────────────────────────────────────
-        repeat_threshold: 10,           // Hard gate: raw repeat % per digit
+        repeat_threshold: 11,           // Hard gate: raw repeat % per digit
         hmm_nonrep_confidence: 0.75,   // Bayesian P(NON-REP) required from HMM forward
-        bocpd_nonrep_confidence: 0.82, // BOCPD P(NON-REP) required
+        bocpd_nonrep_confidence: 0.72, // BOCPD P(NON-REP) required
         min_regime_persistence: 8,     // Min consecutive ticks in NON-REP (HMM Viterbi)
         acf_lag1_threshold: 0.15,      // Lag-1 ACF gate (< threshold = ok)
         ewma_trend_threshold: 2.0,     // EWMA trend gate (short-long, %)
@@ -148,7 +148,7 @@ function parseArgs() {
         hmm_min_discrimination: 0.10,  // Min B[1][1]-B[0][1] gap to accept BW update
 
         // Ensemble
-        repeat_confidence: 70,         // Final ensemble score gate (0–100)
+        repeat_confidence: 60,         // Final ensemble score gate (0–100)
 
         // Ghost
         ghost_enabled: false,
@@ -1857,12 +1857,14 @@ class RomanianGhostBotV4 {
         const plStr = this.sessionProfit >= 0 ? green(formatMoney(this.sessionProfit)) : red(formatMoney(this.sessionProfit));
         logResult(`${green('✅ WIN!')} [${ch?.symbol}] +$${profit.toFixed(2)} | P/L:${plStr} | Bal:$${this.accountBalance.toFixed(2)}`);
         if (resultDigit !== null) logResult(dim(`  Target:${tradeTargetDigit} Result:${resultDigit}`));
+        
         this.sendTelegram(`
             ✅ <b>WIN! [${ch?.symbol}]
-            🔢 Target:${tradeTargetDigit} | Result:${resultDigit}
-            📊 Last10: ${tradeTickHistory.slice(-10).join(',')}  
+            </b>\n\nTarget:${tradeTargetDigit} 
+            Result:${resultDigit}\n 
+            🔢 Last10: ${tradeTickHistory.slice(-10).join(',')}  
             💰 $${profit.toFixed(2)} 
-            📊 P&L: ${formatMoney(this.sessionProfit)}\n
+            P&L: ${formatMoney(this.sessionProfit)}\n
             📊 ${this.totalWins}W/${this.totalLosses}L\n
         `);
         this.resetMartingale();
@@ -1886,12 +1888,11 @@ class RomanianGhostBotV4 {
         logResult(`${red('❌ LOSS!')} [${ch?.symbol}] -$${lostAmount.toFixed(2)} | P/L:${plStr}${step}`);
         if (resultDigit !== null) logResult(dim(`  Target:${tradeTargetDigit} Result:${resultDigit} ${resultDigit === tradeTargetDigit ? red('REPEATED') : green('diff — unexpected')}`));
         this.sendTelegram(`
-            ❌ <b>LOSS! [${ch?.symbol}]</b>
-            🔢 Target:${tradeTargetDigit} | Result:${resultDigit} 
-            📊 Last10: ${tradeTickHistory.slice(-10).join(',')} 
-            💸 -$${lostAmount.toFixed(2)} 
-            📊 P&L: ${formatMoney(this.sessionProfit)}
-            📊 ${this.totalWins}W/${this.totalLosses}L${step}
+            ❌ <b>LOSS! [${ch?.symbol}]</b>\n\nTarget:${tradeTargetDigit}
+            Result:${resultDigit}\n  
+            🔢 Last10: ${tradeTickHistory.slice(-10).join(',')} 
+            💸 -$${lostAmount.toFixed(2)} | P&L: ${formatMoney(this.sessionProfit)}\n
+            📊 ${this.totalWins}W/${this.totalLosses}L${step}\n
         `);
     }
 
