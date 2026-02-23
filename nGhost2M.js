@@ -1686,13 +1686,15 @@ class RomanianGhostBot {
         );
 
         this.sendTelegram(`
-🎯 <b>TRADE on ${this.activeAsset}</b>
-
-📊 ${this.activeAsset} | Digit: ${this.targetDigit}
-💰 Stake: $${this.currentStake.toFixed(2)}${stepInfo}
-📈 Rate: ${this.targetRepeatRate.toFixed(1)}% | Score: ${score}/100
-🔬 P(NR): ${pnr} | BOCPD_RL: ${r?.bocpdModeRL || '?'}t
-📊 ${this.totalTrades} trades | ${this.totalWins}W/${this.totalLosses}L | P&L: ${this.sessionProfit >= 0 ? '+' : ''}$${this.sessionProfit.toFixed(2)}
+            🎯 <b>TRADE on ${this.activeAsset}</b>
+          
+            📊 ${this.activeAsset} 
+            🔢 Digit: ${this.targetDigit}
+            📜 Last10: ${this.tickHistories[this.activeAsset]?.slice(-10).join(',')} 
+            💰 Stake: $${this.currentStake.toFixed(2)}${stepInfo}
+            📈 Rate: ${this.targetRepeatRate.toFixed(1)}% | Score: ${score}/100
+            🔬 P(NR): ${pnr} | BOCPD_RL: ${r?.bocpdModeRL || '?'}t
+            📊 ${this.totalTrades} trades | ${this.totalWins}W/${this.totalLosses}L | P&L: ${this.sessionProfit >= 0 ? '+' : ''}$${this.sessionProfit.toFixed(2)}
         `.trim());
 
         this.send({
@@ -1751,8 +1753,16 @@ class RomanianGhostBot {
         const plStr = this.sessionProfit >= 0 ? green(formatMoney(this.sessionProfit)) : red(formatMoney(this.sessionProfit));
         logResult(`${green('✅ WIN!')} [${this.lastTradeAsset}] Profit: ${green('+$' + profit.toFixed(2))} | P/L: ${plStr}`);
         
-        this.sendTelegram(`✅ <b>WIN on ${this.lastTradeAsset}!</b>\n\nTarget:${this.targetDigit} | Result:${resultDigit}\n💰 +$${profit.toFixed(2)} | P&L: ${this.sessionProfit >= 0 ? '+' : ''}$${this.sessionProfit.toFixed(2)}\n📊 ${this.totalWins}W/${this.totalLosses}L`);
-        
+        this.sendTelegram(`
+            ✅ <b>WIN!</b>
+            📊 ${this.lastTradeAsset}
+            🔢 Digit: ${this.targetDigit} | Result:${resultDigit}
+            📜 Last10: ${this.tickHistories[this.activeAsset]?.slice(-10).join(',')}
+            💰 +$${profit.toFixed(2)} | P&L: ${this.sessionProfit >= 0 ? '+' : ''}$${this.sessionProfit.toFixed(2)}\n
+            📊 ${this.totalWins}W/${this.totalLosses}L${martInfo}
+            📊 WinRate: ${this.totalTrades > 0 ? ((this.totalWins / this.totalTrades) * 100).toFixed(1) : '0'}%
+        `);
+
         this.resetMartingale(); 
         this.resetGhost();
     }
@@ -1773,7 +1783,15 @@ class RomanianGhostBot {
         
         logResult(`${red('❌ LOSS!')} [${this.lastTradeAsset}] Lost: ${red('-$' + lostAmount.toFixed(2))} | P/L: ${plStr}${martInfo}`);
         
-        this.sendTelegram(`❌ <b>LOSS on ${this.lastTradeAsset}!</b>\n\nTarget:${this.targetDigit} | Result:${resultDigit}\n💸 -$${lostAmount.toFixed(2)} | P&L: ${this.sessionProfit >= 0 ? '+' : ''}$${this.sessionProfit.toFixed(2)}\n📊 ${this.totalWins}W/${this.totalLosses}L${martInfo}`);
+        this.sendTelegram(`
+            ❌ <b>LOSS!</b>
+            📊 ${this.lastTradeAsset}
+            🔢 Digit: ${this.targetDigit} | Result:${resultDigit}
+            📜 Last10: ${this.tickHistories[this.activeAsset]?.slice(-10).join(',')}
+            💸 -$${lostAmount.toFixed(2)} | P&L: ${this.sessionProfit >= 0 ? '+' : ''}$${this.sessionProfit.toFixed(2)}\n
+            📊 ${this.totalWins}W/${this.totalLosses}L${martInfo}
+            📊 WinRate: ${this.totalTrades > 0 ? ((this.totalWins / this.totalTrades) * 100).toFixed(1) : '0'}%
+        `);
         
         // Suspend asset on loss if enabled
         if (this.assetSuspendAfterLoss && this.lastTradeAsset) {
