@@ -90,7 +90,7 @@ function parseArgs() {
 
         // ── Regime detection thresholds ───────────────────────────────────────
         repeat_threshold: 8,
-        hmm_nonrep_confidence: 0.85,
+        hmm_nonrep_confidence: 0.93,
         bocpd_nonrep_confidence: 0.82,
         min_regime_persistence: 8,
         acf_lag1_threshold: 0.15,
@@ -111,7 +111,7 @@ function parseArgs() {
         hmm_min_discrimination: 0.10,
 
         // Ensemble
-        repeat_confidence: 70,
+        repeat_confidence: 90,
 
         // Ghost
         ghost_enabled: false,
