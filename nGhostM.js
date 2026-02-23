@@ -1095,16 +1095,16 @@ class RomanianGhostBotV3 {
         );
 
         this.sendTelegram(`
-🎯 <b>GHOST TRADE</b>
+          🎯 <b>GHOST TRADE</b>
 
-📊 Asset: <b>${asset}</b>
-🔢 Target Digit: ${as.targetDigit}
-📜 Last 5 ticks: ${as.tickHistory.slice(-5).join(', ')}
-💰 Stake: $${this.currentStake.toFixed(2)} | Mart step: ${this.martingaleStep}
-📈 Repeat Rate: ${as.targetRepeatRate.toFixed(1)}%
-🔬 Score: ${score}/100 | P(NR): ${pnrPct}
-📊 Session: ${this.totalTrades} trades | ${this.totalWins}W/${this.totalLosses}L
-⏰ ${new Date().toLocaleTimeString()}`.trim());
+          📊 Asset: <b>${asset}</b>
+          🔢 Target Digit: ${as.targetDigit}
+          📜 Last 10 ticks: ${as.tickHistory.slice(-10).join(', ')}
+          💰 Stake: $${this.currentStake.toFixed(2)} | Mart step: ${this.martingaleStep}
+          📈 Repeat Rate: ${as.targetRepeatRate.toFixed(1)}%
+          🔬 Score: ${score}/100 | P(NR): ${pnrPct}
+          📊 Session: ${this.totalTrades} trades | ${this.totalWins}W/${this.totalLosses}L
+          ⏰ ${new Date().toLocaleTimeString()}`.trim());
 
         const ok = this.send({
             buy: 1,
@@ -1194,14 +1194,14 @@ class RomanianGhostBotV3 {
         logResult(dim(`  Target:${as.targetDigit} | History tail: [${as.tickHistory.slice(-5).join(',')}]`));
 
         this.sendTelegram(`
-✅ <b>WIN!</b> — ${asset}
+          ✅ <b>WIN!</b> — ${asset}
 
-📊 Target Digit: ${as.targetDigit}
-📜 Last 5: ${as.tickHistory.slice(-5).join(', ')}
-💰 Profit: +$${profit.toFixed(2)}
-💵 P&L: ${formatMoney(this.sessionProfit)}
-📊 Balance: $${this.accountBalance.toFixed(2)}
-📈 ${this.totalWins}W/${this.totalLosses}L | Streak: ${this.currentWinStreak}W`.trim());
+          📊 Target Digit: ${as.targetDigit}
+          📜 Last 10: ${as.tickHistory.slice(-10).join(', ')}
+          💰 Profit: +$${profit.toFixed(2)}
+          💵 P&L: ${formatMoney(this.sessionProfit)}
+          📊 Balance: $${this.accountBalance.toFixed(2)}
+          📈 ${this.totalWins}W/${this.totalLosses}L | Streak: ${this.currentWinStreak}W`.trim());
     }
 
     onLoss(asset, lostAmount) {
@@ -1230,14 +1230,14 @@ class RomanianGhostBotV3 {
         logResult(`${red('❌ LOSS!')} [${bold(asset)}] Lost:${red('-$'+lostAmount.toFixed(2))} | P/L:${this.sessionProfit>=0?green(plStr):red(plStr)} | Mart:${this.martingaleStep}/${this.config.max_martingale_steps}`);
 
         this.sendTelegram(`
-❌ <b>LOSS!</b> — ${asset}
+          ❌ <b>LOSS!</b> — ${asset}
 
-📊 Target Digit: ${as.targetDigit}
-📜 Last 5: ${as.tickHistory.slice(-5).join(', ')}
-💸 Lost: -$${lostAmount.toFixed(2)}
-💵 P&L: ${formatMoney(this.sessionProfit)}
-📊 Balance: $${this.accountBalance.toFixed(2)}
-📈 ${this.totalWins}W/${this.totalLosses}L | Streak: ${this.currentLossStreak}L | Mart: ${this.martingaleStep}/${this.config.max_martingale_steps}`.trim());
+          📊 Target Digit: ${as.targetDigit}
+          📜 Last 10: ${as.tickHistory.slice(-10).join(', ')}
+          💸 Lost: -$${lostAmount.toFixed(2)}
+          💵 P&L: ${formatMoney(this.sessionProfit)}
+          📊 Balance: $${this.accountBalance.toFixed(2)}
+          📈 ${this.totalWins}W/${this.totalLosses}L | Streak: ${this.currentLossStreak}L | Mart: ${this.martingaleStep}/${this.config.max_martingale_steps}`.trim());
     }
 
     decideNextAction() {
