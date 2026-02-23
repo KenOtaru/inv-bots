@@ -1122,7 +1122,7 @@ class AdvancedRegimeDetector {
 const fs = require('fs');
 const path = require('path');
 
-const STATE_FILE = path.join(__dirname, 'romanian-ghost-bot-v4-state.json');
+const STATE_FILE = path.join(__dirname, 'romanian-ghost-bot-v5-state.json');
 const STATE_MAX_AGE_MS = 30 * 60 * 1000;   // 30 minutes
 const STATE_SAVE_INTERVAL = 5_000;             // auto-save every 5 s
 
@@ -1147,10 +1147,10 @@ class StatePersistence {
                     largestWin: bot.largestWin,
                     largestLoss: bot.largestLoss,
                 },
-                // Save last 500 ticks per asset (enough to warm detectors quickly)
+                // Save last 1 ticks per asset (enough to warm detectors quickly)
                 assets: Object.fromEntries(
                     Object.entries(bot.channels).map(([sym, ch]) => [sym, {
-                        tickHistory: ch.tickHistory.slice(-500),
+                        tickHistory: ch.tickHistory.slice(-1),
                     }])
                 ),
             };
