@@ -409,7 +409,7 @@ const CONFIG = {
     TELEGRAM_CHAT_ID: '752497117',
 };
 
-let ACTIVE_ASSETS = ['stpRNG'];
+let ACTIVE_ASSETS = ['stpRNG5'];
 
 // ============================================
 // STATE MANAGEMENT
