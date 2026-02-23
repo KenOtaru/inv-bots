@@ -356,7 +356,7 @@ const CONFIG = {
 
     // Capital Settings
     INITIAL_CAPITAL: 500,
-    STAKE: 0.5,
+    STAKE: 1.5,
 
     // Session Targets
     totalTradesN: 5000000,
@@ -393,12 +393,12 @@ const CONFIG = {
     MAX_OSC_MULTIPLIER: 1.5,     // Skip if oscillation > 150% of max (anomaly)
 
     // Martingale Settings
-    MARTINGALE_MULTIPLIER: 4,
-    MARTINGALE_MULTIPLIER2: 5,
-    MARTINGALE_MULTIPLIER3: 5,
-    MARTINGALE_MULTIPLIER4: 5,
-    MARTINGALE_MULTIPLIER5: 5,
-    MAX_MARTINGALE_STEPS: 4,
+    MARTINGALE_MULTIPLIER: 1,
+    MARTINGALE_MULTIPLIER2: 1,
+    MARTINGALE_MULTIPLIER3: 1,
+    MARTINGALE_MULTIPLIER4: 1,
+    MARTINGALE_MULTIPLIER5: 1,
+    MAX_MARTINGALE_STEPS: 20,
 
     // Debug
     DEBUG_MODE: true,
@@ -409,7 +409,7 @@ const CONFIG = {
     TELEGRAM_CHAT_ID: '752497117',
 };
 
-let ACTIVE_ASSETS = ['stpRNG'];
+let ACTIVE_ASSETS = ['stpRNG5'];
 
 // ============================================
 // STATE MANAGEMENT

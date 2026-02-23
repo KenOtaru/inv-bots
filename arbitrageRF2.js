@@ -356,7 +356,7 @@ const CONFIG = {
 
     // Capital Settings
     INITIAL_CAPITAL: 500,
-    STAKE: 0.5,
+    STAKE: 0.35,
 
     // Session Targets
     totalTradesN: 50000000,
@@ -393,12 +393,12 @@ const CONFIG = {
     MAX_OSC_MULTIPLIER: 1.5,     // Skip if oscillation > 150% of max (anomaly)
 
     // Martingale Settings
-    MARTINGALE_MULTIPLIER: 4,
-    MARTINGALE_MULTIPLIER2: 5,
-    MARTINGALE_MULTIPLIER3: 5,
-    MARTINGALE_MULTIPLIER4: 5,
-    MARTINGALE_MULTIPLIER5: 5,
-    MAX_MARTINGALE_STEPS: 4,
+    MARTINGALE_MULTIPLIER: 1,
+    MARTINGALE_MULTIPLIER2: 1,
+    MARTINGALE_MULTIPLIER3: 1,
+    MARTINGALE_MULTIPLIER4: 1,
+    MARTINGALE_MULTIPLIER5: 1,
+    MAX_MARTINGALE_STEPS: 20,
 
     // Debug
     DEBUG_MODE: true,
@@ -409,7 +409,7 @@ const CONFIG = {
     TELEGRAM_CHAT_ID: '752497117',
 };
 
-let ACTIVE_ASSETS = ['stpRNG'];
+let ACTIVE_ASSETS = ['stpRNG5'];
 
 // ============================================
 // STATE MANAGEMENT
@@ -1400,12 +1400,21 @@ class ConnectionManager {
         // ══════════════════════════════════════════
         // STEP 8: EXECUTE TRADE
         // ══════════════════════════════════════════
+        // const direction = predictedDir > 0 ? 'CALLE' : 'PUTE';
+        // const dirName = predictedDir > 0 ? 'RISE' : 'FALL';
+        // const trendEmoji = predictedDir > 0 ? '📈' : '📉';
+
+        // if (dirName === 'RISE') {
+        //     LOGGER.debug(`[${asset}] ⚠️ RISE direction not allowed`);
+        //     return;
+        // }
+
         const direction = predictedDir > 0 ? 'CALLE' : 'PUTE';
         const dirName = predictedDir > 0 ? 'RISE' : 'FALL';
         const trendEmoji = predictedDir > 0 ? '📈' : '📉';
 
-        if (dirName === 'RISE') {
-            LOGGER.debug(`[${asset}] ⚠️ RISE direction not allowed`);
+        if (dirName === 'FALL') {
+            LOGGER.debug(`[${asset}] ⚠️ FALL direction not allowed`);
             return;
         }
 
@@ -1589,7 +1598,7 @@ class DerivBot {
             return;
         }
 
-        const dirName = direction === 'CALLE' ? 'RISE' : 'FALL';
+        const dirName = direction === 'CALLE' ? 'FALL' : 'RISE';
         state.canTrade = false;
         state.lastTradeDirection = dirName;
 
@@ -1618,7 +1627,7 @@ class DerivBot {
             subscribe: 1,
             price: stake.toFixed(2),
             parameters: {
-                contract_type: direction,
+                contract_type: 'PUT',
                 symbol: tradeSymbol,
                 currency: 'USD',
                 amount: stake.toFixed(2),
