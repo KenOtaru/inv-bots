@@ -1079,13 +1079,13 @@ class RomanianGhostUltimate {
         const hmm = this.assetHMMs.get(asset);
         if (!hmm) return;
 
-        this.tickCount++;
-        // Analyze current regime using HMM 
-        const regime = hmm.analyze(history, history[history.length - 1], this.tickCount, asset);
-
         if (this.tickCount > 50) {
             this.tickCount = 0;
         }
+
+        this.tickCount++;
+        // Analyze current regime using HMM 
+        const regime = hmm.analyze(history, history[history.length - 1], this.tickCount, asset);
 
         if (!regime.valid) return;
         if (!regime.signalActive) return;
