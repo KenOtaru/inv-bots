@@ -1859,12 +1859,11 @@ class RomanianGhostBotV4 {
         if (resultDigit !== null) logResult(dim(`  Target:${tradeTargetDigit} Result:${resultDigit}`));
         
         this.sendTelegram(`
-            ✅ <b>WIN! [${ch?.symbol}]
-            </b>\n\nTarget:${tradeTargetDigit} 
-            Result:${resultDigit}\n 
-            🔢 Last10: ${tradeTickHistory.slice(-10).join(',')}  
+            ✅ WIN! [${ch?.symbol}]
+            🔢Target:${tradeTargetDigit} | Result:${resultDigit} 
+            📊 Last10: ${tradeTickHistory.slice(-10).join(',')}  
             💰 $${profit.toFixed(2)} 
-            P&L: ${formatMoney(this.sessionProfit)}\n
+            📊 P&L: ${formatMoney(this.sessionProfit)}\n
             📊 ${this.totalWins}W/${this.totalLosses}L\n
         `);
         this.resetMartingale();
