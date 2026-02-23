@@ -74,7 +74,7 @@ function parseArgs() {
         endpoint: 'wss://ws.derivws.com/websockets/v3',
 
         // ── Multi-Asset Configuration ─────────────────────────────────────────
-        symbols: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'RDBEAR', 'RDBULL'],
+        symbols: ['R_10', 'R_25', 'R_50', 'R_75', 'RDBEAR', 'RDBULL'],
         asset_scan_interval: 10,       // Re-evaluate best asset every N ticks
         min_score_advantage: 5,        // Min score advantage to switch assets
         asset_lock_ticks: 30,          // Min ticks before allowing asset switch
@@ -90,7 +90,7 @@ function parseArgs() {
 
         // ── Regime detection thresholds ───────────────────────────────────────
         repeat_threshold: 9,
-        hmm_nonrep_confidence: 0.85,
+        hmm_nonrep_confidence: 0.75,
         bocpd_nonrep_confidence: 0.82,
         min_regime_persistence: 8,
         acf_lag1_threshold: 0.15,
@@ -111,7 +111,7 @@ function parseArgs() {
         hmm_min_discrimination: 0.10,
 
         // Ensemble
-        repeat_confidence: 80,
+        repeat_confidence: 70,
 
         // Ghost
         ghost_enabled: false,
