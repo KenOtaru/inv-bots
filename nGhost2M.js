@@ -900,7 +900,7 @@ class AdvancedRegimeDetector {
                         `Discrimination: ${(fitResult.discrimination * 100).toFixed(1)}% ✅`
                     );
                 } else {
-                    logHMM(yellow(`⚠️  HMM Baum-Welch rejected: ${fitResult.reason} — using prior params`));
+                    // logHMM(yellow(`⚠️  HMM Baum-Welch rejected: ${fitResult.reason} — using prior params`));
                 }
             }
         }
@@ -1969,16 +1969,16 @@ class RomanianGhostBotV4 {
 
         const stateCol = r.hmmState === 0 ? green : yellow;
         const pnrPct = (r.posteriorNR * 100).toFixed(1);
-        logHMM(`[${sym}] HMM: ${stateCol(bold(r.hmmStateName))} | P(NR):${r.posteriorNR >= this.config.hmm_nonrep_confidence ? green(pnrPct + '%') : red(pnrPct + '%')} | Persist:${r.hmmPersistence >= this.config.min_regime_persistence ? green(r.hmmPersistence + 't') : yellow(r.hmmPersistence + 't')} | B(rep|NR)=${(r.hmmB_repeatNR * 100).toFixed(1)}% B(rep|REP)=${(r.hmmB_repeatREP * 100).toFixed(1)}% Discrim:${(r.hmmDiscrim * 100).toFixed(1)}%`);
+        // logHMM(`[${sym}] HMM: ${stateCol(bold(r.hmmStateName))} | P(NR):${r.posteriorNR >= this.config.hmm_nonrep_confidence ? green(pnrPct + '%') : red(pnrPct + '%')} | Persist:${r.hmmPersistence >= this.config.min_regime_persistence ? green(r.hmmPersistence + 't') : yellow(r.hmmPersistence + 't')} | B(rep|NR)=${(r.hmmB_repeatNR * 100).toFixed(1)}% B(rep|REP)=${(r.hmmB_repeatREP * 100).toFixed(1)}% Discrim:${(r.hmmDiscrim * 100).toFixed(1)}%`);
 
         const bocpdOk = r.bocpdIsNonRep && r.bocpdPNonRep >= this.config.bocpd_nonrep_confidence;
-        logBocpd(`[${sym}] BOCPD: P(NR):${bocpdOk ? green((r.bocpdPNonRep * 100).toFixed(1) + '%') : red((r.bocpdPNonRep * 100).toFixed(1) + '%')} | ModeRL:${r.bocpdModeRL >= this.config.bocpd_min_run_for_signal ? green(r.bocpdModeRL + 't') : yellow(r.bocpdModeRL + 't')} | ExpRL:${r.bocpdExpRL.toFixed(1)}t | θ̂:${(r.bocpdTheta * 100).toFixed(1)}%`);
+        // logBocpd(`[${sym}] BOCPD: P(NR):${bocpdOk ? green((r.bocpdPNonRep * 100).toFixed(1) + '%') : red((r.bocpdPNonRep * 100).toFixed(1) + '%')} | ModeRL:${r.bocpdModeRL >= this.config.bocpd_min_run_for_signal ? green(r.bocpdModeRL + 't') : yellow(r.bocpdModeRL + 't')} | ExpRL:${r.bocpdExpRL.toFixed(1)}t | θ̂:${(r.bocpdTheta * 100).toFixed(1)}%`);
 
-        logAnalysis(`[${sym}] EWMA:${r.ewmaValues.map((v, i) => v < thr ? green(v.toFixed(1) + '%') : red(v.toFixed(1) + '%')).join('|')} Trend:${r.ewmaTrend <= this.config.ewma_trend_threshold ? green(r.ewmaTrend.toFixed(2) + '%') : red(r.ewmaTrend.toFixed(2) + '%')} ACF[1]:${r.acf[0] < this.config.acf_lag1_threshold ? green(r.acf[0].toFixed(3)) : red(r.acf[0].toFixed(3))}`);
-        logAnalysis(`[${sym}] CUSUM:up=${r.cusumUpAlarm ? red('ALARM ' + r.cusumUp.toFixed(2)) : green('ok ' + r.cusumUp.toFixed(2))} down=${r.cusumDownConfirm ? green('confirmed ' + r.cusumDown.toFixed(2)) : dim('pending ' + r.cusumDown.toFixed(2))} | Break:p=${r.structBreak.pBreak.toFixed(3)} ${r.structBreak.pBreak > this.config.structural_break_threshold ? red('BREAK') : green('OK')}`);
+        // logAnalysis(`[${sym}] EWMA:${r.ewmaValues.map((v, i) => v < thr ? green(v.toFixed(1) + '%') : red(v.toFixed(1) + '%')).join('|')} Trend:${r.ewmaTrend <= this.config.ewma_trend_threshold ? green(r.ewmaTrend.toFixed(2) + '%') : red(r.ewmaTrend.toFixed(2) + '%')} ACF[1]:${r.acf[0] < this.config.acf_lag1_threshold ? green(r.acf[0].toFixed(3)) : red(r.acf[0].toFixed(3))}`);
+        // logAnalysis(`[${sym}] CUSUM:up=${r.cusumUpAlarm ? red('ALARM ' + r.cusumUp.toFixed(2)) : green('ok ' + r.cusumUp.toFixed(2))} down=${r.cusumDownConfirm ? green('confirmed ' + r.cusumDown.toFixed(2)) : dim('pending ' + r.cusumDown.toFixed(2))} | Break:p=${r.structBreak.pBreak.toFixed(3)} ${r.structBreak.pBreak > this.config.structural_break_threshold ? red('BREAK') : green('OK')}`);
 
         const cs = r.componentScores;
-        logRegime(`[${sym}] Score:${r.safetyScore >= this.config.repeat_confidence ? green(bold(r.safetyScore + '/100')) : red(r.safetyScore + '/100')} | BOCPD:${cs.bocpdScore.toFixed(1)} HMM:${cs.hmmScore.toFixed(1)} EWMA:${cs.ewmaScore.toFixed(1)} ACF:${cs.acfScore.toFixed(1)} Break:${cs.breakScore.toFixed(1)} CUSUM:${cs.cusumScore.toFixed(1)}`);
+        // logRegime(`[${sym}] Score:${r.safetyScore >= this.config.repeat_confidence ? green(bold(r.safetyScore + '/100')) : red(r.safetyScore + '/100')} | BOCPD:${cs.bocpdScore.toFixed(1)} HMM:${cs.hmmScore.toFixed(1)} EWMA:${cs.ewmaScore.toFixed(1)} ACF:${cs.acfScore.toFixed(1)} Break:${cs.breakScore.toFixed(1)} CUSUM:${cs.cusumScore.toFixed(1)}`);
 
         if (ch.signalActive) {
             logAnalysis(green(bold(`✅ [${sym}] SIGNAL ACTIVE — digit ${curDigit} | Score:${r.safetyScore}/100 | P(NR):${pnrPct}% → DIFFER`)));
@@ -1996,7 +1996,7 @@ class RomanianGhostBotV4 {
             if (r.cusumUpAlarm) reasons.push(`CUSUM_UP_ALARM`);
             if (r.structBreak.pBreak >= this.config.structural_break_threshold) reasons.push(`STRUCT_BREAK(p=${r.structBreak.pBreak.toFixed(2)})`);
             if (r.safetyScore < this.config.repeat_confidence) reasons.push(`score=${r.safetyScore}<${this.config.repeat_confidence}`);
-            logAnalysis(red(`⛔ NO SIGNAL [${sym}] digit ${curDigit}: ${reasons.join(', ')}`));
+            // logAnalysis(red(`⛔ NO SIGNAL [${sym}] digit ${curDigit}: ${reasons.join(', ')}`));
         }
     }
 
