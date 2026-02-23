@@ -89,8 +89,8 @@ function parseArgs() {
         min_ticks_for_analysis: 100,
 
         // ── Regime detection thresholds ───────────────────────────────────────
-        repeat_threshold: 8,
-        hmm_nonrep_confidence: 0.93,
+        repeat_threshold: 9,
+        hmm_nonrep_confidence: 0.85,
         bocpd_nonrep_confidence: 0.82,
         min_regime_persistence: 8,
         acf_lag1_threshold: 0.15,
@@ -111,7 +111,7 @@ function parseArgs() {
         hmm_min_discrimination: 0.10,
 
         // Ensemble
-        repeat_confidence: 85,
+        repeat_confidence: 80,
 
         // Ghost
         ghost_enabled: false,
