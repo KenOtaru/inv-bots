@@ -6,7 +6,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'abitrageRF000019-state.json');
+const STATE_FILE = path.join(__dirname, 'abitrageRF000027-state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -356,7 +356,7 @@ const CONFIG = {
 
     // Capital Settings
     INITIAL_CAPITAL: 500,
-    STAKE: 1.5,
+    STAKE: 4,
 
     // Session Targets
     totalTradesN: 5000000,
