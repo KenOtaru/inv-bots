@@ -122,7 +122,7 @@ function parseArgs() {
         min_ticks_for_analysis: 50,
 
         // ── Regime detection thresholds ───────────────────────────────────────
-        repeat_threshold: 9,           // Hard gate: raw repeat % per digit
+        repeat_threshold: 8,           // Hard gate: raw repeat % per digit
         hmm_nonrep_confidence: 0.75,   // Bayesian P(NON-REP) required from HMM forward
         bocpd_nonrep_confidence: 0.82, // BOCPD P(NON-REP) required
         min_regime_persistence: 8,     // Min consecutive ticks in NON-REP (HMM Viterbi)
