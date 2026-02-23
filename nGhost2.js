@@ -111,39 +111,44 @@ function parseArgs() {
         api_token: TOKEN,
         app_id: '1089',
         endpoint: 'wss://ws.derivws.com/websockets/v3',
-        symbol: 'R_100',
+        symbol: 'R_75',
         base_stake: 0.61,
         currency: 'USD',
         contract_type: 'DIGITDIFF',
 
         // History
         tick_history_size: 5000,
-        analysis_window: 5000,
-        min_ticks_for_analysis: 50,
+        analysis_window: 3000,
+        min_ticks_for_analysis: 100,
 
         // ── Regime detection thresholds ───────────────────────────────────────
-        repeat_threshold: 11,           // Hard gate: raw repeat % per digit
-        hmm_nonrep_confidence: 0.50,   //0.88 Bayesian P(NON-REP) required from HMM
-        bocpd_nonrep_confidence: 0.50, //0.85 BOCPD P(NON-REP) required
-        min_regime_persistence: 8,    // Min consecutive ticks in NON-REP (HMM)
-        acf_lag1_threshold: 0.12,      // Lag-1 ACF gate (< threshold = ok)
-        ewma_trend_threshold: 1.5,     // EWMA trend gate (short-long, %)
-        cusum_up_threshold: 4.5,       // Up-CUSUM alarm (rep regime shift)
-        cusum_down_threshold: -2.0,    // Down-CUSUM confirmation (non-rep sustained)
-        cusum_slack: 0.005,
-        structural_break_threshold: 0.12, // P-value threshold for structural break
+        repeat_threshold: 9,           // Hard gate: raw repeat % per digit
+        hmm_nonrep_confidence: 0.75,   // Bayesian P(NON-REP) required from HMM forward
+        bocpd_nonrep_confidence: 0.82, // BOCPD P(NON-REP) required
+        min_regime_persistence: 8,     // Min consecutive ticks in NON-REP (HMM Viterbi)
+        acf_lag1_threshold: 0.15,      // Lag-1 ACF gate (< threshold = ok)
+        ewma_trend_threshold: 2.0,     // EWMA trend gate (short-long, %)
+        // CUSUM — uses FIXED p0=0.10, p1=0.40 internally (NOT from HMM diagonals)
+        // With correct LLRs: no-repeat LLR=-0.405, repeat LLR=+1.386, slack=0.15
+        // At 5% repeat rate, CUSUM drifts: 0.95*(-0.405-0.15) + 0.05*(1.386-0.15) = -0.464/tick
+        // → clears in ~10 non-rep ticks after last alarm trigger
+        cusum_up_threshold: 3.5,       // Up-CUSUM alarm (rep regime shift detector)
+        cusum_down_threshold: -4.0,    // Down-CUSUM confirmation (non-rep sustained)
+        cusum_slack: 0.15,             // CRITICAL: must be large enough that non-rep ticks drain CUSUM
+        structural_break_threshold: 0.15, // P-value threshold for structural break
 
         // BOCPD
         bocpd_hazard: 1 / 150,        // Expected regime length ~150 ticks
         bocpd_prior_alpha: 1,         // Beta prior α (successes = repeats)
         bocpd_prior_beta: 9,          // Beta prior β (favours ~10% repeat baseline)
-        bocpd_min_run_for_signal: 20, // Min run length in non-rep regime to trust
+        bocpd_min_run_for_signal: 15, // Min run length in non-rep regime to trust
 
-        // HMM
-        hmm_refit_every: 50,          // Refit Baum-Welch every N ticks
+        // Binary HMM
+        hmm_refit_every: 50,           // Refit Baum-Welch every N ticks
+        hmm_min_discrimination: 0.10,  // Min B[1][1]-B[0][1] gap to accept BW update
 
         // Ensemble
-        repeat_confidence: 52,        // Final ensemble score gate (0–100)
+        repeat_confidence: 70,         // Final ensemble score gate (0–100)
 
         // Ghost
         ghost_enabled: false,
@@ -418,86 +423,74 @@ class BOCPD {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-//  COMPONENT 2: 2-STATE HMM WITH 10×10 TRANSITION MATRIX EMISSIONS
+//  COMPONENT 2: 2-STATE BINARY HMM (repeat / no-repeat observations)
 //
-//  Observation model:
-//    At each tick t (t ≥ 1), we observe the PAIR (digit[t-1], digit[t])
-//    which is an index in 0..99 (10×10 = 100 possible observations)
+//  WHY BINARY INSTEAD OF 10×10:
+//    The 10×10 pair model has 100 emission parameters per state.
+//    At ~5-10% repeat rate with 5000 ticks we only see ~250-500 repeat
+//    events split across 100 pair types — ~2-5 diagonal events per cell.
+//    Baum-Welch cannot estimate 200 emission params reliably from that,
+//    causing BOTH states to converge to near-uniform emissions (0.5% vs 1.6%).
+//    With near-identical emissions, Viterbi decoding is essentially random
+//    (persistence resets every 1-3 ticks) and the forward posterior swings
+//    wildly between 0% and 100%.
 //
-//    State 0 = NON-REP: diagonal elements of 10×10 emission matrix are low
-//    State 1 = REP:     diagonal elements are elevated
+//  Binary HMM has only 4 emission parameters (2 per state):
+//    B[0] = [P(no-repeat|NR), P(repeat|NR)]  e.g. [0.91, 0.09]
+//    B[1] = [P(no-repeat|REP), P(repeat|REP)] e.g. [0.55, 0.45]
+//    → LLR per repeat = log(0.45/0.09) ≈ 1.61  (strong signal!)
+//    → Baum-Welch converges reliably with hundreds of observations
+//    → Viterbi produces stable, meaningful regime sequences
+//    → Forward posterior smoothly transitions between states
 //
-//  Why this is better than binary:
-//    • Captures the FULL digit transition structure per regime
-//    • REP regime has systematically elevated P(d→d) for every digit d
-//    • NON-REP regime has near-uniform off-diagonal distribution
-//    • Richer signal → better state discrimination
-//
-//  Baum-Welch trains on observed (from,to) pairs.
-//  Viterbi decodes the most probable hidden state sequence.
-//  Forward algorithm maintains real-time Bayesian posterior.
+//  Baum-Welch acceptance gate:
+//    After re-estimation, if discrimination (B[1][1] - B[0][1]) < threshold
+//    (typically 0.10), the update is REJECTED and old params are kept.
+//    This prevents collapse when the asset is in extended non-rep regimes
+//    that leave too few repeat events for robust estimation.
 // ══════════════════════════════════════════════════════════════════════════════
-class HMM10x10 {
+class BinaryHMM {
     constructor(config) {
         this.cfg = config;
-        const N = 2, O = 100;
+        this.MIN_DISCRIM = config.hmm_min_discrimination || 0.10;
 
-        // Initial distribution
-        this.pi = [0.6, 0.4];
+        // Initial distribution: bias toward NON-REP
+        this.pi = [0.65, 0.35];
 
-        // Transition matrix
+        // Transition matrix: REP regimes are sticky but NON-REP is stickier
         this.A = [
-            [0.92, 0.08],   // NON-REP → NON-REP, NON-REP → REP
+            [0.93, 0.07],   // NON-REP → NON-REP, NON-REP → REP
             [0.22, 0.78],   // REP → NON-REP,     REP → REP
         ];
 
-        // Emission: B[state][obs] where obs = from*10 + to (0..99)
-        // Initialise with informed prior:
-        //   NON-REP: ~1/10 on diagonal, rest uniform off-diagonal
-        //   REP:     ~40% on diagonal, rest spread uniformly
-        this.B = new Array(N);
-        for (let s = 0; s < N; s++) {
-            this.B[s] = new Array(O).fill(0);
-        }
-        // State 0: NON-REP → near-uniform but slightly less on diagonal
-        for (let from = 0; from < 10; from++) {
-            for (let to = 0; to < 10; to++) {
-                const isRepeat = from === to;
-                this.B[0][from * 10 + to] = isRepeat ? 0.06 : (0.94 / 9) / 10 * 10;
-            }
-        }
-        // Normalise B[0]
-        const b0sum = this.B[0].reduce((s, v) => s + v, 0);
-        this.B[0] = this.B[0].map(v => v / b0sum);
+        // Binary emission: B[state][obs],  obs=0: no-repeat,  obs=1: repeat
+        // Informed priors based on known asset behaviour:
+        //   NON-REP: ~9% repeat probability (close to random 10%)
+        //   REP:     ~45% repeat probability (strongly elevated)
+        this.B = [
+            [0.91, 0.09],   // NON-REP state
+            [0.55, 0.45],   // REP state
+        ];
 
-        // State 1: REP → elevated diagonal
-        for (let from = 0; from < 10; from++) {
-            for (let to = 0; to < 10; to++) {
-                const isRepeat = from === to;
-                this.B[1][from * 10 + to] = isRepeat ? 0.45 : (0.55 / 9) / 10 * 10;
-            }
-        }
-        const b1sum = this.B[1].reduce((s, v) => s + v, 0);
-        this.B[1] = this.B[1].map(v => v / b1sum);
-
-        // Forward vector (log-space)
-        this.logAlpha = [Math.log(0.6), Math.log(0.4)];
+        // Forward vector (log-space) — maintained incrementally
+        this.logAlpha = [Math.log(0.65), Math.log(0.35)];
         this.fitted = false;
+        this.lastFitDiscrim = 0;
     }
 
-    // Build observation sequence: obs[t] = from*10+to = pair index
+    // Build binary observation sequence: 1 if digit[t] = digit[t-1], else 0
     buildObs(digitSeq) {
         const obs = new Array(digitSeq.length - 1);
         for (let t = 1; t < digitSeq.length; t++) {
-            obs[t - 1] = digitSeq[t - 1] * 10 + digitSeq[t];
+            obs[t - 1] = digitSeq[t] === digitSeq[t - 1] ? 1 : 0;
         }
         return obs;
     }
 
-    // ── Baum-Welch on pair observations ───────────────────────────────────────
-    baumWelch(obs, maxIter = 15, tol = 1e-4) {
-        const T = obs.length, N = 2, O = 100;
-        if (T < 20) return false;
+    // ── Baum-Welch EM parameter estimation ─────────────────────────────────────
+    baumWelch(obs, maxIter = 30, tol = 1e-6) {
+        const T = obs.length, N = 2, O = 2;
+        if (T < 30) return { accepted: false, reason: 'too few obs' };
 
         let pi = [...this.pi];
         let A = this.A.map(r => [...r]);
@@ -505,42 +498,44 @@ class HMM10x10 {
         let prevLogL = -Infinity;
 
         for (let iter = 0; iter < maxIter; iter++) {
-            // Forward (log)
+            // ── Forward (log-space) ───────────────────────────────────────────
             const logAlpha = Array.from({ length: T }, () => new Array(N).fill(-Infinity));
             for (let s = 0; s < N; s++) logAlpha[0][s] = Math.log(pi[s] + 1e-300) + Math.log(B[s][obs[0]] + 1e-300);
             for (let t = 1; t < T; t++) {
                 for (let s = 0; s < N; s++) {
-                    const inc = A.map((_, p) => logAlpha[t - 1][p] + Math.log(A[p][s] + 1e-300));
+                    const inc = [0, 1].map(p => logAlpha[t - 1][p] + Math.log(A[p][s] + 1e-300));
                     logAlpha[t][s] = logSumExp(inc) + Math.log(B[s][obs[t]] + 1e-300);
                 }
             }
             const logL = logSumExp(logAlpha[T - 1]);
 
-            // Backward (log)
+            // ── Backward (log-space) ──────────────────────────────────────────
             const logBeta = Array.from({ length: T }, () => new Array(N).fill(-Infinity));
             for (let s = 0; s < N; s++) logBeta[T - 1][s] = 0;
             for (let t = T - 2; t >= 0; t--) {
                 for (let s = 0; s < N; s++) {
-                    const vals = A[s].map((a, nx) => Math.log(a + 1e-300) + Math.log(B[nx][obs[t + 1]] + 1e-300) + logBeta[t + 1][nx]);
+                    const vals = [0, 1].map(nx => Math.log(A[s][nx] + 1e-300) + Math.log(B[nx][obs[t + 1]] + 1e-300) + logBeta[t + 1][nx]);
                     logBeta[t][s] = logSumExp(vals);
                 }
             }
 
-            // Gamma + Xi
+            // ── Gamma (state occupancy) ───────────────────────────────────────
             const logGamma = Array.from({ length: T }, () => new Array(N).fill(-Infinity));
             for (let t = 0; t < T; t++) {
-                const d = logSumExp(logAlpha[t].map((la, s) => la + logBeta[t][s]));
+                const d = logSumExp([0, 1].map(s => logAlpha[t][s] + logBeta[t][s]));
                 for (let s = 0; s < N; s++) logGamma[t][s] = logAlpha[t][s] + logBeta[t][s] - d;
             }
+
+            // ── Xi (transition counts) ────────────────────────────────────────
             const logXi = Array.from({ length: T - 1 }, () => Array.from({ length: N }, () => new Array(N).fill(-Infinity)));
             for (let t = 0; t < T - 1; t++) {
-                const d = logSumExp(logAlpha[t].map((la, s) => la + logBeta[t][s]));
+                const d = logSumExp([0, 1].map(s => logAlpha[t][s] + logBeta[t][s]));
                 for (let s = 0; s < N; s++) for (let nx = 0; nx < N; nx++) {
                     logXi[t][s][nx] = logAlpha[t][s] + Math.log(A[s][nx] + 1e-300) + Math.log(B[nx][obs[t + 1]] + 1e-300) + logBeta[t + 1][nx] - d;
                 }
             }
 
-            // M-step
+            // ── M-step ────────────────────────────────────────────────────────
             for (let s = 0; s < N; s++) pi[s] = Math.exp(logGamma[0][s]);
             const piSum = pi.reduce((a, b) => a + b, 0);
             pi = pi.map(v => v / piSum);
@@ -569,10 +564,8 @@ class HMM10x10 {
             prevLogL = logL;
         }
 
-        // Label-switching guard: state 0 should have lower diagonal repeat emission
-        const diagMean0 = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].reduce((s, d) => s + B[0][d * 10 + d], 0) / 10;
-        const diagMean1 = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].reduce((s, d) => s + B[1][d * 10 + d], 0) / 10;
-        if (diagMean0 > diagMean1) {
+        // ── Label-switching guard: state 0 must be NON-REP (lower repeat emission)
+        if (B[0][1] > B[1][1]) {
             [pi[0], pi[1]] = [pi[1], pi[0]];
             [A[0], A[1]] = [A[1], A[0]];
             A[0] = [A[0][1], A[0][0]];
@@ -580,12 +573,23 @@ class HMM10x10 {
             [B[0], B[1]] = [B[1], B[0]];
         }
 
+        const discrimination = B[1][1] - B[0][1];
+
+        // ── Acceptance gate: reject if states collapsed to near-identical emissions
+        if (discrimination < this.MIN_DISCRIM) {
+            return {
+                accepted: false, discrimination, repeatNR: B[0][1], repeatREP: B[1][1],
+                reason: `discrimination ${(discrimination * 100).toFixed(1)}% < ${(this.MIN_DISCRIM * 100).toFixed(0)}% threshold — keeping prior params`
+            };
+        }
+
         this.pi = pi; this.A = A; this.B = B;
         this.fitted = true;
-        return { diagMean0: Math.min(diagMean0, diagMean1), diagMean1: Math.max(diagMean0, diagMean1) };
+        this.lastFitDiscrim = discrimination;
+        return { accepted: true, discrimination, repeatNR: B[0][1], repeatREP: B[1][1] };
     }
 
-    // ── Viterbi (log-space) ────────────────────────────────────────────────────
+    // ── Viterbi decoding ────────────────────────────────────────────────────────
     viterbi(obs) {
         const T = obs.length, N = 2;
         if (T === 0) return null;
@@ -614,7 +618,6 @@ class HMM10x10 {
         let transitions = 0;
         for (let t = 1; t < T; t++) if (seq[t] !== seq[t - 1]) transitions++;
 
-        // Segment stability: divide into 5 segments, measure NON-REP fraction each
         const seg = Math.max(1, Math.floor(T / 5));
         const segFracs = [];
         for (let i = 0; i < 5 && i * seg < T; i++) {
@@ -626,7 +629,7 @@ class HMM10x10 {
         return { stateSeq: seq, currentState: cur, persistence, transitions, stability };
     }
 
-    // ── Forward algorithm (incremental) ───────────────────────────────────────
+    // ── Forward algorithm (incremental, O(N²) per tick) ────────────────────────
     updateForward(obs_t) {
         const N = 2;
         const newLogA = new Array(N);
@@ -636,13 +639,11 @@ class HMM10x10 {
         }
         const d = logSumExp(newLogA);
         this.logAlpha = newLogA;
-        return [Math.exp(newLogA[0] - d), Math.exp(newLogA[1] - d)]; // [P(NR), P(REP)]
+        return [Math.exp(newLogA[0] - d), Math.exp(newLogA[1] - d)];
     }
 
-    // Mean diagonal emission probability for a state (repeat emission)
-    meanDiagEmission(state) {
-        return [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].reduce((s, d) => s + this.B[state][d * 10 + d], 0) / 10;
-    }
+    // Repeat emission probability for a given state
+    repeatEmission(state) { return this.B[state][1]; }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -811,7 +812,7 @@ class AdvancedRegimeDetector {
 
         // Sub-components
         this.bocpd = new BOCPD(config);
-        this.hmm = new HMM10x10(config);
+        this.hmm = new BinaryHMM(config);   // ← Binary HMM (not 10×10)
         this.ewma = new EWMAStack();
         this.cusum = new TwoSidedCUSUM(config);
 
@@ -847,7 +848,6 @@ class AdvancedRegimeDetector {
     tick(prevDigit, curDigit) {
         const isRepeat = prevDigit === curDigit;
         const obs_binary = isRepeat ? 1 : 0;
-        const obs_pair = prevDigit * 10 + curDigit;
 
         // BOCPD update
         this.bocpdResult = this.bocpd.update(obs_binary);
@@ -855,11 +855,16 @@ class AdvancedRegimeDetector {
         // EWMA stack update
         this.ewma.update(obs_binary);
 
-        // CUSUM update
-        // Use learned B parameters from HMM if available; else defaults
-        const p0 = this.hmm.fitted ? this.hmm.meanDiagEmission(0) : 0.10;
-        const p1 = this.hmm.fitted ? this.hmm.meanDiagEmission(1) : 0.40;
-        this.cusum.update(prevDigit, isRepeat, p0, p1);
+        // ── CUSUM update — always use FIXED p0=0.10, p1=0.40 ─────────────────
+        // CRITICAL: Do NOT use HMM diagonal emissions as p0/p1.
+        // With Baum-Welch that converges to near-uniform (0.5% vs 1.6%),
+        // the LLR for no-repeat becomes tiny (-0.011) and slack=0.005 barely
+        // drains the CUSUM, causing permanent stuck alarms.
+        // With p0=0.10, p1=0.40:
+        //   No-repeat LLR = log(0.60/0.90) = -0.405; net = -0.405 - slack = fast drain
+        //   Repeat LLR    = log(0.40/0.10) = +1.386; net = +1.386 - slack
+        // At 5% repeat rate: E[CUSUM/tick] = 0.05*1.236 + 0.95*(-0.555) = -0.464 → drains fast
+        this.cusum.update(prevDigit, isRepeat, 0.10, 0.40);
 
         // Append to repeat buffer
         this.repeatBuffer.push(obs_binary);
@@ -877,39 +882,42 @@ class AdvancedRegimeDetector {
             return { valid: false, reason: `insufficient data (${len}/${this.cfg.min_ticks_for_analysis})` };
         }
 
-        // ── Build pair observation sequence for HMM ────────────────────────────
-        const pairObs = this.hmm.buildObs(window);
+        // ── Build BINARY observation sequence for HMM ─────────────────────────
+        // obs[t] = 1 if window[t+1] === window[t], else 0
+        const binaryObs = this.hmm.buildObs(window);
 
         // ── Refit HMM via Baum-Welch if needed ────────────────────────────────
-        let hmmFitStats = null;
         if (!this.hmm.fitted || this.ticksSinceRefit >= this.cfg.hmm_refit_every) {
-            hmmFitStats = this.hmm.baumWelch(pairObs);
+            const fitResult = this.hmm.baumWelch(binaryObs);
             this.ticksSinceRefit = 0;
-            if (hmmFitStats) {
-                const p0diag = (hmmFitStats.diagMean0 * 100).toFixed(1);
-                const p1diag = (hmmFitStats.diagMean1 * 100).toFixed(1);
-                logHMM(
-                    `📐 HMM(10×10) refitted | ` +
-                    `A: NR→NR=${(this.hmm.A[0][0] * 100).toFixed(1)}% NR→R=${(this.hmm.A[0][1] * 100).toFixed(1)}% ` +
-                    `R→NR=${(this.hmm.A[1][0] * 100).toFixed(1)}% R→R=${(this.hmm.A[1][1] * 100).toFixed(1)}% | ` +
-                    `DiagEmit: NR=${p0diag}% R=${p1diag}%`
-                );
+            if (fitResult) {
+                if (fitResult.accepted) {
+                    logHMM(
+                        `📐 HMM(binary) fitted | ` +
+                        `A: NR→NR=${(this.hmm.A[0][0] * 100).toFixed(1)}% NR→R=${(this.hmm.A[0][1] * 100).toFixed(1)}% ` +
+                        `R→NR=${(this.hmm.A[1][0] * 100).toFixed(1)}% R→R=${(this.hmm.A[1][1] * 100).toFixed(1)}% | ` +
+                        `B(rep|NR)=${(fitResult.repeatNR * 100).toFixed(1)}% B(rep|REP)=${(fitResult.repeatREP * 100).toFixed(1)}% | ` +
+                        `Discrimination: ${(fitResult.discrimination * 100).toFixed(1)}% ✅`
+                    );
+                } else {
+                    logHMM(yellow(`⚠️  HMM Baum-Welch rejected: ${fitResult.reason} — using prior params`));
+                }
             }
         }
 
         // ── Viterbi decode ─────────────────────────────────────────────────────
-        const vit = this.hmm.viterbi(pairObs);
+        const vit = this.hmm.viterbi(binaryObs);
         if (!vit) return { valid: false, reason: 'viterbi failed' };
 
         // ── Forward (real-time Bayesian posterior) ─────────────────────────────
-        // Re-run from scratch for accurate final posterior
+        // Re-run full forward pass on binary obs for accurate final posterior
         let logA = [Math.log(this.hmm.pi[0] + 1e-300), Math.log(this.hmm.pi[1] + 1e-300)];
-        logA[0] += Math.log(this.hmm.B[0][pairObs[0]] + 1e-300);
-        logA[1] += Math.log(this.hmm.B[1][pairObs[0]] + 1e-300);
-        for (let t = 1; t < pairObs.length; t++) {
+        logA[0] += Math.log(this.hmm.B[0][binaryObs[0]] + 1e-300);
+        logA[1] += Math.log(this.hmm.B[1][binaryObs[0]] + 1e-300);
+        for (let t = 1; t < binaryObs.length; t++) {
             const nA = [0, 1].map(s => {
                 const inc = [0, 1].map(p => logA[p] + Math.log(this.hmm.A[p][s] + 1e-300));
-                return logSumExp(inc) + Math.log(this.hmm.B[s][pairObs[t]] + 1e-300);
+                return logSumExp(inc) + Math.log(this.hmm.B[s][binaryObs[t]] + 1e-300);
             });
             logA = nA;
         }
@@ -1034,7 +1042,7 @@ class AdvancedRegimeDetector {
         return {
             valid: true,
 
-            // HMM
+            // HMM (Binary)
             hmmState: vit.currentState,
             hmmStateName: vit.currentState === 0 ? 'NON-REP' : 'REP',
             hmmPersistence: vit.persistence,
@@ -1043,8 +1051,9 @@ class AdvancedRegimeDetector {
             posteriorNR,
             posteriorRep,
             hmmA: this.hmm.A,
-            hmmB_diagNR: this.hmm.meanDiagEmission(0),
-            hmmB_diagREP: this.hmm.meanDiagEmission(1),
+            hmmB_repeatNR: this.hmm.repeatEmission(0),  // P(repeat | NON-REP state)
+            hmmB_repeatREP: this.hmm.repeatEmission(1),  // P(repeat | REP state)
+            hmmDiscrim: this.hmm.lastFitDiscrim,
 
             // BOCPD
             bocpdPNonRep: bocpd.pNonRep,
@@ -1421,11 +1430,12 @@ class RomanianGhostBot {
         const stateCol = r.hmmState === 0 ? green : yellow;
         const pnrPct = (r.posteriorNR * 100).toFixed(1);
         logHMM(
-            `HMM(10×10) State: ${stateCol(bold(r.hmmStateName))} | ` +
+            `HMM(binary) State: ${stateCol(bold(r.hmmStateName))} | ` +
             `P(NR): ${r.posteriorNR >= this.config.hmm_nonrep_confidence ? green(pnrPct + '%') : red(pnrPct + '%')} | ` +
             `Persist: ${r.hmmPersistence >= this.config.min_regime_persistence ? green(r.hmmPersistence + 't') : yellow(r.hmmPersistence + 't')} | ` +
             `Stability: ${(r.hmmStability * 100).toFixed(1)}% | ` +
-            `DiagEmit: NR=${(r.hmmB_diagNR * 100).toFixed(1)}% REP=${(r.hmmB_diagREP * 100).toFixed(1)}%`
+            `B(rep|NR)=${(r.hmmB_repeatNR * 100).toFixed(1)}% B(rep|REP)=${(r.hmmB_repeatREP * 100).toFixed(1)}% ` +
+            `Discrim:${(r.hmmDiscrim * 100).toFixed(1)}%`
         );
 
         // BOCPD
@@ -1554,7 +1564,7 @@ class RomanianGhostBot {
         if (this.currentStake > this.config.max_stake) { logRisk('Stake>max'); this.stop('Stake exceeds max'); return; }
         if (this.currentStake > this.accountBalance) { this.stop('Insufficient balance'); return; }
         if (immediate) this.placeTrade();
-        // else { this.pendingTrade=true; this.botState=STATE.GHOST_TRADING; logBot(`⚡ Recovery trade queued — waiting for digit ${bold(cyan(this.targetDigit))}`); }
+        else { this.pendingTrade = true; this.botState = STATE.GHOST_TRADING; logBot(`⚡ Recovery trade queued — waiting for digit ${bold(cyan(this.targetDigit))}`); }
     }
 
     placeTrade() {
@@ -1574,15 +1584,14 @@ class RomanianGhostBot {
         );
 
         this.sendTelegram(`
-            🎯 <b>TRADE 2</b>
+🎯 <b>TRADE</b>
 
-            📊 ${this.config.symbol} | Digit: ${this.targetDigit}
-            last 5 ticks: ${this.tickHistory.slice(-5).join(', ')}
-            💰 Stake: $${this.currentStake.toFixed(2)}${stepInfo}
-            📈 Rate: ${this.targetRepeatRate.toFixed(1)}% | Score: ${score}/100
-            🔬 P(NR): ${pnr} | BOCPD_RL: ${bocpdRL}t
-            👻 Ghost: ${this.ghostConsecutiveWins}/${this.config.ghost_wins_required}
-            📊 ${this.totalTrades} trades | ${this.totalWins}W/${this.totalLosses}L | P&L: ${this.sessionProfit >= 0 ? '+' : ''}$${this.sessionProfit.toFixed(2)}
+📊 ${this.config.symbol} | Digit: ${this.targetDigit}
+💰 Stake: $${this.currentStake.toFixed(2)}${stepInfo}
+📈 Rate: ${this.targetRepeatRate.toFixed(1)}% | Score: ${score}/100
+🔬 P(NR): ${pnr} | BOCPD_RL: ${bocpdRL}t
+👻 Ghost: ${this.ghostConsecutiveWins}/${this.config.ghost_wins_required}
+📊 ${this.totalTrades} trades | ${this.totalWins}W/${this.totalLosses}L | P&L: ${this.sessionProfit >= 0 ? '+' : ''}$${this.sessionProfit.toFixed(2)}
         `.trim());
 
         this.send({
@@ -1629,7 +1638,7 @@ class RomanianGhostBot {
         const plStr = this.sessionProfit >= 0 ? green(formatMoney(this.sessionProfit)) : red(formatMoney(this.sessionProfit));
         logResult(`${green('✅ WIN!')} Profit: ${green('+$' + profit.toFixed(2))} | P/L: ${plStr} | Bal: ${green('$' + this.accountBalance.toFixed(2))}`);
         if (resultDigit !== null) logResult(dim(`  Target:${this.targetDigit} Result:${resultDigit} Ghost:${this.ghostConsecutiveWins}/${this.config.ghost_wins_required}`));
-        this.sendTelegram(`✅ <b>WIN 2!</b>\n\nTarget:${this.targetDigit} | Result:${resultDigit}\n💰 +$${profit.toFixed(2)} | P&L: ${this.sessionProfit >= 0 ? '+' : ''}$${this.sessionProfit.toFixed(2)}\n📊 ${this.totalWins}W/${this.totalLosses}L\n${new Date().toLocaleString()}`);
+        this.sendTelegram(`✅ <b>WIN!</b>\n\nTarget:${this.targetDigit} | Result:${resultDigit}\n💰 +$${profit.toFixed(2)} | P&L: ${this.sessionProfit >= 0 ? '+' : ''}$${this.sessionProfit.toFixed(2)}\n📊 ${this.totalWins}W/${this.totalLosses}L\n${new Date().toLocaleString()}`);
         this.resetMartingale(); this.resetGhost();
     }
 
@@ -1644,7 +1653,7 @@ class RomanianGhostBot {
         const plStr = this.sessionProfit >= 0 ? green(formatMoney(this.sessionProfit)) : red(formatMoney(this.sessionProfit));
         logResult(`${red('❌ LOSS!')} Lost: ${red('-$' + lostAmount.toFixed(2))} | P/L: ${plStr}${martInfo}`);
         if (resultDigit !== null) logResult(dim(`  Target:${this.targetDigit} Result:${resultDigit} ${resultDigit === this.targetDigit ? red('REPEATED') : green('diff — unexpected')}`));
-        this.sendTelegram(`❌ <b>LOSS 2!</b>\n\nTarget:${this.targetDigit} | Result:${resultDigit}\n💸 -$${lostAmount.toFixed(2)} | P&L: ${this.sessionProfit >= 0 ? '+' : ''}$${this.sessionProfit.toFixed(2)}\n📊 ${this.totalWins}W/${this.totalLosses}L${martInfo}\n${new Date().toLocaleString()}`);
+        this.sendTelegram(`❌ <b>LOSS!</b>\n\nTarget:${this.targetDigit} | Result:${resultDigit}\n💸 -$${lostAmount.toFixed(2)} | P&L: ${this.sessionProfit >= 0 ? '+' : ''}$${this.sessionProfit.toFixed(2)}\n📊 ${this.totalWins}W/${this.totalLosses}L${martInfo}\n${new Date().toLocaleString()}`);
         this.ghostConsecutiveWins = 0; this.ghostConfirmed = false; this.ghostRoundsPlayed = 0; this.ghostAwaitingResult = false;
     }
 
