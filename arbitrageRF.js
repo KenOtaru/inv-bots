@@ -361,7 +361,7 @@ const CONFIG = {
     // Session Targets
     totalTradesN: 5000000,
     SESSION_PROFIT_TARGET: 5000,
-    SESSION_STOP_LOSS: -125,
+    SESSION_STOP_LOSS: -200,
     highestPercentageDigit: null,
 
     // Candle Settings
@@ -398,7 +398,7 @@ const CONFIG = {
     MARTINGALE_MULTIPLIER3: 1,
     MARTINGALE_MULTIPLIER4: 1,
     MARTINGALE_MULTIPLIER5: 1,
-    MAX_MARTINGALE_STEPS: 20,
+    MAX_MARTINGALE_STEPS: 50,
 
     // Debug
     DEBUG_MODE: true,
