@@ -1795,7 +1795,8 @@ class RomanianGhostBotV4 {
             📊 Digit: ${ch.targetDigit} | Rate: ${ch.targetRepeatRate.toFixed(1)}%
             🔢 Last10: ${ch.tickHistory.slice(-10).join(',')}
             💰 Stake: $${this.currentStake.toFixed(2)}${step}
-            🔬 Score: ${score}/100 | P(NR): ${pnr} | BOCPD_RL: ${bRL}t
+            🔬 Score: ${score}/100 | P(NR): ${pnr} 
+            📊 BOCPD_RL: ${bRL}t
             👻 Ghost: ${ch.ghostConsecutiveWins}/${this.config.ghost_wins_required}
             📊 ${this.totalTrades} trades | ${this.totalWins}W/${this.totalLosses}L | P&L: ${formatMoney(this.sessionProfit)}`
         );
@@ -1863,8 +1864,8 @@ class RomanianGhostBotV4 {
             🔢 Target:${tradeTargetDigit} | Result:${resultDigit} 
             📊 Last10: ${tradeTickHistory.slice(-10).join(',')}  
             💰 $${profit.toFixed(2)} 
-            📊 P&L: ${formatMoney(this.sessionProfit)}\n
-            📊 ${this.totalWins}W/${this.totalLosses}L\n
+            📊 P&L: ${formatMoney(this.sessionProfit)}
+            📊 ${this.totalWins}W/${this.totalLosses}L
         `);
         this.resetMartingale();
     }
@@ -1890,7 +1891,8 @@ class RomanianGhostBotV4 {
             ❌ <b>LOSS! [${ch?.symbol}]</b>
             🔢 Target:${tradeTargetDigit} | Result:${resultDigit}  
             📊 Last10: ${tradeTickHistory.slice(-10).join(',')} 
-            💸 -$${lostAmount.toFixed(2)} | P&L: ${formatMoney(this.sessionProfit)}
+            💸 -$${lostAmount.toFixed(2)} 
+            📊 P&L: ${formatMoney(this.sessionProfit)}
             📊 ${this.totalWins}W/${this.totalLosses}L${step}
         `);
     }
