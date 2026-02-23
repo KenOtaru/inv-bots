@@ -1793,7 +1793,7 @@ class RomanianGhostBotV4 {
         this.sendTelegram(
             `🎯 <b>TRADE — ${ch.symbol}</b>
             📊 Digit: ${ch.targetDigit} | Rate: ${ch.targetRepeatRate.toFixed(1)}%
-            🔢 Last10: ${ch.tickHistory[ch.symbol].slice(-10).join(',')}
+            🔢 Last10: ${ch.tickHistory.slice(-10).join(',')}
             💰 Stake: $${this.currentStake.toFixed(2)}${step}
             🔬 Score: ${score}/100 | P(NR): ${pnr} | BOCPD_RL: ${bRL}t
             👻 Ghost: ${ch.ghostConsecutiveWins}/${this.config.ghost_wins_required}
@@ -1853,7 +1853,15 @@ class RomanianGhostBotV4 {
         const plStr = this.sessionProfit >= 0 ? green(formatMoney(this.sessionProfit)) : red(formatMoney(this.sessionProfit));
         logResult(`${green('✅ WIN!')} [${ch?.symbol}] +$${profit.toFixed(2)} | P/L:${plStr} | Bal:$${this.accountBalance.toFixed(2)}`);
         if (resultDigit !== null) logResult(dim(`  Target:${ch?.targetDigit} Result:${resultDigit}`));
-        this.sendTelegram(`✅ <b>WIN! [${ch?.symbol}]</b>\n\nTarget:${ch?.targetDigit} | Result:${resultDigit}\n 🔢 Last10: ${ch.tickHistory[ch.symbol].slice(-10).join(',')} 💰 $${profit.toFixed(2)} | P&L: ${formatMoney(this.sessionProfit)}\n📊 ${this.totalWins}W/${this.totalLosses}L\n${new Date().toLocaleString()}`);
+        this.sendTelegram(`
+            ✅ <b>WIN! [${ch?.symbol}]
+            </b>\n\nTarget:${ch?.targetDigit} 
+            Result:${resultDigit}\n 
+            🔢 Last10: ${ch.tickHistory.slice(-10).join(',')}  
+            💰 $${profit.toFixed(2)} 
+            P&L: ${formatMoney(this.sessionProfit)}\n
+            📊 ${this.totalWins}W/${this.totalLosses}L\n
+        `);
         this.resetMartingale();
     }
 
@@ -1870,7 +1878,13 @@ class RomanianGhostBotV4 {
         const plStr = this.sessionProfit >= 0 ? green(formatMoney(this.sessionProfit)) : red(formatMoney(this.sessionProfit));
         logResult(`${red('❌ LOSS!')} [${ch?.symbol}] -$${lostAmount.toFixed(2)} | P/L:${plStr}${step}`);
         if (resultDigit !== null) logResult(dim(`  Target:${ch?.targetDigit} Result:${resultDigit} ${resultDigit === ch?.targetDigit ? red('REPEATED') : green('diff — unexpected')}`));
-        this.sendTelegram(`❌ <b>LOSS! [${ch?.symbol}]</b>\n\nTarget:${ch?.targetDigit} | Result:${resultDigit}\n 🔢 Last10: ${ch.tickHistory[ch.symbol].slice(-10).join(',')} 💸 -$${lostAmount.toFixed(2)} | P&L: ${formatMoney(this.sessionProfit)}\n📊 ${this.totalWins}W/${this.totalLosses}L${step}\n${new Date().toLocaleString()}`);
+        this.sendTelegram(`
+            ❌ <b>LOSS! [${ch?.symbol}]</b>\n\nTarget:${ch?.targetDigit}
+            Result:${resultDigit}\n  
+            🔢 Last10: ${ch.tickHistory.slice(-10).join(',')} 
+            💸 -$${lostAmount.toFixed(2)} | P&L: ${formatMoney(this.sessionProfit)}\n
+            📊 ${this.totalWins}W/${this.totalLosses}L${step}\n
+        `);
     }
 
     decideNextAction(ch, won) {
