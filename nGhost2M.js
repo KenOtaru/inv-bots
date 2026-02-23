@@ -1849,15 +1849,19 @@ class RomanianGhostBotV4 {
         if (this.currentWinStreak > this.maxWinStreak) this.maxWinStreak = this.currentWinStreak;
         if (profit > this.largestWin) this.largestWin = profit;
 
+        // Save trade data BEFORE resetting
+        const tradeTargetDigit = ch?.targetDigit;
+        const tradeTickHistory = ch ? [...ch.tickHistory] : [];
+
         if (ch) { ch.detector.resetCUSUM(ch.targetDigit); ch.resetGhost(); ch.state = CHANNEL_STATE.ANALYZING; }
         const plStr = this.sessionProfit >= 0 ? green(formatMoney(this.sessionProfit)) : red(formatMoney(this.sessionProfit));
         logResult(`${green('✅ WIN!')} [${ch?.symbol}] +$${profit.toFixed(2)} | P/L:${plStr} | Bal:$${this.accountBalance.toFixed(2)}`);
-        if (resultDigit !== null) logResult(dim(`  Target:${ch?.targetDigit} Result:${resultDigit}`));
+        if (resultDigit !== null) logResult(dim(`  Target:${tradeTargetDigit} Result:${resultDigit}`));
         this.sendTelegram(`
             ✅ <b>WIN! [${ch?.symbol}]
-            </b>\n\nTarget:${ch?.targetDigit} 
+            </b>\n\nTarget:${tradeTargetDigit} 
             Result:${resultDigit}\n 
-            🔢 Last10: ${ch.tickHistory.slice(-10).join(',')}  
+            🔢 Last10: ${tradeTickHistory.slice(-10).join(',')}  
             💰 $${profit.toFixed(2)} 
             P&L: ${formatMoney(this.sessionProfit)}\n
             📊 ${this.totalWins}W/${this.totalLosses}L\n
@@ -1873,15 +1877,19 @@ class RomanianGhostBotV4 {
         this.martingaleStep++;
         if (this.martingaleStep > this.maxMartingaleReached) this.maxMartingaleReached = this.martingaleStep;
 
+        // Save trade data BEFORE resetting
+        const tradeTargetDigit = ch?.targetDigit;
+        const tradeTickHistory = ch ? [...ch.tickHistory] : [];
+
         if (ch) { ch.ghostConsecutiveWins = 0; ch.ghostConfirmed = false; ch.ghostRoundsPlayed = 0; ch.ghostAwaitingResult = false; ch.state = CHANNEL_STATE.ANALYZING; }
         const step = this.config.martingale_enabled ? ` | Mart:${this.martingaleStep}/${this.config.max_martingale_steps}` : '';
         const plStr = this.sessionProfit >= 0 ? green(formatMoney(this.sessionProfit)) : red(formatMoney(this.sessionProfit));
         logResult(`${red('❌ LOSS!')} [${ch?.symbol}] -$${lostAmount.toFixed(2)} | P/L:${plStr}${step}`);
-        if (resultDigit !== null) logResult(dim(`  Target:${ch?.targetDigit} Result:${resultDigit} ${resultDigit === ch?.targetDigit ? red('REPEATED') : green('diff — unexpected')}`));
+        if (resultDigit !== null) logResult(dim(`  Target:${tradeTargetDigit} Result:${resultDigit} ${resultDigit === tradeTargetDigit ? red('REPEATED') : green('diff — unexpected')}`));
         this.sendTelegram(`
-            ❌ <b>LOSS! [${ch?.symbol}]</b>\n\nTarget:${ch?.targetDigit}
+            ❌ <b>LOSS! [${ch?.symbol}]</b>\n\nTarget:${tradeTargetDigit}
             Result:${resultDigit}\n  
-            🔢 Last10: ${ch.tickHistory.slice(-10).join(',')} 
+            🔢 Last10: ${tradeTickHistory.slice(-10).join(',')} 
             💸 -$${lostAmount.toFixed(2)} | P&L: ${formatMoney(this.sessionProfit)}\n
             📊 ${this.totalWins}W/${this.totalLosses}L${step}\n
         `);
