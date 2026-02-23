@@ -1860,7 +1860,7 @@ class RomanianGhostBotV4 {
         
         this.sendTelegram(`
             ✅ WIN! [${ch?.symbol}]
-            🔢Target:${tradeTargetDigit} | Result:${resultDigit} 
+            🔢 Target:${tradeTargetDigit} | Result:${resultDigit} 
             📊 Last10: ${tradeTickHistory.slice(-10).join(',')}  
             💰 $${profit.toFixed(2)} 
             📊 P&L: ${formatMoney(this.sessionProfit)}\n
@@ -1887,11 +1887,11 @@ class RomanianGhostBotV4 {
         logResult(`${red('❌ LOSS!')} [${ch?.symbol}] -$${lostAmount.toFixed(2)} | P/L:${plStr}${step}`);
         if (resultDigit !== null) logResult(dim(`  Target:${tradeTargetDigit} Result:${resultDigit} ${resultDigit === tradeTargetDigit ? red('REPEATED') : green('diff — unexpected')}`));
         this.sendTelegram(`
-            ❌ <b>LOSS! [${ch?.symbol}]</b>\n\nTarget:${tradeTargetDigit}
-            Result:${resultDigit}\n  
-            🔢 Last10: ${tradeTickHistory.slice(-10).join(',')} 
-            💸 -$${lostAmount.toFixed(2)} | P&L: ${formatMoney(this.sessionProfit)}\n
-            📊 ${this.totalWins}W/${this.totalLosses}L${step}\n
+            ❌ <b>LOSS! [${ch?.symbol}]</b>
+            🔢 Target:${tradeTargetDigit} | Result:${resultDigit}  
+            📊 Last10: ${tradeTickHistory.slice(-10).join(',')} 
+            💸 -$${lostAmount.toFixed(2)} | P&L: ${formatMoney(this.sessionProfit)}
+            📊 ${this.totalWins}W/${this.totalLosses}L${step}
         `);
     }
 
