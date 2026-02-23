@@ -356,7 +356,7 @@ const CONFIG = {
 
     // Capital Settings
     INITIAL_CAPITAL: 500,
-    STAKE: 0.5,
+    STAKE: 1.5,
 
     // Session Targets
     totalTradesN: 5000000,
@@ -393,12 +393,12 @@ const CONFIG = {
     MAX_OSC_MULTIPLIER: 1.5,     // Skip if oscillation > 150% of max (anomaly)
 
     // Martingale Settings
-    MARTINGALE_MULTIPLIER: 4,
-    MARTINGALE_MULTIPLIER2: 5,
-    MARTINGALE_MULTIPLIER3: 5,
-    MARTINGALE_MULTIPLIER4: 5,
-    MARTINGALE_MULTIPLIER5: 5,
-    MAX_MARTINGALE_STEPS: 4,
+    MARTINGALE_MULTIPLIER: 1,
+    MARTINGALE_MULTIPLIER2: 1,
+    MARTINGALE_MULTIPLIER3: 1,
+    MARTINGALE_MULTIPLIER4: 1,
+    MARTINGALE_MULTIPLIER5: 1,
+    MAX_MARTINGALE_STEPS: 20,
 
     // Debug
     DEBUG_MODE: true,
@@ -869,6 +869,20 @@ class ConnectionManager {
                     assetState.closedCandles = assetState.closedCandles.slice(-CONFIG.MAX_CANDLES_STORED);
                 }
                 assetState.lastProcessedCandleOpenTime = closedCandle.open_time;
+
+                assetState.lastProcessedCandleOpenTime = closedCandle.open_time;
+
+                const closeTime = new Date(closedCandle.epoch * 1000).toISOString();
+                const candleType = CandleAnalyzer.getCandleDirection(closedCandle);
+                const candleEmoji = candleType === 'BULLISH' ? '🟢' : candleType === 'BEARISH' ? '🔴' : '⚪';
+
+                LOGGER.info(`${symbol} ${candleEmoji} CANDLE CLOSED [${closeTime}] ${candleType}: O:${closedCandle.open.toFixed(5)} H:${closedCandle.high.toFixed(5)} L:${closedCandle.low.toFixed(5)} C:${closedCandle.close.toFixed(5)}`);
+
+                // TRIGGER TRADE AFTER CANDLE CLOSE
+                // setTimeout(() => {
+                state.canTrade = true;
+                bot.executeNextTrade(symbol, closedCandle);
+                // }, 500); // Small delay to ensure candle is fully processed
             }
         }
 
@@ -1425,11 +1439,11 @@ class ConnectionManager {
         state.lastSignalTime = now;
         state.canTrade = true;
 
-        bot.executeNextTrade(asset, direction, {
-            reason: `OSC ${currentOscLength}/${targetOscLength} → ${dirName}`,
-            probability: confidence.toFixed(1),
-            oscInfo: `Osc: ${currentOscLength}t, avg=${avgOscLength.toFixed(1)}, max=${maxOscLength}`
-        });
+        // bot.executeNextTrade(asset, direction, {
+        //     reason: `OSC ${currentOscLength}/${targetOscLength} → ${dirName}`,
+        //     probability: confidence.toFixed(1),
+        //     oscInfo: `Osc: ${currentOscLength}t, avg=${avgOscLength.toFixed(1)}, max=${maxOscLength}`
+        // });
     }
 
     getLastDigit(quote, asset) {
@@ -1597,7 +1611,7 @@ class DerivBot {
 
         const position = {
             symbol: tradeSymbol,
-            direction: dirName,
+            direction: dirName || 'CALLE',
             stake: stake,
             duration: CONFIG.DURATION,
             durationUnit: CONFIG.DURATION_UNIT,
@@ -1618,7 +1632,7 @@ class DerivBot {
             subscribe: 1,
             price: stake.toFixed(2),
             parameters: {
-                contract_type: direction,
+                contract_type: 'CALLE',
                 symbol: tradeSymbol,
                 currency: 'USD',
                 amount: stake.toFixed(2),
