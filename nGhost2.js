@@ -60,50 +60,50 @@
 const WebSocket = require('ws');
 const TelegramBot = require('node-telegram-bot-api');
 
-const TOKEN         = "0P94g4WdSrSrzir";
+const TOKEN = "0P94g4WdSrSrzir";
 const TELEGRAM_TOKEN = "8288121368:AAHYRb0Stk5dWUWN1iTYbdO3fyIEwIuZQR8";
-const CHAT_ID       = "752497117";
+const CHAT_ID = "752497117";
 
 // ── ANSI helpers ──────────────────────────────────────────────────────────────
 const C = {
-    reset:'\x1b[0m', bold:'\x1b[1m', dim:'\x1b[2m',
-    cyan:'\x1b[36m', blue:'\x1b[34m', green:'\x1b[32m',
-    red:'\x1b[31m', yellow:'\x1b[33m', magenta:'\x1b[35m',
-    orange:'\x1b[38;5;208m', white:'\x1b[37m',
+    reset: '\x1b[0m', bold: '\x1b[1m', dim: '\x1b[2m',
+    cyan: '\x1b[36m', blue: '\x1b[34m', green: '\x1b[32m',
+    red: '\x1b[31m', yellow: '\x1b[33m', magenta: '\x1b[35m',
+    orange: '\x1b[38;5;208m', white: '\x1b[37m',
 };
-const col    = (t,...c) => c.join('') + t + C.reset;
-const bold   = t => col(t, C.bold);
-const dim    = t => col(t, C.dim);
-const cyan   = t => col(t, C.cyan);
-const blue   = t => col(t, C.blue);
-const green  = t => col(t, C.green);
-const red    = t => col(t, C.red);
+const col = (t, ...c) => c.join('') + t + C.reset;
+const bold = t => col(t, C.bold);
+const dim = t => col(t, C.dim);
+const cyan = t => col(t, C.cyan);
+const blue = t => col(t, C.blue);
+const green = t => col(t, C.green);
+const red = t => col(t, C.red);
 const yellow = t => col(t, C.yellow);
-const magenta= t => col(t, C.magenta);
+const magenta = t => col(t, C.magenta);
 
 // ── Logger ────────────────────────────────────────────────────────────────────
 const PREFIX_COLOURS = {
-    BOT:'cyan', API:'blue', TICK:'dim', ANALYSIS:'yellow',
-    GHOST:'magenta', TRADE:'bold', RESULT:'bold', RISK:'red',
-    STATS:'cyan', ERROR:'red+bold', HMM:'orange', BOCPD:'green',
-    REGIME:'magenta',
+    BOT: 'cyan', API: 'blue', TICK: 'dim', ANALYSIS: 'yellow',
+    GHOST: 'magenta', TRADE: 'bold', RESULT: 'bold', RISK: 'red',
+    STATS: 'cyan', ERROR: 'red+bold', HMM: 'orange', BOCPD: 'green',
+    REGIME: 'magenta',
 };
 const loggers = {};
-['BOT','API','TICK','ANALYSIS','GHOST','TRADE','RESULT','RISK','STATS','ERROR','HMM','BOCPD','REGIME'].forEach(p => {
+['BOT', 'API', 'TICK', 'ANALYSIS', 'GHOST', 'TRADE', 'RESULT', 'RISK', 'STATS', 'ERROR', 'HMM', 'BOCPD', 'REGIME'].forEach(p => {
     const fn = {
-        cyan:cyan, blue:blue, dim:dim, yellow:yellow, magenta:magenta,
-        bold:bold, red:red, green:green, orange:t=>col(t,C.orange),
-        'red+bold':t=>col(t,C.bold,C.red),
-    }[PREFIX_COLOURS[p]] || (t=>t);
+        cyan: cyan, blue: blue, dim: dim, yellow: yellow, magenta: magenta,
+        bold: bold, red: red, green: green, orange: t => col(t, C.orange),
+        'red+bold': t => col(t, C.bold, C.red),
+    }[PREFIX_COLOURS[p]] || (t => t);
     loggers[p] = m => {
-        const ts = dim(`[${new Date().toTimeString().slice(0,8)}]`);
+        const ts = dim(`[${new Date().toTimeString().slice(0, 8)}]`);
         console.log(`${ts} ${fn(`[${p}]`)} ${m}`);
     };
 });
-const {BOT:logBot,API:logApi,TICK:logTick,ANALYSIS:logAnalysis,
-       GHOST:logGhost,TRADE:logTrade,RESULT:logResult,RISK:logRisk,
-       STATS:logStats,ERROR:logError,HMM:logHMM,BOCPD:logBocpd,
-       REGIME:logRegime} = loggers;
+const { BOT: logBot, API: logApi, TICK: logTick, ANALYSIS: logAnalysis,
+    GHOST: logGhost, TRADE: logTrade, RESULT: logResult, RISK: logRisk,
+    STATS: logStats, ERROR: logError, HMM: logHMM, BOCPD: logBocpd,
+    REGIME: logRegime } = loggers;
 
 // ── Config ────────────────────────────────────────────────────────────────────
 function parseArgs() {
@@ -168,23 +168,23 @@ function parseArgs() {
 function getLastDigit(price, asset) {
     const parts = price.toString().split('.');
     const frac = parts.length > 1 ? parts[1] : '';
-    if (['RDBULL','RDBEAR','R_75','R_50'].includes(asset))
+    if (['RDBULL', 'RDBEAR', 'R_75', 'R_50'].includes(asset))
         return frac.length >= 4 ? parseInt(frac[3], 10) : 0;
-    if (['R_10','R_25','1HZ15V','1HZ30V','1HZ90V'].includes(asset))
+    if (['R_10', 'R_25', '1HZ15V', '1HZ30V', '1HZ90V'].includes(asset))
         return frac.length >= 3 ? parseInt(frac[2], 10) : 0;
     return frac.length >= 2 ? parseInt(frac[1], 10) : 0;
 }
-function formatMoney(v) { return `${v>=0?'+':''}$${v.toFixed(2)}`; }
+function formatMoney(v) { return `${v >= 0 ? '+' : ''}$${v.toFixed(2)}`; }
 function formatDuration(ms) {
-    const t=Math.floor(ms/1000),h=Math.floor(t/3600),m=Math.floor((t%3600)/60),s=t%60;
-    if(h>0) return `${h}h ${String(m).padStart(2,'0')}m ${String(s).padStart(2,'0')}s`;
-    return `${m}m ${String(s).padStart(2,'0')}s`;
+    const t = Math.floor(ms / 1000), h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+    if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`;
+    return `${m}m ${String(s).padStart(2, '0')}s`;
 }
-function clamp(v,lo,hi) { return Math.max(lo,Math.min(hi,v)); }
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 function logSumExp(arr) {
-    const m=Math.max(...arr);
-    if(!isFinite(m)) return -Infinity;
-    return m+Math.log(arr.reduce((s,x)=>s+Math.exp(x-m),0));
+    const m = Math.max(...arr);
+    if (!isFinite(m)) return -Infinity;
+    return m + Math.log(arr.reduce((s, x) => s + Math.exp(x - m), 0));
 }
 
 // Binomial log-PMF: log C(n,k) + k*log(p) + (n-k)*log(1-p)
@@ -210,9 +210,9 @@ function betaIncomplete(x, a, b) {
 function lgamma(z) {
     // Lanczos approximation
     const g = 7;
-    const c = [0.99999999999980993,676.5203681218851,-1259.1392167224028,
-                771.32342877765313,-176.61502916214059,12.507343278686905,
-                -0.13857109526572012,9.9843695780195716e-6,1.5056327351493116e-7];
+    const c = [0.99999999999980993, 676.5203681218851, -1259.1392167224028,
+        771.32342877765313, -176.61502916214059, 12.507343278686905,
+        -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7];
     if (z < 0.5) return Math.log(Math.PI / Math.sin(Math.PI * z)) - lgamma(1 - z);
     z -= 1;
     let x = c[0];
@@ -226,12 +226,12 @@ function continuedFraction(x, a, b) {
     if (Math.abs(D) < 1e-30) D = 1e-30;
     D = 1 / D; f = D;
     for (let m = 1; m <= MAX; m++) {
-        let aa = m * (b - m) * x / ((a + 2*m - 1) * (a + 2*m));
+        let aa = m * (b - m) * x / ((a + 2 * m - 1) * (a + 2 * m));
         D = 1 + aa * D; C = 1 + aa / C;
         if (Math.abs(D) < 1e-30) D = 1e-30;
         if (Math.abs(C) < 1e-30) C = 1e-30;
         D = 1 / D; let delta = C * D; f *= delta;
-        aa = -(a + m) * (a + b + m) * x / ((a + 2*m) * (a + 2*m + 1));
+        aa = -(a + m) * (a + b + m) * x / ((a + 2 * m) * (a + 2 * m + 1));
         D = 1 + aa * D; C = 1 + aa / C;
         if (Math.abs(D) < 1e-30) D = 1e-30;
         if (Math.abs(C) < 1e-30) C = 1e-30;
@@ -243,10 +243,10 @@ function continuedFraction(x, a, b) {
 
 // ── State Constants ────────────────────────────────────────────────────────────
 const STATE = {
-    INITIALIZING:'INITIALIZING', CONNECTING:'CONNECTING', AUTHENTICATING:'AUTHENTICATING',
-    COLLECTING_TICKS:'COLLECTING_TICKS', ANALYZING:'ANALYZING', GHOST_TRADING:'GHOST_TRADING',
-    PLACING_TRADE:'PLACING_TRADE', WAITING_RESULT:'WAITING_RESULT',
-    PROCESSING_RESULT:'PROCESSING_RESULT', COOLDOWN:'COOLDOWN', STOPPED:'STOPPED',
+    INITIALIZING: 'INITIALIZING', CONNECTING: 'CONNECTING', AUTHENTICATING: 'AUTHENTICATING',
+    COLLECTING_TICKS: 'COLLECTING_TICKS', ANALYZING: 'ANALYZING', GHOST_TRADING: 'GHOST_TRADING',
+    PLACING_TRADE: 'PLACING_TRADE', WAITING_RESULT: 'WAITING_RESULT',
+    PROCESSING_RESULT: 'PROCESSING_RESULT', COOLDOWN: 'COOLDOWN', STOPPED: 'STOPPED',
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -278,19 +278,19 @@ const STATE = {
 // ══════════════════════════════════════════════════════════════════════════════
 class BOCPD {
     constructor(config) {
-        this.hazard    = config.bocpd_hazard;
-        this.alpha0    = config.bocpd_prior_alpha;
-        this.beta0     = config.bocpd_prior_beta;
-        this.minRun    = config.bocpd_min_run_for_signal;
+        this.hazard = config.bocpd_hazard;
+        this.alpha0 = config.bocpd_prior_alpha;
+        this.beta0 = config.bocpd_prior_beta;
+        this.minRun = config.bocpd_min_run_for_signal;
         this.threshold = config.bocpd_nonrep_confidence;
 
         // Log run-length posterior: logR[r] = log P(run_length = r | x_{1:t})
         // Maintained as a sparse array (grow over time)
-        this.logR      = [0]; // start: log P(r=0) = 0 → P=1 (no history yet)
-        this.alphas    = [this.alpha0];  // sufficient stats per run length
-        this.betas     = [this.beta0];
+        this.logR = [0]; // start: log P(r=0) = 0 → P=1 (no history yet)
+        this.alphas = [this.alpha0];  // sufficient stats per run length
+        this.betas = [this.beta0];
 
-        this.t         = 0;
+        this.t = 0;
         this.lastChangepoint = 0;
 
         // History of most probable run lengths (for trend analysis)
@@ -299,7 +299,7 @@ class BOCPD {
         this.obsHistory = [];
 
         // Current regime estimate (inferred from BOCPD posterior)
-        this.pNonRep   = 0.5;
+        this.pNonRep = 0.5;
         this.expectedRunLength = 0;
     }
 
@@ -330,27 +330,27 @@ class BOCPD {
         const logChangepointMass = logSumExp(logPredictive.map((lp, r) => lp + Math.log(H) + this.logR[r]));
 
         // Build new logR: index 0 = changepoint, indices 1..lenR = growth
-        const newLogR      = new Array(lenR + 1);
-        const newAlphas    = new Array(lenR + 1);
-        const newBetas     = new Array(lenR + 1);
+        const newLogR = new Array(lenR + 1);
+        const newAlphas = new Array(lenR + 1);
+        const newBetas = new Array(lenR + 1);
 
         // r_t = 0 (changepoint): reset to prior
-        newLogR[0]   = logChangepointMass;
+        newLogR[0] = logChangepointMass;
         newAlphas[0] = this.alpha0 + obs;
-        newBetas[0]  = this.beta0  + (1 - obs);
+        newBetas[0] = this.beta0 + (1 - obs);
 
         // r_t = r+1 (growth)
         for (let r = 0; r < lenR; r++) {
-            newLogR[r + 1]   = logGrowthMass[r];
+            newLogR[r + 1] = logGrowthMass[r];
             newAlphas[r + 1] = this.alphas[r] + obs;
-            newBetas[r + 1]  = this.betas[r]  + (1 - obs);
+            newBetas[r + 1] = this.betas[r] + (1 - obs);
         }
 
         // Normalise
         const logZ = logSumExp(newLogR);
-        this.logR   = newLogR.map(v => v - logZ);
+        this.logR = newLogR.map(v => v - logZ);
         this.alphas = newAlphas;
-        this.betas  = newBetas;
+        this.betas = newBetas;
 
         // ── Prune small-probability run lengths to cap memory ──────────────────
         if (this.logR.length > 800) {
@@ -359,9 +359,9 @@ class BOCPD {
             const keep = this.logR.map((v, i) => i).filter(i => this.logR[i] > threshold);
             // Always keep r=0
             if (!keep.includes(0)) keep.unshift(0);
-            this.logR   = keep.map(i => this.logR[i]);
+            this.logR = keep.map(i => this.logR[i]);
             this.alphas = keep.map(i => this.alphas[i]);
-            this.betas  = keep.map(i => this.betas[i]);
+            this.betas = keep.map(i => this.betas[i]);
             // Re-normalise after pruning
             const logZ2 = logSumExp(this.logR);
             this.logR = this.logR.map(v => v - logZ2);
@@ -392,13 +392,13 @@ class BOCPD {
         if (this.runHistory.length > 200) this.runHistory.shift();
 
         return {
-            pNonRep:        this.pNonRep,
-            expectedRL:     this.expectedRunLength,
-            modeRL:         modeIdx,
-            thetaEstimate:  thetaMode,
+            pNonRep: this.pNonRep,
+            expectedRL: this.expectedRunLength,
+            modeRL: modeIdx,
+            thetaEstimate: thetaMode,
             pLongRun,
             pLowTheta,
-            pChangepoint:   Math.exp(this.logR[0]),  // probability we just had a changepoint
+            pChangepoint: Math.exp(this.logR[0]),  // probability we just had a changepoint
         };
     }
 
@@ -408,10 +408,10 @@ class BOCPD {
     }
 
     reset() {
-        this.logR   = [0];
+        this.logR = [0];
         this.alphas = [this.alpha0];
-        this.betas  = [this.beta0];
-        this.t      = 0;
+        this.betas = [this.beta0];
+        this.t = 0;
         this.pNonRep = 0.5;
         this.expectedRunLength = 0;
     }
@@ -467,8 +467,8 @@ class HMM10x10 {
             }
         }
         // Normalise B[0]
-        const b0sum = this.B[0].reduce((s,v)=>s+v,0);
-        this.B[0] = this.B[0].map(v=>v/b0sum);
+        const b0sum = this.B[0].reduce((s, v) => s + v, 0);
+        this.B[0] = this.B[0].map(v => v / b0sum);
 
         // State 1: REP → elevated diagonal
         for (let from = 0; from < 10; from++) {
@@ -477,8 +477,8 @@ class HMM10x10 {
                 this.B[1][from * 10 + to] = isRepeat ? 0.45 : (0.55 / 9) / 10 * 10;
             }
         }
-        const b1sum = this.B[1].reduce((s,v)=>s+v,0);
-        this.B[1] = this.B[1].map(v=>v/b1sum);
+        const b1sum = this.B[1].reduce((s, v) => s + v, 0);
+        this.B[1] = this.B[1].map(v => v / b1sum);
 
         // Forward vector (log-space)
         this.logAlpha = [Math.log(0.6), Math.log(0.4)];
@@ -500,148 +500,148 @@ class HMM10x10 {
         if (T < 20) return false;
 
         let pi = [...this.pi];
-        let A  = this.A.map(r => [...r]);
-        let B  = this.B.map(r => [...r]);
+        let A = this.A.map(r => [...r]);
+        let B = this.B.map(r => [...r]);
         let prevLogL = -Infinity;
 
         for (let iter = 0; iter < maxIter; iter++) {
             // Forward (log)
-            const logAlpha = Array.from({length:T}, ()=>new Array(N).fill(-Infinity));
-            for (let s=0;s<N;s++) logAlpha[0][s] = Math.log(pi[s]+1e-300)+Math.log(B[s][obs[0]]+1e-300);
-            for (let t=1;t<T;t++) {
-                for (let s=0;s<N;s++) {
-                    const inc = A.map((_,p)=>logAlpha[t-1][p]+Math.log(A[p][s]+1e-300));
-                    logAlpha[t][s] = logSumExp(inc)+Math.log(B[s][obs[t]]+1e-300);
+            const logAlpha = Array.from({ length: T }, () => new Array(N).fill(-Infinity));
+            for (let s = 0; s < N; s++) logAlpha[0][s] = Math.log(pi[s] + 1e-300) + Math.log(B[s][obs[0]] + 1e-300);
+            for (let t = 1; t < T; t++) {
+                for (let s = 0; s < N; s++) {
+                    const inc = A.map((_, p) => logAlpha[t - 1][p] + Math.log(A[p][s] + 1e-300));
+                    logAlpha[t][s] = logSumExp(inc) + Math.log(B[s][obs[t]] + 1e-300);
                 }
             }
-            const logL = logSumExp(logAlpha[T-1]);
+            const logL = logSumExp(logAlpha[T - 1]);
 
             // Backward (log)
-            const logBeta = Array.from({length:T}, ()=>new Array(N).fill(-Infinity));
-            for (let s=0;s<N;s++) logBeta[T-1][s]=0;
-            for (let t=T-2;t>=0;t--) {
-                for (let s=0;s<N;s++) {
-                    const vals = A[s].map((a,nx)=>Math.log(a+1e-300)+Math.log(B[nx][obs[t+1]]+1e-300)+logBeta[t+1][nx]);
-                    logBeta[t][s]=logSumExp(vals);
+            const logBeta = Array.from({ length: T }, () => new Array(N).fill(-Infinity));
+            for (let s = 0; s < N; s++) logBeta[T - 1][s] = 0;
+            for (let t = T - 2; t >= 0; t--) {
+                for (let s = 0; s < N; s++) {
+                    const vals = A[s].map((a, nx) => Math.log(a + 1e-300) + Math.log(B[nx][obs[t + 1]] + 1e-300) + logBeta[t + 1][nx]);
+                    logBeta[t][s] = logSumExp(vals);
                 }
             }
 
             // Gamma + Xi
-            const logGamma = Array.from({length:T}, ()=>new Array(N).fill(-Infinity));
-            for (let t=0;t<T;t++) {
-                const d=logSumExp(logAlpha[t].map((la,s)=>la+logBeta[t][s]));
-                for (let s=0;s<N;s++) logGamma[t][s]=logAlpha[t][s]+logBeta[t][s]-d;
+            const logGamma = Array.from({ length: T }, () => new Array(N).fill(-Infinity));
+            for (let t = 0; t < T; t++) {
+                const d = logSumExp(logAlpha[t].map((la, s) => la + logBeta[t][s]));
+                for (let s = 0; s < N; s++) logGamma[t][s] = logAlpha[t][s] + logBeta[t][s] - d;
             }
-            const logXi=Array.from({length:T-1},()=>Array.from({length:N},()=>new Array(N).fill(-Infinity)));
-            for (let t=0;t<T-1;t++) {
-                const d=logSumExp(logAlpha[t].map((la,s)=>la+logBeta[t][s]));
-                for (let s=0;s<N;s++) for (let nx=0;nx<N;nx++) {
-                    logXi[t][s][nx]=logAlpha[t][s]+Math.log(A[s][nx]+1e-300)+Math.log(B[nx][obs[t+1]]+1e-300)+logBeta[t+1][nx]-d;
+            const logXi = Array.from({ length: T - 1 }, () => Array.from({ length: N }, () => new Array(N).fill(-Infinity)));
+            for (let t = 0; t < T - 1; t++) {
+                const d = logSumExp(logAlpha[t].map((la, s) => la + logBeta[t][s]));
+                for (let s = 0; s < N; s++) for (let nx = 0; nx < N; nx++) {
+                    logXi[t][s][nx] = logAlpha[t][s] + Math.log(A[s][nx] + 1e-300) + Math.log(B[nx][obs[t + 1]] + 1e-300) + logBeta[t + 1][nx] - d;
                 }
             }
 
             // M-step
-            for (let s=0;s<N;s++) pi[s]=Math.exp(logGamma[0][s]);
-            const piSum=pi.reduce((a,b)=>a+b,0);
-            pi=pi.map(v=>v/piSum);
+            for (let s = 0; s < N; s++) pi[s] = Math.exp(logGamma[0][s]);
+            const piSum = pi.reduce((a, b) => a + b, 0);
+            pi = pi.map(v => v / piSum);
 
-            for (let s=0;s<N;s++) {
-                const denom=logSumExp(logGamma.slice(0,T-1).map(g=>g[s]));
-                for (let nx=0;nx<N;nx++) {
-                    const numer=logSumExp(logXi.map(xi=>xi[s][nx]));
-                    A[s][nx]=Math.exp(numer-denom);
+            for (let s = 0; s < N; s++) {
+                const denom = logSumExp(logGamma.slice(0, T - 1).map(g => g[s]));
+                for (let nx = 0; nx < N; nx++) {
+                    const numer = logSumExp(logXi.map(xi => xi[s][nx]));
+                    A[s][nx] = Math.exp(numer - denom);
                 }
-                const rs=A[s].reduce((a,b)=>a+b,0);
-                A[s]=A[s].map(v=>v/rs);
+                const rs = A[s].reduce((a, b) => a + b, 0);
+                A[s] = A[s].map(v => v / rs);
             }
 
-            for (let s=0;s<N;s++) {
-                const denom=logSumExp(logGamma.map(g=>g[s]));
-                for (let o=0;o<O;o++) {
-                    const relevant=logGamma.filter((_,t)=>obs[t]===o).map(g=>g[s]);
-                    B[s][o]=relevant.length>0?Math.exp(logSumExp(relevant)-denom):1e-10;
+            for (let s = 0; s < N; s++) {
+                const denom = logSumExp(logGamma.map(g => g[s]));
+                for (let o = 0; o < O; o++) {
+                    const relevant = logGamma.filter((_, t) => obs[t] === o).map(g => g[s]);
+                    B[s][o] = relevant.length > 0 ? Math.exp(logSumExp(relevant) - denom) : 1e-10;
                 }
-                const bsum=B[s].reduce((a,b)=>a+b,0);
-                B[s]=B[s].map(v=>v/bsum);
+                const bsum = B[s].reduce((a, b) => a + b, 0);
+                B[s] = B[s].map(v => v / bsum);
             }
 
-            if (Math.abs(logL-prevLogL)<tol) break;
-            prevLogL=logL;
+            if (Math.abs(logL - prevLogL) < tol) break;
+            prevLogL = logL;
         }
 
         // Label-switching guard: state 0 should have lower diagonal repeat emission
-        const diagMean0 = [0,1,2,3,4,5,6,7,8,9].reduce((s,d)=>s+B[0][d*10+d],0)/10;
-        const diagMean1 = [0,1,2,3,4,5,6,7,8,9].reduce((s,d)=>s+B[1][d*10+d],0)/10;
+        const diagMean0 = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].reduce((s, d) => s + B[0][d * 10 + d], 0) / 10;
+        const diagMean1 = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].reduce((s, d) => s + B[1][d * 10 + d], 0) / 10;
         if (diagMean0 > diagMean1) {
-            [pi[0],pi[1]]=[pi[1],pi[0]];
-            [A[0],A[1]]=[A[1],A[0]];
-            A[0]=[A[0][1],A[0][0]];
-            A[1]=[A[1][1],A[1][0]];
-            [B[0],B[1]]=[B[1],B[0]];
+            [pi[0], pi[1]] = [pi[1], pi[0]];
+            [A[0], A[1]] = [A[1], A[0]];
+            A[0] = [A[0][1], A[0][0]];
+            A[1] = [A[1][1], A[1][0]];
+            [B[0], B[1]] = [B[1], B[0]];
         }
 
-        this.pi=pi; this.A=A; this.B=B;
-        this.fitted=true;
-        return {diagMean0:Math.min(diagMean0,diagMean1), diagMean1:Math.max(diagMean0,diagMean1)};
+        this.pi = pi; this.A = A; this.B = B;
+        this.fitted = true;
+        return { diagMean0: Math.min(diagMean0, diagMean1), diagMean1: Math.max(diagMean0, diagMean1) };
     }
 
     // ── Viterbi (log-space) ────────────────────────────────────────────────────
     viterbi(obs) {
-        const T=obs.length, N=2;
-        if (T===0) return null;
-        const logDelta=Array.from({length:T},()=>new Array(N).fill(-Infinity));
-        const psi=Array.from({length:T},()=>new Array(N).fill(0));
-        for (let s=0;s<N;s++) logDelta[0][s]=Math.log(this.pi[s]+1e-300)+Math.log(this.B[s][obs[0]]+1e-300);
-        for (let t=1;t<T;t++) {
-            for (let s=0;s<N;s++) {
-                let best=-Infinity,bp=0;
-                for (let p=0;p<N;p++) {
-                    const v=logDelta[t-1][p]+Math.log(this.A[p][s]+1e-300);
-                    if (v>best){best=v;bp=p;}
+        const T = obs.length, N = 2;
+        if (T === 0) return null;
+        const logDelta = Array.from({ length: T }, () => new Array(N).fill(-Infinity));
+        const psi = Array.from({ length: T }, () => new Array(N).fill(0));
+        for (let s = 0; s < N; s++) logDelta[0][s] = Math.log(this.pi[s] + 1e-300) + Math.log(this.B[s][obs[0]] + 1e-300);
+        for (let t = 1; t < T; t++) {
+            for (let s = 0; s < N; s++) {
+                let best = -Infinity, bp = 0;
+                for (let p = 0; p < N; p++) {
+                    const v = logDelta[t - 1][p] + Math.log(this.A[p][s] + 1e-300);
+                    if (v > best) { best = v; bp = p; }
                 }
-                logDelta[t][s]=best+Math.log(this.B[s][obs[t]]+1e-300);
-                psi[t][s]=bp;
+                logDelta[t][s] = best + Math.log(this.B[s][obs[t]] + 1e-300);
+                psi[t][s] = bp;
             }
         }
-        const seq=new Array(T);
-        seq[T-1]=logDelta[T-1][0]>=logDelta[T-1][1]?0:1;
-        for (let t=T-2;t>=0;t--) seq[t]=psi[t+1][seq[t+1]];
+        const seq = new Array(T);
+        seq[T - 1] = logDelta[T - 1][0] >= logDelta[T - 1][1] ? 0 : 1;
+        for (let t = T - 2; t >= 0; t--) seq[t] = psi[t + 1][seq[t + 1]];
 
-        const cur=seq[T-1];
-        let persistence=1;
-        for (let t=T-2;t>=0;t--) { if(seq[t]===cur) persistence++; else break; }
+        const cur = seq[T - 1];
+        let persistence = 1;
+        for (let t = T - 2; t >= 0; t--) { if (seq[t] === cur) persistence++; else break; }
 
-        let transitions=0;
-        for (let t=1;t<T;t++) if(seq[t]!==seq[t-1]) transitions++;
+        let transitions = 0;
+        for (let t = 1; t < T; t++) if (seq[t] !== seq[t - 1]) transitions++;
 
         // Segment stability: divide into 5 segments, measure NON-REP fraction each
-        const seg=Math.max(1,Math.floor(T/5));
-        const segFracs=[];
-        for (let i=0;i<5&&i*seg<T;i++) {
-            const sl=seq.slice(i*seg,Math.min((i+1)*seg,T));
-            segFracs.push(sl.filter(s=>s===0).length/sl.length);
+        const seg = Math.max(1, Math.floor(T / 5));
+        const segFracs = [];
+        for (let i = 0; i < 5 && i * seg < T; i++) {
+            const sl = seq.slice(i * seg, Math.min((i + 1) * seg, T));
+            segFracs.push(sl.filter(s => s === 0).length / sl.length);
         }
-        const stability=segFracs.reduce((a,b)=>a+b,0)/segFracs.length;
+        const stability = segFracs.reduce((a, b) => a + b, 0) / segFracs.length;
 
-        return {stateSeq:seq, currentState:cur, persistence, transitions, stability};
+        return { stateSeq: seq, currentState: cur, persistence, transitions, stability };
     }
 
     // ── Forward algorithm (incremental) ───────────────────────────────────────
     updateForward(obs_t) {
-        const N=2;
-        const newLogA=new Array(N);
-        for (let s=0;s<N;s++) {
-            const inc=this.logAlpha.map((la,p)=>la+Math.log(this.A[p][s]+1e-300));
-            newLogA[s]=logSumExp(inc)+Math.log(this.B[s][obs_t]+1e-300);
+        const N = 2;
+        const newLogA = new Array(N);
+        for (let s = 0; s < N; s++) {
+            const inc = this.logAlpha.map((la, p) => la + Math.log(this.A[p][s] + 1e-300));
+            newLogA[s] = logSumExp(inc) + Math.log(this.B[s][obs_t] + 1e-300);
         }
-        const d=logSumExp(newLogA);
-        this.logAlpha=newLogA;
-        return [Math.exp(newLogA[0]-d), Math.exp(newLogA[1]-d)]; // [P(NR), P(REP)]
+        const d = logSumExp(newLogA);
+        this.logAlpha = newLogA;
+        return [Math.exp(newLogA[0] - d), Math.exp(newLogA[1] - d)]; // [P(NR), P(REP)]
     }
 
     // Mean diagonal emission probability for a state (repeat emission)
     meanDiagEmission(state) {
-        return [0,1,2,3,4,5,6,7,8,9].reduce((s,d)=>s+this.B[state][d*10+d],0)/10;
+        return [0, 1, 2, 3, 4, 5, 6, 7, 8, 9].reduce((s, d) => s + this.B[state][d * 10 + d], 0) / 10;
     }
 }
 
@@ -652,10 +652,10 @@ class HMM10x10 {
 class EWMAStack {
     constructor() {
         // λ values: larger = shorter memory
-        this.lambdas  = [0.40, 0.18, 0.07, 0.025];
-        this.names    = ['ultra-short(~4t)', 'short(~15t)', 'medium(~40t)', 'long(~100t)'];
-        this.values   = [null, null, null, null];  // null until enough data
-        this.n        = 0;
+        this.lambdas = [0.40, 0.18, 0.07, 0.025];
+        this.names = ['ultra-short(~4t)', 'short(~15t)', 'medium(~40t)', 'long(~100t)'];
+        this.values = [null, null, null, null];  // null until enough data
+        this.n = 0;
     }
 
     update(repeatObs) {
@@ -735,7 +735,7 @@ function structuralBreakTest(repeatSeq) {
         if (p <= 0 || p >= 1) return 0;
         return k * Math.log(p) + (n - k) * Math.log(1 - p);
     }
-    const llAlt  = logLik(k1, n1, p1) + logLik(k2, n2, p2);
+    const llAlt = logLik(k1, n1, p1) + logLik(k2, n2, p2);
     const llNull = logLik(k1 + k2, n1 + n2, pPool);
     const lrtStat = 2 * (llAlt - llNull);
 
@@ -757,16 +757,16 @@ function structuralBreakTest(repeatSeq) {
 // ══════════════════════════════════════════════════════════════════════════════
 class TwoSidedCUSUM {
     constructor(config) {
-        this.slack   = config.cusum_slack;
-        this.upThr   = config.cusum_up_threshold;
+        this.slack = config.cusum_slack;
+        this.upThr = config.cusum_up_threshold;
         this.downThr = config.cusum_down_threshold;  // negative threshold for down-CUSUM
 
         // Per-digit CUSUM values
-        this.upC   = new Array(10).fill(0);
+        this.upC = new Array(10).fill(0);
         this.downC = new Array(10).fill(0);
 
         // Global CUSUM (all repeats, not per-digit)
-        this.globalUp   = 0;
+        this.globalUp = 0;
         this.globalDown = 0;
     }
 
@@ -778,27 +778,27 @@ class TwoSidedCUSUM {
         const logLR = Math.log((isRepeat ? p1 : (1 - p1)) / ((isRepeat ? p0 : (1 - p0)) + 1e-300) + 1e-300);
 
         // Up-CUSUM: accumulated evidence for shift INTO rep
-        this.upC[digit]   = Math.max(0, this.upC[digit]   + logLR - this.slack);
+        this.upC[digit] = Math.max(0, this.upC[digit] + logLR - this.slack);
         this.downC[digit] = Math.min(0, this.downC[digit] + logLR + this.slack);
 
         // Global
-        this.globalUp   = Math.max(0, this.globalUp   + logLR - this.slack);
+        this.globalUp = Math.max(0, this.globalUp + logLR - this.slack);
         this.globalDown = Math.min(0, this.globalDown + logLR + this.slack);
     }
 
     resetDigit(d) { this.upC[d] = 0; this.downC[d] = 0; }
     resetGlobal() { this.globalUp = 0; this.globalDown = 0; }
 
-    upAlarm(digit)   { return this.upC[digit]   > this.upThr   || this.globalUp   > this.upThr; }
+    upAlarm(digit) { return this.upC[digit] > this.upThr || this.globalUp > this.upThr; }
     downConfirmed(digit) {
         // Down-CUSUM goes negative; confirmed when sufficiently negative
         return this.downC[digit] < this.downThr && this.globalDown < this.downThr;
     }
 
     summary(digit) {
-        return `up=${this.upC[digit].toFixed(2)}(${this.upAlarm(digit)?'ALARM':'ok'}) ` +
-               `down=${this.downC[digit].toFixed(2)}(${this.downConfirmed(digit)?'confirmed':'pending'}) ` +
-               `globalUp=${this.globalUp.toFixed(2)} globalDown=${this.globalDown.toFixed(2)}`;
+        return `up=${this.upC[digit].toFixed(2)}(${this.upAlarm(digit) ? 'ALARM' : 'ok'}) ` +
+            `down=${this.downC[digit].toFixed(2)}(${this.downConfirmed(digit) ? 'confirmed' : 'pending'}) ` +
+            `globalUp=${this.globalUp.toFixed(2)} globalDown=${this.globalDown.toFixed(2)}`;
     }
 }
 
@@ -810,17 +810,17 @@ class AdvancedRegimeDetector {
         this.cfg = config;
 
         // Sub-components
-        this.bocpd  = new BOCPD(config);
-        this.hmm    = new HMM10x10(config);
-        this.ewma   = new EWMAStack();
-        this.cusum  = new TwoSidedCUSUM(config);
+        this.bocpd = new BOCPD(config);
+        this.hmm = new HMM10x10(config);
+        this.ewma = new EWMAStack();
+        this.cusum = new TwoSidedCUSUM(config);
 
         // Per-digit repeat rate (transition-based, sliding window)
-        this.perDigitRate  = new Array(10).fill(10); // initialise to 10% baseline
+        this.perDigitRate = new Array(10).fill(10); // initialise to 10% baseline
 
         // Raw repeat obs buffer for ACF + structural break
-        this.repeatBuffer  = [];
-        this.BUFFER_MAX    = 500;
+        this.repeatBuffer = [];
+        this.BUFFER_MAX = 500;
 
         // Component trust weights (adaptive) — updated after each resolved trade
         this.weights = { bocpd: 1.0, hmm: 1.0, ewma: 1.0, acf: 0.7, structural: 0.6, cusum: 1.0 };
@@ -833,7 +833,7 @@ class AdvancedRegimeDetector {
 
     // ── Per-digit repeat rate (full transition counting) ──────────────────────
     computePerDigitRepeatRate(window) {
-        const transFrom   = new Array(10).fill(0);
+        const transFrom = new Array(10).fill(0);
         const transRepeat = new Array(10).fill(0);
         for (let i = 0; i < window.length - 1; i++) {
             transFrom[window[i]]++;
@@ -847,7 +847,7 @@ class AdvancedRegimeDetector {
     tick(prevDigit, curDigit) {
         const isRepeat = prevDigit === curDigit;
         const obs_binary = isRepeat ? 1 : 0;
-        const obs_pair   = prevDigit * 10 + curDigit;
+        const obs_pair = prevDigit * 10 + curDigit;
 
         // BOCPD update
         this.bocpdResult = this.bocpd.update(obs_binary);
@@ -871,7 +871,7 @@ class AdvancedRegimeDetector {
     // ── Full analysis (called on each analysis tick) ───────────────────────────
     analyze(tickHistory, targetDigit) {
         const window = tickHistory.slice(-this.cfg.analysis_window);
-        const len    = window.length;
+        const len = window.length;
 
         if (len < this.cfg.min_ticks_for_analysis) {
             return { valid: false, reason: `insufficient data (${len}/${this.cfg.min_ticks_for_analysis})` };
@@ -890,8 +890,8 @@ class AdvancedRegimeDetector {
                 const p1diag = (hmmFitStats.diagMean1 * 100).toFixed(1);
                 logHMM(
                     `📐 HMM(10×10) refitted | ` +
-                    `A: NR→NR=${(this.hmm.A[0][0]*100).toFixed(1)}% NR→R=${(this.hmm.A[0][1]*100).toFixed(1)}% ` +
-                    `R→NR=${(this.hmm.A[1][0]*100).toFixed(1)}% R→R=${(this.hmm.A[1][1]*100).toFixed(1)}% | ` +
+                    `A: NR→NR=${(this.hmm.A[0][0] * 100).toFixed(1)}% NR→R=${(this.hmm.A[0][1] * 100).toFixed(1)}% ` +
+                    `R→NR=${(this.hmm.A[1][0] * 100).toFixed(1)}% R→R=${(this.hmm.A[1][1] * 100).toFixed(1)}% | ` +
                     `DiagEmit: NR=${p0diag}% R=${p1diag}%`
                 );
             }
@@ -903,26 +903,26 @@ class AdvancedRegimeDetector {
 
         // ── Forward (real-time Bayesian posterior) ─────────────────────────────
         // Re-run from scratch for accurate final posterior
-        let logA = [Math.log(this.hmm.pi[0]+1e-300), Math.log(this.hmm.pi[1]+1e-300)];
-        logA[0] += Math.log(this.hmm.B[0][pairObs[0]]+1e-300);
-        logA[1] += Math.log(this.hmm.B[1][pairObs[0]]+1e-300);
-        for (let t=1;t<pairObs.length;t++) {
-            const nA=[0,1].map(s => {
-                const inc=[0,1].map(p=>logA[p]+Math.log(this.hmm.A[p][s]+1e-300));
-                return logSumExp(inc)+Math.log(this.hmm.B[s][pairObs[t]]+1e-300);
+        let logA = [Math.log(this.hmm.pi[0] + 1e-300), Math.log(this.hmm.pi[1] + 1e-300)];
+        logA[0] += Math.log(this.hmm.B[0][pairObs[0]] + 1e-300);
+        logA[1] += Math.log(this.hmm.B[1][pairObs[0]] + 1e-300);
+        for (let t = 1; t < pairObs.length; t++) {
+            const nA = [0, 1].map(s => {
+                const inc = [0, 1].map(p => logA[p] + Math.log(this.hmm.A[p][s] + 1e-300));
+                return logSumExp(inc) + Math.log(this.hmm.B[s][pairObs[t]] + 1e-300);
             });
-            logA=nA;
+            logA = nA;
         }
         const denom = logSumExp(logA);
-        const posteriorNR  = Math.exp(logA[0]-denom);
-        const posteriorRep = Math.exp(logA[1]-denom);
+        const posteriorNR = Math.exp(logA[0] - denom);
+        const posteriorRep = Math.exp(logA[1] - denom);
 
         // ── Per-digit raw repeat rates ─────────────────────────────────────────
         const rawRepeatProb = this.computePerDigitRepeatRate(window);
 
         // ── Recent short window repeat rate (last 20 ticks) ───────────────────
         const shortWin = window.slice(-20);
-        const shortRepeats = shortWin.slice(1).filter((d,i)=>d===shortWin[i]).length;
+        const shortRepeats = shortWin.slice(1).filter((d, i) => d === shortWin[i]).length;
         const recentRate = (shortRepeats / (shortWin.length - 1)) * 100;
 
         // ── Lag ACF of recent repeat sequence ─────────────────────────────────
@@ -937,11 +937,11 @@ class AdvancedRegimeDetector {
         const bocpd = this.bocpdResult || { pNonRep: 0.5, expectedRL: 0, modeRL: 0, thetaEstimate: 0.1, pChangepoint: 0.5 };
 
         // ── EWMA stack ────────────────────────────────────────────────────────
-        const ewmaValues = [0,1,2,3].map(i => this.ewma.get(i));
-        const ewmaTrend  = this.ewma.trend();
+        const ewmaValues = [0, 1, 2, 3].map(i => this.ewma.get(i));
+        const ewmaTrend = this.ewma.trend();
 
         // ── CUSUM results ──────────────────────────────────────────────────────
-        const cusumUpAlarm     = this.cusum.upAlarm(targetDigit);
+        const cusumUpAlarm = this.cusum.upAlarm(targetDigit);
         const cusumDownConfirm = this.cusum.downConfirmed(targetDigit);
 
         // ─────────────────────────────────────────────────────────────────────
@@ -1004,30 +1004,30 @@ class AdvancedRegimeDetector {
         let rawScore = bocpdScore + hmmScore + ewmaScore + acfScore + breakScore + cusumScore;
 
         // Hard gates that zero out score regardless
-        if (vit.currentState !== 0)                                   rawScore = 0;
-        if (posteriorNR < this.cfg.hmm_nonrep_confidence)             rawScore = Math.min(rawScore, 30);
-        if (rawRepeatProb[targetDigit] >= threshold)                   rawScore = 0;
+        if (vit.currentState !== 0) rawScore = 0;
+        if (posteriorNR < this.cfg.hmm_nonrep_confidence) rawScore = Math.min(rawScore, 30);
+        if (rawRepeatProb[targetDigit] >= threshold) rawScore = 0;
         if (this.ewma.get(0) >= threshold || this.ewma.get(1) >= threshold) rawScore = 0;
-        if (cusumUpAlarm)                                              rawScore = 0;
-        if (bocpd.pChangepoint > 0.3)                                 rawScore = Math.min(rawScore, 25); // very recent changepoint → uncertain
-        if (ewmaTrend > this.cfg.ewma_trend_threshold * 2)            rawScore = 0; // sharp upward trend
+        if (cusumUpAlarm) rawScore = 0;
+        if (bocpd.pChangepoint > 0.3) rawScore = Math.min(rawScore, 25); // very recent changepoint → uncertain
+        if (ewmaTrend > this.cfg.ewma_trend_threshold * 2) rawScore = 0; // sharp upward trend
 
         const safetyScore = Math.round(clamp(rawScore, 0, 100));
 
         // ── SIGNAL CONDITION ──────────────────────────────────────────────────
         const signalActive = (
-            vit.currentState === 0                                          &&
-            posteriorNR >= this.cfg.hmm_nonrep_confidence                   &&
-            vit.persistence >= this.cfg.min_regime_persistence              &&
-            this.bocpd.isNonRepRegime()                                     &&
-            bocpd.pNonRep >= this.cfg.bocpd_nonrep_confidence               &&
-            bocpd.modeRL >= this.cfg.bocpd_min_run_for_signal               &&
-            rawRepeatProb[targetDigit] < threshold                          &&
-            this.ewma.get(0) < threshold && this.ewma.get(1) < threshold    &&
-            ewmaTrend <= this.cfg.ewma_trend_threshold                      &&
-            (acf[0] ?? 0) < this.cfg.acf_lag1_threshold                    &&
-            !cusumUpAlarm                                                   &&
-            breakResult.pBreak < this.cfg.structural_break_threshold        &&
+            vit.currentState === 0 &&
+            posteriorNR >= this.cfg.hmm_nonrep_confidence &&
+            vit.persistence >= this.cfg.min_regime_persistence &&
+            this.bocpd.isNonRepRegime() &&
+            bocpd.pNonRep >= this.cfg.bocpd_nonrep_confidence &&
+            bocpd.modeRL >= this.cfg.bocpd_min_run_for_signal &&
+            rawRepeatProb[targetDigit] < threshold &&
+            this.ewma.get(0) < threshold && this.ewma.get(1) < threshold &&
+            ewmaTrend <= this.cfg.ewma_trend_threshold &&
+            (acf[0] ?? 0) < this.cfg.acf_lag1_threshold &&
+            !cusumUpAlarm &&
+            breakResult.pBreak < this.cfg.structural_break_threshold &&
             safetyScore >= this.cfg.repeat_confidence
         );
 
@@ -1047,12 +1047,12 @@ class AdvancedRegimeDetector {
             hmmB_diagREP: this.hmm.meanDiagEmission(1),
 
             // BOCPD
-            bocpdPNonRep:    bocpd.pNonRep,
-            bocpdModeRL:     bocpd.modeRL,
-            bocpdExpRL:      bocpd.expectedRL,
-            bocpdTheta:      bocpd.thetaEstimate,
+            bocpdPNonRep: bocpd.pNonRep,
+            bocpdModeRL: bocpd.modeRL,
+            bocpdExpRL: bocpd.expectedRL,
+            bocpdTheta: bocpd.thetaEstimate,
             bocpdPChangepoint: bocpd.pChangepoint,
-            bocpdIsNonRep:   this.bocpd.isNonRepRegime(),
+            bocpdIsNonRep: this.bocpd.isNonRepRegime(),
 
             // EWMA
             ewmaValues,
@@ -1067,8 +1067,8 @@ class AdvancedRegimeDetector {
             // CUSUM
             cusumUpAlarm,
             cusumDownConfirm,
-            cusumUp:    this.cusum.upC[targetDigit],
-            cusumDown:  this.cusum.downC[targetDigit],
+            cusumUp: this.cusum.upC[targetDigit],
+            cusumDown: this.cusum.downC[targetDigit],
             cusumGlobalUp: this.cusum.globalUp,
 
             // Per-digit rates
@@ -1123,7 +1123,7 @@ class RomanianGhostBot {
         this.accountId = '';
 
         this.tickHistory = [];
-        this.prevDigit   = -1;
+        this.prevDigit = -1;
 
         // Detector
         this.detector = new AdvancedRegimeDetector(config);
@@ -1180,16 +1180,16 @@ class RomanianGhostBot {
         console.log(`  Analysis Window     : ${bold(c.analysis_window)} ticks`);
         console.log(`  Min Ticks           : ${bold(c.min_ticks_for_analysis)}`);
         console.log(`  Repeat Threshold    : ${bold(c.repeat_threshold + '%')}`);
-        console.log(`  HMM NonRep Conf     : ${bold((c.hmm_nonrep_confidence*100).toFixed(0)+'%')}`);
-        console.log(`  BOCPD NonRep Conf   : ${bold((c.bocpd_nonrep_confidence*100).toFixed(0)+'%')} | Expected regime: ${bold(Math.round(1/c.bocpd_hazard)+' ticks')}`);
-        console.log(`  BOCPD Min Run       : ${bold(c.bocpd_min_run_for_signal+' ticks')}`);
+        console.log(`  HMM NonRep Conf     : ${bold((c.hmm_nonrep_confidence * 100).toFixed(0) + '%')}`);
+        console.log(`  BOCPD NonRep Conf   : ${bold((c.bocpd_nonrep_confidence * 100).toFixed(0) + '%')} | Expected regime: ${bold(Math.round(1 / c.bocpd_hazard) + ' ticks')}`);
+        console.log(`  BOCPD Min Run       : ${bold(c.bocpd_min_run_for_signal + ' ticks')}`);
         console.log(`  Min Persistence     : ${bold(c.min_regime_persistence)} ticks in NON-REP`);
         console.log(`  ACF Lag-1 Gate      : ${bold('< ' + c.acf_lag1_threshold)}`);
         console.log(`  EWMA Trend Gate     : ${bold('≤ ' + c.ewma_trend_threshold + '%')}`);
-        console.log(`  Ghost Trading       : ${c.ghost_enabled?green('ON')+` | Wins: ${c.ghost_wins_required}`:red('OFF')}`);
-        console.log(`  Martingale          : ${c.martingale_enabled?green('ON')+` | Steps: ${c.max_martingale_steps} | Mult: ${c.martingale_multiplier}x`:red('OFF')}`);
-        console.log(`  Take Profit         : ${green('$'+c.take_profit.toFixed(2))}`);
-        console.log(`  Stop Loss           : ${red('$'+c.stop_loss.toFixed(2))}`);
+        console.log(`  Ghost Trading       : ${c.ghost_enabled ? green('ON') + ` | Wins: ${c.ghost_wins_required}` : red('OFF')}`);
+        console.log(`  Martingale          : ${c.martingale_enabled ? green('ON') + ` | Steps: ${c.max_martingale_steps} | Mult: ${c.martingale_multiplier}x` : red('OFF')}`);
+        console.log(`  Take Profit         : ${green('$' + c.take_profit.toFixed(2))}`);
+        console.log(`  Stop Loss           : ${red('$' + c.stop_loss.toFixed(2))}`);
         console.log(bold(cyan('═══════════════════════════════════════════════════════════════════')));
         console.log('');
         console.log(bold(yellow('  REGIME DETECTION ENGINE v3.0 (7-component ensemble):')));
@@ -1208,22 +1208,22 @@ class RomanianGhostBot {
         this.botState = STATE.CONNECTING;
         const url = `${this.config.endpoint}?app_id=${this.config.app_id}`;
         logApi(`Connecting to ${dim(url)} ...`);
-        try { this.ws = new WebSocket(url); } catch(e) { logError(`WS create failed: ${e.message}`); this.attemptReconnect(); return; }
+        try { this.ws = new WebSocket(url); } catch (e) { logError(`WS create failed: ${e.message}`); this.attemptReconnect(); return; }
         this.ws.on('open', () => {
             logApi(green('✅ Connected'));
             this.reconnectAttempts = 0;
             this.botState = STATE.AUTHENTICATING;
             if (this.pingInterval) clearInterval(this.pingInterval);
             this.pingInterval = setInterval(() => {
-                if (this.ws && this.ws.readyState === WebSocket.OPEN) this.send({ping:1});
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) this.send({ ping: 1 });
             }, 30000);
             logApi('Authenticating...');
-            this.send({authorize: this.config.api_token});
+            this.send({ authorize: this.config.api_token });
         });
-        this.ws.on('message', raw => { try { this.handleMessage(JSON.parse(raw)); } catch(e) { logError(`Parse: ${e.message}`); } });
+        this.ws.on('message', raw => { try { this.handleMessage(JSON.parse(raw)); } catch (e) { logError(`Parse: ${e.message}`); } });
         this.ws.on('close', code => {
             logApi(`⚠️  Closed (${code})`);
-            if (this.pingInterval) { clearInterval(this.pingInterval); this.pingInterval=null; }
+            if (this.pingInterval) { clearInterval(this.pingInterval); this.pingInterval = null; }
             if (this.botState !== STATE.STOPPED) this.attemptReconnect();
         });
         this.ws.on('error', e => logError(`WS error: ${e.message}`));
@@ -1232,40 +1232,40 @@ class RomanianGhostBot {
     attemptReconnect() {
         if (this.reconnectAttempts >= this.MAX_RECONNECT) { this.stop('Max reconnects'); return; }
         this.reconnectAttempts++;
-        const delay = Math.pow(2, this.reconnectAttempts-1)*1000;
-        logApi(`Reconnect in ${delay/1000}s (${this.reconnectAttempts}/${this.MAX_RECONNECT})...`);
+        const delay = Math.pow(2, this.reconnectAttempts - 1) * 1000;
+        logApi(`Reconnect in ${delay / 1000}s (${this.reconnectAttempts}/${this.MAX_RECONNECT})...`);
         this.isTradeActive = false;
-        setTimeout(()=>{ if(this.botState!==STATE.STOPPED) this.connectWS(); }, delay);
+        setTimeout(() => { if (this.botState !== STATE.STOPPED) this.connectWS(); }, delay);
     }
 
     send(payload) {
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
         if (!payload.ping) payload.req_id = ++this.requestId;
-        try { this.ws.send(JSON.stringify(payload)); } catch(e) { logError(`Send: ${e.message}`); }
+        try { this.ws.send(JSON.stringify(payload)); } catch (e) { logError(`Send: ${e.message}`); }
     }
 
-    sendTelegram(text) { this.telegramBot.sendMessage(CHAT_ID, text, {parse_mode:'HTML'}).catch(()=>{}); }
+    sendTelegram(text) { this.telegramBot.sendMessage(CHAT_ID, text, { parse_mode: 'HTML' }).catch(() => { }); }
 
     handleMessage(msg) {
         if (msg.error) { this.handleApiError(msg); return; }
-        switch(msg.msg_type) {
-            case 'authorize':   this.handleAuth(msg); break;
-            case 'balance':     this.handleBalance(msg); break;
-            case 'history':     this.handleTickHistory(msg); break;
-            case 'tick':        this.handleTick(msg); break;
-            case 'buy':         this.handleBuy(msg); break;
+        switch (msg.msg_type) {
+            case 'authorize': this.handleAuth(msg); break;
+            case 'balance': this.handleBalance(msg); break;
+            case 'history': this.handleTickHistory(msg); break;
+            case 'tick': this.handleTick(msg); break;
+            case 'buy': this.handleBuy(msg); break;
             case 'transaction': this.handleTransaction(msg); break;
             case 'ping': break;
         }
     }
 
     handleApiError(msg) {
-        const code = msg.error.code||'UNKNOWN', emsg = msg.error.message||'Unknown';
-        logError(`[${code}] on ${msg.msg_type||'?'}: ${emsg}`);
-        if (['InvalidToken','AuthorizationRequired'].includes(code)) { this.stop('Auth failed'); return; }
-        if (code==='RateLimit') setTimeout(()=>{ if(this.botState!==STATE.STOPPED){this.isTradeActive=false;this.executeTradeFlow(false);} },10000);
-        if (code==='InsufficientBalance') { this.stop('Insufficient balance'); return; }
-        if (msg.msg_type==='buy') { this.isTradeActive=false; this.botState=STATE.ANALYZING; }
+        const code = msg.error.code || 'UNKNOWN', emsg = msg.error.message || 'Unknown';
+        logError(`[${code}] on ${msg.msg_type || '?'}: ${emsg}`);
+        if (['InvalidToken', 'AuthorizationRequired'].includes(code)) { this.stop('Auth failed'); return; }
+        if (code === 'RateLimit') setTimeout(() => { if (this.botState !== STATE.STOPPED) { this.isTradeActive = false; this.executeTradeFlow(false); } }, 10000);
+        if (code === 'InsufficientBalance') { this.stop('Insufficient balance'); return; }
+        if (msg.msg_type === 'buy') { this.isTradeActive = false; this.botState = STATE.ANALYZING; }
     }
 
     handleAuth(msg) {
@@ -1273,36 +1273,36 @@ class RomanianGhostBot {
         const auth = msg.authorize;
         this.accountBalance = parseFloat(auth.balance);
         this.startingBalance = this.accountBalance;
-        this.accountId = auth.loginid||'N/A';
+        this.accountId = auth.loginid || 'N/A';
         this.sessionStartTime = Date.now();
         const isDemo = this.accountId.startsWith('VRTC');
-        logApi(`${green('✅ Authenticated')} | ${bold(this.accountId)} ${isDemo?dim('(Demo)'):red('(REAL MONEY!)')} | Balance: ${green('$'+this.accountBalance.toFixed(2))}`);
+        logApi(`${green('✅ Authenticated')} | ${bold(this.accountId)} ${isDemo ? dim('(Demo)') : red('(REAL MONEY!)')} | Balance: ${green('$' + this.accountBalance.toFixed(2))}`);
         if (!isDemo) logRisk('⚠️  REAL ACCOUNT — trading with real money!');
-        this.send({balance:1,subscribe:1});
-        this.send({transaction:1,subscribe:1});
+        this.send({ balance: 1, subscribe: 1 });
+        this.send({ transaction: 1, subscribe: 1 });
         this.botState = STATE.COLLECTING_TICKS;
         logBot(`Fetching last ${bold(this.config.tick_history_size)} ticks...`);
-        this.send({ticks_history:this.config.symbol,count:this.config.tick_history_size,end:'latest',style:'ticks'});
+        this.send({ ticks_history: this.config.symbol, count: this.config.tick_history_size, end: 'latest', style: 'ticks' });
     }
 
     handleTickHistory(msg) {
-        if (!msg.history||!msg.history.prices) { logError('No history'); this.subscribeToLiveTicks(); return; }
-        const digits = msg.history.prices.map(p=>getLastDigit(p,this.config.symbol));
+        if (!msg.history || !msg.history.prices) { logError('No history'); this.subscribeToLiveTicks(); return; }
+        const digits = msg.history.prices.map(p => getLastDigit(p, this.config.symbol));
         this.tickHistory = digits.slice(-this.config.tick_history_size);
-        logBot(`${green('✅ Loaded '+this.tickHistory.length+' historical ticks')}`);
+        logBot(`${green('✅ Loaded ' + this.tickHistory.length + ' historical ticks')}`);
 
         // Warm up BOCPD and EWMA with historical repeat sequence
         logBot('Warming up regime detectors from history...');
-        for (let i=1; i<this.tickHistory.length; i++) {
-            this.detector.tick(this.tickHistory[i-1], this.tickHistory[i]);
+        for (let i = 1; i < this.tickHistory.length; i++) {
+            this.detector.tick(this.tickHistory[i - 1], this.tickHistory[i]);
         }
         logBot(green('✅ Regime detector warmed up'));
-        logBocpd(`After warmup | P(NR)=${(this.detector.bocpd.pNonRep*100).toFixed(1)}% | ExpRL=${this.detector.bocpd.expectedRunLength.toFixed(1)} | EWMA[1]=${this.detector.ewma.get(1).toFixed(1)}%`);
+        logBocpd(`After warmup | P(NR)=${(this.detector.bocpd.pNonRep * 100).toFixed(1)}% | ExpRL=${this.detector.bocpd.expectedRunLength.toFixed(1)} | EWMA[1]=${this.detector.ewma.get(1).toFixed(1)}%`);
 
         this.subscribeToLiveTicks();
         if (this.tickHistory.length >= this.config.min_ticks_for_analysis) {
             this.botState = STATE.ANALYZING;
-            this.prevDigit = this.tickHistory[this.tickHistory.length-1];
+            this.prevDigit = this.tickHistory[this.tickHistory.length - 1];
             const lastDigit = this.prevDigit;
             this.regime = this.detector.analyze(this.tickHistory, lastDigit);
             this.applyRegimeSignal(lastDigit);
@@ -1314,7 +1314,7 @@ class RomanianGhostBot {
 
     subscribeToLiveTicks() {
         logBot(`Subscribing to live ticks for ${bold(this.config.symbol)}...`);
-        this.send({ticks:this.config.symbol,subscribe:1});
+        this.send({ ticks: this.config.symbol, subscribe: 1 });
     }
 
     handleBalance(msg) {
@@ -1322,11 +1322,11 @@ class RomanianGhostBot {
     }
 
     handleTick(msg) {
-        if (!msg.tick || this.botState===STATE.STOPPED) return;
+        if (!msg.tick || this.botState === STATE.STOPPED) return;
 
-        const price       = msg.tick.quote;
-        const curDigit    = getLastDigit(price, this.config.symbol);
-        const prevDigit   = this.prevDigit;
+        const price = msg.tick.quote;
+        const curDigit = getLastDigit(price, this.config.symbol);
+        const prevDigit = this.prevDigit;
 
         this.tickHistory.push(curDigit);
         if (this.tickHistory.length > this.config.tick_history_size)
@@ -1339,26 +1339,26 @@ class RomanianGhostBot {
         this.prevDigit = curDigit;
 
         const count = this.tickHistory.length;
-        const last5 = this.tickHistory.slice(Math.max(0,count-6), count-1);
+        const last5 = this.tickHistory.slice(Math.max(0, count - 6), count - 1);
         const stateHint =
-            this.botState===STATE.WAITING_RESULT ? '⏳ waiting'
-            : this.botState===STATE.COOLDOWN ? '❄️ cooldown'
-            : this.botState===STATE.GHOST_TRADING ? `👻 ghost ${this.ghostConsecutiveWins}/${this.config.ghost_wins_required}`
-            : '';
+            this.botState === STATE.WAITING_RESULT ? '⏳ waiting'
+                : this.botState === STATE.COOLDOWN ? '❄️ cooldown'
+                    : this.botState === STATE.GHOST_TRADING ? `👻 ghost ${this.ghostConsecutiveWins}/${this.config.ghost_wins_required}`
+                        : '';
         logTick(
-            dim(last5.join(' › ')+'  ›') + ` ${bold(cyan('['+curDigit+']'))}` +
+            dim(last5.join(' › ') + '  ›') + ` ${bold(cyan('[' + curDigit + ']'))}` +
             dim(`  ${price}  (${count}/${this.config.tick_history_size})`) +
             (stateHint ? `  ${dim(stateHint)}` : '')
         );
 
         // Pending trade gate
-        if (this.pendingTrade && !this.isTradeActive && this.botState!==STATE.STOPPED) {
-            if (curDigit===this.targetDigit) { this.pendingTrade=false; this.placeTrade(); return; }
+        if (this.pendingTrade && !this.isTradeActive && this.botState !== STATE.STOPPED) {
+            if (curDigit === this.targetDigit) { this.pendingTrade = false; this.placeTrade(); return; }
             logGhost(dim(`⏳ Waiting for digit ${bold(this.targetDigit)} — got ${curDigit}`));
             return;
         }
 
-        switch(this.botState) {
+        switch (this.botState) {
             case STATE.COLLECTING_TICKS:
                 if (count >= this.config.min_ticks_for_analysis) {
                     this.botState = STATE.ANALYZING;
@@ -1391,73 +1391,73 @@ class RomanianGhostBot {
 
     applyRegimeSignal(curDigit) {
         this.targetDigit = curDigit;
-        if (!this.regime||!this.regime.valid) { this.signalActive=false; return; }
+        if (!this.regime || !this.regime.valid) { this.signalActive = false; return; }
         this.targetRepeatRate = this.regime.rawRepeatProb[curDigit];
         this.signalActive = this.regime.signalActive;
     }
 
     refreshSignalForLockedTarget() {
-        if (this.targetDigit<0||!this.regime||!this.regime.valid) return;
+        if (this.targetDigit < 0 || !this.regime || !this.regime.valid) return;
         this.targetRepeatRate = this.regime.rawRepeatProb[this.targetDigit];
         this.signalActive = this.regime.signalActive;
     }
 
     logRegimeAnalysis(curDigit) {
-        if (!this.regime||!this.regime.valid) return;
+        if (!this.regime || !this.regime.valid) return;
         const r = this.regime;
         const thr = this.config.repeat_threshold;
 
         // Rate display
-        const rateStr = r.rawRepeatProb.map((rp,i) => {
-            if (i===curDigit) {
+        const rateStr = r.rawRepeatProb.map((rp, i) => {
+            if (i === curDigit) {
                 const ok = rp < thr;
-                return (ok?green:red)(`${i}:${rp.toFixed(0)}%`);
+                return (ok ? green : red)(`${i}:${rp.toFixed(0)}%`);
             }
             return dim(`${i}:${rp.toFixed(0)}%`);
         }).join(' ');
         logAnalysis(`Rates [raw]: [${rateStr}]  recent=${r.recentRate.toFixed(1)}%`);
 
         // HMM
-        const stateCol = r.hmmState===0?green:yellow;
-        const pnrPct = (r.posteriorNR*100).toFixed(1);
+        const stateCol = r.hmmState === 0 ? green : yellow;
+        const pnrPct = (r.posteriorNR * 100).toFixed(1);
         logHMM(
             `HMM(10×10) State: ${stateCol(bold(r.hmmStateName))} | ` +
-            `P(NR): ${r.posteriorNR>=this.config.hmm_nonrep_confidence?green(pnrPct+'%'):red(pnrPct+'%')} | ` +
-            `Persist: ${r.hmmPersistence>=this.config.min_regime_persistence?green(r.hmmPersistence+'t'):yellow(r.hmmPersistence+'t')} | ` +
-            `Stability: ${(r.hmmStability*100).toFixed(1)}% | ` +
-            `DiagEmit: NR=${(r.hmmB_diagNR*100).toFixed(1)}% REP=${(r.hmmB_diagREP*100).toFixed(1)}%`
+            `P(NR): ${r.posteriorNR >= this.config.hmm_nonrep_confidence ? green(pnrPct + '%') : red(pnrPct + '%')} | ` +
+            `Persist: ${r.hmmPersistence >= this.config.min_regime_persistence ? green(r.hmmPersistence + 't') : yellow(r.hmmPersistence + 't')} | ` +
+            `Stability: ${(r.hmmStability * 100).toFixed(1)}% | ` +
+            `DiagEmit: NR=${(r.hmmB_diagNR * 100).toFixed(1)}% REP=${(r.hmmB_diagREP * 100).toFixed(1)}%`
         );
 
         // BOCPD
         const bocpdOk = r.bocpdIsNonRep && r.bocpdPNonRep >= this.config.bocpd_nonrep_confidence;
         logBocpd(
-            `BOCPD | P(NR): ${bocpdOk?green((r.bocpdPNonRep*100).toFixed(1)+'%'):red((r.bocpdPNonRep*100).toFixed(1)+'%')} | ` +
-            `ModeRL: ${r.bocpdModeRL>=this.config.bocpd_min_run_for_signal?green(r.bocpdModeRL+'t'):yellow(r.bocpdModeRL+'t')} | ` +
+            `BOCPD | P(NR): ${bocpdOk ? green((r.bocpdPNonRep * 100).toFixed(1) + '%') : red((r.bocpdPNonRep * 100).toFixed(1) + '%')} | ` +
+            `ModeRL: ${r.bocpdModeRL >= this.config.bocpd_min_run_for_signal ? green(r.bocpdModeRL + 't') : yellow(r.bocpdModeRL + 't')} | ` +
             `ExpRL: ${r.bocpdExpRL.toFixed(1)}t | ` +
-            `θ̂: ${(r.bocpdTheta*100).toFixed(1)}% | ` +
-            `P(changepoint): ${r.bocpdPChangepoint>0.15?red((r.bocpdPChangepoint*100).toFixed(1)+'%'):green((r.bocpdPChangepoint*100).toFixed(1)+'%')}`
+            `θ̂: ${(r.bocpdTheta * 100).toFixed(1)}% | ` +
+            `P(changepoint): ${r.bocpdPChangepoint > 0.15 ? red((r.bocpdPChangepoint * 100).toFixed(1) + '%') : green((r.bocpdPChangepoint * 100).toFixed(1) + '%')}`
         );
 
         // EWMA + ACF
         logAnalysis(
-            `EWMA: ${r.ewmaValues.map((v,i)=>v<thr?green(v.toFixed(1)+'%'):red(v.toFixed(1)+'%')).join(' | ')} | ` +
-            `Trend: ${r.ewmaTrend<=this.config.ewma_trend_threshold?green(r.ewmaTrend.toFixed(2)+'%'):red(r.ewmaTrend.toFixed(2)+'%')} | ` +
-            `ACF[1]: ${r.acf[0]<this.config.acf_lag1_threshold?green(r.acf[0].toFixed(3)):red(r.acf[0].toFixed(3))}`
+            `EWMA: ${r.ewmaValues.map((v, i) => v < thr ? green(v.toFixed(1) + '%') : red(v.toFixed(1) + '%')).join(' | ')} | ` +
+            `Trend: ${r.ewmaTrend <= this.config.ewma_trend_threshold ? green(r.ewmaTrend.toFixed(2) + '%') : red(r.ewmaTrend.toFixed(2) + '%')} | ` +
+            `ACF[1]: ${r.acf[0] < this.config.acf_lag1_threshold ? green(r.acf[0].toFixed(3)) : red(r.acf[0].toFixed(3))}`
         );
 
         // CUSUM + Break
         logAnalysis(
-            `CUSUM: up=${r.cusumUpAlarm?red('ALARM '+r.cusumUp.toFixed(2)):green('ok '+r.cusumUp.toFixed(2))} ` +
-            `down=${r.cusumDownConfirm?green('confirmed '+r.cusumDown.toFixed(2)):dim('pending '+r.cusumDown.toFixed(2))} ` +
+            `CUSUM: up=${r.cusumUpAlarm ? red('ALARM ' + r.cusumUp.toFixed(2)) : green('ok ' + r.cusumUp.toFixed(2))} ` +
+            `down=${r.cusumDownConfirm ? green('confirmed ' + r.cusumDown.toFixed(2)) : dim('pending ' + r.cusumDown.toFixed(2))} ` +
             `| StructBreak: p=${r.structBreak.pBreak.toFixed(3)} ` +
-            `old=${(r.structBreak.rateOld*100).toFixed(1)}%→new=${(r.structBreak.rateNew*100).toFixed(1)}% ` +
-            `${r.structBreak.pBreak>this.config.structural_break_threshold?red('BREAK'):green('OK')}`
+            `old=${(r.structBreak.rateOld * 100).toFixed(1)}%→new=${(r.structBreak.rateNew * 100).toFixed(1)}% ` +
+            `${r.structBreak.pBreak > this.config.structural_break_threshold ? red('BREAK') : green('OK')}`
         );
 
         // Ensemble
         const cs = r.componentScores;
         logRegime(
-            `Score: ${r.safetyScore>=this.config.repeat_confidence?green(bold(r.safetyScore+'/100')):red(r.safetyScore+'/100')} | ` +
+            `Score: ${r.safetyScore >= this.config.repeat_confidence ? green(bold(r.safetyScore + '/100')) : red(r.safetyScore + '/100')} | ` +
             `BOCPD:${cs.bocpdScore.toFixed(1)} HMM:${cs.hmmScore.toFixed(1)} EWMA:${cs.ewmaScore.toFixed(1)} ` +
             `ACF:${cs.acfScore.toFixed(1)} Break:${cs.breakScore.toFixed(1)} CUSUM:${cs.cusumScore.toFixed(1)}`
         );
@@ -1469,24 +1469,24 @@ class RomanianGhostBot {
             )));
         } else {
             const reasons = [];
-            if (r.hmmState!==0)                                                  reasons.push(`HMM=${r.hmmStateName}`);
-            if (r.posteriorNR<this.config.hmm_nonrep_confidence)                 reasons.push(`P(NR)=${pnrPct}%`);
-            if (r.hmmPersistence<this.config.min_regime_persistence)             reasons.push(`persist=${r.hmmPersistence}<${this.config.min_regime_persistence}`);
-            if (!r.bocpdIsNonRep)                                                reasons.push(`BOCPD:not_NR(RL=${r.bocpdModeRL}t)`);
-            if (r.bocpdPNonRep<this.config.bocpd_nonrep_confidence)             reasons.push(`BOCPD_P(NR)=${(r.bocpdPNonRep*100).toFixed(1)}%`);
-            if (r.rawRepeatProb[curDigit]>=thr)                                  reasons.push(`raw=${r.rawRepeatProb[curDigit].toFixed(1)}%`);
-            if (this.detector.ewma.get(0)>=thr||this.detector.ewma.get(1)>=thr) reasons.push(`EWMA_high`);
-            if (r.ewmaTrend>this.config.ewma_trend_threshold)                    reasons.push(`trend+${r.ewmaTrend.toFixed(2)}`);
-            if (r.acf[0]>=this.config.acf_lag1_threshold)                        reasons.push(`ACF[1]=${r.acf[0].toFixed(3)}`);
-            if (r.cusumUpAlarm)                                                  reasons.push(`CUSUM_UP_ALARM`);
-            if (r.structBreak.pBreak>=this.config.structural_break_threshold)    reasons.push(`STRUCT_BREAK(p=${r.structBreak.pBreak.toFixed(2)})`);
-            if (r.safetyScore<this.config.repeat_confidence)                     reasons.push(`score=${r.safetyScore}<${this.config.repeat_confidence}`);
+            if (r.hmmState !== 0) reasons.push(`HMM=${r.hmmStateName}`);
+            if (r.posteriorNR < this.config.hmm_nonrep_confidence) reasons.push(`P(NR)=${pnrPct}%`);
+            if (r.hmmPersistence < this.config.min_regime_persistence) reasons.push(`persist=${r.hmmPersistence}<${this.config.min_regime_persistence}`);
+            if (!r.bocpdIsNonRep) reasons.push(`BOCPD:not_NR(RL=${r.bocpdModeRL}t)`);
+            if (r.bocpdPNonRep < this.config.bocpd_nonrep_confidence) reasons.push(`BOCPD_P(NR)=${(r.bocpdPNonRep * 100).toFixed(1)}%`);
+            if (r.rawRepeatProb[curDigit] >= thr) reasons.push(`raw=${r.rawRepeatProb[curDigit].toFixed(1)}%`);
+            if (this.detector.ewma.get(0) >= thr || this.detector.ewma.get(1) >= thr) reasons.push(`EWMA_high`);
+            if (r.ewmaTrend > this.config.ewma_trend_threshold) reasons.push(`trend+${r.ewmaTrend.toFixed(2)}`);
+            if (r.acf[0] >= this.config.acf_lag1_threshold) reasons.push(`ACF[1]=${r.acf[0].toFixed(3)}`);
+            if (r.cusumUpAlarm) reasons.push(`CUSUM_UP_ALARM`);
+            if (r.structBreak.pBreak >= this.config.structural_break_threshold) reasons.push(`STRUCT_BREAK(p=${r.structBreak.pBreak.toFixed(2)})`);
+            if (r.safetyScore < this.config.repeat_confidence) reasons.push(`score=${r.safetyScore}<${this.config.repeat_confidence}`);
             logAnalysis(red(`⛔ NO SIGNAL — digit ${curDigit}: ${reasons.join(', ')}`));
         }
     }
 
     processSignal(curDigit) {
-        if (!this.signalActive) { this.botState=STATE.ANALYZING; return; }
+        if (!this.signalActive) { this.botState = STATE.ANALYZING; return; }
         if (this.config.ghost_enabled && !this.ghostConfirmed) {
             this.botState = STATE.GHOST_TRADING;
             const r = this.regime;
@@ -1498,76 +1498,76 @@ class RomanianGhostBot {
     }
 
     runGhostCheck(curDigit) {
-        if (this.botState!==STATE.GHOST_TRADING) return;
+        if (this.botState !== STATE.GHOST_TRADING) return;
         if (!this.signalActive) {
             logGhost(dim(`⏳ Signal lost for digit ${this.targetDigit} — re-analyzing...`));
-            this.resetGhost(); this.botState=STATE.ANALYZING; return;
+            this.resetGhost(); this.botState = STATE.ANALYZING; return;
         }
         this.ghostRoundsPlayed++;
         if (this.ghostAwaitingResult) {
             this.ghostAwaitingResult = false;
-            if (curDigit!==this.targetDigit) {
+            if (curDigit !== this.targetDigit) {
                 this.ghostConsecutiveWins++;
                 logGhost(`👻 ${green(`✅ Ghost WIN ${this.ghostConsecutiveWins}/${this.config.ghost_wins_required}`)} — digit ${bold(cyan(this.targetDigit))} did NOT repeat`);
             } else {
-                const had=this.ghostConsecutiveWins; this.ghostConsecutiveWins=0;
+                const had = this.ghostConsecutiveWins; this.ghostConsecutiveWins = 0;
                 logGhost(`👻 ${red('❌ Ghost LOSS — digit REPEATED')} (had ${had} wins) — reset`);
             }
         } else {
-            if (curDigit===this.targetDigit) {
-                const wic=this.ghostConsecutiveWins+1;
-                if (wic>=this.config.ghost_wins_required) {
-                    this.ghostConsecutiveWins=wic; this.ghostConfirmed=true;
+            if (curDigit === this.targetDigit) {
+                const wic = this.ghostConsecutiveWins + 1;
+                if (wic >= this.config.ghost_wins_required) {
+                    this.ghostConsecutiveWins = wic; this.ghostConfirmed = true;
                     logGhost(green(bold(`✅ Ghost confirmed! Live trade NOW on digit ${this.targetDigit}`)));
                     this.executeTradeFlow(true);
                 } else {
-                    this.ghostAwaitingResult=true;
+                    this.ghostAwaitingResult = true;
                     logGhost(`👻 Digit ${bold(cyan(this.targetDigit))} appeared | Wins: ${this.ghostConsecutiveWins}/${this.config.ghost_wins_required} | awaiting next...`);
                 }
             } else {
                 logGhost(dim(`⏳ Digit ${curDigit} — waiting for ${bold(this.targetDigit)} (${this.ghostConsecutiveWins}/${this.config.ghost_wins_required})`));
                 this.refreshSignalForLockedTarget();
-                if (!this.signalActive) { logGhost(dim('Signal lost — returning to ANALYZING')); this.resetGhost(); this.botState=STATE.ANALYZING; return; }
+                if (!this.signalActive) { logGhost(dim('Signal lost — returning to ANALYZING')); this.resetGhost(); this.botState = STATE.ANALYZING; return; }
             }
         }
-        if (!this.ghostConfirmed && this.ghostRoundsPlayed>=this.config.ghost_max_rounds) {
-            logGhost(yellow('⚠️  Max ghost rounds. Re-analyzing...')); this.resetGhost(); this.botState=STATE.ANALYZING;
+        if (!this.ghostConfirmed && this.ghostRoundsPlayed >= this.config.ghost_max_rounds) {
+            logGhost(yellow('⚠️  Max ghost rounds. Re-analyzing...')); this.resetGhost(); this.botState = STATE.ANALYZING;
         }
     }
 
     resetGhost() {
-        this.ghostConsecutiveWins=0; this.ghostRoundsPlayed=0;
-        this.ghostConfirmed=false; this.ghostAwaitingResult=false;
-        this.targetDigit=-1; this.signalActive=false;
+        this.ghostConsecutiveWins = 0; this.ghostRoundsPlayed = 0;
+        this.ghostConfirmed = false; this.ghostAwaitingResult = false;
+        this.targetDigit = -1; this.signalActive = false;
     }
 
     executeTradeFlow(immediate) {
-        if (this.isTradeActive||this.pendingTrade||this.botState===STATE.STOPPED) return;
-        const risk=this.checkRiskLimits();
+        if (this.isTradeActive || this.pendingTrade || this.botState === STATE.STOPPED) return;
+        const risk = this.checkRiskLimits();
         if (!risk.canTrade) {
             logRisk(risk.reason);
-            if (risk.action==='STOP') { this.stop(risk.reason); return; }
-            if (risk.action==='COOLDOWN') { this.startCooldown(); return; }
+            if (risk.action === 'STOP') { this.stop(risk.reason); return; }
+            if (risk.action === 'COOLDOWN') { this.startCooldown(); return; }
             return;
         }
-        this.currentStake=this.calculateStake();
-        if (this.currentStake>this.config.max_stake) { logRisk('Stake>max'); this.stop('Stake exceeds max'); return; }
-        if (this.currentStake>this.accountBalance) { this.stop('Insufficient balance'); return; }
+        this.currentStake = this.calculateStake();
+        if (this.currentStake > this.config.max_stake) { logRisk('Stake>max'); this.stop('Stake exceeds max'); return; }
+        if (this.currentStake > this.accountBalance) { this.stop('Insufficient balance'); return; }
         if (immediate) this.placeTrade();
         // else { this.pendingTrade=true; this.botState=STATE.GHOST_TRADING; logBot(`⚡ Recovery trade queued — waiting for digit ${bold(cyan(this.targetDigit))}`); }
     }
 
     placeTrade() {
-        this.isTradeActive=true; this.botState=STATE.PLACING_TRADE;
-        const stepInfo=this.config.martingale_enabled?` | Mart:${this.martingaleStep}/${this.config.max_martingale_steps}`:'';
-        const r=this.regime;
-        const score=r&&r.valid?r.safetyScore:0;
-        const pnr=r&&r.valid?(r.posteriorNR*100).toFixed(1)+'%':'?';
-        const bocpdRL=r&&r.valid?r.bocpdModeRL:'?';
+        this.isTradeActive = true; this.botState = STATE.PLACING_TRADE;
+        const stepInfo = this.config.martingale_enabled ? ` | Mart:${this.martingaleStep}/${this.config.max_martingale_steps}` : '';
+        const r = this.regime;
+        const score = r && r.valid ? r.safetyScore : 0;
+        const pnr = r && r.valid ? (r.posteriorNR * 100).toFixed(1) + '%' : '?';
+        const bocpdRL = r && r.valid ? r.bocpdModeRL : '?';
 
         logTrade(
             `🎯 DIFFER from ${bold(cyan(this.targetDigit))} | ` +
-            `Stake: ${bold('$'+this.currentStake.toFixed(2))}${stepInfo} | ` +
+            `Stake: ${bold('$' + this.currentStake.toFixed(2))}${stepInfo} | ` +
             `Rate: ${this.targetRepeatRate.toFixed(1)}% | ` +
             `Score: ${score}/100 | P(NR): ${pnr} | BOCPD_RL: ${bocpdRL}t | ` +
             `Ghost: ${this.ghostConsecutiveWins}/${this.config.ghost_wins_required}`
@@ -1582,147 +1582,147 @@ class RomanianGhostBot {
             📈 Rate: ${this.targetRepeatRate.toFixed(1)}% | Score: ${score}/100
             🔬 P(NR): ${pnr} | BOCPD_RL: ${bocpdRL}t
             👻 Ghost: ${this.ghostConsecutiveWins}/${this.config.ghost_wins_required}
-            📊 ${this.totalTrades} trades | ${this.totalWins}W/${this.totalLosses}L | P&L: ${this.sessionProfit>=0?'+':''}$${this.sessionProfit.toFixed(2)}
+            📊 ${this.totalTrades} trades | ${this.totalWins}W/${this.totalLosses}L | P&L: ${this.sessionProfit >= 0 ? '+' : ''}$${this.sessionProfit.toFixed(2)}
         `.trim());
 
         this.send({
-            buy:1, price:this.currentStake,
-            parameters:{
-                contract_type:this.config.contract_type, symbol:this.config.symbol,
-                duration:1, duration_unit:'t', basis:'stake',
-                amount:this.currentStake, barrier:String(this.targetDigit),
-                currency:this.config.currency,
+            buy: 1, price: this.currentStake,
+            parameters: {
+                contract_type: this.config.contract_type, symbol: this.config.symbol,
+                duration: 1, duration_unit: 't', basis: 'stake',
+                amount: this.currentStake, barrier: String(this.targetDigit),
+                currency: this.config.currency,
             },
         });
-        this.botState=STATE.WAITING_RESULT;
+        this.botState = STATE.WAITING_RESULT;
     }
 
     handleBuy(msg) {
         if (!msg.buy) return;
-        this.lastContractId=msg.buy.contract_id;
-        this.lastBuyPrice=parseFloat(msg.buy.buy_price);
+        this.lastContractId = msg.buy.contract_id;
+        this.lastBuyPrice = parseFloat(msg.buy.buy_price);
         logTrade(dim(`Contract ${this.lastContractId} | Cost: $${this.lastBuyPrice.toFixed(2)} | Payout: $${parseFloat(msg.buy.payout).toFixed(2)}`));
     }
 
     handleTransaction(msg) {
-        if (!msg.transaction||msg.transaction.action!=='sell'||!this.isTradeActive) return;
-        this.botState=STATE.PROCESSING_RESULT;
-        const payout=parseFloat(msg.transaction.amount)||0;
-        const profit=payout-this.lastBuyPrice;
+        if (!msg.transaction || msg.transaction.action !== 'sell' || !this.isTradeActive) return;
+        this.botState = STATE.PROCESSING_RESULT;
+        const payout = parseFloat(msg.transaction.amount) || 0;
+        const profit = payout - this.lastBuyPrice;
         this.totalTrades++;
-        const resultDigit=this.tickHistory.length>0?this.tickHistory[this.tickHistory.length-1]:null;
+        const resultDigit = this.tickHistory.length > 0 ? this.tickHistory[this.tickHistory.length - 1] : null;
         const won = profit > 0;
-        if (won) this.processWin(profit,resultDigit);
-        else this.processLoss(this.lastBuyPrice,resultDigit);
+        if (won) this.processWin(profit, resultDigit);
+        else this.processLoss(this.lastBuyPrice, resultDigit);
         // Adaptive ensemble feedback
         this.detector.applyTradeFeedback(won, this.regime);
-        this.isTradeActive=false;
+        this.isTradeActive = false;
         this.decideNextAction();
     }
 
-    processWin(profit,resultDigit) {
-        this.totalWins++; this.sessionProfit+=profit;
-        this.currentWinStreak++; this.currentLossStreak=0;
-        if (this.currentWinStreak>this.maxWinStreak) this.maxWinStreak=this.currentWinStreak;
-        if (profit>this.largestWin) this.largestWin=profit;
+    processWin(profit, resultDigit) {
+        this.totalWins++; this.sessionProfit += profit;
+        this.currentWinStreak++; this.currentLossStreak = 0;
+        if (this.currentWinStreak > this.maxWinStreak) this.maxWinStreak = this.currentWinStreak;
+        if (profit > this.largestWin) this.largestWin = profit;
         this.detector.resetCUSUM(this.targetDigit);
-        const plStr=this.sessionProfit>=0?green(formatMoney(this.sessionProfit)):red(formatMoney(this.sessionProfit));
-        logResult(`${green('✅ WIN!')} Profit: ${green('+$'+profit.toFixed(2))} | P/L: ${plStr} | Bal: ${green('$'+this.accountBalance.toFixed(2))}`);
-        if (resultDigit!==null) logResult(dim(`  Target:${this.targetDigit} Result:${resultDigit} Ghost:${this.ghostConsecutiveWins}/${this.config.ghost_wins_required}`));
-        this.sendTelegram(`✅ <b>WIN 2!</b>\n\nTarget:${this.targetDigit} | Result:${resultDigit}\n💰 +$${profit.toFixed(2)} | P&L: ${this.sessionProfit>=0?'+':''}$${this.sessionProfit.toFixed(2)}\n📊 ${this.totalWins}W/${this.totalLosses}L\n${new Date().toLocaleString()}`);
+        const plStr = this.sessionProfit >= 0 ? green(formatMoney(this.sessionProfit)) : red(formatMoney(this.sessionProfit));
+        logResult(`${green('✅ WIN!')} Profit: ${green('+$' + profit.toFixed(2))} | P/L: ${plStr} | Bal: ${green('$' + this.accountBalance.toFixed(2))}`);
+        if (resultDigit !== null) logResult(dim(`  Target:${this.targetDigit} Result:${resultDigit} Ghost:${this.ghostConsecutiveWins}/${this.config.ghost_wins_required}`));
+        this.sendTelegram(`✅ <b>WIN 2!</b>\n\nTarget:${this.targetDigit} | Result:${resultDigit}\n💰 +$${profit.toFixed(2)} | P&L: ${this.sessionProfit >= 0 ? '+' : ''}$${this.sessionProfit.toFixed(2)}\n📊 ${this.totalWins}W/${this.totalLosses}L\n${new Date().toLocaleString()}`);
         this.resetMartingale(); this.resetGhost();
     }
 
-    processLoss(lostAmount,resultDigit) {
-        this.totalLosses++; this.sessionProfit-=lostAmount; this.totalMartingaleLoss+=lostAmount;
-        this.currentLossStreak++; this.currentWinStreak=0;
-        if (this.currentLossStreak>this.maxLossStreak) this.maxLossStreak=this.currentLossStreak;
-        if (lostAmount>this.largestLoss) this.largestLoss=lostAmount;
+    processLoss(lostAmount, resultDigit) {
+        this.totalLosses++; this.sessionProfit -= lostAmount; this.totalMartingaleLoss += lostAmount;
+        this.currentLossStreak++; this.currentWinStreak = 0;
+        if (this.currentLossStreak > this.maxLossStreak) this.maxLossStreak = this.currentLossStreak;
+        if (lostAmount > this.largestLoss) this.largestLoss = lostAmount;
         this.martingaleStep++;
-        if (this.martingaleStep>this.maxMartingaleReached) this.maxMartingaleReached=this.martingaleStep;
-        const martInfo=this.config.martingale_enabled?` | Mart:${this.martingaleStep}/${this.config.max_martingale_steps}`:'';
-        const plStr=this.sessionProfit>=0?green(formatMoney(this.sessionProfit)):red(formatMoney(this.sessionProfit));
-        logResult(`${red('❌ LOSS!')} Lost: ${red('-$'+lostAmount.toFixed(2))} | P/L: ${plStr}${martInfo}`);
-        if (resultDigit!==null) logResult(dim(`  Target:${this.targetDigit} Result:${resultDigit} ${resultDigit===this.targetDigit?red('REPEATED'):green('diff — unexpected')}`));
-        this.sendTelegram(`❌ <b>LOSS 2!</b>\n\nTarget:${this.targetDigit} | Result:${resultDigit}\n💸 -$${lostAmount.toFixed(2)} | P&L: ${this.sessionProfit>=0?'+':''}$${this.sessionProfit.toFixed(2)}\n📊 ${this.totalWins}W/${this.totalLosses}L${martInfo}\n${new Date().toLocaleString()}`);
-        this.ghostConsecutiveWins=0; this.ghostConfirmed=false; this.ghostRoundsPlayed=0; this.ghostAwaitingResult=false;
+        if (this.martingaleStep > this.maxMartingaleReached) this.maxMartingaleReached = this.martingaleStep;
+        const martInfo = this.config.martingale_enabled ? ` | Mart:${this.martingaleStep}/${this.config.max_martingale_steps}` : '';
+        const plStr = this.sessionProfit >= 0 ? green(formatMoney(this.sessionProfit)) : red(formatMoney(this.sessionProfit));
+        logResult(`${red('❌ LOSS!')} Lost: ${red('-$' + lostAmount.toFixed(2))} | P/L: ${plStr}${martInfo}`);
+        if (resultDigit !== null) logResult(dim(`  Target:${this.targetDigit} Result:${resultDigit} ${resultDigit === this.targetDigit ? red('REPEATED') : green('diff — unexpected')}`));
+        this.sendTelegram(`❌ <b>LOSS 2!</b>\n\nTarget:${this.targetDigit} | Result:${resultDigit}\n💸 -$${lostAmount.toFixed(2)} | P&L: ${this.sessionProfit >= 0 ? '+' : ''}$${this.sessionProfit.toFixed(2)}\n📊 ${this.totalWins}W/${this.totalLosses}L${martInfo}\n${new Date().toLocaleString()}`);
+        this.ghostConsecutiveWins = 0; this.ghostConfirmed = false; this.ghostRoundsPlayed = 0; this.ghostAwaitingResult = false;
     }
 
     decideNextAction() {
-        const risk=this.checkRiskLimits();
+        const risk = this.checkRiskLimits();
         if (!risk.canTrade) {
             logRisk(risk.reason);
-            if (risk.action==='STOP') { this.stop(risk.reason); return; }
-            if (risk.action==='COOLDOWN') { this.startCooldown(); return; }
+            if (risk.action === 'STOP') { this.stop(risk.reason); return; }
+            if (risk.action === 'COOLDOWN') { this.startCooldown(); return; }
         }
-        if (this.config.martingale_enabled&&this.martingaleStep>0&&this.martingaleStep<this.config.max_martingale_steps) {
+        if (this.config.martingale_enabled && this.martingaleStep > 0 && this.martingaleStep < this.config.max_martingale_steps) {
             logBot(dim(`📈 Martingale recovery step ${this.martingaleStep}/${this.config.max_martingale_steps}...`));
-            this.botState=this.config.ghost_enabled?STATE.GHOST_TRADING:STATE.ANALYZING;
+            this.botState = this.config.ghost_enabled ? STATE.GHOST_TRADING : STATE.ANALYZING;
             if (!this.config.ghost_enabled) this.executeTradeFlow(false);
             return;
         }
-        if (this.config.martingale_enabled&&this.martingaleStep>=this.config.max_martingale_steps) {
+        if (this.config.martingale_enabled && this.martingaleStep >= this.config.max_martingale_steps) {
             logRisk('🛑 Max Martingale steps reached!'); this.resetMartingale(); this.startCooldown(); return;
         }
-        this.botState=STATE.ANALYZING;
+        this.botState = STATE.ANALYZING;
     }
 
     calculateStake() {
-        if (!this.config.martingale_enabled||this.martingaleStep===0) return this.config.base_stake;
-        const raw=this.config.base_stake*Math.pow(this.config.martingale_multiplier,this.martingaleStep);
-        const calc=Math.round(raw*100)/100;
-        const final=Math.min(calc,this.config.max_stake);
+        if (!this.config.martingale_enabled || this.martingaleStep === 0) return this.config.base_stake;
+        const raw = this.config.base_stake * Math.pow(this.config.martingale_multiplier, this.martingaleStep);
+        const calc = Math.round(raw * 100) / 100;
+        const final = Math.min(calc, this.config.max_stake);
         logBot(dim(`Mart: Step ${this.martingaleStep} | $${this.config.base_stake}×${this.config.martingale_multiplier}^${this.martingaleStep}=$${calc.toFixed(2)} → $${final.toFixed(2)}`));
         return final;
     }
 
     checkRiskLimits() {
-        if (this.sessionProfit>=this.config.take_profit) {
+        if (this.sessionProfit >= this.config.take_profit) {
             this.sendTelegram(`🎉 <b>TAKE PROFIT!</b>\nP&L: $${this.sessionProfit.toFixed(2)}\n${new Date().toLocaleString()}`);
-            return {canTrade:false,reason:`🎯 Take profit! P/L:${formatMoney(this.sessionProfit)}`,action:'STOP'};
+            return { canTrade: false, reason: `🎯 Take profit! P/L:${formatMoney(this.sessionProfit)}`, action: 'STOP' };
         }
-        if (this.sessionProfit<=-this.config.stop_loss) {
+        if (this.sessionProfit <= -this.config.stop_loss) {
             this.sendTelegram(`🛑 <b>STOP LOSS!</b>\nP&L: $${this.sessionProfit.toFixed(2)}\n${new Date().toLocaleString()}`);
-            return {canTrade:false,reason:`🛑 Stop loss! P/L:${formatMoney(this.sessionProfit)}`,action:'STOP'};
+            return { canTrade: false, reason: `🛑 Stop loss! P/L:${formatMoney(this.sessionProfit)}`, action: 'STOP' };
         }
-        const ns=(!this.config.martingale_enabled||this.martingaleStep===0)?this.config.base_stake:Math.min(Math.round(this.config.base_stake*Math.pow(this.config.martingale_multiplier,this.martingaleStep)*100)/100,this.config.max_stake);
-        if (ns>this.accountBalance) return {canTrade:false,reason:'Next stake>balance',action:'STOP'};
-        if (ns>this.config.max_stake) return {canTrade:false,reason:'Next stake>max',action:'STOP'};
-        if (this.config.martingale_enabled&&this.martingaleStep>=this.config.max_martingale_steps)
-            return {canTrade:false,reason:'Max Martingale steps reached.',action:'COOLDOWN'};
-        return {canTrade:true};
+        const ns = (!this.config.martingale_enabled || this.martingaleStep === 0) ? this.config.base_stake : Math.min(Math.round(this.config.base_stake * Math.pow(this.config.martingale_multiplier, this.martingaleStep) * 100) / 100, this.config.max_stake);
+        if (ns > this.accountBalance) return { canTrade: false, reason: 'Next stake>balance', action: 'STOP' };
+        if (ns > this.config.max_stake) return { canTrade: false, reason: 'Next stake>max', action: 'STOP' };
+        if (this.config.martingale_enabled && this.martingaleStep >= this.config.max_martingale_steps)
+            return { canTrade: false, reason: 'Max Martingale steps reached.', action: 'COOLDOWN' };
+        return { canTrade: true };
     }
 
-    resetMartingale() { this.martingaleStep=0; this.totalMartingaleLoss=0; this.currentStake=this.config.base_stake; }
+    resetMartingale() { this.martingaleStep = 0; this.totalMartingaleLoss = 0; this.currentStake = this.config.base_stake; }
 
     startCooldown() {
-        this.botState=STATE.COOLDOWN; this.resetMartingale(); this.resetGhost();
-        logBot(`⏸️  Cooldown ${this.config.cooldown_after_max_loss/1000}s...`);
-        this.cooldownTimer=setTimeout(()=>{
-            if (this.botState===STATE.COOLDOWN) { logBot(green('▶️  Cooldown ended. Resuming...')); this.botState=STATE.ANALYZING; }
+        this.botState = STATE.COOLDOWN; this.resetMartingale(); this.resetGhost();
+        logBot(`⏸️  Cooldown ${this.config.cooldown_after_max_loss / 1000}s...`);
+        this.cooldownTimer = setTimeout(() => {
+            if (this.botState === STATE.COOLDOWN) { logBot(green('▶️  Cooldown ended. Resuming...')); this.botState = STATE.ANALYZING; }
         }, this.config.cooldown_after_max_loss);
     }
 
-    stop(reason='User stopped') {
-        this.botState=STATE.STOPPED;
+    stop(reason = 'User stopped') {
+        this.botState = STATE.STOPPED;
         logBot(`🛑 ${bold('Stopping.')} Reason: ${reason}`);
-        if (this.cooldownTimer) { clearTimeout(this.cooldownTimer); this.cooldownTimer=null; }
-        if (this.pingInterval) { clearInterval(this.pingInterval); this.pingInterval=null; }
-        this.pendingTrade=false;
-        if (this.ws&&this.ws.readyState===WebSocket.OPEN) {
-            try { this.ws.send(JSON.stringify({forget_all:'ticks'})); this.ws.send(JSON.stringify({forget_all:'balance'})); this.ws.send(JSON.stringify({forget_all:'transaction'})); } catch(_) {}
-            setTimeout(()=>{try{this.ws.close();}catch(_){}},500);
+        if (this.cooldownTimer) { clearTimeout(this.cooldownTimer); this.cooldownTimer = null; }
+        if (this.pingInterval) { clearInterval(this.pingInterval); this.pingInterval = null; }
+        this.pendingTrade = false;
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            try { this.ws.send(JSON.stringify({ forget_all: 'ticks' })); this.ws.send(JSON.stringify({ forget_all: 'balance' })); this.ws.send(JSON.stringify({ forget_all: 'transaction' })); } catch (_) { }
+            setTimeout(() => { try { this.ws.close(); } catch (_) { } }, 500);
         }
         this.sendTelegram(`🛑 <b>STOPPED</b>\nReason: ${reason}\nP&L: $${this.sessionProfit.toFixed(2)}`);
         this.printFinalStats();
-        setTimeout(()=>process.exit(0),1200);
+        setTimeout(() => process.exit(0), 1200);
     }
 
     printFinalStats() {
-        const dur=Date.now()-this.sessionStartTime;
-        const wr=this.totalTrades>0?((this.totalWins/this.totalTrades)*100).toFixed(1):'0.0';
-        const avg=this.totalTrades>0?this.sessionProfit/this.totalTrades:0;
-        const plC=this.sessionProfit>=0?green:red;
+        const dur = Date.now() - this.sessionStartTime;
+        const wr = this.totalTrades > 0 ? ((this.totalWins / this.totalTrades) * 100).toFixed(1) : '0.0';
+        const avg = this.totalTrades > 0 ? this.sessionProfit / this.totalTrades : 0;
+        const plC = this.sessionProfit >= 0 ? green : red;
         console.log('');
         logStats(bold(cyan('═══════════════════════════════════════════════')));
         logStats(bold(cyan('              SESSION SUMMARY                  ')));
@@ -1732,13 +1732,13 @@ class RomanianGhostBot {
         logStats(`  Total Trades     : ${bold(this.totalTrades)}`);
         logStats(`  Wins             : ${green(this.totalWins)}`);
         logStats(`  Losses           : ${red(this.totalLosses)}`);
-        logStats(`  Win Rate         : ${bold(wr+'%')}`);
+        logStats(`  Win Rate         : ${bold(wr + '%')}`);
         logStats(`  Session P/L      : ${plC(bold(formatMoney(this.sessionProfit)))}`);
         logStats(`  Starting Balance : $${this.startingBalance.toFixed(2)}`);
         logStats(`  Final Balance    : $${this.accountBalance.toFixed(2)}`);
         logStats(`  Avg P/L/Trade    : ${formatMoney(avg)}`);
-        logStats(`  Largest Win      : ${green('+$'+this.largestWin.toFixed(2))}`);
-        logStats(`  Largest Loss     : ${red('-$'+this.largestLoss.toFixed(2))}`);
+        logStats(`  Largest Win      : ${green('+$' + this.largestWin.toFixed(2))}`);
+        logStats(`  Largest Loss     : ${red('-$' + this.largestLoss.toFixed(2))}`);
         logStats(`  Max Win Streak   : ${green(this.maxWinStreak)}`);
         logStats(`  Max Loss Streak  : ${red(this.maxLossStreak)}`);
         logStats(`  Max Martingale   : Step ${this.maxMartingaleReached}`);
@@ -1751,9 +1751,9 @@ class RomanianGhostBot {
 (function main() {
     const config = parseArgs();
     const bot = new RomanianGhostBot(config);
-    process.on('SIGINT',  ()=>{ console.log(''); bot.stop('SIGINT'); });
-    process.on('SIGTERM', ()=>bot.stop('SIGTERM'));
-    process.on('uncaughtException', e=>{ logError(`Uncaught: ${e.message}`); if(e.stack)logError(e.stack); bot.stop('Uncaught exception'); });
-    process.on('unhandledRejection', r=>logError(`Rejection: ${r}`));
+    process.on('SIGINT', () => { console.log(''); bot.stop('SIGINT'); });
+    process.on('SIGTERM', () => bot.stop('SIGTERM'));
+    process.on('uncaughtException', e => { logError(`Uncaught: ${e.message}`); if (e.stack) logError(e.stack); bot.stop('Uncaught exception'); });
+    process.on('unhandledRejection', r => logError(`Rejection: ${r}`));
     bot.start();
 })();
