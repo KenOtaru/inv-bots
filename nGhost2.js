@@ -99,6 +99,9 @@ class StatePersistence {
                     maxMartingaleReached: bot.maxMartingaleReached,
                     largestWin: bot.largestWin,
                     largestLoss: bot.largestLoss,
+                    x2Losses: bot.x2Losses,
+                    x3Losses: bot.x3Losses,
+                    x4Losses: bot.x4Losses,
                     targetDigit: bot.targetDigit,
                     ghostConsecutiveWins: bot.ghostConsecutiveWins,
                     ghostRoundsPlayed: bot.ghostRoundsPlayed,
@@ -1260,6 +1263,9 @@ class RomanianGhostBot {
         this.maxMartingaleReached = 0;
         this.largestWin = 0;
         this.largestLoss = 0;
+        this.x2Losses = 0;
+        this.x3Losses = 0;
+        this.x4Losses = 0;
 
         // Hourly stats tracking
         this.hourlyStats = {
@@ -1267,6 +1273,9 @@ class RomanianGhostBot {
             wins: 0,
             losses: 0,
             pnl: 0,
+            x2Losses: 0,
+            x3Losses: 0,
+            x4Losses: 0,
             lastHour: new Date().getHours()
         };
 
@@ -1304,6 +1313,9 @@ class RomanianGhostBot {
             this.maxMartingaleReached = trading.maxMartingaleReached;
             this.largestWin = trading.largestWin;
             this.largestLoss = trading.largestLoss;
+            this.x2Losses = trading.x2Losses || 0;
+            this.x3Losses = trading.x3Losses || 0;
+            this.x4Losses = trading.x4Losses || 0;
             this.targetDigit = trading.targetDigit;
             this.ghostConsecutiveWins = trading.ghostConsecutiveWins;
             this.ghostRoundsPlayed = trading.ghostRoundsPlayed;
@@ -1363,6 +1375,7 @@ class RomanianGhostBot {
 📈 <b>Session Totals</b>
 ├ Total Trades: ${this.totalTrades}
 ├ Total W/L: ${this.totalWins}/${this.totalLosses}
+├ x2-x4 Losses: ${this.x2Losses}/${this.x3Losses}/${this.x4Losses}
 ├ Session P&L: ${(this.sessionProfit >= 0 ? '+' : '')}${formatMoney(this.sessionProfit)}
 ├ Current Balance: $${this.accountBalance.toFixed(2)}
 ├ Max Win Streak: ${this.maxWinStreak}
@@ -1385,6 +1398,9 @@ class RomanianGhostBot {
             wins: 0,
             losses: 0,
             pnl: 0,
+            x2Losses: 0,
+            x3Losses: 0,
+            x4Losses: 0,
             lastHour: new Date().getHours()
         };
     }
@@ -1932,7 +1948,7 @@ class RomanianGhostBot {
             🔢 Last10: ${this.tickHistory.slice(-10).join(',')}
             💰 +$${profit.toFixed(2)}
             📊 P&L: ${this.sessionProfit >= 0 ? '+' : ''}$${this.sessionProfit.toFixed(2)}
-            📊 ${this.totalTrades} trades | ${this.totalWins}W/${this.totalLosses}L
+            📊 ${this.totalTrades} trades | ${this.totalWins}W/${this.totalLosses}L | x2-x4: ${this.x2Losses}/${this.x3Losses}/${this.x4Losses}
             
             `.trim());
         this.resetMartingale(); this.resetGhost();
@@ -1951,6 +1967,20 @@ class RomanianGhostBot {
         this.hourlyStats.losses++;
         this.hourlyStats.pnl -= lostAmount;
         
+        // Count consecutive losses
+        if (this.currentLossStreak === 2) {
+            this.x2Losses++;
+            this.hourlyStats.x2Losses++;
+        }
+        if (this.currentLossStreak === 3) {
+            this.x3Losses++;
+            this.hourlyStats.x3Losses++;
+        }
+        if (this.currentLossStreak === 4) {
+            this.x4Losses++;
+            this.hourlyStats.x4Losses++;
+        }
+        
         const martInfo = this.config.martingale_enabled ? ` | Mart:${this.martingaleStep}/${this.config.max_martingale_steps}` : '';
         const plStr = this.sessionProfit >= 0 ? green(formatMoney(this.sessionProfit)) : red(formatMoney(this.sessionProfit));
         logResult(`${red('❌ LOSS!')} Lost: ${red('-$' + lostAmount.toFixed(2))} | P/L: ${plStr}${martInfo}`);
@@ -1961,7 +1991,7 @@ class RomanianGhostBot {
             🔢 Last10: ${this.tickHistory.slice(-10).join(',')}
             💸 -$${lostAmount.toFixed(2)}
             📊 P&L: ${this.sessionProfit >= 0 ? '+' : ''}$${this.sessionProfit.toFixed(2)}
-            📊 ${this.totalTrades} trades | ${this.totalWins}W/${this.totalLosses}L
+            📊 ${this.totalTrades} trades | ${this.totalWins}W/${this.totalLosses}L | x2-x4: ${this.x2Losses}/${this.x3Losses}/${this.x4Losses}${martInfo}
             `.trim());
         this.ghostConsecutiveWins = 0; this.ghostConfirmed = false; this.ghostRoundsPlayed = 0; this.ghostAwaitingResult = false;
     }
