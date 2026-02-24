@@ -187,9 +187,9 @@ function parseArgs() {
         min_ticks_for_hmm: 50,         // Minimum ticks before HMM is reliable
 
         // Regime detection thresholds
-        repeat_threshold: 10,           //7 Raw per-digit repeat % gate
-        repeat_confidence: 80,        //90 Bayesian P(repeat | observations) required
-        hmm_nonrep_confidence: 0.83,   //0.93 Bayesian P(NON-REP) required
+        repeat_threshold: 9,           //7 Raw per-digit repeat % gate
+        repeat_confidence: 90,        //90 Bayesian P(repeat | observations) required
+        hmm_nonrep_confidence: 0.93,   //0.93 Bayesian P(NON-REP) required
         min_regime_persistence: 8,     // Ticks current regime must have lasted
         cusum_threshold: 4.5,          // CUSUM alarm threshold (regime shift detector)
         cusum_slack: 0.005,            // CUSUM slack (sensitivity tuning)
