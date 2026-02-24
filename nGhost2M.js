@@ -1,7 +1,7 @@
 // ============================================================================
 // ROMANIAN GHOST BLACK FIBONACCI 9.2 ULTIMATE — NOVEMBER 2025
-// All mathematical flaws fixed + 7 new enhancements
-// Expected: 97.8% win rate, 25-35 trades/day, +12,000% monthly
+// INTEGRATED WITH ADVANCED REGIME DETECTION v3.0
+// BOCPD + Binary HMM + EWMA Stack + ACF + Structural Break + CUSUM Ensemble
 // ============================================================================
 
 const WebSocket = require('ws');
@@ -9,151 +9,211 @@ const TelegramBot = require('node-telegram-bot-api');
 const fs = require('fs');
 const path = require('path');
 
-
 const TOKEN = "0P94g4WdSrSrzir";
 const TELEGRAM_TOKEN = "8288121368:AAHYRb0Stk5dWUWN1iTYbdO3fyIEwIuZQR8";
 const CHAT_ID = "752497117";
 
-const STATE_FILE = path.join(__dirname, 'ghost92-00012-state.json');
+const STATE_FILE = path.join(__dirname, 'nGhost2M-state.json');
 
 // ══════════════════════════════════════════════════════════════════════════════
 //  UTILITY FUNCTIONS
 // ══════════════════════════════════════════════════════════════════════════════
-function clamp(v, lo, hi) {
-    return Math.max(lo, Math.min(hi, v));
-}
-
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 function logSumExp(arr) {
     const m = Math.max(...arr);
     if (!isFinite(m)) return -Infinity;
     return m + Math.log(arr.reduce((s, x) => s + Math.exp(x - m), 0));
 }
+function formatMoney(v) { return `${v >= 0 ? '+' : ''}$${v.toFixed(2)}`; }
 
-function formatMoney(v) {
-    return `${v >= 0 ? '+' : ''}$${v.toFixed(2)}`;
-}
-
-// ── Logger helpers ─────────────────────────────────────────────────────────
+// Logger helpers
 function getTimestamp() {
     const n = new Date();
-    return [
-        String(n.getHours()).padStart(2, '0'),
-        String(n.getMinutes()).padStart(2, '0'),
-        String(n.getSeconds()).padStart(2, '0'),
-    ].join(':');
+    return [String(n.getHours()).padStart(2, '0'), String(n.getMinutes()).padStart(2, '0'), String(n.getSeconds()).padStart(2, '0')].join(':');
 }
-
-const logHMM = (msg) => {
-    const ts = `[${getTimestamp()}]`;
-    console.log(`${ts} [HMM] ${msg}`);
-};
-
-const logBot = (msg) => {
-    const ts = `[${getTimestamp()}]`;
-    console.log(`${ts} [BOT] ${msg}`);
-};
-
-const logAnalysis = (msg) => {
-    const ts = `[${getTimestamp()}]`;
-    console.log(`${ts} [ANALYSIS] ${msg}`);
-};
+const logHMM = (msg) => console.log(`[${getTimestamp()}] [HMM] ${msg}`);
+const logBot = (msg) => console.log(`[${getTimestamp()}] [BOT] ${msg}`);
+const logAnalysis = (msg) => console.log(`[${getTimestamp()}] [ANALYSIS] ${msg}`);
+const logBocpd = (msg) => console.log(`[${getTimestamp()}] [BOCPD] ${msg}`);
+const logStatus = (msg) => console.log(`[${getTimestamp()}] [STATUS] ${msg}`);
 
 // ══════════════════════════════════════════════════════════════════════════════
-//  HMM REGIME DETECTOR — one instance per asset
-//  2-State HMM: State 0 = NON-REP, State 1 = REP
+//  COMPONENT 1: BOCPD (Bayesian Online Changepoint Detection)
 // ══════════════════════════════════════════════════════════════════════════════
-class HMMRegimeDetector {
-    constructor(cfg) {
-        this.cfg = cfg;
-        // Initial HMM parameters (learned via Baum-Welch)
-        this.pi = [0.6, 0.4];
-        this.A = [[0.90, 0.10], [0.25, 0.75]];
-        this.B = [[0.92, 0.08], [0.40, 0.60]]; // [state][obs]: obs=1 means repeat
-        this.hmmFitted = false;
-        this.cusumValue = new Array(10).fill(0); // per-digit CUSUM
+class BOCPD {
+    constructor(config) {
+        this.hazard = config.bocpd_hazard;
+        this.alpha0 = config.bocpd_prior_alpha;
+        this.beta0 = config.bocpd_prior_beta;
+        this.threshold = config.bocpd_nonrep_confidence;
+        this.minRun = config.bocpd_min_run_for_signal;
+
+        this.logR = [0];
+        this.alphas = [this.alpha0];
+        this.betas = [this.beta0];
+        this.t = 0;
+        this.pNonRep = 0.5;
+        this.expectedRunLength = 0;
     }
 
-    // ── Baum-Welch EM parameter estimation ────────────────────────────────────
-    baumWelch(obs, maxIter = 20, tol = 1e-5) {
-        const T = obs.length;
-        if (T < 10) return false;
-        const N = 2;
-        let pi = [...this.pi];
-        let A = this.A.map(r => [...r]);
-        let B = this.B.map(r => [...r]);
-        let prevLogL = -Infinity;
+    update(obs) {
+        const ones = obs ? 1 : 0;
+        const zeros = 1 - ones;
+        const T = this.logR.length;
+
+        const newAlphas = [];
+        const newBetas = [];
+        const newLogR = new Array(T + 1).fill(-Infinity);
+
+        for (let r = 0; r < T; r++) {
+            const a = this.alphas[r] + ones;
+            const b = this.betas[r] + zeros;
+            const betaBinom = this.betaLogPMF(ones, a, b);
+            newAlphas.push(a);
+            newBetas.push(b);
+            newLogR[r + 1] = this.logR[r] + (Math.log(1 - this.hazard) + betaBinom);
+        }
+
+        const a = this.alpha0 + ones;
+        const b = this.beta0 + zeros;
+        const betaBinom = this.betaLogPMF(ones, a, b);
+        newLogR[0] = Math.log(this.hazard) + betaBinom;
+        newAlphas.unshift(a);
+        newBetas.unshift(b);
+
+        const logRmax = Math.max(...newLogR.slice(0, -1));
+        if (logRmax > -20) {
+            const mask = newLogR.map((lr, i) => i === 0 || lr > logRmax - 40);
+            this.logR = newLogR.filter((_, i) => mask[i]);
+            this.alphas = newAlphas.filter((_, i) => mask[i]);
+            this.betas = newBetas.filter((_, i) => mask[i]);
+        } else {
+            this.logR = newLogR;
+            this.alphas = newAlphas;
+            this.betas = newBetas;
+        }
+
+        const logRden = logSumExp(this.logR);
+        this.logR = this.logR.map(lr => Math.exp(lr - logRden));
+
+        this.pNonRep = 1 - this.logR[0];
+        this.expectedRunLength = this.logR.reduce((s, p, i) => s + i * p, 0);
+        const mode = this.logR.indexOf(Math.max(...this.logR));
+        this.modeRL = mode;
+        this.thetaEstimate = (this.alpha0 + ones) / (this.alpha0 + this.beta0 + 1);
+        this.pChangepoint = this.logR[0];
+        this.t++;
+
+        return { pNonRep: this.pNonRep, expectedRL: this.expectedRunLength, modeRL: mode, thetaEstimate: this.thetaEstimate, pChangepoint: this.pChangepoint };
+    }
+
+    betaLogPMF(k, a, b) {
+        return Math.log(k === 1 ? a : b) - Math.log(a + b);
+    }
+
+    isNonRepRegime() {
+        return this.pNonRep >= this.threshold && this.expectedRunLength >= this.minRun;
+    }
+
+    reset() {
+        this.logR = [0];
+        this.alphas = [this.alpha0];
+        this.betas = [this.beta0];
+        this.t = 0;
+        this.pNonRep = 0.5;
+        this.expectedRunLength = 0;
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  COMPONENT 2: BINARY HMM
+// ══════════════════════════════════════════════════════════════════════════════
+class BinaryHMM {
+    constructor(config) {
+        this.cfg = config;
+        this.MIN_DISCRIM = config.hmm_min_discrimination || 0.10;
+        this.pi = [0.65, 0.35];
+        this.A = [[0.93, 0.07], [0.22, 0.78]];
+        this.B = [[0.91, 0.09], [0.55, 0.45]];
+        this.logAlpha = [Math.log(0.65), Math.log(0.35)];
+        this.fitted = false;
+        this.lastFitDiscrim = 0;
+    }
+
+    buildObs(digitSeq) {
+        const obs = new Array(digitSeq.length - 1);
+        for (let t = 1; t < digitSeq.length; t++) obs[t - 1] = digitSeq[t] === digitSeq[t - 1] ? 1 : 0;
+        return obs;
+    }
+
+    baumWelch(obs, maxIter = 30, tol = 1e-6) {
+        const T = obs.length, N = 2, O = 2;
+        if (T < 30) return { accepted: false, reason: 'too few obs' };
+
+        let pi = [...this.pi], A = this.A.map(r => [...r]), B = this.B.map(r => [...r]), prevLogL = -Infinity;
 
         for (let iter = 0; iter < maxIter; iter++) {
-            // Forward pass (log-space)
             const logAlpha = Array.from({ length: T }, () => new Array(N).fill(-Infinity));
-            for (let s = 0; s < N; s++)
-                logAlpha[0][s] = Math.log(pi[s] + 1e-300) + Math.log(B[s][obs[0]] + 1e-300);
-            for (let t = 1; t < T; t++)
+            for (let s = 0; s < N; s++) logAlpha[0][s] = Math.log(pi[s] + 1e-300) + Math.log(B[s][obs[0]] + 1e-300);
+            for (let t = 1; t < T; t++) {
                 for (let s = 0; s < N; s++) {
-                    const inc = A.map((row, p) => logAlpha[t - 1][p] + Math.log(row[s] + 1e-300));
+                    const inc = [0, 1].map(p => logAlpha[t - 1][p] + Math.log(A[p][s] + 1e-300));
                     logAlpha[t][s] = logSumExp(inc) + Math.log(B[s][obs[t]] + 1e-300);
                 }
+            }
             const logL = logSumExp(logAlpha[T - 1]);
 
-            // Backward pass (log-space)
             const logBeta = Array.from({ length: T }, () => new Array(N).fill(-Infinity));
             for (let s = 0; s < N; s++) logBeta[T - 1][s] = 0;
-            for (let t = T - 2; t >= 0; t--)
+            for (let t = T - 2; t >= 0; t--) {
                 for (let s = 0; s < N; s++) {
-                    const vals = A[s].map((a, nx) =>
-                        Math.log(a + 1e-300) + Math.log(B[nx][obs[t + 1]] + 1e-300) + logBeta[t + 1][nx]
-                    );
+                    const vals = [0, 1].map(nx => Math.log(A[s][nx] + 1e-300) + Math.log(B[nx][obs[t + 1]] + 1e-300) + logBeta[t + 1][nx]);
                     logBeta[t][s] = logSumExp(vals);
                 }
+            }
 
-            // Gamma (state occupancy)
             const logGamma = Array.from({ length: T }, () => new Array(N).fill(-Infinity));
             for (let t = 0; t < T; t++) {
-                const den = logSumExp(logAlpha[t].map((la, s) => la + logBeta[t][s]));
-                for (let s = 0; s < N; s++) logGamma[t][s] = logAlpha[t][s] + logBeta[t][s] - den;
+                const d = logSumExp([0, 1].map(s => logAlpha[t][s] + logBeta[t][s]));
+                for (let s = 0; s < N; s++) logGamma[t][s] = logAlpha[t][s] + logBeta[t][s] - d;
             }
 
-            // Xi (transition occupancy)
-            const logXi = Array.from({ length: T - 1 }, () =>
-                Array.from({ length: N }, () => new Array(N).fill(-Infinity))
-            );
+            const logXi = Array.from({ length: T - 1 }, () => Array.from({ length: N }, () => new Array(N).fill(-Infinity)));
             for (let t = 0; t < T - 1; t++) {
-                const den = logSumExp(logAlpha[t].map((la, s) => la + logBeta[t][s]));
-                for (let s = 0; s < N; s++)
-                    for (let nx = 0; nx < N; nx++)
-                        logXi[t][s][nx] = logAlpha[t][s] + Math.log(A[s][nx] + 1e-300) +
-                            Math.log(B[nx][obs[t + 1]] + 1e-300) + logBeta[t + 1][nx] - den;
+                const d = logSumExp([0, 1].map(s => logAlpha[t][s] + logBeta[t][s]));
+                for (let s = 0; s < N; s++) for (let nx = 0; nx < N; nx++) {
+                    logXi[t][s][nx] = logAlpha[t][s] + Math.log(A[s][nx] + 1e-300) + Math.log(B[nx][obs[t + 1]] + 1e-300) + logBeta[t + 1][nx] - d;
+                }
             }
 
-            // M-step: re-estimate pi, A, B
             for (let s = 0; s < N; s++) pi[s] = Math.exp(logGamma[0][s]);
             const piSum = pi.reduce((a, b) => a + b, 0);
             pi = pi.map(v => v / piSum);
 
             for (let s = 0; s < N; s++) {
-                const den = logSumExp(logGamma.slice(0, T - 1).map(g => g[s]));
+                const denom = logSumExp(logGamma.slice(0, T - 1).map(g => g[s]));
                 for (let nx = 0; nx < N; nx++) {
-                    const num = logSumExp(logXi.map(xi => xi[s][nx]));
-                    A[s][nx] = Math.exp(num - den);
+                    const numer = logSumExp(logXi.map(xi => xi[s][nx]));
+                    A[s][nx] = Math.exp(numer - denom);
                 }
                 const rs = A[s].reduce((a, b) => a + b, 0);
                 A[s] = A[s].map(v => v / rs);
             }
+
             for (let s = 0; s < N; s++) {
-                const den = logSumExp(logGamma.map(g => g[s]));
-                for (let o = 0; o < 2; o++) {
-                    const num = logSumExp(logGamma.filter((_, t) => obs[t] === o).map(g => g[s]));
-                    B[s][o] = Math.exp(num - den);
+                const denom = logSumExp(logGamma.map(g => g[s]));
+                for (let o = 0; o < O; o++) {
+                    const relevant = logGamma.filter((_, t) => obs[t] === o).map(g => g[s]);
+                    B[s][o] = relevant.length > 0 ? Math.exp(logSumExp(relevant) - denom) : 1e-10;
                 }
-                const bs = B[s].reduce((a, b) => a + b, 0);
-                B[s] = B[s].map(v => v / bs);
+                const bsum = B[s].reduce((a, b) => a + b, 0);
+                B[s] = B[s].map(v => v / bsum);
             }
 
             if (Math.abs(logL - prevLogL) < tol) break;
             prevLogL = logL;
         }
 
-        // Ensure State 0 = NON-REP (lower repeat emission)
         if (B[0][1] > B[1][1]) {
             [pi[0], pi[1]] = [pi[1], pi[0]];
             [A[0], A[1]] = [A[1], A[0]];
@@ -162,200 +222,409 @@ class HMMRegimeDetector {
             [B[0], B[1]] = [B[1], B[0]];
         }
 
+        const discrimination = B[1][1] - B[0][1];
+        if (discrimination < this.MIN_DISCRIM) return { accepted: false, discrimination, repeatNR: B[0][1], repeatREP: B[1][1], reason: `discrimination ${(discrimination * 100).toFixed(1)}% < ${(this.MIN_DISCRIM * 100).toFixed(0)}%` };
+
         this.pi = pi; this.A = A; this.B = B;
-        this.hmmFitted = true;
-        return true;
+        this.fitted = true;
+        this.lastFitDiscrim = discrimination;
+        return { accepted: true, discrimination, repeatNR: B[0][1], repeatREP: B[1][1] };
     }
 
-    // ── Viterbi decoding ───────────────────────────────────────────────────────
     viterbi(obs) {
         const T = obs.length, N = 2;
         if (T === 0) return null;
         const logDelta = Array.from({ length: T }, () => new Array(N).fill(-Infinity));
         const psi = Array.from({ length: T }, () => new Array(N).fill(0));
-        for (let s = 0; s < N; s++)
-            logDelta[0][s] = Math.log(this.pi[s] + 1e-300) + Math.log(this.B[s][obs[0]] + 1e-300);
-        for (let t = 1; t < T; t++)
+        for (let s = 0; s < N; s++) logDelta[0][s] = Math.log(this.pi[s] + 1e-300) + Math.log(this.B[s][obs[0]] + 1e-300);
+        for (let t = 1; t < T; t++) {
             for (let s = 0; s < N; s++) {
-                let best = -Infinity, bestP = 0;
+                let best = -Infinity, bp = 0;
                 for (let p = 0; p < N; p++) {
                     const v = logDelta[t - 1][p] + Math.log(this.A[p][s] + 1e-300);
-                    if (v > best) { best = v; bestP = p; }
+                    if (v > best) { best = v; bp = p; }
                 }
                 logDelta[t][s] = best + Math.log(this.B[s][obs[t]] + 1e-300);
-                psi[t][s] = bestP;
+                psi[t][s] = bp;
             }
-        const stateSeq = new Array(T);
-        stateSeq[T - 1] = logDelta[T - 1][0] >= logDelta[T - 1][1] ? 0 : 1;
-        for (let t = T - 2; t >= 0; t--) stateSeq[t] = psi[t + 1][stateSeq[t + 1]];
-        const curState = stateSeq[T - 1];
+        }
+        const seq = new Array(T);
+        seq[T - 1] = logDelta[T - 1][0] >= logDelta[T - 1][1] ? 0 : 1;
+        for (let t = T - 2; t >= 0; t--) seq[t] = psi[t + 1][seq[t + 1]];
+        const cur = seq[T - 1];
         let persistence = 1;
-        for (let t = T - 2; t >= 0; t--) { if (stateSeq[t] === curState) persistence++; else break; }
+        for (let t = T - 2; t >= 0; t--) { if (seq[t] === cur) persistence++; else break; }
         let transitions = 0;
-        for (let t = 1; t < T; t++) if (stateSeq[t] !== stateSeq[t - 1]) transitions++;
-        return { stateSeq, currentState: curState, persistence, transitions };
+        for (let t = 1; t < T; t++) if (seq[t] !== seq[t - 1]) transitions++;
+        return { stateSeq: seq, currentState: cur, persistence, transitions };
     }
 
-    // ── CUSUM change-point detector ────────────────────────────────────────────
-    updateCUSUM(digit, obs_t) {
-        const llr = Math.log(this.B[1][obs_t] + 1e-300) - Math.log(this.B[0][obs_t] + 1e-300);
-        this.cusumValue[digit] = Math.max(0, this.cusumValue[digit] + llr - this.cfg.cusum_slack);
-        return this.cusumValue[digit] > this.cfg.cusum_threshold;
+    updateForward(obs_t) {
+        const N = 2;
+        const newLogA = new Array(N);
+        for (let s = 0; s < N; s++) {
+            const inc = this.logAlpha.map((la, p) => la + Math.log(this.A[p][s] + 1e-300));
+            newLogA[s] = logSumExp(inc) + Math.log(this.B[s][obs_t] + 1e-300);
+        }
+        const d = logSumExp(newLogA);
+        this.logAlpha = newLogA;
+        return [Math.exp(newLogA[0] - d), Math.exp(newLogA[1] - d)];
     }
-    resetCUSUM(digit) { this.cusumValue[digit] = 0; }
-    getCUSUMValue(digit) { return this.cusumValue[digit]; }
 
-    // ── Per-digit stats (raw prob + EWMA) ─────────────────────────────────────
-    computePerDigitStats(window) {
-        const len = window.length;
-        const ALPHA = 0.15;
+    repeatEmission(state) { return this.B[state][1]; }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  COMPONENT 3: MULTI-SCALE EWMA STACK
+// ══════════════════════════════════════════════════════════════════════════════
+class EWMAStack {
+    constructor() {
+        this.lambdas = [0.40, 0.18, 0.07, 0.025];
+        this.names = ['ultra-short(~4t)', 'short(~15t)', 'medium(~40t)', 'long(~100t)'];
+        this.values = [null, null, null, null];
+        this.n = 0;
+    }
+
+    update(repeatObs) {
+        const v = repeatObs * 100;
+        this.n++;
+        for (let i = 0; i < 4; i++) {
+            if (this.values[i] === null) this.values[i] = v;
+            else this.values[i] = this.lambdas[i] * v + (1 - this.lambdas[i]) * this.values[i];
+        }
+    }
+
+    get(idx) { return this.values[idx] ?? 50; }
+    trend() { return this.get(1) - this.get(3); }
+    allBelowThreshold(threshold) { return this.values.every(v => v === null || v < threshold); }
+    summary() { return this.names.map((n, i) => `${n}=${this.get(i).toFixed(1)}%`).join(' | '); }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  COMPONENT 4: LAG AUTOCORRELATION
+// ══════════════════════════════════════════════════════════════════════════════
+function computeACF(seq, maxLag = 5) {
+    const n = seq.length;
+    if (n < maxLag + 2) return new Array(maxLag).fill(0);
+    const mean = seq.reduce((s, v) => s + v, 0) / n;
+    const variance = seq.reduce((s, v) => s + (v - mean) ** 2, 0) / n;
+    if (variance < 1e-10) return new Array(maxLag).fill(0);
+    const acf = [];
+    for (let lag = 1; lag <= maxLag; lag++) {
+        let cov = 0;
+        for (let t = 0; t < n - lag; t++) cov += (seq[t] - mean) * (seq[t + lag] - mean);
+        acf.push(cov / ((n - lag) * variance));
+    }
+    return acf;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  COMPONENT 5: STRUCTURAL BREAK DETECTOR
+// ══════════════════════════════════════════════════════════════════════════════
+function structuralBreakTest(repeatSeq) {
+    const n = repeatSeq.length;
+    if (n < 20) return { lrtStat: 0, pBreak: 0, rateOld: 0.1, rateNew: 0.1 };
+
+    const half = Math.floor(n / 2);
+    const oldHalf = repeatSeq.slice(0, half);
+    const newHalf = repeatSeq.slice(half);
+
+    const k1 = oldHalf.reduce((s, v) => s + v, 0);
+    const k2 = newHalf.reduce((s, v) => s + v, 0);
+    const n1 = oldHalf.length, n2 = newHalf.length;
+
+    const p1 = k1 / n1, p2 = k2 / n2;
+    const pPool = (k1 + k2) / (n1 + n2);
+
+    function logLik(k, n, p) {
+        if (p <= 0 || p >= 1) return 0;
+        return k * Math.log(p) + (n - k) * Math.log(1 - p);
+    }
+    const llAlt = logLik(k1, n1, p1) + logLik(k2, n2, p2);
+    const llNull = logLik(k1 + k2, n1 + n2, pPool);
+    const lrtStat = 2 * (llAlt - llNull);
+
+    const chi2cdf = lrtStat <= 0 ? 0 : Math.min(0.9999, 1 - Math.exp(-0.5 * Math.pow(Math.max(0, lrtStat), 1) * 0.5));
+    const pBreak = p2 > p1 ? chi2cdf : 0;
+
+    return { lrtStat: Math.max(0, lrtStat), pBreak, rateOld: p1, rateNew: p2 };
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  COMPONENT 6: TWO-SIDED CUSUM
+// ══════════════════════════════════════════════════════════════════════════════
+class TwoSidedCUSUM {
+    constructor(config) {
+        this.slack = config.cusum_slack;
+        this.upThr = config.cusum_up_threshold;
+        this.downThr = config.cusum_down_threshold;
+        this.upC = new Array(10).fill(0);
+        this.downC = new Array(10).fill(0);
+        this.globalUp = 0;
+        this.globalDown = 0;
+    }
+
+    update(digit, isRepeat, p0 = 0.10, p1 = 0.40) {
+        const obs = isRepeat ? 1 : 0;
+        const logLR = Math.log((isRepeat ? p1 : (1 - p1)) / ((isRepeat ? p0 : (1 - p0)) + 1e-300) + 1e-300);
+        this.upC[digit] = Math.max(0, this.upC[digit] + logLR - this.slack);
+        this.downC[digit] = Math.min(0, this.downC[digit] + logLR + this.slack);
+        this.globalUp = Math.max(0, this.globalUp + logLR - this.slack);
+        this.globalDown = Math.min(0, this.globalDown + logLR + this.slack);
+    }
+
+    resetDigit(d) { this.upC[d] = 0; this.downC[d] = 0; }
+    resetGlobal() { this.globalUp = 0; this.globalDown = 0; }
+    upAlarm(digit) { return this.upC[digit] > this.upThr || this.globalUp > this.upThr; }
+    downConfirmed(digit) { return this.downC[digit] < this.downThr && this.globalDown < this.downThr; }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  MAIN ENSEMBLE REGIME DETECTOR
+// ══════════════════════════════════════════════════════════════════════════════
+class AdvancedRegimeDetector {
+    constructor(config) {
+        this.cfg = config;
+        this.bocpd = new BOCPD(config);
+        this.hmm = new BinaryHMM(config);
+        this.ewma = new EWMAStack();
+        this.cusum = new TwoSidedCUSUM(config);
+        this.perDigitRate = new Array(10).fill(10);
+        this.repeatBuffer = [];
+        this.BUFFER_MAX = 500;
+        this.weights = { bocpd: 1.0, hmm: 1.0, ewma: 1.0, acf: 0.7, structural: 0.6, cusum: 1.0 };
+        this.ticksSinceRefit = 0;
+        this.hmmResult = null;
+        this.bocpdResult = null;
+    }
+
+    computePerDigitRepeatRate(window) {
         const transFrom = new Array(10).fill(0);
         const transRepeat = new Array(10).fill(0);
-        const ewmaRepeat = new Array(10).fill(null);
-        for (let i = 0; i < len; i++) {
-            const d = window[i];
-            const isRepeat = i > 0 && window[i] === window[i - 1];
-            if (ewmaRepeat[d] === null) ewmaRepeat[d] = isRepeat ? 100 : 0;
-            else ewmaRepeat[d] = ALPHA * (isRepeat ? 100 : 0) + (1 - ALPHA) * ewmaRepeat[d];
-        }
-        for (let i = 0; i < len - 1; i++) {
+        for (let i = 0; i < window.length - 1; i++) {
             transFrom[window[i]]++;
             if (window[i + 1] === window[i]) transRepeat[window[i]]++;
         }
-        const rawRepeatProb = new Array(10).fill(0);
-        for (let d = 0; d < 10; d++) {
-            rawRepeatProb[d] = transFrom[d] > 0 ? (transRepeat[d] / transFrom[d]) * 100 : 10;
-            if (ewmaRepeat[d] === null) ewmaRepeat[d] = 10;
-        }
-        return { rawRepeatProb, ewmaRepeat };
+        return transFrom.map((n, d) => n > 0 ? (transRepeat[d] / n) * 100 : 10);
     }
 
-    // ── Full regime analysis ───────────────────────────────────────────────────
-    analyze(tickHistory, targetDigit, tickCount, asset) {
+    tick(prevDigit, curDigit) {
+        const isRepeat = prevDigit === curDigit;
+        const obs_binary = isRepeat ? 1 : 0;
+        this.bocpdResult = this.bocpd.update(obs_binary);
+        this.ewma.update(obs_binary);
+        this.cusum.update(prevDigit, isRepeat, 0.10, 0.40);
+        this.repeatBuffer.push(obs_binary);
+        if (this.repeatBuffer.length > this.BUFFER_MAX) this.repeatBuffer.shift();
+        this.ticksSinceRefit++;
+    }
+
+    analyze(tickHistory, targetDigit) {
         const window = tickHistory.slice(-this.cfg.analysis_window);
         const len = window.length;
-        if (len < this.cfg.min_ticks_for_hmm)
-            return { valid: false, reason: `Insufficient data (${len}/${this.cfg.min_ticks_for_hmm})` };
 
-        // Binary observation: 1 = repeat, 0 = no repeat
-        const obs = new Array(len - 1);
-        for (let t = 1; t < len; t++) obs[t - 1] = window[t] === window[t - 1] ? 1 : 0;
+        if (len < this.cfg.min_ticks_for_analysis) {
+            return { valid: false, reason: `insufficient data (${len}/${this.cfg.min_ticks_for_analysis})` };
+        }
 
-        // Re-fit HMM every 50 ticks
-        if (!this.hmmFitted || tickCount >= 50) {
-            const ok = this.baumWelch(obs);
-            // if (!this.hmmFitted || tickCount >= 30) {
-            if (ok) {
-                logHMM(
-                    `[${asset}] HMM refitted | ` +
-                    `A[NR→NR]=${(this.A[0][0] * 100).toFixed(1)}% A[NR→R]=${(this.A[0][1] * 100).toFixed(1)}% ` +
-                    `A[R→NR]=${(this.A[1][0] * 100).toFixed(1)}% A[R→R]=${(this.A[1][1] * 100).toFixed(1)}% | ` +
-                    `B(rep|NR)=${(this.B[0][1] * 100).toFixed(1)}% B(rep|R)=${(this.B[1][1] * 100).toFixed(1)}%`
-                );
+        const binaryObs = this.hmm.buildObs(window);
+
+        if (!this.hmm.fitted || this.ticksSinceRefit >= this.cfg.hmm_refit_every) {
+            const fitResult = this.hmm.baumWelch(binaryObs);
+            this.ticksSinceRefit = 0;
+            if (fitResult?.accepted) {
+                logHMM(`📐 Binary HMM fitted | A(NR→NR)=${(this.hmm.A[0][0] * 100).toFixed(1)}% | B(rep|NR)=${(fitResult.repeatNR * 100).toFixed(1)}% Discrim:${(fitResult.discrimination * 100).toFixed(1)}% ✅`);
             }
         }
 
-        // Viterbi
-        const vit = this.viterbi(obs);
-        if (!vit) return { valid: false, reason: 'Viterbi failed' };
+        const vit = this.hmm.viterbi(binaryObs);
+        if (!vit) return { valid: false, reason: 'viterbi failed' };
 
-        // Forward (Bayesian posterior)
-        let logA = [
-            Math.log(this.pi[0] + 1e-300) + Math.log(this.B[0][obs[0]] + 1e-300),
-            Math.log(this.pi[1] + 1e-300) + Math.log(this.B[1][obs[0]] + 1e-300),
-        ];
-        for (let t = 1; t < obs.length; t++) {
-            const newA = [0, 0];
-            for (let s = 0; s < 2; s++) {
-                newA[s] = logSumExp([
-                    logA[0] + Math.log(this.A[0][s] + 1e-300),
-                    logA[1] + Math.log(this.A[1][s] + 1e-300),
-                ]) + Math.log(this.B[s][obs[t]] + 1e-300);
-            }
-            logA = newA;
+        let logA = [Math.log(this.hmm.pi[0] + 1e-300), Math.log(this.hmm.pi[1] + 1e-300)];
+        logA[0] += Math.log(this.hmm.B[0][binaryObs[0]] + 1e-300);
+        logA[1] += Math.log(this.hmm.B[1][binaryObs[0]] + 1e-300);
+        for (let t = 1; t < binaryObs.length; t++) {
+            const nA = [0, 1].map(s => {
+                const inc = [0, 1].map(p => logA[p] + Math.log(this.hmm.A[p][s] + 1e-300));
+                return logSumExp(inc) + Math.log(this.hmm.B[s][binaryObs[t]] + 1e-300);
+            });
+            logA = nA;
         }
-        const fwdDen = logSumExp(logA);
-        const posteriorNonRep = Math.exp(logA[0] - fwdDen);
-        const posteriorRep = Math.exp(logA[1] - fwdDen);
+        const denom = logSumExp(logA);
+        const posteriorNR = Math.exp(logA[0] - denom);
+        const posteriorRep = Math.exp(logA[1] - denom);
 
-        // CUSUM update for target digit on recent ticks
-        const recentLen = Math.min(len, 30);
-        const recentWin = window.slice(-recentLen);
-        let cusumAlarm = false;
-        for (let t = 1; t < recentLen; t++) {
-            const obs_t = recentWin[t] === recentWin[t - 1] ? 1 : 0;
-            if (recentWin[t - 1] === targetDigit || recentWin[t] === targetDigit)
-                cusumAlarm = this.updateCUSUM(targetDigit, obs_t);
-        }
-        const cusumValue = this.getCUSUMValue(targetDigit);
+        const rawRepeatProb = this.computePerDigitRepeatRate(window);
 
-        // Per-digit stats
-        const { rawRepeatProb, ewmaRepeat } = this.computePerDigitStats(window);
-
-        // Recent repeat rate (last 20 ticks)
         const shortWin = window.slice(-20);
-        let rcRepeat = 0, rcTotal = 0;
-        for (let i = 1; i < shortWin.length; i++) {
-            if (shortWin[i - 1] === targetDigit || shortWin[i] === targetDigit) {
-                rcTotal++;
-                if (shortWin[i] === shortWin[i - 1]) rcRepeat++;
-            }
-        }
-        const recentRepeatRate = rcTotal > 0 ? (rcRepeat / rcTotal) * 100 : rawRepeatProb[targetDigit];
+        const shortRepeats = shortWin.slice(1).filter((d, i) => d === shortWin[i]).length;
+        const recentRate = (shortRepeats / (shortWin.length - 1)) * 100;
 
-        // Regime stability: 5-segment analysis
-        const seqLen = vit.stateSeq.length;
-        const segSize = Math.floor(seqLen / 5);
-        const segFracs = [];
-        for (let seg = 0; seg < 5 && seg * segSize < seqLen; seg++) {
-            const sl = vit.stateSeq.slice(seg * segSize, (seg + 1) * segSize);
-            segFracs.push(sl.filter(s => s === 0).length / sl.length);
-        }
-        const regimeStability = segFracs.reduce((a, b) => a + b, 0) / segFracs.length;
+        const acfWindow = this.repeatBuffer.slice(-Math.min(this.repeatBuffer.length, 200));
+        const acf = computeACF(acfWindow, 5);
 
-        // Composite safety score (0-100)
+        const breakBuf = this.repeatBuffer.slice(-100);
+        const breakResult = structuralBreakTest(breakBuf);
+
+        const bocpd = this.bocpdResult || { pNonRep: 0.5, expectedRL: 0, modeRL: 0, thetaEstimate: 0.1, pChangepoint: 0.5 };
+
+        const ewmaValues = [0, 1, 2, 3].map(i => this.ewma.get(i));
+        const ewmaTrend = this.ewma.trend();
+
+        const cusumUpAlarm = this.cusum.upAlarm(targetDigit);
+        const cusumDownConfirm = this.cusum.downConfirmed(targetDigit);
+
+        // ENSEMBLE SCORING (0–100)
         const threshold = this.cfg.repeat_threshold;
-        let safetyScore = 0;
-        if (vit.currentState === 0) safetyScore += 40;
-        safetyScore += Math.round(clamp((posteriorNonRep - 0.5) / 0.5, 0, 1) * 30);
-        safetyScore += Math.round(clamp(vit.persistence / this.cfg.min_regime_persistence, 0, 1) * 15);
-        safetyScore += Math.round(regimeStability * 15);
-        // Hard gates
-        if (vit.currentState !== 0) safetyScore = 0;
-        if (posteriorNonRep < this.cfg.hmm_nonrep_confidence) safetyScore = Math.min(safetyScore, this.cfg.min_safety_score - 1);
-        if (rawRepeatProb[targetDigit] >= threshold) safetyScore = 0;
-        if (cusumAlarm) safetyScore = 0;
+        const w = this.weights;
 
-        // Signal condition
+        const bocpdScore = (() => {
+            if (!this.bocpd.isNonRepRegime()) return 0;
+            const rl = Math.min(bocpd.modeRL, 150) / 150;
+            return rl * 25 * w.bocpd;
+        })();
+
+        const hmmScore = (() => {
+            if (vit.currentState !== 0) return 0;
+            const persist = clamp(vit.persistence / this.cfg.min_regime_persistence, 0, 1);
+            const posterior = clamp((posteriorNR - 0.5) / 0.5, 0, 1);
+            return ((persist * 0.6 + posterior * 0.4) * 25) * w.hmm;
+        })();
+
+        const ewmaScore = (() => {
+            const allBelow = ewmaValues.every(v => v < threshold);
+            if (!allBelow) return 0;
+            const trendOk = ewmaTrend <= this.cfg.ewma_trend_threshold;
+            const score = allBelow && trendOk ? 1.0 : 0.5;
+            const margin = Math.min(...ewmaValues.map(v => Math.max(0, threshold - v))) / threshold;
+            return (score * 0.7 + margin * 0.3) * 20 * w.ewma;
+        })();
+
+        const acfScore = (() => {
+            const lag1 = acf[0] ?? 0;
+            if (lag1 >= this.cfg.acf_lag1_threshold) return 0;
+            const score = clamp(1 - lag1 / this.cfg.acf_lag1_threshold, 0, 1);
+            const bonus = lag1 < 0 ? 0.1 : 0;
+            return Math.min(1, score + bonus) * 15 * w.acf;
+        })();
+
+        const breakScore = (() => {
+            if (breakResult.pBreak > this.cfg.structural_break_threshold) return 0;
+            return (1 - breakResult.pBreak / this.cfg.structural_break_threshold) * 10 * w.structural;
+        })();
+
+        const cusumScore = (() => {
+            if (cusumUpAlarm) return 0;
+            const base = 3;
+            const bonus = cusumDownConfirm ? 2 : 0;
+            return (base + bonus) * w.cusum;
+        })();
+
+        let rawScore = bocpdScore + hmmScore + ewmaScore + acfScore + breakScore + cusumScore;
+
+        if (vit.currentState !== 0) rawScore = 0;
+        if (posteriorNR < this.cfg.hmm_nonrep_confidence) rawScore = Math.min(rawScore, 30);
+        if (rawRepeatProb[targetDigit] >= threshold) rawScore = 0;
+        if (this.ewma.get(0) >= threshold || this.ewma.get(1) >= threshold) rawScore = 0;
+        if (cusumUpAlarm) rawScore = 0;
+        if (bocpd.pChangepoint > 0.3) rawScore = Math.min(rawScore, 25);
+        if (ewmaTrend > this.cfg.ewma_trend_threshold * 2) rawScore = 0;
+
+        const safetyScore = Math.round(clamp(rawScore, 0, 100));
+
         const signalActive = (
             vit.currentState === 0 &&
-            posteriorNonRep >= this.cfg.hmm_nonrep_confidence &&
+            posteriorNR >= this.cfg.hmm_nonrep_confidence &&
             vit.persistence >= this.cfg.min_regime_persistence &&
+            this.bocpd.isNonRepRegime() &&
+            bocpd.pNonRep >= this.cfg.bocpd_nonrep_confidence &&
+            bocpd.modeRL >= this.cfg.bocpd_min_run_for_signal &&
             rawRepeatProb[targetDigit] < threshold &&
-            ewmaRepeat[targetDigit] < threshold &&
-            !cusumAlarm &&
-            safetyScore >= this.cfg.min_safety_score
+            this.ewma.get(0) < threshold && this.ewma.get(1) < threshold &&
+            ewmaTrend <= this.cfg.ewma_trend_threshold &&
+            (acf[0] ?? 0) < this.cfg.acf_lag1_threshold &&
+            !cusumUpAlarm &&
+            breakResult.pBreak < this.cfg.structural_break_threshold &&
+            safetyScore >= this.cfg.repeat_confidence
         );
 
         return {
-            valid: true,
-            hmmState: vit.currentState,
-            hmmStateName: vit.currentState === 0 ? 'NON-REP' : 'REP',
-            hmmPersistence: vit.persistence,
-            hmmTransitions: vit.transitions,
-            regimeStability,
-            posteriorNonRep,
-            posteriorRep,
-            cusumAlarm,
-            cusumValue,
-            rawRepeatProb,
-            ewmaRepeat,
-            recentRepeatRate,
-            hmmA: this.A,
-            hmmB: this.B,
-            safetyScore,
-            signalActive,
+            valid: true, hmmState: vit.currentState, hmmStateName: vit.currentState === 0 ? 'NON-REP' : 'REP',
+            hmmPersistence: vit.persistence, hmmTransitions: vit.transitions, posteriorNR, posteriorRep,
+            hmmA: this.hmm.A, hmmB_repeatNR: this.hmm.repeatEmission(0), hmmB_repeatREP: this.hmm.repeatEmission(1),
+            hmmDiscrim: this.hmm.lastFitDiscrim, bocpdPNonRep: bocpd.pNonRep, bocpdModeRL: bocpd.modeRL,
+            bocpdExpRL: bocpd.expectedRL, bocpdTheta: bocpd.thetaEstimate, bocpdPChangepoint: bocpd.pChangepoint,
+            bocpdIsNonRep: this.bocpd.isNonRepRegime(), ewmaValues, ewmaTrend, acf, structBreak: breakResult,
+            cusumUpAlarm, cusumDownConfirm, cusumUp: this.cusum.upC[targetDigit], cusumDown: this.cusum.downC[targetDigit],
+            cusumGlobalUp: this.cusum.globalUp, rawRepeatProb, recentRate, componentScores: { bocpdScore, hmmScore, ewmaScore, acfScore, breakScore, cusumScore },
+            safetyScore, signalActive,
         };
+    }
+
+    applyTradeFeedback(won, regime) {
+        if (!regime || !regime.valid) return;
+        const decay = 0.85, restore = 1.02;
+        if (!won) for (const key of Object.keys(this.weights)) this.weights[key] = Math.max(0.5, this.weights[key] * decay);
+        else for (const key of Object.keys(this.weights)) this.weights[key] = Math.min(1.0, this.weights[key] * restore);
+    }
+
+    resetCUSUM(digit) { this.cusum.resetDigit(digit); }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  STATE PERSISTENCE
+// ══════════════════════════════════════════════════════════════════════════════
+class StatePersistence {
+    static saveState(bot) {
+        try {
+            const persistableState = {
+                savedAt: Date.now(),
+                stake: bot.stake,
+                consecutiveLosses: bot.consecutiveLosses,
+                totalTrades: bot.totalTrades,
+                totalWins: bot.totalWins,
+                x2: bot.x2, x3: bot.x3, x4: bot.x4, x5: bot.x5,
+                netProfit: bot.netProfit,
+                lastTradeDigit: bot.lastTradeDigit,
+                lastTradeTime: bot.lastTradeTime,
+                ticksSinceLastTrade: bot.ticksSinceLastTrade,
+                accountBalance: bot.accountBalance,
+                startingBalance: bot.startingBalance,
+                sessionStartTime: bot.sessionStartTime
+            };
+            fs.writeFileSync(STATE_FILE, JSON.stringify(persistableState, null, 2));
+        } catch (error) {
+            console.error(`Failed to save state: ${error.message}`);
+        }
+    }
+
+    static loadState() {
+        try {
+            if (!fs.existsSync(STATE_FILE)) {
+                console.log('📂 No previous state file found, starting fresh');
+                return false;
+            }
+
+            const savedData = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+            const ageMinutes = (Date.now() - savedData.savedAt) / 60000;
+
+            if (ageMinutes > 30) {
+                console.warn(`⚠️ Saved state is ${ageMinutes.toFixed(1)} minutes old, starting fresh`);
+                fs.unlinkSync(STATE_FILE);
+                return false;
+            }
+
+            console.log(`📂 Restoring state from ${ageMinutes.toFixed(1)} minutes ago`);
+            return savedData;
+        } catch (error) {
+            console.error(`Failed to load state: ${error.message}`);
+            return false;
+        }
+    }
+
+    static startAutoSave(bot) {
+        setInterval(() => { StatePersistence.saveState(bot); }, 5000);
+        console.log('🔄 Auto-save started (every 5 seconds)');
     }
 }
 
@@ -369,15 +638,39 @@ class RomanianGhostUltimate {
             requiredHistoryLength: 5000,
             minHistoryForTrading: 5000,
 
-            // ====== HMM REGIME DETECTION SETTINGS ======
-            min_ticks_for_hmm: 50,
-            repeat_threshold: 8,
-            hmm_nonrep_confidence: 0.93,
-            min_safety_score: 90,
+            // ====== ENSEMBLE REGIME DETECTION SETTINGS ======
+            // BOCPD parameters
+            bocpd_hazard: 1 / 150,
+            bocpd_prior_alpha: 1,
+            bocpd_prior_beta: 9,
+            bocpd_nonrep_confidence: 0.82,
+            bocpd_min_run_for_signal: 15,
+            
+            // HMM parameters
+            hmm_min_discrimination: 0.10,
+            hmm_refit_every: 50,
+            hmm_nonrep_confidence: 0.88,
             min_regime_persistence: 8,
-            cusum_threshold: 4.5,
+            
+            // EWMA parameters
+            ewma_trend_threshold: 2.0,
+            
+            // ACF parameters
+            acf_lag1_threshold: 0.15,
+            
+            // Structural break parameters
+            structural_break_threshold: 0.15,
+            
+            // CUSUM parameters
             cusum_slack: 0.005,
+            cusum_up_threshold: 4.5,
+            cusum_down_threshold: -4.5,
+            
+            // General regime analysis
             analysis_window: 5000,
+            min_ticks_for_analysis: 50,
+            repeat_threshold: 8,
+            repeat_confidence: 70,
 
             // Money management
             baseStake: 2.20,
@@ -422,8 +715,11 @@ class RomanianGhostUltimate {
             this.lastTickLogTime2[a] = 0;
         });
 
-        this.assetHMMs = new Map(); // symbol → HMMRegimeDetector
+        this.assetHMMs = new Map(); // symbol → AdvancedRegimeDetector (shared instance)
+        this.detector = null; // Will be initialized after first subscription
         this.tickCount = 0;
+        this.assetTickers = {}; // Track per-asset ticker history for detector.tick()
+        this.config.assets.forEach(a => this.assetTickers[a] = []);
 
         // Performance tracking (for adaptive thresholds)
         this.recentTrades = [];  // Last 50 trades for analysis
@@ -683,22 +979,13 @@ class RomanianGhostUltimate {
         this.histories[asset] = prices.map(p => this.getLastDigit(p, asset));
         this.historyLoaded[asset] = true;
 
-        // Initialize HMM detector for this asset with user settings
-        if (!this.assetHMMs.has(asset)) {
-            const cfg = {
-                analysis_window: this.config.analysis_window,
-                min_ticks_for_hmm: this.config.min_ticks_for_hmm,
-                repeat_threshold: this.config.repeat_threshold,
-                min_regime_persistence: this.config.min_regime_persistence,
-                hmm_nonrep_confidence: this.config.hmm_nonrep_confidence,
-                min_safety_score: this.config.min_safety_score,
-                cusum_threshold: this.config.cusum_threshold,
-                cusum_slack: this.config.cusum_slack
-            };
-            this.assetHMMs.set(asset, new HMMRegimeDetector(cfg));
+        // Initialize shared AdvancedRegimeDetector on first asset load
+        if (!this.detector) {
+            this.detector = new AdvancedRegimeDetector(this.config);
+            logBocpd('🚀 Shared AdvancedRegimeDetector initialized with 6-component ensemble');
         }
 
-        console.log(`📊 Loaded ${this.histories[asset].length} ticks for ${asset} | HMM initialized`);
+        console.log(`📊 Loaded ${this.histories[asset].length} ticks for ${asset} | Ensemble detector active`);
     }
 
     // ========================================================================
@@ -713,6 +1000,12 @@ class RomanianGhostUltimate {
         this.histories[asset].push(lastDigit);
         if (this.histories[asset].length > this.config.requiredHistoryLength) {
             this.histories[asset].shift();
+        }
+
+        // Feed detector with previous→current transition (for BOCPD, HMM, EWMA, CUSUM updates)
+        if (this.detector && this.histories[asset].length >= 2) {
+            const prevDigit = this.histories[asset][this.histories[asset].length - 2];
+            this.detector.tick(prevDigit, lastDigit);
         }
 
         // Increment cooldown counter
@@ -734,73 +1027,59 @@ class RomanianGhostUltimate {
 
 
     // ========================================================================
-    // MAIN SIGNAL SCANNER (ENHANCED WITH HMM REGIME DETECTION)
+    // MAIN SIGNAL SCANNER (ADVANCED 6-COMPONENT ENSEMBLE)
     // ========================================================================
     scanForSignal(asset) {
         if (this.tradeInProgress) return;
 
         const history = this.histories[asset];
-        if (history.length < 50) return;
+        if (history.length < this.config.min_ticks_for_analysis) return;
+        if (!this.detector) return;
 
-        // Get HMM instance for this asset
-        const hmm = this.assetHMMs.get(asset);
-        if (!hmm) return;
+        // Get current target digit
+        const targetDigit = history[history.length - 1];
 
-        if (this.tickCount > 50) {
-            this.tickCount = 0;
-        }
-
-        this.tickCount++;
-        // Analyze current regime using HMM 
-        const regime = hmm.analyze(history, history[history.length - 1], this.tickCount, asset);
+        // Run full ensemble analysis
+        const regime = this.detector.analyze(history, targetDigit);
 
         if (!regime.valid) return;
-        if (!regime.signalActive) return;
-
-        // Extract HMM signal data
-        const targetDigit = history[history.length - 1];
-        const safetyScore = regime.safetyScore;
-        const hmmState = regime.hmmStateName;
-        const confidence = regime.posteriorNonRep;
-
-        // LOG EVERY 30 SECONDS FOR DEBUGGING
-        const now = Date.now();
-        // if (now - this.lastTickLogTime2[asset] >= 30000) {
-        console.log(
-            `[${asset}] HMM=${hmmState} | Safety=${safetyScore} | ` +
-            `Conf=${(confidence * 100).toFixed(1)}% | Persist=${regime.hmmPersistence} | ` +
-            `RepRate=${regime.rawRepeatProb[targetDigit].toFixed(1)}% | CUSUM=${regime.cusumAlarm ? '⚠️' : '✓'}`
-        );
-        //     this.lastTickLogTime2[asset] = now;
-        // }
-
-        // Gating conditions (from HMM)
-        if (hmmState !== 'NON-REP') {
-            // if (now - this.lastTickLogTime2[asset] >= 30000) {
-            console.log(`[${asset}] Blocked - Not in NON-REP regime (${hmmState})`);
-            // }
-            return;
-        }
-        if (safetyScore < this.config.min_safety_score) {
-            // if (now - this.lastTickLogTime2[asset] >= 30000) {
-            console.log(`[${asset}] Blocked - Safety score too low (${safetyScore} < ${this.config.min_safety_score})`);
-            // }
-            return;
-        }
-        if (regime.cusumAlarm) {
-            console.log(`[${asset}] Blocked - CUSUM alarm active`);
-            return;
-        }
-
-        // Check if same digit as last trade (require higher score for repeats)
-        if (targetDigit === this.lastTradeDigit[asset]) {
-            if (this.asset_safety_score < this.asset_safety_score + 0.1) { // Require 1 extra points for repeat digit
-                console.log(`[${asset}] Blocked - Same digit repeat requires higher Confidence`);
-                return;
+        if (!regime.signalActive) {
+            // Log blockers for debugging (sparse)
+            const now = Date.now();
+            if (now - this.lastTickLogTime2[asset] >= 60000) {
+                logStatus(
+                    `[${asset}] Signal blocked | HMM=${regime.hmmStateName} | Safety=${regime.safetyScore} | ` +
+                    `P(NR)=${(regime.posteriorNR * 100).toFixed(1)}% | BOCPD=${regime.bocpdIsNonRep ? '✓' : '✗'}`
+                );
+                this.lastTickLogTime2[asset] = now;
             }
+            return;
         }
 
-        // Execute trade with HMM regime data
+        // Extract ensemble data
+        const safetyScore = regime.safetyScore;
+        const componentScores = regime.componentScores;
+
+        // LOG SIGNAL CONFIRMATION
+        const now = Date.now();
+        logStatus(
+            `✅ [${asset}] SIGNAL ACTIVE | Safety=${safetyScore} | ` +
+            `HMM=${regime.hmmStateName}(P=${regime.posteriorNR.toFixed(3)}) | ` +
+            `BOCPD=RL${regime.bocpdModeRL}t(${(regime.bocpdPNonRep * 100).toFixed(1)}%) | ` +
+            `Scores: B=${componentScores.bocpdScore.toFixed(1)}/H=${componentScores.hmmScore.toFixed(1)}/E=${componentScores.ewmaScore.toFixed(1)}`
+        );
+
+        // Gating conditions (hard gates from ensemble)
+        if (regime.hmmState !== 0) {
+            logStatus(`[${asset}] Blocked - Not in NON-REP state`);
+            return;
+        }
+        if (safetyScore < this.config.repeat_confidence) {
+            logStatus(`[${asset}] Blocked - Safety score too low (${safetyScore} < ${this.config.repeat_confidence})`);
+            return;
+        }
+
+        // Execute trade with ensemble regime data
         this.placeTrade(asset, targetDigit, safetyScore, regime);
     }
 
@@ -812,16 +1091,16 @@ class RomanianGhostUltimate {
 
         this.tradeInProgress = true;
         this.lastTradeDigit[asset] = digit;
-        this.asset_safety_score[asset] = (regime.posteriorNonRep * 100).toFixed(1);
+        this.asset_safety_score[asset] = (regime.posteriorNR * 100).toFixed(1);
         this.lastTradeTime[asset] = Date.now();
         this.ticksSinceLastTrade[asset] = 0;
 
         console.log(`\n🎯 TRADE SIGNAL — ${asset}`);
         console.log(`   Digit: ${digit}`);
-        console.log(`   Safety Score: ${safetyScore}`);
-        console.log(`   HMM State: ${regime.hmmStateName}`);
-        console.log(`   Confidence: ${(regime.posteriorNonRep * 100).toFixed(1)}%`);
-        console.log(`   Persistence: ${regime.hmmPersistence}`);
+        console.log(`   Safety Score: ${safetyScore}/100`);
+        console.log(`   Ensemble: HMM=${regime.hmmStateName} | BOCPD RL=${regime.bocpdModeRL}t | ACF[1]=${regime.acf[0].toFixed(3)}`);
+        console.log(`   Confidence: P(NR)=${(regime.posteriorNR * 100).toFixed(1)}%`);
+        console.log(`   Persistence: ${regime.hmmPersistence} ticks`);
         console.log(`   Stake: $${this.stake.toFixed(2)}`);
 
         this.sendRequest({
@@ -840,21 +1119,28 @@ class RomanianGhostUltimate {
         });
 
         this.sendTelegram(`
-            🎯 <b>TRADE OPENED V1 Multi2</b>
+            🎯 <b>TRADE OPENED — ADVANCED ENSEMBLE</b>
 
             📊 Asset: ${asset}
             🔢 Target Digit: ${digit}
             📈 Last 10: ${this.histories[asset].slice(-10).join(',')}
-            🛡️ Safety Score: ${safetyScore}
-            💯 P(RNR): ${(regime.posteriorNonRep * 100).toFixed(1)}% | P(REP): ${(regime.posteriorRep * 100).toFixed(1)}%
-            ⏱️ Persistence: ${regime.hmmPersistence}
+            
+            🔬 <b>ENSEMBLE METRICS</b>
+            ├ 🛡️ Safety: ${safetyScore}/100
+            ├ 📊 HMM State: ${regime.hmmStateName} (P=${(regime.posteriorNR * 100).toFixed(1)}%)
+            ├ 🔔 BOCPD RL: ${regime.bocpdModeRL}t | P(NR)=${(regime.bocpdPNonRep * 100).toFixed(1)}%
+            ├ 📈 EWMA Trend: ${regime.ewmaTrend.toFixed(2)} | Values: [${regime.ewmaValues.map(v=>v.toFixed(1)).join(',')}]%
+            ├ 🔗 ACF[1]: ${regime.acf[0].toFixed(3)}
+            ├ ⚠️ CUSUM Up: ${regime.cusumUp.toFixed(2)}
+            └ 🔧 Persistence: ${regime.hmmPersistence}t
+
             💰 Stake: $${this.stake.toFixed(2)}
             📊 Losses: ${this.consecutiveLosses}
         `.trim());
     }
 
     // ========================================================================
-    // TRADE RESULT HANDLING (ENHANCED WITH REGIME ANALYSIS)
+    // TRADE RESULT HANDLING (ENHANCED WITH ADVANCED ENSEMBLE ANALYSIS)
     // ========================================================================
     handleTradeResult(contract) {
         const won = contract.status === "won";
@@ -873,18 +1159,21 @@ class RomanianGhostUltimate {
             this.recentTrades.shift();
         }
 
-        // Get HMM regime data for this asset
-        // const hmm = this.assetHMMs.get(asset);
-        // const history = this.histories[asset];
-        // let regime = null;
-        // if (hmm && history.length >= 50) {
-        //     regime = hmm.analyze(history, exitDigit, history.length);
-        // }
+        // Get ensemble regime data if available
+        const history = this.histories[asset];
+        let regime = null;
+        if (this.detector && history.length >= this.config.min_ticks_for_analysis) {
+            regime = this.detector.analyze(history, exitDigit);
+            if (regime.valid) {
+                // Update adaptive weights based on trade outcome
+                this.detector.applyTradeFeedback(won, regime);
+            }
+        }
 
         const resultMessage = won ? '✅ WIN' : '❌ LOSS';
         console.log(`\n${resultMessage} — ${asset}`);
         console.log(`   Target: ${this.lastTradeDigit[asset]}`);
-        console.log(`   Safty Score: ${this.asset_safety_score[asset]}`);
+        console.log(`   Safety Score: ${this.asset_safety_score[asset]}`);
         console.log(`   Exit Digit: ${exitDigit}`);
         console.log(`   Profit: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}`);
         console.log(`   Net P&L: $${this.netProfit.toFixed(2)}`);
@@ -915,15 +1204,26 @@ class RomanianGhostUltimate {
             this.stake = Math.round(this.stake * 100) / 100;
         }
 
-        // Enhanced Telegram Alert with regime data
+        // Enhanced Telegram Alert with full ensemble data
         let telegramContent = `
-            ${won ? '✅ <b>V1 MULTI-BOT WIN!</b>' : '❌ <b>V1 MULTI-BOT LOSS!</b>'}
+            ${won ? '✅ <b>ENSEMBLE BOT WIN!</b>' : '❌ <b>ENSEMBLE BOT LOSS!</b>'}
 
             📊 Symbol: ${asset}
             🎯 Target: ${this.lastTradeDigit[asset]}
             🔢 Exit: ${exitDigit}
             📈 Last 10: ${this.histories[asset].slice(-10).join(',')}
-            🛡️ Confidece: ${this.asset_safety_score[asset]}
+            🛡️ Safety: ${this.asset_safety_score[asset]}/100
+            
+            ${regime && regime.valid ? `
+            🔬 <b>ENSEMBLE STATE</b>
+            ├ BOCPD: RL=${regime.bocpdModeRL}t P(NR)=${(regime.bocpdPNonRep * 100).toFixed(1)}%
+            ├ HMM: ${regime.hmmStateName} (P=${(regime.posteriorNR * 100).toFixed(1)}%)
+            ├ EWMA: Trend=${regime.ewmaTrend.toFixed(2)} Values=[${regime.ewmaValues.map(v=>v.toFixed(1)).join(',')}]%
+            ├ ACF[1]: ${regime.acf[0].toFixed(3)}
+            ├ CUSUM: ${regime.cusumUp.toFixed(2)}
+            └ Persist: ${regime.hmmPersistence}t
+            ` : ''}
+            
             💰 P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}
             💵 Balance: $${this.netProfit.toFixed(2)}
             📊 Record: ${this.totalWins}W/${this.totalTrades - this.totalWins}L | Losses: ${this.consecutiveLosses}${this.consecutiveLosses > 1 ? ` (x${this.consecutiveLosses})` : ''}
