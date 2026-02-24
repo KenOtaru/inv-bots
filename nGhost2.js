@@ -1882,7 +1882,7 @@ class RomanianGhostBot {
         );
 
         this.sendTelegram(`
-            🎯 <b>TRADE v2</b>
+            🎯 <b>TRADE OPENED v2</b>
 
             📊 ${this.config.symbol} | Digit: ${this.targetDigit}
             🔢 Last10: ${this.tickHistory.slice(-10).join(',')}

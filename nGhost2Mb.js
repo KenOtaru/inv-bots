@@ -120,7 +120,7 @@ const CONFIG = {
     hmm_min_discrimination:    0.10,
 
     // Ensemble
-    repeat_confidence:         70,
+    repeat_confidence:         73,
 
     // Ghost
     ghost_enabled:             false,
@@ -892,7 +892,7 @@ class RomanianGhostBotV4 {
         const s = this.hourlyStats;
         const wr = s.trades > 0 ? ((s.wins/s.trades)*100).toFixed(1) : '0.0';
         const msg = `
-                ⏰ <b>Ghost Bot v4 — Hourly Summary</b>
+                ⏰ <b>Ghost Bot v2 Multi — Hourly Summary</b>
 
                 📊 <b>Last Hour</b>
                 ├ Trades: ${s.trades}
@@ -1335,7 +1335,7 @@ class RomanianGhostBotV4 {
         );
 
         this.sendTelegram(`
-            🎯 <b>TRADE PLACED v4</b>
+            🎯 <b>TRADE PLACED v2 Multi</b>
 
             📊 <b>${asset}</b>
             🎯 Differ: <b>${as.targetDigit}</b>
@@ -1439,7 +1439,7 @@ class RomanianGhostBotV4 {
 
             logResult(`[${asset}] ${green('✅ WIN!')} +$${profit.toFixed(2)} | Target:${as.targetDigit} Result:${resultDigit} | P/L:${formatMoney(this.sessionProfit)} | Bal:$${this.accountBalance.toFixed(2)}`);
             this.sendTelegram(`
-                    ✅ <b>WIN! v4</b>
+                    ✅ <b>WIN! v2 Multi</b>
 
                     📊 <b>${asset}</b>
                     🎯 Target: ${as.targetDigit} | Result: ${resultDigit}
@@ -1466,7 +1466,7 @@ class RomanianGhostBotV4 {
 
             logResult(`[${asset}] ${red('❌ LOSS!')} -$${lostAmount.toFixed(2)} | Target:${as.targetDigit} Result:${resultDigit} ${resultDigit === as.targetDigit ? red('REPEATED!') : ''} | Mart:${as.martingaleStep}/${this.config.max_martingale_steps} | P/L:${formatMoney(this.sessionProfit)}`);
             this.sendTelegram(`
-                    ❌ <b>LOSS! v4</b>
+                    ❌ <b>LOSS! v2 Multi</b>
 
                     📊 <b>${asset}</b>
                     🎯 Target: ${as.targetDigit} | Result: ${resultDigit}${resultDigit === as.targetDigit ? ' 🔁 REPEATED' : ''}

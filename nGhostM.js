@@ -1095,7 +1095,7 @@ class RomanianGhostBotV3 {
         );
 
         this.sendTelegram(`
-          🎯 <b>GHOST TRADE</b>
+          🎯 <b>TRADE OPENED v1 Multi</b>
 
           📊 Asset: <b>${asset}</b>
           🔢 Target Digit: ${as.targetDigit}
@@ -1198,7 +1198,7 @@ class RomanianGhostBotV3 {
         logResult(dim(`  Target:${tradeTargetDigit} | History tail: [${tradeTickHistory.slice(-5).join(',')}]`));
 
         this.sendTelegram(`
-          ✅ <b>WIN!</b> — ${asset}
+          ✅ <b>WIN! v1 Multi</b> — ${asset}
 
           📊 Target Digit: ${tradeTargetDigit}
           📜 Last 10: ${tradeTickHistory.slice(-10).join(', ')}
@@ -1238,7 +1238,7 @@ class RomanianGhostBotV3 {
         logResult(`${red('❌ LOSS!')} [${bold(asset)}] Lost:${red('-$'+lostAmount.toFixed(2))} | P/L:${this.sessionProfit>=0?green(plStr):red(plStr)} | Mart:${this.martingaleStep}/${this.config.max_martingale_steps}`);
 
         this.sendTelegram(`
-          ❌ <b>LOSS!</b> — ${asset}
+          ❌ <b>LOSS! v1 Multi</b> — ${asset}
 
           📊 Target Digit: ${tradeTargetDigit}
           📜 Last 10: ${tradeTickHistory.slice(-10).join(', ')}

@@ -1465,7 +1465,7 @@ class RomanianGhostBot {
         );
 
         this.sendTelegram(`
-            🎯 <b>OPEN TRADE v1</b>
+            🎯 <b>TRADE OPENED v1</b>
 
             📊 Symbol: ${this.config.symbol}
             🔢 Target Digit: ${this.targetDigit}
