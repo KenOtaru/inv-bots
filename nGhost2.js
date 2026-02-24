@@ -108,7 +108,7 @@ class StatePersistence {
                     ghostConfirmed: bot.ghostConfirmed,
                 },
                 history: {
-                    tickHistory: bot.tickHistory.slice(-200),
+                    // tickHistory: bot.tickHistory.slice(-200),
                     sessionStartTime: bot.sessionStartTime,
                     startingBalance: bot.startingBalance,
                     accountBalance: bot.accountBalance,

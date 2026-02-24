@@ -661,7 +661,7 @@ class RomanianGhostUltimate {
             if (this.hourly.trades === 0) return;
             const winRate = ((this.hourly.wins / this.hourly.trades) * 100).toFixed(1);
             this.sendTelegram(`
-            ⏰ <b>HOURLY — GHOST 9.2</b>
+            ⏰ <b>HOURLY — GHOST Bot v1 Milti2</b>
 
             📊 Trades: ${this.hourly.trades}
             ✅/❌ W/L: ${this.hourly.wins}/${this.hourly.losses}
