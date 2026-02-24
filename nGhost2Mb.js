@@ -98,7 +98,7 @@ const CONFIG = {
     min_ticks_for_analysis:   100,
 
     // Regime detection
-    repeat_threshold:          9,
+    repeat_threshold:          8,
     hmm_nonrep_confidence:     0.75,
     bocpd_nonrep_confidence:   0.82,
     min_regime_persistence:    8,
@@ -120,7 +120,7 @@ const CONFIG = {
     hmm_min_discrimination:    0.10,
 
     // Ensemble
-    repeat_confidence:         70,
+    repeat_confidence:         75,
 
     // Ghost
     ghost_enabled:             false,
@@ -147,7 +147,7 @@ const CONFIG = {
     reconnect_base_delay:      5000,
 
     // Persistence
-    state_file:                path.join(__dirname, 'ghost-bot-v4-state.json'),
+    state_file:                path.join(__dirname, 'ghost-bot-v400001-state.json'),
     state_save_interval:       5000,
     state_max_age_minutes:     30,
 };
