@@ -670,7 +670,7 @@ class RomanianGhostUltimate {
             analysis_window: 5000,
             min_ticks_for_analysis: 50,
             repeat_threshold: 8,
-            repeat_confidence: 70,
+            repeat_confidence: 50,
 
             // Money management
             baseStake: 2.20,
@@ -941,7 +941,7 @@ class RomanianGhostUltimate {
             if (this.hourly.trades === 0) return;
             const winRate = ((this.hourly.wins / this.hourly.trades) * 100).toFixed(1);
             this.sendTelegram(`
-            ⏰ <b>HOURLY — GHOST Bot v1 Milti2</b>
+            ⏰ <b>HOURLY — GHOST Bot v2 Milti2</b>
 
             📊 Trades: ${this.hourly.trades}
             ✅/❌ W/L: ${this.hourly.wins}/${this.hourly.losses}
