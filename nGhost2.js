@@ -1364,25 +1364,25 @@ class RomanianGhostBot {
         const pnlStr = (stats.pnl >= 0 ? '+' : '') + '$' + stats.pnl.toFixed(2);
 
         const message = `
-⏰ <b>🤖 Ghost Bot v3.0 Hourly Summary</b>
+            ⏰ <b>🤖 Ghost Bot v2.0 Hourly Summary</b>
 
-📊 <b>Last Hour</b>
-├ Trades: ${stats.trades}
-├ Wins: ${stats.wins} | Losses: ${stats.losses}
-├ Win Rate: ${winRate}%
-└ ${pnlEmoji} <b>P&L:</b> ${pnlStr}
+            📊 <b>Last Hour</b>
+            ├ Trades: ${stats.trades}
+            ├ Wins: ${stats.wins} | Losses: ${stats.losses}
+            ├ Win Rate: ${winRate}%
+            └ ${pnlEmoji} <b>P&L:</b> ${pnlStr}
 
-📈 <b>Session Totals</b>
-├ Total Trades: ${this.totalTrades}
-├ Total W/L: ${this.totalWins}/${this.totalLosses}
-├ x2-x4 Losses: ${this.x2Losses}/${this.x3Losses}/${this.x4Losses}
-├ Session P&L: ${(this.sessionProfit >= 0 ? '+' : '')}${formatMoney(this.sessionProfit)}
-├ Current Balance: $${this.accountBalance.toFixed(2)}
-├ Max Win Streak: ${this.maxWinStreak}
-├ Max Loss Streak: ${this.maxLossStreak}
-└ Current Stake: $${this.currentStake.toFixed(2)}
+            📈 <b>Session Totals</b>
+            ├ Total Trades: ${this.totalTrades}
+            ├ Total W/L: ${this.totalWins}/${this.totalLosses}
+            ├ x2-x3 Losses: ${this.x2Losses}/${this.x3Losses}
+            ├ Session P&L: ${(this.sessionProfit >= 0 ? '+' : '')}${formatMoney(this.sessionProfit)}
+            ├ Current Balance: $${this.accountBalance.toFixed(2)}
+            ├ Max Win Streak: ${this.maxWinStreak}
+            ├ Max Loss Streak: ${this.maxLossStreak}
+            └ Current Stake: $${this.currentStake.toFixed(2)}
 
-⏰ ${new Date().toLocaleString()}
+            ⏰ ${new Date().toLocaleString()}
         `.trim();
 
         try {
@@ -1947,7 +1947,7 @@ class RomanianGhostBot {
             Target:${this.targetDigit} | Result:${resultDigit}
             🔢 Last10: ${this.tickHistory.slice(-10).join(',')}
             💰 +$${profit.toFixed(2)}
-            📊 P&L: ${this.sessionProfit >= 0 ? '+' : ''}$${this.sessionProfit.toFixed(2)}
+            📊 P&L: $${this.sessionProfit.toFixed(2)}
             📊 Trades: ${this.totalTrades} | ${this.totalWins}W/${this.totalLosses}L (${(this.totalWins / this.totalTrades * 100).toFixed(1)}%) 
             📊 x2-x3: ${this.x2Losses}/${this.x3Losses}}
             
@@ -1991,7 +1991,7 @@ class RomanianGhostBot {
             Target:${this.targetDigit} | Result:${resultDigit}
             🔢 Last10: ${this.tickHistory.slice(-10).join(',')}
             💸 -$${lostAmount.toFixed(2)}
-            📊 P&L: ${this.sessionProfit >= 0 ? '+' : ''}$${this.sessionProfit.toFixed(2)}
+            📊 P&L: $${this.sessionProfit.toFixed(2)}
             📊 Trades: ${this.totalTrades} | ${this.totalWins}W/${this.totalLosses}L (${(this.totalWins / this.totalTrades * 100).toFixed(1)}%) 
             📊 x2-x3: ${this.x2Losses}/${this.x3Losses}}
 
