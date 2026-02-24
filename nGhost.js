@@ -97,7 +97,7 @@ function parseArgs() {
         min_ticks_for_hmm: 50,         // Minimum ticks before HMM is reliable
 
         // Regime detection thresholds
-        repeat_threshold: 7,           // Raw per-digit repeat % gate
+        repeat_threshold: 8,           // Raw per-digit repeat % gate
         repeat_confidence: 90,        // Bayesian P(repeat | observations) required
         hmm_nonrep_confidence: 0.93,   // Bayesian P(NON-REP) required
         min_regime_persistence: 8,     // Ticks current regime must have lasted
