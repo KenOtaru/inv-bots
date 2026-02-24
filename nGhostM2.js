@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 
 
-const TOKEN = "0P94g4WdSrSrzir";
+const TOKEN = "rgNedekYXvCaPeP";
 const TELEGRAM_TOKEN = "8288121368:AAHYRb0Stk5dWUWN1iTYbdO3fyIEwIuZQR8";
 const CHAT_ID = "752497117";
 
