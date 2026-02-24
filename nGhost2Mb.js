@@ -32,7 +32,7 @@ const fs = require('fs');
 const path = require('path');
 
 // ── Credentials ────────────────────────────────────────────────────────────────
-const API_TOKEN        = '0P94g4WdSrSrzir';
+const API_TOKEN        = 'DMylfkyce6VyZt7';
 const TELEGRAM_TOKEN   = '8288121368:AAHYRb0Stk5dWUWN1iTYbdO3fyIEwIuZQR8';
 const CHAT_ID          = '752497117';
 const APP_ID           = '1089';

@@ -33,7 +33,7 @@ const fs = require('fs');
 const path = require('path');
 
 // ── Credentials ───────────────────────────────────────────────────────────────
-const TOKEN         = '0P94g4WdSrSrzir';
+const TOKEN         = 'rgNedekYXvCaPeP';
 const TELEGRAM_TOKEN = '8288121368:AAHYRb0Stk5dWUWN1iTYbdO3fyIEwIuZQR8';
 const CHAT_ID       = '752497117';
 
@@ -116,7 +116,7 @@ function formatDuration(ms) {
 //  STATE PERSISTENCE
 // ══════════════════════════════════════════════════════════════════════════════
 
-const STATE_FILE          = path.join(__dirname, 'ghost-bot-v300003-state.json');
+const STATE_FILE          = path.join(__dirname, 'ghost-bot-v300004-state.json');
 const STATE_SAVE_INTERVAL = 5000;    // every 5 seconds
 const STATE_MAX_AGE_MS    = 30 * 60 * 1000; // 30 minutes
 
