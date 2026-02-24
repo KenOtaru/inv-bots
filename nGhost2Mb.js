@@ -1335,14 +1335,15 @@ class RomanianGhostBotV4 {
         );
 
         this.sendTelegram(`
-            🎯 <b>TRADE PLACED</b>
+            🎯 <b>TRADE PLACED v4</b>
 
             📊 <b>${asset}</b>
             🎯 Differ: <b>${as.targetDigit}</b>
             🔢 Digits: ${last10}
             💰 Stake: $${as.currentStake.toFixed(2)} [Step ${as.martingaleStep}]
             📈 Rate: ${as.targetRepeatRate.toFixed(1)}% | Score: ${score}/100
-            🔬 P(NR): ${pnr} | BOCPD_RL: ${bocRL}t
+            🔬 P(NR): ${pnr} 
+            🔬 BOCPD_RL: ${bocRL}t
         `
         );
 
@@ -1438,15 +1439,14 @@ class RomanianGhostBotV4 {
 
             logResult(`[${asset}] ${green('✅ WIN!')} +$${profit.toFixed(2)} | Target:${as.targetDigit} Result:${resultDigit} | P/L:${formatMoney(this.sessionProfit)} | Bal:$${this.accountBalance.toFixed(2)}`);
             this.sendTelegram(`
-                    ✅ <b>WIN!</b>
+                    ✅ <b>WIN! v4</b>
 
                     📊 <b>${asset}</b>
                     🎯 Target: ${as.targetDigit} | Result: ${resultDigit}
                     🔢 Digits: ${last10}
                     💰 +$${profit.toFixed(2)}
-                    📈 P&L: ${formatMoney(this.sessionProfit)} | Bal: $${this.accountBalance.toFixed(2)}
                     📊 ${this.totalWins}W/${this.totalLosses}L | WStreak:${as.currentWinStreak}
-                    📊 ${this.totalTrades} trades | ${formatMoney(this.sessionProfit)}
+                    📈 Trades: ${this.totalTrades} | ${formatMoney(this.sessionProfit)}
                 `
             );
         } else {
@@ -1466,15 +1466,14 @@ class RomanianGhostBotV4 {
 
             logResult(`[${asset}] ${red('❌ LOSS!')} -$${lostAmount.toFixed(2)} | Target:${as.targetDigit} Result:${resultDigit} ${resultDigit === as.targetDigit ? red('REPEATED!') : ''} | Mart:${as.martingaleStep}/${this.config.max_martingale_steps} | P/L:${formatMoney(this.sessionProfit)}`);
             this.sendTelegram(`
-                    ❌ <b>LOSS!</b>
+                    ❌ <b>LOSS! v4</b>
 
                     📊 <b>${asset}</b>
                     🎯 Target: ${as.targetDigit} | Result: ${resultDigit}${resultDigit === as.targetDigit ? ' 🔁 REPEATED' : ''}
                     🔢 Digits: ${last10}
                     💸 -$${lostAmount.toFixed(2)}
-                    📈 P&L: ${formatMoney(this.sessionProfit)} | Bal: $${this.accountBalance.toFixed(2)}
                     📊 ${this.totalWins}W/${this.totalLosses}L | Mart: ${as.martingaleStep}/${this.config.max_martingale_steps}
-                    📊 ${this.totalTrades} trades | ${formatMoney(this.sessionProfit)}
+                    📈 Trades: ${this.totalTrades} | ${formatMoney(this.sessionProfit)}
                 `
             );
             this.decideNextAction(asset);
