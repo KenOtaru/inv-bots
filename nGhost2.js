@@ -222,8 +222,8 @@ function parseArgs() {
         // With correct LLRs: no-repeat LLR=-0.405, repeat LLR=+1.386, slack=0.15
         // At 5% repeat rate, CUSUM drifts: 0.95*(-0.405-0.15) + 0.05*(1.386-0.15) = -0.464/tick
         // → clears in ~10 non-rep ticks after last alarm trigger
-        cusum_up_threshold: 4.5,       // Up-CUSUM alarm (rep regime shift detector)
-        cusum_down_threshold: -4.5,    // Down-CUSUM confirmation (non-rep sustained)
+        cusum_up_threshold: 4.5,       //3.5 Up-CUSUM alarm (rep regime shift detector)
+        cusum_down_threshold: -4.5,    //4.0 Down-CUSUM confirmation (non-rep sustained)
         cusum_slack: 0.15,             // CRITICAL: must be large enough that non-rep ticks drain CUSUM
         structural_break_threshold: 0.15, // P-value threshold for structural break
 
@@ -238,7 +238,7 @@ function parseArgs() {
         hmm_min_discrimination: 0.10,  // Min B[1][1]-B[0][1] gap to accept BW update
 
         // Ensemble
-        repeat_confidence: 70,         // Final ensemble score gate (0–100)
+        repeat_confidence: 70,         //70 Final ensemble score gate (0–100)
 
         // Ghost
         ghost_enabled: false,
