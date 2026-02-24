@@ -28,10 +28,97 @@
 const WebSocket = require('ws');
 const TelegramBot = require('node-telegram-bot-api');
 const { stubFalse } = require('lodash');
+const fs = require('fs');
+const path = require('path');
 
 const TOKEN = "0P94g4WdSrSrzir";
 const TELEGRAM_TOKEN = "8288121368:AAHYRb0Stk5dWUWN1iTYbdO3fyIEwIuZQR8";
 const CHAT_ID = "752497117";
+
+// ============================================
+// STATE PERSISTENCE MANAGER
+// ============================================
+const STATE_FILE = path.join(__dirname, 'nGhost-state.json');
+const STATE_SAVE_INTERVAL = 5000; // Save every 5 seconds
+
+class StatePersistence {
+    static saveState(bot) {
+        try {
+            const persistableState = {
+                savedAt: Date.now(),
+                config: {
+                    base_stake: bot.config.base_stake,
+                    martingale_multiplier: bot.config.martingale_multiplier,
+                    max_martingale_steps: bot.config.max_martingale_steps,
+                    take_profit: bot.config.take_profit,
+                    stop_loss: bot.config.stop_loss,
+                },
+                trading: {
+                    currentStake: bot.currentStake,
+                    martingaleStep: bot.martingaleStep,
+                    totalMartingaleLoss: bot.totalMartingaleLoss,
+                    totalTrades: bot.totalTrades,
+                    totalWins: bot.totalWins,
+                    totalLosses: bot.totalLosses,
+                    sessionProfit: bot.sessionProfit,
+                    currentWinStreak: bot.currentWinStreak,
+                    currentLossStreak: bot.currentLossStreak,
+                    maxWinStreak: bot.maxWinStreak,
+                    maxLossStreak: bot.maxLossStreak,
+                    maxMartingaleReached: bot.maxMartingaleReached,
+                    largestWin: bot.largestWin,
+                    largestLoss: bot.largestLoss,
+                    targetDigit: bot.targetDigit,
+                    ghostConsecutiveWins: bot.ghostConsecutiveWins,
+                    ghostRoundsPlayed: bot.ghostRoundsPlayed,
+                    ghostConfirmed: bot.ghostConfirmed,
+                },
+                history: {
+                    tickHistory: bot.tickHistory.slice(-200),
+                    sessionStartTime: bot.sessionStartTime,
+                    startingBalance: bot.startingBalance,
+                    accountBalance: bot.accountBalance,
+                }
+            };
+
+            fs.writeFileSync(STATE_FILE, JSON.stringify(persistableState, null, 2));
+        } catch (error) {
+            console.error(`Failed to save state: ${error.message}`);
+        }
+    }
+
+    static loadState() {
+        try {
+            if (!fs.existsSync(STATE_FILE)) {
+                console.log('📂 No previous state file found, starting fresh');
+                return false;
+            }
+
+            const savedData = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+            const ageMinutes = (Date.now() - savedData.savedAt) / 60000;
+
+            // Only restore if state is less than 30 minutes old
+            if (ageMinutes > 30) {
+                console.warn(`⚠️ Saved state is ${ageMinutes.toFixed(1)} minutes old, starting fresh`);
+                fs.unlinkSync(STATE_FILE);
+                return false;
+            }
+
+            console.log(`📂 Restoring state from ${ageMinutes.toFixed(1)} minutes ago`);
+            return savedData;
+        } catch (error) {
+            console.error(`Failed to load state: ${error.message}`);
+            return false;
+        }
+    }
+
+    static startAutoSave(bot) {
+        setInterval(() => {
+            StatePersistence.saveState(bot);
+        }, STATE_SAVE_INTERVAL);
+        console.log('🔄 Auto-save started (every 5 seconds)');
+    }
+}
 
 // ── ANSI Colour Helpers ───────────────────────────────────────────────────────
 const C = {
@@ -653,7 +740,10 @@ class RomanianGhostBot {
         this.ws = null;
         this.botState = STATE.INITIALIZING;
         this.reconnectAttempts = 0;
-        this.MAX_RECONNECT = 5;
+        this.maxReconnectAttempts = 50; // Increased for better resilience
+        this.reconnectDelay = 5000; // Start with 5 seconds
+        this.reconnectTimer = null;
+        this.isReconnecting = false;
         this.pingInterval = null;
         this.requestId = 0;
 
@@ -700,8 +790,132 @@ class RomanianGhostBot {
         this.largestWin = 0;
         this.largestLoss = 0;
 
+        // Hourly stats tracking
+        this.hourlyStats = {
+            trades: 0,
+            wins: 0,
+            losses: 0,
+            pnl: 0,
+            lastHour: new Date().getHours()
+        };
+
         this.cooldownTimer = null;
         this.telegramBot = new TelegramBot(TELEGRAM_TOKEN, { polling: false });
+
+        // Load saved state if available
+        this.loadSavedState();
+
+        // Start auto-save
+        StatePersistence.startAutoSave(this);
+
+        // Start hourly telegram timer
+        this.startTelegramTimer();
+    }
+
+    loadSavedState() {
+        const savedState = StatePersistence.loadState();
+        if (!savedState) return;
+
+        try {
+            // Restore trading state
+            const trading = savedState.trading;
+            this.currentStake = trading.currentStake;
+            this.martingaleStep = trading.martingaleStep;
+            this.totalMartingaleLoss = trading.totalMartingaleLoss;
+            this.totalTrades = trading.totalTrades;
+            this.totalWins = trading.totalWins;
+            this.totalLosses = trading.totalLosses;
+            this.sessionProfit = trading.sessionProfit;
+            this.currentWinStreak = trading.currentWinStreak;
+            this.currentLossStreak = trading.currentLossStreak;
+            this.maxWinStreak = trading.maxWinStreak;
+            this.maxLossStreak = trading.maxLossStreak;
+            this.maxMartingaleReached = trading.maxMartingaleReached;
+            this.largestWin = trading.largestWin;
+            this.largestLoss = trading.largestLoss;
+            this.targetDigit = trading.targetDigit;
+            this.ghostConsecutiveWins = trading.ghostConsecutiveWins;
+            this.ghostRoundsPlayed = trading.ghostRoundsPlayed;
+            this.ghostConfirmed = trading.ghostConfirmed;
+
+            // Restore history
+            this.tickHistory = savedState.history.tickHistory || [];
+            this.startingBalance = savedState.history.startingBalance;
+            this.accountBalance = savedState.history.accountBalance;
+            this.sessionStartTime = savedState.history.sessionStartTime;
+
+            console.log('✅ State restored successfully');
+            console.log(`   Trades: ${this.totalTrades} | W/L: ${this.totalWins}/${this.totalLosses}`);
+            console.log(`   P&L: ${formatMoney(this.sessionProfit)} | Current Stake: $${this.currentStake.toFixed(2)}`);
+        } catch (error) {
+            console.error(`Error restoring state: ${error.message}`);
+        }
+    }
+
+    startTelegramTimer() {
+        const now = new Date();
+        const nextHour = new Date(now);
+        nextHour.setHours(nextHour.getHours() + 1);
+        nextHour.setMinutes(0);
+        nextHour.setSeconds(0);
+        nextHour.setMilliseconds(0);
+
+        const timeUntilNextHour = nextHour.getTime() - now.getTime();
+
+        setTimeout(() => {
+            this.sendHourlySummary();
+            setInterval(() => {
+                this.sendHourlySummary();
+            }, 60 * 60 * 1000);
+        }, timeUntilNextHour);
+
+        console.log(`📱 Hourly summaries scheduled. First in ${Math.ceil(timeUntilNextHour / 60000)} minutes.`);
+    }
+
+    async sendHourlySummary() {
+        const stats = this.hourlyStats;
+        const winRate = stats.wins + stats.losses > 0
+            ? ((stats.wins / (stats.wins + stats.losses)) * 100).toFixed(1)
+            : 0;
+        const pnlEmoji = stats.pnl >= 0 ? '🟢' : '🔴';
+        const pnlStr = (stats.pnl >= 0 ? '+' : '') + '$' + stats.pnl.toFixed(2);
+
+        const message = `
+⏰ <b>🤖 Ghost Bot v2.0 Hourly Summary</b>
+
+📊 <b>Last Hour</b>
+├ Trades: ${stats.trades}
+├ Wins: ${stats.wins} | Losses: ${stats.losses}
+├ Win Rate: ${winRate}%
+└ ${pnlEmoji} <b>P&L:</b> ${pnlStr}
+
+📈 <b>Session Totals</b>
+├ Total Trades: ${this.totalTrades}
+├ Total W/L: ${this.totalWins}/${this.totalLosses}
+├ Session P&L: ${(this.sessionProfit >= 0 ? '+' : '')}${formatMoney(this.sessionProfit)}
+├ Current Balance: $${this.accountBalance.toFixed(2)}
+├ Max Win Streak: ${this.maxWinStreak}
+├ Max Loss Streak: ${this.maxLossStreak}
+└ Current Stake: $${this.currentStake.toFixed(2)}
+
+⏰ ${new Date().toLocaleString()}
+        `.trim();
+
+        try {
+            await this.telegramBot.sendMessage(CHAT_ID, message, { parse_mode: 'HTML' });
+            console.log('📱 Telegram: Hourly Summary sent');
+        } catch (error) {
+            console.error(`❌ Telegram hourly summary failed: ${error.message}`);
+        }
+
+        // Reset hourly stats
+        this.hourlyStats = {
+            trades: 0,
+            wins: 0,
+            losses: 0,
+            pnl: 0,
+            lastHour: new Date().getHours()
+        };
     }
 
     start() {
@@ -742,6 +956,13 @@ class RomanianGhostBot {
 
     // ── WebSocket ────────────────────────────────────────────────────────────────
     connectWS() {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            console.log('Already connected');
+            return;
+        }
+
+        console.log('🔌 Connecting to Deriv API...');
+        
         this.botState = STATE.CONNECTING;
         const url = `${this.config.endpoint}?app_id=${this.config.app_id}`;
         logApi(`Connecting to ${dim(url)} ...`);
@@ -755,6 +976,7 @@ class RomanianGhostBot {
         this.ws.on('open', () => {
             logApi(green('✅ Connected'));
             this.reconnectAttempts = 0;
+            this.isReconnecting = false; // Reset reconnecting flag
             this.botState = STATE.AUTHENTICATING;
             if (this.pingInterval) clearInterval(this.pingInterval);
             this.pingInterval = setInterval(() => {
@@ -769,23 +991,79 @@ class RomanianGhostBot {
         });
         this.ws.on('close', code => {
             logApi(`⚠️  Connection closed (code: ${code})`);
-            if (this.pingInterval) { clearInterval(this.pingInterval); this.pingInterval = null; }
-            if (this.botState !== STATE.STOPPED) this.attemptReconnect();
+            this.handleDisconnect();
         });
         this.ws.on('error', e => logError(`WebSocket error: ${e.message}`));
     }
 
-    attemptReconnect() {
-        if (this.reconnectAttempts >= this.MAX_RECONNECT) {
-            logError(`Max reconnection attempts reached. Stopping.`);
-            this.stop('Max reconnect attempts exceeded');
+    handleDisconnect() {
+        if (this.botState === STATE.STOPPED) {
+            console.log('Planned shutdown, not reconnecting.');
             return;
         }
+
+        // Only proceed if not already handling disconnect
+        if (this.isReconnecting) {
+            console.log('Already handling disconnect, skipping...');
+            return;
+        }
+
+        this.botState = STATE.CONNECTING;
+        
+        // Save state immediately on disconnect
+        StatePersistence.saveState(this);
+
+        if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+            logError('❌ Max reconnection attempts reached');
+            this.sendTelegram(
+                `❌ <b>Max Reconnection Attempts Reached</b>\n` +
+                `Please restart the bot manually.\n` +
+                `Final P&L: ${formatMoney(this.sessionProfit)}`
+            );
+            this.isReconnecting = false;
+            this.stop('Max reconnection attempts exceeded');
+            return;
+        }
+
+        this.isReconnecting = true;
         this.reconnectAttempts++;
-        const delay = Math.pow(2, this.reconnectAttempts - 1) * 1000;
-        logApi(`Reconnecting in ${delay / 1000}s (attempt ${this.reconnectAttempts}/${this.MAX_RECONNECT})...`);
-        this.isTradeActive = false;
-        setTimeout(() => { if (this.botState !== STATE.STOPPED) this.connectWS(); }, delay);
+
+        // Exponential backoff: 5s, 7.5s, 11.25s, etc., max 30 seconds
+        const delay = Math.min(
+            this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1),
+            30000
+        );
+
+        console.log(
+            `🔄 Reconnecting in ${(delay / 1000).toFixed(1)}s... ` +
+            `(Attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`
+        );
+        console.log(
+            `📊 Preserved state - Trades: ${this.totalTrades}, ` +
+            `P&L: ${formatMoney(this.sessionProfit)}`
+        );
+
+        this.sendTelegram(
+            `⚠️ <b>CONNECTION LOST - RECONNECTING</b>\n` +
+            `📊 Attempt: ${this.reconnectAttempts}/${this.maxReconnectAttempts}\n` +
+            `⏱️ Retrying in ${(delay / 1000).toFixed(1)}s\n` +
+            `💾 State preserved: ${this.totalTrades} trades, ${formatMoney(this.sessionProfit)} P&L`
+        );
+
+        // Clear any existing reconnect timer
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+        }
+
+        this.reconnectTimer = setTimeout(() => {
+            logBot('🔄 Attempting reconnection...');
+            this.isReconnecting = false; // Reset flag before connecting
+            this.connectWS();
+        }, delay);
+    }
+
+    attemptReconnect() {
+        this.handleDisconnect();
     }
 
     send(payload) {
@@ -1228,6 +1506,11 @@ class RomanianGhostBot {
         if (this.currentWinStreak > this.maxWinStreak) this.maxWinStreak = this.currentWinStreak;
         if (profit > this.largestWin) this.largestWin = profit;
 
+        // Update hourly stats
+        this.hourlyStats.trades++;
+        this.hourlyStats.wins++;
+        this.hourlyStats.pnl += profit;
+
         // Reset CUSUM for target digit on win
         this.hmm.resetCUSUM(this.targetDigit);
 
@@ -1237,13 +1520,13 @@ class RomanianGhostBot {
         if (resultDigit !== null) logResult(dim(`  Target: ${this.targetDigit} | Result: ${resultDigit} | Ghost: ${this.ghostConsecutiveWins}/${this.config.ghost_wins_required}`));
 
         this.sendTelegram(`
-            ✅ <b>WIN! v1</b>
+            ✅ <b>WIN! v2</b>
 
             📊 Symbol: ${this.config.symbol}
             🎯 Target: ${this.targetDigit} | Result: ${resultDigit !== null ? resultDigit : 'N/A'}
             🔢 Last 5 ticks: ${this.tickHistory.slice(-5).join(', ')}
             💰 Profit: +$${profit.toFixed(2)}
-            💵 P&L: ${this.sessionProfit >= 0 ? '+' : ''}$${this.sessionProfit.toFixed(2)}
+            💵 P&L: ${this.sessionProfit >= 0 ? '+' : ''}${formatMoney(this.sessionProfit)}
             📊 Balance: $${this.accountBalance.toFixed(2)}
             📈 Record: ${this.totalWins}W/${this.totalLosses}L | Streak: ${this.currentWinStreak}W
         `.trim());
@@ -1263,6 +1546,11 @@ class RomanianGhostBot {
         this.martingaleStep++;
         if (this.martingaleStep > this.maxMartingaleReached) this.maxMartingaleReached = this.martingaleStep;
 
+        // Update hourly stats
+        this.hourlyStats.trades++;
+        this.hourlyStats.losses++;
+        this.hourlyStats.pnl -= lostAmount;
+
         const martInfo = this.config.martingale_enabled ? ` | Mart: ${this.martingaleStep}/${this.config.max_martingale_steps}` : '';
         const plStr = this.sessionProfit >= 0 ? green(formatMoney(this.sessionProfit)) : red(formatMoney(this.sessionProfit));
         logResult(`${red('❌ LOSS!')} Lost: ${red('-$' + lostAmount.toFixed(2))} | P/L: ${plStr} | Bal: $${this.accountBalance.toFixed(2)}${martInfo}`);
@@ -1270,13 +1558,13 @@ class RomanianGhostBot {
             logResult(dim(`  Target: ${this.targetDigit} | Result: ${resultDigit} (${resultDigit === this.targetDigit ? red('REPEATED') : green('different — unexpected loss')})`));
 
         this.sendTelegram(`
-            ❌ <b>LOSS! v1</b>
+            ❌ <b>LOSS! v2</b>
 
             📊 Symbol: ${this.config.symbol}
             🎯 Target: ${this.targetDigit} | Result: ${resultDigit !== null ? resultDigit : 'N/A'}
             🔢 Last 5 ticks: ${this.tickHistory.slice(-5).join(', ')}
             💸 Lost: -$${lostAmount.toFixed(2)}
-            💵 P&L: ${this.sessionProfit >= 0 ? '+' : ''}$${this.sessionProfit.toFixed(2)}
+            💵 P&L: ${this.sessionProfit >= 0 ? '+' : ''}${formatMoney(this.sessionProfit)}
             📊 Balance: $${this.accountBalance.toFixed(2)}
             📈 Record: ${this.totalWins}W/${this.totalLosses}L | Streak: ${this.currentLossStreak}L${martInfo}
         `.trim());
@@ -1361,8 +1649,13 @@ class RomanianGhostBot {
     stop(reason = 'User stopped') {
         this.botState = STATE.STOPPED;
         logBot(`🛑 ${bold('Stopping bot...')} Reason: ${reason}`);
+        
+        // Save state before shutting down
+        StatePersistence.saveState(this);
+        
         if (this.cooldownTimer) { clearTimeout(this.cooldownTimer); this.cooldownTimer = null; }
         if (this.pingInterval) { clearInterval(this.pingInterval); this.pingInterval = null; }
+        if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
         this.pendingTrade = false;
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
             try {
@@ -1372,7 +1665,7 @@ class RomanianGhostBot {
             } catch (_) {}
             setTimeout(() => { try { this.ws.close(); } catch (_) {} }, 500);
         }
-        this.sendTelegram(`🛑 <b>SESSION STOPPED</b>\n\nReason: ${reason}\n\nFinal P&L: $${this.sessionProfit.toFixed(2)}`);
+        this.sendTelegram(`🛑 <b>SESSION STOPPED</b>\n\nReason: ${reason}\n\nFinal P&L: ${formatMoney(this.sessionProfit)}`);
         this.printFinalStats();
         setTimeout(() => process.exit(0), 1200);
     }
