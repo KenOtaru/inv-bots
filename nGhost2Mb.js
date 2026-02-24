@@ -1447,7 +1447,7 @@ class RomanianGhostBotV4 {
                     💰 +$${profit.toFixed(2)}
                     📊 ${this.totalWins}W/${this.totalLosses}L | WStreak:${as.currentWinStreak}
                     📈 Trades: ${this.totalTrades} | ${formatMoney(this.sessionProfit)}
-                `
+                `.trim()
             );
         } else {
             // cost = stake amount lost
@@ -1474,7 +1474,7 @@ class RomanianGhostBotV4 {
                     💸 -$${lostAmount.toFixed(2)}
                     📊 ${this.totalWins}W/${this.totalLosses}L | Mart: ${as.martingaleStep}/${this.config.max_martingale_steps}
                     📈 Trades: ${this.totalTrades} | ${formatMoney(this.sessionProfit)}
-                `
+                `.trim()
             );
             this.decideNextAction(asset);
         }
