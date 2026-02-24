@@ -238,7 +238,7 @@ function parseArgs() {
         hmm_min_discrimination: 0.10,  // Min B[1][1]-B[0][1] gap to accept BW update
 
         // Ensemble
-        repeat_confidence: 70,         //70 Final ensemble score gate (0–100)
+        repeat_confidence: 50,         //70 Final ensemble score gate (0–100)
 
         // Ghost
         ghost_enabled: false,
