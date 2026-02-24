@@ -1171,7 +1171,7 @@ class RomanianGhostBot {
         );
 
         this.sendTelegram(`
-            🎯 <b>GHOST TRADE</b>
+            🎯 <b>GHOST TRADE v1</b>
 
             📊 Symbol: ${this.config.symbol}
             🔢 Target Digit: ${this.targetDigit}
@@ -1179,7 +1179,6 @@ class RomanianGhostBot {
             💰 Stake: $${this.currentStake.toFixed(2)}${stepInfo}
             📈 Repeat Rate: ${this.targetRepeatRate.toFixed(1)}%
             🔬 Score: ${score}/100 | P(NR): ${pnr}
-            👻 Ghost: ${this.ghostConsecutiveWins}/${this.config.ghost_wins_required}
             📊 Session: ${this.totalTrades} trades | ${this.totalWins}W/${this.totalLosses}L
         `.trim());
 
@@ -1238,11 +1237,11 @@ class RomanianGhostBot {
         if (resultDigit !== null) logResult(dim(`  Target: ${this.targetDigit} | Result: ${resultDigit} | Ghost: ${this.ghostConsecutiveWins}/${this.config.ghost_wins_required}`));
 
         this.sendTelegram(`
-            ✅ <b>WIN!</b>
+            ✅ <b>WIN! v1</b>
 
             📊 Symbol: ${this.config.symbol}
             🎯 Target: ${this.targetDigit} | Result: ${resultDigit !== null ? resultDigit : 'N/A'}
-             Last 5 ticks: ${this.tickHistory.slice(-5).join(', ')}
+            🔢 Last 5 ticks: ${this.tickHistory.slice(-5).join(', ')}
             💰 Profit: +$${profit.toFixed(2)}
             💵 P&L: ${this.sessionProfit >= 0 ? '+' : ''}$${this.sessionProfit.toFixed(2)}
             📊 Balance: $${this.accountBalance.toFixed(2)}
@@ -1271,16 +1270,15 @@ class RomanianGhostBot {
             logResult(dim(`  Target: ${this.targetDigit} | Result: ${resultDigit} (${resultDigit === this.targetDigit ? red('REPEATED') : green('different — unexpected loss')})`));
 
         this.sendTelegram(`
-            ❌ <b>LOSS!</b>
+            ❌ <b>LOSS! v1</b>
 
             📊 Symbol: ${this.config.symbol}
             🎯 Target: ${this.targetDigit} | Result: ${resultDigit !== null ? resultDigit : 'N/A'}
-             Last 5 ticks: ${this.tickHistory.slice(-5).join(', ')}
+            🔢 Last 5 ticks: ${this.tickHistory.slice(-5).join(', ')}
             💸 Lost: -$${lostAmount.toFixed(2)}
             💵 P&L: ${this.sessionProfit >= 0 ? '+' : ''}$${this.sessionProfit.toFixed(2)}
             📊 Balance: $${this.accountBalance.toFixed(2)}
             📈 Record: ${this.totalWins}W/${this.totalLosses}L | Streak: ${this.currentLossStreak}L${martInfo}
-            👻 Ghost: Reset to 0
         `.trim());
 
         this.ghostConsecutiveWins = 0;
