@@ -14,7 +14,7 @@ const TOKEN = "0P94g4WdSrSrzir";
 const TELEGRAM_TOKEN = "8288121368:AAHYRb0Stk5dWUWN1iTYbdO3fyIEwIuZQR8";
 const CHAT_ID = "752497117";
 
-const STATE_FILE = path.join(__dirname, 'ghost92-0009-state.json');
+const STATE_FILE = path.join(__dirname, 'ghost92-00012-state.json');
 
 // ══════════════════════════════════════════════════════════════════════════════
 //  UTILITY FUNCTIONS
@@ -379,10 +379,6 @@ class RomanianGhostUltimate {
             cusum_slack: 0.005,
             analysis_window: 5000,
 
-            // Cooldown (prevents overtrading)
-            cooldownTicks: 15,            // Wait 15 ticks between trades
-            cooldownAfterLoss: 30,        // Wait 30 ticks after loss
-
             // Money management
             baseStake: 2.20,
             firstLossMultiplier: 11.3,
@@ -738,46 +734,10 @@ class RomanianGhostUltimate {
 
 
     // ========================================================================
-    // ENHANCEMENT #5: COOLDOWN SYSTEM
-    // ========================================================================
-    canTrade(asset) {
-        // Basic checks
-        if (this.tradeInProgress) return false;
-        if (!this.wsReady) return false;
-        if (!this.historyLoaded[asset]) return false;
-        if (this.histories[asset].length < this.config.minHistoryForTrading) return false;
-
-        // Cooldown check
-        const ticksSinceLast = this.ticksSinceLastTrade[asset];
-        const requiredCooldown = this.consecutiveLosses > 0
-            ? this.config.cooldownAfterLoss
-            : this.config.cooldownTicks;
-
-        if (ticksSinceLast < requiredCooldown) return false;
-
-        // Time filter (avoid volatile minutes)
-        const now = new Date();
-        const minute = now.getMinutes();
-        if (minute < this.config.avoidMinutesAroundHour ||
-            minute > (60 - this.config.avoidMinutesAroundHour)) {
-            return false;
-        }
-
-        // Max consecutive losses check
-        if (this.consecutiveLosses >= this.config.maxConsecutiveLosses) return false;
-
-        // Stop loss check
-        if (this.netProfit <= this.config.stopLoss) return false;
-
-        return true;
-    }
-
-
-    // ========================================================================
     // MAIN SIGNAL SCANNER (ENHANCED WITH HMM REGIME DETECTION)
     // ========================================================================
     scanForSignal(asset) {
-        // if (!this.canTrade(asset)) return;
+        if (this.tradeInProgress) return;
 
         const history = this.histories[asset];
         if (history.length < 50) return;
@@ -914,12 +874,12 @@ class RomanianGhostUltimate {
         }
 
         // Get HMM regime data for this asset
-        const hmm = this.assetHMMs.get(asset);
-        const history = this.histories[asset];
-        let regime = null;
-        if (hmm && history.length >= 50) {
-            regime = hmm.analyze(history, exitDigit, history.length);
-        }
+        // const hmm = this.assetHMMs.get(asset);
+        // const history = this.histories[asset];
+        // let regime = null;
+        // if (hmm && history.length >= 50) {
+        //     regime = hmm.analyze(history, exitDigit, history.length);
+        // }
 
         const resultMessage = won ? '✅ WIN' : '❌ LOSS';
         console.log(`\n${resultMessage} — ${asset}`);
