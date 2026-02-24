@@ -880,7 +880,7 @@ class RomanianGhostUltimate {
         });
 
         this.sendTelegram(`
-            🎯 <b>GHOST TRADE</b>
+            🎯 <b>TRADE OPENED V1 Multi2</b>
 
             📊 Asset: ${asset}
             🔢 Target Digit: ${digit}
@@ -957,7 +957,7 @@ class RomanianGhostUltimate {
 
         // Enhanced Telegram Alert with regime data
         let telegramContent = `
-            ${won ? '✅ <b>MULTI-BOT WIN!</b>' : '❌ <b>MULTI-BOT LOSS!</b>'}
+            ${won ? '✅ <b>V1 MULTI-BOT WIN!</b>' : '❌ <b>V1 MULTI-BOT LOSS!</b>'}
 
             📊 Symbol: ${asset}
             🎯 Target: ${this.lastTradeDigit[asset]}
