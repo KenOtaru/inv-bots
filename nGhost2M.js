@@ -1119,20 +1119,20 @@ class RomanianGhostUltimate {
         });
 
         this.sendTelegram(`
-            🎯 <b>TRADE OPENED — ADVANCED ENSEMBLE</b>
+            🎯 <b>TRADE OPENED — ENSEMBLE V2 Multi</b>
 
             📊 Asset: ${asset}
             🔢 Target Digit: ${digit}
             📈 Last 10: ${this.histories[asset].slice(-10).join(',')}
             
             🔬 <b>ENSEMBLE METRICS</b>
-            ├ 🛡️ Safety: ${safetyScore}/100
-            ├ 📊 HMM State: ${regime.hmmStateName} (P=${(regime.posteriorNR * 100).toFixed(1)}%)
-            ├ 🔔 BOCPD RL: ${regime.bocpdModeRL}t | P(NR)=${(regime.bocpdPNonRep * 100).toFixed(1)}%
-            ├ 📈 EWMA Trend: ${regime.ewmaTrend.toFixed(2)} | Values: [${regime.ewmaValues.map(v=>v.toFixed(1)).join(',')}]%
-            ├ 🔗 ACF[1]: ${regime.acf[0].toFixed(3)}
-            ├ ⚠️ CUSUM Up: ${regime.cusumUp.toFixed(2)}
-            └ 🔧 Persistence: ${regime.hmmPersistence}t
+            ├ Safety: ${safetyScore}/100
+            ├ HMM: ${regime.hmmStateName} (P=${(regime.posteriorNR * 100).toFixed(1)}%)
+            ├ BOCPD: ${regime.bocpdModeRL}t (P(NR)=${(regime.bocpdPNonRep * 100).toFixed(1)}%)
+            ├ EWMA: ${regime.ewmaTrend.toFixed(2)}([${regime.ewmaValues.map(v=>v.toFixed(1)).join(',')}]%)
+            ├ ACF[1]: ${regime.acf[0].toFixed(3)}
+            ├ CUSUM Up: ${regime.cusumUp.toFixed(2)}
+            └ Persistence: ${regime.hmmPersistence}t
 
             💰 Stake: $${this.stake.toFixed(2)}
             📊 Losses: ${this.consecutiveLosses}
@@ -1216,9 +1216,9 @@ class RomanianGhostUltimate {
             
             ${regime && regime.valid ? `
             🔬 <b>ENSEMBLE STATE</b>
-            ├ BOCPD: RL=${regime.bocpdModeRL}t P(NR)=${(regime.bocpdPNonRep * 100).toFixed(1)}%
+            ├ BOCPD: ${regime.bocpdModeRL}(${(regime.bocpdPNonRep * 100).toFixed(1)}%)
             ├ HMM: ${regime.hmmStateName} (P=${(regime.posteriorNR * 100).toFixed(1)}%)
-            ├ EWMA: Trend=${regime.ewmaTrend.toFixed(2)} Values=[${regime.ewmaValues.map(v=>v.toFixed(1)).join(',')}]%
+            ├ EWMA: ${regime.ewmaTrend.toFixed(2)}([${regime.ewmaValues.map(v=>v.toFixed(1)).join(',')}]%)
             ├ ACF[1]: ${regime.acf[0].toFixed(3)}
             ├ CUSUM: ${regime.cusumUp.toFixed(2)}
             └ Persist: ${regime.hmmPersistence}t
