@@ -212,9 +212,9 @@ function parseArgs() {
         min_ticks_for_analysis: 100,
 
         // ── Regime detection thresholds ───────────────────────────────────────
-        repeat_threshold: 9,           // Hard gate: raw repeat % per digit
-        hmm_nonrep_confidence: 0.75,   // Bayesian P(NON-REP) required from HMM forward
-        bocpd_nonrep_confidence: 0.82, // BOCPD P(NON-REP) required
+        repeat_threshold: 10,           // Hard gate: raw repeat % per digit
+        hmm_nonrep_confidence: 0.70,   //0.75 Bayesian P(NON-REP) required from HMM forward
+        bocpd_nonrep_confidence: 0.72, //0.82 BOCPD P(NON-REP) required
         min_regime_persistence: 8,     // Min consecutive ticks in NON-REP (HMM Viterbi)
         acf_lag1_threshold: 0.15,      // Lag-1 ACF gate (< threshold = ok)
         ewma_trend_threshold: 2.0,     // EWMA trend gate (short-long, %)
@@ -222,8 +222,8 @@ function parseArgs() {
         // With correct LLRs: no-repeat LLR=-0.405, repeat LLR=+1.386, slack=0.15
         // At 5% repeat rate, CUSUM drifts: 0.95*(-0.405-0.15) + 0.05*(1.386-0.15) = -0.464/tick
         // → clears in ~10 non-rep ticks after last alarm trigger
-        cusum_up_threshold: 3.5,       // Up-CUSUM alarm (rep regime shift detector)
-        cusum_down_threshold: -4.0,    // Down-CUSUM confirmation (non-rep sustained)
+        cusum_up_threshold: 4.5,       // Up-CUSUM alarm (rep regime shift detector)
+        cusum_down_threshold: -4.5,    // Down-CUSUM confirmation (non-rep sustained)
         cusum_slack: 0.15,             // CRITICAL: must be large enough that non-rep ticks drain CUSUM
         structural_break_threshold: 0.15, // P-value threshold for structural break
 
@@ -1882,7 +1882,7 @@ class RomanianGhostBot {
         );
 
         this.sendTelegram(`
-            🎯 <b>TRADE</b>
+            🎯 <b>TRADE v2</b>
 
             📊 ${this.config.symbol} | Digit: ${this.targetDigit}
             🔢 Last10: ${this.tickHistory.slice(-10).join(',')}
@@ -1943,12 +1943,13 @@ class RomanianGhostBot {
         logResult(`${green('✅ WIN!')} Profit: ${green('+$' + profit.toFixed(2))} | P/L: ${plStr} | Bal: ${green('$' + this.accountBalance.toFixed(2))}`);
         if (resultDigit !== null) logResult(dim(`  Target:${this.targetDigit} Result:${resultDigit} Ghost:${this.ghostConsecutiveWins}/${this.config.ghost_wins_required}`));
         this.sendTelegram(`
-            ✅ <b>WIN! v3</b>
+            ✅ <b>WIN! v2</b>
             Target:${this.targetDigit} | Result:${resultDigit}
             🔢 Last10: ${this.tickHistory.slice(-10).join(',')}
             💰 +$${profit.toFixed(2)}
             📊 P&L: ${this.sessionProfit >= 0 ? '+' : ''}$${this.sessionProfit.toFixed(2)}
-            📊 ${this.totalTrades} trades | ${this.totalWins}W/${this.totalLosses}L | x2-x4: ${this.x2Losses}/${this.x3Losses}/${this.x4Losses}
+            📊 Trades: ${this.totalTrades} | ${this.totalWins}W/${this.totalLosses}L (${(this.totalWins / this.totalTrades * 100).toFixed(1)}%) 
+            📊 x2-x3: ${this.x2Losses}/${this.x3Losses}}
             
             `.trim());
         this.resetMartingale(); this.resetGhost();
@@ -1986,13 +1987,15 @@ class RomanianGhostBot {
         logResult(`${red('❌ LOSS!')} Lost: ${red('-$' + lostAmount.toFixed(2))} | P/L: ${plStr}${martInfo}`);
         if (resultDigit !== null) logResult(dim(`  Target:${this.targetDigit} Result:${resultDigit} ${resultDigit === this.targetDigit ? red('REPEATED') : green('diff — unexpected')}`));
         this.sendTelegram(`
-            ❌ <b>LOSS! v3</b>
+            ❌ <b>LOSS! v2</b>
             Target:${this.targetDigit} | Result:${resultDigit}
             🔢 Last10: ${this.tickHistory.slice(-10).join(',')}
             💸 -$${lostAmount.toFixed(2)}
             📊 P&L: ${this.sessionProfit >= 0 ? '+' : ''}$${this.sessionProfit.toFixed(2)}
-            📊 ${this.totalTrades} trades | ${this.totalWins}W/${this.totalLosses}L | x2-x4: ${this.x2Losses}/${this.x3Losses}/${this.x4Losses}${martInfo}
-            `.trim());
+            📊 Trades: ${this.totalTrades} | ${this.totalWins}W/${this.totalLosses}L (${(this.totalWins / this.totalTrades * 100).toFixed(1)}%) 
+            📊 x2-x3: ${this.x2Losses}/${this.x3Losses}}
+
+        `.trim());
         this.ghostConsecutiveWins = 0; this.ghostConfirmed = false; this.ghostRoundsPlayed = 0; this.ghostAwaitingResult = false;
     }
 

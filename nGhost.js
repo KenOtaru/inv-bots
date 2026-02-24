@@ -187,9 +187,9 @@ function parseArgs() {
         min_ticks_for_hmm: 50,         // Minimum ticks before HMM is reliable
 
         // Regime detection thresholds
-        repeat_threshold: 8,           // Raw per-digit repeat % gate
-        repeat_confidence: 90,        // Bayesian P(repeat | observations) required
-        hmm_nonrep_confidence: 0.93,   // Bayesian P(NON-REP) required
+        repeat_threshold: 10,           //7 Raw per-digit repeat % gate
+        repeat_confidence: 80,        //90 Bayesian P(repeat | observations) required
+        hmm_nonrep_confidence: 0.83,   //0.93 Bayesian P(NON-REP) required
         min_regime_persistence: 8,     // Ticks current regime must have lasted
         cusum_threshold: 4.5,          // CUSUM alarm threshold (regime shift detector)
         cusum_slack: 0.005,            // CUSUM slack (sensitivity tuning)
@@ -1465,15 +1465,14 @@ class RomanianGhostBot {
         );
 
         this.sendTelegram(`
-            🎯 <b>GHOST TRADE v1</b>
+            🎯 <b>OPEN TRADE v1</b>
 
             📊 Symbol: ${this.config.symbol}
             🔢 Target Digit: ${this.targetDigit}
-             Last 5 ticks: ${this.tickHistory.slice(-5).join(', ')}
+            📊 Digits: ${this.tickHistory.slice(-10).join(', ')}
             💰 Stake: $${this.currentStake.toFixed(2)}${stepInfo}
             📈 Repeat Rate: ${this.targetRepeatRate.toFixed(1)}%
             🔬 Score: ${score}/100 | P(NR): ${pnr}
-            📊 Session: ${this.totalTrades} trades | ${this.totalWins}W/${this.totalLosses}L
         `.trim());
 
         this.send({
@@ -1537,15 +1536,17 @@ class RomanianGhostBot {
         if (resultDigit !== null) logResult(dim(`  Target: ${this.targetDigit} | Result: ${resultDigit} | Ghost: ${this.ghostConsecutiveWins}/${this.config.ghost_wins_required}`));
 
         this.sendTelegram(`
-            ✅ <b>WIN! v2</b>
+            ✅ <b>WIN! v1</b>
 
             📊 Symbol: ${this.config.symbol}
             🎯 Target: ${this.targetDigit} | Result: ${resultDigit !== null ? resultDigit : 'N/A'}
-            🔢 Last 5 ticks: ${this.tickHistory.slice(-5).join(', ')}
+            🔢 Digits: ${this.tickHistory.slice(-5).join(', ')}
             💰 Profit: +$${profit.toFixed(2)}
             💵 P&L: ${this.sessionProfit >= 0 ? '+' : ''}${formatMoney(this.sessionProfit)}
-            📊 Balance: $${this.accountBalance.toFixed(2)}
-            📈 Record: ${this.totalWins}W/${this.totalLosses}L | Streak: ${this.currentWinStreak}W
+            📊 Balance: $${this.accountBalance.toFixed(2)} 
+            📈 WinStreak: ${this.currentWinStreak}
+            📈 Record: Totals: ${this.totalTrades} | ${this.totalWins}W/${this.totalLosses}L (${(this.totalWins / this.totalTrades * 100).toFixed(1)}%)
+            📊 x2-x3: ${this.x2Losses}/${this.x3Losses}
         `.trim());
 
         this.resetMartingale();
@@ -1589,16 +1590,17 @@ class RomanianGhostBot {
             logResult(dim(`  Target: ${this.targetDigit} | Result: ${resultDigit} (${resultDigit === this.targetDigit ? red('REPEATED') : green('different — unexpected loss')})`));
 
         this.sendTelegram(`
-            ❌ <b>LOSS! v2</b>
+            ❌ <b>LOSS! v1</b>
 
             📊 Symbol: ${this.config.symbol}
             🎯 Target: ${this.targetDigit} | Result: ${resultDigit !== null ? resultDigit : 'N/A'}
-            🔢 Last 5 ticks: ${this.tickHistory.slice(-5).join(', ')}
+            🔢 Digits: ${this.tickHistory.slice(-10).join(', ')}
             💸 Lost: -$${lostAmount.toFixed(2)}
             💵 P&L: ${this.sessionProfit >= 0 ? '+' : ''}${formatMoney(this.sessionProfit)}
             📊 Balance: $${this.accountBalance.toFixed(2)}
-            📈 Record: ${this.totalWins}W/${this.totalLosses}L | x2-x4: ${this.x2Losses}/${this.x3Losses}/${this.x4Losses}
+            📈 Record: Totals: ${this.totalTrades} | ${this.totalWins}W/${this.totalLosses}L (${(this.totalWins / this.totalTrades * 100).toFixed(1)}%)
             ⏱️ Streak: ${this.currentLossStreak}L${martInfo}
+            📊 x2-x3: ${this.x2Losses}/${this.x3Losses}
         `.trim());
 
         this.ghostConsecutiveWins = 0;
