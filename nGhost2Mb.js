@@ -99,13 +99,13 @@ const CONFIG = {
 
     // Regime detection
     repeat_threshold:          8,
-    hmm_nonrep_confidence:     0.85,
-    bocpd_nonrep_confidence:   0.82,
+    hmm_nonrep_confidence:     0.93,
+    bocpd_nonrep_confidence:   0.90,
     min_regime_persistence:    8,
     acf_lag1_threshold:        0.15,
     ewma_trend_threshold:      2.0,
-    cusum_up_threshold:        3.5,
-    cusum_down_threshold:      -4.0,
+    cusum_up_threshold:        4.5,
+    cusum_down_threshold:      -4.5,
     cusum_slack:               0.15,
     structural_break_threshold:0.15,
 
