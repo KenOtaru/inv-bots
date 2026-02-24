@@ -379,18 +379,6 @@ class RomanianGhostUltimate {
             cusum_slack: 0.005,
             analysis_window: 5000,
 
-            // Z-Score thresholds (CORRECTED - uses AVERAGE not sum)
-            minAvgZScore: 2.0,           // Average Z-score per window
-            minParticipation: 8,          // Digit must dominate 8+ windows
-
-            // Volatility thresholds (CORRECTED - realistic values)
-            minConcentration: 0.023,      // Minimum concentration for ultra-low
-            maxConcentration: 0.25,       // Maximum (avoid extreme anomalies)
-
-            // Confirmation layers
-            minStreakLength: 3,           // Minimum current streak
-            maxStreakLength: 8,           // Maximum before exhaustion
-
             // Cooldown (prevents overtrading)
             cooldownTicks: 15,            // Wait 15 ticks between trades
             cooldownAfterLoss: 30,        // Wait 30 ticks after loss
@@ -748,256 +736,6 @@ class RomanianGhostUltimate {
         }
     }
 
-    // ========================================================================
-    // ENHANCEMENT #1: MULTI-LAYER Z-SCORE WITH AVERAGE (FIXED)
-    // ========================================================================
-    calculateZScoreAnalysis(history) {
-        const windows = [13, 21, 34, 55, 89, 144, 233, 377, 610, 987];
-        const zScoreSums = Array(10).fill(0);
-        const aboveExpectedCount = Array(10).fill(0);
-        const windowZScores = Array(10).fill(null).map(() => []);
-        let validWindowCount = 0;
-
-        for (const w of windows) {
-            if (history.length < w) continue;
-            validWindowCount++;
-
-            const slice = history.slice(-w);
-            const counts = Array(10).fill(0);
-            slice.forEach(d => counts[d]++);
-            const exp = w / 10;
-            const sd = Math.sqrt(w * 0.1 * 0.9);
-
-            for (let i = 0; i < 10; i++) {
-                const z = (counts[i] - exp) / sd;
-                zScoreSums[i] += z;
-                windowZScores[i].push({ window: w, z });
-
-                if (counts[i] > exp) {
-                    aboveExpectedCount[i]++;
-                }
-            }
-        }
-
-        // Calculate AVERAGE Z-score per digit
-        const results = [];
-        for (let i = 0; i < 10; i++) {
-            const avgZ = validWindowCount > 0 ? zScoreSums[i] / validWindowCount : 0;
-            const participation = aboveExpectedCount[i];
-
-            // Only consider digits that dominate 8+ windows
-            if (participation >= this.config.minParticipation) {
-                results.push({
-                    digit: i,
-                    avgZScore: avgZ,
-                    participation,
-                    windowDetails: windowZScores[i],
-                    consistency: this.calculateConsistency(windowZScores[i])
-                });
-            }
-        }
-
-        return results.sort((a, b) => b.avgZScore - a.avgZScore);
-    }
-
-    // ========================================================================
-    // ENHANCEMENT #2: Z-SCORE CONSISTENCY CHECK
-    // ========================================================================
-    calculateConsistency(windowZScores) {
-        if (windowZScores.length < 3) return 0;
-
-        const zValues = windowZScores.map(w => w.z);
-        const mean = zValues.reduce((a, b) => a + b, 0) / zValues.length;
-        const variance = zValues.reduce((s, z) => s + Math.pow(z - mean, 2), 0) / zValues.length;
-        const stdDev = Math.sqrt(variance);
-
-        // Lower std dev = more consistent signal across windows
-        // Return consistency score 0-1 (higher = better)
-        return Math.max(0, 1 - (stdDev / 2));
-    }
-
-    // ========================================================================
-    // ENHANCEMENT #3: ADVANCED VOLATILITY ANALYSIS
-    // ========================================================================
-    calculateVolatilityAnalysis(history) {
-        if (history.length < 500) return null;
-
-        const last500 = history.slice(-500);
-        const last200 = history.slice(-200);
-        const last50 = history.slice(-50);
-
-        // Entropy calculation for each window
-        const entropy500 = this.calculateEntropy(last500);
-        const entropy200 = this.calculateEntropy(last200);
-        const entropy50 = this.calculateEntropy(last50);
-
-        // Concentration (1 - normalized entropy)
-        const maxEntropy = Math.log2(10);
-        const conc500 = 1 - (entropy500 / maxEntropy);
-        const conc200 = 1 - (entropy200 / maxEntropy);
-        const conc50 = 1 - (entropy50 / maxEntropy);
-
-        // Weighted concentration (recent data weighted more)
-        const weightedConc = (conc500 * 1.0 + conc200 * 1.5 + conc50 * 2.5) / 5.0;
-
-        // Trend: Is concentration increasing or decreasing?
-        const concTrend = conc50 - conc500;
-
-        // Streak analysis
-        const streakInfo = this.analyzeStreaks(last50);
-
-        // Hurst exponent approximation (for mean-reversion detection)
-        const hurst = this.calculateHurstApprox(last200);
-
-        return {
-            concentration: weightedConc,
-            concLong: conc500,
-            concMedium: conc200,
-            concShort: conc50,
-            concTrend,
-            isUltraLow: weightedConc > this.config.minConcentration &&
-                weightedConc < this.config.maxConcentration,
-            streakInfo,
-            hurst,
-            isMeanReverting: hurst < 0.47
-        };
-    }
-
-    calculateEntropy(data) {
-        const freq = Array(10).fill(0);
-        data.forEach(d => freq[d]++);
-
-        let entropy = 0;
-        for (let f of freq) {
-            if (f > 0) {
-                const p = f / data.length;
-                entropy -= p * Math.log2(p);
-            }
-        }
-        return entropy;
-    }
-
-    analyzeStreaks(data) {
-        let maxStreak = 1;
-        let currentStreak = 1;
-        let currentDigit = data[data.length - 1];
-        let streakDigit = currentDigit;
-
-        // Find current streak at end
-        for (let i = data.length - 2; i >= 0; i--) {
-            if (data[i] === currentDigit) {
-                currentStreak++;
-            } else {
-                break;
-            }
-        }
-
-        // Find max streak in window
-        let tempStreak = 1;
-        for (let i = 1; i < data.length; i++) {
-            if (data[i] === data[i - 1]) {
-                tempStreak++;
-                if (tempStreak > maxStreak) {
-                    maxStreak = tempStreak;
-                    streakDigit = data[i];
-                }
-            } else {
-                tempStreak = 1;
-            }
-        }
-
-        return {
-            currentStreak,
-            currentDigit,
-            maxStreak,
-            streakDigit,
-            isExhausted: currentStreak >= this.config.maxStreakLength
-        };
-    }
-
-    calculateHurstApprox(data) {
-        const n = data.length;
-        if (n < 50) return 0.5;
-
-        const mean = data.reduce((a, b) => a + b, 0) / n;
-
-        let cumDev = 0;
-        let maxDev = 0;
-        let minDev = 0;
-
-        for (let val of data) {
-            cumDev += val - mean;
-            maxDev = Math.max(maxDev, cumDev);
-            minDev = Math.min(minDev, cumDev);
-        }
-
-        const range = maxDev - minDev;
-        const stdDev = Math.sqrt(data.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / n);
-
-        if (stdDev === 0) return 0.5;
-
-        const hurst = Math.log(range / stdDev) / Math.log(n);
-        return Math.max(0.1, Math.min(0.9, hurst));
-    }
-
-    // ========================================================================
-    // ENHANCEMENT #4: SIGNAL CONFLUENCE SCORING
-    // ========================================================================
-    calculateSignalScore(zAnalysis, volAnalysis, history) {
-        if (!zAnalysis || zAnalysis.length === 0 || !volAnalysis) return null;
-
-        const best = zAnalysis[0];
-        const digit = best.digit;
-
-        // Base score from Z-score (max 40 points)
-        const zScore = Math.min(best.avgZScore * 10, 40);
-
-        // Consistency bonus (max 15 points)
-        const consistencyScore = best.consistency * 15;
-
-        // Participation bonus (max 10 points)
-        const participationScore = (best.participation / 10) * 10;
-
-        // Volatility score (max 15 points)
-        let volScore = 0;
-        if (volAnalysis.isUltraLow) volScore += 10;
-        if (volAnalysis.isMeanReverting) volScore += 5;
-
-        // Trend alignment (max 10 points)
-        let trendScore = 0;
-        if (volAnalysis.concTrend > 0.01) trendScore += 10; // Concentration increasing
-
-        // Streak consideration (max 10 points)
-        let streakScore = 0;
-        const streak = volAnalysis.streakInfo;
-        if (streak.currentDigit === digit && streak.currentStreak >= 3) {
-            streakScore += 5;
-            if (streak.currentStreak >= 5) streakScore += 5; // Bonus for strong streak
-        }
-
-        const totalScore = zScore + consistencyScore + participationScore +
-            volScore + trendScore + streakScore;
-
-        // Recent appearance check
-        const inRecent = history.slice(-9).includes(digit);
-
-        return {
-            digit,
-            totalScore,
-            components: {
-                zScore,
-                consistencyScore,
-                participationScore,
-                volScore,
-                trendScore,
-                streakScore
-            },
-            avgZScore: best.avgZScore,
-            participation: best.participation,
-            inRecent,
-            isValid: totalScore >= 65 && inRecent  // Minimum 60 points to trade
-        };
-    }
 
     // ========================================================================
     // ENHANCEMENT #5: COOLDOWN SYSTEM
@@ -1034,43 +772,12 @@ class RomanianGhostUltimate {
         return true;
     }
 
-    // ========================================================================
-    // ENHANCEMENT #6: ADAPTIVE THRESHOLDS
-    // ========================================================================
-    getAdaptiveThresholds() {
-        if (this.recentTrades.length < 20) {
-            return {
-                minScore: 60,
-                minZScore: this.config.minAvgZScore
-            };
-        }
-
-        // Calculate recent win rate
-        const recentWins = this.recentTrades.filter(t => t.won).length;
-        const recentWinRate = recentWins / this.recentTrades.length;
-
-        // Adjust thresholds based on performance
-        let minScore = 60;
-        let minZScore = this.config.minAvgZScore;
-
-        if (recentWinRate < 0.90) {
-            // Increase thresholds if win rate dropping
-            minScore = 70;
-            minZScore = 2.6;
-        } else if (recentWinRate > 0.97) {
-            // Can slightly relax if performing well
-            minScore = 60;
-            minZScore = 2.0;
-        }
-
-        return { minScore, minZScore };
-    }
 
     // ========================================================================
     // MAIN SIGNAL SCANNER (ENHANCED WITH HMM REGIME DETECTION)
     // ========================================================================
     scanForSignal(asset) {
-        if (!this.canTrade(asset)) return;
+        // if (!this.canTrade(asset)) return;
 
         const history = this.histories[asset];
         if (history.length < 50) return;
@@ -1095,9 +802,6 @@ class RomanianGhostUltimate {
         const safetyScore = regime.safetyScore;
         const hmmState = regime.hmmStateName;
         const confidence = regime.posteriorNonRep;
-
-        // Get adaptive thresholds based on recent performance
-        const thresholds = this.getAdaptiveThresholds();
 
         // LOG EVERY 30 SECONDS FOR DEBUGGING
         const now = Date.now();
