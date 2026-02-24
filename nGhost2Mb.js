@@ -1339,7 +1339,7 @@ class RomanianGhostBotV4 {
 
             📊 <b>${asset}</b>
             🎯 Differ: <b>${as.targetDigit}</b>
-            🔢 Last 10 digits: <code>${last10}</code>
+            🔢 Digits: ${last10}
             💰 Stake: $${as.currentStake.toFixed(2)} [Step ${as.martingaleStep}]
             📈 Rate: ${as.targetRepeatRate.toFixed(1)}% | Score: ${score}/100
             🔬 P(NR): ${pnr} | BOCPD_RL: ${bocRL}t
@@ -1442,7 +1442,7 @@ class RomanianGhostBotV4 {
 
                     📊 <b>${asset}</b>
                     🎯 Target: ${as.targetDigit} | Result: ${resultDigit}
-                    🔢 Last 10 digits: <code>${last10}</code>
+                    🔢 Digits: ${last10}
                     💰 +$${profit.toFixed(2)}
                     📈 P&L: ${formatMoney(this.sessionProfit)} | Bal: $${this.accountBalance.toFixed(2)}
                     📊 ${this.totalWins}W/${this.totalLosses}L | WStreak:${as.currentWinStreak}
@@ -1470,7 +1470,7 @@ class RomanianGhostBotV4 {
 
                     📊 <b>${asset}</b>
                     🎯 Target: ${as.targetDigit} | Result: ${resultDigit}${resultDigit === as.targetDigit ? ' 🔁 REPEATED' : ''}
-                    🔢 Last 10 digits: <code>${last10}</code>
+                    🔢 Digits: ${last10}
                     💸 -$${lostAmount.toFixed(2)}
                     📈 P&L: ${formatMoney(this.sessionProfit)} | Bal: $${this.accountBalance.toFixed(2)}
                     📊 ${this.totalWins}W/${this.totalLosses}L | Mart: ${as.martingaleStep}/${this.config.max_martingale_steps}
