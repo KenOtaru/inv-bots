@@ -1,0 +1,2092 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Romanian Ghost 9.2 — Trading Bot</title>
+    <style>
+        /* ═══════════════════════════════════════════════════════════════
+           CSS RESET & BASE
+           ═══════════════════════════════════════════════════════════════ */
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --bg-primary: #0a0e17;
+            --bg-secondary: #111827;
+            --bg-card: #1a2236;
+            --bg-card-hover: #1f2a42;
+            --bg-input: #0d1321;
+            --border-color: #2a3650;
+            --border-focus: #3b82f6;
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-blue: #3b82f6;
+            --accent-blue-hover: #2563eb;
+            --accent-green: #10b981;
+            --accent-green-dim: #065f46;
+            --accent-red: #ef4444;
+            --accent-red-dim: #7f1d1d;
+            --accent-yellow: #f59e0b;
+            --accent-orange: #f97316;
+            --accent-purple: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --win-bg: #052e16;
+            --loss-bg: #2a0a0a;
+            --shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+            --radius: 10px;
+            --radius-sm: 6px;
+        }
+
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* ═══════════════════════════════════════════════════════════════
+           HEADER
+           ═══════════════════════════════════════════════════════════════ */
+        .header {
+            background: linear-gradient(135deg, #111827 0%, #1a2236 100%);
+            border-bottom: 1px solid var(--border-color);
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .header-logo {
+            font-size: 28px;
+            filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.5));
+        }
+
+        .header-title {
+            font-size: 18px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header-subtitle {
+            font-size: 11px;
+            color: var(--text-muted);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .connection-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            border: 1px solid var(--border-color);
+            background: var(--bg-card);
+        }
+
+        .connection-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent-red);
+            transition: background 0.3s;
+        }
+
+        .connection-dot.connected {
+            background: var(--accent-green);
+            box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+            animation: pulse-green 2s infinite;
+        }
+
+        @keyframes pulse-green {
+            0%, 100% { box-shadow: 0 0 4px rgba(16, 185, 129, 0.4); }
+            50% { box-shadow: 0 0 12px rgba(16, 185, 129, 0.8); }
+        }
+
+        /* ═══════════════════════════════════════════════════════════════
+           LAYOUT
+           ═══════════════════════════════════════════════════════════════ */
+        .main-container {
+            display: grid;
+            grid-template-columns: 360px 1fr;
+            gap: 0;
+            min-height: calc(100vh - 65px);
+        }
+
+        /* ═══════════════════════════════════════════════════════════════
+           LEFT PANEL — SETTINGS
+           ═══════════════════════════════════════════════════════════════ */
+        .settings-panel {
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border-color);
+            overflow-y: auto;
+            max-height: calc(100vh - 65px);
+            padding: 20px;
+        }
+
+        .settings-panel::-webkit-scrollbar {
+            width: 6px;
+        }
+        .settings-panel::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .settings-panel::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 3px;
+        }
+
+        .panel-section {
+            margin-bottom: 20px;
+        }
+
+        .panel-section-title {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .form-group {
+            margin-bottom: 12px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 5px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 8px 12px;
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            font-size: 13px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--border-focus);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+        }
+
+        .form-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .form-row-3 {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+        }
+
+        /* Asset checkboxes */
+        .asset-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 6px;
+        }
+
+        .asset-checkbox {
+            display: none;
+        }
+
+        .asset-label {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 6px 4px;
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.2s;
+            user-select: none;
+        }
+
+        .asset-checkbox:checked + .asset-label {
+            background: rgba(59, 130, 246, 0.15);
+            border-color: var(--accent-blue);
+            color: var(--accent-blue);
+        }
+
+        .asset-label:hover {
+            border-color: var(--text-muted);
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 10px 18px;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+
+        .btn-start {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+            width: 100%;
+            padding: 12px;
+            font-size: 14px;
+            border-radius: var(--radius);
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+        }
+
+        .btn-start:hover {
+            box-shadow: 0 4px 20px rgba(16, 185, 129, 0.5);
+            transform: translateY(-1px);
+        }
+
+        .btn-start:active {
+            transform: translateY(0);
+        }
+
+        .btn-stop {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: white;
+            width: 100%;
+            padding: 12px;
+            font-size: 14px;
+            border-radius: var(--radius);
+            box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-stop:hover {
+            box-shadow: 0 4px 20px rgba(239, 68, 68, 0.5);
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: var(--bg-card);
+            color: var(--text-secondary);
+            border: 1px solid var(--border-color);
+            padding: 8px 14px;
+            font-size: 12px;
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg-card-hover);
+            color: var(--text-primary);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+
+        .btn-group .btn {
+            flex: 1;
+        }
+
+        /* ═══════════════════════════════════════════════════════════════
+           RIGHT PANEL — DASHBOARD
+           ═══════════════════════════════════════════════════════════════ */
+        .dashboard {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            max-height: calc(100vh - 65px);
+        }
+
+        /* Stats Bar */
+        .stats-bar {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 12px;
+            padding: 16px 20px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius);
+            padding: 14px;
+            text-align: center;
+            transition: border-color 0.2s;
+        }
+
+        .stat-card:hover {
+            border-color: var(--text-muted);
+        }
+
+        .stat-label {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+        }
+
+        .stat-value {
+            font-size: 22px;
+            font-weight: 800;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+
+        .stat-value.positive {
+            color: var(--accent-green);
+        }
+
+        .stat-value.negative {
+            color: var(--accent-red);
+        }
+
+        .stat-value.neutral {
+            color: var(--text-primary);
+        }
+
+        .stat-sub {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-top: 3px;
+        }
+
+        /* Trade Details & Logs Split */
+        .content-split {
+            display: grid;
+            grid-template-columns: 420px 1fr;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* Trade History */
+        .trade-history {
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .section-header {
+            padding: 12px 16px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+
+        .section-header .badge {
+            background: var(--accent-blue);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: 700;
+        }
+
+        .trade-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+        }
+
+        .trade-list::-webkit-scrollbar {
+            width: 6px;
+        }
+        .trade-list::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 3px;
+        }
+
+        .trade-item {
+            display: grid;
+            grid-template-columns: 28px 1fr auto;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            margin-bottom: 4px;
+            border-radius: var(--radius-sm);
+            border: 1px solid transparent;
+            transition: background 0.15s;
+        }
+
+        .trade-item:hover {
+            background: var(--bg-card-hover);
+        }
+
+        .trade-item.win {
+            background: var(--win-bg);
+            border-color: rgba(16, 185, 129, 0.15);
+        }
+
+        .trade-item.loss {
+            background: var(--loss-bg);
+            border-color: rgba(239, 68, 68, 0.15);
+        }
+
+        .trade-icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        .trade-icon.win {
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--accent-green);
+        }
+
+        .trade-icon.loss {
+            background: rgba(239, 68, 68, 0.2);
+            color: var(--accent-red);
+        }
+
+        .trade-info {
+            min-width: 0;
+        }
+
+        .trade-info-main {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-primary);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .trade-info-sub {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .trade-profit {
+            font-size: 13px;
+            font-weight: 700;
+            font-family: 'Consolas', 'Monaco', monospace;
+            text-align: right;
+            white-space: nowrap;
+        }
+
+        .trade-profit.positive { color: var(--accent-green); }
+        .trade-profit.negative { color: var(--accent-red); }
+
+        /* Log Panel */
+        .log-panel {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .log-tabs {
+            display: flex;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            flex-shrink: 0;
+        }
+
+        .log-tab {
+            padding: 10px 18px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+            user-select: none;
+        }
+
+        .log-tab:hover {
+            color: var(--text-secondary);
+        }
+
+        .log-tab.active {
+            color: var(--accent-blue);
+            border-bottom-color: var(--accent-blue);
+        }
+
+        .log-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px 12px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 11.5px;
+            line-height: 1.6;
+        }
+
+        .log-content::-webkit-scrollbar {
+            width: 6px;
+        }
+        .log-content::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 3px;
+        }
+
+        .log-entry {
+            padding: 2px 0;
+            border-bottom: 1px solid rgba(42, 54, 80, 0.3);
+        }
+
+        .log-time {
+            color: var(--text-muted);
+        }
+
+        .log-tag {
+            font-weight: 700;
+            margin: 0 4px;
+        }
+
+        .log-tag.conn { color: var(--accent-cyan); }
+        .log-tag.trade { color: var(--accent-yellow); }
+        .log-tag.hmm { color: var(--accent-purple); }
+        .log-tag.win { color: var(--accent-green); }
+        .log-tag.loss { color: var(--accent-red); }
+        .log-tag.info { color: var(--text-secondary); }
+        .log-tag.warn { color: var(--accent-orange); }
+        .log-tag.error { color: var(--accent-red); }
+
+        .log-msg {
+            color: var(--text-secondary);
+        }
+
+        /* Empty States */
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 200px;
+            color: var(--text-muted);
+            font-size: 13px;
+            gap: 8px;
+        }
+
+        .empty-state-icon {
+            font-size: 36px;
+            opacity: 0.4;
+        }
+
+        /* Loss streak badges */
+        .loss-badges {
+            display: flex;
+            gap: 6px;
+            flex-wrap: wrap;
+            margin-top: 4px;
+        }
+
+        .loss-badge {
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: 700;
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            color: var(--text-muted);
+        }
+
+        .loss-badge.active {
+            background: rgba(239, 68, 68, 0.15);
+            border-color: rgba(239, 68, 68, 0.3);
+            color: var(--accent-red);
+        }
+
+        /* Responsive */
+        @media (max-width: 1200px) {
+            .main-container {
+                grid-template-columns: 1fr;
+            }
+            .settings-panel {
+                max-height: none;
+                border-right: none;
+                border-bottom: 1px solid var(--border-color);
+            }
+            .dashboard {
+                max-height: none;
+                min-height: 600px;
+            }
+            .stats-bar {
+                grid-template-columns: repeat(3, 1fr);
+            }
+            .content-split {
+                grid-template-columns: 1fr;
+            }
+            .trade-history {
+                border-right: none;
+                border-bottom: 1px solid var(--border-color);
+                max-height: 350px;
+            }
+            .log-panel {
+                min-height: 400px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .header {
+                padding: 12px 16px;
+            }
+            .header-title {
+                font-size: 15px;
+            }
+            .stats-bar {
+                grid-template-columns: repeat(2, 1fr);
+                gap: 8px;
+                padding: 12px;
+            }
+            .stat-value {
+                font-size: 18px;
+            }
+        }
+
+        /* Toast notifications */
+        .toast-container {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .toast {
+            padding: 12px 18px;
+            border-radius: var(--radius-sm);
+            font-size: 13px;
+            font-weight: 600;
+            animation: slideIn 0.3s ease, fadeOut 0.3s ease 2.7s;
+            box-shadow: var(--shadow);
+            max-width: 320px;
+        }
+
+        .toast.success {
+            background: rgba(16, 185, 129, 0.9);
+            color: white;
+        }
+
+        .toast.error {
+            background: rgba(239, 68, 68, 0.9);
+            color: white;
+        }
+
+        .toast.info {
+            background: rgba(59, 130, 246, 0.9);
+            color: white;
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(100px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        @keyframes fadeOut {
+            from { opacity: 1; }
+            to { opacity: 0; }
+        }
+
+        /* Settings disabled state */
+        .settings-panel.disabled .form-input,
+        .settings-panel.disabled .asset-label,
+        .settings-panel.disabled .btn-secondary {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     HEADER
+     ═══════════════════════════════════════════════════════════════ -->
+<div class="header">
+    <div class="header-left">
+        <div class="header-logo">👻</div>
+        <div>
+            <div class="header-title">Romanian Ghost 9.2 Ultimate</div>
+            <div class="header-subtitle">HMM Regime · Digit Differ</div>
+        </div>
+    </div>
+    <div class="header-right">
+        <div class="connection-indicator">
+            <div class="connection-dot" id="connDot"></div>
+            <span id="connText">Disconnected</span>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     MAIN LAYOUT
+     ═══════════════════════════════════════════════════════════════ -->
+<div class="main-container">
+    <!-- ─── SETTINGS PANEL ─────────────────────────────────────── -->
+    <div class="settings-panel" id="settingsPanel">
+
+        <!-- API Token -->
+        <div class="panel-section">
+            <div class="panel-section-title">🔑 Connection</div>
+            <div class="form-group">
+                <label class="form-label">Deriv API Token</label>
+                <input type="password" class="form-input" id="apiToken" placeholder="Enter your API token" autocomplete="off">
+            </div>
+        </div>
+
+        <!-- Assets -->
+        <div class="panel-section">
+            <div class="panel-section-title">📊 Assets</div>
+            <div class="asset-grid" id="assetGrid">
+                <div><input type="checkbox" class="asset-checkbox" id="asset_R_10" value="R_10" checked><label class="asset-label" for="asset_R_10">R_10</label></div>
+                <div><input type="checkbox" class="asset-checkbox" id="asset_R_25" value="R_25" checked><label class="asset-label" for="asset_R_25">R_25</label></div>
+                <div><input type="checkbox" class="asset-checkbox" id="asset_R_50" value="R_50" checked><label class="asset-label" for="asset_R_50">R_50</label></div>
+                <div><input type="checkbox" class="asset-checkbox" id="asset_R_75" value="R_75" checked><label class="asset-label" for="asset_R_75">R_75</label></div>
+                <div><input type="checkbox" class="asset-checkbox" id="asset_RDBULL" value="RDBULL" checked><label class="asset-label" for="asset_RDBULL">RDBULL</label></div>
+                <div><input type="checkbox" class="asset-checkbox" id="asset_RDBEAR" value="RDBEAR" checked><label class="asset-label" for="asset_RDBEAR">RDBEAR</label></div>
+            </div>
+        </div>
+
+        <!-- HMM Settings -->
+        <div class="panel-section">
+            <div class="panel-section-title">🧠 HMM Regime Detection</div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Analysis Window</label>
+                    <input type="number" class="form-input" id="analysisWindow" value="1000" min="100" max="5000">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Min Ticks for HMM</label>
+                    <input type="number" class="form-input" id="minTicksHMM" value="50" min="10" max="200">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Repeat Threshold (%)</label>
+                    <input type="number" class="form-input" id="repeatThreshold" value="8" min="1" max="30" step="0.5">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">NonRep Confidence</label>
+                    <input type="number" class="form-input" id="hmmConfidence" value="0.93" min="0.5" max="0.99" step="0.01">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Min Safety Score</label>
+                    <input type="number" class="form-input" id="minSafety" value="90" min="50" max="100">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Min Persistence</label>
+                    <input type="number" class="form-input" id="minPersistence" value="8" min="1" max="50">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">CUSUM Threshold</label>
+                    <input type="number" class="form-input" id="cusumThreshold" value="4.5" min="0.5" max="20" step="0.5">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">CUSUM Slack</label>
+                    <input type="number" class="form-input" id="cusumSlack" value="0.005" min="0.001" max="0.1" step="0.001">
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">HMM Refit Interval (ticks)</label>
+                <input type="number" class="form-input" id="refitInterval" value="200" min="50" max="1000">
+            </div>
+        </div>
+
+        <!-- Money Management -->
+        <div class="panel-section">
+            <div class="panel-section-title">💰 Money Management</div>
+            <div class="form-row-3">
+                <div class="form-group">
+                    <label class="form-label">Base Stake ($)</label>
+                    <input type="number" class="form-input" id="baseStake" value="2.20" min="0.35" max="100" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">1st Loss ×</label>
+                    <input type="number" class="form-input" id="firstLossMultiplier" value="11.3" min="1" max="50" step="0.1">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Next Loss ×</label>
+                    <input type="number" class="form-input" id="subsequentMultiplier" value="11.3" min="1" max="50" step="0.1">
+                </div>
+            </div>
+            <div class="form-row-3">
+                <div class="form-group">
+                    <label class="form-label">Max Losses</label>
+                    <input type="number" class="form-input" id="maxLosses" value="6" min="1" max="15">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Take Profit ($)</label>
+                    <input type="number" class="form-input" id="takeProfit" value="10000" min="10" max="100000" step="10">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Stop Loss ($)</label>
+                    <input type="number" class="form-input" id="stopLoss" value="-500" max="0" step="10">
+                </div>
+            </div>
+        </div>
+
+        <!-- Telegram (Optional) -->
+        <div class="panel-section">
+            <div class="panel-section-title">📱 Telegram (Optional)</div>
+            <div class="form-group">
+                <label class="form-label">Bot Token</label>
+                <input type="text" class="form-input" id="telegramToken" placeholder="123456:ABC...">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Chat ID</label>
+                <input type="text" class="form-input" id="telegramChatId" placeholder="e.g. 752497117">
+            </div>
+        </div>
+
+        <!-- Save / Load -->
+        <div class="panel-section">
+            <div class="panel-section-title">💾 Settings Presets</div>
+            <div class="btn-group">
+                <button class="btn btn-secondary" onclick="saveSettings()">💾 Save</button>
+                <button class="btn btn-secondary" onclick="loadSettings()">📂 Load</button>
+                <button class="btn btn-secondary" onclick="resetSettings()">🔄 Reset</button>
+            </div>
+        </div>
+
+        <!-- Start / Stop -->
+        <div class="panel-section">
+            <button class="btn btn-start" id="startBtn" onclick="toggleBot()">
+                ▶ Start Bot
+            </button>
+        </div>
+    </div>
+
+    <!-- ─── DASHBOARD ──────────────────────────────────────────── -->
+    <div class="dashboard">
+
+        <!-- Stats Bar -->
+        <div class="stats-bar">
+            <div class="stat-card">
+                <div class="stat-label">Total Trades</div>
+                <div class="stat-value neutral" id="statTotalTrades">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Wins / Losses</div>
+                <div class="stat-value neutral" id="statWinLoss">0 / 0</div>
+                <div class="stat-sub" id="statWinRate">— %</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Win Rate</div>
+                <div class="stat-value positive" id="statWinRatePct">— %</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Net Profit</div>
+                <div class="stat-value neutral" id="statProfit">$0.00</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Current Stake</div>
+                <div class="stat-value neutral" id="statStake">$2.20</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Loss Streak</div>
+                <div class="stat-value neutral" id="statStreak">0</div>
+                <div class="loss-badges" id="lossBadges">
+                    <span class="loss-badge">×2: <b id="lossX2">0</b></span>
+                    <span class="loss-badge">×3: <b id="lossX3">0</b></span>
+                    <span class="loss-badge">×4: <b id="lossX4">0</b></span>
+                    <span class="loss-badge">×5: <b id="lossX5">0</b></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Content Split: Trades + Logs -->
+        <div class="content-split">
+
+            <!-- Trade History -->
+            <div class="trade-history">
+                <div class="section-header">
+                    <span>📋 Trade Results</span>
+                    <span class="badge" id="tradeCount">0</span>
+                </div>
+                <div class="trade-list" id="tradeList">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📊</div>
+                        <div>No trades yet</div>
+                        <div style="font-size:11px;">Start the bot to begin trading</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Log Panel -->
+            <div class="log-panel">
+                <div class="log-tabs">
+                    <div class="log-tab active" data-tab="all" onclick="switchLogTab(this)">All</div>
+                    <div class="log-tab" data-tab="conn" onclick="switchLogTab(this)">Connection</div>
+                    <div class="log-tab" data-tab="trade" onclick="switchLogTab(this)">Trade</div>
+                    <div class="log-tab" data-tab="hmm" onclick="switchLogTab(this)">HMM</div>
+                </div>
+                <div class="log-content" id="logContent">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📝</div>
+                        <div>Waiting for events...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     JAVASCRIPT — FULL BOT ENGINE
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<script>
+
+// ════════════════════════════════════════════════════════════════════════════
+//  UTILITY FUNCTIONS
+// ════════════════════════════════════════════════════════════════════════════
+function clamp(v, lo, hi) {
+    return Math.max(lo, Math.min(hi, v));
+}
+
+function logSumExp(arr) {
+    if (arr.length === 0) return -Infinity;
+    let m = -Infinity;
+    for (let i = 0; i < arr.length; i++) {
+        if (arr[i] > m) m = arr[i];
+    }
+    if (!isFinite(m)) return -Infinity;
+    let sum = 0;
+    for (let i = 0; i < arr.length; i++) {
+        sum += Math.exp(arr[i] - m);
+    }
+    return m + Math.log(sum);
+}
+
+function logSumExp2(a, b) {
+    if (!isFinite(a) && !isFinite(b)) return -Infinity;
+    const m = a > b ? a : b;
+    return m + Math.log(Math.exp(a - m) + Math.exp(b - m));
+}
+
+function getTimestamp() {
+    const n = new Date();
+    return [
+        String(n.getHours()).padStart(2, '0'),
+        String(n.getMinutes()).padStart(2, '0'),
+        String(n.getSeconds()).padStart(2, '0'),
+    ].join(':');
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  UI HELPERS
+// ════════════════════════════════════════════════════════════════════════════
+const MAX_LOG_ENTRIES = 500;
+const MAX_TRADE_ENTRIES = 200;
+let activeLogTab = 'all';
+let logEntries = [];
+let tradeResults = [];
+
+function showToast(message, type = 'info') {
+    const container = document.getElementById('toastContainer');
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    container.prepend(toast);
+    setTimeout(() => toast.remove(), 3000);
+}
+
+function addLog(tag, message) {
+    const ts = getTimestamp();
+    const entry = { ts, tag, message, id: Date.now() + Math.random() };
+    logEntries.unshift(entry);
+    if (logEntries.length > MAX_LOG_ENTRIES) logEntries.pop();
+    renderLogs();
+}
+
+function renderLogs() {
+    const container = document.getElementById('logContent');
+    const filtered = activeLogTab === 'all'
+        ? logEntries
+        : logEntries.filter(e => e.tag === activeLogTab);
+
+    if (filtered.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">📝</div>
+                <div>No ${activeLogTab === 'all' ? '' : activeLogTab + ' '}events yet</div>
+            </div>`;
+        return;
+    }
+
+    const html = filtered.slice(0, 200).map(e => {
+        return `<div class="log-entry">` +
+            `<span class="log-time">[${e.ts}]</span>` +
+            `<span class="log-tag ${e.tag}">[${e.tag.toUpperCase()}]</span>` +
+            `<span class="log-msg">${escapeHtml(e.message)}</span>` +
+            `</div>`;
+    }).join('');
+    container.innerHTML = html;
+}
+
+function escapeHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+}
+
+function switchLogTab(el) {
+    document.querySelectorAll('.log-tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    activeLogTab = el.dataset.tab;
+    renderLogs();
+}
+
+function addTradeResult(trade) {
+    tradeResults.unshift(trade);
+    if (tradeResults.length > MAX_TRADE_ENTRIES) tradeResults.pop();
+    renderTrades();
+}
+
+function renderTrades() {
+    const container = document.getElementById('tradeList');
+    document.getElementById('tradeCount').textContent = tradeResults.length;
+
+    if (tradeResults.length === 0) {
+        container.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-state-icon">📊</div>
+                <div>No trades yet</div>
+                <div style="font-size:11px;">Start the bot to begin trading</div>
+            </div>`;
+        return;
+    }
+
+    container.innerHTML = tradeResults.map(t => {
+        const cls = t.won ? 'win' : 'loss';
+        const icon = t.won ? '✓' : '✗';
+        const profitCls = t.profit >= 0 ? 'positive' : 'negative';
+        const profitStr = (t.profit >= 0 ? '+' : '') + '$' + t.profit.toFixed(2);
+        return `<div class="trade-item ${cls}">` +
+            `<div class="trade-icon ${cls}">${icon}</div>` +
+            `<div class="trade-info">` +
+            `<div class="trade-info-main">${t.asset} — Digit ${t.targetDigit} → ${t.exitDigit}</div>` +
+            `<div class="trade-info-sub">${t.time} · Safety ${t.safetyScore} · Conf ${t.confidence}% · Stake $${t.stake}</div>` +
+            `</div>` +
+            `<div class="trade-profit ${profitCls}">${profitStr}</div>` +
+            `</div>`;
+    }).join('');
+}
+
+function updateStats(bot) {
+    const { totalTrades, totalWins, netProfit, stake, consecutiveLosses, x2, x3, x4, x5 } = bot;
+    const totalLosses = totalTrades - totalWins;
+    const winRate = totalTrades > 0 ? ((totalWins / totalTrades) * 100).toFixed(1) : '—';
+
+    document.getElementById('statTotalTrades').textContent = totalTrades;
+    document.getElementById('statWinLoss').textContent = `${totalWins} / ${totalLosses}`;
+
+    const wrEl = document.getElementById('statWinRatePct');
+    wrEl.textContent = totalTrades > 0 ? `${winRate}%` : '— %';
+    wrEl.className = 'stat-value ' + (parseFloat(winRate) >= 50 ? 'positive' : parseFloat(winRate) > 0 ? 'negative' : 'neutral');
+
+    const profEl = document.getElementById('statProfit');
+    profEl.textContent = `${netProfit >= 0 ? '+' : ''}$${netProfit.toFixed(2)}`;
+    profEl.className = 'stat-value ' + (netProfit >= 0 ? 'positive' : 'negative');
+
+    document.getElementById('statStake').textContent = `$${stake.toFixed(2)}`;
+    document.getElementById('statStreak').textContent = consecutiveLosses;
+
+    document.getElementById('lossX2').textContent = x2;
+    document.getElementById('lossX3').textContent = x3;
+    document.getElementById('lossX4').textContent = x4;
+    document.getElementById('lossX5').textContent = x5;
+}
+
+function setConnectionStatus(connected) {
+    const dot = document.getElementById('connDot');
+    const text = document.getElementById('connText');
+    if (connected) {
+        dot.classList.add('connected');
+        text.textContent = 'Connected';
+    } else {
+        dot.classList.remove('connected');
+        text.textContent = 'Disconnected';
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  SETTINGS SAVE / LOAD / RESET
+// ════════════════════════════════════════════════════════════════════════════
+const SETTINGS_KEY = 'ghost92_settings';
+const DEFAULT_SETTINGS = {
+    apiToken: '',
+    assets: ['R_10', 'R_25', 'R_50', 'R_75', 'RDBULL', 'RDBEAR'],
+    analysisWindow: 1000,
+    minTicksHMM: 50,
+    repeatThreshold: 8,
+    hmmConfidence: 0.93,
+    minSafety: 90,
+    minPersistence: 8,
+    cusumThreshold: 4.5,
+    cusumSlack: 0.005,
+    refitInterval: 200,
+    baseStake: 2.20,
+    firstLossMultiplier: 11.3,
+    subsequentMultiplier: 11.3,
+    maxLosses: 6,
+    takeProfit: 10000,
+    stopLoss: -500,
+    telegramToken: '',
+    telegramChatId: '',
+};
+
+function gatherSettings() {
+    const assets = [];
+    document.querySelectorAll('.asset-checkbox:checked').forEach(cb => assets.push(cb.value));
+    return {
+        apiToken: document.getElementById('apiToken').value.trim(),
+        assets,
+        analysisWindow: parseInt(document.getElementById('analysisWindow').value) || 1000,
+        minTicksHMM: parseInt(document.getElementById('minTicksHMM').value) || 50,
+        repeatThreshold: parseFloat(document.getElementById('repeatThreshold').value) || 8,
+        hmmConfidence: parseFloat(document.getElementById('hmmConfidence').value) || 0.93,
+        minSafety: parseInt(document.getElementById('minSafety').value) || 90,
+        minPersistence: parseInt(document.getElementById('minPersistence').value) || 8,
+        cusumThreshold: parseFloat(document.getElementById('cusumThreshold').value) || 4.5,
+        cusumSlack: parseFloat(document.getElementById('cusumSlack').value) || 0.005,
+        refitInterval: parseInt(document.getElementById('refitInterval').value) || 200,
+        baseStake: parseFloat(document.getElementById('baseStake').value) || 2.20,
+        firstLossMultiplier: parseFloat(document.getElementById('firstLossMultiplier').value) || 11.3,
+        subsequentMultiplier: parseFloat(document.getElementById('subsequentMultiplier').value) || 11.3,
+        maxLosses: parseInt(document.getElementById('maxLosses').value) || 6,
+        takeProfit: parseFloat(document.getElementById('takeProfit').value) || 10000,
+        stopLoss: parseFloat(document.getElementById('stopLoss').value) || -500,
+        telegramToken: document.getElementById('telegramToken').value.trim(),
+        telegramChatId: document.getElementById('telegramChatId').value.trim(),
+    };
+}
+
+function applySettings(settings) {
+    document.getElementById('apiToken').value = settings.apiToken || '';
+    document.querySelectorAll('.asset-checkbox').forEach(cb => {
+        cb.checked = settings.assets.includes(cb.value);
+    });
+    document.getElementById('analysisWindow').value = settings.analysisWindow;
+    document.getElementById('minTicksHMM').value = settings.minTicksHMM;
+    document.getElementById('repeatThreshold').value = settings.repeatThreshold;
+    document.getElementById('hmmConfidence').value = settings.hmmConfidence;
+    document.getElementById('minSafety').value = settings.minSafety;
+    document.getElementById('minPersistence').value = settings.minPersistence;
+    document.getElementById('cusumThreshold').value = settings.cusumThreshold;
+    document.getElementById('cusumSlack').value = settings.cusumSlack;
+    document.getElementById('refitInterval').value = settings.refitInterval;
+    document.getElementById('baseStake').value = settings.baseStake;
+    document.getElementById('firstLossMultiplier').value = settings.firstLossMultiplier;
+    document.getElementById('subsequentMultiplier').value = settings.subsequentMultiplier;
+    document.getElementById('maxLosses').value = settings.maxLosses;
+    document.getElementById('takeProfit').value = settings.takeProfit;
+    document.getElementById('stopLoss').value = settings.stopLoss;
+    document.getElementById('telegramToken').value = settings.telegramToken || '';
+    document.getElementById('telegramChatId').value = settings.telegramChatId || '';
+}
+
+function saveSettings() {
+    const settings = gatherSettings();
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    showToast('Settings saved', 'success');
+}
+
+function loadSettings() {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (!raw) {
+        showToast('No saved settings found', 'error');
+        return;
+    }
+    try {
+        const settings = { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+        applySettings(settings);
+        showToast('Settings loaded', 'success');
+    } catch (e) {
+        showToast('Failed to load settings', 'error');
+    }
+}
+
+function resetSettings() {
+    applySettings(DEFAULT_SETTINGS);
+    showToast('Settings reset to defaults', 'info');
+}
+
+// Load saved settings on page load
+(function() {
+    const raw = localStorage.getItem(SETTINGS_KEY);
+    if (raw) {
+        try {
+            const settings = { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+            applySettings(settings);
+        } catch(e) { /* ignore */ }
+    }
+})();
+
+// ════════════════════════════════════════════════════════════════════════════
+//  HMM REGIME DETECTOR (Browser-optimized)
+// ════════════════════════════════════════════════════════════════════════════
+class HMMRegimeDetector {
+    constructor(cfg) {
+        this.cfg = cfg;
+        this.pi = [0.6, 0.4];
+        this.A = [[0.90, 0.10], [0.25, 0.75]];
+        this.B = [[0.92, 0.08], [0.40, 0.60]];
+        this.hmmFitted = false;
+        this.cusumValue = new Array(10).fill(0);
+        this.ticksSinceRefit = 0;
+        this._bwBuffersSize = 0;
+        this._lastAnalysisResult = null;
+        this._analysisTickCounter = 0;
+    }
+
+    _ensureBWBuffers(T) {
+        if (this._bwBuffersSize >= T) return;
+        const N = 2;
+        this._logAlpha = new Array(T);
+        this._logBeta = new Array(T);
+        this._logGamma = new Array(T);
+        this._logXi = new Array(T > 0 ? T - 1 : 0);
+        for (let t = 0; t < T; t++) {
+            this._logAlpha[t] = new Float64Array(N);
+            this._logBeta[t] = new Float64Array(N);
+            this._logGamma[t] = new Float64Array(N);
+        }
+        for (let t = 0; t < T - 1; t++) {
+            this._logXi[t] = [new Float64Array(N), new Float64Array(N)];
+        }
+        this._bwBuffersSize = T;
+    }
+
+    baumWelch(obs, maxIter = 20, tol = 1e-5) {
+        const T = obs.length;
+        if (T < 10) return false;
+        const N = 2;
+
+        this._ensureBWBuffers(T);
+        const logAlpha = this._logAlpha;
+        const logBeta = this._logBeta;
+        const logGamma = this._logGamma;
+        const logXi = this._logXi;
+
+        let pi = [...this.pi];
+        let A = this.A.map(r => [...r]);
+        let B = this.B.map(r => [...r]);
+        let prevLogL = -Infinity;
+
+        const logPi = [0, 0];
+        const logA = [[0, 0], [0, 0]];
+        const logB = [[0, 0], [0, 0]];
+
+        for (let iter = 0; iter < maxIter; iter++) {
+            for (let s = 0; s < N; s++) {
+                logPi[s] = Math.log(pi[s] + 1e-300);
+                for (let nx = 0; nx < N; nx++) logA[s][nx] = Math.log(A[s][nx] + 1e-300);
+                for (let o = 0; o < 2; o++) logB[s][o] = Math.log(B[s][o] + 1e-300);
+            }
+
+            for (let s = 0; s < N; s++)
+                logAlpha[0][s] = logPi[s] + logB[s][obs[0]];
+
+            for (let t = 1; t < T; t++) {
+                for (let s = 0; s < N; s++) {
+                    logAlpha[t][s] = logSumExp2(
+                        logAlpha[t - 1][0] + logA[0][s],
+                        logAlpha[t - 1][1] + logA[1][s]
+                    ) + logB[s][obs[t]];
+                }
+            }
+
+            const logL = logSumExp2(logAlpha[T - 1][0], logAlpha[T - 1][1]);
+
+            logBeta[T - 1][0] = 0;
+            logBeta[T - 1][1] = 0;
+            for (let t = T - 2; t >= 0; t--) {
+                for (let s = 0; s < N; s++) {
+                    logBeta[t][s] = logSumExp2(
+                        logA[s][0] + logB[0][obs[t + 1]] + logBeta[t + 1][0],
+                        logA[s][1] + logB[1][obs[t + 1]] + logBeta[t + 1][1]
+                    );
+                }
+            }
+
+            for (let t = 0; t < T; t++) {
+                const den = logSumExp2(
+                    logAlpha[t][0] + logBeta[t][0],
+                    logAlpha[t][1] + logBeta[t][1]
+                );
+                for (let s = 0; s < N; s++)
+                    logGamma[t][s] = logAlpha[t][s] + logBeta[t][s] - den;
+            }
+
+            for (let t = 0; t < T - 1; t++) {
+                const den = logSumExp2(
+                    logAlpha[t][0] + logBeta[t][0],
+                    logAlpha[t][1] + logBeta[t][1]
+                );
+                for (let s = 0; s < N; s++) {
+                    for (let nx = 0; nx < N; nx++) {
+                        logXi[t][s][nx] = logAlpha[t][s] + logA[s][nx] +
+                            logB[nx][obs[t + 1]] + logBeta[t + 1][nx] - den;
+                    }
+                }
+            }
+
+            for (let s = 0; s < N; s++) pi[s] = Math.exp(logGamma[0][s]);
+            const piSum = pi[0] + pi[1];
+            pi[0] /= piSum; pi[1] /= piSum;
+
+            for (let s = 0; s < N; s++) {
+                let denAccum = -Infinity;
+                const numAccum = [-Infinity, -Infinity];
+                for (let t = 0; t < T - 1; t++) {
+                    denAccum = logSumExp2(denAccum, logGamma[t][s]);
+                    for (let nx = 0; nx < N; nx++)
+                        numAccum[nx] = logSumExp2(numAccum[nx], logXi[t][s][nx]);
+                }
+                for (let nx = 0; nx < N; nx++) A[s][nx] = Math.exp(numAccum[nx] - denAccum);
+                const rs = A[s][0] + A[s][1];
+                A[s][0] /= rs; A[s][1] /= rs;
+            }
+
+            for (let s = 0; s < N; s++) {
+                let denAccum = -Infinity;
+                const numAccum = [-Infinity, -Infinity];
+                for (let t = 0; t < T; t++) {
+                    denAccum = logSumExp2(denAccum, logGamma[t][s]);
+                    numAccum[obs[t]] = logSumExp2(numAccum[obs[t]], logGamma[t][s]);
+                }
+                for (let o = 0; o < 2; o++) B[s][o] = Math.exp(numAccum[o] - denAccum);
+                const bs = B[s][0] + B[s][1];
+                B[s][0] /= bs; B[s][1] /= bs;
+            }
+
+            if (Math.abs(logL - prevLogL) < tol) break;
+            prevLogL = logL;
+        }
+
+        if (B[0][1] > B[1][1]) {
+            [pi[0], pi[1]] = [pi[1], pi[0]];
+            [A[0], A[1]] = [A[1], A[0]];
+            A[0] = [A[0][1], A[0][0]]; A[1] = [A[1][1], A[1][0]];
+            [B[0], B[1]] = [B[1], B[0]];
+        }
+
+        this.pi = pi; this.A = A; this.B = B;
+        this.hmmFitted = true;
+        return true;
+    }
+
+    viterbi(obs) {
+        const T = obs.length, N = 2;
+        if (T === 0) return null;
+
+        const logDelta = new Array(T);
+        const psi = new Array(T);
+        for (let t = 0; t < T; t++) {
+            logDelta[t] = new Float64Array(N);
+            psi[t] = new Uint8Array(N);
+        }
+
+        const logB = [
+            Math.log(this.B[0][0] + 1e-300), Math.log(this.B[0][1] + 1e-300),
+            Math.log(this.B[1][0] + 1e-300), Math.log(this.B[1][1] + 1e-300)
+        ];
+        const logA00 = Math.log(this.A[0][0] + 1e-300);
+        const logA01 = Math.log(this.A[0][1] + 1e-300);
+        const logA10 = Math.log(this.A[1][0] + 1e-300);
+        const logA11 = Math.log(this.A[1][1] + 1e-300);
+
+        logDelta[0][0] = Math.log(this.pi[0] + 1e-300) + logB[obs[0]];
+        logDelta[0][1] = Math.log(this.pi[1] + 1e-300) + logB[2 + obs[0]];
+
+        for (let t = 1; t < T; t++) {
+            const o = obs[t];
+            const v00 = logDelta[t - 1][0] + logA00;
+            const v10 = logDelta[t - 1][1] + logA10;
+            if (v00 >= v10) { logDelta[t][0] = v00 + logB[o]; psi[t][0] = 0; }
+            else { logDelta[t][0] = v10 + logB[o]; psi[t][0] = 1; }
+            const v01 = logDelta[t - 1][0] + logA01;
+            const v11 = logDelta[t - 1][1] + logA11;
+            if (v01 >= v11) { logDelta[t][1] = v01 + logB[2 + o]; psi[t][1] = 0; }
+            else { logDelta[t][1] = v11 + logB[2 + o]; psi[t][1] = 1; }
+        }
+
+        const stateSeq = new Uint8Array(T);
+        stateSeq[T - 1] = logDelta[T - 1][0] >= logDelta[T - 1][1] ? 0 : 1;
+        for (let t = T - 2; t >= 0; t--) stateSeq[t] = psi[t + 1][stateSeq[t + 1]];
+
+        const curState = stateSeq[T - 1];
+        let persistence = 1;
+        for (let t = T - 2; t >= 0; t--) {
+            if (stateSeq[t] === curState) persistence++; else break;
+        }
+        let transitions = 0;
+        for (let t = 1; t < T; t++) if (stateSeq[t] !== stateSeq[t - 1]) transitions++;
+        return { stateSeq, currentState: curState, persistence, transitions };
+    }
+
+    updateCUSUM(digit, obs_t) {
+        const llr = Math.log(this.B[1][obs_t] + 1e-300) - Math.log(this.B[0][obs_t] + 1e-300);
+        this.cusumValue[digit] = Math.max(0, this.cusumValue[digit] + llr - this.cfg.cusum_slack);
+        return this.cusumValue[digit] > this.cfg.cusum_threshold;
+    }
+
+    resetCUSUM(digit) { this.cusumValue[digit] = 0; }
+    getCUSUMValue(digit) { return this.cusumValue[digit]; }
+
+    computePerDigitStats(window) {
+        const len = window.length;
+        const ALPHA = 0.15;
+        const transFrom = new Array(10).fill(0);
+        const transRepeat = new Array(10).fill(0);
+        const ewmaRepeat = new Array(10).fill(null);
+
+        for (let i = 0; i < len; i++) {
+            const d = window[i];
+            const isRepeat = i > 0 && window[i] === window[i - 1];
+            if (ewmaRepeat[d] === null) ewmaRepeat[d] = isRepeat ? 100 : 0;
+            else ewmaRepeat[d] = ALPHA * (isRepeat ? 100 : 0) + (1 - ALPHA) * ewmaRepeat[d];
+            if (i < len - 1) {
+                transFrom[window[i]]++;
+                if (window[i + 1] === window[i]) transRepeat[window[i]]++;
+            }
+        }
+
+        const rawRepeatProb = new Array(10).fill(0);
+        for (let d = 0; d < 10; d++) {
+            rawRepeatProb[d] = transFrom[d] > 0 ? (transRepeat[d] / transFrom[d]) * 100 : 10;
+            if (ewmaRepeat[d] === null) ewmaRepeat[d] = 10;
+        }
+        return { rawRepeatProb, ewmaRepeat };
+    }
+
+    analyze(tickHistory, targetDigit, asset) {
+        this._analysisTickCounter++;
+        if (this._analysisTickCounter < 3 && this._lastAnalysisResult !== null) {
+            return this._lastAnalysisResult;
+        }
+        this._analysisTickCounter = 0;
+
+        const windowSize = Math.min(this.cfg.analysis_window, tickHistory.length);
+        const window = tickHistory.slice(-windowSize);
+        const len = window.length;
+
+        if (len < this.cfg.min_ticks_for_hmm)
+            return (this._lastAnalysisResult = { valid: false, reason: `Insufficient data (${len}/${this.cfg.min_ticks_for_hmm})` });
+
+        const obs = new Uint8Array(len - 1);
+        for (let t = 1; t < len; t++) obs[t - 1] = window[t] === window[t - 1] ? 1 : 0;
+
+        this.ticksSinceRefit++;
+        if (!this.hmmFitted || this.ticksSinceRefit >= this.cfg.refit_interval) {
+            const ok = this.baumWelch(obs);
+            if (ok) {
+                this.ticksSinceRefit = 0;
+                addLog('hmm',
+                    `[${asset}] HMM refitted | A[NR→NR]=${(this.A[0][0]*100).toFixed(1)}% ` +
+                    `A[NR→R]=${(this.A[0][1]*100).toFixed(1)}% A[R→NR]=${(this.A[1][0]*100).toFixed(1)}% ` +
+                    `A[R→R]=${(this.A[1][1]*100).toFixed(1)}% | B(rep|NR)=${(this.B[0][1]*100).toFixed(1)}% ` +
+                    `B(rep|R)=${(this.B[1][1]*100).toFixed(1)}%`
+                );
+            }
+        }
+
+        const vit = this.viterbi(obs);
+        if (!vit) return (this._lastAnalysisResult = { valid: false, reason: 'Viterbi failed' });
+
+        // Forward posterior
+        let logA0 = Math.log(this.pi[0] + 1e-300) + Math.log(this.B[0][obs[0]] + 1e-300);
+        let logA1 = Math.log(this.pi[1] + 1e-300) + Math.log(this.B[1][obs[0]] + 1e-300);
+        const logATrans = [
+            [Math.log(this.A[0][0] + 1e-300), Math.log(this.A[0][1] + 1e-300)],
+            [Math.log(this.A[1][0] + 1e-300), Math.log(this.A[1][1] + 1e-300)]
+        ];
+        const logBEmit = [
+            [Math.log(this.B[0][0] + 1e-300), Math.log(this.B[0][1] + 1e-300)],
+            [Math.log(this.B[1][0] + 1e-300), Math.log(this.B[1][1] + 1e-300)]
+        ];
+        for (let t = 1; t < obs.length; t++) {
+            const o = obs[t];
+            const n0 = logSumExp2(logA0 + logATrans[0][0], logA1 + logATrans[1][0]) + logBEmit[0][o];
+            const n1 = logSumExp2(logA0 + logATrans[0][1], logA1 + logATrans[1][1]) + logBEmit[1][o];
+            logA0 = n0; logA1 = n1;
+        }
+        const fwdDen = logSumExp2(logA0, logA1);
+        const posteriorNonRep = Math.exp(logA0 - fwdDen);
+        const posteriorRep = Math.exp(logA1 - fwdDen);
+
+        // CUSUM — single observation
+        const lastObs = obs[obs.length - 1];
+        const prevDigit = window[window.length - 2];
+        const currDigit = window[window.length - 1];
+        let cusumAlarm = false;
+        if (prevDigit === targetDigit || currDigit === targetDigit)
+            cusumAlarm = this.updateCUSUM(targetDigit, lastObs);
+        const cusumValue = this.getCUSUMValue(targetDigit);
+
+        const { rawRepeatProb, ewmaRepeat } = this.computePerDigitStats(window);
+
+        // Regime stability
+        const seqLen = vit.stateSeq.length;
+        const segSize = Math.floor(seqLen / 5);
+        let stabilitySum = 0, segCount = 0;
+        for (let seg = 0; seg < 5 && seg * segSize < seqLen; seg++) {
+            const start = seg * segSize;
+            const end = Math.min((seg + 1) * segSize, seqLen);
+            let nonRepCount = 0;
+            for (let i = start; i < end; i++) if (vit.stateSeq[i] === 0) nonRepCount++;
+            stabilitySum += nonRepCount / (end - start);
+            segCount++;
+        }
+        const regimeStability = segCount > 0 ? stabilitySum / segCount : 0;
+
+        const threshold = this.cfg.repeat_threshold;
+        let safetyScore = 0;
+        if (vit.currentState === 0) safetyScore += 40;
+        safetyScore += Math.round(clamp((posteriorNonRep - 0.5) / 0.5, 0, 1) * 30);
+        safetyScore += Math.round(clamp(vit.persistence / this.cfg.min_regime_persistence, 0, 1) * 15);
+        safetyScore += Math.round(regimeStability * 15);
+
+        if (vit.currentState !== 0) safetyScore = 0;
+        if (posteriorNonRep < this.cfg.hmm_nonrep_confidence) safetyScore = Math.min(safetyScore, this.cfg.min_safety_score - 1);
+        if (rawRepeatProb[targetDigit] >= threshold) safetyScore = 0;
+        if (cusumAlarm) safetyScore = 0;
+
+        const signalActive = (
+            vit.currentState === 0 &&
+            posteriorNonRep >= this.cfg.hmm_nonrep_confidence &&
+            vit.persistence >= this.cfg.min_regime_persistence &&
+            rawRepeatProb[targetDigit] < threshold &&
+            ewmaRepeat[targetDigit] < threshold &&
+            !cusumAlarm &&
+            safetyScore >= this.cfg.min_safety_score
+        );
+
+        this._lastAnalysisResult = {
+            valid: true,
+            hmmState: vit.currentState,
+            hmmStateName: vit.currentState === 0 ? 'NON-REP' : 'REP',
+            hmmPersistence: vit.persistence,
+            hmmTransitions: vit.transitions,
+            regimeStability,
+            posteriorNonRep, posteriorRep,
+            cusumAlarm, cusumValue,
+            rawRepeatProb, ewmaRepeat,
+            hmmA: this.A, hmmB: this.B,
+            safetyScore, signalActive,
+        };
+        return this._lastAnalysisResult;
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  MAIN BOT CLASS (Browser WebSocket)
+// ════════════════════════════════════════════════════════════════════════════
+class GhostBot {
+    constructor(settings) {
+        this.settings = settings;
+        this.config = {
+            assets: settings.assets,
+            requiredHistoryLength: 5000,
+            analysis_window: settings.analysisWindow,
+            min_ticks_for_hmm: settings.minTicksHMM,
+            repeat_threshold: settings.repeatThreshold,
+            hmm_nonrep_confidence: settings.hmmConfidence,
+            min_safety_score: settings.minSafety,
+            min_regime_persistence: settings.minPersistence,
+            cusum_threshold: settings.cusumThreshold,
+            cusum_slack: settings.cusumSlack,
+            refit_interval: settings.refitInterval,
+            baseStake: settings.baseStake,
+            firstLossMultiplier: settings.firstLossMultiplier,
+            subsequentMultiplier: settings.subsequentMultiplier,
+            maxConsecutiveLosses: settings.maxLosses,
+            takeProfit: settings.takeProfit,
+            stopLoss: settings.stopLoss,
+        };
+
+        this.histories = {};
+        this.config.assets.forEach(a => this.histories[a] = []);
+
+        this.stake = this.config.baseStake;
+        this.consecutiveLosses = 0;
+        this.totalTrades = 0;
+        this.totalWins = 0;
+        this.x2 = 0; this.x3 = 0; this.x4 = 0; this.x5 = 0;
+        this.netProfit = 0;
+
+        this.lastTradeDigit = {};
+        this.asset_safety_score = {};
+        this.lastTradeTime = {};
+        this.ticksSinceLastTrade = {};
+        this.lastTickLogTime = {};
+        this.tradeInProgress = false;
+        this.stopped = false;
+
+        this.config.assets.forEach(a => {
+            this.lastTradeDigit[a] = null;
+            this.asset_safety_score[a] = null;
+            this.lastTradeTime[a] = 0;
+            this.ticksSinceLastTrade[a] = 999;
+            this.lastTickLogTime[a] = 0;
+        });
+
+        this.assetHMMs = new Map();
+        this.historyLoaded = {};
+        this.config.assets.forEach(a => this.historyLoaded[a] = false);
+
+        this.ws = null;
+        this.connected = false;
+
+        this.connect();
+    }
+
+    connect() {
+        addLog('conn', 'Connecting to Deriv API...');
+        try {
+            this.ws = new WebSocket('wss://ws.derivws.com/websockets/v3?app_id=1089');
+        } catch (e) {
+            addLog('error', `WebSocket creation failed: ${e.message}`);
+            return;
+        }
+
+        this.ws.onopen = () => {
+            this.connected = true;
+            setConnectionStatus(true);
+            addLog('conn', 'Connected to Deriv');
+            this.ws.send(JSON.stringify({ authorize: this.settings.apiToken }));
+        };
+
+        this.ws.onmessage = (evt) => {
+            try {
+                this.handleMessage(JSON.parse(evt.data));
+            } catch (e) {
+                addLog('error', `Parse error: ${e.message}`);
+            }
+        };
+
+        this.ws.onclose = () => {
+            this.connected = false;
+            setConnectionStatus(false);
+            addLog('conn', 'Disconnected from Deriv');
+        };
+
+        this.ws.onerror = (e) => {
+            addLog('error', 'WebSocket error occurred');
+        };
+    }
+
+    stop() {
+        this.stopped = true;
+        addLog('conn', 'Bot stopped by user');
+        if (this.ws) {
+            try { this.ws.close(); } catch(e) {}
+        }
+        this.ws = null;
+        this.connected = false;
+        setConnectionStatus(false);
+    }
+
+    send(obj) {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN)
+            this.ws.send(JSON.stringify(obj));
+    }
+
+    sendTelegram(text) {
+        if (!this.settings.telegramToken || !this.settings.telegramChatId) return;
+        const url = `https://api.telegram.org/bot${this.settings.telegramToken}/sendMessage`;
+        fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chat_id: this.settings.telegramChatId,
+                text: text.replace(/<[^>]*>/g, ''),
+                parse_mode: 'HTML'
+            })
+        }).catch(() => {});
+    }
+
+    handleMessage(msg) {
+        if (this.stopped) return;
+
+        if (msg.error) {
+            addLog('error', `API: ${msg.error.message}`);
+            if (msg.msg_type === 'buy') this.tradeInProgress = false;
+            return;
+        }
+
+        switch (msg.msg_type) {
+            case 'authorize':
+                addLog('conn', `Authenticated as ${msg.authorize?.loginid || 'unknown'}`);
+                this.initSubscriptions();
+                break;
+            case 'history':
+                this.handleHistory(msg);
+                break;
+            case 'tick':
+                this.handleTick(msg.tick);
+                break;
+            case 'buy':
+                if (msg.buy) {
+                    addLog('trade', `Contract purchased: ${msg.buy.contract_id} | Cost: $${parseFloat(msg.buy.buy_price).toFixed(2)}`);
+                    this.send({
+                        proposal_open_contract: 1,
+                        contract_id: msg.buy.contract_id,
+                        subscribe: 1
+                    });
+                } else {
+                    this.tradeInProgress = false;
+                }
+                break;
+            case 'proposal_open_contract':
+                if (msg.proposal_open_contract?.is_sold)
+                    this.handleTradeResult(msg.proposal_open_contract);
+                break;
+        }
+    }
+
+    initSubscriptions() {
+        addLog('conn', `Subscribing to ${this.config.assets.length} assets...`);
+        this.config.assets.forEach(asset => {
+            this.send({
+                ticks_history: asset,
+                adjust_start_time: 1,
+                count: this.config.requiredHistoryLength,
+                end: 'latest', start: 1, style: 'ticks'
+            });
+            this.send({ ticks: asset, subscribe: 1 });
+        });
+    }
+
+    getLastDigit(quote, asset) {
+        const qStr = quote.toString();
+        const [, frac = ''] = qStr.split('.');
+        if (['RDBULL', 'RDBEAR', 'R_75', 'R_50'].includes(asset))
+            return frac.length >= 4 ? parseInt(frac[3]) : 0;
+        else if (['R_10', 'R_25', '1HZ15V', '1HZ30V', '1HZ90V'].includes(asset))
+            return frac.length >= 3 ? parseInt(frac[2]) : 0;
+        else
+            return frac.length >= 2 ? parseInt(frac[1]) : 0;
+    }
+
+    handleHistory(msg) {
+        const asset = msg.echo_req.ticks_history;
+        const prices = msg.history?.prices || [];
+        this.histories[asset] = prices.map(p => this.getLastDigit(p, asset));
+        this.historyLoaded[asset] = true;
+
+        if (!this.assetHMMs.has(asset)) {
+            this.assetHMMs.set(asset, new HMMRegimeDetector({
+                analysis_window: this.config.analysis_window,
+                min_ticks_for_hmm: this.config.min_ticks_for_hmm,
+                repeat_threshold: this.config.repeat_threshold,
+                min_regime_persistence: this.config.min_regime_persistence,
+                hmm_nonrep_confidence: this.config.hmm_nonrep_confidence,
+                min_safety_score: this.config.min_safety_score,
+                cusum_threshold: this.config.cusum_threshold,
+                cusum_slack: this.config.cusum_slack,
+                refit_interval: this.config.refit_interval,
+            }));
+        }
+        addLog('conn', `Loaded ${this.histories[asset].length} ticks for ${asset}`);
+    }
+
+    handleTick(tick) {
+        if (this.stopped) return;
+        const asset = tick.symbol;
+        if (!this.config.assets.includes(asset)) return;
+
+        const lastDigit = this.getLastDigit(tick.quote, asset);
+        this.histories[asset].push(lastDigit);
+        if (this.histories[asset].length > this.config.requiredHistoryLength)
+            this.histories[asset].shift();
+
+        this.ticksSinceLastTrade[asset]++;
+
+        // Throttled tick log — every 60 seconds
+        const now = Date.now();
+        if (now - this.lastTickLogTime[asset] >= 60000) {
+            addLog('info', `[${asset}] Tick #${this.histories[asset].length} | Digit: ${lastDigit} | Last 10: ${this.histories[asset].slice(-10).join(',')}`);
+            this.lastTickLogTime[asset] = now;
+        }
+
+        if (this.historyLoaded[asset] && !this.tradeInProgress)
+            this.scanForSignal(asset);
+    }
+
+    scanForSignal(asset) {
+        if (this.tradeInProgress || this.stopped) return;
+
+        const history = this.histories[asset];
+        if (history.length < 50) return;
+
+        const hmm = this.assetHMMs.get(asset);
+        if (!hmm) return;
+
+        const regime = hmm.analyze(history, history[history.length - 1], asset);
+        if (!regime.valid || !regime.signalActive) return;
+
+        const targetDigit = history[history.length - 1];
+        const confidence = regime.posteriorNonRep;
+
+        // Same-digit repeat guard — proper numeric comparison
+        if (targetDigit === this.lastTradeDigit[asset]) {
+            const currentConf = confidence * 100;
+            const previousConf = parseFloat(this.asset_safety_score[asset]) || 0;
+            if (currentConf < previousConf + 0.1) return;
+        }
+
+        this.placeTrade(asset, targetDigit, regime.safetyScore, regime);
+    }
+
+    placeTrade(asset, digit, safetyScore, regime) {
+        if (this.tradeInProgress || this.stopped) return;
+
+        this.tradeInProgress = true;
+        this.lastTradeDigit[asset] = digit;
+        this.asset_safety_score[asset] = (regime.posteriorNonRep * 100).toFixed(1);
+        this.lastTradeTime[asset] = Date.now();
+        this.ticksSinceLastTrade[asset] = 0;
+
+        addLog('trade',
+            `SIGNAL ${asset} | Digit: ${digit} | Safety: ${safetyScore} | ` +
+            `HMM: ${regime.hmmStateName} | Conf: ${(regime.posteriorNonRep*100).toFixed(1)}% | ` +
+            `Persist: ${regime.hmmPersistence} | Stake: $${this.stake.toFixed(2)}`
+        );
+
+        this.send({
+            buy: 1,
+            price: this.stake,
+            parameters: {
+                amount: this.stake,
+                basis: "stake",
+                contract_type: "DIGITDIFF",
+                currency: "USD",
+                duration: 1,
+                duration_unit: "t",
+                symbol: asset,
+                barrier: digit.toString()
+            }
+        });
+
+        this.sendTelegram(
+            `🎯 TRADE OPENED\n` +
+            `Asset: ${asset}\nDigit: ${digit}\nSafety: ${safetyScore}\n` +
+            `Conf: ${(regime.posteriorNonRep*100).toFixed(1)}%\n` +
+            `Stake: $${this.stake.toFixed(2)}\nLosses: ${this.consecutiveLosses}`
+        );
+    }
+
+    handleTradeResult(contract) {
+        const won = contract.status === "won";
+        const profit = parseFloat(contract.profit);
+        const asset = contract.underlying;
+        const exitDigit = this.getLastDigit(contract.exit_tick_display_value, asset);
+
+        this.totalTrades++;
+        this.netProfit += profit;
+
+        const tag = won ? 'win' : 'loss';
+        addLog(tag,
+            `${won ? 'WIN' : 'LOSS'} ${asset} | Target: ${this.lastTradeDigit[asset]} → Exit: ${exitDigit} | ` +
+            `P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)} | Net: $${this.netProfit.toFixed(2)}`
+        );
+
+        // Add to trade list
+        addTradeResult({
+            won,
+            profit,
+            asset,
+            targetDigit: this.lastTradeDigit[asset],
+            exitDigit,
+            safetyScore: this.asset_safety_score[asset] || '—',
+            confidence: this.asset_safety_score[asset] || '—',
+            stake: this.stake.toFixed(2),
+            time: getTimestamp(),
+        });
+
+        if (won) {
+            this.totalWins++;
+            this.consecutiveLosses = 0;
+            this.stake = this.config.baseStake;
+        } else {
+            this.consecutiveLosses++;
+            if (this.consecutiveLosses === 2) this.x2++;
+            if (this.consecutiveLosses === 3) this.x3++;
+            if (this.consecutiveLosses === 4) this.x4++;
+            if (this.consecutiveLosses === 5) this.x5++;
+
+            // Corrected Martingale formula
+            if (this.consecutiveLosses === 1) {
+                this.stake = this.config.baseStake * this.config.firstLossMultiplier;
+            } else {
+                this.stake = this.config.baseStake *
+                    this.config.firstLossMultiplier *
+                    Math.pow(this.config.subsequentMultiplier, this.consecutiveLosses - 1);
+            }
+            this.stake = Math.round(this.stake * 100) / 100;
+        }
+
+        // Update UI
+        updateStats(this);
+
+        this.sendTelegram(
+            `${won ? '✅ WIN' : '❌ LOSS'}\n` +
+            `${asset} | ${this.lastTradeDigit[asset]}→${exitDigit}\n` +
+            `P&L: ${profit >= 0?'+':''}$${profit.toFixed(2)}\n` +
+            `Net: $${this.netProfit.toFixed(2)}\n` +
+            `Record: ${this.totalWins}W/${this.totalTrades-this.totalWins}L\n` +
+            `Next Stake: $${this.stake.toFixed(2)}`
+        );
+
+        // Stop conditions
+        if (this.consecutiveLosses >= this.config.maxConsecutiveLosses) {
+            addLog('warn', `MAX CONSECUTIVE LOSSES (${this.config.maxConsecutiveLosses}) REACHED — Bot stopped`);
+            showToast(`Max losses reached! P&L: $${this.netProfit.toFixed(2)}`, 'error');
+            this.stop();
+            botInstance = null;
+            updateToggleButton(false);
+            return;
+        }
+        if (this.netProfit >= this.config.takeProfit) {
+            addLog('win', `TAKE PROFIT ($${this.config.takeProfit}) REACHED — Bot stopped`);
+            showToast(`Take profit reached! $${this.netProfit.toFixed(2)}`, 'success');
+            this.stop();
+            botInstance = null;
+            updateToggleButton(false);
+            return;
+        }
+        if (this.netProfit <= this.config.stopLoss) {
+            addLog('loss', `STOP LOSS ($${this.config.stopLoss}) REACHED — Bot stopped`);
+            showToast(`Stop loss reached! $${this.netProfit.toFixed(2)}`, 'error');
+            this.stop();
+            botInstance = null;
+            updateToggleButton(false);
+            return;
+        }
+
+        this.tradeInProgress = false;
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  GLOBAL CONTROLS
+// ════════════════════════════════════════════════════════════════════════════
+let botInstance = null;
+
+function updateToggleButton(running) {
+    const btn = document.getElementById('startBtn');
+    const panel = document.getElementById('settingsPanel');
+    if (running) {
+        btn.className = 'btn btn-stop';
+        btn.innerHTML = '⏹ Stop Bot';
+        panel.classList.add('disabled');
+    } else {
+        btn.className = 'btn btn-start';
+        btn.innerHTML = '▶ Start Bot';
+        panel.classList.remove('disabled');
+    }
+}
+
+function toggleBot() {
+    if (botInstance) {
+        // Stop
+        botInstance.stop();
+        botInstance = null;
+        updateToggleButton(false);
+        showToast('Bot stopped', 'info');
+    } else {
+        // Start
+        const settings = gatherSettings();
+        if (!settings.apiToken) {
+            showToast('Please enter your API token', 'error');
+            document.getElementById('apiToken').focus();
+            return;
+        }
+        if (settings.assets.length === 0) {
+            showToast('Please select at least one asset', 'error');
+            return;
+        }
+
+        // Clear previous logs & trades
+        logEntries = [];
+        tradeResults = [];
+        renderLogs();
+        renderTrades();
+
+        botInstance = new GhostBot(settings);
+        updateToggleButton(true);
+        updateStats(botInstance);
+        showToast('Bot started', 'success');
+    }
+}
+</script>
+
+</body>
+</html>
