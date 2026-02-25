@@ -544,9 +544,9 @@ class RomanianGhostUltimate {
 
             // ====== HMM REGIME DETECTION SETTINGS ======
             min_ticks_for_hmm: 50,
-            repeat_threshold: 90, 
+            repeat_threshold: 98, 
             hmm_nonrep_confidence: 0.935,
-            min_safety_score: 96,
+            min_safety_score: 98,
             min_regime_persistence: 8,
             cusum_threshold: 4.5,
             cusum_slack: 0.005,
@@ -940,7 +940,7 @@ class RomanianGhostUltimate {
         if (targetDigit === this.lastTradeDigit[asset]) {
             const currentConfidence = confidence * 100;
             const previousConfidence = parseFloat(this.asset_safety_score[asset]) || 0;
-            const requiredConfidence = previousConfidence + 0.1;
+            const requiredConfidence = previousConfidence + 0.3; // require at least 0.3% higher confidence than last trade on same digit
             if (currentConfidence < requiredConfidence) {
                 if (now - this.lastTickLogTime2[asset] >= 30000) {
                     console.log(
