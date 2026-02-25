@@ -902,7 +902,7 @@ class RomanianGhostUltimate {
             analysis_window: 5000,
             min_ticks_for_analysis: 50,
             repeat_threshold: 8,
-            repeat_confidence: 60,
+            repeat_confidence: 55,//70
 
             // Money management
             baseStake: 0.61,
