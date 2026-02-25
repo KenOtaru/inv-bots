@@ -9,7 +9,7 @@ const fs = require('fs');
 const path = require('path');
 
 const TOKEN = "rgNedekYXvCaPeP";
-const TELEGRAM_TOKEN = "8288121368:AAHYRb0Stk5dWUWN1iTYbdO3fyIEwIuZQR8";
+const TELEGRAM_TOKEN = "8218636914:AAGvaKFh8MT769-_9eOEiU4XKufL0aHRhZ4";
 const CHAT_ID = "752497117";
 
 const STATE_FILE = path.join(__dirname, 'ghost92-00017-state.json');
