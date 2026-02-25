@@ -899,16 +899,16 @@ class RomanianGhostUltimate {
             cusum_down_threshold: -4.5,
 
             // General
-            analysis_window: 5000,
+            analysis_window: 1000,
             min_ticks_for_analysis: 50,
-            repeat_threshold: 8,
-            repeat_confidence: 55,//70
+            repeat_threshold: 9,
+            repeat_confidence: 50,//70
 
             // Money management
             baseStake: 0.61,
             firstLossMultiplier: 11.3,
             subsequentMultiplier: 11.3,
-            maxConsecutiveLosses: 6,
+            maxConsecutiveLosses: 3,
             takeProfit: 10000,
             stopLoss: -500,
 

@@ -940,7 +940,7 @@ class RomanianGhostUltimate {
         if (targetDigit === this.lastTradeDigit[asset]) {
             const currentConfidence = confidence * 100;
             const previousConfidence = parseFloat(this.asset_safety_score[asset]) || 0;
-            const requiredConfidence = previousConfidence + 0.3; // require at least 0.3% higher confidence than last trade on same digit
+            const requiredConfidence = previousConfidence + 1; // require at least 1% higher confidence than last trade on same digit
             if (currentConfidence < requiredConfidence) {
                 if (now - this.lastTickLogTime2[asset] >= 30000) {
                     console.log(
@@ -963,7 +963,7 @@ class RomanianGhostUltimate {
 
         this.tradeInProgress = true;
         this.lastTradeDigit[asset] = digit;
-        this.asset_safety_score[asset] = (regime.posteriorNonRep * 100).toFixed(1);
+        this.asset_safety_score[asset] = safetyScore;
         this.lastTradeTime[asset] = Date.now();
         this.ticksSinceLastTrade[asset] = 0;
 
@@ -996,7 +996,7 @@ class RomanianGhostUltimate {
             📊 Asset: ${asset}
             🔢 Target Digit: ${digit}
             📈 Last10: ${this.histories[asset].slice(-10).join(',')}
-            🛡️ Safety Score: ${safetyScore}
+            🛡️ SafetyScore: ${safetyScore}
             💯 P(RNR): ${(regime.posteriorNonRep * 100).toFixed(1)}% | P(REP): ${(regime.posteriorRep * 100).toFixed(1)}%
             ⏱️ Persistence: ${regime.hmmPersistence}
             💰 Stake: $${this.stake.toFixed(2)}
@@ -1068,7 +1068,7 @@ class RomanianGhostUltimate {
             🎯 Target: ${this.lastTradeDigit[asset]}
             🔢 Exit: ${exitDigit}
             📈 Last10: ${this.histories[asset].slice(-10).join(',')}
-            🛡️ Confidence: ${this.asset_safety_score[asset]}
+            🛡️ SafetyScoe: ${this.asset_safety_score[asset]}
             💰 P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}
             💵 Balance: $${this.netProfit.toFixed(2)}
             📊 Record: ${this.totalWins}W/${this.totalTrades - this.totalWins}L | Losses: ${this.consecutiveLosses}${this.consecutiveLosses > 1 ? ` (x${this.consecutiveLosses})` : ''}
