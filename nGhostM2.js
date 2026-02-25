@@ -544,7 +544,7 @@ class RomanianGhostUltimate {
 
             // ====== HMM REGIME DETECTION SETTINGS ======
             min_ticks_for_hmm: 50,
-            repeat_threshold: 5.5, 
+            repeat_threshold: 5, // % threshold for raw repeat probability per digit
             hmm_nonrep_confidence: 0.935,
             min_safety_score: 96,
             min_regime_persistence: 8,
