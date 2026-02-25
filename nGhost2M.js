@@ -13,7 +13,7 @@ const TOKEN = "DMylfkyce6VyZt7";
 const TELEGRAM_TOKEN = "8288121368:AAHYRb0Stk5dWUWN1iTYbdO3fyIEwIuZQR8";
 const CHAT_ID = "752497117";
 
-const STATE_FILE = path.join(__dirname, 'nGhost2M-state00001.json');
+const STATE_FILE = path.join(__dirname, 'nGhost2M-state000011.json');
 
 // ══════════════════════════════════════════════════════════════════════════════
 //  UTILITY FUNCTIONS
@@ -678,7 +678,7 @@ class AdvancedRegimeDetector {
             const fitResult = this.hmm.baumWelch(fitObs);
             this.ticksSinceRefit = 0;
             if (fitResult?.accepted) {
-                logHMM(`📐 HMM fitted | Discrim:${(fitResult.discrimination * 100).toFixed(1)}% ✅`);
+                // logHMM(`📐 HMM fitted | Discrim:${(fitResult.discrimination * 100).toFixed(1)}% ✅`);
                 // Warm up forward from last ~50 observations after refit
                 const warmUpObs = this.recentBinaryObs.slice(-50);
                 this.hmm.warmUpForward(warmUpObs);
@@ -902,7 +902,7 @@ class RomanianGhostUltimate {
             analysis_window: 5000,
             min_ticks_for_analysis: 50,
             repeat_threshold: 8,
-            repeat_confidence: 73,
+            repeat_confidence: 60,
 
             // Money management
             baseStake: 2.20,
