@@ -544,8 +544,8 @@ class RomanianGhostUltimate {
 
             // ====== HMM REGIME DETECTION SETTINGS ======
             min_ticks_for_hmm: 50,
-            repeat_threshold: 80, 
-            hmm_nonrep_confidence: 0.83,
+            repeat_threshold: 90, 
+            hmm_nonrep_confidence: 0.935,
             min_safety_score: 96,
             min_regime_persistence: 8,
             cusum_threshold: 4.5,
@@ -554,12 +554,12 @@ class RomanianGhostUltimate {
             analysis_window: 1000,
 
             // Money management
-            baseStake: 2.20,
+            baseStake: 0.61,
             firstLossMultiplier: 11.3,
             subsequentMultiplier: 11.3,
-            maxConsecutiveLosses: 6,
+            maxConsecutiveLosses: 3,
             takeProfit: 10000,
-            stopLoss: -500,
+            stopLoss: -50,
 
             // Time filters
             avoidMinutesAroundHour: 5,
@@ -808,18 +808,18 @@ class RomanianGhostUltimate {
             if (this.hourly.trades === 0) return;
             const winRate = ((this.hourly.wins / this.hourly.trades) * 100).toFixed(1);
             this.sendTelegram(`
-⏰ <b>HOURLY — GHOST Bot v1 Multi2</b>
+                ⏰ <b>HOURLY — GHOST Bot v1 Multi</b>
 
-📊 Trades: ${this.hourly.trades}
-✅/❌ W/L: ${this.hourly.wins}/${this.hourly.losses}
-📈 Win Rate: ${winRate}%
-💰 P&L: ${this.hourly.pnl >= 0 ? '+' : ''}$${this.hourly.pnl.toFixed(2)}
+                📊 Trades: ${this.hourly.trades}
+                ✅/❌ W/L: ${this.hourly.wins}/${this.hourly.losses}
+                📈 Win Rate: ${winRate}%
+                💰 P&L: ${this.hourly.pnl >= 0 ? '+' : ''}$${this.hourly.pnl.toFixed(2)}
 
-📊 <b>Session</b>
-├ Total: ${this.totalTrades}
-├ W/L: ${this.totalWins}/${this.totalTrades - this.totalWins}
-├ x2-x5: ${this.x2}/${this.x3}/${this.x4}/${this.x5}
-└ Net: $${this.netProfit.toFixed(2)}
+                📊 <b>Session</b>
+                ├ Total: ${this.totalTrades}
+                ├ W/L: ${this.totalWins}/${this.totalTrades - this.totalWins}
+                ├ x2-x5: ${this.x2}/${this.x3}/${this.x4}/${this.x5}
+                └ Net: $${this.netProfit.toFixed(2)}
             `.trim());
             // FIX #10: Single reset instead of duplicate
             this.hourly = { trades: 0, wins: 0, losses: 0, pnl: 0 };
@@ -991,16 +991,16 @@ class RomanianGhostUltimate {
         });
 
         this.sendTelegram(`
-🎯 <b>TRADE OPENED V1 Multi2</b>
+            🎯 <b>TRADE OPENED V1 Multi</b>
 
-📊 Asset: ${asset}
-🔢 Target Digit: ${digit}
-📈 Last 10: ${this.histories[asset].slice(-10).join(',')}
-🛡️ Safety Score: ${safetyScore}
-💯 P(RNR): ${(regime.posteriorNonRep * 100).toFixed(1)}% | P(REP): ${(regime.posteriorRep * 100).toFixed(1)}%
-⏱️ Persistence: ${regime.hmmPersistence}
-💰 Stake: $${this.stake.toFixed(2)}
-📊 Losses: ${this.consecutiveLosses}
+            📊 Asset: ${asset}
+            🔢 Target Digit: ${digit}
+            📈 Last 10: ${this.histories[asset].slice(-10).join(',')}
+            🛡️ Safety Score: ${safetyScore}
+            💯 P(RNR): ${(regime.posteriorNonRep * 100).toFixed(1)}% | P(REP): ${(regime.posteriorRep * 100).toFixed(1)}%
+            ⏱️ Persistence: ${regime.hmmPersistence}
+            💰 Stake: $${this.stake.toFixed(2)}
+            📊 Losses: ${this.consecutiveLosses}
         `.trim());
     }
 
@@ -1062,18 +1062,18 @@ class RomanianGhostUltimate {
         }
 
         let telegramContent = `
-${won ? '✅ <b>V1 MULTI-BOT WIN!</b>' : '❌ <b>V1 MULTI-BOT LOSS!</b>'}
+            ${won ? '✅ <b>V1 MULTI-BOT WIN!</b>' : '❌ <b>V1 MULTI-BOT LOSS!</b>'}
 
-📊 Symbol: ${asset}
-🎯 Target: ${this.lastTradeDigit[asset]}
-🔢 Exit: ${exitDigit}
-📈 Last 10: ${this.histories[asset].slice(-10).join(',')}
-🛡️ Confidence: ${this.asset_safety_score[asset]}
-💰 P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}
-💵 Balance: $${this.netProfit.toFixed(2)}
-📊 Record: ${this.totalWins}W/${this.totalTrades - this.totalWins}L | Losses: ${this.consecutiveLosses}${this.consecutiveLosses > 1 ? ` (x${this.consecutiveLosses})` : ''}
-📊 WIN RATE: ${((this.totalWins / this.totalTrades) * 100).toFixed(1)}%
-💲 Next Stake: $${this.stake.toFixed(2)}
+            📊 Symbol: ${asset}
+            🎯 Target: ${this.lastTradeDigit[asset]}
+            🔢 Exit: ${exitDigit}
+            📈 Last 10: ${this.histories[asset].slice(-10).join(',')}
+            🛡️ Confidence: ${this.asset_safety_score[asset]}
+            💰 P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}
+            💵 Balance: $${this.netProfit.toFixed(2)}
+            📊 Record: ${this.totalWins}W/${this.totalTrades - this.totalWins}L | Losses: ${this.consecutiveLosses}${this.consecutiveLosses > 1 ? ` (x${this.consecutiveLosses})` : ''}
+            📊 WIN RATE: ${((this.totalWins / this.totalTrades) * 100).toFixed(1)}%
+            💲 Next Stake: $${this.stake.toFixed(2)}
         `;
 
         this.sendTelegram(telegramContent.trim());
