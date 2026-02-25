@@ -995,7 +995,7 @@ class RomanianGhostUltimate {
 
             📊 Asset: ${asset}
             🔢 Target Digit: ${digit}
-            📈 Last 10: ${this.histories[asset].slice(-10).join(',')}
+            📈 Last10: ${this.histories[asset].slice(-10).join(',')}
             🛡️ Safety Score: ${safetyScore}
             💯 P(RNR): ${(regime.posteriorNonRep * 100).toFixed(1)}% | P(REP): ${(regime.posteriorRep * 100).toFixed(1)}%
             ⏱️ Persistence: ${regime.hmmPersistence}
@@ -1067,7 +1067,7 @@ class RomanianGhostUltimate {
             📊 Symbol: ${asset}
             🎯 Target: ${this.lastTradeDigit[asset]}
             🔢 Exit: ${exitDigit}
-            📈 Last 10: ${this.histories[asset].slice(-10).join(',')}
+            📈 Last10: ${this.histories[asset].slice(-10).join(',')}
             🛡️ Confidence: ${this.asset_safety_score[asset]}
             💰 P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}
             💵 Balance: $${this.netProfit.toFixed(2)}
