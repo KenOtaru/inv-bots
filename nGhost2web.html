@@ -1,0 +1,1759 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Romanian Ghost 9.2 Ultimate — Ensemble Trading Bot</title>
+    <style>
+        /* ═══════════════════════════════════════════════════════════════
+           CSS RESET & BASE
+           ═══════════════════════════════════════════════════════════════ */
+        *, *::before, *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        :root {
+            --bg-primary: #0a0e17;
+            --bg-secondary: #111827;
+            --bg-card: #1a2236;
+            --bg-card-hover: #1f2a42;
+            --bg-input: #0d1321;
+            --border-color: #2a3650;
+            --border-focus: #3b82f6;
+            --text-primary: #e2e8f0;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
+            --accent-blue: #3b82f6;
+            --accent-blue-hover: #2563eb;
+            --accent-green: #10b981;
+            --accent-green-dim: #065f46;
+            --accent-red: #ef4444;
+            --accent-red-dim: #7f1d1d;
+            --accent-yellow: #f59e0b;
+            --accent-orange: #f97316;
+            --accent-purple: #8b5cf6;
+            --accent-cyan: #06b6d4;
+            --win-bg: #052e16;
+            --loss-bg: #2a0a0a;
+            --shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+            --radius: 10px;
+            --radius-sm: 6px;
+        }
+
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* ═══════════════════════════════════════════════════════════════
+           HEADER
+           ═══════════════════════════════════════════════════════════════ */
+        .header {
+            background: linear-gradient(135deg, #111827 0%, #1a2236 100%);
+            border-bottom: 1px solid var(--border-color);
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(10px);
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .header-logo {
+            font-size: 28px;
+            filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.5));
+        }
+
+        .header-title {
+            font-size: 18px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header-subtitle {
+            font-size: 11px;
+            color: var(--text-muted);
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .connection-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+            border: 1px solid var(--border-color);
+            background: var(--bg-card);
+        }
+
+        .connection-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--accent-red);
+            transition: background 0.3s;
+        }
+
+        .connection-dot.connected {
+            background: var(--accent-green);
+            box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+            animation: pulse-green 2s infinite;
+        }
+
+        @keyframes pulse-green {
+            0%, 100% { box-shadow: 0 0 4px rgba(16, 185, 129, 0.4); }
+            50% { box-shadow: 0 0 12px rgba(16, 185, 129, 0.8); }
+        }
+
+        /* ═══════════════════════════════════════════════════════════════
+           LAYOUT
+           ═══════════════════════════════════════════════════════════════ */
+        .main-container {
+            display: grid;
+            grid-template-columns: 380px 1fr;
+            gap: 0;
+            min-height: calc(100vh - 65px);
+        }
+
+        /* ═══════════════════════════════════════════════════════════════
+           LEFT PANEL — SETTINGS
+           ═══════════════════════════════════════════════════════════════ */
+        .settings-panel {
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border-color);
+            overflow-y: auto;
+            max-height: calc(100vh - 65px);
+            padding: 20px;
+        }
+
+        .settings-panel::-webkit-scrollbar {
+            width: 6px;
+        }
+        .settings-panel::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .settings-panel::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 3px;
+        }
+
+        .panel-section {
+            margin-bottom: 20px;
+        }
+
+        .panel-section-title {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .panel-section-title.clickable {
+            cursor: pointer;
+            user-select: none;
+            transition: color 0.2s;
+        }
+
+        .panel-section-title.clickable:hover {
+            color: var(--text-secondary);
+        }
+
+        .panel-section-title .collapse-arrow {
+            font-size: 9px;
+            transition: transform 0.25s;
+            margin-left: auto;
+        }
+
+        .panel-section-title .collapse-arrow.open {
+            transform: rotate(90deg);
+        }
+
+        .collapsible-body {
+            display: none;
+        }
+
+        .collapsible-body.open {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 12px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 5px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 8px 12px;
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            font-size: 13px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--border-focus);
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+        }
+
+        .form-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .form-row-3 {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+        }
+
+        /* Token eye toggle */
+        .input-group {
+            position: relative;
+        }
+
+        .input-group .form-input {
+            padding-right: 36px;
+        }
+
+        .input-group .eye-btn {
+            position: absolute;
+            right: 8px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            color: var(--text-muted);
+            padding: 2px;
+        }
+
+        .input-group .eye-btn:hover {
+            color: var(--text-secondary);
+        }
+
+        /* Asset checkboxes */
+        .asset-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 6px;
+        }
+
+        .asset-checkbox {
+            display: none;
+        }
+
+        .asset-label {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 6px 4px;
+            background: var(--bg-input);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-sm);
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.2s;
+            user-select: none;
+        }
+
+        .asset-checkbox:checked + .asset-label {
+            background: rgba(59, 130, 246, 0.15);
+            border-color: var(--accent-blue);
+            color: var(--accent-blue);
+        }
+
+        .asset-label:hover {
+            border-color: var(--text-muted);
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 10px 18px;
+            border: none;
+            border-radius: var(--radius-sm);
+            font-size: 13px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+
+        .btn-start {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+            width: 100%;
+            padding: 12px;
+            font-size: 14px;
+            border-radius: var(--radius);
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+        }
+
+        .btn-start:hover {
+            box-shadow: 0 4px 20px rgba(16, 185, 129, 0.5);
+            transform: translateY(-1px);
+        }
+
+        .btn-start:active {
+            transform: translateY(0);
+        }
+
+        .btn-stop {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: white;
+            width: 100%;
+            padding: 12px;
+            font-size: 14px;
+            border-radius: var(--radius);
+            box-shadow: 0 4px 15px rgba(239, 68, 68, 0.3);
+        }
+
+        .btn-stop:hover {
+            box-shadow: 0 4px 20px rgba(239, 68, 68, 0.5);
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: var(--bg-card);
+            color: var(--text-secondary);
+            border: 1px solid var(--border-color);
+            padding: 8px 14px;
+            font-size: 12px;
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg-card-hover);
+            color: var(--text-primary);
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 14px;
+        }
+
+        .btn-group .btn {
+            flex: 1;
+        }
+
+        /* ═══════════════════════════════════════════════════════════════
+           RIGHT PANEL — DASHBOARD
+           ═══════════════════════════════════════════════════════════════ */
+        .dashboard {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            max-height: calc(100vh - 65px);
+        }
+
+        /* Stats Bar */
+        .stats-bar {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 12px;
+            padding: 16px 20px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius);
+            padding: 14px;
+            text-align: center;
+            transition: border-color 0.2s;
+        }
+
+        .stat-card:hover {
+            border-color: var(--text-muted);
+        }
+
+        .stat-label {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+        }
+
+        .stat-value {
+            font-size: 22px;
+            font-weight: 800;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+
+        .stat-value.positive { color: var(--accent-green); }
+        .stat-value.negative { color: var(--accent-red); }
+        .stat-value.neutral { color: var(--text-primary); }
+
+        .stat-sub {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-top: 3px;
+        }
+
+        /* Trade Details & Logs Split */
+        .content-split {
+            display: grid;
+            grid-template-columns: 420px 1fr;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* Trade History */
+        .trade-history {
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .section-header {
+            padding: 12px 16px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-shrink: 0;
+        }
+
+        .section-header .badge {
+            background: var(--accent-blue);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: 700;
+        }
+
+        .trade-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+        }
+
+        .trade-list::-webkit-scrollbar { width: 6px; }
+        .trade-list::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
+
+        .trade-item {
+            display: grid;
+            grid-template-columns: 28px 1fr auto;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            margin-bottom: 4px;
+            border-radius: var(--radius-sm);
+            border: 1px solid transparent;
+            transition: background 0.15s;
+        }
+
+        .trade-item:hover { background: var(--bg-card-hover); }
+        .trade-item.win { background: var(--win-bg); border-color: rgba(16, 185, 129, 0.15); }
+        .trade-item.loss { background: var(--loss-bg); border-color: rgba(239, 68, 68, 0.15); }
+
+        .trade-icon {
+            width: 28px; height: 28px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 14px; font-weight: 700;
+        }
+
+        .trade-icon.win { background: rgba(16, 185, 129, 0.2); color: var(--accent-green); }
+        .trade-icon.loss { background: rgba(239, 68, 68, 0.2); color: var(--accent-red); }
+
+        .trade-info { min-width: 0; }
+        .trade-info-main {
+            font-size: 12px; font-weight: 600; color: var(--text-primary);
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+        .trade-info-sub { font-size: 10px; color: var(--text-muted); margin-top: 2px; }
+
+        .trade-profit {
+            font-size: 13px; font-weight: 700;
+            font-family: 'Consolas', 'Monaco', monospace;
+            text-align: right; white-space: nowrap;
+        }
+        .trade-profit.positive { color: var(--accent-green); }
+        .trade-profit.negative { color: var(--accent-red); }
+
+        /* Log Panel */
+        .log-panel {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .log-tabs {
+            display: flex;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            flex-shrink: 0;
+        }
+
+        .log-tab {
+            padding: 10px 18px;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+            user-select: none;
+        }
+
+        .log-tab:hover { color: var(--text-secondary); }
+        .log-tab.active { color: var(--accent-blue); border-bottom-color: var(--accent-blue); }
+
+        .log-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px 12px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 11.5px;
+            line-height: 1.6;
+        }
+
+        .log-content::-webkit-scrollbar { width: 6px; }
+        .log-content::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
+
+        .log-entry {
+            padding: 2px 0;
+            border-bottom: 1px solid rgba(42, 54, 80, 0.3);
+            animation: logFadeIn 0.2s ease;
+        }
+
+        @keyframes logFadeIn {
+            from { opacity: 0; transform: translateY(-2px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .log-time { color: var(--text-muted); }
+        .log-tag { font-weight: 700; margin: 0 4px; }
+        .log-tag.conn { color: var(--accent-cyan); }
+        .log-tag.trade { color: var(--accent-yellow); }
+        .log-tag.hmm { color: var(--accent-purple); }
+        .log-tag.bocpd { color: var(--accent-orange); }
+        .log-tag.win { color: var(--accent-green); }
+        .log-tag.loss { color: var(--accent-red); }
+        .log-tag.info { color: var(--text-secondary); }
+        .log-tag.warn { color: var(--accent-orange); }
+        .log-tag.error { color: var(--accent-red); }
+        .log-tag.analysis { color: var(--accent-cyan); }
+        .log-msg { color: var(--text-secondary); }
+
+        /* Empty States */
+        .empty-state {
+            display: flex; flex-direction: column; align-items: center;
+            justify-content: center; height: 200px; color: var(--text-muted);
+            font-size: 13px; gap: 8px;
+        }
+        .empty-state-icon { font-size: 36px; opacity: 0.4; }
+
+        /* Loss streak badges */
+        .loss-badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+        .loss-badge {
+            padding: 2px 8px; border-radius: 10px; font-size: 10px; font-weight: 700;
+            background: var(--bg-input); border: 1px solid var(--border-color); color: var(--text-muted);
+        }
+        .loss-badge.active { background: rgba(239,68,68,0.15); border-color: rgba(239,68,68,0.3); color: var(--accent-red); }
+
+        /* Loading indicator */
+        .loading-bar {
+            padding: 8px 20px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            font-size: 11px;
+            color: var(--text-muted);
+            display: none;
+        }
+        .loading-bar.visible { display: block; }
+        .loading-track { height: 3px; background: var(--bg-input); border-radius: 2px; overflow: hidden; margin-top: 4px; }
+        .loading-fill { height: 100%; background: var(--accent-blue); border-radius: 2px; width: 0%; transition: width 0.4s; }
+
+        /* Toast notifications */
+        .toast-container {
+            position: fixed; top: 80px; right: 20px; z-index: 1000;
+            display: flex; flex-direction: column; gap: 8px;
+        }
+        .toast {
+            padding: 12px 18px; border-radius: var(--radius-sm); font-size: 13px; font-weight: 600;
+            animation: slideIn 0.3s ease, fadeOut 0.3s ease 2.7s;
+            box-shadow: var(--shadow); max-width: 320px;
+        }
+        .toast.success { background: rgba(16, 185, 129, 0.9); color: white; }
+        .toast.error { background: rgba(239, 68, 68, 0.9); color: white; }
+        .toast.info { background: rgba(59, 130, 246, 0.9); color: white; }
+        @keyframes slideIn { from { transform: translateX(100px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+
+        /* Settings disabled state */
+        .settings-panel.disabled .form-input,
+        .settings-panel.disabled .asset-label,
+        .settings-panel.disabled .btn-secondary,
+        .settings-panel.disabled .eye-btn {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+
+        /* Responsive */
+        @media (max-width: 1200px) {
+            .main-container { grid-template-columns: 1fr; }
+            .settings-panel { max-height: none; border-right: none; border-bottom: 1px solid var(--border-color); }
+            .dashboard { max-height: none; min-height: 600px; }
+            .stats-bar { grid-template-columns: repeat(3, 1fr); }
+            .content-split { grid-template-columns: 1fr; }
+            .trade-history { border-right: none; border-bottom: 1px solid var(--border-color); max-height: 350px; }
+            .log-panel { min-height: 400px; }
+        }
+        @media (max-width: 768px) {
+            .header { padding: 12px 16px; }
+            .header-title { font-size: 15px; }
+            .stats-bar { grid-template-columns: repeat(2, 1fr); gap: 8px; padding: 12px; }
+            .stat-value { font-size: 18px; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     HEADER
+     ═══════════════════════════════════════════════════════════════ -->
+<div class="header">
+    <div class="header-left">
+        <div class="header-logo">👻</div>
+        <div>
+            <div class="header-title">Romanian Ghost 9.2 Ultimate</div>
+            <div class="header-subtitle">6-Component Ensemble · BOCPD · HMM · CUSUM · Digit Differ</div>
+        </div>
+    </div>
+    <div class="header-right">
+        <div class="connection-indicator">
+            <div class="connection-dot" id="connDot"></div>
+            <span id="connText">Disconnected</span>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     MAIN LAYOUT
+     ═══════════════════════════════════════════════════════════════ -->
+<div class="main-container">
+    <!-- ─── SETTINGS PANEL ─────────────────────────────────────── -->
+    <div class="settings-panel" id="settingsPanel">
+
+        <!-- API Token -->
+        <div class="panel-section">
+            <div class="panel-section-title">🔑 Connection</div>
+            <div class="form-group">
+                <label class="form-label">Deriv API Token</label>
+                <div class="input-group">
+                    <input type="password" class="form-input" id="apiToken" placeholder="Enter your API token" autocomplete="off">
+                    <button class="eye-btn" onclick="toggleTokenEye()" title="Show/hide token">👁️</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Assets -->
+        <div class="panel-section">
+            <div class="panel-section-title">📊 Assets</div>
+            <div class="asset-grid" id="assetGrid">
+                <div><input type="checkbox" class="asset-checkbox" id="asset_R_10" value="R_10" checked><label class="asset-label" for="asset_R_10">R_10</label></div>
+                <div><input type="checkbox" class="asset-checkbox" id="asset_R_25" value="R_25" checked><label class="asset-label" for="asset_R_25">R_25</label></div>
+                <div><input type="checkbox" class="asset-checkbox" id="asset_R_50" value="R_50" checked><label class="asset-label" for="asset_R_50">R_50</label></div>
+                <div><input type="checkbox" class="asset-checkbox" id="asset_R_75" value="R_75" checked><label class="asset-label" for="asset_R_75">R_75</label></div>
+                <div><input type="checkbox" class="asset-checkbox" id="asset_RDBULL" value="RDBULL" checked><label class="asset-label" for="asset_RDBULL">RDBULL</label></div>
+                <div><input type="checkbox" class="asset-checkbox" id="asset_RDBEAR" value="RDBEAR" checked><label class="asset-label" for="asset_RDBEAR">RDBEAR</label></div>
+                <div><input type="checkbox" class="asset-checkbox" id="asset_1HZ10V" value="1HZ10V"><label class="asset-label" for="asset_1HZ10V">1HZ10V</label></div>
+                <div><input type="checkbox" class="asset-checkbox" id="asset_1HZ25V" value="1HZ25V"><label class="asset-label" for="asset_1HZ25V">1HZ25V</label></div>
+                <div><input type="checkbox" class="asset-checkbox" id="asset_1HZ50V" value="1HZ50V"><label class="asset-label" for="asset_1HZ50V">1HZ50V</label></div>
+                <div><input type="checkbox" class="asset-checkbox" id="asset_1HZ75V" value="1HZ75V"><label class="asset-label" for="asset_1HZ75V">1HZ75V</label></div>
+                <div><input type="checkbox" class="asset-checkbox" id="asset_1HZ100V" value="1HZ100V"><label class="asset-label" for="asset_1HZ100V">1HZ100V</label></div>
+            </div>
+        </div>
+
+        <!-- Money Management -->
+        <div class="panel-section">
+            <div class="panel-section-title">💰 Money Management</div>
+            <div class="form-row-3">
+                <div class="form-group">
+                    <label class="form-label">Base Stake ($)</label>
+                    <input type="number" class="form-input" id="baseStake" value="2.20" min="0.35" max="100" step="0.01">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">1st Loss ×</label>
+                    <input type="number" class="form-input" id="firstLossMultiplier" value="11.3" min="1" max="50" step="0.1">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Next Loss ×</label>
+                    <input type="number" class="form-input" id="subsequentMultiplier" value="11.3" min="1" max="50" step="0.1">
+                </div>
+            </div>
+            <div class="form-row-3">
+                <div class="form-group">
+                    <label class="form-label">Max Losses</label>
+                    <input type="number" class="form-input" id="maxLosses" value="6" min="1" max="15">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Take Profit ($)</label>
+                    <input type="number" class="form-input" id="takeProfit" value="10000" min="10" step="10">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Stop Loss ($)</label>
+                    <input type="number" class="form-input" id="stopLoss" value="-500" max="0" step="10">
+                </div>
+            </div>
+        </div>
+
+        <!-- Ensemble Detection Settings (Collapsible) -->
+        <div class="panel-section" id="ensembleSection">
+            <div class="panel-section-title clickable" onclick="toggleEnsembleSection()">
+                🔬 Ensemble Detection
+                <span class="collapse-arrow" id="ensembleArrow">▶</span>
+            </div>
+            <div class="collapsible-body" id="ensembleBody">
+                <!-- BOCPD -->
+                <div class="form-group" style="margin-bottom:4px;"><label class="form-label" style="color:var(--accent-orange);font-size:10px;text-transform:uppercase;letter-spacing:1px;">BOCPD</label></div>
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">Hazard (1/N)</label><input type="number" class="form-input" id="bocpdHazardInv" value="150" min="10" max="1000"></div>
+                    <div class="form-group"><label class="form-label">NR Confidence</label><input type="number" class="form-input" id="bocpdNRConf" value="0.82" step="0.01" min="0.5" max="0.99"></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">Min Run Length</label><input type="number" class="form-input" id="bocpdMinRun" value="15" min="1" max="100"></div>
+                    <div class="form-group"><label class="form-label">Prior α / β</label><input type="text" class="form-input" id="bocpdPrior" value="1 / 9" placeholder="α / β"></div>
+                </div>
+
+                <!-- HMM -->
+                <div class="form-group" style="margin-bottom:4px;margin-top:12px;"><label class="form-label" style="color:var(--accent-purple);font-size:10px;text-transform:uppercase;letter-spacing:1px;">Hidden Markov Model</label></div>
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">Min Discrim.</label><input type="number" class="form-input" id="hmmMinDiscrim" value="0.10" step="0.01" min="0.01" max="0.5"></div>
+                    <div class="form-group"><label class="form-label">Refit Every</label><input type="number" class="form-input" id="hmmRefitEvery" value="50" min="10" max="500"></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">NR Confidence</label><input type="number" class="form-input" id="hmmNRConf" value="0.88" step="0.01" min="0.5" max="0.99"></div>
+                    <div class="form-group"><label class="form-label">Min Persistence</label><input type="number" class="form-input" id="minPersistence" value="8" min="1" max="50"></div>
+                </div>
+
+                <!-- EWMA / ACF / Break -->
+                <div class="form-group" style="margin-bottom:4px;margin-top:12px;"><label class="form-label" style="color:var(--accent-cyan);font-size:10px;text-transform:uppercase;letter-spacing:1px;">EWMA / ACF / Structural</label></div>
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">EWMA Trend Thr.</label><input type="number" class="form-input" id="ewmaTrend" value="2.0" step="0.1" min="0.1"></div>
+                    <div class="form-group"><label class="form-label">ACF Lag-1 Thr.</label><input type="number" class="form-input" id="acfLag1" value="0.15" step="0.01" min="0.01" max="0.5"></div>
+                </div>
+                <div class="form-group"><label class="form-label">Struct. Break Thr.</label><input type="number" class="form-input" id="structBreakThr" value="0.15" step="0.01" min="0.01" max="0.5"></div>
+
+                <!-- CUSUM -->
+                <div class="form-group" style="margin-bottom:4px;margin-top:12px;"><label class="form-label" style="color:var(--accent-yellow);font-size:10px;text-transform:uppercase;letter-spacing:1px;">CUSUM</label></div>
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">Slack</label><input type="number" class="form-input" id="cusumSlack" value="0.005" step="0.001" min="0"></div>
+                    <div class="form-group"><label class="form-label">Up Threshold</label><input type="number" class="form-input" id="cusumUp" value="4.5" step="0.1" min="0.1"></div>
+                </div>
+                <div class="form-group"><label class="form-label">Down Threshold</label><input type="number" class="form-input" id="cusumDown" value="-4.5" step="0.1" max="-0.1"></div>
+
+                <!-- General -->
+                <div class="form-group" style="margin-bottom:4px;margin-top:12px;"><label class="form-label" style="color:var(--text-secondary);font-size:10px;text-transform:uppercase;letter-spacing:1px;">General</label></div>
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">Repeat Thr. %</label><input type="number" class="form-input" id="repeatThreshold" value="8" step="0.5" min="1" max="50"></div>
+                    <div class="form-group"><label class="form-label">Min Safety Score</label><input type="number" class="form-input" id="minSafety" value="73" min="1" max="100"></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label class="form-label">Analysis Window</label><input type="number" class="form-input" id="analysisWindow" value="5000" min="100" max="10000"></div>
+                    <div class="form-group"><label class="form-label">Min Ticks</label><input type="number" class="form-input" id="minTicks" value="50" min="10" max="500"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Telegram (Optional) -->
+        <div class="panel-section">
+            <div class="panel-section-title">📱 Telegram (Optional)</div>
+            <div class="form-group">
+                <label class="form-label">Bot Token</label>
+                <input type="text" class="form-input" id="telegramToken" placeholder="123456:ABC...">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Chat ID</label>
+                <input type="text" class="form-input" id="telegramChatId" placeholder="e.g. 752497117">
+            </div>
+        </div>
+
+        <!-- Save / Load -->
+        <div class="panel-section">
+            <div class="panel-section-title">💾 Settings Presets</div>
+            <div class="btn-group">
+                <button class="btn btn-secondary" onclick="saveSettings()">💾 Save</button>
+                <button class="btn btn-secondary" onclick="loadSettings()">📂 Load</button>
+                <button class="btn btn-secondary" onclick="resetSettings()">🔄 Reset</button>
+            </div>
+        </div>
+
+        <!-- Start / Stop -->
+        <div class="panel-section">
+            <button class="btn btn-start" id="startBtn" onclick="toggleBot()">▶ Start Bot</button>
+        </div>
+    </div>
+
+    <!-- ─── DASHBOARD ──────────────────────────────────────────── -->
+    <div class="dashboard">
+
+        <!-- Stats Bar -->
+        <div class="stats-bar">
+            <div class="stat-card">
+                <div class="stat-label">Total Trades</div>
+                <div class="stat-value neutral" id="statTotalTrades">0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Wins / Losses</div>
+                <div class="stat-value neutral" id="statWinLoss">0 / 0</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Win Rate</div>
+                <div class="stat-value neutral" id="statWinRatePct">— %</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Net Profit</div>
+                <div class="stat-value neutral" id="statProfit">$0.00</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Current Stake</div>
+                <div class="stat-value neutral" id="statStake">$2.20</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-label">Loss Streak</div>
+                <div class="stat-value neutral" id="statStreak">0</div>
+                <div class="loss-badges">
+                    <span class="loss-badge">×2: <b id="lossX2">0</b></span>
+                    <span class="loss-badge">×3: <b id="lossX3">0</b></span>
+                    <span class="loss-badge">×4: <b id="lossX4">0</b></span>
+                    <span class="loss-badge">×5: <b id="lossX5">0</b></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Loading Bar -->
+        <div class="loading-bar" id="loadingBar">
+            <span>Loading history: <b id="loadProg">0 / 0</b> assets</span>
+            <div class="loading-track"><div class="loading-fill" id="loadFill"></div></div>
+        </div>
+
+        <!-- Content Split: Trades + Logs -->
+        <div class="content-split">
+
+            <!-- Trade History -->
+            <div class="trade-history">
+                <div class="section-header">
+                    <span>📋 Trade Results</span>
+                    <span class="badge" id="tradeCount">0</span>
+                </div>
+                <div class="trade-list" id="tradeList">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📊</div>
+                        <div>No trades yet</div>
+                        <div style="font-size:11px;">Start the bot to begin trading</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Log Panel -->
+            <div class="log-panel">
+                <div class="log-tabs">
+                    <div class="log-tab active" data-tab="all" onclick="switchLogTab(this)">All</div>
+                    <div class="log-tab" data-tab="conn" onclick="switchLogTab(this)">Connection</div>
+                    <div class="log-tab" data-tab="trade" onclick="switchLogTab(this)">Trade</div>
+                    <div class="log-tab" data-tab="analysis" onclick="switchLogTab(this)">Analysis</div>
+                    <div class="log-tab" data-tab="hmm" onclick="switchLogTab(this)">HMM</div>
+                    <div class="log-tab" data-tab="error" onclick="switchLogTab(this)">Errors</div>
+                </div>
+                <div class="log-content" id="logContent">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📝</div>
+                        <div>Waiting for events...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Toast Container -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════════════════
+     JAVASCRIPT — COMPLETE FIXED ENGINE + UI
+     ═══════════════════════════════════════════════════════════════════════════ -->
+<script>
+'use strict';
+
+// ════════════════════════════════════════════════════════════════════════════
+//  UTILITY FUNCTIONS
+// ════════════════════════════════════════════════════════════════════════════
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+function logSumExp(arr) {
+    if (arr.length === 0) return -Infinity;
+    let m = -Infinity;
+    for (let i = 0; i < arr.length; i++) if (arr[i] > m) m = arr[i];
+    if (!isFinite(m)) return -Infinity;
+    let s = 0;
+    for (let i = 0; i < arr.length; i++) s += Math.exp(arr[i] - m);
+    return m + Math.log(s);
+}
+
+function lse2(a, b) {
+    if (!isFinite(a) && !isFinite(b)) return -Infinity;
+    const m = a > b ? a : b;
+    return m + Math.log(Math.exp(a - m) + Math.exp(b - m));
+}
+
+function erfFn(x) {
+    const a1=.254829592,a2=-.284496736,a3=1.421413741,a4=-1.453152027,a5=1.061405429,p=.3275911;
+    const sign = x<0?-1:1; x=Math.abs(x);
+    const t=1/(1+p*x);
+    return sign*(1-(((((a5*t+a4)*t)+a3)*t+a2)*t+a1)*t*Math.exp(-x*x));
+}
+
+function chi2cdf1(x) { return x<=0?0:erfFn(Math.sqrt(x/2)); }
+
+function ts() {
+    const n=new Date();
+    return [String(n.getHours()).padStart(2,'0'),String(n.getMinutes()).padStart(2,'0'),String(n.getSeconds()).padStart(2,'0')].join(':');
+}
+
+function escapeHtml(str) { const d=document.createElement('div'); d.textContent=str; return d.innerHTML; }
+
+// ════════════════════════════════════════════════════════════════════════════
+//  UI HELPERS
+// ════════════════════════════════════════════════════════════════════════════
+const MAX_LOG_ENTRIES = 500;
+const MAX_TRADE_ENTRIES = 200;
+let activeLogTab = 'all';
+let logEntries = [];
+let tradeResults = [];
+
+function showToast(message, type='info') {
+    const c=document.getElementById('toastContainer');
+    const t=document.createElement('div');
+    t.className=`toast ${type}`; t.textContent=message;
+    c.prepend(t); setTimeout(()=>t.remove(),3000);
+}
+
+function addLog(tag, message) {
+    const entry = { ts:ts(), tag, message, id:Date.now()+Math.random() };
+    logEntries.unshift(entry);
+    if (logEntries.length > MAX_LOG_ENTRIES) logEntries.pop();
+    appendLogEntry(entry);
+}
+
+function appendLogEntry(e) {
+    if (activeLogTab !== 'all' && e.tag !== activeLogTab) return;
+    const container = document.getElementById('logContent');
+    // Remove empty state if present
+    const empty = container.querySelector('.empty-state');
+    if (empty) empty.remove();
+    const div = document.createElement('div');
+    div.className = 'log-entry';
+    div.setAttribute('data-tag', e.tag);
+    div.innerHTML = `<span class="log-time">[${e.ts}]</span><span class="log-tag ${e.tag}">[${e.tag.toUpperCase()}]</span><span class="log-msg">${escapeHtml(e.message)}</span>`;
+    container.prepend(div);
+    // Limit displayed entries
+    while (container.children.length > 300) container.removeChild(container.lastChild);
+}
+
+function renderLogs() {
+    const container = document.getElementById('logContent');
+    const filtered = activeLogTab === 'all' ? logEntries : logEntries.filter(e => e.tag === activeLogTab);
+    if (filtered.length === 0) {
+        container.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📝</div><div>No ${activeLogTab==='all'?'':'filtered '}events</div></div>`;
+        return;
+    }
+    container.innerHTML = filtered.slice(0, 300).map(e =>
+        `<div class="log-entry" data-tag="${e.tag}"><span class="log-time">[${e.ts}]</span><span class="log-tag ${e.tag}">[${e.tag.toUpperCase()}]</span><span class="log-msg">${escapeHtml(e.message)}</span></div>`
+    ).join('');
+}
+
+function switchLogTab(el) {
+    document.querySelectorAll('.log-tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    activeLogTab = el.dataset.tab;
+    renderLogs();
+}
+
+function addTradeResult(trade) {
+    tradeResults.unshift(trade);
+    if (tradeResults.length > MAX_TRADE_ENTRIES) tradeResults.pop();
+    renderTrades();
+}
+
+function renderTrades() {
+    const container = document.getElementById('tradeList');
+    document.getElementById('tradeCount').textContent = tradeResults.length;
+    if (tradeResults.length === 0) {
+        container.innerHTML = `<div class="empty-state"><div class="empty-state-icon">📊</div><div>No trades yet</div><div style="font-size:11px;">Start the bot to begin trading</div></div>`;
+        return;
+    }
+    container.innerHTML = tradeResults.map(t => {
+        const cls = t.won ? 'win' : 'loss';
+        const icon = t.won ? '✓' : '✗';
+        const profitCls = t.profit >= 0 ? 'positive' : 'negative';
+        const profitStr = (t.profit >= 0 ? '+' : '') + '$' + t.profit.toFixed(2);
+        return `<div class="trade-item ${cls}"><div class="trade-icon ${cls}">${icon}</div><div class="trade-info"><div class="trade-info-main">${t.asset} — Digit ${t.targetDigit} → ${t.exitDigit}</div><div class="trade-info-sub">${t.time} · Safety ${t.safetyScore} · P(NR) ${t.confidence}% · Stake $${t.stake}${t.streak>0?' · x'+t.streak:''}</div></div><div class="trade-profit ${profitCls}">${profitStr}</div></div>`;
+    }).join('');
+}
+
+function updateStats(bot) {
+    const { totalTrades, totalWins, netProfit, stake, consecutiveLosses, x2, x3, x4, x5 } = bot;
+    const totalLosses = totalTrades - totalWins;
+    const winRate = totalTrades > 0 ? ((totalWins / totalTrades) * 100).toFixed(1) : '—';
+    document.getElementById('statTotalTrades').textContent = totalTrades;
+    document.getElementById('statWinLoss').textContent = `${totalWins} / ${totalLosses}`;
+    const wrEl = document.getElementById('statWinRatePct');
+    wrEl.textContent = totalTrades > 0 ? `${winRate}%` : '— %';
+    wrEl.className = 'stat-value ' + (parseFloat(winRate) >= 50 ? 'positive' : (totalTrades > 0 ? 'negative' : 'neutral'));
+    const profEl = document.getElementById('statProfit');
+    profEl.textContent = `${netProfit >= 0 ? '+' : ''}$${netProfit.toFixed(2)}`;
+    profEl.className = 'stat-value ' + (netProfit >= 0 ? 'positive' : 'negative');
+    document.getElementById('statStake').textContent = `$${stake.toFixed(2)}`;
+    document.getElementById('statStreak').textContent = consecutiveLosses;
+    document.getElementById('lossX2').textContent = x2;
+    document.getElementById('lossX3').textContent = x3;
+    document.getElementById('lossX4').textContent = x4;
+    document.getElementById('lossX5').textContent = x5;
+}
+
+function updateLoadingBar(loaded, total) {
+    const bar = document.getElementById('loadingBar');
+    if (loaded >= total) { bar.classList.remove('visible'); return; }
+    bar.classList.add('visible');
+    document.getElementById('loadProg').textContent = `${loaded} / ${total}`;
+    document.getElementById('loadFill').style.width = (total > 0 ? (loaded/total*100) : 0) + '%';
+}
+
+function setConnectionStatus(connected) {
+    const dot = document.getElementById('connDot');
+    const text = document.getElementById('connText');
+    if (connected) { dot.classList.add('connected'); text.textContent = 'Connected'; }
+    else { dot.classList.remove('connected'); text.textContent = 'Disconnected'; }
+}
+
+function toggleTokenEye() {
+    const i = document.getElementById('apiToken');
+    i.type = i.type === 'password' ? 'text' : 'password';
+}
+
+function toggleEnsembleSection() {
+    const body = document.getElementById('ensembleBody');
+    const arrow = document.getElementById('ensembleArrow');
+    body.classList.toggle('open');
+    arrow.classList.toggle('open');
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  SETTINGS SAVE / LOAD / RESET
+// ════════════════════════════════════════════════════════════════════════════
+const SETTINGS_KEY = 'ghost92_ensemble_settings';
+
+function gatherSettings() {
+    const assets = [];
+    document.querySelectorAll('.asset-checkbox:checked').forEach(cb => assets.push(cb.value));
+    const priorParts = (document.getElementById('bocpdPrior').value || '1 / 9').split('/').map(s => parseFloat(s.trim()) || 1);
+    return {
+        apiToken: document.getElementById('apiToken').value.trim(),
+        assets,
+        baseStake: parseFloat(document.getElementById('baseStake').value) || 2.20,
+        firstLossMultiplier: parseFloat(document.getElementById('firstLossMultiplier').value) || 11.3,
+        subsequentMultiplier: parseFloat(document.getElementById('subsequentMultiplier').value) || 11.3,
+        maxLosses: parseInt(document.getElementById('maxLosses').value) || 6,
+        takeProfit: parseFloat(document.getElementById('takeProfit').value) || 10000,
+        stopLoss: parseFloat(document.getElementById('stopLoss').value) || -500,
+        bocpd_hazard: 1 / (parseInt(document.getElementById('bocpdHazardInv').value) || 150),
+        bocpd_prior_alpha: priorParts[0] || 1,
+        bocpd_prior_beta: priorParts[1] || 9,
+        bocpd_nonrep_confidence: parseFloat(document.getElementById('bocpdNRConf').value) || 0.82,
+        bocpd_min_run_for_signal: parseInt(document.getElementById('bocpdMinRun').value) || 15,
+        hmm_min_discrimination: parseFloat(document.getElementById('hmmMinDiscrim').value) || 0.10,
+        hmm_refit_every: parseInt(document.getElementById('hmmRefitEvery').value) || 50,
+        hmm_nonrep_confidence: parseFloat(document.getElementById('hmmNRConf').value) || 0.88,
+        min_regime_persistence: parseInt(document.getElementById('minPersistence').value) || 8,
+        ewma_trend_threshold: parseFloat(document.getElementById('ewmaTrend').value) || 2.0,
+        acf_lag1_threshold: parseFloat(document.getElementById('acfLag1').value) || 0.15,
+        structural_break_threshold: parseFloat(document.getElementById('structBreakThr').value) || 0.15,
+        cusum_slack: parseFloat(document.getElementById('cusumSlack').value) || 0.005,
+        cusum_up_threshold: parseFloat(document.getElementById('cusumUp').value) || 4.5,
+        cusum_down_threshold: parseFloat(document.getElementById('cusumDown').value) || -4.5,
+        repeat_threshold: parseFloat(document.getElementById('repeatThreshold').value) || 8,
+        repeat_confidence: parseInt(document.getElementById('minSafety').value) || 73,
+        analysis_window: parseInt(document.getElementById('analysisWindow').value) || 5000,
+        min_ticks_for_analysis: parseInt(document.getElementById('minTicks').value) || 50,
+        telegramToken: document.getElementById('telegramToken').value.trim(),
+        telegramChatId: document.getElementById('telegramChatId').value.trim(),
+    };
+}
+
+function applySettings(s) {
+    if (s.apiToken) document.getElementById('apiToken').value = s.apiToken;
+    document.querySelectorAll('.asset-checkbox').forEach(cb => { cb.checked = (s.assets||[]).includes(cb.value); });
+    document.getElementById('baseStake').value = s.baseStake ?? 2.20;
+    document.getElementById('firstLossMultiplier').value = s.firstLossMultiplier ?? 11.3;
+    document.getElementById('subsequentMultiplier').value = s.subsequentMultiplier ?? 11.3;
+    document.getElementById('maxLosses').value = s.maxLosses ?? 6;
+    document.getElementById('takeProfit').value = s.takeProfit ?? 10000;
+    document.getElementById('stopLoss').value = s.stopLoss ?? -500;
+    document.getElementById('bocpdHazardInv').value = s.bocpd_hazard ? Math.round(1/s.bocpd_hazard) : 150;
+    document.getElementById('bocpdPrior').value = `${s.bocpd_prior_alpha??1} / ${s.bocpd_prior_beta??9}`;
+    document.getElementById('bocpdNRConf').value = s.bocpd_nonrep_confidence ?? 0.82;
+    document.getElementById('bocpdMinRun').value = s.bocpd_min_run_for_signal ?? 15;
+    document.getElementById('hmmMinDiscrim').value = s.hmm_min_discrimination ?? 0.10;
+    document.getElementById('hmmRefitEvery').value = s.hmm_refit_every ?? 50;
+    document.getElementById('hmmNRConf').value = s.hmm_nonrep_confidence ?? 0.88;
+    document.getElementById('minPersistence').value = s.min_regime_persistence ?? 8;
+    document.getElementById('ewmaTrend').value = s.ewma_trend_threshold ?? 2.0;
+    document.getElementById('acfLag1').value = s.acf_lag1_threshold ?? 0.15;
+    document.getElementById('structBreakThr').value = s.structural_break_threshold ?? 0.15;
+    document.getElementById('cusumSlack').value = s.cusum_slack ?? 0.005;
+    document.getElementById('cusumUp').value = s.cusum_up_threshold ?? 4.5;
+    document.getElementById('cusumDown').value = s.cusum_down_threshold ?? -4.5;
+    document.getElementById('repeatThreshold').value = s.repeat_threshold ?? 8;
+    document.getElementById('minSafety').value = s.repeat_confidence ?? 73;
+    document.getElementById('analysisWindow').value = s.analysis_window ?? 5000;
+    document.getElementById('minTicks').value = s.min_ticks_for_analysis ?? 50;
+    document.getElementById('telegramToken').value = s.telegramToken || '';
+    document.getElementById('telegramChatId').value = s.telegramChatId || '';
+}
+
+function saveSettings() { localStorage.setItem(SETTINGS_KEY, JSON.stringify(gatherSettings())); showToast('Settings saved','success'); }
+function loadSettings() {
+    const raw=localStorage.getItem(SETTINGS_KEY);
+    if (!raw) { showToast('No saved settings','error'); return; }
+    try { applySettings(JSON.parse(raw)); showToast('Settings loaded','success'); } catch(e) { showToast('Load failed','error'); }
+}
+function resetSettings() { applySettings({}); showToast('Reset to defaults','info'); }
+
+// Load on startup
+(function(){ const raw=localStorage.getItem(SETTINGS_KEY); if(raw) try { applySettings(JSON.parse(raw)); } catch(e){} })();
+
+// ════════════════════════════════════════════════════════════════════════════
+//  COMPONENT 1: BOCPD (FIXED — log-space, predictive before posterior)
+// ════════════════════════════════════════════════════════════════════════════
+class BOCPD {
+    constructor(cfg) {
+        this.hazard=cfg.bocpd_hazard; this.a0=cfg.bocpd_prior_alpha; this.b0=cfg.bocpd_prior_beta;
+        this.threshold=cfg.bocpd_nonrep_confidence; this.minRun=cfg.bocpd_min_run_for_signal;
+        this.logH=Math.log(this.hazard); this.log1mH=Math.log(1-this.hazard);
+        this.MAX_RL=300; this.reset();
+    }
+    reset() { this.logR=[0]; this.alphas=[this.a0]; this.betas=[this.b0]; this.t=0; this.pNonRep=0.5; this.expectedRL=0; this.modeRL=0; this.theta=this.a0/(this.a0+this.b0); this.pCP=0.5; }
+    update(obs) {
+        const one=obs?1:0, zero=1-one, T=this.logR.length;
+        const nLR=new Array(T+1), nA=new Array(T+1), nB=new Array(T+1), cpT=new Array(T);
+        for (let r=0;r<T;r++) {
+            const pred=Math.log(one?this.alphas[r]:this.betas[r])-Math.log(this.alphas[r]+this.betas[r]);
+            nLR[r+1]=this.logR[r]+this.log1mH+pred; cpT[r]=this.logR[r]+this.logH+pred;
+            nA[r+1]=this.alphas[r]+one; nB[r+1]=this.betas[r]+zero;
+        }
+        nLR[0]=logSumExp(cpT); nA[0]=this.a0+one; nB[0]=this.b0+zero;
+        const norm=logSumExp(nLR);
+        if (nLR.length>this.MAX_RL) {
+            const mx=Math.max(...nLR), cut=mx-40, keep=[];
+            for(let i=0;i<nLR.length;i++) if(i===0||nLR[i]>cut) keep.push(i);
+            this.logR=keep.map(i=>nLR[i]-norm); this.alphas=keep.map(i=>nA[i]); this.betas=keep.map(i=>nB[i]);
+        } else { this.logR=nLR.map(v=>v-norm); this.alphas=nA; this.betas=nB; }
+        this.pCP=Math.exp(this.logR[0]); this.pNonRep=1-this.pCP;
+        this.expectedRL=0; let best=-Infinity; this.modeRL=0;
+        for(let i=0;i<this.logR.length;i++) { this.expectedRL+=i*Math.exp(this.logR[i]); if(this.logR[i]>best){best=this.logR[i];this.modeRL=i;} }
+        const mi=this.logR.indexOf(best);
+        if(mi>=0&&mi<this.alphas.length) this.theta=this.alphas[mi]/(this.alphas[mi]+this.betas[mi]);
+        this.t++;
+    }
+    isNonRep() { return this.pNonRep>=this.threshold && this.expectedRL>=this.minRun; }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  COMPONENT 2: BINARY HMM (OPTIMIZED — incremental forward, periodic Viterbi)
+// ════════════════════════════════════════════════════════════════════════════
+class BinaryHMM {
+    constructor(cfg) {
+        this.MIN_D=cfg.hmm_min_discrimination||.10; this.refitEvery=cfg.hmm_refit_every||50;
+        this.pi=[.65,.35]; this.A=[[.93,.07],[.22,.78]]; this.B=[[.91,.09],[.55,.45]];
+        this.fitted=false; this.lastDiscrim=0; this._cache();
+        this.logAlpha=[...this.logPi]; this.postNR=.65; this.postRep=.35;
+        this.cachedVit=null; this.vitAge=0; this.VIT_INT=15;
+    }
+    _cache() {
+        this.logA=this.A.map(r=>r.map(v=>Math.log(v+1e-300)));
+        this.logB=this.B.map(r=>r.map(v=>Math.log(v+1e-300)));
+        this.logPi=this.pi.map(v=>Math.log(v+1e-300));
+    }
+    forward1(o) {
+        const la=this.logAlpha;
+        const s0=lse2(la[0]+this.logA[0][0],la[1]+this.logA[1][0])+this.logB[0][o];
+        const s1=lse2(la[0]+this.logA[0][1],la[1]+this.logA[1][1])+this.logB[1][o];
+        const d=lse2(s0,s1); this.logAlpha=[s0-d,s1-d];
+        this.postNR=Math.exp(s0-d); this.postRep=Math.exp(s1-d);
+    }
+    warmUp(obs) { this.logAlpha=[...this.logPi]; for(let i=0;i<obs.length;i++) this.forward1(obs[i]); }
+    baumWelch(rawObs) {
+        const obs=rawObs.length>500?rawObs.slice(-500):rawObs;
+        const T=obs.length; if(T<30) return {ok:false};
+        let pi=[...this.pi],A=this.A.map(r=>[...r]),B=this.B.map(r=>[...r]),pLL=-Infinity;
+        for(let it=0;it<20;it++){
+            const la=new Array(T),lb=new Array(T);
+            la[0]=[Math.log(pi[0]+1e-300)+Math.log(B[0][obs[0]]+1e-300),Math.log(pi[1]+1e-300)+Math.log(B[1][obs[0]]+1e-300)];
+            for(let t=1;t<T;t++){la[t]=[0,0];for(let s=0;s<2;s++) la[t][s]=lse2(la[t-1][0]+Math.log(A[0][s]+1e-300),la[t-1][1]+Math.log(A[1][s]+1e-300))+Math.log(B[s][obs[t]]+1e-300);}
+            const ll=lse2(la[T-1][0],la[T-1][1]);
+            lb[T-1]=[0,0]; for(let t=T-2;t>=0;t--){lb[t]=[0,0];for(let s=0;s<2;s++) lb[t][s]=lse2(Math.log(A[s][0]+1e-300)+Math.log(B[0][obs[t+1]]+1e-300)+lb[t+1][0],Math.log(A[s][1]+1e-300)+Math.log(B[1][obs[t+1]]+1e-300)+lb[t+1][1]);}
+            const lg=new Array(T);
+            for(let t=0;t<T;t++){const d=lse2(la[t][0]+lb[t][0],la[t][1]+lb[t][1]);lg[t]=[la[t][0]+lb[t][0]-d,la[t][1]+lb[t][1]-d];}
+            const xiS=[[-Infinity,-Infinity],[-Infinity,-Infinity]];
+            for(let t=0;t<T-1;t++){const d=lse2(la[t][0]+lb[t][0],la[t][1]+lb[t][1]);for(let s=0;s<2;s++)for(let n=0;n<2;n++){const v=la[t][s]+Math.log(A[s][n]+1e-300)+Math.log(B[n][obs[t+1]]+1e-300)+lb[t+1][n]-d;xiS[s][n]=lse2(xiS[s][n],v);}}
+            pi=[Math.exp(lg[0][0]),Math.exp(lg[0][1])]; const ps=pi[0]+pi[1]; pi[0]/=ps; pi[1]/=ps;
+            for(let s=0;s<2;s++){let gd=-Infinity;for(let t=0;t<T-1;t++) gd=lse2(gd,lg[t][s]);for(let n=0;n<2;n++) A[s][n]=Math.exp(xiS[s][n]-gd);const as=A[s][0]+A[s][1];A[s][0]/=as;A[s][1]/=as;}
+            for(let s=0;s<2;s++){let gd=-Infinity;const bn=[-Infinity,-Infinity];for(let t=0;t<T;t++){gd=lse2(gd,lg[t][s]);bn[obs[t]]=lse2(bn[obs[t]],lg[t][s]);}for(let o=0;o<2;o++) B[s][o]=isFinite(bn[o])?Math.exp(bn[o]-gd):1e-10;const bs=B[s][0]+B[s][1];B[s][0]/=bs;B[s][1]/=bs;}
+            if(Math.abs(ll-pLL)<1e-5) break; pLL=ll;
+        }
+        if(B[0][1]>B[1][1]){[pi[0],pi[1]]=[pi[1],pi[0]];[A[0],A[1]]=[A[1],A[0]];A[0]=[A[0][1],A[0][0]];A[1]=[A[1][1],A[1][0]];[B[0],B[1]]=[B[1],B[0]];}
+        const disc=B[1][1]-B[0][1]; if(disc<this.MIN_D) return {ok:false,disc};
+        this.pi=pi;this.A=A;this.B=B;this.fitted=true;this.lastDiscrim=disc;this._cache();
+        return {ok:true,disc,rNR:B[0][1],rREP:B[1][1]};
+    }
+    viterbi(obs) {
+        if(obs.length>200) obs=obs.slice(-200);
+        const T=obs.length; if(T===0) return null;
+        const ld=new Array(T),ps=new Array(T);
+        ld[0]=[this.logPi[0]+this.logB[0][obs[0]],this.logPi[1]+this.logB[1][obs[0]]]; ps[0]=[0,0];
+        for(let t=1;t<T;t++){ld[t]=[0,0];ps[t]=[0,0];for(let s=0;s<2;s++){const v0=ld[t-1][0]+this.logA[0][s],v1=ld[t-1][1]+this.logA[1][s];if(v0>=v1){ld[t][s]=v0+this.logB[s][obs[t]];ps[t][s]=0;}else{ld[t][s]=v1+this.logB[s][obs[t]];ps[t][s]=1;}}}
+        const seq=new Array(T); seq[T-1]=ld[T-1][0]>=ld[T-1][1]?0:1;
+        for(let t=T-2;t>=0;t--) seq[t]=ps[t+1][seq[t+1]];
+        const cur=seq[T-1]; let pers=1; for(let t=T-2;t>=0;t--){if(seq[t]===cur) pers++; else break;}
+        let trans=0; for(let t=1;t<T;t++) if(seq[t]!==seq[t-1]) trans++;
+        return {state:cur,pers,trans};
+    }
+    needsVit() { this.vitAge++; return this.vitAge>=this.VIT_INT||!this.cachedVit; }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  COMPONENT 3: EWMA Stack
+// ════════════════════════════════════════════════════════════════════════════
+class EWMAStack {
+    constructor() { this.lam=[.40,.18,.07,.025]; this.v=[null,null,null,null]; }
+    update(rep) { const x=rep*100; for(let i=0;i<4;i++) this.v[i]=this.v[i]===null?x:this.lam[i]*x+(1-this.lam[i])*this.v[i]; }
+    get(i) { return this.v[i]??50; }
+    trend() { return this.get(1)-this.get(3); }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  COMPONENT 4: ACF
+// ════════════════════════════════════════════════════════════════════════════
+function computeACF(seq, ml=5) {
+    const n=seq.length; if(n<ml+2) return new Array(ml).fill(0);
+    let mean=0; for(let i=0;i<n;i++) mean+=seq[i]; mean/=n;
+    let vari=0; for(let i=0;i<n;i++) vari+=(seq[i]-mean)**2; vari/=n;
+    if(vari<1e-10) return new Array(ml).fill(0);
+    const r=new Array(ml);
+    for(let lag=1;lag<=ml;lag++){let c=0;for(let t=0;t<n-lag;t++) c+=(seq[t]-mean)*(seq[t+lag]-mean);r[lag-1]=c/((n-lag)*vari);}
+    return r;
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  COMPONENT 5: Structural Break (fixed chi² CDF)
+// ════════════════════════════════════════════════════════════════════════════
+function structBreak(seq) {
+    const n=seq.length; if(n<20) return {stat:0,pBreak:0,rOld:.1,rNew:.1};
+    const h=Math.floor(n/2); let k1=0,k2=0;
+    for(let i=0;i<h;i++) k1+=seq[i]; for(let i=h;i<n;i++) k2+=seq[i];
+    const n1=h,n2=n-h,p1=k1/n1,p2=k2/n2,pp=(k1+k2)/n;
+    const ll=(k,n,p)=>{const pc=clamp(p,1e-10,1-1e-10);return k*Math.log(pc)+(n-k)*Math.log(1-pc);};
+    const stat=Math.max(0,2*(ll(k1,n1,p1)+ll(k2,n2,p2)-ll(k1+k2,n,pp)));
+    return {stat,pBreak:p2>p1?chi2cdf1(stat):0,rOld:p1,rNew:p2};
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  COMPONENT 6: Two-Sided CUSUM (fixed epsilon)
+// ════════════════════════════════════════════════════════════════════════════
+class CUSUM {
+    constructor(cfg) {
+        this.slack=cfg.cusum_slack; this.uT=cfg.cusum_up_threshold; this.dT=cfg.cusum_down_threshold;
+        this.uC=new Array(10).fill(0); this.dC=new Array(10).fill(0); this.gU=0; this.gD=0;
+    }
+    update(d,rep,p0=.10,p1=.40) {
+        const lr=Math.log(((rep?p1:1-p1)+1e-300)/((rep?p0:1-p0)+1e-300));
+        this.uC[d]=Math.max(0,this.uC[d]+lr-this.slack); this.dC[d]=Math.min(0,this.dC[d]+lr+this.slack);
+        this.gU=Math.max(0,this.gU+lr-this.slack); this.gD=Math.min(0,this.gD+lr+this.slack);
+    }
+    upAlarm(d) { return this.uC[d]>this.uT||this.gU>this.uT; }
+    downOK(d) { return this.dC[d]<this.dT&&this.gD<this.dT; }
+    resetD(d) { this.uC[d]=0; this.dC[d]=0; }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  Incremental Digit Repeat Tracker
+// ════════════════════════════════════════════════════════════════════════════
+class DigitTracker {
+    constructor(win=5000) { this.win=win; this.from=new Array(10).fill(0); this.rep=new Array(10).fill(0); this.buf=[]; }
+    update(prev,cur) {
+        const r=prev===cur?1:0; this.from[prev]++; this.rep[prev]+=r; this.buf.push({f:prev,r});
+        if(this.buf.length>this.win){const o=this.buf.shift();this.from[o.f]--;this.rep[o.f]-=o.r;}
+    }
+    rates() { return this.from.map((n,d)=>n>0?(this.rep[d]/n)*100:10); }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  PER-ASSET ENSEMBLE REGIME DETECTOR (all 6 components)
+// ════════════════════════════════════════════════════════════════════════════
+class Detector {
+    constructor(cfg) {
+        this.cfg=cfg; this.bocpd=new BOCPD(cfg); this.hmm=new BinaryHMM(cfg);
+        this.ewma=new EWMAStack(); this.cusum=new CUSUM(cfg);
+        this.dt=new DigitTracker(cfg.analysis_window);
+        this.repBuf=[]; this.REP_MAX=200; this.binObs=[]; this.BIN_MAX=500;
+        this.w={bocpd:1,hmm:1,ewma:1,acf:.7,sb:.6,cusum:1};
+        this.refitAge=0; this.ticks=0;
+        this.cachedACF=new Array(5).fill(0); this.cachedSB={stat:0,pBreak:0,rOld:.1,rNew:.1};
+        this.acfAge=0; this.sbAge=0;
+    }
+    tick(prev,cur) {
+        const rep=prev===cur, ob=rep?1:0;
+        this.bocpd.update(ob); this.ewma.update(ob); this.cusum.update(prev,rep);
+        this.dt.update(prev,cur);
+        this.repBuf.push(ob); if(this.repBuf.length>this.REP_MAX) this.repBuf.shift();
+        this.binObs.push(ob); if(this.binObs.length>this.BIN_MAX) this.binObs.shift();
+        if(this.hmm.fitted) this.hmm.forward1(ob);
+        this.refitAge++; this.acfAge++; this.sbAge++; this.ticks++;
+        let refitInfo=null;
+        if(!this.hmm.fitted||this.refitAge>=this.cfg.hmm_refit_every){
+            const r=this.hmm.baumWelch(this.binObs); this.refitAge=0;
+            if(r.ok){this.hmm.warmUp(this.binObs.slice(-50));refitInfo={disc:r.disc};}
+        }
+        if(this.acfAge>=10){this.cachedACF=computeACF(this.repBuf,5);this.acfAge=0;}
+        if(this.sbAge>=20){this.cachedSB=structBreak(this.repBuf.slice(-100));this.sbAge=0;}
+        return refitInfo;
+    }
+    analyze(target) {
+        if(this.ticks<this.cfg.min_ticks_for_analysis) return {valid:false,reason:'warming up'};
+        if(this.hmm.needsVit()&&this.hmm.fitted){this.hmm.cachedVit=this.hmm.viterbi(this.binObs.slice(-200));this.hmm.vitAge=0;}
+        const vit=this.hmm.cachedVit;
+        if(!vit) return {valid:false,reason:'viterbi pending'};
+        const pNR=this.hmm.postNR, pREP=this.hmm.postRep, rates=this.dt.rates();
+        const af=this.cachedACF, sb=this.cachedSB, bp=this.bocpd;
+        const ev=[0,1,2,3].map(i=>this.ewma.get(i)), et=this.ewma.trend();
+        const cUA=this.cusum.upAlarm(target), cDC=this.cusum.downOK(target);
+        const thr=this.cfg.repeat_threshold, w=this.w;
+
+        const bS=(()=>{if(!bp.isNonRep())return 0;return(Math.min(bp.modeRL,150)/150)*25*w.bocpd;})();
+        const hS=(()=>{if(vit.state!==0)return 0;const pe=clamp(vit.pers/this.cfg.min_regime_persistence,0,1),po=clamp((pNR-.5)/.5,0,1);return((pe*.6+po*.4)*25)*w.hmm;})();
+        const eS=(()=>{if(!ev.every(v=>v<thr))return 0;const tok=et<=this.cfg.ewma_trend_threshold,sc=tok?1:.5,mg=Math.min(...ev.map(v=>Math.max(0,thr-v)))/thr;return(sc*.7+mg*.3)*20*w.ewma;})();
+        const aS=(()=>{const l1=af[0]??0;if(l1>=this.cfg.acf_lag1_threshold)return 0;return Math.min(1,clamp(1-l1/this.cfg.acf_lag1_threshold,0,1)+(l1<0?.1:0))*15*w.acf;})();
+        const sS=(()=>{if(sb.pBreak>this.cfg.structural_break_threshold)return 0;return(1-sb.pBreak/this.cfg.structural_break_threshold)*10*w.sb;})();
+        const cS=(()=>{if(cUA)return 0;return(3+(cDC?2:0))*w.cusum;})();
+
+        let raw=bS+hS+eS+aS+sS+cS;
+        if(vit.state!==0) raw=0;
+        if(pNR<this.cfg.hmm_nonrep_confidence) raw=Math.min(raw,30);
+        if(rates[target]>=thr) raw=0;
+        if(this.ewma.get(0)>=thr||this.ewma.get(1)>=thr) raw=0;
+        if(cUA) raw=0;
+        if(bp.pCP>.3) raw=Math.min(raw,25);
+        if(et>this.cfg.ewma_trend_threshold*2) raw=0;
+
+        const safety=Math.round(clamp(raw,0,100));
+        const active=(vit.state===0&&pNR>=this.cfg.hmm_nonrep_confidence&&vit.pers>=this.cfg.min_regime_persistence&&bp.isNonRep()&&bp.pNonRep>=this.cfg.bocpd_nonrep_confidence&&bp.modeRL>=this.cfg.bocpd_min_run_for_signal&&rates[target]<thr&&this.ewma.get(0)<thr&&this.ewma.get(1)<thr&&et<=this.cfg.ewma_trend_threshold&&(af[0]??0)<this.cfg.acf_lag1_threshold&&!cUA&&sb.pBreak<this.cfg.structural_break_threshold&&safety>=this.cfg.repeat_confidence);
+
+        return {
+            valid:true,active,safety,hmmState:vit.state,stateName:vit.state===0?'NON-REP':'REP',
+            pers:vit.pers,trans:vit.trans,pNR,pREP,disc:this.hmm.lastDiscrim,
+            bpNR:bp.pNonRep,bpRL:bp.modeRL,bpERL:bp.expectedRL,bpCP:bp.pCP,bpOK:bp.isNonRep(),
+            ev,et,af,sb,cUA,cDC,cU:this.cusum.uC[target],cGU:this.cusum.gU,
+            rates,scores:{bS,hS,eS,aS,sS,cS},
+        };
+    }
+    feedback(won) {
+        const f=won?1.02:.85;
+        for(const k of Object.keys(this.w)) this.w[k]=won?Math.min(1,this.w[k]*f):Math.max(.5,this.w[k]*f);
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  MAIN BOT CLASS (Browser WebSocket — direct to Deriv)
+// ════════════════════════════════════════════════════════════════════════════
+class GhostBot {
+    constructor(settings) {
+        this.settings = settings;
+        this.cfg = {
+            ...settings,
+            requiredHistoryLength: settings.analysis_window || 5000,
+        };
+        this.histories = {};
+        this.detectors = {};
+        this.historyLoaded = {};
+        this.lastTickLogTime = {};
+        this.lastAnalysisLogTime = {};
+        this.lastTradeDigit = {};
+        this.lastSafety = {};
+        this.lastTradeTime = {};
+        this.tSince = {};
+
+        this.cfg.assets.forEach(a => {
+            this.histories[a]=[]; this.detectors[a]=null; this.historyLoaded[a]=false;
+            this.lastTickLogTime[a]=0; this.lastAnalysisLogTime[a]=0;
+            this.lastTradeDigit[a]=null; this.lastSafety[a]=null;
+            this.lastTradeTime[a]=0; this.tSince[a]=999;
+        });
+
+        this.stake = settings.baseStake;
+        this.consecutiveLosses = 0;
+        this.totalTrades = 0;
+        this.totalWins = 0;
+        this.x2=0; this.x3=0; this.x4=0; this.x5=0;
+        this.netProfit = 0;
+        this.tradeInProgress = false;
+        this.stopped = false;
+        this.ws = null;
+        this.connected = false;
+        this.assetsLoadedCount = 0;
+
+        this.connect();
+    }
+
+    connect() {
+        addLog('conn', 'Connecting to Deriv API...');
+        try { this.ws = new WebSocket('wss://ws.derivws.com/websockets/v3?app_id=1089'); }
+        catch(e) { addLog('error', `Connection failed: ${e.message}`); return; }
+
+        this.ws.onopen = () => {
+            this.connected = true;
+            setConnectionStatus(true);
+            addLog('conn', '✅ Connected to Deriv WebSocket');
+            this.ws.send(JSON.stringify({ authorize: this.settings.apiToken }));
+        };
+        this.ws.onmessage = (evt) => {
+            try { this.handleMessage(JSON.parse(evt.data)); }
+            catch(e) { addLog('error', `Parse error: ${e.message}`); }
+        };
+        this.ws.onclose = () => {
+            this.connected = false;
+            setConnectionStatus(false);
+            addLog('conn', 'Disconnected from Deriv');
+            if (!this.stopped) {
+                addLog('conn', '🔄 Reconnecting in 5s...');
+                setTimeout(() => { if (!this.stopped) this.connect(); }, 5000);
+            }
+        };
+        this.ws.onerror = () => addLog('error', 'WebSocket error');
+    }
+
+    stop() {
+        this.stopped = true;
+        addLog('conn', '🛑 Bot stopped by user');
+        if (this.ws) { try { this.ws.close(); } catch(e) {} this.ws = null; }
+        this.connected = false;
+        setConnectionStatus(false);
+    }
+
+    send(obj) { if (this.ws?.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(obj)); }
+
+    sendTelegram(text) {
+        if (!this.settings.telegramToken || !this.settings.telegramChatId) return;
+        fetch(`https://api.telegram.org/bot${this.settings.telegramToken}/sendMessage`, {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ chat_id:this.settings.telegramChatId, text:text.replace(/<[^>]*>/g,''), parse_mode:'HTML' })
+        }).catch(()=>{});
+    }
+
+    getLastDigit(quote, asset) {
+        const f = (quote.toString().split('.')[1] || '');
+        if (['RDBULL','RDBEAR','R_75','R_50'].includes(asset)) return f.length>=4?parseInt(f[3]):0;
+        if (['R_10','R_25','1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V','1HZ15V','1HZ30V','1HZ90V'].includes(asset)) return f.length>=3?parseInt(f[2]):0;
+        return f.length>=2?parseInt(f[1]):0;
+    }
+
+    handleMessage(msg) {
+        if (this.stopped) return;
+        if (msg.error) {
+            addLog('error', `API: ${msg.error.message}`);
+            if (msg.msg_type === 'buy') { this.tradeInProgress = false; updateStats(this); }
+            return;
+        }
+        switch (msg.msg_type) {
+            case 'authorize':
+                addLog('conn', `✅ Authenticated: ${msg.authorize?.loginid} | Balance: $${msg.authorize?.balance} ${msg.authorize?.currency}`);
+                this.initSubscriptions();
+                break;
+            case 'history': this.handleHistory(msg); break;
+            case 'tick': this.handleTick(msg.tick); break;
+            case 'buy':
+                if (msg.buy) {
+                    addLog('trade', `📝 Contract: ${msg.buy.contract_id} | Cost: $${parseFloat(msg.buy.buy_price).toFixed(2)}`);
+                    this.send({ proposal_open_contract:1, contract_id:msg.buy.contract_id, subscribe:1 });
+                } else { this.tradeInProgress = false; }
+                break;
+            case 'proposal_open_contract':
+                if (msg.proposal_open_contract?.is_sold) this.handleTradeResult(msg.proposal_open_contract);
+                break;
+        }
+    }
+
+    initSubscriptions() {
+        addLog('conn', `📊 Subscribing to ${this.cfg.assets.length} assets...`);
+        updateLoadingBar(0, this.cfg.assets.length);
+        this.cfg.assets.forEach(a => {
+            this.send({ ticks_history:a, adjust_start_time:1, count:this.cfg.requiredHistoryLength, end:'latest', start:1, style:'ticks' });
+            this.send({ ticks:a, subscribe:1 });
+        });
+    }
+
+    handleHistory(msg) {
+        const a = msg.echo_req.ticks_history;
+        const prices = msg.history?.prices || [];
+        this.histories[a] = prices.map(p => this.getLastDigit(p, a));
+        this.historyLoaded[a] = true;
+        this.detectors[a] = new Detector(this.cfg);
+
+        // Warm up detector with historical data
+        const h = this.histories[a];
+        for (let i=1; i<h.length; i++) this.detectors[a].tick(h[i-1], h[i]);
+
+        this.assetsLoadedCount++;
+        addLog('conn', `📊 ${a}: ${h.length} ticks loaded, ensemble detector warmed up`);
+        updateLoadingBar(this.assetsLoadedCount, this.cfg.assets.length);
+    }
+
+    handleTick(tick) {
+        if (this.stopped) return;
+        const a = tick.symbol;
+        if (!this.cfg.assets.includes(a)) return;
+
+        const d = this.getLastDigit(tick.quote, a);
+        this.histories[a].push(d);
+        if (this.histories[a].length > this.cfg.requiredHistoryLength) this.histories[a].shift();
+
+        const det = this.detectors[a];
+        if (det && this.histories[a].length >= 2) {
+            const prev = this.histories[a][this.histories[a].length - 2];
+            const ri = det.tick(prev, d);
+            if (ri?.disc !== undefined) {
+                addLog('hmm', `📐 [${a}] HMM refit | Discrim: ${(ri.disc*100).toFixed(1)}%`);
+            }
+        }
+
+        this.tSince[a]++;
+
+        // Throttled tick log (every 60s)
+        const now = Date.now();
+        if (now - this.lastTickLogTime[a] >= 60000) {
+            addLog('info', `[${a}] #${this.histories[a].length} | D:${d} | [${this.histories[a].slice(-10).join(',')}]`);
+            this.lastTickLogTime[a] = now;
+        }
+
+        if (this.historyLoaded[a] && !this.tradeInProgress) this.scan(a);
+    }
+
+    scan(a) {
+        if (this.tradeInProgress || this.stopped) return;
+        const h = this.histories[a];
+        if (h.length < this.cfg.min_ticks_for_analysis) return;
+        const det = this.detectors[a];
+        if (!det) return;
+
+        const target = h[h.length - 1];
+        const r = det.analyze(target);
+        if (!r.valid) return;
+
+        if (!r.active) {
+            const now = Date.now();
+            if (now - this.lastAnalysisLogTime[a] >= 60000) {
+                addLog('analysis', `🔍 [${a}] Block | ${r.stateName} Safety=${r.safety} P(NR)=${(r.pNR*100).toFixed(1)}% BOCPD=${r.bpOK?'✓':'✗'} RL=${r.bpRL} Scores: B=${r.scores.bS.toFixed(1)} H=${r.scores.hS.toFixed(1)} E=${r.scores.eS.toFixed(1)}`);
+                this.lastAnalysisLogTime[a] = now;
+            }
+            return;
+        }
+
+        this.placeTrade(a, target, r.safety, r);
+    }
+
+    placeTrade(a, digit, safety, r) {
+        if (this.tradeInProgress || this.stopped) return;
+        this.tradeInProgress = true;
+        this.lastTradeDigit[a] = digit;
+        this.lastSafety[a] = safety;
+        this.lastTradeTime[a] = Date.now();
+        this.tSince[a] = 0;
+
+        addLog('trade', `🎯 [${a}] TRADE | D:${digit} Safety:${safety}/100 Stake:$${this.stake.toFixed(2)} | ${r.stateName} P(NR)=${(r.pNR*100).toFixed(1)}% BOCPD_RL=${r.bpRL} Persist=${r.pers}`);
+
+        this.send({
+            buy:1, price:this.stake,
+            parameters: {
+                amount:this.stake, basis:'stake', contract_type:'DIGITDIFF',
+                currency:'USD', duration:1, duration_unit:'t',
+                symbol:a, barrier:digit.toString()
+            }
+        });
+
+        this.sendTelegram(`🎯 TRADE\n${a} | D:${digit}\nSafety: ${safety}/100\nP(NR): ${(r.pNR*100).toFixed(1)}%\nStake: $${this.stake.toFixed(2)}\nStreak: ${this.consecutiveLosses}`);
+        updateStats(this);
+    }
+
+    handleTradeResult(contract) {
+        const won = contract.status === 'won';
+        const profit = parseFloat(contract.profit);
+        const a = contract.underlying;
+        const exitDigit = this.getLastDigit(contract.exit_tick_display_value, a);
+        const entryDigit = this.lastTradeDigit[a];
+
+        this.totalTrades++;
+        this.netProfit += profit;
+
+        // Adaptive weight feedback
+        const det = this.detectors[a];
+        if (det) {
+            det.feedback(won);
+            if (!won && det.cusum.upAlarm(entryDigit)) det.cusum.resetD(entryDigit);
+        }
+
+        const tag = won ? 'win' : 'loss';
+        addLog(tag, `${won?'✅':'❌'} [${a}] ${won?'WIN':'LOSS'} | T:${entryDigit}→E:${exitDigit} | P&L:${profit>=0?'+':''}$${profit.toFixed(2)} | Net:$${this.netProfit.toFixed(2)}`);
+
+        if (won) {
+            this.totalWins++;
+            this.consecutiveLosses = 0;
+            this.stake = this.cfg.baseStake;
+        } else {
+            this.consecutiveLosses++;
+            if (this.consecutiveLosses===2) this.x2++;
+            if (this.consecutiveLosses===3) this.x3++;
+            if (this.consecutiveLosses===4) this.x4++;
+            if (this.consecutiveLosses>=5) this.x5++;
+            this.stake = this.consecutiveLosses===1
+                ? this.cfg.baseStake * this.cfg.firstLossMultiplier
+                : this.cfg.baseStake * Math.pow(this.cfg.subsequentMultiplier, this.consecutiveLosses - 1);
+            this.stake = Math.round(this.stake * 100) / 100;
+        }
+
+        addTradeResult({
+            won, profit, asset:a, targetDigit:entryDigit, exitDigit,
+            safetyScore:this.lastSafety[a]??'—',
+            confidence:(this.detectors[a]?.hmm.postNR*100||0).toFixed(1),
+            stake:won?this.cfg.baseStake.toFixed(2):(profit<0?(-profit+parseFloat(this.cfg.baseStake)).toFixed(2):this.cfg.baseStake.toFixed(2)),
+            time:ts(), streak:this.consecutiveLosses,
+        });
+
+        updateStats(this);
+
+        this.sendTelegram(`${won?'✅ WIN':'❌ LOSS'}\n${a} T:${entryDigit}→E:${exitDigit}\nP&L:${profit>=0?'+':''}$${profit.toFixed(2)}\nNet:$${this.netProfit.toFixed(2)}\nW/L:${this.totalWins}/${this.totalTrades-this.totalWins}\nNext:$${this.stake.toFixed(2)}`);
+
+        // Stop conditions
+        if (this.consecutiveLosses >= this.cfg.maxLosses) {
+            addLog('warn', `🛑 MAX LOSSES (${this.cfg.maxLosses}) — Stopping`);
+            showToast(`Max losses! Net: $${this.netProfit.toFixed(2)}`, 'error');
+            this.stop(); botInstance=null; updateToggleButton(false); return;
+        }
+        if (this.netProfit >= this.cfg.takeProfit) {
+            addLog('win', `🎉 TAKE PROFIT ($${this.cfg.takeProfit}) — Stopping`);
+            showToast(`Take profit! $${this.netProfit.toFixed(2)}`, 'success');
+            this.stop(); botInstance=null; updateToggleButton(false); return;
+        }
+        if (this.netProfit <= this.cfg.stopLoss) {
+            addLog('loss', `🛑 STOP LOSS ($${this.cfg.stopLoss}) — Stopping`);
+            showToast(`Stop loss! $${this.netProfit.toFixed(2)}`, 'error');
+            this.stop(); botInstance=null; updateToggleButton(false); return;
+        }
+
+        this.tradeInProgress = false;
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  GLOBAL CONTROLS
+// ════════════════════════════════════════════════════════════════════════════
+let botInstance = null;
+
+function updateToggleButton(running) {
+    const btn = document.getElementById('startBtn');
+    const panel = document.getElementById('settingsPanel');
+    if (running) { btn.className='btn btn-stop'; btn.innerHTML='⏹ Stop Bot'; panel.classList.add('disabled'); }
+    else { btn.className='btn btn-start'; btn.innerHTML='▶ Start Bot'; panel.classList.remove('disabled'); }
+}
+
+function toggleBot() {
+    if (botInstance) {
+        botInstance.stop();
+        botInstance = null;
+        updateToggleButton(false);
+        showToast('Bot stopped', 'info');
+    } else {
+        const s = gatherSettings();
+        if (!s.apiToken) { showToast('Enter API token', 'error'); document.getElementById('apiToken').focus(); return; }
+        if (!s.assets.length) { showToast('Select at least one asset', 'error'); return; }
+        logEntries = [];
+        tradeResults = [];
+        renderLogs();
+        renderTrades();
+        botInstance = new GhostBot(s);
+        updateToggleButton(true);
+        updateStats(botInstance);
+        showToast('Bot started — loading history...', 'success');
+    }
+}
+</script>
+</body>
+</html>
