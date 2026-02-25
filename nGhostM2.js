@@ -546,7 +546,7 @@ class RomanianGhostUltimate {
             min_ticks_for_hmm: 50,
             repeat_threshold: 90, 
             hmm_nonrep_confidence: 0.935,
-            min_safety_score: 98,
+            min_safety_score: 96,
             min_regime_persistence: 8,
             cusum_threshold: 4.5,
             cusum_slack: 0.005,
@@ -560,10 +560,6 @@ class RomanianGhostUltimate {
             maxConsecutiveLosses: 3,
             takeProfit: 10000,
             stopLoss: -50,
-
-            // Time filters
-            avoidMinutesAroundHour: 5,
-            tradingHoursUTC: { start: 0, end: 24 },
         };
 
         // ====== TRADING STATE ======
