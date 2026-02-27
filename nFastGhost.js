@@ -45,6 +45,10 @@ const CONFIG = {
     strategy: {
         // Tick analysis window - how many recent ticks to analyze
         analysis_window: 25,
+        // Deep history length for repeat-cycle analysis
+        history_length: 5000,
+        // Short window emphasis (most recent ticks)
+        short_window: 50,
 
         // Minimum ticks to collect before starting analysis
         min_ticks_before_start: 30,
@@ -364,6 +368,185 @@ class DigitAnalyzer {
 }
 
 // ============================================================================
+// REPEAT CYCLE ANALYZER - Long-history repeat vs non-repeat regime detector
+// Inspired by AdvancedRegimeDetector in nGhost2M.js, but simplified and focused
+// on last-digit repeat saturation and transitions into non-repetition cycles.
+// ============================================================================
+class RepeatCycleAnalyzer {
+    constructor(config) {
+        this.maxHistory = config.history_length || 5000;
+        this.shortWindow = config.short_window || 50;
+        this.midWindow = 200;
+
+        // Thresholds for regime logic
+        this.oversatMinRepeat = 0.30;      // short-window repeat rate considered "over-saturated"
+        this.oversatDelta = 0.10;          // short repeat must exceed long repeat by this
+        this.nonRepMaxRepeat = 0.15;       // short-window repeat rate considered "non-repeat cycle"
+        this.recentOversatHorizon = 300;   // how far back we remember oversaturation
+
+        this.digits = [];
+        this.repeats = []; // 1 when same as previous digit, else 0
+        this.tickCount = 0;
+
+        this.lastOversatIndex = null;
+        this.lastOversatShortRate = 0;
+        this.lastOversatLongRate = 0;
+    }
+
+    _pushDigit(digit) {
+        if (this.digits.length > 0) {
+            const prev = this.digits[this.digits.length - 1];
+            const rep = prev === digit ? 1 : 0;
+            this.repeats.push(rep);
+            if (this.repeats.length > this.maxHistory) {
+                this.repeats.shift();
+            }
+        }
+
+        this.digits.push(digit);
+        if (this.digits.length > this.maxHistory) {
+            this.digits.shift();
+        }
+
+        this.tickCount++;
+    }
+
+    _windowMean(arr, n) {
+        if (arr.length === 0) return 0;
+        const size = Math.min(n, arr.length);
+        let sum = 0;
+        for (let i = arr.length - size; i < arr.length; i++) {
+            sum += arr[i];
+        }
+        return sum / size;
+    }
+
+    _fullMean(arr) {
+        if (arr.length === 0) return 0;
+        let sum = 0;
+        for (let i = 0; i < arr.length; i++) sum += arr[i];
+        return sum / arr.length;
+    }
+
+    addDigit(digit) {
+        this._pushDigit(digit);
+
+        if (this.repeats.length < this.shortWindow + 5) {
+            return;
+        }
+
+        const shortRepeat = this._windowMean(this.repeats, this.shortWindow);
+        const midRepeat = this._windowMean(this.repeats, this.midWindow);
+        const longRepeat = this._fullMean(this.repeats);
+
+        const longBaseline = longRepeat;
+
+        // Detect oversaturation regime (too much repetition recently)
+        const isOversat =
+            shortRepeat >= this.oversatMinRepeat &&
+            shortRepeat >= longBaseline + this.oversatDelta;
+
+        if (isOversat) {
+            this.lastOversatIndex = this.tickCount;
+            this.lastOversatShortRate = shortRepeat;
+            this.lastOversatLongRate = longBaseline;
+        }
+
+        this.lastSnapshot = {
+            shortRepeat,
+            midRepeat,
+            longRepeat,
+            isOversat,
+        };
+    }
+
+    /**
+     * Get regime / signal for the current situation, focusing on whether we are
+     * in a non-repetition cycle following a recent oversaturated repetition regime.
+     *
+     * @param {number} currentDigit - last observed digit (used for logging only)
+     * @returns {{active:boolean, score:number, details:object}}
+     */
+    getSignal(currentDigit) {
+        if (!this.lastSnapshot || this.repeats.length < this.shortWindow + 5) {
+            return { active: false, score: 0, details: null };
+        }
+
+        const { shortRepeat, midRepeat, longRepeat, isOversat } = this.lastSnapshot;
+
+        // Require there to have been an oversaturation regime recently
+        const oversatRecent =
+            this.lastOversatIndex !== null &&
+            (this.tickCount - this.lastOversatIndex) <= this.recentOversatHorizon;
+
+        if (!oversatRecent) {
+            return {
+                active: false,
+                score: 0,
+                details: {
+                    reason: 'no_recent_oversaturation',
+                    shortRepeat,
+                    midRepeat,
+                    longRepeat,
+                    lastOversatShortRate: this.lastOversatShortRate,
+                    lastOversatLongRate: this.lastOversatLongRate,
+                    ticks_since_oversat: this.lastOversatIndex === null
+                        ? 0
+                        : this.tickCount - this.lastOversatIndex,
+                },
+            };
+        }
+
+        // Identify non-repetition cycle:
+        //  - short repeat rate is low,
+        //  - short < long baseline,
+        //  - mid-term also not too high (trend actually eased)
+        const inNonRepCycle =
+            shortRepeat <= this.nonRepMaxRepeat &&
+            shortRepeat < longRepeat &&
+            midRepeat <= this.oversatMinRepeat;
+
+        if (!inNonRepCycle || isOversat) {
+            return {
+                active: false,
+                score: 0,
+                details: {
+                    reason: 'not_in_nonrep_cycle',
+                    shortRepeat,
+                    midRepeat,
+                    longRepeat,
+                    isOversat,
+                    lastOversatShortRate: this.lastOversatShortRate,
+                    lastOversatLongRate: this.lastOversatLongRate,
+                    ticks_since_oversat: this.lastOversatIndex === null
+                        ? 0
+                        : this.tickCount - this.lastOversatIndex,
+                },
+            };
+        }
+
+        // Score: stronger when shortRepeat is very low vs long baseline
+        const depth = Math.max(0, (longRepeat - shortRepeat));
+        const normDepth = Math.min(1, depth / 0.20); // normalize assuming 20pp max drop
+        const score = Math.round(normDepth * 100);
+
+        return {
+            active: true,
+            score,
+            details: {
+                currentDigit,
+                shortRepeat,
+                midRepeat,
+                longRepeat,
+                lastOversatShortRate: this.lastOversatShortRate,
+                lastOversatLongRate: this.lastOversatLongRate,
+                ticks_since_oversat: this.tickCount - this.lastOversatIndex,
+            },
+        };
+    }
+}
+
+// ============================================================================
 // GHOST TRADE MANAGER - Virtual Trade Simulation
 // ============================================================================
 class GhostTradeManager {
@@ -663,12 +846,12 @@ class RomanianGhostBot {
 
         // Core components
         this.analyzer = new DigitAnalyzer(CONFIG.strategy.analysis_window);
-        this.ghostManager = new GhostTradeManager();
+        this.repeatCycleAnalyzer = new RepeatCycleAnalyzer(CONFIG.strategy);
         this.stakeManager = new FibonacciStakeManager();
         this.tracker = new TradeTracker();
 
         // State management
-        this.state = 'INITIALIZING'; // INITIALIZING, COLLECTING, GHOST_TESTING, TRADING, COOLDOWN, STOPPED
+        this.state = 'INITIALIZING'; // INITIALIZING, COLLECTING, TRADING, COOLDOWN, STOPPED
         this.historyLoaded = false;
         this.cooldownTicksRemaining = 0;
         this.pendingContract = null;
@@ -900,7 +1083,8 @@ class RomanianGhostBot {
         this._send({
             ticks_history: CONFIG.symbol,
             adjust_start_time: 1,
-            count: CONFIG.strategy.min_ticks_before_start * 3,
+            // Request deep history for repeat-cycle analysis (e.g. 5000 ticks)
+            count: CONFIG.strategy.history_length || 5000,
             end: 'latest',
             start: 1,
             style: 'ticks',
@@ -935,16 +1119,17 @@ class RomanianGhostBot {
                 epoch: times[i] || null,
                 symbol: CONFIG.symbol,
             };
-            this.analyzer.addTick(tick);
+            const digit = this.analyzer.addTick(tick);
+            this.repeatCycleAnalyzer.addDigit(digit);
         }
 
         this.historyLoaded = true;
 
         Logger.info(`📊 History warm-up complete. Tick count: ${this.analyzer.getTickCount()}`);
 
-        if (CONFIG.show_digit_analysis) {
+        // if (CONFIG.show_digit_analysis) {
             this._printDigitAnalysis();
-        }
+        // }
 
         if (this.state === 'INITIALIZING') {
             this.state = 'COLLECTING';
@@ -960,18 +1145,34 @@ class RomanianGhostBot {
 
         const tick = response.tick;
         const digit = this.analyzer.addTick(tick);
+        this.repeatCycleAnalyzer.addDigit(digit);
         const tickCount = this.analyzer.getTickCount();
 
-        // Periodically log last 10 ticks for visibility
-        const now = Date.now();
-        // if (now - this.lastTickLogTime >= 30000) {
-            const recentTicks = this.analyzer.getRecentTicks(10);
-            const quotesStr = recentTicks.map(t => t.quote).join(',');
-            const digitsStr = recentTicks.map(t => t.digit).join(',');
-            // Logger.info(`📈 Last 10 ticks: [${quotesStr}]`);
-            Logger.info(`🔢 Last 10 digits: [${digitsStr}]`);
-            this.lastTickLogTime = now;
-        // }
+         // Periodically log last 10 digits for visibility
+         const now = Date.now();
+         // if (now - this.lastTickLogTime >= 30000) {
+             const recentTicks = this.analyzer.getRecentTicks(10);
+             const digitsStr = recentTicks.map(t => t.digit).join(',');
+             Logger.info(`🔢 Last 10 digits: [${digitsStr}]`);
+             this.lastTickLogTime = now;
+         // }
+
+        // Per-tick repeat-cycle stats for visibility
+        const cycleSignal = this.repeatCycleAnalyzer.getSignal(digit);
+        if (cycleSignal && cycleSignal.details) {
+            const d = cycleSignal.details;
+            Logger.info(
+                `🔬 REPEAT-CYCLE ANALYSIS: ` +
+                `short=${(d.shortRepeat * 100).toFixed(1)}% ` +
+                `mid=${(d.midRepeat * 100).toFixed(1)}% ` +
+                `long=${(d.longRepeat * 100).toFixed(1)}% ` +
+                `lastOversatShort=${(d.lastOversatShortRate * 100).toFixed(1)}% ` +
+                `lastOversatLong=${(d.lastOversatLongRate * 100).toFixed(1)}% ` +
+                `ticksSinceOversat=${d.ticks_since_oversat} ` +
+                `score=${cycleSignal.score} ` +
+                `active=${cycleSignal.active}`
+            );
+        }
 
         if (CONFIG.show_tick_data && tickCount % 5 === 0) {
             Logger.debug(`📊 Tick #${tickCount}: ${tick.quote} | Digit: ${digit} | ${this.analyzer.getSummary()}`);
@@ -981,10 +1182,6 @@ class RomanianGhostBot {
         switch (this.state) {
             case 'COLLECTING':
                 this._handleCollectingState(tickCount);
-                break;
-
-            case 'GHOST_TESTING':
-                this._handleGhostTestingState(digit);
                 break;
 
             case 'TRADING':
@@ -1005,49 +1202,16 @@ class RomanianGhostBot {
      */
     _handleCollectingState(tickCount) {
         if (tickCount >= CONFIG.strategy.min_ticks_before_start) {
-            Logger.info('✅ Enough tick data collected. Moving to GHOST_TESTING...');
-            this.ghostManager.reset();
-            this.state = 'GHOST_TESTING';
+            Logger.info('✅ Enough tick data collected. Moving to TRADING (repeat-cycle mode)...');
+            this.state = 'TRADING';
 
-            if (CONFIG.show_digit_analysis) {
+            // if (CONFIG.show_digit_analysis) {
                 this._printDigitAnalysis();
-            }
+            // }
         } else {
             if (tickCount % 10 === 0) {
                 Logger.info(`📊 Collecting ticks: ${tickCount}/${CONFIG.strategy.min_ticks_before_start}`);
             }
-        }
-    }
-
-    /**
-     * GHOST_TESTING state - running virtual trades for confirmation
-     */
-    _handleGhostTestingState(lastDigit) {
-        // Resolve any pending ghost trade
-        if (this.ghostManager.hasActiveGhostTrade()) {
-            this.ghostManager.resolveGhostTrade(lastDigit);
-        }
-
-        // Check if ghost testing is confirmed
-        if (this.ghostManager.isStrategyConfirmed()) {
-            Logger.info('✅ Ghost trades confirmed strategy! Moving to TRADING...');
-            Logger.info(this.ghostManager.getSummary());
-            this.state = 'TRADING';
-            return;
-        }
-
-        // Place new ghost trade
-        const signal = this._generateSignal();
-        if (signal) {
-            this.ghostManager.placeGhostTrade(signal.digit, Date.now());
-        }
-
-        // If too many ghost trades without confirmation, reset
-        if (this.ghostManager.totalGhostTrades >= CONFIG.strategy.ghost_trades_required * 3 &&
-            !this.ghostManager.isStrategyConfirmed()) {
-            Logger.warn('⚠️  Ghost testing inconclusive. Resetting and re-collecting...');
-            this.ghostManager.reset();
-            // Stay in ghost testing, the analyzer continues to accumulate
         }
     }
 
@@ -1077,9 +1241,6 @@ class RomanianGhostBot {
             Logger.warn(`❄️  Entering cooldown after ${this.stakeManager.getConsecutiveLosses()} losses`);
             this.cooldownTicksRemaining = CONFIG.strategy.cooldown_ticks_after_loss_streak;
             this.state = 'COOLDOWN';
-
-            // Also reset ghost manager and re-test
-            this.ghostManager.reset();
             return;
         }
 
@@ -1111,9 +1272,8 @@ class RomanianGhostBot {
         }
 
         if (this.cooldownTicksRemaining <= 0) {
-            Logger.info('✅ Cooldown complete. Re-entering GHOST_TESTING...');
-            this.ghostManager.reset();
-            this.state = 'GHOST_TESTING';
+            Logger.info('✅ Cooldown complete. Re-entering TRADING...');
+            this.state = 'TRADING';
 
             // Step back fibonacci level during cooldown
             this.stakeManager.currentLevel = Math.max(0, this.stakeManager.currentLevel - 2);
@@ -1126,58 +1286,44 @@ class RomanianGhostBot {
     _generateSignal() {
         if (!this.analyzer.hasEnoughData()) return null;
 
-        const ghostScores = this.analyzer.getGhostScores();
-        if (!ghostScores || ghostScores.length === 0) return null;
-
-        const hotDigit = ghostScores[0]; // Highest ghost score
-        const freqAnalysis = this.analyzer.getFrequencyAnalysis();
-        const topFreq = freqAnalysis[0];
-
-        // Romanian Ghost Selection Logic:
-        // 1. Primary: Choose the digit with highest ghost score (most likely to differ from)
-        // 2. Verify: It must exceed frequency threshold
-        // 3. Confirm: Use multiple factors for confidence
-
-        let selectedDigit = hotDigit.digit;
-        let confidence = 0;
-
-        // Condition 1: Frequency threshold met
-        if (topFreq.frequency >= CONFIG.strategy.frequency_threshold) {
-            selectedDigit = topFreq.digit;
-            confidence += 0.3;
-        }
-
-        // Condition 2: Ghost score is positive (overrepresented)
-        if (hotDigit.score > 0) {
-            confidence += 0.2;
-        }
-
-        // Condition 3: Digit appeared consecutively
-        const consec = this.analyzer.getConsecutiveCount(selectedDigit);
-        if (consec >= CONFIG.strategy.consecutive_threshold) {
-            confidence += 0.2;
-        }
-
-        // Condition 4: Transition analysis supports it
+        // Long-history repeat/non-repeat regime signal (5000-tick buffer, emphasize last 50)
         const lastDigit = this.analyzer.getLastDigit();
-        if (lastDigit !== null) {
-            const transProb = this.analyzer.getTransitionProbability(lastDigit, selectedDigit);
-            if (transProb > 0.15) { // Higher than uniform distribution
-                confidence += 0.15;
-            }
+        const cycleSignal = this.repeatCycleAnalyzer.getSignal(lastDigit);
+        if (!cycleSignal.active) {
+            return null;
         }
 
-        // Condition 5: Digit has appeared in recent 5 ticks
-        const recent5 = this.analyzer.getRecentDigits(5);
-        const recentAppearances = recent5.filter(d => d === selectedDigit).length;
-        if (recentAppearances >= 2) {
+        // Use the current last digit as predicted digit for "Digit Differs"
+        const selectedDigit = lastDigit;
+
+        // Base confidence from cycle score (0–100 => 0.0–1.0)
+        let confidence = cycleSignal.score / 100;
+
+        // Additional short-window confirmation from digit analyzer
+        const freqAnalysis = this.analyzer.getFrequencyAnalysis();
+        const topFreq = freqAnalysis ? freqAnalysis[0] : null;
+        const consec = this.analyzer.getConsecutiveCount(selectedDigit);
+
+        if (topFreq && topFreq.digit === selectedDigit && topFreq.frequency >= CONFIG.strategy.frequency_threshold) {
             confidence += 0.15;
         }
 
-        // Black Fibonacci 9.1 adjustment: On higher fib levels, require more confidence
+        if (consec >= CONFIG.strategy.consecutive_threshold) {
+            confidence += 0.10;
+        }
+
+        // Transition probability as light confirmation
+        if (lastDigit !== null) {
+            const transProb = this.analyzer.getTransitionProbability(lastDigit, selectedDigit);
+            if (transProb > 0.15) {
+                confidence += 0.05;
+            }
+        }
+
+        // Black Fibonacci 9.1 adjustment: On higher fib levels, be more conservative
         const fibLevel = this.stakeManager.currentLevel;
         if (fibLevel >= 3) {
-            confidence -= (fibLevel - 2) * 0.05; // Reduce confidence requirement awareness
+            confidence -= (fibLevel - 2) * 0.05;
         }
 
         if (confidence < 0.3) return null; // Minimum confidence threshold
@@ -1185,8 +1331,9 @@ class RomanianGhostBot {
         return {
             digit: selectedDigit,
             confidence: Math.min(confidence, 1.0),
-            ghostScore: hotDigit.score,
-            frequency: topFreq.frequency,
+            cycleScore: cycleSignal.score,
+            cycleDetails: cycleSignal.details,
+            frequency: topFreq ? topFreq.frequency : 0,
             consecutive: consec,
             fibLevel: fibLevel,
             stake: this.stakeManager.getCurrentStake(),
@@ -1210,7 +1357,20 @@ class RomanianGhostBot {
         Logger.info(`🎲 PLACING TRADE: Digit Differs from ${signal.digit}`);
         Logger.info(`💰 Stake: $${stake} | Confidence: ${(signal.confidence * 100).toFixed(0)}%`);
         Logger.info(`📊 ${this.stakeManager.getSummary()}`);
-        Logger.info(`📈 Ghost Score: ${signal.ghostScore} | Freq: ${(signal.frequency * 100).toFixed(0)}%`);
+        Logger.info(`📈 Repeat-cycle score: ${signal.cycleScore} | Freq: ${(signal.frequency * 100).toFixed(0)}%`);
+
+        if (signal.cycleDetails) {
+            const d = signal.cycleDetails;
+            Logger.info(
+                `🔬 Repeat-cycle stats ` +
+                `short=${(d.shortRepeat * 100).toFixed(1)}% ` +
+                `mid=${(d.midRepeat * 100).toFixed(1)}% ` +
+                `long=${(d.longRepeat * 100).toFixed(1)}% ` +
+                `lastOversatShort=${(d.lastOversatShortRate * 100).toFixed(1)}% ` +
+                `lastOversatLong=${(d.lastOversatLongRate * 100).toFixed(1)}% ` +
+                `ticksSinceOversat=${d.ticks_since_oversat}`
+            );
+        }
 
         const recentTicks = this.analyzer.getRecentTicks(10);
         const quotesStr = recentTicks.map(t => t.quote).join(',');
@@ -1321,8 +1481,21 @@ class RomanianGhostBot {
         const recentTicks = this.analyzer.getRecentTicks(10);
         const quotesStr = recentTicks.map(t => t.quote).join(',');
         const digitsStr = recentTicks.map(t => t.digit).join(',');
-        // Logger.info(`📈 Last 10 ticks at settlement: [${quotesStr}]`);
         Logger.info(`🔢 Last 10 digits at settlement: [${digitsStr}]`);
+
+        if (signal && signal.cycleDetails) {
+            const d = signal.cycleDetails;
+            Logger.info(
+                `🔬 Last trade repeat-cycle ` +
+                `short=${(d.shortRepeat * 100).toFixed(1)}% ` +
+                `mid=${(d.midRepeat * 100).toFixed(1)}% ` +
+                `long=${(d.longRepeat * 100).toFixed(1)}% ` +
+                `lastOversatShort=${(d.lastOversatShortRate * 100).toFixed(1)}% ` +
+                `lastOversatLong=${(d.lastOversatLongRate * 100).toFixed(1)}% ` +
+                `ticksSinceOversat=${d.ticks_since_oversat} ` +
+                `cycleScore=${signal.cycleScore}`
+            );
+        }
 
         Logger.info(`   Total P/L: $${this.tracker.totalProfit.toFixed(2)} | ` +
             `Trades: ${this.tracker.getTradeCount()} | ` +
@@ -1335,13 +1508,6 @@ class RomanianGhostBot {
         // Unsubscribe from this contract
         if (contract.id) {
             this._send({ forget: contract.id });
-        }
-
-        // After every real trade, reset ghost trades and require fresh confirmation
-        this.ghostManager.reset();
-        if (this.state !== 'STOPPED') {
-            Logger.info('👻 Resetting ghost trades after live contract. Returning to GHOST_TESTING state.');
-            this.state = 'GHOST_TESTING';
         }
     }
 
@@ -1422,14 +1588,22 @@ class RomanianGhostBot {
         }
         console.log('─'.repeat(50));
 
-        const ghostScores = this.analyzer.getGhostScores();
-        if (ghostScores) {
-            console.log('\n👻 GHOST SCORES:');
-            for (const gs of ghostScores.slice(0, 3)) {
-                console.log(`  Digit ${gs.digit}: Score=${gs.score.toFixed(2)} Freq=${(gs.frequency * 100).toFixed(0)}% Consec=${gs.consecutive}`);
-            }
+        const lastDigit = this.analyzer.getLastDigit();
+        const cycleSignal = this.repeatCycleAnalyzer.getSignal(lastDigit);
+        if (cycleSignal && cycleSignal.details) {
+            const d = cycleSignal.details;
+            console.log('\n🔬 REPEAT-CYCLE ANALYSIS:');
+            console.log(
+                `  short=${(d.shortRepeat * 100).toFixed(1)}% ` +
+                `mid=${(d.midRepeat * 100).toFixed(1)}% ` +
+                `long=${(d.longRepeat * 100).toFixed(1)}% ` +
+                `lastOversatShort=${(d.lastOversatShortRate * 100).toFixed(1)}% ` +
+                `lastOversatLong=${(d.lastOversatLongRate * 100).toFixed(1)}% ` +
+                `ticksSinceOversat=${d.ticks_since_oversat} ` +
+                `score=${cycleSignal.score}`
+            );
+            console.log('');
         }
-        console.log('');
     }
 }
 
