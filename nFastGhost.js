@@ -368,29 +368,34 @@ class DigitAnalyzer {
 }
 
 // ============================================================================
-// REPEAT CYCLE ANALYZER - Long-history repeat vs non-repeat regime detector
-// Inspired by AdvancedRegimeDetector in nGhost2M.js, but simplified and focused
-// on last-digit repeat saturation and transitions into non-repetition cycles.
+// REPEAT CYCLE ANALYZER - Short-window (50) saturation learning over 5000 ticks
+// Focuses ONLY on short-cycle repetition behaviour, learning a saturation level
+// from historical 50-tick batches, then triggering when current short cycle
+// peaks near that learned level and starts to exhaust.
 // ============================================================================
 class RepeatCycleAnalyzer {
     constructor(config) {
-        this.maxHistory = config.history_length || 5000;
-        this.shortWindow = config.short_window || 50;
-        this.midWindow = 200;
+        this.maxHistory = config.history_length || 5000; // e.g. 5000 ticks
+        this.shortWindow = config.short_window || 50;    // 50-tick short cycle
 
-        // Thresholds for regime logic
-        this.oversatMinRepeat = 0.30;      // short-window repeat rate considered "over-saturated"
-        this.oversatDelta = 0.10;          // short repeat must exceed long repeat by this
-        this.nonRepMaxRepeat = 0.15;       // short-window repeat rate considered "non-repeat cycle"
-        this.recentOversatHorizon = 300;   // how far back we remember oversaturation
+        // Historical batch learning parameters
+        this.nonRepMaxRepeat = 0.15;    // "very low repeat" regime for next batch
+        this.minBatchesForLearning = 10;
 
         this.digits = [];
         this.repeats = []; // 1 when same as previous digit, else 0
         this.tickCount = 0;
 
-        this.lastOversatIndex = null;
-        this.lastOversatShortRate = 0;
-        this.lastOversatLongRate = 0;
+        // Learned saturation level from history (short-cycle repeat rate 0–1)
+        this.learnedSaturation = null;
+
+        // Track recent short-cycle values to detect peaks / exhaustion
+        this.prevShort = null;
+        this.currShort = null;
+
+        // Hold the last exhaustion signal for a few ticks so score/active don't reset next tick
+        this.signalHoldTicks = 1;
+        this.signalHold = null; // { score, details, ticksLeft }
     }
 
     _pushDigit(digit) {
@@ -411,14 +416,14 @@ class RepeatCycleAnalyzer {
         this.tickCount++;
     }
 
-    _windowMean(arr, n) {
+    _windowMeanFromEnd(arr, n, offsetFromEnd = 0) {
         if (arr.length === 0) return 0;
-        const size = Math.min(n, arr.length);
+        const end = arr.length - offsetFromEnd;
+        const start = Math.max(0, end - n);
+        if (start >= end) return 0;
         let sum = 0;
-        for (let i = arr.length - size; i < arr.length; i++) {
-            sum += arr[i];
-        }
-        return sum / size;
+        for (let i = start; i < end; i++) sum += arr[i];
+        return sum / (end - start);
     }
 
     _fullMean(arr) {
@@ -428,6 +433,47 @@ class RepeatCycleAnalyzer {
         return sum / arr.length;
     }
 
+    /**
+     * Learn a typical saturation level from 50-tick batches over history.
+     * For each 50-tick batch b, look at the NEXT 50-tick batch b+1. If b+1
+     * has very low repeat (< nonRepMaxRepeat), treat batch b's short-rate
+     * as a "saturation before non-repeat" sample.
+     */
+    _updateLearnedSaturation() {
+        const w = this.shortWindow;
+        if (this.repeats.length < w * 3) return; // need enough data
+
+        const nBatches = Math.floor(this.repeats.length / w);
+        if (nBatches < this.minBatchesForLearning) return;
+
+        const samples = [];
+        for (let b = 0; b < nBatches - 1; b++) {
+            const start = b * w;
+            const mid = start + w;
+            const end = mid + w;
+
+            let sumCur = 0, sumNext = 0;
+            for (let i = start; i < mid; i++) sumCur += this.repeats[i];
+            for (let i = mid; i < end; i++) sumNext += this.repeats[i];
+            const rateCur = sumCur / w;
+            const rateNext = sumNext / w;
+
+            if (rateNext <= this.nonRepMaxRepeat) {
+                samples.push(rateCur);
+            }
+        }
+
+        if (samples.length === 0) return;
+
+        // Use median of saturation samples for robustness
+        samples.sort((a, b) => a - b);
+        const midIdx = Math.floor(samples.length / 2);
+        this.learnedSaturation =
+            samples.length % 2 === 1
+                ? samples[midIdx]
+                : (samples[midIdx - 1] + samples[midIdx]) / 2;
+    }
+
     addDigit(digit) {
         this._pushDigit(digit);
 
@@ -435,113 +481,114 @@ class RepeatCycleAnalyzer {
             return;
         }
 
-        const shortRepeat = this._windowMean(this.repeats, this.shortWindow);
-        const midRepeat = this._windowMean(this.repeats, this.midWindow);
-        const longRepeat = this._fullMean(this.repeats);
-
-        const longBaseline = longRepeat;
-
-        // Detect oversaturation regime (too much repetition recently)
-        const isOversat =
-            shortRepeat >= this.oversatMinRepeat &&
-            shortRepeat >= longBaseline + this.oversatDelta;
-
-        if (isOversat) {
-            this.lastOversatIndex = this.tickCount;
-            this.lastOversatShortRate = shortRepeat;
-            this.lastOversatLongRate = longBaseline;
+        // Update learned saturation from history occasionally
+        if (this.tickCount % this.shortWindow === 0) {
+            this._updateLearnedSaturation();
         }
 
+        // Update short-cycle estimates for peak / exhaustion detection
+        const shortNow = this._windowMeanFromEnd(this.repeats, this.shortWindow, 0);
+        this.prevShort = this.currShort;
+        this.currShort = shortNow;
+
+        // We also keep a snapshot of other context for logging
+        const longRepeat = this._fullMean(this.repeats);
+        const midRepeat = this._windowMeanFromEnd(this.repeats, this.shortWindow * 2, 0);
+
         this.lastSnapshot = {
-            shortRepeat,
+            shortRepeat: this.currShort,
             midRepeat,
             longRepeat,
-            isOversat,
         };
     }
 
     /**
-     * Get regime / signal for the current situation, focusing on whether we are
-     * in a non-repetition cycle following a recent oversaturated repetition regime.
-     *
-     * @param {number} currentDigit - last observed digit (used for logging only)
-     * @returns {{active:boolean, score:number, details:object}}
+     * Get signal based purely on short-cycle saturation and exhaustion.
+     * active == true when:
+     *  - we have a learned saturation level,
+     *  - previous short-cycle was at/above that level,
+     *  - current short-cycle has started to fall (exhaustion of repeats).
      */
     getSignal(currentDigit) {
         if (!this.lastSnapshot || this.repeats.length < this.shortWindow + 5) {
+            this.signalHold = null;
             return { active: false, score: 0, details: null };
         }
 
-        const { shortRepeat, midRepeat, longRepeat, isOversat } = this.lastSnapshot;
+        const { shortRepeat, midRepeat, longRepeat } = this.lastSnapshot;
+        const sat = this.learnedSaturation;
 
-        // Require there to have been an oversaturation regime recently
-        const oversatRecent =
-            this.lastOversatIndex !== null &&
-            (this.tickCount - this.lastOversatIndex) <= this.recentOversatHorizon;
+        const baseDetails = {
+            currentDigit,
+            shortRepeat,
+            midRepeat,
+            longRepeat,
+            learnedSaturation: sat != null ? sat : 0,
+            // For log compatibility (always numeric)
+            lastOversatShortRate: sat != null ? sat : 0,
+            lastOversatLongRate: longRepeat,
+            ticks_since_oversat: 0,
+        };
 
-        if (!oversatRecent) {
+        // Return held signal so score/active don't reset on the very next tick
+        if (this.signalHold && this.signalHold.ticksLeft > 0) {
+            this.signalHold.ticksLeft--;
+            return {
+                active: true,
+                score: this.signalHold.score,
+                details: { ...this.signalHold.details, ...baseDetails },
+            };
+        }
+        this.signalHold = null;
+
+        if (sat == null || this.prevShort == null) {
             return {
                 active: false,
                 score: 0,
                 details: {
-                    reason: 'no_recent_oversaturation',
-                    shortRepeat,
-                    midRepeat,
-                    longRepeat,
-                    lastOversatShortRate: this.lastOversatShortRate,
-                    lastOversatLongRate: this.lastOversatLongRate,
-                    ticks_since_oversat: this.lastOversatIndex === null
-                        ? 0
-                        : this.tickCount - this.lastOversatIndex,
+                    ...baseDetails,
+                    reason: 'saturation_not_learned_yet',
                 },
             };
         }
 
-        // Identify non-repetition cycle:
-        //  - short repeat rate is low,
-        //  - short < long baseline,
-        //  - mid-term also not too high (trend actually eased)
-        const inNonRepCycle =
-            shortRepeat <= this.nonRepMaxRepeat &&
-            shortRepeat < longRepeat &&
-            midRepeat <= this.oversatMinRepeat;
+        const prevAtOrAboveSat = this.prevShort >= sat;
+        const nowBelowPrev = shortRepeat < this.prevShort;
+        const notTooLow = shortRepeat >= sat * 0.5; // still in elevated zone
 
-        if (!inNonRepCycle || isOversat) {
+        const exhaustion = prevAtOrAboveSat && nowBelowPrev && notTooLow;
+
+        if (!exhaustion) {
             return {
                 active: false,
                 score: 0,
                 details: {
-                    reason: 'not_in_nonrep_cycle',
-                    shortRepeat,
-                    midRepeat,
-                    longRepeat,
-                    isOversat,
-                    lastOversatShortRate: this.lastOversatShortRate,
-                    lastOversatLongRate: this.lastOversatLongRate,
-                    ticks_since_oversat: this.lastOversatIndex === null
-                        ? 0
-                        : this.tickCount - this.lastOversatIndex,
+                    ...baseDetails,
+                    reason: 'no_exhaustion',
                 },
             };
         }
 
-        // Score: stronger when shortRepeat is very low vs long baseline
-        const depth = Math.max(0, (longRepeat - shortRepeat));
-        const normDepth = Math.min(1, depth / 0.20); // normalize assuming 20pp max drop
-        const score = Math.round(normDepth * 100);
+        // Score: how far above saturation the previous peak was, and how gently we're coming down
+        const peakExcess = Math.max(0, this.prevShort - sat);      // above saturation
+        const drop = Math.max(0, this.prevShort - shortRepeat);    // how much we've fallen
+
+        // Normalize to a 0–1 scale (assume at most 20pp above and 20pp drop)
+        const normPeak = Math.min(1, peakExcess / 0.20);
+        const normDrop = Math.min(1, drop / 0.20);
+        const score = Math.round(((normPeak * 0.6) + (normDrop * 0.4)) * 100);
+
+        // Hold this signal for a few ticks so it doesn't reset to 0 on the next tick
+        this.signalHold = {
+            score,
+            details: { ...baseDetails, reason: 'short_cycle_exhaustion' },
+            ticksLeft: this.signalHoldTicks,
+        };
 
         return {
             active: true,
             score,
-            details: {
-                currentDigit,
-                shortRepeat,
-                midRepeat,
-                longRepeat,
-                lastOversatShortRate: this.lastOversatShortRate,
-                lastOversatLongRate: this.lastOversatLongRate,
-                ticks_since_oversat: this.tickCount - this.lastOversatIndex,
-            },
+            details: this.signalHold.details,
         };
     }
 }
@@ -1161,9 +1208,11 @@ class RomanianGhostBot {
         const cycleSignal = this.repeatCycleAnalyzer.getSignal(digit);
         if (cycleSignal && cycleSignal.details) {
             const d = cycleSignal.details;
+            const thresholdPct = (d.learnedSaturation * 100).toFixed(1);
             Logger.info(
                 `🔬 REPEAT-CYCLE ANALYSIS: ` +
                 `short=${(d.shortRepeat * 100).toFixed(1)}% ` +
+                `threshold=${thresholdPct}% ` +
                 `mid=${(d.midRepeat * 100).toFixed(1)}% ` +
                 `long=${(d.longRepeat * 100).toFixed(1)}% ` +
                 `lastOversatShort=${(d.lastOversatShortRate * 100).toFixed(1)}% ` +
@@ -1254,9 +1303,9 @@ class RomanianGhostBot {
             return;
         }
 
-        // Generate trading signal
+        // Trade only when RepeatCycleAnalyzer detects exhaustion (short reached threshold then started to fall)
         const signal = this._generateSignal();
-        if (signal && signal.confidence >= 0.5) {
+        if (signal) {
             this._placeTrade(signal);
         }
     }
@@ -1281,61 +1330,32 @@ class RomanianGhostBot {
     }
 
     /**
-     * Generate trading signal - Romanian Ghost Algorithm
+     * Generate trading signal - RepeatCycleAnalyzer only.
+     * A trade is taken only when the short repeat rate has reached the learned threshold
+     * and then starts to fall (exhaustion). No other logic is used.
      */
     _generateSignal() {
         if (!this.analyzer.hasEnoughData()) return null;
 
-        // Long-history repeat/non-repeat regime signal (5000-tick buffer, emphasize last 50)
         const lastDigit = this.analyzer.getLastDigit();
         const cycleSignal = this.repeatCycleAnalyzer.getSignal(lastDigit);
+
         if (!cycleSignal.active) {
             return null;
         }
 
-        // Use the current last digit as predicted digit for "Digit Differs"
-        const selectedDigit = lastDigit;
-
-        // Base confidence from cycle score (0–100 => 0.0–1.0)
-        let confidence = cycleSignal.score / 100;
-
-        // Additional short-window confirmation from digit analyzer
-        const freqAnalysis = this.analyzer.getFrequencyAnalysis();
-        const topFreq = freqAnalysis ? freqAnalysis[0] : null;
-        const consec = this.analyzer.getConsecutiveCount(selectedDigit);
-
-        if (topFreq && topFreq.digit === selectedDigit && topFreq.frequency >= CONFIG.strategy.frequency_threshold) {
-            confidence += 0.15;
-        }
-
-        if (consec >= CONFIG.strategy.consecutive_threshold) {
-            confidence += 0.10;
-        }
-
-        // Transition probability as light confirmation
-        if (lastDigit !== null) {
-            const transProb = this.analyzer.getTransitionProbability(lastDigit, selectedDigit);
-            if (transProb > 0.15) {
-                confidence += 0.05;
-            }
-        }
-
-        // Black Fibonacci 9.1 adjustment: On higher fib levels, be more conservative
+        // Exhaustion detected: short reached threshold and started to fall → execute trade
+        const confidence = Math.min(cycleSignal.score / 100, 1.0);
         const fibLevel = this.stakeManager.currentLevel;
-        if (fibLevel >= 3) {
-            confidence -= (fibLevel - 2) * 0.05;
-        }
-
-        if (confidence < 0.3) return null; // Minimum confidence threshold
 
         return {
-            digit: selectedDigit,
-            confidence: Math.min(confidence, 1.0),
+            digit: lastDigit,
+            confidence,
             cycleScore: cycleSignal.score,
             cycleDetails: cycleSignal.details,
-            frequency: topFreq ? topFreq.frequency : 0,
-            consecutive: consec,
-            fibLevel: fibLevel,
+            frequency: cycleSignal.details ? cycleSignal.details.shortRepeat : 0,
+            consecutive: 0,
+            fibLevel,
             stake: this.stakeManager.getCurrentStake(),
         };
     }
@@ -1364,6 +1384,7 @@ class RomanianGhostBot {
             Logger.info(
                 `🔬 Repeat-cycle stats ` +
                 `short=${(d.shortRepeat * 100).toFixed(1)}% ` +
+                `threshold=${(d.learnedSaturation * 100).toFixed(1)}% ` +
                 `mid=${(d.midRepeat * 100).toFixed(1)}% ` +
                 `long=${(d.longRepeat * 100).toFixed(1)}% ` +
                 `lastOversatShort=${(d.lastOversatShortRate * 100).toFixed(1)}% ` +
@@ -1488,6 +1509,7 @@ class RomanianGhostBot {
             Logger.info(
                 `🔬 Last trade repeat-cycle ` +
                 `short=${(d.shortRepeat * 100).toFixed(1)}% ` +
+                `threshold=${(d.learnedSaturation * 100).toFixed(1)}% ` +
                 `mid=${(d.midRepeat * 100).toFixed(1)}% ` +
                 `long=${(d.longRepeat * 100).toFixed(1)}% ` +
                 `lastOversatShort=${(d.lastOversatShortRate * 100).toFixed(1)}% ` +
@@ -1573,28 +1595,30 @@ class RomanianGhostBot {
         const analysis = this.analyzer.getFrequencyAnalysis();
         if (!analysis) return;
 
-        console.log('\n📊 DIGIT FREQUENCY ANALYSIS:');
-        console.log('─'.repeat(50));
-        console.log('Digit | Count | Freq    | Bar');
-        console.log('─'.repeat(50));
+        // console.log('\n📊 DIGIT FREQUENCY ANALYSIS:');
+        // console.log('─'.repeat(50));
+        // console.log('Digit | Count | Freq    | Bar');
+        // console.log('─'.repeat(50));
 
-        for (const entry of analysis) {
-            const bar = '█'.repeat(Math.round(entry.frequency * 50));
-            const marker = entry.frequency >= CONFIG.strategy.frequency_threshold ? ' ← HOT' : '';
-            console.log(
-                `  ${entry.digit}   |   ${entry.count.toString().padStart(2)}  | ` +
-                `${(entry.frequency * 100).toFixed(1).padStart(5)}%  | ${bar}${marker}`
-            );
-        }
-        console.log('─'.repeat(50));
+        // for (const entry of analysis) {
+        //     const bar = '█'.repeat(Math.round(entry.frequency * 50));
+        //     const marker = entry.frequency >= CONFIG.strategy.frequency_threshold ? ' ← HOT' : '';
+        //     console.log(
+        //         `  ${entry.digit}   |   ${entry.count.toString().padStart(2)}  | ` +
+        //         `${(entry.frequency * 100).toFixed(1).padStart(5)}%  | ${bar}${marker}`
+        //     );
+        // }
+        // console.log('─'.repeat(50));
 
         const lastDigit = this.analyzer.getLastDigit();
         const cycleSignal = this.repeatCycleAnalyzer.getSignal(lastDigit);
         if (cycleSignal && cycleSignal.details) {
             const d = cycleSignal.details;
             console.log('\n🔬 REPEAT-CYCLE ANALYSIS:');
+            const thresholdPct = (d.learnedSaturation * 100).toFixed(1);
             console.log(
                 `  short=${(d.shortRepeat * 100).toFixed(1)}% ` +
+                `threshold=${thresholdPct}% (short must reach then exhaust to trade) ` +
                 `mid=${(d.midRepeat * 100).toFixed(1)}% ` +
                 `long=${(d.longRepeat * 100).toFixed(1)}% ` +
                 `lastOversatShort=${(d.lastOversatShortRate * 100).toFixed(1)}% ` +
