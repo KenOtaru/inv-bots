@@ -1,0 +1,12 @@
+name: My Config
+version: 1.0.0
+schema: v1
+models:
+  - name: LMArena - Cluade-6
+    provider: openai
+    model: cluade-opus-4-6       # use any model name available on LMArena
+    apiBase: http://localhost:8000/api/v1
+    apiKey: placeholder  # any value works, it's not checked
+    roles:
+      - chat
+      - edit
