@@ -33,7 +33,7 @@ const CONFIG = {
 
     // Market Selection
     // Options: 'R_10', 'R_25', 'R_50', 'R_75', 'R_100', '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V'
-    symbol: 'R_25',
+    symbol: 'R_75',
 
     // Contract Configuration
     contract_type: 'DIGITDIFF',
