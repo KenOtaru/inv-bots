@@ -19,6 +19,18 @@
 
 const WebSocket = require('ws');
 const readline = require('readline');
+const fs = require('fs');
+const path = require('path');
+
+// Optional Telegram (set env or in config to enable)
+let TelegramBot = null;
+try {
+    TelegramBot = require('node-telegram-bot-api');
+} catch (e) {
+    // node-telegram-bot-api not installed
+}
+
+const STATE_FILE = path.join(__dirname, 'nFastGhost-state.json');
 
 // ============================================================================
 // CONFIGURATION
@@ -92,6 +104,10 @@ const CONFIG = {
     log_level: 'INFO', // DEBUG, INFO, WARN, ERROR
     show_tick_data: true,
     show_digit_analysis: true,
+
+    // Telegram (optional; also set via TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID env)
+    telegram_bot_token: '8218636914:AAGvaKFh8MT769-_9eOEiU4XKufL0aHRhZ4',
+    telegram_chat_id: '752497117',
 };
 
 // ============================================================================
@@ -793,6 +809,7 @@ class TradeTracker {
         this.peakProfit = 0;
         this.startBalance = 0;
         this.currentBalance = 0;
+        this.restoredTradeCount = 0; // set by loadState for persistence
     }
 
     recordTrade(trade) {
@@ -825,7 +842,7 @@ class TradeTracker {
     }
 
     getTradeCount() {
-        return this.trades.length;
+        return this.trades.length + (this.restoredTradeCount || 0);
     }
 
     getWinRate() {
@@ -913,8 +930,95 @@ class RomanianGhostBot {
         // Tick logging
         this.lastTickLogTime = 0;
 
-        // Signal handling
+        // Hourly stats for Telegram
+        this.hourly = { trades: 0, wins: 0, losses: 0, pnl: 0 };
+        this.sessionStartTime = Date.now();
+
+        // Telegram (optional)
+        this.telegramBot = null;
+        if (TelegramBot && CONFIG.telegram_bot_token && CONFIG.telegram_chat_id) {
+            this.telegramBot = new TelegramBot(CONFIG.telegram_bot_token, { polling: false });
+        }
+
         this._setupSignalHandlers();
+        this.loadState();
+    }
+
+    sendTelegram(text) {
+        if (this.telegramBot && CONFIG.telegram_chat_id) {
+            this.telegramBot.sendMessage(CONFIG.telegram_chat_id, text, { parse_mode: 'HTML' }).catch(() => {});
+        }
+    }
+
+    saveState() {
+        try {
+            const stateData = {
+                savedAt: Date.now(),
+                totalProfit: this.tracker.totalProfit,
+                totalWins: this.tracker.totalWins,
+                totalLosses: this.tracker.totalLosses,
+                tradeCount: this.tracker.getTradeCount(),
+                startBalance: this.tracker.startBalance,
+                currentBalance: this.tracker.currentBalance,
+                currentLevel: this.stakeManager.currentLevel,
+                sessionStartTime: this.sessionStartTime,
+            };
+            fs.writeFileSync(STATE_FILE, JSON.stringify(stateData, null, 2));
+        } catch (e) {
+            Logger.error('Error saving state:', e.message);
+        }
+    }
+
+    loadState() {
+        try {
+            if (!fs.existsSync(STATE_FILE)) return;
+            const data = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+            if (Date.now() - data.savedAt > 30 * 60 * 1000) return;
+
+            this.tracker.totalProfit = data.totalProfit ?? 0;
+            this.tracker.totalWins = data.totalWins ?? 0;
+            this.tracker.totalLosses = data.totalLosses ?? 0;
+            this.tracker.restoredTradeCount = data.tradeCount ?? 0;
+            if (data.startBalance != null) this.tracker.startBalance = data.startBalance;
+            if (data.currentBalance != null) this.tracker.currentBalance = data.currentBalance;
+            if (data.currentLevel != null) this.stakeManager.currentLevel = data.currentLevel;
+            if (data.sessionStartTime != null) this.sessionStartTime = data.sessionStartTime;
+
+            Logger.info('✅ State restored from ' + new Date(data.savedAt).toLocaleString());
+        } catch (e) {
+            Logger.error('Error loading state:', e.message);
+        }
+    }
+
+    startAutoSave() {
+        setInterval(() => this.saveState(), 5000);
+    }
+
+    startHourlySummary() {
+        setInterval(() => {
+            if (this.hourly.trades === 0) return;
+            const winRate = ((this.hourly.wins / this.hourly.trades) * 100).toFixed(1);
+            this.sendTelegram(`
+⏰ <b>HOURLY — nFastGhost Repeat-Cycle Bot</b>
+
+📊 <b>This hour</b>
+├ Trades: ${this.hourly.trades}
+├ ✅ Wins: ${this.hourly.wins} | ❌ Losses: ${this.hourly.losses}
+├ Win Rate: ${winRate}%
+└ P&L: ${this.hourly.pnl >= 0 ? '+' : ''}$${this.hourly.pnl.toFixed(2)}
+
+📊 <b>Session</b>
+├ Symbol: ${CONFIG.symbol}
+├ Total Trades: ${this.tracker.getTradeCount()}
+├ W/L: ${this.tracker.totalWins}/${this.tracker.totalLosses}
+├ Win Rate: ${(this.tracker.getWinRate() * 100).toFixed(1)}%
+├ Total P&L: $${this.tracker.totalProfit.toFixed(2)}
+├ Balance: $${this.tracker.currentBalance.toFixed(2)}
+├ Fib Level: ${this.stakeManager.currentLevel}
+└ Runtime: ${((Date.now() - this.sessionStartTime) / 3600000).toFixed(1)}h
+            `.trim());
+            this.hourly = { trades: 0, wins: 0, losses: 0, pnl: 0 };
+        }, 3600000);
     }
 
     _setupSignalHandlers() {
@@ -922,6 +1026,7 @@ class RomanianGhostBot {
             Logger.info('\n🛑 Shutting down bot...');
             this.isRunning = false;
             this.state = 'STOPPED';
+            this.saveState();
             this.tracker.printSummary();
             if (this.ws && this.ws.readyState === WebSocket.OPEN) {
                 this.ws.close();
@@ -946,6 +1051,8 @@ class RomanianGhostBot {
         Logger.info(`🛑 Max Daily Loss: $${CONFIG.risk.max_daily_loss}`);
 
         this.isRunning = true;
+        this.startAutoSave();
+        this.startHourlySummary();
         await this._connect();
     }
 
@@ -1264,6 +1371,26 @@ class RomanianGhostBot {
         }
     }
 
+    _stopTrading(reason) {
+        this.state = 'STOPPED';
+        this.saveState();
+        this.tracker.printSummary();
+        const runtimeMin = ((Date.now() - this.sessionStartTime) / 60000).toFixed(1);
+        this.sendTelegram(`
+🛑 <b>BOT STOPPED — nFastGhost</b>
+
+Reason: ${reason}
+
+📊 <b>Session summary</b>
+├ Trades: ${this.tracker.getTradeCount()}
+├ W/L: ${this.tracker.totalWins}/${this.tracker.totalLosses}
+├ Win rate: ${(this.tracker.getWinRate() * 100).toFixed(1)}%
+├ Total P&L: $${this.tracker.totalProfit.toFixed(2)}
+├ Balance: $${this.tracker.currentBalance.toFixed(2)}
+└ Runtime: ${runtimeMin} min
+        `.trim());
+    }
+
     /**
      * TRADING state - placing real trades
      */
@@ -1272,16 +1399,14 @@ class RomanianGhostBot {
         const stopReason = this.tracker.shouldStopTrading();
         if (stopReason) {
             Logger.warn(`🛑 Stopping: ${stopReason}`);
-            this.state = 'STOPPED';
-            this.tracker.printSummary();
+            this._stopTrading(stopReason);
             return;
         }
 
         // Check max consecutive losses
         if (this.stakeManager.isMaxLossesReached()) {
             Logger.warn(`🛑 Max consecutive losses (${CONFIG.risk.max_consecutive_losses}) reached!`);
-            this.state = 'STOPPED';
-            this.tracker.printSummary();
+            this._stopTrading('MAX_CONSECUTIVE_LOSSES');
             return;
         }
 
@@ -1401,6 +1526,25 @@ class RomanianGhostBot {
 
         Logger.info('═'.repeat(50));
 
+        const d = signal.cycleDetails || {};
+        const th = (d.learnedSaturation != null ? d.learnedSaturation * 100 : 0).toFixed(1);
+        const sh = (d.shortRepeat != null ? d.shortRepeat * 100 : 0).toFixed(1);
+        this.sendTelegram(`
+            🎯 <b>TRADE OPENED — nFastGhost Repeat-Cycle</b>
+
+            📊 Symbol: ${CONFIG.symbol}
+            🔢 Digit Differs: ${signal.digit}
+            📈 Last 10 digits: ${recentTicks.map(t => t.digit).join(',')}
+
+            🔬 <b>Repeat-Cycle</b>
+            ├ Short: ${sh}% | Threshold: ${th}%
+            ├ Score: ${signal.cycleScore}
+            └ Exhaustion (short reached threshold then fell)
+
+            💰 Stake: $${stake.toFixed(2)}
+            📊 Fib Level: ${this.stakeManager.currentLevel} | Consec losses: ${this.stakeManager.getConsecutiveLosses()}
+        `.trim());
+
         this.contractInProgress = true;
         this.lastTradeTime = Date.now();
 
@@ -1474,6 +1618,10 @@ class RomanianGhostBot {
 
         const signal = this.pendingContract ? this.pendingContract.signal : null;
 
+        this.hourly.trades++;
+        this.hourly.pnl += profit;
+        if (isWin) this.hourly.wins++; else this.hourly.losses++;
+
         Logger.info('');
         if (isWin) {
             Logger.info(`🎉 ${'═'.repeat(20)} WIN ${'═'.repeat(20)} 🎉`);
@@ -1498,6 +1646,24 @@ class RomanianGhostBot {
                 contract_id: contract.contract_id,
             });
         }
+
+        const exitQuote = contract.exit_tick_display_value != null ? contract.exit_tick_display_value : (contract.sell_price || '');
+        const exitDigit = exitQuote !== '' ? getLastDigitFromQuote(exitQuote, CONFIG.symbol) : '—';
+        const last10 = this.analyzer.getRecentTicks(10).map(t => t.digit).join(',');
+        this.sendTelegram(`
+            ${isWin ? '✅ <b>WIN</b>' : '❌ <b>LOSS</b>'} — nFastGhost
+
+            📊 Symbol: ${CONFIG.symbol}
+            🎯 Target digit: ${signal ? signal.digit : '?'}
+            🔢 Exit digit: ${exitDigit}
+            📈 Last 10: ${last10}
+
+            💰 P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}
+            💵 Session P&L: $${this.tracker.totalProfit.toFixed(2)}
+            📊 Balance: $${this.tracker.currentBalance.toFixed(2)}
+            📊 Record: ${this.tracker.totalWins}W/${this.tracker.totalLosses}L | Win rate: ${(this.tracker.getWinRate() * 100).toFixed(1)}%
+            💲 Next stake: $${this.stakeManager.getCurrentStake().toFixed(2)} | Fib level: ${this.stakeManager.currentLevel}
+        `.trim());
 
         const recentTicks = this.analyzer.getRecentTicks(10);
         const quotesStr = recentTicks.map(t => t.quote).join(',');
@@ -1751,6 +1917,8 @@ NOTES:
     - Get your API token at: https://app.deriv.com/account/api-token
     - Required token scopes: Read, Trade
     - Start with a DEMO account
+    - Telegram: set TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID for trade/hourly/stop notifications
+    - State is saved to nFastGhost-state.json every 5s and restored on start (if < 30 min old)
     - Install dependency: npm install ws
     `);
 }
