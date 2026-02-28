@@ -1067,14 +1067,22 @@ class MultiAssetGhostBot {
         const recentTicks = analyzer.getRecentTicks(10);
         const last10 = recentTicks.map(t => t.digit).join(',');
 
+        const d = signal.cycleDetails || {};
+        const th = (d.learnedSaturation != null ? d.learnedSaturation * 100 : 0).toFixed(1);
+        const sh = (d.shortRepeat != null ? d.shortRepeat * 100 : 0).toFixed(1);
+
         const message = `
             🔔 <b>Trade Opened (nFastGhost Multi-Asset)</b>
 
             📊 <b>${asset}</b>
             🎯 <b>Differ Digit:</b> ${signal.digit}
-            💰 <b>Stake:</b> $${this.currentStake.toFixed(2)}
+            🔢 <b>Last10:</b> ${last10}
             📈 <b>Confidence:</b> ${(signal.confidence * 100).toFixed(0)}%
-            🔢 <b>Last 10:</b> ${last10}
+            💰 <b>Stake:</b> $${this.currentStake.toFixed(2)}
+            
+            🔬 <b>Repeat-Cycle</b>
+            ├ Short: ${sh}% | Threshold: ${th}%
+            └ Score: ${signal.cycleScore}
 
             ⏰ ${new Date().toLocaleTimeString()}
         `.trim();
@@ -1196,7 +1204,7 @@ class MultiAssetGhostBot {
             ${won ? '🟢' : '🔴'} <b>P&L:</b> ${pnlStr}
             🎯 <b>Differs:</b> ${this.pendingContract?.signal?.digit || '?'}
             🔢 <b>Exit Digit:</b> ${exitDigit}
-            🔢 <b>Last 10:</b> ${last10}
+            🔢 <b>Last10:</b> ${last10}
             
             📊 <b>Trades Today:</b> ${this.totalTrades}
             📊 <b>Wins/Losses:</b> ${this.totalWins}/${this.totalLosses}
@@ -1206,8 +1214,6 @@ class MultiAssetGhostBot {
             🎯 <b>Win Rate:</b> ${winRate}%
             
             💰 <b>Next Stake:</b> $${this.currentStake.toFixed(2)}
-            
-            ⏰ ${new Date().toLocaleTimeString()}
         `.trim();
         this.sendTelegramMessage(telegramMsg);
 
@@ -1283,8 +1289,6 @@ class MultiAssetGhostBot {
             ├ x4 Losses: ${this.consecutiveLosses4}
             ├ Daily P&L: ${(this.totalProfitLoss >= 0 ? '+' : '')}$${this.totalProfitLoss.toFixed(2)}
             └ Current Stake: $${this.currentStake.toFixed(2)}
-
-            ⏰ ${new Date().toLocaleString()}
         `.trim();
 
         try {
