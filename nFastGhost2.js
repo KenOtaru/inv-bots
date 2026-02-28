@@ -32,7 +32,7 @@ try {
     // node-telegram-bot-api not installed
 }
 
-const STATE_FILE = path.join(__dirname, 'nFastGhost-state000003.json');
+const STATE_FILE = path.join(__dirname, 'nFastGhost-state000004.json');
 
 // ============================================================================
 // CONFIGURATION
@@ -282,6 +282,7 @@ class RepeatCycleAnalyzer {
 
         // Learned saturation level from history
         this.learnedSaturation = null;
+        this.learnedSaturation2 = null;
 
         // Multi-tick tracking for robust exhaustion detection
         this.shortHistory = [];
@@ -375,6 +376,7 @@ class RepeatCycleAnalyzer {
             ? samples[midIdx]
             : (samples[midIdx - 1] + samples[midIdx]) / 2;
 
+            this.learnedSaturation2 = (this.learnedSaturation * 100).toFixed(1);
         Logger.debug(`Saturation learning: ${samples.length} samples, median=${(this.learnedSaturation * 100).toFixed(1)}%`);
     }
 
@@ -1243,7 +1245,8 @@ class RomanianGhostBot {
         const signal = this._generateSignal();
 
         if(signal) console.log(`Confidence: ${(signal.confidence * 100).toFixed(0)}%`);
-        if (signal && signal.confidence > 0.75) {
+
+        if (signal.confidence > 0.75 && this.learnedSaturation2 < 50) {
             Logger.info(`Confidence: ${(signal.confidence * 100).toFixed(0)}%`);
             this._placeTrade(signal);
         }
