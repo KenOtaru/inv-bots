@@ -73,7 +73,7 @@ const CONFIG = {
         frequency_threshold: 0.28,  // 28% (7+ out of 25 ticks)
 
         // Consecutive same-digit threshold for extra confidence
-        consecutive_threshold: 3,
+        consecutive_threshold: 2,
 
         // Cool-down after losses
         cooldown_ticks_after_loss_streak: 10,
@@ -609,106 +609,6 @@ class RepeatCycleAnalyzer {
     }
 }
 
-// ============================================================================
-// GHOST TRADE MANAGER - Virtual Trade Simulation
-// ============================================================================
-class GhostTradeManager {
-    constructor() {
-        this.ghostTrades = [];
-        this.totalGhostTrades = 0;
-        this.ghostWins = 0;
-        this.ghostLosses = 0;
-        this.currentGhostTrade = null; // { digit, entryTick }
-        this.isConfirmed = false;
-        this.confirmationHistory = [];
-    }
-
-    /**
-     * Place a virtual (ghost) trade
-     */
-    placeGhostTrade(digit, tickEpoch) {
-        this.currentGhostTrade = {
-            digit: digit,
-            entryEpoch: tickEpoch,
-            placed: Date.now(),
-        };
-        Logger.debug(`👻 Ghost trade placed: Differs from ${digit}`);
-    }
-
-    /**
-     * Resolve ghost trade with the result digit
-     */
-    resolveGhostTrade(resultDigit) {
-        if (!this.currentGhostTrade) return null;
-
-        const ghost = this.currentGhostTrade;
-        const win = resultDigit !== ghost.digit; // Differs wins when digit is different
-
-        this.totalGhostTrades++;
-        if (win) this.ghostWins++;
-        else this.ghostLosses++;
-
-        const result = {
-            digit: ghost.digit,
-            resultDigit: resultDigit,
-            win: win,
-            winRate: this.getWinRate(),
-        };
-
-        this.ghostTrades.push(result);
-
-        // Keep only recent ghost trades
-        if (this.ghostTrades.length > 20) {
-            this.ghostTrades = this.ghostTrades.slice(-20);
-        }
-
-        this.currentGhostTrade = null;
-
-        Logger.debug(`👻 Ghost result: Differs ${ghost.digit} vs ${resultDigit} = ${win ? 'WIN' : 'LOSS'} (Rate: ${(result.winRate * 100).toFixed(0)}%)`);
-
-        return result;
-    }
-
-    hasActiveGhostTrade() {
-        return this.currentGhostTrade !== null;
-    }
-
-    getWinRate() {
-        if (this.totalGhostTrades === 0) return 0;
-        return this.ghostWins / this.totalGhostTrades;
-    }
-
-    getRecentWinRate(n = 5) {
-        const recent = this.ghostTrades.slice(-n);
-        if (recent.length === 0) return 0;
-        const wins = recent.filter(t => t.win).length;
-        return wins / recent.length;
-    }
-
-    /**
-     * Check if ghost trades confirm strategy is working
-     */
-    isStrategyConfirmed() {
-        if (this.totalGhostTrades < CONFIG.strategy.ghost_trades_required) {
-            return false;
-        }
-        return this.getRecentWinRate(CONFIG.strategy.ghost_trades_required)
-            >= CONFIG.strategy.ghost_win_rate_threshold;
-    }
-
-    reset() {
-        this.ghostTrades = [];
-        this.totalGhostTrades = 0;
-        this.ghostWins = 0;
-        this.ghostLosses = 0;
-        this.currentGhostTrade = null;
-        this.isConfirmed = false;
-    }
-
-    getSummary() {
-        return `Ghost: ${this.totalGhostTrades} trades, ${this.ghostWins}W/${this.ghostLosses}L, Rate: ${(this.getWinRate() * 100).toFixed(0)}%, Confirmed: ${this.isStrategyConfirmed()}`;
-    }
-}
 
 // ============================================================================
 // FIBONACCI STAKE MANAGER - Black Fibonacci 9.1
@@ -999,23 +899,23 @@ class RomanianGhostBot {
             if (this.hourly.trades === 0) return;
             const winRate = ((this.hourly.wins / this.hourly.trades) * 100).toFixed(1);
             this.sendTelegram(`
-⏰ <b>HOURLY — nFastGhost Repeat-Cycle Bot</b>
+                ⏰ <b>HOURLY — nFastGhost Repeat-Cycle Bot</b>
 
-📊 <b>This hour</b>
-├ Trades: ${this.hourly.trades}
-├ ✅ Wins: ${this.hourly.wins} | ❌ Losses: ${this.hourly.losses}
-├ Win Rate: ${winRate}%
-└ P&L: ${this.hourly.pnl >= 0 ? '+' : ''}$${this.hourly.pnl.toFixed(2)}
+                📊 <b>This hour</b>
+                ├ Trades: ${this.hourly.trades}
+                ├ ✅ Wins: ${this.hourly.wins} | ❌ Losses: ${this.hourly.losses}
+                ├ Win Rate: ${winRate}%
+                └ P&L: ${this.hourly.pnl >= 0 ? '+' : ''}$${this.hourly.pnl.toFixed(2)}
 
-📊 <b>Session</b>
-├ Symbol: ${CONFIG.symbol}
-├ Total Trades: ${this.tracker.getTradeCount()}
-├ W/L: ${this.tracker.totalWins}/${this.tracker.totalLosses}
-├ Win Rate: ${(this.tracker.getWinRate() * 100).toFixed(1)}%
-├ Total P&L: $${this.tracker.totalProfit.toFixed(2)}
-├ Balance: $${this.tracker.currentBalance.toFixed(2)}
-├ Fib Level: ${this.stakeManager.currentLevel}
-└ Runtime: ${((Date.now() - this.sessionStartTime) / 3600000).toFixed(1)}h
+                📊 <b>Session</b>
+                ├ Symbol: ${CONFIG.symbol}
+                ├ Total Trades: ${this.tracker.getTradeCount()}
+                ├ W/L: ${this.tracker.totalWins}/${this.tracker.totalLosses}
+                ├ Win Rate: ${(this.tracker.getWinRate() * 100).toFixed(1)}%
+                ├ Total P&L: $${this.tracker.totalProfit.toFixed(2)}
+                ├ Balance: $${this.tracker.currentBalance.toFixed(2)}
+                ├ Fib Level: ${this.stakeManager.currentLevel}
+                └ Runtime: ${((Date.now() - this.sessionStartTime) / 3600000).toFixed(1)}h
             `.trim());
             this.hourly = { trades: 0, wins: 0, losses: 0, pnl: 0 };
         }, 3600000);
@@ -1377,17 +1277,17 @@ class RomanianGhostBot {
         this.tracker.printSummary();
         const runtimeMin = ((Date.now() - this.sessionStartTime) / 60000).toFixed(1);
         this.sendTelegram(`
-🛑 <b>BOT STOPPED — nFastGhost</b>
+            🛑 <b>BOT STOPPED — nFastGhost</b>
 
-Reason: ${reason}
+            Reason: ${reason}
 
-📊 <b>Session summary</b>
-├ Trades: ${this.tracker.getTradeCount()}
-├ W/L: ${this.tracker.totalWins}/${this.tracker.totalLosses}
-├ Win rate: ${(this.tracker.getWinRate() * 100).toFixed(1)}%
-├ Total P&L: $${this.tracker.totalProfit.toFixed(2)}
-├ Balance: $${this.tracker.currentBalance.toFixed(2)}
-└ Runtime: ${runtimeMin} min
+            📊 <b>Session summary</b>
+            ├ Trades: ${this.tracker.getTradeCount()}
+            ├ W/L: ${this.tracker.totalWins}/${this.tracker.totalLosses}
+            ├ Win rate: ${(this.tracker.getWinRate() * 100).toFixed(1)}%
+            ├ Total P&L: $${this.tracker.totalProfit.toFixed(2)}
+            ├ Balance: $${this.tracker.currentBalance.toFixed(2)}
+            └ Runtime: ${runtimeMin} min
         `.trim());
     }
 
@@ -1430,7 +1330,8 @@ Reason: ${reason}
 
         // Trade only when RepeatCycleAnalyzer detects exhaustion (short reached threshold then started to fall)
         const signal = this._generateSignal();
-        if (signal) {
+        console.log('Confidence:', signal.confidence);
+        if (signal && signal.confidence > 0.5) {
             this._placeTrade(signal);
         }
     }
