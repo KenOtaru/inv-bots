@@ -1331,7 +1331,7 @@ class RomanianGhostBot {
         // Trade only when RepeatCycleAnalyzer detects exhaustion (short reached threshold then started to fall)
         const signal = this._generateSignal();
         console.log('Confidence:', signal.confidence);
-        if (signal && signal.confidence > 0.5) {
+        if (signal && signal.confidence < 0.10) {
             this._placeTrade(signal);
         }
     }
