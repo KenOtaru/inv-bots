@@ -1081,7 +1081,7 @@ class MultiAssetGhostBot {
             💰 <b>Stake:</b> $${this.currentStake.toFixed(2)}
             
             🔬 <b>Repeat-Cycle</b>
-            ├ Short: ${sh}% | Threshold: ${th}%
+            ├ Short: ${sh}% | ${th}%
             └ Score: ${signal.cycleScore}
 
             ⏰ ${new Date().toLocaleTimeString()}
