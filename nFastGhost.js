@@ -71,21 +71,21 @@ const CONFIG = {
 
     // Multiplier-based Stake Management (from liveMultiAccumNew.js)
     stake: {
-        initial_stake: 10.5,
-        multiplier: 21,
-        multiplier2: 50,
+        initial_stake: 2.2,
+        multiplier: 11.3,
+        multiplier2: 11.3,
         multiplier3: 100,
-        max_stake: 50.00,
+        max_stake: 150.00,
     },
 
     // Risk Management
     risk: {
         max_daily_loss: 100.00,
-        max_daily_trades: 200,
-        max_consecutive_losses: 8,
-        take_profit: 30.00,
+        max_daily_trades: 2000000000000000,
+        max_consecutive_losses: 3,
+        take_profit: 3000.00,
         min_balance: 10.00,
-        max_stake: 50.00,
+        max_stake: 150.00,
     },
 
     // Logging
