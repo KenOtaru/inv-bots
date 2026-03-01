@@ -924,7 +924,7 @@ class MultiAssetGhostBot {
         this.cycleAnalyzers[asset].addDigit(digit);
 
         const now = Date.now();
-        if (now - this.lastTickLogTime[asset] >= 30000) {
+        if (!this.tradeInProgress && now - this.lastTickLogTime[asset] >= 30000) {
             const analyzer = this.analyzers[asset];
             const recent = analyzer.getRecentDigits(5);
             const sat = this.cycleAnalyzers[asset].learnedSaturation;

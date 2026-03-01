@@ -924,7 +924,7 @@ class MultiAssetGhostBot {
         this.cycleAnalyzers[asset].addDigit(digit);
 
         const now = Date.now();
-        if (now - this.lastTickLogTime[asset] >= 30000) {
+        if (!this.tradeInProgress && now - this.lastTickLogTime[asset] >= 30000) {
             const analyzer = this.analyzers[asset];
             const recent = analyzer.getRecentDigits(5);
             const sat = this.cycleAnalyzers[asset].learnedSaturation;
@@ -982,7 +982,7 @@ class MultiAssetGhostBot {
         // Generate signal for this asset
         const signal = this.generateSignal(asset);
         
-        if (signal && signal.tradeSignal && signal.confidence > 0.75) {
+        if (signal && signal.confidence > 0.75) {
             const sat = this.cycleAnalyzers[asset].learnedSaturation;
             console.log(`Trade Signal [${asset}]: Digit: ${signal.digit} | Confidence: ${(signal.confidence * 100).toFixed(0)}% | Short Repeat: ${signal.shortRepeat} | Sat: ${sat != null ? (sat * 100).toFixed(1) + '%' : '---'}`);
 
