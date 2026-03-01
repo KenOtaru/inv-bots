@@ -989,7 +989,7 @@ class MultiAssetGhostBot {
             const last10 = recentTicks.map(t => t.digit).join(',');
             
             console.log(`Trade Signal [${asset}]: Digit: ${signal.digit}/${signal.hotDigit} | Confidence: ${(signal.confidence * 100).toFixed(0)}% | ShortR: ${signal.shortRepeat} | Sat: ${sat != null ? (sat * 100).toFixed(1) + '%' : '---'}`);
-            if (sat && sat === 0.1) {
+            if (sat && sat > 0.1) {
                 this.placeTrade(asset, signal);
             } else {
                 console.log(`[${asset}] ${last10}`);
