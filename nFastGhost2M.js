@@ -36,7 +36,7 @@ try {
     // node-telegram-bot-api not installed
 }
 
-const STATE_FILE = path.join(__dirname, 'nFastGhostMMulti000003-state.json');
+const STATE_FILE = path.join(__dirname, 'nFastGhostMMulti000007-state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================================================
@@ -98,8 +98,8 @@ const CONFIG = {
     show_tick_data: true,
 
     // Telegram (use environment variables)
-    telegram_bot_token: process.env.TELEGRAM_BOT_TOKEN || '8218636914:AAGvaKFh8MT769-_9eOEiU4XKufL0aHRhZ4',
-    telegram_chat_id: process.env.TELEGRAM_CHAT_ID || '752497117',
+    telegram_bot_token: '8218636914:AAGvaKFh8MT769-_9eOEiU4XKufL0aHRhZ4',
+    telegram_chat_id: '752497117',
 };
 
 // ============================================================================
@@ -981,14 +981,14 @@ class MultiAssetGhostBot {
         // Generate signal for this asset
         const signal = this.generateSignal(asset);
         
-        if (signal && signal.tradeSignal && signal.confidence > 0.15) {
+        if (signal && signal.tradeSignal && signal.confidence > 0.1) {
             const sat = this.cycleAnalyzers[asset].learnedSaturation;
 
             const analyzer = this.analyzers[asset];
             const recentTicks = analyzer.getRecentTicks(10);
             const last10 = recentTicks.map(t => t.digit).join(',');
             
-            console.log(`Trade Signal [${asset}]: Digit: ${signal.digit}/${signal.hotDigit} | Confidence: ${(signal.confidence * 100).toFixed(0)}% | ShortR: ${signal.shortRepeat} | Sat: ${sat != null ? (sat * 100).toFixed(1) + '%' : '---'}`);
+            console.log(`Trade Signal [${asset}]: Digit: ${signal.digit}/${signal.hotDigit} | Conf: ${(signal.confidence * 100).toFixed(0)}% | ShortR: ${signal.shortRepeat} | Sat: ${sat != null ? (sat * 100).toFixed(1) + '%' : '---'}`);
             if (sat && sat > 0.1) {
                 this.placeTrade(asset, signal);
             } else {
