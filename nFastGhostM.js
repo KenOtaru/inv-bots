@@ -987,9 +987,9 @@ class MultiAssetGhostBot {
             const analyzer = this.analyzers[asset];
             const recentTicks = analyzer.getRecentTicks(10);
             const last10 = recentTicks.map(t => t.digit).join(',');
-            
-             console.log(`Trade Signal [${asset}]: Digit: ${signal.digit} | Confidence: ${(signal.confidence * 100).toFixed(0)}% | ShortR: ${signal.shortRepeat} | Sat: ${sat != null ? (sat * 100).toFixed(1) + '%' : '---'}`);
-            if (sat && sat < 0.1) {
+
+             console.log(`Trade Signal [${asset}]: Digit: ${signal.digit}/${signal.hotDigit}  | Confidence: ${(signal.confidence * 100).toFixed(0)}% | ShortR: ${signal.shortRepeat} | Sat: ${sat != null ? (sat * 100).toFixed(1) + '%' : '---'}`);
+            if (sat && sat === 0.1) {
                 this.placeTrade(asset, signal);
             } else {
                 console.log(`[${asset}] ${last10}`);
@@ -1038,6 +1038,7 @@ class MultiAssetGhostBot {
             cycleDetails: cycleSignal.details,
             shortRepeat: cycleSignal.details ? cycleSignal.details.shortRepeat : 0,
             tradeSignal: hotDigitInfo.digit === lastDigit,
+            hotDigit: hotDigitInfo.digit,
         };
     }
 
