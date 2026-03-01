@@ -981,7 +981,7 @@ class MultiAssetGhostBot {
         // Generate signal for this asset
         const signal = this.generateSignal(asset);
         
-        if (signal && signal.tradeSignal && signal.confidence > 0.75) {
+        if (signal && signal.tradeSignal && signal.confidence > 0.15) {
             const sat = this.cycleAnalyzers[asset].learnedSaturation;
 
             const analyzer = this.analyzers[asset];
