@@ -928,13 +928,13 @@ class MultiAssetGhostBot {
             const analyzer = this.analyzers[asset];
             const recent = analyzer.getRecentDigits(5);
             const sat = this.cycleAnalyzers[asset].learnedSaturation;
-            console.log(`[${asset}] ${tick.quote}: ${recent.join(', ')} | Sat: ${sat != null ? (sat * 100).toFixed(1) + '%' : '---'}`);
+            console.log(`[${asset}] ${tick.quote}: ${recent.join(', ')} | ShortR: ${signal.shortRepeat} | Sat: ${sat != null ? (sat * 100).toFixed(1) + '%' : '---'} | Confidence: ${(signal.confidence * 100).toFixed(0)}%`);
             this.lastTickLogTime[asset] = now;
         } else if (this.tradeInProgress) {
             const analyzer = this.analyzers[asset];
             const recent = analyzer.getRecentDigits(5);
             const sat = this.cycleAnalyzers[asset].learnedSaturation;
-            console.log(`[${asset}] ${tick.quote}: ${recent.join(', ')} | Sat: ${sat != null ? (sat * 100).toFixed(1) + '%' : '---'}`);
+            console.log(`[${asset}] ${tick.quote}: ${recent.join(', ')} | ShortR: ${signal.shortRepeat} | Sat: ${sat != null ? (sat * 100).toFixed(1) + '%' : '---'} | Confidence: ${(signal.confidence * 100).toFixed(0)}%`);
         }
 
         // State machine
@@ -985,7 +985,7 @@ class MultiAssetGhostBot {
         if (signal && signal.tradeSignal && signal.confidence > 0.6) {
             const sat = this.cycleAnalyzers[asset].learnedSaturation;
 
-            console.log(`Trade Signal [${asset}]: Digit: ${signal.digit} | Confidence: ${(signal.confidence * 100).toFixed(0)}% | Short Repeat: ${signal.shortRepeat} | Sat: ${sat != null ? (sat * 100).toFixed(1) + '%' : '---'}`);
+            console.log(`Trade Signal [${asset}]: Digit: ${signal.digit} | Confidence: ${(signal.confidence * 100).toFixed(0)}% | ShortR: ${signal.shortRepeat} | Sat: ${sat != null ? (sat * 100).toFixed(1) + '%' : '---'}`);
             if (sat && sat < 0.1) {
                 this.placeTrade(asset, signal);
             }
