@@ -930,10 +930,10 @@ class MultiAssetGhostBot {
 
         const now = Date.now();
         if (!this.tradeInProgress && now - this.lastTickLogTime[asset] >= 30000) {
-            console.log(`[${asset}] ${tick.quote}: ${recent.join(', ')} | ShortR: ${signal.shortRepeat} | Sat: ${sat != null ? (sat * 100).toFixed(1) + '%' : '---'} | Confidence: ${(signal.confidence * 100).toFixed(0)}%`);
+            console.log(`[${asset}] ${tick.quote}: ${recent.join(', ')} | Sat: ${sat != null ? (sat * 100).toFixed(1) + '%' : '---'}`);
             this.lastTickLogTime[asset] = now;
         } else if (this.tradeInProgress) {
-            console.log(`[${asset}] ${tick.quote}: ${recent.join(', ')} | Sat: ${sat != null ? (sat * 100).toFixed(1) + '%' : '---'} | Confidence: ${(signal.confidence * 100).toFixed(0)}%`);
+            console.log(`[${asset}] ${tick.quote}: ${recent.join(', ')} | Sat: ${sat != null ? (sat * 100).toFixed(1) + '%' : '---'}`);
         }
 
         // State machine
