@@ -983,8 +983,10 @@ class MultiAssetGhostBot {
         
         if (signal && !signal.tradeSignal && signal.confidence > 0.75) {
             const sat = this.cycleAnalyzers[asset].learnedSaturation;
-            console.log(`Trade Signal [${asset}]: Digit: ${signal.digit} | Confidence: ${(signal.confidence * 100).toFixed(0)}% | ShortR: ${signal.shortRepeat} | Sat: ${sat != null ? (sat * 100).toFixed(1) + '%' : '---'}`);
 
+            const recentTicks = analyzer.getRecentTicks(10);
+            console.log(`[${asset}] ${recentTicks.join(', ')}`);
+            console.log(`Trade Signal [${asset}]: Digit: ${signal.digit} | Confidence: ${(signal.confidence * 100).toFixed(0)}% | ShortR: ${signal.shortRepeat} | Sat: ${sat != null ? (sat * 100).toFixed(1) + '%' : '---'}`);
             if (sat && sat < 0.1) {
                 this.placeTrade(asset, signal);
             }
