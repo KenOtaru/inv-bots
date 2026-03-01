@@ -923,17 +923,16 @@ class MultiAssetGhostBot {
         const digit = this.analyzers[asset].addTick(tick);
         this.cycleAnalyzers[asset].addDigit(digit);
 
+        const analyzer = this.analyzers[asset];
+        const recent = analyzer.getRecentDigits(5);
+        const sat = this.cycleAnalyzers[asset].learnedSaturation;
+        const signal = this.generateSignal(asset);
+
         const now = Date.now();
         if (!this.tradeInProgress && now - this.lastTickLogTime[asset] >= 30000) {
-            const analyzer = this.analyzers[asset];
-            const recent = analyzer.getRecentDigits(5);
-            const sat = this.cycleAnalyzers[asset].learnedSaturation;
             console.log(`[${asset}] ${tick.quote}: ${recent.join(', ')} | ShortR: ${signal.shortRepeat} | Sat: ${sat != null ? (sat * 100).toFixed(1) + '%' : '---'} | Confidence: ${(signal.confidence * 100).toFixed(0)}%`);
             this.lastTickLogTime[asset] = now;
         } else if (this.tradeInProgress) {
-            const analyzer = this.analyzers[asset];
-            const recent = analyzer.getRecentDigits(5);
-            const sat = this.cycleAnalyzers[asset].learnedSaturation;
             console.log(`[${asset}] ${tick.quote}: ${recent.join(', ')} | ShortR: ${signal.shortRepeat} | Sat: ${sat != null ? (sat * 100).toFixed(1) + '%' : '---'} | Confidence: ${(signal.confidence * 100).toFixed(0)}%`);
         }
 
