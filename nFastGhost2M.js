@@ -1850,6 +1850,7 @@ class MultiAssetGhostBot {
 
         StatePersistence.startAutoSave(this);
         this.connect();
+        this.checkTimeForDisconnectReconnect();
     }
 }
 
