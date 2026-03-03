@@ -486,28 +486,28 @@ class RepeatCycleAnalyzer {
         }
 
         // Fallback: if no single bin qualifies, merge adjacent top bins
-        // if (!bestBin) {
-        //     // Try merging top 2-3 adjacent bins
-        //     for (let i = 0; i < sortedBins.length - 1; i++) {
-        //         const merged = sortedBins[i].count + sortedBins[i + 1].count;
-        //         if (merged >= minBinCount) {
-        //             // Use the higher bin's average rate
-        //             bestBin = sortedBins[i];
-        //             bestBinRate = sortedBins[i].avgRate;
-        //             break;
-        //         }
-        //     }
-        // }
+        if (!bestBin) {
+            // Try merging top 2-3 adjacent bins
+            for (let i = 0; i < sortedBins.length - 1; i++) {
+                const merged = sortedBins[i].count + sortedBins[i + 1].count;
+                if (merged >= minBinCount) {
+                    // Use the higher bin's average rate
+                    bestBin = sortedBins[i];
+                    bestBinRate = sortedBins[i].avgRate;
+                    break;
+                }
+            }
+        }
 
         // Final fallback: use the top 25% percentile (highest peaks)
-        // if (!bestBin) {
-        //     const topQuartileIdx = Math.floor(peakSamples.length * 0.25);
-        //     const topQuartile = peakSamples.slice(0, Math.max(1, topQuartileIdx));
-        //     let sum = 0;
-        //     for (const s of topQuartile) sum += s.rate;
-        //     bestBinRate = sum / topQuartile.length;
-        //     bestBin = { samples: topQuartile, avgRate: bestBinRate };
-        // }
+        if (!bestBin) {
+            const topQuartileIdx = Math.floor(peakSamples.length * 0.25);
+            const topQuartile = peakSamples.slice(0, Math.max(1, topQuartileIdx));
+            let sum = 0;
+            for (const s of topQuartile) sum += s.rate;
+            bestBinRate = sum / topQuartile.length;
+            bestBin = { samples: topQuartile, avgRate: bestBinRate };
+        }
 
         // Set the learned saturation to the identified peak level
         this.learnedSaturation = bestBinRate;
@@ -1230,7 +1230,7 @@ class MultiAssetGhostBot {
         // Determine the trade digit: prefer the saturation-identified hot digit
         // Fall back to the window hot digit if saturation digit isn't available
         // const tradeDigit = saturationHotDigit != null ? saturationHotDigit : hotDigitInfo.digit;
-        const tradeDigit = hotDigitInfo.digit;
+        const tradeDigit = (hotDigitInfo.digit && hotDigitInfo.frequency !== saturationHotDigit);
 
         const confidence = Math.min(cycleSignal.score / 100, 1.0);
 
