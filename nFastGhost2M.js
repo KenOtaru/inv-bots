@@ -461,7 +461,7 @@ class RepeatCycleAnalyzer {
 
         // Find the highest bin that has meaningful frequency
         // "Meaningful" = at least 15% of total samples or minimum 3 occurrences
-        const minBinCount = Math.max(4, Math.floor(peakSamples.length * 0.10));
+        const minBinCount = Math.max(3, Math.floor(peakSamples.length * 0.10));
 
         let bestBin = null;
         let bestBinRate = 0;
