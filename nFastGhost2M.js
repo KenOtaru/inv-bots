@@ -53,7 +53,7 @@ try {
     // node-telegram-bot-api not installed
 }
 
-const STATE_FILE = path.join(__dirname, 'nFastGhostMMulti000001-state.json');
+const STATE_FILE = path.join(__dirname, 'nFastGhostMMulti000002-state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================================================
@@ -348,9 +348,6 @@ class DigitAnalyzer {
 // ============================================================================
 // REPEAT CYCLE ANALYZER
 // ============================================================================
-// ============================================================================
-// REPEAT CYCLE ANALYZER
-// ============================================================================
 class RepeatCycleAnalyzer {
     constructor(config) {
         this.maxHistory = config.history_length || 5000;
@@ -365,7 +362,7 @@ class RepeatCycleAnalyzer {
         this.learnedSaturation = null;
         this.shortHistory = [];
         this.exhaustionLookback = 6;
-        this.signalHoldTicks = 5;
+        this.signalHoldTicks = 3;
         this.signalHold = null;
         this.lastSnapshot = null;
 
@@ -406,26 +403,6 @@ class RepeatCycleAnalyzer {
         return sum / arr.length;
     }
 
-    /**
-     * _updateLearnedSaturation()
-     *
-     * Scans the full repeat history using sliding short-cycle windows.
-     * For each window position, computes the repeat-rate in the current
-     * window and checks if the NEXT window drops to none/very low repeats.
-     *
-     * NEW BEHAVIOR: Instead of taking the median of all pre-collapse
-     * repeat rates, this now identifies the HIGHEST (peak) repetition
-     * saturation percentage that consistently appears before the regime
-     * transitions to none/very low repeats.
-     *
-     * It builds a histogram of peak repeat-rates observed before collapse
-     * events, then selects the most frequently occurring peak level
-     * (the mode of the top-quartile peaks), giving us the most consistent
-     * HIGH saturation threshold that precedes regime change.
-     *
-     * Also identifies the dominant (hot) digit driving repeats at the
-     * peak saturation windows.
-     */
     _updateLearnedSaturation() {
         const w = this.shortWindow;
         if (this.repeats.length < w * 3) return;
@@ -484,7 +461,7 @@ class RepeatCycleAnalyzer {
 
         // Find the highest bin that has meaningful frequency
         // "Meaningful" = at least 15% of total samples or minimum 3 occurrences
-        const minBinCount = Math.max(3, Math.floor(peakSamples.length * 0.10));
+        const minBinCount = Math.max(4, Math.floor(peakSamples.length * 0.10));
 
         let bestBin = null;
         let bestBinRate = 0;
@@ -509,28 +486,28 @@ class RepeatCycleAnalyzer {
         }
 
         // Fallback: if no single bin qualifies, merge adjacent top bins
-        if (!bestBin) {
-            // Try merging top 2-3 adjacent bins
-            for (let i = 0; i < sortedBins.length - 1; i++) {
-                const merged = sortedBins[i].count + sortedBins[i + 1].count;
-                if (merged >= minBinCount) {
-                    // Use the higher bin's average rate
-                    bestBin = sortedBins[i];
-                    bestBinRate = sortedBins[i].avgRate;
-                    break;
-                }
-            }
-        }
+        // if (!bestBin) {
+        //     // Try merging top 2-3 adjacent bins
+        //     for (let i = 0; i < sortedBins.length - 1; i++) {
+        //         const merged = sortedBins[i].count + sortedBins[i + 1].count;
+        //         if (merged >= minBinCount) {
+        //             // Use the higher bin's average rate
+        //             bestBin = sortedBins[i];
+        //             bestBinRate = sortedBins[i].avgRate;
+        //             break;
+        //         }
+        //     }
+        // }
 
         // Final fallback: use the top 25% percentile (highest peaks)
-        if (!bestBin) {
-            const topQuartileIdx = Math.floor(peakSamples.length * 0.25);
-            const topQuartile = peakSamples.slice(0, Math.max(1, topQuartileIdx));
-            let sum = 0;
-            for (const s of topQuartile) sum += s.rate;
-            bestBinRate = sum / topQuartile.length;
-            bestBin = { samples: topQuartile, avgRate: bestBinRate };
-        }
+        // if (!bestBin) {
+        //     const topQuartileIdx = Math.floor(peakSamples.length * 0.25);
+        //     const topQuartile = peakSamples.slice(0, Math.max(1, topQuartileIdx));
+        //     let sum = 0;
+        //     for (const s of topQuartile) sum += s.rate;
+        //     bestBinRate = sum / topQuartile.length;
+        //     bestBin = { samples: topQuartile, avgRate: bestBinRate };
+        // }
 
         // Set the learned saturation to the identified peak level
         this.learnedSaturation = bestBinRate;
@@ -1185,7 +1162,7 @@ class MultiAssetGhostBot {
         // Generate signal for this asset
         const signal = this.generateSignal(asset);
 
-        if (signal && signal.tradeSignal && signal.confidence > 0.1) {
+        if (signal && signal.tradeSignal && signal.confidence > 0.5) {
             const sat = this.cycleAnalyzers[asset].learnedSaturation;
             const satHotDigit = this.cycleAnalyzers[asset].saturationHotDigit;
 
@@ -1252,7 +1229,8 @@ class MultiAssetGhostBot {
 
         // Determine the trade digit: prefer the saturation-identified hot digit
         // Fall back to the window hot digit if saturation digit isn't available
-        const tradeDigit = saturationHotDigit != null ? saturationHotDigit : hotDigitInfo.digit;
+        // const tradeDigit = saturationHotDigit != null ? saturationHotDigit : hotDigitInfo.digit;
+        const tradeDigit = hotDigitInfo.digit;
 
         const confidence = Math.min(cycleSignal.score / 100, 1.0);
 
