@@ -6,7 +6,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'fractal_riseFall000001-state.json');
+const STATE_FILE = path.join(__dirname, 'fractal_riseFall000002-state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -595,12 +595,12 @@ const CONFIG = {
     // ============================================
     // TRADING SESSION WINDOWS (GMT+1 hours)
     // ============================================
-    // London Session: 8:00 AM - 10:00 AM GMT+1
+    // London Session: 8:00 AM - 9:00 AM GMT+1
     LONDON_START: 8,
-    LONDON_END: 10,
-    // New York Session: 1:00 PM - 3:00 PM GMT+1
+    LONDON_END: 9,
+    // New York Session: 1:00 PM - 2:00 PM GMT+1
     NEWYORK_START: 13,
-    NEWYORK_END: 15,
+    NEWYORK_END: 14,
 
     // Debug
     DEBUG_MODE: true,
