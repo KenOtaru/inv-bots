@@ -1080,7 +1080,7 @@ const CONFIG = {
     // TRADING SESSION WINDOWS (GMT+1 hours)
     // ============================================
     LONDON_START: 8,
-    LONDON_END: 11,
+    LONDON_END: 9,
     NEWYORK_START: 13,
     NEWYORK_END: 14,
 
@@ -1120,7 +1120,7 @@ const ASSET_CONFIGS = {
         TIMEFRAME_LABEL: '1m',
         MAX_CANDLES_STORED: 100,
         CANDLES_TO_LOAD: 100,
-        DURATION: 114,           // 110 seconds
+        DURATION: 54,           // 110 seconds
         DURATION_UNIT: 's'
     },
     R_75: {
