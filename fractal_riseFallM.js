@@ -1157,7 +1157,7 @@ function getAssetConfig(symbol) {
     };
 }
 
-let ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'];
+let ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'];
 
 // ============================================
 // STATE MANAGEMENT
@@ -2465,11 +2465,11 @@ class DerivBot {
         if (isRecoveryMode) {
             // Recovery: alternate direction from the previous losing trade ON THIS ASSET
             if (assetState.lastTradeDirection === 'CALLE') {
-                direction = 'PUTE';
+                symbol === 'R_50' ? direction = 'CALLE' : direction = 'PUTE';
                 signalReason =
                     `Recovery (${symbol} Prev LOSS on RISE → now FALL)`;
             } else {
-                direction = 'CALLE';
+                symbol === 'R_50' ? direction = 'PUTE' : direction = 'CALLE';
                 signalReason =
                     `Recovery (${symbol} Prev LOSS on FALL → now RISE)`;
             }
@@ -2484,7 +2484,7 @@ class DerivBot {
                         `${symbol} ⏭️ Breakout UP already traded at Resistance ${resistance.toFixed(5)} — waiting for new fractal level`
                     );
                 } else {
-                    direction = 'CALLE';
+                    symbol === 'R_50' ? direction = 'PUTE' : direction = 'CALLE';
                     signalReason = `BREAKOUT UP — Close ${closePrice.toFixed(5)} > Resistance ${resistance.toFixed(5)} (diff: +${(closePrice - resistance).toFixed(5)})`;
                 }
             } else if (closePrice < support) {
@@ -2493,7 +2493,7 @@ class DerivBot {
                         `${symbol} ⏭️ Breakout DOWN already traded at Support ${support.toFixed(5)} — waiting for new fractal level`
                     );
                 } else {
-                    direction = 'PUTE';
+                    symbol === 'R_50' ? direction = 'CALLE' : direction = 'PUTE';
                     signalReason = `BREAKOUT DOWN — Close ${closePrice.toFixed(5)} < Support ${support.toFixed(5)} (diff: -${(support - closePrice).toFixed(5)})`;
                 }
             } else {
