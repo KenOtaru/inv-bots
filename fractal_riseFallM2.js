@@ -2296,7 +2296,7 @@ class DerivBot {
         console.log(`   Period: ${overall.firstTradeDate || 'N/A'} to ${overall.lastTradeDate || 'N/A'}`);
 
         console.log('─'.repeat(80));
-        console.log(`🕐 TRADING WINDOWS (GMT+1):`); TOKYO_START
+        console.log(`🕐 TRADING WINDOWS (GMT+1):`);
         console.log(
             `   TY TOKYO Session:   ${String(CONFIG.TOKYO_START).padStart(2, '0')}:00 - ${String(CONFIG.TOKYO_END).padStart(2, '0')}:00`
         );
