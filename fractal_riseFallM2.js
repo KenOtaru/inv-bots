@@ -2659,14 +2659,14 @@ class DerivBot {
                 return;
             }
 
-            // Daily reconnection at 2:00 AM GMT+1
+            // Daily reconnection at 1:00 AM GMT+1 (to catch TOKYO session start)
             if (
                 !state.session.isActive &&
-                currentHours === 2 &&
+                currentHours === 1 &&
                 currentMinutes >= 0
             ) {
                 LOGGER.info(
-                    "It's 2:00 AM GMT+1, reconnecting the bot and resetting daily session stats."
+                    "It's 1:00 AM GMT+1, reconnecting the bot and resetting daily session stats."
                 );
                 // No longer call resetDailyStats — day change is handled by checkDayChange
                 state.session.isActive = true;
