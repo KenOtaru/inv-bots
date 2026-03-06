@@ -645,12 +645,12 @@ class RepeatCycleAnalyzer {
             : 0;
         const meaningfulDecline = declineFraction >= 0.15;
         const notCollapsed = currentVal >= this.nonRepMaxRepeat;
-        const last3 = recent.slice(-5);
-        const declining = last3.length >= 5
+        const last3 = recent.slice(-3);
+        const declining = last3.length >= 3
             && last3[0] > last3[1]
             && last3[1] > last3[2]
-            && last3[2] > last3[3]
-            && last3[3] > last3[4];
+            // && last3[2] > last3[3]
+            // && last3[3] > last3[4];
 
         const exhaustion = peakReachedSat && meaningfulDecline && notCollapsed && declining;
 
