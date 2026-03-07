@@ -6,8 +6,8 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'fractal_riseFallM000008-state.json');
-const HISTORY_FILE = path.join(__dirname, 'fractal_riseFallM000008-history.json');
+const STATE_FILE = path.join(__dirname, 'fractal_riseFallM000009-state.json');
+const HISTORY_FILE = path.join(__dirname, 'fractal_riseFallM000009-history.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
@@ -1080,12 +1080,12 @@ const CONFIG = {
     // ============================================
     // TRADING SESSION WINDOWS (GMT+1 hours)
     // ============================================
-    TOKYO_START: 1,
-    TOKYO_END: 2,
-    LONDON_START: 9,
-    LONDON_END: 11,
-    NEWYORK_START: 13,
-    NEWYORK_END: 14,
+    TOKYO_START: 3,
+    TOKYO_END: 5,
+    LONDON_START: 10,
+    LONDON_END: 12,
+    NEWYORK_START: 15,
+    NEWYORK_END: 17,
 
     // Debug
     DEBUG_MODE: true,
@@ -2352,7 +2352,7 @@ class DerivBot {
         });
 
         TelegramService.sendStartupMessage();
-        // TelegramService.startHourlyTimer();
+        TelegramService.startHourlyTimer();
 
         this.startSessionTimeChecker();
 
