@@ -6,8 +6,8 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'fractal_riseFallM0000012-state.json');
-const HISTORY_FILE = path.join(__dirname, 'fractal_riseFallM0000012-history.json');
+const STATE_FILE = path.join(__dirname, 'fractal_riseFallM0000013-state.json');
+const HISTORY_FILE = path.join(__dirname, 'fractal_riseFallM0000013-history.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
@@ -775,6 +775,7 @@ class TelegramService {
             🕐 TOKYO Session: ${CONFIG.TOKYO_START}:00 - ${CONFIG.TOKYO_END}:00 (GMT+1)
             🕐 London Session: ${CONFIG.LONDON_START}:00 - ${CONFIG.LONDON_END}:00 (GMT+1)
             🕐 New York Session: ${CONFIG.NEWYORK_START}:00 - ${CONFIG.NEWYORK_END}:00 (GMT+1)
+            🕐 SYDNEY Session: ${CONFIG.SYDNEY_START}:00 - ${CONFIG.SYDNEY_END}:00 (GMT+1)
         `.trim();
         await this.sendMessage(message);
     }
@@ -1087,6 +1088,8 @@ const CONFIG = {
     LONDON_END: 9,
     NEWYORK_START: 1,
     NEWYORK_END: 2,
+    SYDNEY_START: 22,
+    SYDNEY_END: 23,
 
     // Debug
     DEBUG_MODE: true,
@@ -1257,6 +1260,15 @@ class TradingSessionManager {
             };
         }
 
+        if (currentTimeDecimal >= CONFIG.SYDNEY_START && currentTimeDecimal < CONFIG.SYDNEY_END) {
+            return {
+                inSession: true,
+                sessionName: 'SYDNEY',
+                nextSession: null,
+                minutesUntilNext: 0
+            };
+        }
+
 
         let nextSession = '';
         let minutesUntilNext = 0;
@@ -1270,6 +1282,9 @@ class TradingSessionManager {
         } else if (currentTimeDecimal < CONFIG.NEWYORK_START) {
             nextSession = 'NEW YORK';
             minutesUntilNext = (CONFIG.NEWYORK_START - currentTimeDecimal) * 60;
+        } else if (currentTimeDecimal < CONFIG.SYDNEY_START) {
+            nextSession = 'SYDNEY';
+            minutesUntilNext = (CONFIG.SYDNEY_START - currentTimeDecimal) * 60;
         } else {
             nextSession = 'TOKYO';
             minutesUntilNext = ((24 - currentTimeDecimal) + CONFIG.TOKYO_START) * 60;
@@ -2307,13 +2322,16 @@ class DerivBot {
         console.log('─'.repeat(80));
         console.log(`🕐 TRADING WINDOWS (GMT+1):`);
         console.log(
-            `   TY TOKYO Session:   ${String(CONFIG.TOKYO_START).padStart(2, '0')}:00 - ${String(CONFIG.TOKYO_END).padStart(2, '0')}:00`
+            `   JY TOKYO Session:   ${String(CONFIG.TOKYO_START).padStart(2, '0')}:00 - ${String(CONFIG.TOKYO_END).padStart(2, '0')}:00`
         );
         console.log(
             `   🇬🇧 London Session:   ${String(CONFIG.LONDON_START).padStart(2, '0')}:00 - ${String(CONFIG.LONDON_END).padStart(2, '0')}:00`
         );
         console.log(
             `   🇺🇸 New York Session: ${String(CONFIG.NEWYORK_START).padStart(2, '0')}:00 - ${String(CONFIG.NEWYORK_END).padStart(2, '0')}:00`
+        );
+        console.log(
+            `   AU New York Session: ${String(CONFIG.SYDNEY_START).padStart(2, '0')}:00 - ${String(CONFIG.SYDNEY_END).padStart(2, '0')}:00`
         );
         console.log(
             `   📊 Current Status: ${TradingSessionManager.getSessionStatusString()}`
@@ -2698,11 +2716,11 @@ class DerivBot {
                 if (
                     allAssetsRecovered &&
                     anyAssetTradedWin &&
-                    currentHours >= CONFIG.NEWYORK_END &&
+                    currentHours >= CONFIG.SYDNEY_END &&
                     currentMinutes >= 30
                 ) {
                     LOGGER.info(
-                        `It's past ${CONFIG.NEWYORK_END}:30 GMT+1, all assets recovered, disconnecting.`
+                        `It's past ${CONFIG.SYDNEY_END}:30 GMT+1, all assets recovered, disconnecting.`
                     );
                     // Send end-of-day summary
                     TelegramService.sendDayEndSummary(TradeHistoryManager.getDateKey());
@@ -2848,9 +2866,9 @@ console.log(
 console.log(
     ` Base Stake: $${CONFIG.STAKE} | Per-asset candle & duration configs`
 );
-console.log(
-    ` 🕐 London: ${CONFIG.LONDON_START}:00-${CONFIG.LONDON_END}:00 | New York: ${CONFIG.NEWYORK_START}:00-${CONFIG.NEWYORK_END}:00 (GMT+1)`
-);
+// console.log(
+//     ` 🕐 London: ${CONFIG.LONDON_START}:00-${CONFIG.LONDON_END}:00 | New York: ${CONFIG.NEWYORK_START}:00-${CONFIG.NEWYORK_END}:00 (GMT+1)`
+// );
 console.log('═'.repeat(80));
 console.log('\n🚀 Initializing (Per-Asset Independent Mode)...\n');
 
