@@ -522,12 +522,21 @@ class TelegramService {
     static async sendMessage(message) {
         if (!CONFIG.TELEGRAM_ENABLED) return;
         try {
+            if (!message || message.length === 0) {
+                LOGGER.error('[TELEGRAM] ❌ Message is empty! Not sending.');
+                console.error('[DEBUG] Empty message received in sendMessage()');
+                return;
+            }
+
             const url = `https://api.telegram.org/bot${CONFIG.TELEGRAM_BOT_TOKEN}/sendMessage`;
             const data = JSON.stringify({
                 chat_id: CONFIG.TELEGRAM_CHAT_ID,
                 text: message,
                 parse_mode: 'HTML'
             });
+
+            console.log(`[DEBUG] Sending Telegram message (${message.length} chars, ${data.length} bytes)`);
+            console.log(`[DEBUG] Message preview: ${message.substring(0, 100)}...`);
 
             const options = {
                 method: 'POST',
@@ -545,20 +554,23 @@ class TelegramService {
                         if (res.statusCode === 200) {
                             resolve(true);
                         } else {
-                            reject(new Error(body));
+                            reject(new Error(`HTTP ${res.statusCode}: ${body}`));
                         }
                     });
                 });
-                req.on('error', error => {
-                    reject(error);
-                });
+                req.on('error', reject);
                 req.write(data);
                 req.end();
+            }).then(() => {
+                LOGGER.info('[TELEGRAM] ✅ Message sent successfully');
+            }).catch(error => {
+                LOGGER.error(`[TELEGRAM] ❌ Send failed: ${error.message}`);
             });
         } catch (error) {
             LOGGER.error(
-                `Failed to send Telegram message: ${error.message}`
+                `[TELEGRAM] ❌ Failed to send message: ${error.message}`
             );
+            console.error('[DEBUG] Exception in sendMessage:', error);
         }
     }
 
@@ -744,16 +756,24 @@ class TelegramService {
     }
 
     static async sendStartupMessage() {
-        const overall = TradeHistoryManager.getOverallStats();
-        const totalDays = TradeHistoryManager.getAllDays().length;
+        try {
+            const overall = TradeHistoryManager.getOverallStats();
+            const totalDays = TradeHistoryManager.getAllDays().length;
 
-        let assetConfigInfo = '';
-        ACTIVE_ASSETS.forEach(symbol => {
-            const ac = getAssetConfig(symbol);
-            assetConfigInfo += `\n  ${symbol}: ${ac.TIMEFRAME_LABEL} candles, Duration: ${ac.DURATION}${ac.DURATION_UNIT}`;
-        });
+            let assetConfigInfo = '';
+            ACTIVE_ASSETS.forEach(symbol => {
+                const ac = getAssetConfig(symbol);
+                assetConfigInfo += `\n  ${symbol}: ${ac.TIMEFRAME_LABEL} candles, Duration: ${ac.DURATION}${ac.DURATION_UNIT}`;
+            });
 
-        const message = `
+            // Validate CONFIG values before using them
+            console.log('[DEBUG] CONFIG Session Values:');
+            console.log(`  TOKYO_START: ${CONFIG.TOKYO_START}, TOKYO_END: ${CONFIG.TOKYO_END}`);
+            console.log(`  LONDON_START: ${CONFIG.LONDON_START}, LONDON_END: ${CONFIG.LONDON_END}`);
+            console.log(`  NEWYORK_START: ${CONFIG.NEWYORK_START}, NEWYORK_END: ${CONFIG.NEWYORK_END}`);
+            console.log(`  SYDNEY_START: ${CONFIG.SYDNEY_START}, SYDNEY_END: ${CONFIG.SYDNEY_END}`);
+
+            const message = `
             🤖 <b>DERIV RISE/FALL BOT STARTED</b>
             Strategy: Fractal Breakout (MT5 Logic)
             Mode: <b>Independent Per-Asset Management</b>
@@ -772,12 +792,26 @@ class TelegramService {
             ├ Overall P/L: $${overall.netPL.toFixed(2)}
             └ Period: ${overall.firstTradeDate || 'N/A'} to ${overall.lastTradeDate || 'N/A'}
 
-            🕐 TOKYO Session: ${CONFIG.TOKYO_START}:00 - ${CONFIG.TOKYO_END}:00 (GMT+1)
-            🕐 London Session: ${CONFIG.LONDON_START}:00 - ${CONFIG.LONDON_END}:00 (GMT+1)
-            🕐 New York Session: ${CONFIG.NEWYORK_START}:00 - ${CONFIG.NEWYORK_END}:00 (GMT+1)
-            🕐 SYDNEY Session: ${CONFIG.SYDNEY_START}:00 - ${CONFIG.SYDNEY_END}:00 (GMT+1)
+            🕐 TOKYO Session: ${CONFIG.TOKYO_START || 'UNDEFINED'}:00 - ${CONFIG.TOKYO_END || 'UNDEFINED'}:00 (GMT+1)
+            🕐 London Session: ${CONFIG.LONDON_START || 'UNDEFINED'}:00 - ${CONFIG.LONDON_END || 'UNDEFINED'}:00 (GMT+1)
+            🕐 New York Session: ${CONFIG.NEWYORK_START || 'UNDEFINED'}:00 - ${CONFIG.NEWYORK_END || 'UNDEFINED'}:00 (GMT+1)
+            🕐 SYDNEY Session: ${CONFIG.SYDNEY_START || 'UNDEFINED'}:00 - ${CONFIG.SYDNEY_END || 'UNDEFINED'}:00 (GMT+1)
         `.trim();
-        await this.sendMessage(message);
+
+            if (!message || message.length === 0) {
+                LOGGER.error('[TELEGRAM] ❌ Message is empty before sending!');
+                return;
+            }
+
+            console.log('[DEBUG] Message preview:');
+            console.log(message.substring(0, 200) + '...');
+            console.log(`[DEBUG] Message length: ${message.length}`);
+
+            await this.sendMessage(message);
+        } catch (error) {
+            LOGGER.error(`[TELEGRAM] Failed to send startup message: ${error.message}`);
+            console.error('[DEBUG] Full error:', error);
+        }
     }
 
     static async sendHourlySummary() {
