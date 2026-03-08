@@ -2331,7 +2331,7 @@ class DerivBot {
             `   🇺🇸 New York Session: ${String(CONFIG.NEWYORK_START).padStart(2, '0')}:00 - ${String(CONFIG.NEWYORK_END).padStart(2, '0')}:00`
         );
         console.log(
-            `   AU New York Session: ${String(CONFIG.SYDNEY_START).padStart(2, '0')}:00 - ${String(CONFIG.SYDNEY_END).padStart(2, '0')}:00`
+            `   AU Sedney Session: ${String(CONFIG.SYDNEY_START).padStart(2, '0')}:00 - ${String(CONFIG.SYDNEY_END).padStart(2, '0')}:00`
         );
         console.log(
             `   📊 Current Status: ${TradingSessionManager.getSessionStatusString()}`
