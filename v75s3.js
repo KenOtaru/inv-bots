@@ -1286,7 +1286,7 @@ function main() {
   if (bot.telegramBot) bot.startTelegramTimer();
 
   // ── Time-based scheduler ─────────────────────────────────────────────────
-  bot.startTimeScheduler();
+  // bot.startTimeScheduler();
 
   // ── Connect — auth → start() fires inside _onAuthorize ──────────────────
   bot.connect();
