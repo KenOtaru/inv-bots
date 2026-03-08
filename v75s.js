@@ -1481,7 +1481,7 @@ function main() {
   if (bot.telegramBot) bot.startTelegramTimer();
 
   // ── Time scheduler (weekend pause + EOD) ─────────────────────────────────
-  bot.startTimeScheduler();
+//   bot.startTimeScheduler();
 
   // ── Auto-start if configured ──────────────────────────────────────────────
   // (start() is also called from _onAuthorize when config.autoStart is true)
