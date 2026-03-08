@@ -2650,23 +2650,23 @@ class DerivBot {
             SessionManager.checkDayChange();
 
             // Weekend check
-            const isWeekend =
-                currentDay === 0 ||
-                (currentDay === 6 && currentHours >= 23) ||
-                (currentDay === 1 && currentHours < 2);
+            // const isWeekend =
+            //     currentDay === 0 ||
+            //     (currentDay === 6 && currentHours >= 23) ||
+            //     (currentDay === 1 && currentHours < 2);
 
-            if (isWeekend) {
-                if (state.session.isActive) {
-                    LOGGER.info(
-                        'Weekend trading suspension. Disconnecting...'
-                    );
-                    TelegramService.sendHourlySummary();
-                    if (this.connection.ws)
-                        this.connection.ws.close();
-                    state.session.isActive = false;
-                }
-                return;
-            }
+            // if (isWeekend) {
+            //     if (state.session.isActive) {
+            //         LOGGER.info(
+            //             'Weekend trading suspension. Disconnecting...'
+            //         );
+            //         TelegramService.sendHourlySummary();
+            //         if (this.connection.ws)
+            //             this.connection.ws.close();
+            //         state.session.isActive = false;
+            //     }
+            //     return;
+            // }
 
             // Daily reconnection at 1:00 AM GMT+1 (to catch TOKYO session start)
             if (
