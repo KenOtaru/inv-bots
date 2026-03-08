@@ -6,7 +6,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'fractal_riseFall00000002-state.json');
+const STATE_FILE = path.join(__dirname, 'fractal_riseFall000002-state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -583,12 +583,12 @@ const CONFIG = {
     // Trade Settings
     MAX_OPEN_POSITIONS: 1,
     TRADE_DELAY: 1000,
-    MARTINGALE_MULTIPLIER: 1.48,
-    MARTINGALE_MULTIPLIER2: 2.2,
-    MARTINGALE_MULTIPLIER3: 2.3,
-    MARTINGALE_MULTIPLIER4: 2.5,
+    MARTINGALE_MULTIPLIER: 2,
+    MARTINGALE_MULTIPLIER2: 2.3,
+    MARTINGALE_MULTIPLIER3: 2.5,
+    MARTINGALE_MULTIPLIER4: 2.3,
     MARTINGALE_MULTIPLIER5: 3,
-    MAX_MARTINGALE_STEPS: 9,
+    MAX_MARTINGALE_STEPS: 7,
     System: 1,
     iDirection: 'RISE',
 
@@ -596,11 +596,11 @@ const CONFIG = {
     // TRADING SESSION WINDOWS (GMT+1 hours)
     // ============================================
     // London Session: 8:00 AM - 9:00 AM GMT+1
-    LONDON_START: 1,
-    LONDON_END: 12,
+    LONDON_START: 8,
+    LONDON_END: 9,
     // New York Session: 1:00 PM - 2:00 PM GMT+1
-    NEWYORK_START: 12,
-    NEWYORK_END: 23,
+    NEWYORK_START: 13,
+    NEWYORK_END: 14,
 
     // Debug
     DEBUG_MODE: true,
@@ -611,7 +611,7 @@ const CONFIG = {
     TELEGRAM_CHAT_ID: '752497117'
 };
 
-let ACTIVE_ASSETS = ['1HZ75V'];
+let ACTIVE_ASSETS = ['R_100'];
 
 // ============================================
 // STATE MANAGEMENT
@@ -1265,88 +1265,88 @@ class ConnectionManager {
             incomingCandle.open_time !== currentOpenTime;
 
         if (isNewCandle) {
-            // const closedCandle = {
-            //     ...assetState.currentFormingCandle
-            // };
-            // closedCandle.epoch =
-            //     closedCandle.open_time + CONFIG.GRANULARITY;
+            const closedCandle = {
+                ...assetState.currentFormingCandle
+            };
+            closedCandle.epoch =
+                closedCandle.open_time + CONFIG.GRANULARITY;
 
-            // if (
-            //     closedCandle.open_time !==
-            //     assetState.lastProcessedCandleOpenTime
-            // ) {
-                // assetState.closedCandles.push(closedCandle);
+            if (
+                closedCandle.open_time !==
+                assetState.lastProcessedCandleOpenTime
+            ) {
+                assetState.closedCandles.push(closedCandle);
 
-                // if (
-                //     assetState.closedCandles.length >
-                //     CONFIG.MAX_CANDLES_STORED
-                // ) {
-                //     assetState.closedCandles =
-                //         assetState.closedCandles.slice(
-                //             -CONFIG.MAX_CANDLES_STORED
-                //         );
-                // }
+                if (
+                    assetState.closedCandles.length >
+                    CONFIG.MAX_CANDLES_STORED
+                ) {
+                    assetState.closedCandles =
+                        assetState.closedCandles.slice(
+                            -CONFIG.MAX_CANDLES_STORED
+                        );
+                }
 
-                // assetState.lastProcessedCandleOpenTime =
-                //     closedCandle.open_time;
+                assetState.lastProcessedCandleOpenTime =
+                    closedCandle.open_time;
 
-                // const closeTime = new Date(
-                //     closedCandle.epoch * 1000
-                // ).toISOString();
-                // const candleType =
-                //     CandleAnalyzer.getCandleDirection(
-                //         closedCandle
-                //     );
-                // const candleEmoji =
-                //     candleType === 'BULLISH'
-                //         ? '🟢'
-                //         : candleType === 'BEARISH'
-                //             ? '🔴'
-                //             : '⚪';
+                const closeTime = new Date(
+                    closedCandle.epoch * 1000
+                ).toISOString();
+                const candleType =
+                    CandleAnalyzer.getCandleDirection(
+                        closedCandle
+                    );
+                const candleEmoji =
+                    candleType === 'BULLISH'
+                        ? '🟢'
+                        : candleType === 'BEARISH'
+                            ? '🔴'
+                            : '⚪';
 
-                // LOGGER.info(
-                //     `${symbol} ${candleEmoji} CANDLE CLOSED [${closeTime}] ${candleType}: O:${closedCandle.open.toFixed(5)} H:${closedCandle.high.toFixed(5)} L:${closedCandle.low.toFixed(5)} C:${closedCandle.close.toFixed(5)}`
-                // );
+                LOGGER.info(
+                    `${symbol} ${candleEmoji} CANDLE CLOSED [${closeTime}] ${candleType}: O:${closedCandle.open.toFixed(5)} H:${closedCandle.high.toFixed(5)} L:${closedCandle.low.toFixed(5)} C:${closedCandle.close.toFixed(5)}`
+                );
 
                 // Update fractal levels
-                // const fractals = TechnicalIndicators.findFractals(assetState.closedCandles);
+                const fractals = TechnicalIndicators.findFractals(assetState.closedCandles);
 
-                // const prevHigh = assetState.lastFractalHigh;
-                // const prevLow = assetState.lastFractalLow;
+                const prevHigh = assetState.lastFractalHigh;
+                const prevLow = assetState.lastFractalLow;
 
-                // if (fractals.fractalHigh !== null) {
-                //     if (fractals.fractalHigh !== assetState.lastFractalHigh) {
-                //         assetState.tradedFractalHigh = null;
-                //         LOGGER.info(
-                //             `${symbol} 🔺 NEW Fractal Resistance: ${fractals.fractalHigh.toFixed(5)} (was ${assetState.lastFractalHigh !== null ? assetState.lastFractalHigh.toFixed(5) : 'N/A'}) — breakout reset`
-                //         );
-                //     }
-                //     assetState.lastFractalHigh = fractals.fractalHigh;
-                // }
+                if (fractals.fractalHigh !== null) {
+                    if (fractals.fractalHigh !== assetState.lastFractalHigh) {
+                        assetState.tradedFractalHigh = null;
+                        LOGGER.info(
+                            `${symbol} 🔺 NEW Fractal Resistance: ${fractals.fractalHigh.toFixed(5)} (was ${assetState.lastFractalHigh !== null ? assetState.lastFractalHigh.toFixed(5) : 'N/A'}) — breakout reset`
+                        );
+                    }
+                    assetState.lastFractalHigh = fractals.fractalHigh;
+                }
 
-                // if (fractals.fractalLow !== null) {
-                //     if (fractals.fractalLow !== assetState.lastFractalLow) {
-                //         assetState.tradedFractalLow = null;
-                //         LOGGER.info(
-                //             `${symbol} 🔻 NEW Fractal Support: ${fractals.fractalLow.toFixed(5)} (was ${assetState.lastFractalLow !== null ? assetState.lastFractalLow.toFixed(5) : 'N/A'}) — breakout reset`
-                //         );
-                //     }
-                //     assetState.lastFractalLow = fractals.fractalLow;
-                // }
+                if (fractals.fractalLow !== null) {
+                    if (fractals.fractalLow !== assetState.lastFractalLow) {
+                        assetState.tradedFractalLow = null;
+                        LOGGER.info(
+                            `${symbol} 🔻 NEW Fractal Support: ${fractals.fractalLow.toFixed(5)} (was ${assetState.lastFractalLow !== null ? assetState.lastFractalLow.toFixed(5) : 'N/A'}) — breakout reset`
+                        );
+                    }
+                    assetState.lastFractalLow = fractals.fractalLow;
+                }
 
-                // if (
-                //     assetState.lastFractalHigh === prevHigh &&
-                //     assetState.lastFractalLow === prevLow
-                // ) {
-                //     LOGGER.debug(
-                //         `${symbol} Fractals unchanged — R: ${assetState.lastFractalHigh !== null ? assetState.lastFractalHigh.toFixed(5) : 'N/A'} | S: ${assetState.lastFractalLow !== null ? assetState.lastFractalLow.toFixed(5) : 'N/A'}`
-                //     );
-                // }
+                if (
+                    assetState.lastFractalHigh === prevHigh &&
+                    assetState.lastFractalLow === prevLow
+                ) {
+                    LOGGER.debug(
+                        `${symbol} Fractals unchanged — R: ${assetState.lastFractalHigh !== null ? assetState.lastFractalHigh.toFixed(5) : 'N/A'} | S: ${assetState.lastFractalLow !== null ? assetState.lastFractalLow.toFixed(5) : 'N/A'}`
+                    );
+                }
 
                 // TRIGGER TRADE ANALYSIS
                 state.canTrade = true;
                 bot.executeNextTrade(symbol, closedCandle);
-            // }
+            }
         }
 
         assetState.currentFormingCandle = incomingCandle;
@@ -1711,16 +1711,16 @@ class DerivBot {
         const support = assetState.lastFractalLow;
         const closePrice = lastClosedCandle.close;
 
-        // if (resistance === null || support === null) {
-        //     LOGGER.info(
-        //         `${tradeSymbol} ⏳ Waiting for fractal levels to form — Resistance: ${resistance !== null ? resistance.toFixed(5) : 'PENDING'} | Support: ${support !== null ? support.toFixed(5) : 'PENDING'}`
-        //     );
-        //     return;
-        // }
+        if (resistance === null || support === null) {
+            LOGGER.info(
+                `${tradeSymbol} ⏳ Waiting for fractal levels to form — Resistance: ${resistance !== null ? resistance.toFixed(5) : 'PENDING'} | Support: ${support !== null ? support.toFixed(5) : 'PENDING'}`
+            );
+            return;
+        }
 
-        // LOGGER.info(
-        //     `${tradeSymbol} 📐 Fractal Levels — Resistance: ${resistance.toFixed(5)} | Support: ${support.toFixed(5)} | Close: ${closePrice.toFixed(5)}`
-        // );
+        LOGGER.info(
+            `${tradeSymbol} 📐 Fractal Levels — Resistance: ${resistance.toFixed(5)} | Support: ${support.toFixed(5)} | Close: ${closePrice.toFixed(5)}`
+        );
 
         // =============================================
         // DETERMINE TRADE DIRECTION
@@ -1744,29 +1744,29 @@ class DerivBot {
                 `🔄 RECOVERY MODE: ${signalReason}`
             );
         } else {
-            // if (closePrice > resistance) {
-                // if (assetState.tradedFractalHigh === resistance) {
-                //     LOGGER.debug(
-                //         `${tradeSymbol} ⏭️ Breakout UP already traded at Resistance ${resistance.toFixed(5)} — waiting for new fractal level`
-                //     );
-                // } else {
+            if (closePrice > resistance) {
+                if (assetState.tradedFractalHigh === resistance) {
+                    LOGGER.debug(
+                        `${tradeSymbol} ⏭️ Breakout UP already traded at Resistance ${resistance.toFixed(5)} — waiting for new fractal level`
+                    );
+                } else {
                     direction = 'CALLE';
                     signalReason = `BREAKOUT UP — Close ${closePrice.toFixed(5)} > Resistance ${resistance.toFixed(5)} (diff: +${(closePrice - resistance).toFixed(5)})`;
-                // }
-            // } else if (closePrice < support) {
-            //     if (assetState.tradedFractalLow === support) {
-            //         LOGGER.debug(
-            //             `${tradeSymbol} ⏭️ Breakout DOWN already traded at Support ${support.toFixed(5)} — waiting for new fractal level`
-            //         );
-            //     } else {
-            //         direction = 'PUTE';
-            //         signalReason = `BREAKOUT DOWN — Close ${closePrice.toFixed(5)} < Support ${support.toFixed(5)} (diff: -${(support - closePrice).toFixed(5)})`;
-            //     }
-            // } else {
-            //     LOGGER.info(
-            //         `${tradeSymbol} ⏸️ No breakout — Close ${closePrice.toFixed(5)} is between Support ${support.toFixed(5)} and Resistance ${resistance.toFixed(5)}`
-            //     );
-            // }
+                }
+            } else if (closePrice < support) {
+                if (assetState.tradedFractalLow === support) {
+                    LOGGER.debug(
+                        `${tradeSymbol} ⏭️ Breakout DOWN already traded at Support ${support.toFixed(5)} — waiting for new fractal level`
+                    );
+                } else {
+                    direction = 'PUTE';
+                    signalReason = `BREAKOUT DOWN — Close ${closePrice.toFixed(5)} < Support ${support.toFixed(5)} (diff: -${(support - closePrice).toFixed(5)})`;
+                }
+            } else {
+                LOGGER.info(
+                    `${tradeSymbol} ⏸️ No breakout — Close ${closePrice.toFixed(5)} is between Support ${support.toFixed(5)} and Resistance ${resistance.toFixed(5)}`
+                );
+            }
 
             if (direction) {
                 LOGGER.trade(`⚡ FRACTAL SIGNAL: ${signalReason}`);
