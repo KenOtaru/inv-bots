@@ -69,7 +69,7 @@ const STATE_MAX_AGE_MINUTES = 30;     // discard state files older than this
 
 const DEFAULT_CONFIG = {
   // ── Deriv API ──────────────────────────────────────────────────────────────
-  apiToken:             '',
+  apiToken:             'rgNedekYXvCaPeP',
   appId:                '1089',
 
   // ── Symbol / contract ─────────────────────────────────────────────────────
@@ -88,7 +88,7 @@ const DEFAULT_CONFIG = {
   extraLevelMultipliers: [2.2, 2.3, 2.5],        // custom multiplier per extra level e.g. [1.48, 1.6, 1.8]
 
   // ── Auto-compounding ──────────────────────────────────────────────────────
-  autoCompounding:      false,
+  autoCompounding:      true,
   compoundPercentage:   0.35,          // % of investmentRemaining used as base stake
 
   // ── Risk management ───────────────────────────────────────────────────────
