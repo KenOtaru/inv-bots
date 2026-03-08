@@ -6,8 +6,8 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'fractal_riseFallM0000011-state.json');
-const HISTORY_FILE = path.join(__dirname, 'fractal_riseFallM0000011-history.json');
+const STATE_FILE = path.join(__dirname, 'fractal_riseFallM0000012-state.json');
+const HISTORY_FILE = path.join(__dirname, 'fractal_riseFallM0000012-history.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
