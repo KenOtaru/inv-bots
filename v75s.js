@@ -28,9 +28,9 @@ const WebSocket    = require('ws');
 const TelegramBot  = require('node-telegram-bot-api');
 const fs           = require('fs');
 const path         = require('path');
-// const http         = require('http');
-// const url          = require('url');
-// const crypto       = require('crypto');
+const http         = require('http');
+const url          = require('url');
+const crypto       = require('crypto');
 
 // ══════════════════════════════════════════════════════════════════════════════
 // CONFIGURATION
@@ -67,8 +67,8 @@ const DEFAULT_CONFIG = {
   takeProfit:            10000,              // stop bot if total P&L >= $takeProfit
 
   // Telegram
-  telegramToken:         '',
-  telegramChatId:        '',
+  telegramToken:         '8343520432:AAGNxzjnljOEhfv_rE-y-F98fUDPmrqZuXc',
+  telegramChatId:        '752497117',
   telegramEnabled:       true,
 
   // HTTP dashboard
@@ -1098,54 +1098,54 @@ class V75GridBot {
 // MINIMAL WEBSOCKET SERVER (for browser push updates)
 // ══════════════════════════════════════════════════════════════════════════════
 
-// class WSServer {
-//   constructor(httpServer) {
-//     this.clients = new Set();
-//     httpServer.on('upgrade', (req, sock, head) => this._handleUpgrade(req, sock, head));
-//   }
+class WSServer {
+  constructor(httpServer) {
+    this.clients = new Set();
+    httpServer.on('upgrade', (req, sock, head) => this._handleUpgrade(req, sock, head));
+  }
 
-//   _handleUpgrade(req, sock) {
-//     const key    = req.headers['sec-websocket-key'];
-//     const accept = crypto.createHash('sha1')
-//       .update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11')
-//       .digest('base64');
+  _handleUpgrade(req, sock) {
+    const key    = req.headers['sec-websocket-key'];
+    const accept = crypto.createHash('sha1')
+      .update(key + '258EAFA5-E914-47DA-95CA-C5AB0DC85B11')
+      .digest('base64');
 
-//     sock.write(
-//       'HTTP/1.1 101 Switching Protocols\r\n' +
-//       'Upgrade: websocket\r\nConnection: Upgrade\r\n' +
-//       `Sec-WebSocket-Accept: ${accept}\r\n\r\n`
-//     );
+    sock.write(
+      'HTTP/1.1 101 Switching Protocols\r\n' +
+      'Upgrade: websocket\r\nConnection: Upgrade\r\n' +
+      `Sec-WebSocket-Accept: ${accept}\r\n\r\n`
+    );
 
-//     const client = { sock, buffer: Buffer.alloc(0) };
-//     this.clients.add(client);
-//     sock.on('data',  (d) => this._onData(client, d));
-//     sock.on('close', ()  => this.clients.delete(client));
-//     sock.on('error', ()  => { try { sock.destroy(); } catch (_) {} this.clients.delete(client); });
-//   }
+    const client = { sock, buffer: Buffer.alloc(0) };
+    this.clients.add(client);
+    sock.on('data',  (d) => this._onData(client, d));
+    sock.on('close', ()  => this.clients.delete(client));
+    sock.on('error', ()  => { try { sock.destroy(); } catch (_) {} this.clients.delete(client); });
+  }
 
-//   _onData(client, chunk) {
-//     client.buffer = Buffer.concat([client.buffer, chunk]);
-//     while (client.buffer.length >= 2) {
-//       const b1 = client.buffer[1]; const mask = (b1 & 0x80) !== 0; let plen = b1 & 0x7f; let hlen = 2 + (mask ? 4 : 0);
-//       if (plen === 126) { if (client.buffer.length < 4) break; plen = client.buffer.readUInt16BE(2); hlen = 4 + (mask ? 4 : 0); }
-//       if (client.buffer.length < hlen + plen) break;
-//       client.buffer = client.buffer.slice(hlen + plen);
-//     }
-//   }
+  _onData(client, chunk) {
+    client.buffer = Buffer.concat([client.buffer, chunk]);
+    while (client.buffer.length >= 2) {
+      const b1 = client.buffer[1]; const mask = (b1 & 0x80) !== 0; let plen = b1 & 0x7f; let hlen = 2 + (mask ? 4 : 0);
+      if (plen === 126) { if (client.buffer.length < 4) break; plen = client.buffer.readUInt16BE(2); hlen = 4 + (mask ? 4 : 0); }
+      if (client.buffer.length < hlen + plen) break;
+      client.buffer = client.buffer.slice(hlen + plen);
+    }
+  }
 
-//   broadcast(obj) {
-//     const payload = Buffer.from(JSON.stringify(obj));
-//     const len     = payload.length;
-//     let   header;
-//     if (len < 126)       { header = Buffer.from([0x81, len]); }
-//     else if (len < 65536){ header = Buffer.alloc(4); header[0]=0x81; header[1]=126; header.writeUInt16BE(len,2); }
-//     else                 { header = Buffer.alloc(10); header[0]=0x81; header[1]=127; header.writeBigUInt64BE(BigInt(len),2); }
-//     const frame = Buffer.concat([header, payload]);
-//     for (const c of this.clients) {
-//       try { c.sock.write(frame); } catch (_) { this.clients.delete(c); }
-//     }
-//   }
-// }
+  broadcast(obj) {
+    const payload = Buffer.from(JSON.stringify(obj));
+    const len     = payload.length;
+    let   header;
+    if (len < 126)       { header = Buffer.from([0x81, len]); }
+    else if (len < 65536){ header = Buffer.alloc(4); header[0]=0x81; header[1]=126; header.writeUInt16BE(len,2); }
+    else                 { header = Buffer.alloc(10); header[0]=0x81; header[1]=127; header.writeBigUInt64BE(BigInt(len),2); }
+    const frame = Buffer.concat([header, payload]);
+    for (const c of this.clients) {
+      try { c.sock.write(frame); } catch (_) { this.clients.delete(c); }
+    }
+  }
+}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // HTTP API HANDLERS
@@ -1717,47 +1717,47 @@ function main() {
   const bot = new V75GridBot(config);
 
   // ── HTTP server ────────────────────────────────────────────────────────────
-//   const server = http.createServer((req, res) => {
-//     const parsed   = url.parse(req.url, true);
-//     const pathname = parsed.pathname;
+  const server = http.createServer((req, res) => {
+    const parsed   = url.parse(req.url, true);
+    const pathname = parsed.pathname;
 
-//     res.setHeader('Access-Control-Allow-Origin',  '*');
-//     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-//     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-//     if (req.method === 'OPTIONS') { res.writeHead(200); res.end(); return; }
+    res.setHeader('Access-Control-Allow-Origin',  '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    if (req.method === 'OPTIONS') { res.writeHead(200); res.end(); return; }
 
-//     if (req.method === 'GET' && pathname === '/') {
-//       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-//       res.end(buildUI());
-//       return;
-//     }
-//     if (pathname.startsWith('/api/')) {
-//       handleAPI(req, res, parsed, bot);
-//       return;
-//     }
-//     res.writeHead(404); res.end('Not Found');
-//   });
+    if (req.method === 'GET' && pathname === '/') {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(buildUI());
+      return;
+    }
+    if (pathname.startsWith('/api/')) {
+      handleAPI(req, res, parsed, bot);
+      return;
+    }
+    res.writeHead(404); res.end('Not Found');
+  });
 
-  // ── WebSocket push server (browser live updates) ───────────────────────────
-//   const wsServer = new WSServer(server);
-//   bot.on((ev) => { wsServer.broadcast({ type: ev.type, state: bot.snapshot() }); });
+//   ── WebSocket push server (browser live updates) ───────────────────────────
+  const wsServer = new WSServer(server);
+  bot.on((ev) => { wsServer.broadcast({ type: ev.type, state: bot.snapshot() }); });
 
-  // ── HTTP server listen ─────────────────────────────────────────────────────
-//   const port = config.httpPort || 3000;
-//   server.listen(port, '0.0.0.0', () => {
-//     console.log(`✅  Web UI    : http://localhost:${port}`);
-//     console.log(`✅  REST API  : http://localhost:${port}/api/`);
-//     console.log(`\nAPI Endpoints:`);
-//     console.log(`  GET  /api/state           — Full engine snapshot`);
-//     console.log(`  POST /api/connect         — Connect & authorize  { apiToken }`);
-//     console.log(`  POST /api/disconnect      — Disconnect`);
-//     console.log(`  POST /api/start           — Start bot`);
-//     console.log(`  POST /api/stop            — Stop gracefully`);
-//     console.log(`  POST /api/emergency-stop  — Emergency stop`);
-//     console.log(`  POST /api/config          — Update any config key`);
-//     console.log(`\n⚠️  Open http://localhost:${port} in your browser`);
-//     console.log('⚠️  Trading involves risk. For educational purposes only.\n');
-//   });
+//   ── HTTP server listen ─────────────────────────────────────────────────────
+  const port = config.httpPort || 3000;
+  server.listen(port, '0.0.0.0', () => {
+    console.log(`✅  Web UI    : http://localhost:${port}`);
+    console.log(`✅  REST API  : http://localhost:${port}/api/`);
+    console.log(`\nAPI Endpoints:`);
+    console.log(`  GET  /api/state           — Full engine snapshot`);
+    console.log(`  POST /api/connect         — Connect & authorize  { apiToken }`);
+    console.log(`  POST /api/disconnect      — Disconnect`);
+    console.log(`  POST /api/start           — Start bot`);
+    console.log(`  POST /api/stop            — Stop gracefully`);
+    console.log(`  POST /api/emergency-stop  — Emergency stop`);
+    console.log(`  POST /api/config          — Update any config key`);
+    console.log(`\n⚠️  Open http://localhost:${port} in your browser`);
+    console.log('⚠️  Trading involves risk. For educational purposes only.\n');
+  });
 
   // ── Auto-connect if token is already stored ────────────────────────────────
   if (config.apiToken) {
