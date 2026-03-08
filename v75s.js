@@ -101,7 +101,7 @@ const DEFAULT_CONFIG = {
   telegramEnabled:      true,
 
   // ── Console UI ────────────────────────────────────────────────────────────
-  consoleRefreshMs:     1000,       // how often to redraw the live stats bar
+  consoleRefreshMs:     180000,       // how often to redraw the live stats bar
   logHistoryMax:        200,        // keep last N log lines in memory
 };
 
