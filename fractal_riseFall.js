@@ -1265,88 +1265,88 @@ class ConnectionManager {
             incomingCandle.open_time !== currentOpenTime;
 
         if (isNewCandle) {
-            const closedCandle = {
-                ...assetState.currentFormingCandle
-            };
-            closedCandle.epoch =
-                closedCandle.open_time + CONFIG.GRANULARITY;
+            // const closedCandle = {
+            //     ...assetState.currentFormingCandle
+            // };
+            // closedCandle.epoch =
+            //     closedCandle.open_time + CONFIG.GRANULARITY;
 
-            if (
-                closedCandle.open_time !==
-                assetState.lastProcessedCandleOpenTime
-            ) {
-                assetState.closedCandles.push(closedCandle);
+            // if (
+            //     closedCandle.open_time !==
+            //     assetState.lastProcessedCandleOpenTime
+            // ) {
+                // assetState.closedCandles.push(closedCandle);
 
-                if (
-                    assetState.closedCandles.length >
-                    CONFIG.MAX_CANDLES_STORED
-                ) {
-                    assetState.closedCandles =
-                        assetState.closedCandles.slice(
-                            -CONFIG.MAX_CANDLES_STORED
-                        );
-                }
+                // if (
+                //     assetState.closedCandles.length >
+                //     CONFIG.MAX_CANDLES_STORED
+                // ) {
+                //     assetState.closedCandles =
+                //         assetState.closedCandles.slice(
+                //             -CONFIG.MAX_CANDLES_STORED
+                //         );
+                // }
 
-                assetState.lastProcessedCandleOpenTime =
-                    closedCandle.open_time;
+                // assetState.lastProcessedCandleOpenTime =
+                //     closedCandle.open_time;
 
-                const closeTime = new Date(
-                    closedCandle.epoch * 1000
-                ).toISOString();
-                const candleType =
-                    CandleAnalyzer.getCandleDirection(
-                        closedCandle
-                    );
-                const candleEmoji =
-                    candleType === 'BULLISH'
-                        ? '🟢'
-                        : candleType === 'BEARISH'
-                            ? '🔴'
-                            : '⚪';
+                // const closeTime = new Date(
+                //     closedCandle.epoch * 1000
+                // ).toISOString();
+                // const candleType =
+                //     CandleAnalyzer.getCandleDirection(
+                //         closedCandle
+                //     );
+                // const candleEmoji =
+                //     candleType === 'BULLISH'
+                //         ? '🟢'
+                //         : candleType === 'BEARISH'
+                //             ? '🔴'
+                //             : '⚪';
 
-                LOGGER.info(
-                    `${symbol} ${candleEmoji} CANDLE CLOSED [${closeTime}] ${candleType}: O:${closedCandle.open.toFixed(5)} H:${closedCandle.high.toFixed(5)} L:${closedCandle.low.toFixed(5)} C:${closedCandle.close.toFixed(5)}`
-                );
+                // LOGGER.info(
+                //     `${symbol} ${candleEmoji} CANDLE CLOSED [${closeTime}] ${candleType}: O:${closedCandle.open.toFixed(5)} H:${closedCandle.high.toFixed(5)} L:${closedCandle.low.toFixed(5)} C:${closedCandle.close.toFixed(5)}`
+                // );
 
                 // Update fractal levels
-                const fractals = TechnicalIndicators.findFractals(assetState.closedCandles);
+                // const fractals = TechnicalIndicators.findFractals(assetState.closedCandles);
 
-                const prevHigh = assetState.lastFractalHigh;
-                const prevLow = assetState.lastFractalLow;
+                // const prevHigh = assetState.lastFractalHigh;
+                // const prevLow = assetState.lastFractalLow;
 
-                if (fractals.fractalHigh !== null) {
-                    if (fractals.fractalHigh !== assetState.lastFractalHigh) {
-                        assetState.tradedFractalHigh = null;
-                        LOGGER.info(
-                            `${symbol} 🔺 NEW Fractal Resistance: ${fractals.fractalHigh.toFixed(5)} (was ${assetState.lastFractalHigh !== null ? assetState.lastFractalHigh.toFixed(5) : 'N/A'}) — breakout reset`
-                        );
-                    }
-                    assetState.lastFractalHigh = fractals.fractalHigh;
-                }
+                // if (fractals.fractalHigh !== null) {
+                //     if (fractals.fractalHigh !== assetState.lastFractalHigh) {
+                //         assetState.tradedFractalHigh = null;
+                //         LOGGER.info(
+                //             `${symbol} 🔺 NEW Fractal Resistance: ${fractals.fractalHigh.toFixed(5)} (was ${assetState.lastFractalHigh !== null ? assetState.lastFractalHigh.toFixed(5) : 'N/A'}) — breakout reset`
+                //         );
+                //     }
+                //     assetState.lastFractalHigh = fractals.fractalHigh;
+                // }
 
-                if (fractals.fractalLow !== null) {
-                    if (fractals.fractalLow !== assetState.lastFractalLow) {
-                        assetState.tradedFractalLow = null;
-                        LOGGER.info(
-                            `${symbol} 🔻 NEW Fractal Support: ${fractals.fractalLow.toFixed(5)} (was ${assetState.lastFractalLow !== null ? assetState.lastFractalLow.toFixed(5) : 'N/A'}) — breakout reset`
-                        );
-                    }
-                    assetState.lastFractalLow = fractals.fractalLow;
-                }
+                // if (fractals.fractalLow !== null) {
+                //     if (fractals.fractalLow !== assetState.lastFractalLow) {
+                //         assetState.tradedFractalLow = null;
+                //         LOGGER.info(
+                //             `${symbol} 🔻 NEW Fractal Support: ${fractals.fractalLow.toFixed(5)} (was ${assetState.lastFractalLow !== null ? assetState.lastFractalLow.toFixed(5) : 'N/A'}) — breakout reset`
+                //         );
+                //     }
+                //     assetState.lastFractalLow = fractals.fractalLow;
+                // }
 
-                if (
-                    assetState.lastFractalHigh === prevHigh &&
-                    assetState.lastFractalLow === prevLow
-                ) {
-                    LOGGER.debug(
-                        `${symbol} Fractals unchanged — R: ${assetState.lastFractalHigh !== null ? assetState.lastFractalHigh.toFixed(5) : 'N/A'} | S: ${assetState.lastFractalLow !== null ? assetState.lastFractalLow.toFixed(5) : 'N/A'}`
-                    );
-                }
+                // if (
+                //     assetState.lastFractalHigh === prevHigh &&
+                //     assetState.lastFractalLow === prevLow
+                // ) {
+                //     LOGGER.debug(
+                //         `${symbol} Fractals unchanged — R: ${assetState.lastFractalHigh !== null ? assetState.lastFractalHigh.toFixed(5) : 'N/A'} | S: ${assetState.lastFractalLow !== null ? assetState.lastFractalLow.toFixed(5) : 'N/A'}`
+                //     );
+                // }
 
                 // TRIGGER TRADE ANALYSIS
                 state.canTrade = true;
                 bot.executeNextTrade(symbol, closedCandle);
-            }
+            // }
         }
 
         assetState.currentFormingCandle = incomingCandle;
