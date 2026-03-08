@@ -57,7 +57,7 @@ const DEFAULT_CONFIG = {
 // FILE PATHS
 // ══════════════════════════════════════════════════════════════════════════════
 
-const STATE_FILE          = path.join(__dirname, 'v75-grid-state001.json');
+const STATE_FILE          = path.join(__dirname, 'v75-grid-state0001.json');
 const STATE_SAVE_INTERVAL = 5000;   // 5 s
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -144,7 +144,7 @@ class V75GridBot {
     this.lastDataTime      = Date.now();
     this.pingIntervalMs    = 20000;
     this.pongTimeoutMs     = 10000;
-    this.dataTimeoutMs     = 60000;
+    this.dataTimeoutMs     = 120000;  // 2 min — V75 subscribe stream can be quiet between updates
 
     // ── Message queue ────────────────────────────────────────────────────────
     this.messageQueue = [];
@@ -176,8 +176,9 @@ class V75GridBot {
     this.totalRecovered        = 0;
 
     // ── Session control ──────────────────────────────────────────────────────
-    this.endOfDay   = false;
-    this.isWinTrade = false;
+    this.endOfDay      = false;
+    this.isWinTrade    = false;
+    this.isFirstConnect = true;   // false after first successful authorize
 
     // ── Hourly Telegram stats ─────────────────────────────────────────────────
     this.hourlyStats = { trades: 0, wins: 0, losses: 0, pnl: 0, lastHour: new Date().getHours() };
@@ -353,7 +354,9 @@ class V75GridBot {
     this.pingInterval = setInterval(() => {
       if (this.connected && this.ws && this.ws.readyState === WebSocket.OPEN) {
         this.ws.ping();
-        this.pongTimeout = setTimeout(() => {
+        // Treat sending a ping as proof the socket is alive — resets the data timeout
+        this.lastDataTime = Date.now();
+        this.pongTimeout  = setTimeout(() => {
           if (Date.now() - this.lastPongTime > this.pongTimeoutMs) {
             this.log('No pong received — connection may be dead', 'warning');
           }
@@ -391,8 +394,12 @@ class V75GridBot {
 
     if (this.isReconnecting) return;
 
-    this.connected = false;
-    this.wsReady   = false;
+    this.connected        = false;
+    this.wsReady          = false;
+    // Clear stale trade lock — the contract is gone with the dead connection;
+    // we'll place a fresh trade once we reconnect and resume.
+    this.tradeInProgress  = false;
+    this.pendingTradeInfo = null;
     this._stopMonitor();
     StatePersistence.save(this);
 
@@ -501,14 +508,37 @@ class V75GridBot {
     this._send({ balance: 1, subscribe: 1 });
     this._processQueue();
 
-    this._sendTelegram(
-      `✅ <b>V75 Grid Bot Connected</b>\n` +
-      `Account: ${this.accountId}\n` +
-      `Balance: ${this.currency} ${this.balance.toFixed(2)}`
-    );
+    if (this.isFirstConnect) {
+      // ── First ever connection: fresh start ─────────────────────────────────
+      this.isFirstConnect = false;
+      this._sendTelegram(
+        `✅ <b>V75 Grid Bot Connected</b>\n` +
+        `Account: ${this.accountId}\n` +
+        `Balance: ${this.currency} ${this.balance.toFixed(2)}`
+      );
+      setTimeout(() => { if (!this.running) this.start(); }, 500);
 
-    // Auto-start trading as soon as we're authorized
-    setTimeout(() => { if (!this.running) this.start(); }, 500);
+    } else {
+      // ── Reconnection: resume trading from where we left off ────────────────
+      this.log(
+        `🔄 Reconnected — resuming | L${this.currentGridLevel} | ` +
+        `${this.currentDirection === 'CALLE' ? 'HIGHER' : 'LOWER'} | ` +
+        `Investment: $${this.investmentRemaining.toFixed(2)}`,
+        'success'
+      );
+      this._sendTelegram(
+        `🔄 <b>Reconnected — Resuming Trading</b>\n` +
+        `Account: ${this.accountId} | Balance: ${this.currency} ${this.balance.toFixed(2)}\n` +
+        `Grid Level: ${this.currentGridLevel} | Next: ${this.currentDirection === 'CALLE' ? 'HIGHER' : 'LOWER'} @ $${this.calculateStake(this.currentGridLevel).toFixed(2)}\n` +
+        `Investment remaining: $${this.investmentRemaining.toFixed(2)}`
+      );
+      // Resume: clear any stale trade lock from the dropped connection
+      this.tradeInProgress  = false;
+      this.pendingTradeInfo = null;
+      if (this.running) {
+        setTimeout(() => { if (this.running && !this.tradeInProgress) this._placeTrade(); }, 1000);
+      }
+    }
   }
 
   // ── balance ───────────────────────────────────────────────────────────────
@@ -774,6 +804,7 @@ class V75GridBot {
     this.pendingTradeInfo      = null;
     this.currentContractId     = null;
     this.isWinTrade            = false;
+    this.reconnectAttempts     = 0;   // fresh reconnect budget for this session
 
     this.log('🚀 V75 Grid Martingale Bot STARTED!', 'success');
     this.log(

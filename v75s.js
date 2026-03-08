@@ -42,7 +42,7 @@ const STATE_SAVE_INTERVAL = 5000;   // 5 seconds
 
 const DEFAULT_CONFIG = {
   // Deriv API
-  apiToken: 'hsj0tA0XJoIzJG5',
+  apiToken: 'DMylfkyce6VyZt7',
   appId: '1089',
 
   // Strategy — core
