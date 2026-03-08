@@ -1086,8 +1086,8 @@ const CONFIG = {
     TOKYO_END: 5,
     LONDON_START: 10,
     LONDON_END: 11,
-    NEWYORK_START: 4,
-    NEWYORK_END: 5,
+    NEWYORK_START: 16,
+    NEWYORK_END: 17,
     SYDNEY_START: 23,
     SYDNEY_END: 0,
 
@@ -1260,13 +1260,27 @@ class TradingSessionManager {
             };
         }
 
-        if (currentTimeDecimal >= CONFIG.SYDNEY_START && currentTimeDecimal < CONFIG.SYDNEY_END) {
-            return {
-                inSession: true,
-                sessionName: 'SYDNEY',
-                nextSession: null,
-                minutesUntilNext: 0
-            };
+        // SYDNEY is overnight (23:00 - 00:00), so use OR logic for START > END
+        if (CONFIG.SYDNEY_END < CONFIG.SYDNEY_START) {
+            // Overnight session: >= 23 OR < 0
+            if (currentTimeDecimal >= CONFIG.SYDNEY_START || currentTimeDecimal < CONFIG.SYDNEY_END) {
+                return {
+                    inSession: true,
+                    sessionName: 'SYDNEY',
+                    nextSession: null,
+                    minutesUntilNext: 0
+                };
+            }
+        } else {
+            // Normal session: 23 < 24 (not applicable but keep for safety)
+            if (currentTimeDecimal >= CONFIG.SYDNEY_START && currentTimeDecimal < CONFIG.SYDNEY_END) {
+                return {
+                    inSession: true,
+                    sessionName: 'SYDNEY',
+                    nextSession: null,
+                    minutesUntilNext: 0
+                };
+            }
         }
 
 
