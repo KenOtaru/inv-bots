@@ -2493,11 +2493,11 @@ class DerivBot {
         if (isRecoveryMode) {
             // Recovery: alternate direction from the previous losing trade ON THIS ASSET
             if (assetState.lastTradeDirection === 'CALLE') {
-                symbol === 'R_50' ? direction = 'CALLE' : direction = 'PUTE';
+                symbol === ('R_25' || 'R_50' || 'stpRNG2' || 'stpRNG3') ? direction = 'CALLE' : direction = 'PUTE';
                 signalReason =
                     `Recovery (${symbol} Prev LOSS on RISE → now FALL)`;
             } else {
-                symbol === 'R_50' ? direction = 'PUTE' : direction = 'CALLE';
+                symbol === ('R_25' || 'R_50' || 'stpRNG2' || 'stpRNG3') ? direction = 'PUTE' : direction = 'CALLE';
                 signalReason =
                     `Recovery (${symbol} Prev LOSS on FALL → now RISE)`;
             }
