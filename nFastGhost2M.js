@@ -53,7 +53,7 @@ try {
     // node-telegram-bot-api not installed
 }
 
-const STATE_FILE = path.join(__dirname, 'nFastGhostMMulti000006-state.json');
+const STATE_FILE = path.join(__dirname, 'nFastGhostMMulti0000001-state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================================================
@@ -1755,7 +1755,7 @@ class MultiAssetGhostBot {
             // Weekend logic: Saturday 11pm to Monday 2am GMT+1 -> Disconnect and stay disconnected
             const isWeekend = (currentDay === 0) || // Sunday
                 (currentDay === 6 && currentHours >= 23) || // Saturday after 11pm
-                (currentDay === 1 && currentHours < 8);    // Monday before 8am
+                (currentDay === 1 && currentHours < 7);    // Monday before 8am
 
             if (isWeekend) {
                 if (!this.endOfDay) {
@@ -1767,7 +1767,7 @@ class MultiAssetGhostBot {
                 return; // Prevent any reconnection logic during the weekend
             }
 
-            if (this.endOfDay && currentHours === 8 && currentMinutes >= 0) {
+            if (this.endOfDay && currentHours === 7 && currentMinutes >= 0) {
                 console.log("It's 8:00 AM GMT+1, reconnecting the bot.");
                 this.resetDailyStats();
                 this.endOfDay = false;
@@ -1775,8 +1775,8 @@ class MultiAssetGhostBot {
             }
 
             if (this.isWinTrade && !this.endOfDay) {
-                if (currentHours >= 17 && currentMinutes >= 0) {
-                    console.log("It's past 5:00 PM GMT+1 after a win trade, disconnecting the bot.");
+                if (currentHours >= 19 && currentMinutes >= 0) {
+                    console.log("It's past 7:00 PM GMT+1 after a win trade, disconnecting the bot.");
                     this.sendHourlySummary();
                     this.disconnect();
                     this.endOfDay = true;
