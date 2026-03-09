@@ -649,6 +649,7 @@ class V75GridBot {
     this.candlesLoaded                = true;
 
     LOGGER.success(`Loaded ${candles.length} historical candles for ${symbol} ✅`);
+    this._placeTrade();
   }
 
   // ── Live OHLC tick — NEW CANDLE CLOSE DETECTION ──────────────────────────
@@ -709,7 +710,7 @@ class V75GridBot {
         );
 
         // ── TRADE GATE: new candle closed → check if we should trade ────────
-        this._onCandleClose(closedCandle);
+        // this._onCandleClose(closedCandle);
       }
     }
 
@@ -748,13 +749,13 @@ class V75GridBot {
       return;
     }
 
-    // if (this.waitingForCandle) {
-    //   LOGGER.info(`🎯 Candle gate opened — placing trade now`);
-    //   this.waitingForCandle = false;
-    //   this._placeTrade();
-    // } else {
+    if (this.waitingForCandle) {
+      LOGGER.info(`🎯 Candle gate opened — placing trade now`);
+      this.waitingForCandle = false;
+      this._placeTrade();
+    } else {
       LOGGER.info(`Candle closed — not waiting (recovery fires immediately after result)`);
-    // }
+    }
   }
 
   // ══════════════════════════════════════════════════════════════════════════
