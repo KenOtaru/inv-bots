@@ -27,10 +27,10 @@ const DEFAULT_CONFIG = {
   investmentAmount: 100,
 
   martingaleMultiplier:  1.48,
-  maxMartingaleLevel:    4,
+  maxMartingaleLevel:    3,//6
   afterMaxLoss:          'continue',
-  continueExtraLevels:   5,
-  extraLevelMultipliers: [2.0, 2.1, 2.2, 2.2, 2.3], //  [2.2, 2.3, 2.5] used only if afterMaxLoss is 'continue'
+  continueExtraLevels:   6,//3
+  extraLevelMultipliers: [2.0, 2.0, 2.1, 2.1, 2.2, 2.3], //  [2.2, 2.3, 2.5] used only if afterMaxLoss is 'continue'
 
   autoCompounding:    true,
   compoundPercentage: 0.35,
