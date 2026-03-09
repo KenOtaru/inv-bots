@@ -24,7 +24,7 @@ const DEFAULT_CONFIG = {
   symbol:        'stpRNG5',
   tickDuration:  5,
   initialStake:  0.35,
-  investmentAmount: 500,
+  investmentAmount: 100,
 
   martingaleMultiplier:  1.48,
   maxMartingaleLevel:    3,//6
@@ -35,7 +35,7 @@ const DEFAULT_CONFIG = {
   autoCompounding:    true,
   compoundPercentage: 0.35,
 
-  stopLoss:   500,
+  stopLoss:   100,
   takeProfit: 10000,
 
   telegramToken:   '8343520432:AAGNxzjnljOEhfv_rE-y-F98fUDPmrqZuXc',
