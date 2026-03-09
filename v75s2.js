@@ -27,7 +27,7 @@ const DEFAULT_CONFIG = {
   appId:    '1089',
 
   // Strategy — core
-  symbol:        '1HZ75V',
+  symbol:        'stpRNG',// 1HZ75V
   tickDuration:  5,           // 5 ticks per contract
   initialStake:  0.35,        // base stake ($)
   investmentAmount: 100,      // investment pool ($)
