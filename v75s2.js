@@ -1063,6 +1063,9 @@ class V75GridBot {
       `  W/L: ${this.wins}/${this.losses}\n` +
       `  Session P&L: ${(this.totalProfit >= 0 ? '+' : '')}$${this.totalProfit.toFixed(2)}\n` +
       `  Investment: $${this.investmentRemaining.toFixed(2)} / $${this.investmentStartAmount.toFixed(2)}\n` +
+      `  Total Recovered: $${this.totalRecovered.toFixed(2)}\n` +
+      `  Max Win Streak: ${this.maxWinStreak}\n` +
+      `  Max Loss Streak: ${this.maxLossStreak}\n` +
       `  Grid Level: ${this.currentGridLevel}\n\n` +
       `⏰ ${new Date().toLocaleString()}`
     );
