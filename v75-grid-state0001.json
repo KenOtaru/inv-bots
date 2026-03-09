@@ -1,0 +1,19 @@
+{
+  "savedAt": 1773039731824,
+  "trading": {
+    "totalProfit": -0.04,
+    "totalTrades": 2,
+    "wins": 1,
+    "losses": 1,
+    "currentGridLevel": 1,
+    "currentDirection": "PUTE",
+    "baseStake": 0.351085,
+    "chainBaseStake": 0.35,
+    "investmentRemaining": 99.44,
+    "totalRecovered": 0,
+    "maxWinStreak": 1,
+    "maxLossStreak": -1,
+    "currentStreak": -1,
+    "waitingForCandle": false
+  }
+}
