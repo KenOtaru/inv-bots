@@ -1768,7 +1768,7 @@ class MultiAssetGhostBot {
             }
 
             if (this.endOfDay && currentHours === 7 && currentMinutes >= 0) {
-                console.log("It's 8:00 AM GMT+1, reconnecting the bot.");
+                console.log("It's 7:00 AM GMT+1, reconnecting the bot.");
                 this.resetDailyStats();
                 this.endOfDay = false;
                 this.connect();
