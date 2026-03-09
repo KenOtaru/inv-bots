@@ -1410,6 +1410,7 @@ class MultiAssetGhostBot {
             this.totalWins++;
             this.hourlyStats.wins++;
             this.consecutiveLosses = 0;
+            this.isWinTrade = true;
 
             // System progression reset
             if (this.sys === 2) {
@@ -1429,6 +1430,7 @@ class MultiAssetGhostBot {
             this.totalLosses++;
             this.hourlyStats.losses++;
             this.consecutiveLosses++;
+            this.isWinTrade = false;
 
             // Track consecutive loss counters
             if (this.consecutiveLosses === 2) this.consecutiveLosses2++;
