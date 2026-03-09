@@ -65,7 +65,7 @@ const DEFAULT_CONFIG = {
 // FILE PATHS
 // ══════════════════════════════════════════════════════════════════════════════
 
-const STATE_FILE          = path.join(__dirname, 'v75s3-grid-state0000001.json');
+const STATE_FILE          = path.join(__dirname, 'v75s3-grid-state0000002.json');
 const STATE_SAVE_INTERVAL = 5000;   // ms
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -748,13 +748,13 @@ class V75GridBot {
       return;
     }
 
-    if (this.waitingForCandle) {
-      LOGGER.info(`🎯 Candle gate opened — placing trade now`);
-      this.waitingForCandle = false;
-      this._placeTrade();
-    } else {
+    // if (this.waitingForCandle) {
+    //   LOGGER.info(`🎯 Candle gate opened — placing trade now`);
+    //   this.waitingForCandle = false;
+    //   this._placeTrade();
+    // } else {
       LOGGER.info(`Candle closed — not waiting (recovery fires immediately after result)`);
-    }
+    // }
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -1062,15 +1062,15 @@ class V75GridBot {
   // ══════════════════════════════════════════════════════════════════════════
 
   _scheduleNextTrade(isWin) {
-    if (isWin) {
-      LOGGER.info(`⏳ Next trade gated — waiting for candle close…`);
-      // _onCandleClose will call _placeTrade when waitingForCandle=true
-    } else {
+    // if (isWin) {
+    //   LOGGER.info(`⏳ Next trade gated — waiting for candle close…`);
+    //   // _onCandleClose will call _placeTrade when waitingForCandle=true
+    // } else {
       LOGGER.info(`⚡ Recovery — placing next trade immediately (1 s delay)…`);
       setTimeout(() => {
         if (this.running && !this.tradeInProgress) this._placeTrade();
       }, 1000);
-    }
+    // }
   }
 
   // ══════════════════════════════════════════════════════════════════════════
