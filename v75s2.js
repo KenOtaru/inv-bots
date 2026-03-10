@@ -21,8 +21,8 @@ const DEFAULT_CONFIG = {
   apiToken: 'hsj0tA0XJoIzJG5',
   appId:    '1089',
 
-  symbol:        'stpRNG3', //1HZ75V
-  tickDuration:  1,
+  symbol:        '1HZ75V', //1HZ75V
+  tickDuration:  5,
   initialStake:  0.35,
   investmentAmount: 100,
 
@@ -47,7 +47,7 @@ const DEFAULT_CONFIG = {
 // FILE PATHS
 // ══════════════════════════════════════════════════════════════════════════════
 
-const STATE_FILE          = path.join(__dirname, 'v75-grid-state0007.json');
+const STATE_FILE          = path.join(__dirname, 'v75-grid-state000001.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -669,7 +669,10 @@ class V75GridBot {
       }
 
       this.currentGridLevel = 0;
-      this.currentDirection = 'CALLE';
+      
+      const nextDir     = this.currentDirection === 'CALLE' ? 'PUTE' : 'CALLE'
+      // this.currentDirection = 'CALLE';
+      this.currentDirection = nextDir;
       this._sendTelegramTradeResult(isWin, profit);
 
     } else {
