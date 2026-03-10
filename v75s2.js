@@ -509,6 +509,7 @@ class V75GridBot {
       setTimeout(() => { if (!this.running) this.start(); }, 300);
 
     } else {
+      this.tradeInProgress = false; // clear any stale trade lock on reconnect
       // ── RECONNECTION ────────────────────────────────────────────────────
       this.log(
         `🔄 Reconnected — resuming | L${this.currentGridLevel} | ` +
@@ -1136,7 +1137,7 @@ class V75GridBot {
         this.endOfDay = true;
         return;
       }
-    }, 20000);
+    }, 10000);
 
     this.log('📅 Time scheduler started (weekend pause + EOD logic)');
   }
