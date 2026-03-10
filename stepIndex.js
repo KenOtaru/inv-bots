@@ -1096,6 +1096,7 @@ class V75GridBot {
   startTimeScheduler() {
     setInterval(() => {
       const now = new Date();
+      // compute UTC ms then add 1 hour for GMT+1 reliably
       const utcMs = now.getTime() + (now.getTimezoneOffset() * 60000);
       const gmt1 = new Date(utcMs + (1 * 60 * 60 * 1000));
       const day = gmt1.getDay();
@@ -1105,7 +1106,7 @@ class V75GridBot {
       const isWeekend =
         day === 0 ||
         (day === 6 && hours >= 23) ||
-        (day === 1 && hours < 7);
+        (day === 1 && hours < 8);
 
       if (isWeekend) {
         if (!this.endOfDay) {
@@ -1118,23 +1119,25 @@ class V75GridBot {
         return;
       }
 
-      if (this.endOfDay && hours === 7 && minutes >= 0) {
-        this.log('📅 07:00 GMT+1 — reconnecting bot', 'success');
+      // Reconnect at 08:00 GMT+1 when endOfDay is set
+      if (this.endOfDay && hours === 8 && minutes >= 0) {
+        this.log('📅 08:00 GMT+1 — reconnecting bot', 'success');
         this._resetDailyStats();
         this.endOfDay = false;
         this.connect();
         return;
       }
 
-      if (!this.endOfDay && this.isWinTrade && hours >= 19) {
-        this.log('📅 Past 19:00 GMT+1 — end-of-day stop', 'info');
+      // Disconnect at or after 17:00 GMT+1 regardless of last trade result
+      if (!this.endOfDay && this.isWinTrade && hours >= 17) {
+        this.log('📅 Past 17:00 GMT+1 — end-of-day stop', 'info');
         this._sendHourlySummary();
         this.stop();
         this.disconnect();
         this.endOfDay = true;
         return;
       }
-    }, 20000);
+    }, 10000);
 
     this.log('📅 Time scheduler started (weekend pause + EOD logic)');
   }
