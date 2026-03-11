@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // ╔══════════════════════════════════════════════════════════════════════════════════╗
-// ║   V75 GRID MARTINGALE BOT — Headless Terminal Edition (FIXED)                  ║
-// ║   Volatility 75 Index (1HZ75V) | CALLE/PUTE | Low-Risk Hybrid                 ║
+// ║   STEP INDEX GRID MARTINGALE BOT — Headless Terminal Edition (FIXED)                  ║
+// ║   Volatility STEP Index | CALLE/PUTE | Low-Risk Hybrid                 ║
 // ╚══════════════════════════════════════════════════════════════════════════════════╝
 
 'use strict';
@@ -22,7 +22,7 @@ const DEFAULT_CONFIG = {
   appId:    '1089',
 
   symbol:        'stpRNG',
-  tickDuration:  54,
+  tickDuration:  1,
   initialStake:  0.35,
   investmentAmount: 100,
 
@@ -47,7 +47,7 @@ const DEFAULT_CONFIG = {
 // FILE PATHS
 // ══════════════════════════════════════════════════════════════════════════════
 
-const STATE_FILE          = path.join(__dirname, 'ST5-grid-state0005.json');
+const STATE_FILE          = path.join(__dirname, 'ST5-grid-state00000001.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -528,15 +528,17 @@ class V75GridBot {
       // FIX #3: If we had a contract open when we disconnected, try to
       // check its status. But also set a fallback to just place a new trade.
       if (this.currentContractId) {
+        this.currentGridLevel = 0; // reset grid level on reconnect if no open contract
         this.log(`Re-subscribing to open contract ${this.currentContractId}…`);
         this.tradeInProgress = true; // mark as in-progress while we check
         this._send({ proposal_open_contract: 1, contract_id: this.currentContractId, subscribe: 1 });
 
-        // FIX: If re-subscribe doesn't yield a result in 15s, force-recover
+        // FIX: If re-subscribe doesn't yield a result in 150s, force-recover
         this._startTradeWatchdog(this.currentContractId, 15000);
       } else {
         // FIX #1: No open contract — just resume trading immediately
         if (this.running && !this.tradeInProgress) {
+          this.currentGridLevel = 0; // reset grid level on reconnect if no open contract
           this.log('No open contract — placing next trade in 2s', 'success');
           setTimeout(() => {
             if (this.running && !this.tradeInProgress) this._placeTrade();
@@ -669,17 +671,36 @@ class V75GridBot {
       }
 
       this.currentGridLevel = 0;
-      this.currentDirection = 'CALLE';
+      // this.currentDirection = 'CALLE';
+      // const nextDir     = this.currentDirection === 'CALLE' ? 'PUTE' : 'CALLE';
       this._sendTelegramTradeResult(isWin, profit);
 
     } else {
       const nextLevel   = this.currentGridLevel + 1;
-      const nextDir     = this.currentDirection === 'CALLE' ? 'PUTE' : 'CALLE';
+      // const nextDir     = this.currentDirection === 'CALLE' ? 'PUTE' : 'CALLE';
       const absoluteMax = cfg.afterMaxLoss === 'continue'
         ? cfg.maxMartingaleLevel + cfg.continueExtraLevels
         : cfg.maxMartingaleLevel;
 
       this.currentGridLevel = nextLevel;
+      // this.currentDirection = nextDir;
+
+      let nextDir = null;
+      if (this.currentGridLevel < 3) {
+        nextDir = this.currentDirection === 'CALLE' ? 'PUTE' : 'CALLE';
+      } 
+      // else if (this.currentGridLevel >= 4 && this.currentGridLevel <= 5) {
+      //   nextDir = this.currentDirection === 'CALLE' ? 'CALLE' : 'PUTE';
+      // } else if (this.currentGridLevel === 6) {
+      //   nextDir = this.currentDirection === 'CALLE' ? 'PUTE' : 'CALLE';
+      // } else if (this.currentGridLevel === 7) {
+      //   nextDir = this.currentDirection === 'CALLE' ? 'CALLE' : 'PUTE';
+      // } else if (this.currentGridLevel === 8) {
+      //   nextDir = this.currentDirection === 'CALLE' ? 'PUTE' : 'CALLE';
+      // } 
+      else {
+        nextDir = this.currentDirection === 'CALLE' ? 'CALLE' : 'PUTE';
+      }
       this.currentDirection = nextDir;
 
       if (nextLevel > absoluteMax) {
@@ -915,7 +936,7 @@ class V75GridBot {
       contract_type: direction,
       currency:      this.currency,
       duration:      this.config.tickDuration,
-      duration_unit: 's',
+      duration_unit: 't',
       symbol:        this.config.symbol,
     });
   }
@@ -1129,7 +1150,7 @@ class V75GridBot {
       }
 
       // Disconnect at or after 17:00 GMT+1 regardless of last trade result
-      if (!this.endOfDay && this.isWinTrade && hours >= 17) {
+      if (!this.endOfDay && this.isWinTrade && hours >= 19) {
         this.log('📅 Past 17:00 GMT+1 — end-of-day stop', 'info');
         this._sendHourlySummary();
         this.stop();
@@ -1175,7 +1196,7 @@ function main() {
 
   if (bot.telegramBot) bot.startTelegramTimer();
 
-  bot.startTimeScheduler();
+  // bot.startTimeScheduler();
 
   bot.connect();
 
