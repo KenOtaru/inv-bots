@@ -21,8 +21,8 @@ const DEFAULT_CONFIG = {
   apiToken: 'hsj0tA0XJoIzJG5',
   appId:    '1089',
 
-  symbol:        'stpRNG3',
-  tickDuration:  1,
+  symbol:        'stpRNG',
+  tickDuration:  3,
   initialStake:  0.35,
   investmentAmount: 100,
 
