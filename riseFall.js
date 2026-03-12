@@ -846,12 +846,12 @@ class DerivBot {
         const tradeRequest = {
             buy: 1,
             subscribe: 1,
-            price: stake,
+            price: stake.toFixed(2),
             parameters: {
                 contract_type: direction,
                 symbol: symbol,
                 currency: 'USD',
-                amount: stake,
+                amount: stake.toFixed(2),
                 duration: CONFIG.DURATION,
                 duration_unit: CONFIG.DURATION_UNIT,
                 basis: 'stake'
