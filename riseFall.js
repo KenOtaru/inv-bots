@@ -538,6 +538,8 @@ class SessionManager {
             // ===== WIN =====
             state.session.winsCount++;
             state.session.profit += profit;
+            // Mark last trade as a win for scheduler
+            state.lastTradeWasWin = true;
             state.session.netPL += profit;
             state.portfolio.dailyProfit += profit;
             state.portfolio.dailyWins++;
@@ -577,6 +579,9 @@ class SessionManager {
             // KEY FIX: Enter recovery mode - don't wait for new candle
             state.inRecovery = true;
             state.waitingForNewCandle = false;
+
+            // Mark last trade as a loss for scheduler
+            state.lastTradeWasWin = false;
 
             if (CONFIG.AUTO_COMPOUNDING) {
                 state.investmentRemaining = Math.max(0, Number((state.investmentRemaining + profit).toFixed(2)));
@@ -1045,6 +1050,8 @@ class DerivBot {
         this.connection = new ConnectionManager();
         this._processedContracts = new Set();
         this.tradeWatchdogMs = 60000; // 60 second watchdog timeout
+        this.endOfDay = false;
+        this.isWinTrade = false;
     }
 
     async start() {
@@ -1073,6 +1080,67 @@ class DerivBot {
         TelegramService.startHourlyTimer();
 
         LOGGER.info('✅ Bot started successfully!');
+    }
+
+    // ============================================
+    // TIME SCHEDULER (weekend pause + EOD logic)
+    // ============================================
+    startTimeScheduler() {
+        setInterval(() => {
+            const now = new Date();
+            // compute UTC ms then add 1 hour for GMT+1 reliably
+            const utcMs = now.getTime() + (now.getTimezoneOffset() * 60000);
+            const gmt1 = new Date(utcMs + (1 * 60 * 60 * 1000));
+            const day = gmt1.getDay();
+            const hours = gmt1.getHours();
+            const minutes = gmt1.getMinutes();
+
+            const isWeekend =
+                day === 0 ||
+                (day === 6 && hours >= 23) ||
+                (day === 1 && hours < 8);
+
+            if (isWeekend) {
+                if (!this.endOfDay) {
+                    LOGGER.warn('📅 Weekend trading pause (Sat 23:00 – Mon 07:00 GMT+1) — disconnecting');
+                    TelegramService.sendHourlySummary();
+                    this.stop();
+                    if (this.connection && this.connection.ws) {
+                        try { this.connection.ws.close(); } catch (e) {/*ignore*/}
+                    }
+                    this.endOfDay = true;
+                }
+                return;
+            }
+
+            // Reconnect at 08:00 GMT+1 when endOfDay is set
+            if (this.endOfDay && hours === 8 && minutes >= 0) {
+                LOGGER.info('📅 08:00 GMT+1 — reconnecting bot');
+                this._resetDailyStats();
+                this.endOfDay = false;
+                this.connection.connect();
+                return;
+            }
+
+            // Disconnect (end of day) if last trade was a win and it's late in the day
+            if (!this.endOfDay && state.lastTradeWasWin && hours >= 19) {
+                LOGGER.info('📅 Past 19:00 GMT+1 — end-of-day stop due to winning trade');
+                TelegramService.sendHourlySummary();
+                this.stop();
+                if (this.connection && this.connection.ws) {
+                    try { this.connection.ws.close(); } catch (e) {/*ignore*/}
+                }
+                this.endOfDay = true;
+                return;
+            }
+        }, 10000);
+
+        LOGGER.info('📅 Time scheduler started (weekend pause + EOD logic)');
+    }
+
+    _resetDailyStats() {
+        state.tradeInProgress = false;
+        state.lastTradeWasWin = false;
     }
 
     subscribeToCandles(symbol) {
@@ -1446,6 +1514,9 @@ console.log(' DERIV RISE/FALL ALTERNATING BOT');
 console.log(` Duration: ${CONFIG.DURATION} ${CONFIG.DURATION_UNIT} | Stake: $${CONFIG.STAKE}`);
 console.log('═'.repeat(80));
 console.log('\n🚀 Initializing...\n');
+
+// Start time scheduler (weekend pause and EOD rules)
+// bot.startTimeScheduler();
 
 bot.connection.connect();
 
