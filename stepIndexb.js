@@ -778,7 +778,7 @@ class V75GridBot {
   _startTradeWatchdog(contractId, customTimeoutMs) {
     this._clearAllWatchdogTimers();
 
-    const timeoutMs = customTimeoutMs || this.tradeWatchdogMs;
+    const timeoutMs = this.tradeWatchdogMs;
 
     this.tradeWatchdogTimer = setTimeout(() => {
       if (!this.tradeInProgress) return;
