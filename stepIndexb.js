@@ -18,7 +18,7 @@ const path        = require('path');
 // ══════════════════════════════════════════════════════════════════════════════
 
 const DEFAULT_CONFIG = {
-  apiToken: 'Dz2V2KvRf4Uukt3',
+  apiToken: 'rgNedekYXvCaPeP',
   appId:    '1089',
 
   symbol:        'stpRNG',
@@ -47,7 +47,7 @@ const DEFAULT_CONFIG = {
 // FILE PATHS
 // ══════════════════════════════════════════════════════════════════════════════
 
-const STATE_FILE          = path.join(__dirname, 'ST5-grid-state00000002.json');
+const STATE_FILE          = path.join(__dirname, 'ST5-grid-state0000000001.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -331,7 +331,7 @@ class V75GridBot {
 
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       this.log('Max reconnect attempts reached — please restart the process', 'error');
-      this._sendTelegram(`❌ <b>STEP INDEX Max reconnect attempts reached</b>\nFinal P&L: $${this.totalProfit.toFixed(2)}`);
+      this._sendTelegram(`❌ <b>STEP INDEXb Max reconnect attempts reached</b>\nFinal P&L: $${this.totalProfit.toFixed(2)}`);
       return;
     }
 
@@ -343,7 +343,7 @@ class V75GridBot {
     this.log(`State preserved — Trades: ${this.totalTrades} | P&L: $${this.totalProfit.toFixed(2)} | Level: ${this.currentGridLevel}`);
 
     this._sendTelegram(
-      `⚠️ <b>STEP INDEX CONNECTION LOST — RECONNECTING</b>\n` +
+      `⚠️ <b>STEP INDEXb CONNECTION LOST — RECONNECTING</b>\n` +
       `Attempt: ${this.reconnectAttempts}/${this.maxReconnectAttempts}\n` +
       `Retrying in ${(delay / 1000).toFixed(1)}s\n` +
       `State preserved: ${this.totalTrades} trades | $${this.totalProfit.toFixed(2)} P&L`
@@ -483,7 +483,7 @@ class V75GridBot {
   _onAuthorize(msg) {
     if (msg.error) {
       this.log(`Authentication failed: ${msg.error.message}`, 'error');
-      this._sendTelegram(`❌ <b>STEP INDEX Authentication Failed:</b> ${msg.error.message}`);
+      this._sendTelegram(`❌ <b>STEP INDEXb Authentication Failed:</b> ${msg.error.message}`);
       return;
     }
 
@@ -502,7 +502,7 @@ class V75GridBot {
     if (!this.hasStartedOnce) {
       // ── FIRST connection ────────────────────────────────────────────────
       this._sendTelegram(
-        `✅ <b>STEP INDEX Grid Bot Connected</b>\n` +
+        `✅ <b>STEP INDEXb Grid Bot Connected</b>\n` +
         `Account: ${this.accountId}\n` +
         `Balance: ${this.currency} ${this.balance.toFixed(2)}`
       );
@@ -518,7 +518,7 @@ class V75GridBot {
         'success'
       );
       this._sendTelegram(
-        `🔄 <b>STEP INDEX Reconnected — Resuming</b>\n` +
+        `🔄 <b>STEP INDEXb Reconnected — Resuming</b>\n` +
         `Account: ${this.accountId} | Balance: ${this.currency} ${this.balance.toFixed(2)}\n` +
         `Grid Level: ${this.currentGridLevel} | ` +
         `Next: ${this.currentDirection === 'CALLE' ? 'HIGHER' : 'LOWER'} @ $${this.calculateStake(this.currentGridLevel).toFixed(2)}\n` +
@@ -637,13 +637,13 @@ class V75GridBot {
     // ── Risk management ───────────────────────────────────────────────────
     if (this.totalProfit <= -this.config.stopLoss) {
       this.log(`🛑 STOP LOSS hit! P&L: $${this.totalProfit.toFixed(2)}`, 'error');
-      this._sendTelegram(`🛑 <b>STEP INDEX STOP LOSS REACHED</b>\nFinal P&L: $${this.totalProfit.toFixed(2)}`);
+      this._sendTelegram(`🛑 <b>STEP INDEXb STOP LOSS REACHED</b>\nFinal P&L: $${this.totalProfit.toFixed(2)}`);
       this.running = false;
       return;
     }
     if (this.totalProfit >= this.config.takeProfit) {
       this.log(`🎉 TAKE PROFIT hit! P&L: $${this.totalProfit.toFixed(2)}`, 'success');
-      this._sendTelegram(`🎉 <b>STEP INDEX TAKE PROFIT REACHED</b>\nFinal P&L: $${this.totalProfit.toFixed(2)}`);
+      this._sendTelegram(`🎉 <b>STEP INDEXb TAKE PROFIT REACHED</b>\nFinal P&L: $${this.totalProfit.toFixed(2)}`);
       this.running = false;
       return;
     }
@@ -706,7 +706,7 @@ class V75GridBot {
       if (nextLevel > absoluteMax) {
         this.log(`🛑 ABSOLUTE CEILING L${absoluteMax} reached — stopping to protect investment`, 'error');
         this._sendTelegram(
-          `🛑 <b>STEP INDEX ABSOLUTE MAX LEVEL REACHED (L${absoluteMax})</b>\n` +
+          `🛑 <b>STEP INDEXb ABSOLUTE MAX LEVEL REACHED (L${absoluteMax})</b>\n` +
           `Investment remaining: $${this.investmentRemaining.toFixed(2)}\n` +
           `Total P&L: $${this.totalProfit.toFixed(2)}`
         );
@@ -868,7 +868,7 @@ class V75GridBot {
     this.log(`🔄 Will retry trade in 3 seconds…`, 'warning');
 
     this._sendTelegram(
-      `⚠️ <b>STEP INDEX STUCK TRADE RECOVERED [${reason}]</b>\n` +
+      `⚠️ <b>STEP INDEXb STUCK TRADE RECOVERED [${reason}]</b>\n` +
       `Contract: ${contractId || 'unknown'}\n` +
       `Open for: ${openSeconds}s\n` +
       `Grid Level: ${this.currentGridLevel}\n` +
@@ -995,7 +995,7 @@ class V75GridBot {
     this.log(`📈 First trade: HIGHER (CALLE) — exploiting V75 mean-reversion`);
 
     this._sendTelegram(
-      `🚀 <b>STEP INDEX Grid Bot STARTED</b>\n` +
+      `🚀 <b>STEP INDEXb Grid Bot STARTED</b>\n` +
       `💵 Investment: $${cfg.investmentAmount}\n` +
       `📊 Base Stake: $${this.baseStake.toFixed(2)}\n` +
       `🔢 Multiplier: ${cfg.martingaleMultiplier}x | Max Level: ${cfg.maxMartingaleLevel}\n` +
@@ -1012,7 +1012,7 @@ class V75GridBot {
     this.tradeInProgress = false;
     this._clearAllWatchdogTimers();
     this.log('🛑 Bot stopped', 'warning');
-    this._sendTelegram(`🛑 <b>STEP INDEX Bot stopped</b>\nP&L: $${this.totalProfit.toFixed(2)} | Trades: ${this.totalTrades}`);
+    this._sendTelegram(`🛑 <b>STEP INDEXb Bot stopped</b>\nP&L: $${this.totalProfit.toFixed(2)} | Trades: ${this.totalTrades}`);
     this._logSummary();
   }
 
@@ -1021,7 +1021,7 @@ class V75GridBot {
     this.tradeInProgress = false;
     this._clearAllWatchdogTimers();
     this.log('🚨 EMERGENCY STOP — All activity halted!', 'error');
-    this._sendTelegram(`🚨 <b>STEP INDEX EMERGENCY STOP TRIGGERED</b>\nP&L: $${this.totalProfit.toFixed(2)} | Trades: ${this.totalTrades}`);
+    this._sendTelegram(`🚨 <b>STEP INDEXb EMERGENCY STOP TRIGGERED</b>\nP&L: $${this.totalProfit.toFixed(2)} | Trades: ${this.totalTrades}`);
     this._logSummary();
   }
 
@@ -1056,7 +1056,7 @@ class V75GridBot {
     const dirLabel = this.currentDirection === 'CALLE' ? 'HIGHER' : 'LOWER';
 
     this._sendTelegram(
-      `${isWin ? '✅ WIN' : '❌ LOSS'} <b>— STEP INDEX Grid Bot</b>\n\n` +
+      `${isWin ? '✅ WIN' : '❌ LOSS'} <b>— STEP INDEXb Grid Bot</b>\n\n` +
       `${isWin ? '🟢' : '🔴'} <b>P&L:</b> ${pnlStr}\n` +
       `📊 <b>Grid Level:</b> ${this.currentGridLevel} → ${isWin ? 'RESET L0' : `L${this.currentGridLevel}`}\n` +
       `🎯 <b>Next:</b> ${dirLabel} @ $${this.calculateStake(this.currentGridLevel).toFixed(2)}\n\n` +
@@ -1075,7 +1075,7 @@ class V75GridBot {
     const pnlStr = (s.pnl >= 0 ? '+' : '') + '$' + s.pnl.toFixed(2);
 
     await this._sendTelegram(
-      `⏰ <b>STEP INDEX Grid Bot — Hourly Summary</b>\n\n` +
+      `⏰ <b>STEP INDEXb Grid Bot — Hourly Summary</b>\n\n` +
       `📊 <b>Last Hour:</b>\n` +
       `  Trades: ${s.trades} | Wins: ${s.wins} | Losses: ${s.losses}\n` +
       `  Win Rate: ${wr}%\n` +
