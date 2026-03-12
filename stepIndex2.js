@@ -803,12 +803,12 @@ class V75GridBot {
             'error'
           );
           this._recoverStuckTrade('watchdog-force');
-        }, 2000);
+        }, 10000);
 
       } else {
         this._recoverStuckTrade('watchdog-offline');
       }
-    }, 1000);
+    }, timeoutMs);
   }
 
   // FIX #7: Clear BOTH timers
