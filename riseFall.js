@@ -1124,8 +1124,7 @@ class DerivBot {
             direction = 'CALLE';
             LOGGER.trade('📊 No previous candle - starting with RISE (CALLE)');
         } else {
-            // Use previous candle direction
-            if (CandleAnalyzer.isBullish(lastCandle)) {
+            if (state.lastTradeDirection === 'PUTE') {
                 direction = 'CALLE'; // Rise if last candle was bullish
                 LOGGER.trade(`📈 Last candle was BULLISH (Close > Open) → Executing RISE trade`);
             } else {
