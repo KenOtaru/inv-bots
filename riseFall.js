@@ -829,7 +829,7 @@ class DerivBot {
         // Apply martingale multiplier based on level
         if (level === 0) {
             return Number(base.toFixed(2));
-        } else if (level < 4) {
+        } else if (level >= 1 && level < 4) {
             return Number(Math.pow(CONFIG.MARTINGALE_MULTIPLIER, level).toFixed(2));
         } else if (level >= 4 && level < 6) {
             return Number(Math.pow(CONFIG.MARTINGALE_MULTIPLIER2, level).toFixed(2));
