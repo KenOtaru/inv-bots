@@ -313,7 +313,7 @@ const LOGGER = {
 // ============================================
 const CONFIG = {
     // API Settings
-    API_TOKEN: '0P94g4WdSrSrzir',
+    API_TOKEN: 'rgNedekYXvCaPeP',
     APP_ID: '1089',
     WS_URL: 'wss://ws.derivws.com/websockets/v3',
 
@@ -326,14 +326,17 @@ const CONFIG = {
     SESSION_STOP_LOSS: -85,
 
     // Trade Duration Settings
-    DURATION: 5,
-    DURATION_UNIT: 'm', // t=ticks, s=seconds, m=minutes
+    DURATION: 1,
+    DURATION_UNIT: 's', // t=ticks, s=seconds, m=minutes
 
     // Trade Settings
     MAX_OPEN_POSITIONS: 1, // One at a time for alternating strategy
     TRADE_DELAY: 1000, // 2 seconds delay between trades
-    MARTINGALE_MULTIPLIER: 2,
-    MAX_MARTINGALE_STEPS: 8,
+    MARTINGALE_MULTIPLIER: 1.48,
+    MARTINGALE_MULTIPLIER2: 2.1,
+    MARTINGALE_MULTIPLIER3: 2.2,
+    MARTINGALE_MULTIPLIER4: 2.3,
+    MAX_MARTINGALE_STEPS: 9,
 
     // Debug
     DEBUG_MODE: true,
@@ -345,7 +348,7 @@ const CONFIG = {
 };
 
 
-let ACTIVE_ASSETS = ['R_100'];
+let ACTIVE_ASSETS = ['stpRNG'];
 
 // ============================================
 // STATE MANAGEMENT
@@ -784,7 +787,19 @@ class DerivBot {
         if (!SessionManager.isSessionActive()) return;
         if (state.portfolio.activePositions.length >= CONFIG.MAX_OPEN_POSITIONS) return;
 
-        const stake = CONFIG.STAKE * Math.pow(CONFIG.MARTINGALE_MULTIPLIER, state.martingaleLevel);
+        let stake = null;
+        if (state.martingaleLevel === 0) {
+            stake = CONFIG.STAKE;
+        } else if (state.martingaleLevel < 4) {
+            stake = CONFIG.STAKE * CONFIG.MARTINGALE_MULTIPLIER;
+        } else if (state.martingaleLevel >= 4 && state.martingaleLevel < 6) {
+            stake = CONFIG.STAKE * CONFIG.MARTINGALE_MULTIPLIER2;
+        } else if (state.martingaleLevel >= 6 && state.martingaleLevel < 8) {
+            stake = CONFIG.STAKE * CONFIG.MARTINGALE_MULTIPLIER3;
+        } else {             
+            stake =  CONFIG.STAKE * CONFIG.MARTINGALE_MULTIPLIER4;
+        }
+        // CONFIG.STAKE * Math.pow(CONFIG.MARTINGALE_MULTIPLIER, state.martingaleLevel);
         const symbol = ACTIVE_ASSETS[0];
 
         if (state.capital < stake) {
