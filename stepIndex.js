@@ -47,7 +47,7 @@ const DEFAULT_CONFIG = {
 // FILE PATHS
 // ══════════════════════════════════════════════════════════════════════════════
 
-const STATE_FILE          = path.join(__dirname, 'ST5-grid-state00000003.json');
+const STATE_FILE          = path.join(__dirname, 'ST5-grid-state000000002.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -137,7 +137,7 @@ class V75GridBot {
     // ── Trade Watchdog ───────────────────────────────────────────────────────
     this.tradeWatchdogTimer    = null;
     this.tradeWatchdogPollTimer = null;  // FIX #7: track the inner poll timeout
-    this.tradeWatchdogMs       = 3000;
+    this.tradeWatchdogMs       = 5000;
     this.tradeStartTime        = null;
 
     // ── Message queue ────────────────────────────────────────────────────────
