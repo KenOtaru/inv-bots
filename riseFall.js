@@ -341,10 +341,10 @@ const CONFIG = {
     MAX_OPEN_POSITIONS: 1, // One at a time for alternating strategy
     TRADE_DELAY: 1000, // 2 seconds delay between trades
     MARTINGALE_MULTIPLIER: 1.48,
-    MARTINGALE_MULTIPLIER2: 2.1,
-    MARTINGALE_MULTIPLIER3: 2.2,
-    MARTINGALE_MULTIPLIER4: 2.3,
-    MAX_MARTINGALE_STEPS: 9,
+    MAX_MARTINGALE_LEVEL: 3,
+    AFTER_MAX_LOSS: 'continue', // 'continue' or 'stop'
+    CONTINUE_EXTRA_LEVELS: 6,
+    EXTRA_LEVEL_MULTIPLIERS: [2.0, 2.0, 2.1, 2.1, 2.2, 2.3],
 
     // Debug
     DEBUG_MODE: true,
@@ -422,7 +422,10 @@ class SessionManager {
             return true;
         }
 
-        if (netPL <= CONFIG.SESSION_STOP_LOSS || state.martingaleLevel >= CONFIG.MAX_MARTINGALE_STEPS) {
+        // Calculate max allowed martingale level
+        const maxLevel = CONFIG.MAX_MARTINGALE_LEVEL + CONFIG.CONTINUE_EXTRA_LEVELS;
+
+        if (netPL <= CONFIG.SESSION_STOP_LOSS || state.martingaleLevel >= maxLevel) {
             LOGGER.error(`🛑 SESSION STOP LOSS REACHED! Net P/L: $${netPL.toFixed(2)}`);
             this.endSession('STOP_LOSS');
             return true;
@@ -525,8 +528,11 @@ class SessionManager {
             if (state.martingaleLevel === 6) state.session.x6Losses++;
             if (state.martingaleLevel === 7) state.session.x7Losses++;
 
-            if (state.martingaleLevel >= CONFIG.MAX_MARTINGALE_STEPS) {
-                LOGGER.warn(`⚠️ Maximum Martingale step reached (${CONFIG.MAX_MARTINGALE_STEPS}), resetting level to 0`);
+            // Calculate max allowed level with extended recovery
+            const maxLevel = CONFIG.MAX_MARTINGALE_LEVEL + CONFIG.CONTINUE_EXTRA_LEVELS;
+
+            if (state.martingaleLevel >= maxLevel) {
+                LOGGER.warn(`⚠️ Maximum Martingale level reached (${maxLevel}), resetting level to 0`);
                 state.martingaleLevel = 0;
             } else {
                 LOGGER.trade(`❌ LOSS: -$${Math.abs(profit).toFixed(2)} | Direction: ${direction} | Next Martingale Level: ${state.martingaleLevel}`);
@@ -814,30 +820,34 @@ class DerivBot {
     }
 
     calculateStake(level) {
+        const cfg = CONFIG;
         let base = state.baseStake;
 
         // If auto-compounding enabled, recalculate base from remaining investment
-        if (CONFIG.AUTO_COMPOUNDING && state.investmentRemaining > 0) {
+        if (cfg.AUTO_COMPOUNDING && state.investmentRemaining > 0) {
             base = Math.max(
-                state.investmentRemaining * (CONFIG.COMPOUND_PERCENTAGE / 100),
+                state.investmentRemaining * (cfg.COMPOUND_PERCENTAGE / 100),
                 0.35
             );
         }
 
         base = Math.max(base, 0.35);
 
-        // Apply martingale multiplier based on level
-        if (level === 0) {
-            return Number(base.toFixed(2));
-        } else if (level >= 1 && level < 4) {
-            return Number(Math.pow(CONFIG.MARTINGALE_MULTIPLIER, level).toFixed(2));
-        } else if (level >= 4 && level < 6) {
-            return Number(Math.pow(CONFIG.MARTINGALE_MULTIPLIER2, level).toFixed(2));
-        } else if (level >= 6 && level < 8) {
-            return Number(Math.pow(CONFIG.MARTINGALE_MULTIPLIER3, level).toFixed(2));
-        } else {
-            return Number(Math.pow(CONFIG.MARTINGALE_MULTIPLIER4, level).toFixed(2));
+        // Standard martingale up to maxMartingaleLevel
+        if (level <= cfg.MAX_MARTINGALE_LEVEL) {
+            return Number((base * Math.pow(cfg.MARTINGALE_MULTIPLIER, level)).toFixed(2));
         }
+
+        // Extended recovery with custom multipliers beyond maxMartingaleLevel
+        let stake = base * Math.pow(cfg.MARTINGALE_MULTIPLIER, cfg.MAX_MARTINGALE_LEVEL);
+        const extraIdx = level - cfg.MAX_MARTINGALE_LEVEL - 1;
+        const mults = cfg.EXTRA_LEVEL_MULTIPLIERS || [];
+        
+        for (let i = 0; i <= extraIdx; i++) {
+            stake *= (mults[i] > 0 ? mults[i] : cfg.MARTINGALE_MULTIPLIER);
+        }
+        
+        return Number(stake.toFixed(2));
     }
 
     executeNextTrade() {
