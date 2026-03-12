@@ -6,7 +6,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'risefall1-state00001.json');
+const STATE_FILE = path.join(__dirname, 'risefall1-state00002.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
