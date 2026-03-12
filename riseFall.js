@@ -382,7 +382,7 @@ const state = {
         dailyLosses: 0,
         activePositions: []
     },
-    lastTradeDirection: null, // 'CALL' or 'PUT'
+    lastTradeDirection: null, // 'CALLE' or 'PUTE'
     martingaleLevel: 0,
     hourlyStats: {
         trades: 0,
@@ -814,18 +814,18 @@ class DerivBot {
         // Determine next direction (alternate)
         let direction;
         if (state.lastTradeDirection === null) {
-            // First trade - start with CALL (Rise)
-            direction = 'CALL';
-        } else if (state.lastTradeDirection === 'CALL') {
-            direction = 'PUT';
+            // First trade - start with CALLE (Rise)
+            direction = 'CALLE';
+        } else if (state.lastTradeDirection === 'CALLE') {
+            direction = 'PUTE';
         } else {
-            direction = 'CALL';
+            direction = 'CALLE';
         }
 
         state.canTrade = false; // Prevent multiple trades
         state.lastTradeDirection = direction;
 
-        LOGGER.trade(`🎯 Executing ${direction === 'CALL' ? 'RISE' : 'FALL'} trade on ${symbol}`);
+        LOGGER.trade(`🎯 Executing ${direction === 'CALLE' ? 'RISE' : 'FALL'} trade on ${symbol}`);
         LOGGER.trade(` Stake: $${stake.toFixed(2)} | Duration: ${CONFIG.DURATION} ${CONFIG.DURATION_UNIT}`);
 
         const position = {
@@ -882,7 +882,7 @@ class DerivBot {
             accountBalance: state.accountBalance,
             session: sessionStats,
             lastDirection: state.lastTradeDirection,
-            nextDirection: state.lastTradeDirection === 'CALL' ? 'PUT' : 'CALL',
+            nextDirection: state.lastTradeDirection === 'CALLE' ? 'PUTE' : 'CALLE',
             activePositionsCount: state.portfolio.activePositions.length,
             activePositions: state.portfolio.activePositions.map(pos => ({
                 symbol: pos.symbol,
