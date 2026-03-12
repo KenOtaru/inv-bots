@@ -1049,7 +1049,7 @@ class DerivBot {
     constructor() {
         this.connection = new ConnectionManager();
         this._processedContracts = new Set();
-        this.tradeWatchdogMs = 60000; // 60 second watchdog timeout
+        this.tradeWatchdogMs = 30000; // 30 second watchdog timeout
         this.endOfDay = false;
         this.isWinTrade = false;
     }
