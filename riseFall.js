@@ -597,10 +597,10 @@ class ConnectionManager {
             state.isAuthorized = true;
             state.accountBalance = response.authorize.balance;
 
-            if (state.capital === CONFIG.INITIAL_CAPITAL) {
-                state.capital = response.authorize.balance;
-                state.investmentRemaining = response.authorize.balance;
-            }
+            // Always use INITIAL_CAPITAL for trading, not account balance
+            // This ensures the bot operates within configured limits
+            state.capital = CONFIG.INITIAL_CAPITAL;
+            state.investmentRemaining = CONFIG.INITIAL_CAPITAL;
 
             this.send({ balance: 1, subscribe: 1 });
 
