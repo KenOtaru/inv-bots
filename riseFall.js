@@ -384,7 +384,8 @@ const CONFIG = {
     MAX_MARTINGALE_LEVEL: 3,
     AFTER_MAX_LOSS: 'continue',
     CONTINUE_EXTRA_LEVELS: 6,
-    EXTRA_LEVEL_MULTIPLIERS: [2.0, 2.0, 2.1, 2.1, 2.2, 2.3],
+    MAX_LOSSES: 9,
+    EXTRA_LEVEL_MULTIPLIERS: [2.0, 2.1, 2.1, 2.2, 2.2, 2.3],
 
     DEBUG_MODE: true,
 
@@ -472,9 +473,9 @@ class SessionManager {
             return true;
         }
 
-        const maxLevel = CONFIG.MAX_MARTINGALE_LEVEL + CONFIG.CONTINUE_EXTRA_LEVELS;
+        const maxLevel = CONFIG.MAX_LOSSES;
 
-        if (netPL <= CONFIG.SESSION_STOP_LOSS || state.martingaleLevel >= maxLevel) {
+        if (state.martingaleLevel >= maxLevel) {
             LOGGER.error(`🛑 SESSION STOP LOSS REACHED! Net P/L: $${netPL.toFixed(2)}`);
             this.endSession('STOP_LOSS');
             return true;
@@ -1175,10 +1176,7 @@ class DerivBot {
         let base = state.baseStake;
 
         if (cfg.AUTO_COMPOUNDING && state.investmentRemaining > 0) {
-            base = Math.max(
-                state.investmentRemaining * (cfg.COMPOUND_PERCENTAGE / 100),
-                0.35
-            );
+            base = Math.max(state.investmentRemaining * cfg.COMPOUND_PERCENTAGE / 100, 0.35);
         }
 
         base = Math.max(base, 0.35);
