@@ -1389,7 +1389,7 @@ class DerivBot {
                         `after ${(timeoutMs / 1000)}s — force-releasing lock`
                     );
                     this._recoverStuckTrade('watchdog-force');
-                }, 5000);
+                }, timeoutMs);
 
             } else {
                 LOGGER.error('Cannot poll contract - not connected or authorized');
@@ -1498,7 +1498,7 @@ class DerivBot {
                 LOGGER.trade('🔄 Resuming trading after stuck trade recovery…');
                 state.canTrade = true;
                 bot.executeNextTrade();
-            }, 5000);
+            }, 2000);
         }
     }
 
