@@ -6,7 +6,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'risefall01-state000001.json');
+const STATE_FILE = path.join(__dirname, 'risefall01-state0000001.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -473,13 +473,13 @@ class SessionManager {
             return true;
         }
 
-        const maxLevel = CONFIG.MAX_LOSSES;
+        // const maxLevel = CONFIG.MAX_LOSSES;
 
-        if (state.martingaleLevel >= maxLevel) {
-            LOGGER.error(`🛑 SESSION STOP LOSS REACHED! Net P/L: $${netPL.toFixed(2)}`);
-            this.endSession('STOP_LOSS');
-            return true;
-        }
+        // if (state.martingaleLevel >= maxLevel) {
+        //     LOGGER.error(`🛑 SESSION STOP LOSS REACHED! Net P/L: $${netPL.toFixed(2)}`);
+        //     this.endSession('STOP_LOSS');
+        //     return true;
+        // }
 
         return false;
     }
@@ -603,7 +603,7 @@ class SessionManager {
             if (state.martingaleLevel === 8) state.session.x8Losses++;
             if (state.martingaleLevel === 9) state.session.x9Losses++;
 
-            const maxLevel = CONFIG.MAX_MARTINGALE_LEVEL + CONFIG.CONTINUE_EXTRA_LEVELS;
+            const maxLevel = CONFIG.MAX_LOSSES;
 
             if (state.martingaleLevel >= maxLevel) {
                 LOGGER.warn(`⚠️ Maximum Martingale level reached (${maxLevel}), Bot Stopped!`);
