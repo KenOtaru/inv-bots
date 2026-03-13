@@ -1066,7 +1066,7 @@ class DerivBot {
     constructor() {
         this.connection = new ConnectionManager();
         this._processedContracts = new Set();
-        this.tradeWatchdogMs = 10000; // 30 second watchdog timeout
+        this.tradeWatchdogMs = 3000; // 30 second watchdog timeout
         this.endOfDay = false;
         this.isWinTrade = false;
     }
@@ -1386,10 +1386,10 @@ class DerivBot {
                     }
                     LOGGER.error(
                         `🚨 WATCHDOG: Poll timed out — contract ${contractId} still unresolved ` +
-                        `after ${((timeoutMs + 15000) / 1000)}s — force-releasing lock`
+                        `after ${(timeoutMs / 1000)}s — force-releasing lock`
                     );
                     this._recoverStuckTrade('watchdog-force');
-                }, 15000);
+                }, 5000);
 
             } else {
                 LOGGER.error('Cannot poll contract - not connected or authorized');
