@@ -48,7 +48,7 @@ const DEFAULT_CONFIG = {
 // FILE PATHS
 // ══════════════════════════════════════════════════════════════════════════════
 
-const STATE_FILE          = path.join(__dirname, 'ST5-grid-state0000000001.json');
+const STATE_FILE          = path.join(__dirname, 'ST-grid-state0000000001.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -114,7 +114,7 @@ class StatePersistence {
 // MAIN BOT CLASS
 // ══════════════════════════════════════════════════════════════════════════════
 
-class V75GridBot {
+class STEPINDEXGridBot {
   constructor(config = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
 
@@ -549,11 +549,11 @@ class V75GridBot {
 
           // Auto-trigger trade if bot is running and not busy
           if (this.running && !this.tradeInProgress) {
-            setTimeout(() => {
+            // setTimeout(() => {
               if (this.running && !this.tradeInProgress && this.canTrade) {
                 this._placeTrade();
               }
-            }, 500);
+            // }, 500);
           }
         }
       }
@@ -1254,7 +1254,7 @@ class V75GridBot {
     this.inRecoveryMode        = false;
     this.canTrade              = false;  // Wait for first new candle
 
-    this.log('🚀 V75 Grid Martingale Bot STARTED!', 'success');
+    this.log('🚀 STEP INDEX Grid Martingale Bot STARTED!', 'success');
     this.log(
       `💵 Investment: $${cfg.investmentAmount} | Base: $${this.baseStake.toFixed(2)} | ` +
       `Mult: ${cfg.martingaleMultiplier}x | Max: L${cfg.maxMartingaleLevel} | ${cfg.tickDuration}t`
@@ -1456,7 +1456,7 @@ class V75GridBot {
 
 function printBanner() {
   console.log('\n╔══════════════════════════════════════════════════════════════════════╗');
-  console.log('║   V75 GRID MARTINGALE BOT — Candle-Gated + Recovery Edition        ║');
+  console.log('║   STEP INDEX GRID MARTINGALE BOT — Candle-Gated + Recovery Edition        ║');
   console.log('║   Strategy: Trade on NEW CANDLE | Recovery until WIN               ║');
   console.log('║   CALLE/PUTE | STEP INDEX | Martingale Recovery                    ║');
   console.log('╚══════════════════════════════════════════════════════════════════════╝\n');
@@ -1472,7 +1472,7 @@ function printBanner() {
 function main() {
   printBanner();
 
-  const bot = new V75GridBot(DEFAULT_CONFIG);
+  const bot = new STEPINDEXGridBot(DEFAULT_CONFIG);
 
   StatePersistence.startAutoSave(bot);
 
