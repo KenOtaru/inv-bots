@@ -1131,8 +1131,8 @@ class DerivBot {
             // }
 
             // Reconnect at 08:00 GMT+1 when endOfDay is set
-            if (this.endOfDay && hours === 7 && minutes >= 0) {
-                LOGGER.info('📅 07:00 GMT+1 — reconnecting bot');
+            if (this.endOfDay && hours === 2 && minutes >= 0) {
+                LOGGER.info('📅 02:00 GMT+1 — reconnecting bot');
                 this._resetDailyStats();
                 this.endOfDay = false;
                 this.connection.connect();
@@ -1140,8 +1140,8 @@ class DerivBot {
             }
 
             // Disconnect (end of day) if last trade was a win and it's late in the day
-            if (!this.endOfDay && state.lastTradeWasWin && hours >= 19) {
-                LOGGER.info('📅 Past 19:00 GMT+1 — end-of-day stop due to winning trade');
+            if (!this.endOfDay && state.lastTradeWasWin && hours >= 18) {
+                LOGGER.info('📅 Past 18:00 GMT+1 — end-of-day stop due to winning trade');
                 TelegramService.sendHourlySummary();
                 this.stop();
                 if (this.connection && this.connection.ws) {
