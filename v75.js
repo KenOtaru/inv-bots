@@ -48,7 +48,7 @@ const DEFAULT_CONFIG = {
 // FILE PATHS
 // ══════════════════════════════════════════════════════════════════════════════
 
-const STATE_FILE          = path.join(__dirname, 'v75-grid-state0000000001.json');
+const STATE_FILE          = path.join(__dirname, 'v75-grid-state0000000002.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -905,10 +905,9 @@ class V75GridBot {
         nextDir = this.currentDirection === 'CALLE' ? 'CALLE' : 'PUTE';
       }
       
-      // this.currentDirection = nextDir;
+      this.currentDirection = nextDir;
 
       this.currentGridLevel = nextLevel;
-      this.currentDirection = nextDir;
 
       // ── ENTER recovery mode ─────────────────────────────────────────
       this.inRecoveryMode = true;
