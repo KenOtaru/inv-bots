@@ -883,10 +883,29 @@ class V75GridBot {
     // ══════════════════════════════════════════════════════════════════════
     } else {
       const nextLevel   = this.currentGridLevel + 1;
-      const nextDir     = this.currentDirection === 'CALLE' ? 'PUTE' : 'CALLE';
+      // const nextDir     = this.currentDirection === 'CALLE' ? 'PUTE' : 'CALLE';
       const absoluteMax = cfg.afterMaxLoss === 'continue'
         ? cfg.maxMartingaleLevel + cfg.continueExtraLevels
         : cfg.maxMartingaleLevel;
+
+      let nextDir = null;
+      if (this.currentGridLevel < 3) {
+        nextDir = this.currentDirection === 'CALLE' ? 'PUTE' : 'CALLE';
+      } 
+      else if (this.currentGridLevel >= 4 && this.currentGridLevel <= 5) {
+        nextDir = this.currentDirection === 'CALLE' ? 'CALLE' : 'PUTE';
+      } else if (this.currentGridLevel === 6) {
+        nextDir = this.currentDirection === 'CALLE' ? 'PUTE' : 'CALLE';
+      } else if (this.currentGridLevel === 7) {
+        nextDir = this.currentDirection === 'CALLE' ? 'CALLE' : 'PUTE';
+      } else if (this.currentGridLevel === 8) {
+        nextDir = this.currentDirection === 'CALLE' ? 'PUTE' : 'CALLE';
+      } 
+      else {
+        nextDir = this.currentDirection === 'CALLE' ? 'CALLE' : 'PUTE';
+      }
+      
+      // this.currentDirection = nextDir;
 
       this.currentGridLevel = nextLevel;
       this.currentDirection = nextDir;
