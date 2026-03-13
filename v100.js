@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // ╔══════════════════════════════════════════════════════════════════════════════════╗
-// ║   STEP INDEX GRID MARTINGALE BOT — Headless Terminal Edition (FIXED)           ║
-// ║   Volatility STEP Index | CALLE/PUTE | Low-Risk Hybrid                        ║
+// ║   GRID MARTINGALE BOT — Headless Terminal Edition (FIXED)           ║
+// ║   Volatility | CALLE/PUTE | Low-Risk Hybrid                        ║
 // ║   NEW: Trade on new candle, recovery trades until win, then wait for candle    ║
 // ╚══════════════════════════════════════════════════════════════════════════════════╝
 
@@ -639,12 +639,12 @@ class V100GridBot {
       this.currentContractId = null;
 
       if (this.running) {
-        setTimeout(() => {
+        // setTimeout(() => {
           if (this.running && !this.tradeInProgress) {
             this.log('Retrying trade after API error…');
             this._placeTrade();
           }
-        }, 2000);
+        // }, 2000);
       }
     }
   }

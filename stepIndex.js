@@ -639,12 +639,12 @@ class STEPINDEXGridBot {
       this.currentContractId = null;
 
       if (this.running) {
-        setTimeout(() => {
+        // setTimeout(() => {
           if (this.running && !this.tradeInProgress) {
             this.log('Retrying trade after API error…');
             this._placeTrade();
           }
-        }, 2000);
+        // }, 2000);
       }
     }
   }
