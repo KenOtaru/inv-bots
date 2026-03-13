@@ -644,7 +644,7 @@ class V75GridBot {
             this.log('Retrying trade after API error…');
             this._placeTrade();
           }
-        }, 3000);
+        }, 2000);
       }
     }
   }
