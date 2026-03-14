@@ -6,8 +6,8 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'fractal_riseFallM0000013-state.json');
-const HISTORY_FILE = path.join(__dirname, 'fractal_riseFallM0000013-history.json');
+const STATE_FILE = path.join(__dirname, 'fractal_riseFallM0000001-state.json');
+const HISTORY_FILE = path.join(__dirname, 'fractal_riseFallM0000001-history.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
@@ -1157,11 +1157,11 @@ const ASSET_CONFIGS = {
         DURATION_UNIT: 's'
     },
     R_50: {
-        GRANULARITY: 60,        // 2-minute candles
+        GRANULARITY: 60,        
         TIMEFRAME_LABEL: '1m',
         MAX_CANDLES_STORED: 100,
         CANDLES_TO_LOAD: 100,
-        DURATION: 54,           // 110 seconds
+        DURATION: 54,           
         DURATION_UNIT: 's'
     },
     R_75: {
@@ -1173,12 +1173,12 @@ const ASSET_CONFIGS = {
         DURATION_UNIT: 's'
     },
     R_100: {
-        GRANULARITY: 60,        // 5-minute candles
+        GRANULARITY: 60,        
         TIMEFRAME_LABEL: '1m',
         MAX_CANDLES_STORED: 100,
         CANDLES_TO_LOAD: 100,
-        DURATION: 54,             // 4 minutes
-        DURATION_UNIT: 's'      // 'm' for minutes
+        DURATION: 54,             
+        DURATION_UNIT: 's'      
     }
 };
 
