@@ -1047,7 +1047,7 @@ class TechnicalIndicators {
         const period = CONFIG.WPR_PERIOD;
         const emptyResult = { wprCurrent: null, wprPrev: null, signal: null };
 
-        if (!closedCandles || closedCandles.length < period + 1) {
+        if (!closedCandles || closedCandles.length < period + 2) {
             return emptyResult; // need at least period+1 bars to detect a cross
         }
 
@@ -1628,6 +1628,8 @@ class SessionManager {
             assetState.martingaleLevel = 0;
             assetState.lastTradeWasWin = true;
             assetState.currentStake = CONFIG.STAKE;
+            assetState.wprWasOversold   = false; // Reset WPR flags on win
+            assetState.wprWasOverbought = false; // Reset WPR flags on win 
 
             // Record in persistent history
             TradeHistoryManager.recordTrade(symbol, profit, assetState.martingaleLevel);
