@@ -991,7 +991,7 @@ class TechnicalIndicators {
      * Returns array of EMA values aligned to the end of the candles array.
      * Returns null values for indices where not enough data exists.
      * @param {Array} closedCandles - Array of candle objects with .close property
-     * @param {number} period - EMA period (e.g. 50 or 200)
+     * @param {number} period - EMA period (e.g. 20 or 50)
      * @returns {Array} Array of EMA values (same length as closedCandles)
      */
     static calculateEMA(closedCandles, period) {
@@ -1098,7 +1098,7 @@ const CONFIG = {
     SESSION_STOP_LOSS: -250,
 
     // Default Candle Settings (used if asset has no specific config)
-    // NOTE: Must be > EMA_SLOW_PERIOD (200) to allow EMA calculation
+    // NOTE: Must be > EMA_SLOW_PERIOD (50) to allow EMA calculation
     GRANULARITY: 60,
     TIMEFRAME_LABEL: '1m',
     MAX_CANDLES_STORED: 300,
