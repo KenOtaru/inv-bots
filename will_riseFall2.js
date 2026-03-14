@@ -3014,4 +3014,4 @@ setInterval(() => {
         console.log(`🔧 Per-Asset Status:${assetLines}`);
         console.log(`🕐 ${status.tradingSession}`);
     }
-}, 30000);
+}, 60000);
