@@ -1014,7 +1014,7 @@ class TechnicalIndicators {
      *   WPR = (Highest_High - Close) / (Highest_High - Lowest_Low) * -100
      * Range: 0 (overbought) to -100 (oversold)
      * @param {Array}  candles - Array of candle objects with .high, .low, .close
-     * @param {number} period  - Lookback period (e.g. 14)
+     * @param {number} period  - Lookback period (e.g. 80)
      * @param {number} index   - Bar index to calculate (default: last bar)
      * @returns {number|null}
      */
