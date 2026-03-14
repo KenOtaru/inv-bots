@@ -1087,7 +1087,7 @@ const CONFIG = {
     STAKE: 0.35,
 
     // Session Targets
-    SESSION_PROFIT_TARGET: 5000,
+    SESSION_PROFIT_TARGET: 50000,
     SESSION_STOP_LOSS: -250,
 
     // Default Candle Settings (used if asset has no specific config)
@@ -1198,7 +1198,7 @@ function getAssetConfig(symbol) {
     };
 }
 
-let ACTIVE_ASSETS = ['R_50', 'R_75', 'R_100', '1HZ50V', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'];
+let ACTIVE_ASSETS = ['R_10', 'R_75', 'R_100', '1HZ50V', 'stpRNG', 'stpRNG2'];
 // let ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V', 'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'];
 
 // ============================================
@@ -2560,11 +2560,11 @@ class DerivBot {
         if (isRecoveryMode) {
             // Recovery: alternate direction from the previous losing trade ON THIS ASSET
             if (assetState.lastTradeDirection === 'CALLE') {
-                symbol === ('R_25' || 'R_50' || 'stpRNG2' || 'stpRNG3') ? direction = 'CALLE' : direction = 'PUTE';
+                direction = 'PUTE';
                 signalReason =
                     `Recovery (${symbol} Prev LOSS on RISE → now FALL)`;
             } else {
-                symbol === ('R_25' || 'R_50' || 'stpRNG2' || 'stpRNG3') ? direction = 'PUTE' : direction = 'CALLE';
+                direction = 'CALLE';
                 signalReason =
                     `Recovery (${symbol} Prev LOSS on FALL → now RISE)`;
             }
@@ -2579,7 +2579,7 @@ class DerivBot {
                         `${symbol} ⏭️ Breakout UP already traded at Resistance ${resistance.toFixed(5)} — waiting for new fractal level`
                     );
                 } else {
-                    symbol === ('R_25' || 'R_50' || 'stpRNG2' || 'stpRNG3') ? direction = 'PUTE' : direction = 'CALLE';
+                    direction = 'CALLE';
                     signalReason = `BREAKOUT UP — Close ${closePrice.toFixed(5)} > Resistance ${resistance.toFixed(5)} (diff: +${(closePrice - resistance).toFixed(5)})`;
                 }
             } else if (closePrice < support) {
@@ -2588,7 +2588,7 @@ class DerivBot {
                         `${symbol} ⏭️ Breakout DOWN already traded at Support ${support.toFixed(5)} — waiting for new fractal level`
                     );
                 } else {
-                    symbol === ('R_25' || 'R_50' || 'stpRNG2' || 'stpRNG3') ? direction = 'CALLE' : direction = 'PUTE';
+                    direction = 'PUTE';
                     signalReason = `BREAKOUT DOWN — Close ${closePrice.toFixed(5)} < Support ${support.toFixed(5)} (diff: -${(support - closePrice).toFixed(5)})`;
                 }
             } else {
