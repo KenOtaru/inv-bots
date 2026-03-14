@@ -1142,14 +1142,18 @@ const CONFIG = {
     // ============================================
     // TRADING SESSION WINDOWS (GMT+1 hours)
     // ============================================
-    TOKYO_START: 1,
-    TOKYO_END: 1.1,
+    TOKYO_START: 2,
+    TOKYO_END: 3,
+    TOKYO_MINUTE: 10,
     LONDON_START: 8,
     LONDON_END: 9,
+    LONDON_MINUTE: 10,
     NEWYORK_START: 14,
     NEWYORK_END: 15,
+    NEWYORK_MINUTE: 10,
     SYDNEY_START: 22,
     SYDNEY_END: 23,
+    SYDNEY_MINUTE: 10,
 
     // Debug
     DEBUG_MODE: true,
@@ -1295,7 +1299,7 @@ class TradingSessionManager {
         const currentMinute = gmtPlus1.getUTCMinutes();
         const currentTimeDecimal = currentHour + (currentMinute / 60);
 
-        if (currentTimeDecimal >= CONFIG.TOKYO_START && currentMinute < CONFIG.TOKYO_END) {
+        if (currentTimeDecimal >= CONFIG.TOKYO_START && currentTimeDecimal < CONFIG.TOKYO_END && currentMinute <= CONFIG.TOKYO_MINUTE) {
             return {
                 inSession: true,
                 sessionName: 'TOKYO',
@@ -1304,7 +1308,7 @@ class TradingSessionManager {
             };
         }
 
-        if (currentTimeDecimal >= CONFIG.LONDON_START && currentTimeDecimal < CONFIG.LONDON_END) {
+        if (currentTimeDecimal >= CONFIG.LONDON_START && currentTimeDecimal < CONFIG.LONDON_END && currentMinute <= CONFIG.LONDON_MINUTE) {
             return {
                 inSession: true,
                 sessionName: 'LONDON',
@@ -1313,7 +1317,7 @@ class TradingSessionManager {
             };
         }
 
-        if (currentTimeDecimal >= CONFIG.NEWYORK_START && currentTimeDecimal < CONFIG.NEWYORK_END) {
+        if (currentTimeDecimal >= CONFIG.NEWYORK_START && currentTimeDecimal < CONFIG.NEWYORK_END && currentMinute <= CONFIG.NEWYORK_MINUTE) {
             return {
                 inSession: true,
                 sessionName: 'NEW YORK',
