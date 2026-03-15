@@ -1081,9 +1081,9 @@ class STEPINDEXGridBot {
               'success'
             );
 
-            if ((analysis.details.consensus.agreementRatio * 100).toFixed(0) < 100) {
+            if (analysis.details.consensus.agreementRatio < 0.99) {
               this.log(
-                `   ⚠️ Consensus agreement at ` +
+                `   ⚠️ Consensus agreement at ${analysis.details.consensus.agreementRatio}` +
                 `${(analysis.details.consensus.agreementRatio * 100).toFixed(0)}% — ` +
                 `trade signal is less certain`
               );
