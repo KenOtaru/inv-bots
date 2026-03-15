@@ -433,7 +433,7 @@ const DEFAULT_CONFIG = {
     // Pattern lengths to analyze
     // Shorter (3-4): more matches, less specific
     // Longer (7-8): fewer matches, more specific
-    patternLengths: [3],  //[3, 4, 5, 6, 7, 8]
+    patternLengths: [1],  //[3, 4, 5, 6, 7, 8]
 
     // Minimum historical occurrences of a pattern before trusting it
     minOccurrences: 5,
@@ -1086,8 +1086,8 @@ class STEPINDEXGridBot {
               `Pattern signal: ${analysis.direction === 'CALLE' ? 'HIGHER 🟢' : 'LOWER 🔴'}\n` +
                 `Confidence: ${(analysis.confidence * 100).toFixed(1)}%\n` +
                 `Stake: $${this.calculateStake(this.currentGridLevel).toFixed(2)}\n` +
-                `Seconds: ${DEFAULT_CONFIG.tickDuration}`
-                `Investment: $${this.investmentRemaining.toFixed(2)}`
+                `Duration: ${DEFAULT_CONFIG.tickDuration}` + '\n' +
+                `Investment: $${this.investmentRemaining.toFixed(2)}`,
             );
 
             // Place trade
