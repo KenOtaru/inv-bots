@@ -1090,18 +1090,13 @@ class STEPINDEXGridBot {
               return;
             }
 
-            const summary = this.patternAnalyzer.getAnalysisSummary(result);
-
             this._sendTelegram(
               `${DEFAULT_CONFIG.symbol} Trade Open\n` +
               `Pattern signal: ${analysis.direction === 'PUTE' ? 'HIGHER 🟢' : 'LOWER 🔴'}\n` +
                 `Confidence: ${(analysis.confidence * 100).toFixed(1)}%\n` +
                 `Stake: $${this.calculateStake(this.currentGridLevel).toFixed(2)}\n` +
                 `Duration: ${DEFAULT_CONFIG.tickDuration}` + '\n' +
-                `Investment: $${this.investmentRemaining.toFixed(2)}` +
-
-                `SUMMARY:` +
-                `\n${summary}\n\n}`,
+                `Investment: $${this.investmentRemaining.toFixed(2)}`
             );
 
             // Place trade
