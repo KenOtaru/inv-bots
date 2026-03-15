@@ -428,12 +428,12 @@ const DEFAULT_CONFIG = {
     // 0.60 = 60% — the bot will only trade when it's at least 60% sure
     // Increase for fewer but higher-quality trades
     // Decrease for more frequent trading with lower accuracy
-    minConfidence: 0.5,
+    minConfidence: 0.6,
 
     // Pattern lengths to analyze
     // Shorter (3-4): more matches, less specific
     // Longer (7-8): fewer matches, more specific
-    patternLengths: [3],  //[3, 4, 5, 6, 7, 8]
+    patternLengths: [2, 3, 4, 5, 6, 7],  //[3, 4, 5, 6, 7, 8]
 
     // Minimum historical occurrences of a pattern before trusting it
     minOccurrences: 5,
@@ -470,7 +470,7 @@ const DEFAULT_CONFIG = {
 // FILE PATHS
 // ══════════════════════════════════════════════════════════════════════════════
 
-const STATE_FILE          = path.join(__dirname, 'ST-grid-state-pattern-v2.json');
+const STATE_FILE          = path.join(__dirname, 'ST-grid-state-pattern-v20001.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1075,7 +1075,7 @@ class STEPINDEXGridBot {
 
             this.log(
               `${modeLabel} | Pattern says ` +
-              `${analysis.direction === 'CALLE' ? 'HIGHER 🟢' : 'LOWER 🔴'} ` +
+              `${analysis.direction === 'PUTE' ? 'HIGHER 🟢' : 'LOWER 🔴'} ` +
               `@ ${(analysis.confidence * 100).toFixed(1)}% confidence | ` +
               `Stake: $${this.calculateStake(this.currentGridLevel).toFixed(2)}`,
               'success'
@@ -1083,11 +1083,17 @@ class STEPINDEXGridBot {
 
             this._sendTelegram(
               `${DEFAULT_CONFIG.symbol} Trade Open\n` +
-              `Pattern signal: ${analysis.direction === 'CALLE' ? 'HIGHER 🟢' : 'LOWER 🔴'}\n` +
+              `Pattern signal: ${analysis.direction === 'PUTE' ? 'HIGHER 🟢' : 'LOWER 🔴'}\n` +
                 `Confidence: ${(analysis.confidence * 100).toFixed(1)}%\n` +
                 `Stake: $${this.calculateStake(this.currentGridLevel).toFixed(2)}\n` +
                 `Duration: ${DEFAULT_CONFIG.tickDuration}` + '\n' +
                 `Investment: $${this.investmentRemaining.toFixed(2)}`,
+                
+                `Trade Analysis}` + '\n' +
+                `🧠 Pattern Settings: Confidence ≥ ${(cfg.pattern.minConfidence * 100).toFixed(0)}% | ` +
+                `Lengths: [${cfg.pattern.patternLengths.join(',')}] | ` +
+                `Min Occurrences: ${cfg.pattern.minOccurrences} | ` +
+                `Recency Decay: ${cfg.pattern.recencyDecay}`
             );
 
             // Place trade
@@ -1797,7 +1803,9 @@ class STEPINDEXGridBot {
     }
 
     const stake     = this.calculateStake(this.currentGridLevel);
-    const direction = this.currentDirection;
+
+    // const direction = this.currentDirection;
+    const direction = this.currentDirection === 'CALLE' ? 'PUTE' : 'CALLE';
     const label     = direction === 'CALLE' ? 'HIGHER' : 'LOWER';
     const tradeType = this.inRecoveryMode
       ? `⚡ RECOVERY L${this.currentGridLevel}`
