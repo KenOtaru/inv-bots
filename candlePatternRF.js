@@ -1082,7 +1082,7 @@ class STEPINDEXGridBot {
             );
 
             this._sendTelegram(
-              `${modeLabel}\n` +
+              `${DEFAULT_CONFIG.symbol} Trade Open\n` +
               `Pattern signal: ${analysis.direction === 'CALLE' ? 'HIGHER 🟢' : 'LOWER 🔴'}\n` +
                 `Confidence: ${(analysis.confidence * 100).toFixed(1)}%\n` +
                 `Stake: $${this.calculateStake(this.currentGridLevel).toFixed(2)}\n` +
