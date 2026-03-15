@@ -1088,12 +1088,6 @@ class STEPINDEXGridBot {
                 `Stake: $${this.calculateStake(this.currentGridLevel).toFixed(2)}\n` +
                 `Duration: ${DEFAULT_CONFIG.tickDuration}` + '\n' +
                 `Investment: $${this.investmentRemaining.toFixed(2)}`,
-                
-                `Trade Analysis}` + '\n' +
-                `🧠 Pattern Settings: Confidence ≥ ${(cfg.pattern.minConfidence * 100).toFixed(0)}% | ` +
-                `Lengths: [${cfg.pattern.patternLengths.join(',')}] | ` +
-                `Min Occurrences: ${cfg.pattern.minOccurrences} | ` +
-                `Recency Decay: ${cfg.pattern.recencyDecay}`
             );
 
             // Place trade
