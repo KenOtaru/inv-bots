@@ -2218,7 +2218,7 @@ function main() {
 
   if (bot.telegramBot) bot.startTelegramTimer();
 
-  bot.startTimeScheduler();
+  // bot.startTimeScheduler();
 
   bot.connect();
 
