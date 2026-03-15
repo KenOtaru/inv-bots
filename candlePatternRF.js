@@ -1063,7 +1063,7 @@ class STEPINDEXGridBot {
         if (this.running && !this.tradeInProgress) {
           const analysis = this._runPatternAnalysis();
 
-          if (analysis.shouldTrade && (analysis.details.consensus.agreementRatio * 100).toFixed(0) >= 100) {
+          if (analysis.shouldTrade) {
             // Pattern has high confidence — execute trade
             this.currentDirection = analysis.direction;
             this.canTrade = true;
@@ -1080,6 +1080,15 @@ class STEPINDEXGridBot {
               `Stake: $${this.calculateStake(this.currentGridLevel).toFixed(2)}`,
               'success'
             );
+
+            if ((analysis.details.consensus.agreementRatio * 100).toFixed(0) < 100) {
+              this.log(
+                `   ⚠️ Consensus agreement at ` +
+                `${(analysis.details.consensus.agreementRatio * 100).toFixed(0)}% — ` +
+                `trade signal is less certain`
+              );
+              return;
+            }
 
             const summary = this.patternAnalyzer.getAnalysisSummary(result);
 
