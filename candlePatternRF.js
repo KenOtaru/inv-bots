@@ -1086,7 +1086,8 @@ class STEPINDEXGridBot {
               `Pattern signal: ${analysis.direction === 'CALLE' ? 'HIGHER 🟢' : 'LOWER 🔴'}\n` +
                 `Confidence: ${(analysis.confidence * 100).toFixed(1)}%\n` +
                 `Stake: $${this.calculateStake(this.currentGridLevel).toFixed(2)}\n` +
-                `Skipped candles: ${this.skippedCandles}`
+                `Seconds: ${DEFAULT_CONFIG.tickDuration}`
+                `Investment: $${this.investmentRemaining.toFixed(2)}`
             );
 
             // Place trade
