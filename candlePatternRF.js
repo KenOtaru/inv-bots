@@ -1098,7 +1098,7 @@ class STEPINDEXGridBot {
                 `Confidence: ${(analysis.confidence * 100).toFixed(1)}%\n` +
                 `Stake: $${this.calculateStake(this.currentGridLevel).toFixed(2)}\n` +
                 `Duration: ${DEFAULT_CONFIG.tickDuration}` + '\n' +
-                `Investment: $${this.investmentRemaining.toFixed(2)}`
+                `Investment: $${this.investmentRemaining.toFixed(2)}` +
 
                 `SUMMARY:` +
                 `\n${summary}\n\n}`,
