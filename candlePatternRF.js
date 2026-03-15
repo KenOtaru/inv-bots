@@ -433,7 +433,7 @@ const DEFAULT_CONFIG = {
     // Pattern lengths to analyze
     // Shorter (3-4): more matches, less specific
     // Longer (7-8): fewer matches, more specific
-    patternLengths: [2, 3],  //
+    patternLengths: [1, 2, 3],  //
 
     // Minimum historical occurrences of a pattern before trusting it
     minOccurrences: 5,
