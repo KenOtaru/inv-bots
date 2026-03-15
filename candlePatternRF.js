@@ -1063,7 +1063,7 @@ class STEPINDEXGridBot {
         if (this.running && !this.tradeInProgress) {
           const analysis = this._runPatternAnalysis();
 
-          if (analysis.shouldTrade) {
+          if (analysis.shouldTrade && (analysis.details.consensus.agreementRatio * 100).toFixed(0) >= 100) {
             // Pattern has high confidence — execute trade
             this.currentDirection = analysis.direction;
             this.canTrade = true;
@@ -1081,17 +1081,22 @@ class STEPINDEXGridBot {
               'success'
             );
 
+            const summary = this.patternAnalyzer.getAnalysisSummary(result);
+
             this._sendTelegram(
               `${DEFAULT_CONFIG.symbol} Trade Open\n` +
               `Pattern signal: ${analysis.direction === 'PUTE' ? 'HIGHER 🟢' : 'LOWER 🔴'}\n` +
                 `Confidence: ${(analysis.confidence * 100).toFixed(1)}%\n` +
                 `Stake: $${this.calculateStake(this.currentGridLevel).toFixed(2)}\n` +
                 `Duration: ${DEFAULT_CONFIG.tickDuration}` + '\n' +
-                `Investment: $${this.investmentRemaining.toFixed(2)}`,
+                `Investment: $${this.investmentRemaining.toFixed(2)}`
+
+                `SUMMARY:` +
+                `\n${summary}\n\n}`,
             );
 
             // Place trade
-            this._placeTrade();
+            this._placeTrade(analysis.direction);
 
           } else {
             // Confidence too low — skip this candle
@@ -1776,7 +1781,7 @@ class STEPINDEXGridBot {
   // PLACE TRADE
   // ══════════════════════════════════════════════════════════════════════════
 
-  _placeTrade() {
+  _placeTrade(directions) {
     if (!this.isAuthorized) {
       this.log('Not authorized — cannot trade', 'error');
       return;
@@ -1799,7 +1804,7 @@ class STEPINDEXGridBot {
     const stake     = this.calculateStake(this.currentGridLevel);
 
     // const direction = this.currentDirection;
-    const direction = this.currentDirection === 'CALLE' ? 'PUTE' : 'CALLE';
+    const direction = directions === 'CALLE' ? 'PUTE' : 'CALLE';
     const label     = direction === 'CALLE' ? 'HIGHER' : 'LOWER';
     const tradeType = this.inRecoveryMode
       ? `⚡ RECOVERY L${this.currentGridLevel}`
