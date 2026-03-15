@@ -428,7 +428,7 @@ const DEFAULT_CONFIG = {
     // 0.60 = 60% — the bot will only trade when it's at least 60% sure
     // Increase for fewer but higher-quality trades
     // Decrease for more frequent trading with lower accuracy
-    minConfidence: 0.55,
+    minConfidence: 0.5,
 
     // Pattern lengths to analyze
     // Shorter (3-4): more matches, less specific
@@ -1081,6 +1081,14 @@ class STEPINDEXGridBot {
               'success'
             );
 
+            this._sendTelegram(
+              `${modeLabel}\n` +
+              `Pattern signal: ${analysis.direction === 'CALLE' ? 'HIGHER 🟢' : 'LOWER 🔴'}\n` +
+                `Confidence: ${(analysis.confidence * 100).toFixed(1)}%\n` +
+                `Stake: $${this.calculateStake(this.currentGridLevel).toFixed(2)}\n` +
+                `Skipped candles: ${this.skippedCandles}`
+            );
+
             // Place trade
             this._placeTrade();
 
@@ -1315,7 +1323,7 @@ class STEPINDEXGridBot {
   // ── balance ───────────────────────────────────────────────────────────────
   _onBalance(msg) {
     this.balance = msg.balance.balance;
-    this.log(`Balance updated: ${this.currency} ${this.balance.toFixed(2)}`);
+    // this.log(`Balance updated: ${this.currency} ${this.balance.toFixed(2)}`);
   }
 
   // ── proposal → buy ────────────────────────────────────────────────────────
