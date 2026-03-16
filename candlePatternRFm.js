@@ -411,7 +411,7 @@ const LOGGER = {
 // TRADE HISTORY MANAGER
 // ══════════════════════════════════════════════════════════════════════════════
 
-const HISTORY_FILE = path.join(__dirname, 'candlePatternRF2-multi-history.json');
+const HISTORY_FILE = path.join(__dirname, 'candlePatternRF-multi-history01.json');
 let tradeHistory = null;
 
 class TradeHistoryManager {
@@ -530,7 +530,7 @@ class TradeHistoryManager {
 // STATE MANAGEMENT
 // ══════════════════════════════════════════════════════════════════════════════
 
-const STATE_FILE = path.join(__dirname, 'candlePatternRF2-multi-state.json');
+const STATE_FILE = path.join(__dirname, 'candlePatternRF-multi-state01.json');
 
 const state = {
   assets: {},
@@ -1073,7 +1073,6 @@ class ConnectionManager {
         if (position) {
           position.contractId = contract.contract_id;
           position.buyPrice = contract.buy_price;
-          // TelegramService.sendTradeAlert('OPEN', position.symbol, position.direction, position.stake, `${position.duration}${position.durationUnit}`);
           break;
         }
       }
