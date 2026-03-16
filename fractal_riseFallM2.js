@@ -1170,46 +1170,46 @@ const CONFIG = {
 // Override default candle/duration settings per asset.
 // Any setting not specified here will fall back to CONFIG defaults.
 const ASSET_CONFIGS = {
-    R_10: {
-        GRANULARITY: 60,
-        TIMEFRAME_LABEL: '1m',
-        MAX_CANDLES_STORED: 100,
-        CANDLES_TO_LOAD: 100,
-        DURATION: 54,
-        DURATION_UNIT: 's'
-    },
-    R_25: {
-        GRANULARITY: 60,
-        TIMEFRAME_LABEL: '1m',
-        MAX_CANDLES_STORED: 100,
-        CANDLES_TO_LOAD: 100,
-        DURATION: 54,
-        DURATION_UNIT: 's'
-    },
-    R_50: {
-        GRANULARITY: 60,        
-        TIMEFRAME_LABEL: '1m',
-        MAX_CANDLES_STORED: 100,
-        CANDLES_TO_LOAD: 100,
-        DURATION: 54,           
-        DURATION_UNIT: 's'
-    },
-    R_75: {
-        GRANULARITY: 60,
-        TIMEFRAME_LABEL: '1m',
-        MAX_CANDLES_STORED: 100,
-        CANDLES_TO_LOAD: 100,
-        DURATION: 54,
-        DURATION_UNIT: 's'
-    },
-    R_100: {
-        GRANULARITY: 60,        
-        TIMEFRAME_LABEL: '1m',
-        MAX_CANDLES_STORED: 100,
-        CANDLES_TO_LOAD: 100,
-        DURATION: 54,             
-        DURATION_UNIT: 's'      
-    }
+    // R_10: {
+    //     GRANULARITY: 60,
+    //     TIMEFRAME_LABEL: '1m',
+    //     MAX_CANDLES_STORED: 100,
+    //     CANDLES_TO_LOAD: 100,
+    //     DURATION: 54,
+    //     DURATION_UNIT: 's'
+    // },
+    // R_25: {
+    //     GRANULARITY: 60,
+    //     TIMEFRAME_LABEL: '1m',
+    //     MAX_CANDLES_STORED: 100,
+    //     CANDLES_TO_LOAD: 100,
+    //     DURATION: 54,
+    //     DURATION_UNIT: 's'
+    // },
+    // R_50: {
+    //     GRANULARITY: 60,        
+    //     TIMEFRAME_LABEL: '1m',
+    //     MAX_CANDLES_STORED: 100,
+    //     CANDLES_TO_LOAD: 100,
+    //     DURATION: 54,           
+    //     DURATION_UNIT: 's'
+    // },
+    // R_75: {
+    //     GRANULARITY: 60,
+    //     TIMEFRAME_LABEL: '1m',
+    //     MAX_CANDLES_STORED: 100,
+    //     CANDLES_TO_LOAD: 100,
+    //     DURATION: 54,
+    //     DURATION_UNIT: 's'
+    // },
+    // R_100: {
+    //     GRANULARITY: 60,        
+    //     TIMEFRAME_LABEL: '1m',
+    //     MAX_CANDLES_STORED: 100,
+    //     CANDLES_TO_LOAD: 100,
+    //     DURATION: 54,             
+    //     DURATION_UNIT: 's'      
+    // }
 };
 
 /**
