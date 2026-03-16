@@ -1298,15 +1298,15 @@ class DerivPatternBot {
     let isRecovery = false;
 
     // Recovery mode: alternate from last losing trade
-    if (assetState.lastTradeWasWin === false) {
-      isRecovery = true;
-      if (assetState.lastTradeDirection === 'CALLE') {
-        direction = 'PUTE';
-      } else {
-        direction = 'CALLE';
-      }
-      LOGGER.trade(`🔄 [${symbol}] RECOVERY MODE: ${direction}`);
-    }
+    // if (assetState.lastTradeWasWin === false) {
+    //   isRecovery = true;
+    //   if (assetState.lastTradeDirection === 'CALLE') {
+    //     direction = 'PUTE';
+    //   } else {
+    //     direction = 'CALLE';
+    //   }
+    //   LOGGER.trade(`🔄 [${symbol}] RECOVERY MODE: ${direction}`);
+    // }
 
     const stake = assetState.currentStake;
     const duration = assetConfig.DURATION;

@@ -35,6 +35,11 @@ const CONFIG = {
   TELEGRAM_BOT_TOKEN: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
   TELEGRAM_CHAT_ID: '752497117',
 
+  // Recovery Strategy Settings
+  // When enabled: After a loss, trade immediately on next candle in SAME direction (no analysis)
+  // When disabled: After a loss, wait for pattern analysis signal
+  USE_RECOVERY_STRATEGY: true,
+
   // State
   STATE_SAVE_INTERVAL: 5000
 };
@@ -685,21 +690,145 @@ class TelegramService {
     const today = TradeHistoryManager.getTodayStats();
     const overall = TradeHistoryManager.getOverallStats();
 
-    const msg = `
-${emoji} <b>${type} TRADE ALERT</b>
-Asset: ${symbol}
-Direction: ${direction}
-Stake: $${stake.toFixed(2)}
-Duration: ${duration}
-Martingale Level: ${asset ? asset.martingaleLevel : 0}
-${details.profit !== undefined ? `
-Profit: $${details.profit.toFixed(2)}
+    // Build analysis details for OPEN trades
+    let analysisDetails = '';
+    if (type === 'OPEN' && details) {
+      if (details.isRecovery) {
+        analysisDetails = `
+🔄 <b>RECOVERY MODE: YES</b>
+⚡ Same direction as loss trade (NO pattern analysis)`;
+      } else if (details.analysis) {
+        const analysis = details.analysis;
+        const agreementRatio = analysis.details?.consensus?.agreementRatio 
+          ? (analysis.details.consensus.agreementRatio * 100).toFixed(0) 
+          : 'N/A';
+        const bestPattern = analysis.details?.bestPattern;
+        analysisDetails = `
+🧠 <b>PATTERN ANALYSIS:</b>
+📊 Confidence: ${(analysis.confidence * 100).toFixed(1)}%
+🤝 Agreement: ${agreementRatio}%
+📈 Best Pattern: L${bestPattern?.patternLength || 'N/A'} "${bestPattern?.pattern || 'N/A'}" (${(bestPattern?.confidence * 100).toFixed(1)}%)`;
+      }
+    }
+
+    // Profit/Loss details for WIN/LOSS trades
+    let resultDetails = '';
+    if (details.profit !== undefined) {
+      const isWin = details.profit > 0;
+      resultDetails = `
+${isWin ? '🟢' : '🔴'} <b>Profit: $${details.profit.toFixed(2)}</b>
 
 📊 Today's P/L: $${today.netPL.toFixed(2)}
-Overall P/L: $${overall.netPL.toFixed(2)}
-Capital: $${state.capital.toFixed(2)}
-` : ''}`.trim();
+📈 Overall P/L: $${overall.netPL.toFixed(2)}
+💰 Capital: $${state.capital.toFixed(2)}`;
+    }
+
+    const recoveryStatus = asset?.isRecovery ? '🔄 RECOVERY' : '🎯 NORMAL';
+
+    const msg = `
+${emoji} <b>${type} TRADE ALERT - ${recoveryStatus}</b>
+
+📊 Asset: ${symbol}
+📈 Direction: ${direction === 'CALLE' ? 'RISE 📈' : 'FALL 📉'}
+💵 Stake: $${stake.toFixed(2)}
+⏱ Duration: ${duration}
+🔢 Martingale Level: ${asset ? asset.martingaleLevel : 0}
+${analysisDetails}${resultDetails}
+
+⏰ ${new Date().toLocaleTimeString()}`.trim();
+
     await this.sendMessage(msg);
+  }
+
+  static async sendHourlySummary() {
+    const statsSnapshot = { ...state.hourlyStats };
+
+    if (statsSnapshot.trades === 0) {
+      LOGGER.info('📱 Telegram: Skipping hourly summary (no trades this hour)');
+      return;
+    }
+
+    const totalTrades = statsSnapshot.wins + statsSnapshot.losses;
+    const winRate = totalTrades > 0 ? ((statsSnapshot.wins / totalTrades) * 100).toFixed(1) : 0;
+    const pnlEmoji = statsSnapshot.pnl >= 0 ? '🟢' : '🔴';
+    const pnlStr = (statsSnapshot.pnl >= 0 ? '+' : '') + '$' + statsSnapshot.pnl.toFixed(2);
+
+    const today = TradeHistoryManager.getTodayStats();
+    const overall = TradeHistoryManager.getOverallStats();
+
+    // Per-asset hourly info
+    let assetInfo = '';
+    ACTIVE_ASSETS.forEach(symbol => {
+      const a = state.assets[symbol];
+      if (a && a.tradesCount > 0) {
+        const ac = getAssetConfig(symbol);
+        const recoveryStatus = a.isRecovery ? '🔄 REC' : '🎯 NORM';
+        assetInfo += `\n  ${symbol} ${recoveryStatus}: ${a.tradesCount}t, ${a.winsCount}W/${a.lossesCount}L, P/L:$${a.netPL.toFixed(2)}, M:${a.martingaleLevel}`;
+      }
+    });
+
+    const msg = `
+⏰ <b>Pattern Bot Hourly Summary</b>
+
+📊 <b>Last Hour</b>
+├ Trades: ${statsSnapshot.trades}
+├ Wins: ${statsSnapshot.wins} | Losses: ${statsSnapshot.losses}
+├ Win Rate: ${winRate}%
+└ ${pnlEmoji} <b>P&L:</b> ${pnlStr}
+
+📅 <b>Today (${TradeHistoryManager.getDateKey()})</b>
+├ Total Trades: ${today.tradesCount}
+├ Total W/L: ${today.winsCount}/${today.lossesCount}
+└ Today P/L: ${today.netPL >= 0 ? '+' : ''}$${today.netPL.toFixed(2)}
+
+📈 <b>Overall (All Time)</b>
+├ Total Trades: ${overall.tradesCount}
+├ Total W/L: ${overall.winsCount}/${overall.lossesCount}
+└ Overall P/L: ${overall.netPL >= 0 ? '+' : ''}$${overall.netPL.toFixed(2)}
+
+💰 Current Capital: $${state.capital.toFixed(2)}
+
+🔧 <b>Per-Asset Status:</b>${assetInfo || '\n  No trades yet'}
+
+🔄 Recovery Strategy: ${CONFIG.USE_RECOVERY_STRATEGY ? 'ENABLED' : 'DISABLED'}
+`.trim();
+
+    try {
+      await this.sendMessage(msg);
+      LOGGER.info('📱 Telegram: Hourly Summary sent');
+      LOGGER.info(`   📊 Hour Stats: ${statsSnapshot.trades} trades, ${statsSnapshot.wins}W/${statsSnapshot.losses}L, ${pnlStr}`);
+    } catch (error) {
+      LOGGER.error(`❌ Telegram hourly summary failed: ${error.message}`);
+    }
+
+    // Reset hourly stats
+    state.hourlyStats = {
+      trades: 0,
+      wins: 0,
+      losses: 0,
+      pnl: 0,
+      lastHour: new Date().getHours()
+    };
+  }
+
+  static startHourlyTimer() {
+    const now = new Date();
+    const nextHour = new Date(now);
+    nextHour.setHours(nextHour.getHours() + 1);
+    nextHour.setMinutes(0);
+    nextHour.setSeconds(0);
+    nextHour.setMilliseconds(0);
+
+    const timeUntilNextHour = nextHour.getTime() - now.getTime();
+
+    LOGGER.info(`📱 Hourly Telegram timer started (first summary in ${Math.ceil(timeUntilNextHour / 60000)} min)`);
+
+    setTimeout(() => {
+      this.sendHourlySummary();
+      setInterval(() => {
+        this.sendHourlySummary();
+      }, 60 * 60 * 1000); // Every hour
+    }, timeUntilNextHour);
   }
 
   static async sendSessionSummary() {
@@ -799,6 +928,7 @@ class ConnectionManager {
           // Trade state
           lastTradeDirection: null,
           lastTradeWasWin: null,
+          isRecovery: false,
           martingaleLevel: 0,
           currentStake: assetConfig.INITIAL_STAKE,
           baseStake: assetConfig.INITIAL_STAKE,
@@ -812,7 +942,9 @@ class ConnectionManager {
           lossesCount: 0,
           profit: 0,
           loss: 0,
-          netPL: 0
+          netPL: 0,
+          // Last analysis for notifications
+          lastAnalysis: null
         };
         LOGGER.info(`📊 Initialized asset: ${symbol} (Stake: $${assetConfig.INITIAL_STAKE}, Duration: ${assetConfig.DURATION}${assetConfig.DURATION_UNIT})`);
       } else {
@@ -1034,12 +1166,22 @@ class ConnectionManager {
       assetState.martingaleLevel = 0;
       assetState.lastTradeWasWin = true;
       assetState.currentStake = assetState.baseStake;
+      // Exit recovery mode on win
+      if (assetState.isRecovery) {
+        assetState.isRecovery = false;
+        LOGGER.info(`[${symbol}] Recovery mode EXITED - Win achieved`);
+      }
     } else {
       assetState.lossesCount++;
       assetState.loss += Math.abs(profit);
       assetState.netPL += profit;
       assetState.martingaleLevel++;
       assetState.lastTradeWasWin = false;
+      // Enter recovery mode on loss (if recovery strategy is enabled)
+      if (CONFIG.USE_RECOVERY_STRATEGY) {
+        assetState.isRecovery = true;
+        LOGGER.info(`[${symbol}] Recovery mode ENTERED - Will trade ${direction} on next candle without analysis`);
+      }
 
       // Calculate next stake
       const cfg = getAssetConfig(symbol);
@@ -1058,6 +1200,7 @@ class ConnectionManager {
         LOGGER.warn(`⚠️ [${symbol}] Max martingale reached, resetting`);
         assetState.martingaleLevel = 0;
         assetState.currentStake = cfg.INITIAL_STAKE;
+        assetState.isRecovery = false;
       }
     }
 
@@ -1249,7 +1392,10 @@ class DerivPatternBot {
       this.subscribeToCandles(symbol);
     });
 
-    TelegramService.sendMessage(`🤖 <b>MULTI-ASSET PATTERN BOT STARTED</b>\nAssets: ${ACTIVE_ASSETS.length}\nCapital: $${state.capital}`);
+    // Start hourly Telegram timer
+    TelegramService.startHourlyTimer();
+
+    TelegramService.sendMessage(`🤖 <b>MULTI-ASSET PATTERN BOT STARTED</b>\nAssets: ${ACTIVE_ASSETS.length}\nCapital: $${state.capital}\n🔄 Recovery Strategy: ${CONFIG.USE_RECOVERY_STRATEGY ? 'ENABLED' : 'DISABLED'}`);
   }
 
   subscribeToCandles(symbol) {
@@ -1286,34 +1432,42 @@ class DerivPatternBot {
       return;
     }
 
-    // Run pattern analysis
-    const analysis = assetState.patternAnalyzer.analyze(assetState.closedCandles);
+    let direction;
+    let analysis = null;
+    let isRecovery = assetState.isRecovery;
 
-    if (!analysis.shouldTrade) {
-      return;
-    }
+    // Check if in recovery mode and recovery strategy is enabled
+    if (CONFIG.USE_RECOVERY_STRATEGY && assetState.isRecovery && assetState.lastTradeDirection) {
+      // Recovery mode: trade SAME direction as losing trade, NO pattern analysis
+      direction = assetState.lastTradeDirection;
+      LOGGER.trade(`🔄 [${symbol}] RECOVERY TRADE - Same direction: ${direction} (NO analysis)`);
+    } else {
+      // Normal mode: run pattern analysis
+      analysis = assetState.patternAnalyzer.analyze(assetState.closedCandles);
+      assetState.lastAnalysis = analysis;
 
-    // Determine direction
-    let direction = analysis.direction;
-    let isRecovery = false;
-
-    // Recovery mode: alternate from last losing trade
-    if (assetState.lastTradeWasWin === false) {
-      isRecovery = true;
-      if (assetState.lastTradeDirection === 'CALLE') {
-        direction = 'PUTE';
-      } else {
-        direction = 'CALLE';
+      if (!analysis.shouldTrade) {
+        LOGGER.info(`[${symbol}] No trade signal - Confidence too low`);
+        assetState.canTrade = false;
+        return;
       }
-      LOGGER.trade(`🔄 [${symbol}] RECOVERY MODE: ${direction}`);
+
+      direction = analysis.direction;
+      isRecovery = false;
+      LOGGER.trade(`🎯 [${symbol}] PATTERN TRADE - Direction: ${direction} | Confidence: ${(analysis.confidence * 100).toFixed(1)}%`);
     }
 
     const stake = assetState.currentStake;
     const duration = assetConfig.DURATION;
     const durationUnit = assetConfig.DURATION_UNIT;
 
-    LOGGER.trade(`🎯 [${symbol}] ${direction === 'CALLE' ? 'RISE' : 'FALL'} | Stake: $${stake.toFixed(2)} | Martingale: L${assetState.martingaleLevel}`);
-    LOGGER.trade(`   Confidence: ${(analysis.confidence * 100).toFixed(1)}% | ${analysis.reason}`);
+    // Log trade details
+    if (isRecovery) {
+      LOGGER.trade(`   Recovery Mode: ${isRecovery ? 'YES' : 'NO'} | Same direction as loss | Stake: $${stake.toFixed(2)} | Martingale: L${assetState.martingaleLevel}`);
+    } else {
+      const agreementRatio = analysis?.details?.consensus?.agreementRatio ? (analysis.details.consensus.agreementRatio * 100).toFixed(0) : 'N/A';
+      LOGGER.trade(`   Recovery Mode: NO | Confidence: ${(analysis.confidence * 100).toFixed(1)}% | Agreement: ${agreementRatio}% | Stake: $${stake.toFixed(2)} | Martingale: L${assetState.martingaleLevel}`);
+    }
 
     // Execute trade
     assetState.canTrade = false;
@@ -1325,6 +1479,12 @@ class DerivPatternBot {
     };
 
     assetState.activePositions.push(position);
+
+    // Send enhanced Telegram notification
+    TelegramService.sendTradeAlert('OPEN', symbol, direction, stake, `${duration}${durationUnit}`, {
+      isRecovery,
+      analysis: isRecovery ? null : analysis
+    });
 
     const tradeRequest = {
       buy: 1, subscribe: 1, price: stake.toFixed(2),
