@@ -430,7 +430,7 @@ const DEFAULT_CONFIG = {
     // 0.60 = 60% — the bot will only trade when it's at least 60% sure
     // Increase for fewer but higher-quality trades
     // Decrease for more frequent trading with lower accuracy
-    minConfidence: 0.57,
+    minConfidence: 0.60,
 
     // Pattern lengths to analyze
     // Shorter (3-4): more matches, less specific
