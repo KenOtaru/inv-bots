@@ -276,32 +276,34 @@ class CandlePatternAnalyzer {
       // Best pattern and consensus agree — strong signal
       // Use the higher of consensus confidence and best pattern confidence
       finalDirection = consensusDirection;
-      finalConfidence = Math.max(consensusConfidence, bestPattern.confidence);
+      // finalConfidence = Math.max(consensusConfidence, bestPattern.confidence);
+      finalConfidence = consensusConfidence; // Use consensus confidence for more stability
       decisionMethod = 'CONSENSUS+BEST_AGREE';
-    } else if (bestPattern.confidence >= this.minConfidence &&
-               bestPattern.confidence > consensusConfidence + 0.05) {
-      // Best pattern disagrees but is significantly stronger — follow best
-      finalDirection = bestPattern.direction;
-      finalConfidence = bestPattern.confidence;
-      decisionMethod = 'BEST_OVERRIDES_CONSENSUS';
-    } else if (consensusConfidence >= this.minConfidence &&
-               agreementRatio >= 0.5) {
-      // Consensus has enough agreement and confidence — follow consensus
-      finalDirection = consensusDirection;
-      finalConfidence = consensusConfidence;
-      decisionMethod = 'CONSENSUS_MAJORITY';
-    } else {
-      // Conflicting signals — use whichever has higher confidence
-      if (bestPattern.confidence > consensusConfidence) {
-        finalDirection = bestPattern.direction;
-        finalConfidence = bestPattern.confidence;
-        decisionMethod = 'BEST_PATTERN_FALLBACK';
-      } else {
-        finalDirection = consensusDirection;
-        finalConfidence = consensusConfidence;
-        decisionMethod = 'CONSENSUS_FALLBACK';
-      }
-    }
+    } 
+    // else if (bestPattern.confidence >= this.minConfidence &&
+    //            bestPattern.confidence > consensusConfidence + 0.05) {
+    //   // Best pattern disagrees but is significantly stronger — follow best
+    //   finalDirection = bestPattern.direction;
+    //   finalConfidence = bestPattern.confidence;
+    //   decisionMethod = 'BEST_OVERRIDES_CONSENSUS';
+    // } else if (consensusConfidence >= this.minConfidence &&
+    //            agreementRatio >= 0.5) {
+    //   // Consensus has enough agreement and confidence — follow consensus
+    //   finalDirection = consensusDirection;
+    //   finalConfidence = consensusConfidence;
+    //   decisionMethod = 'CONSENSUS_MAJORITY';
+    // } else {
+    //   // Conflicting signals — use whichever has higher confidence
+    //   if (bestPattern.confidence > consensusConfidence) {
+    //     finalDirection = bestPattern.direction;
+    //     finalConfidence = bestPattern.confidence;
+    //     decisionMethod = 'BEST_PATTERN_FALLBACK';
+    //   } else {
+    //     finalDirection = consensusDirection;
+    //     finalConfidence = consensusConfidence;
+    //     decisionMethod = 'CONSENSUS_FALLBACK';
+    //   }
+    // }
 
     const shouldTrade = finalConfidence >= this.minConfidence;
 
@@ -433,7 +435,7 @@ const DEFAULT_CONFIG = {
     // Pattern lengths to analyze
     // Shorter (3-4): more matches, less specific
     // Longer (7-8): fewer matches, more specific
-    patternLengths: [2, 3, 4, 5, 6, 7],  //[3, 4, 5, 6, 7, 8]
+    patternLengths: [3, 4, 5, 6, 7, 8],  //[3, 4, 5, 6, 7, 8]
 
     // Minimum historical occurrences of a pattern before trusting it
     minOccurrences: 5,
@@ -470,7 +472,7 @@ const DEFAULT_CONFIG = {
 // FILE PATHS
 // ══════════════════════════════════════════════════════════════════════════════
 
-const STATE_FILE          = path.join(__dirname, 'ST-grid-state-pattern-v200001.json');
+const STATE_FILE          = path.join(__dirname, 'ST-grid-state-pattern-v200002.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1081,26 +1083,27 @@ class STEPINDEXGridBot {
               'success'
             );
 
+            const consesusAgreement = analysis.details.consensus.agreementRatio * 100;
             if (analysis.details.consensus.agreementRatio < 0.99) {
               this.log(
                 `   ⚠️ Consensus agreement at ${analysis.details.consensus.agreementRatio}` +
-                `${(analysis.details.consensus.agreementRatio * 100).toFixed(0)}% — ` +
+                `${consesusAgreement}% — ` +
                 `trade signal is less certain`
               );
-              return;
+              // return;
             }
 
-            this._sendTelegram(
-              `${DEFAULT_CONFIG.symbol} Trade Open\n` +
-              `Pattern signal: ${analysis.direction === 'CALLE' ? 'HIGHER 🟢' : 'LOWER 🔴'}\n` +
-                `Confidence: ${(analysis.confidence * 100).toFixed(1)}%\n` +
-                `Stake: $${this.calculateStake(this.currentGridLevel).toFixed(2)}\n` +
-                `Duration: ${DEFAULT_CONFIG.tickDuration}\n` +
-                `Investment: $${this.investmentRemaining.toFixed(2)}`
-            );
+            // this._sendTelegram(
+            //   `${DEFAULT_CONFIG.symbol} Trade Open\n` +
+            //   `Pattern signal: ${analysis.direction === 'CALLE' ? 'HIGHER 🟢' : 'LOWER 🔴'}\n` +
+            //     `Confidence: ${(analysis.confidence * 100).toFixed(1)}%\n` +
+            //     `Stake: $${this.calculateStake(this.currentGridLevel).toFixed(2)}\n` +
+            //     `Duration: ${DEFAULT_CONFIG.tickDuration}\n` +
+            //     `Investment: $${this.investmentRemaining.toFixed(2)}`
+            // );
 
             // Place trade
-            this._placeTrade(analysis.direction);
+            this._placeTrade(analysis.direction, analysis, consesusAgreement);
 
           } else {
             // Confidence too low — skip this candle
@@ -1188,7 +1191,9 @@ class STEPINDEXGridBot {
     }
 
     this.assetState.candles = [...candles];
-    this.assetState.closedCandles = [...candles];
+    // this.assetState.closedCandles = [...candles];
+    // Exclude the last candle (it's still forming)
+    this.assetState.closedCandles = candles.slice(0, -1);
 
     const lastCandle = candles[candles.length - 1];
     this.assetState.lastProcessedCandleOpenTime = lastCandle.open_time;
@@ -1785,7 +1790,7 @@ class STEPINDEXGridBot {
   // PLACE TRADE
   // ══════════════════════════════════════════════════════════════════════════
 
-  _placeTrade(directions) {
+  _placeTrade(directions, analysis, consensusAgreement) {
     if (!this.isAuthorized) {
       this.log('Not authorized — cannot trade', 'error');
       return;
@@ -1843,10 +1848,23 @@ class STEPINDEXGridBot {
       return;
     }
 
+    //Update investment remaining immediately
+    this.investmentRemaining = Number((this.investmentRemaining - stake).toFixed(2));
+
     this.log(
       `📊 ${tradeType} | ${label} | Stake: $${stake} | ` +
       `Confidence: ${confidenceStr} | ` +
       `Investment left: $${this.investmentRemaining.toFixed(2)}`
+    );
+
+    this._sendTelegram(
+      `${DEFAULT_CONFIG.symbol} Trade Open\n` +
+      `Pattern signal: ${analysis.direction === 'CALLE' ? 'HIGHER 🟢' : 'LOWER 🔴'}\n` +
+        `Confidence: ${(analysis.confidence * 100).toFixed(1)}%\n` + 
+        `Agreement: ${consensusAgreement}%\n` +
+        `Stake: $${this.calculateStake(this.currentGridLevel).toFixed(2)}\n` +
+        `Duration: ${DEFAULT_CONFIG.tickDuration}\n` +
+        `Investment: $${this.investmentRemaining.toFixed(2)}`
     );
 
     // After placing, prevent double-trading until next candle
