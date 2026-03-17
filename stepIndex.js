@@ -1223,6 +1223,14 @@ class STEPINDEXGridBot {
       `Investment left: $${this.investmentRemaining.toFixed(2)}`
     );
 
+    this._sendTelegram(
+      `${DEFAULT_CONFIG.symbol}</b>\n\n` +
+      `📊 ${tradeType} TRADE | ${label}\n` +
+      `📊 Stake: $${stake}\n` +
+      `📊 <b>Grid Level:</b> ${this.currentGridLevel}\n` +
+      `📊 Investment left: $${this.investmentRemaining.toFixed(2)}\n\n`
+    );
+
     if (!this.inRecoveryMode) {
       this.canTrade = false;
     }
