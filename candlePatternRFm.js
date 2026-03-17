@@ -38,7 +38,7 @@ const CONFIG = {
   // Recovery Strategy Settings
   // When enabled: After a loss, trade immediately on next candle in SAME direction (no analysis)
   // When disabled: After a loss, wait for pattern analysis signal
-  USE_RECOVERY_STRATEGY: false,
+  USE_RECOVERY_STRATEGY: true,
 
   // State
   STATE_SAVE_INTERVAL: 5000
@@ -413,7 +413,7 @@ const LOGGER = {
 // TRADE HISTORY MANAGER
 // ══════════════════════════════════════════════════════════════════════════════
 
-const HISTORY_FILE = path.join(__dirname, 'candlePatternRF-multi-history0001.json');
+const HISTORY_FILE = path.join(__dirname, 'candlePatternRF-multi-history0000001.json');
 let tradeHistory = null;
 
 class TradeHistoryManager {
@@ -532,7 +532,7 @@ class TradeHistoryManager {
 // STATE MANAGEMENT
 // ══════════════════════════════════════════════════════════════════════════════
 
-const STATE_FILE = path.join(__dirname, 'candlePatternRF-multi-state0001.json');
+const STATE_FILE = path.join(__dirname, 'candlePatternRF-multi-state0000001.json');
 
 const state = {
   assets: {},
