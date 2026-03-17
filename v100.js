@@ -1139,11 +1139,11 @@ class V100GridBot {
   // ══════════════════════════════════════════════════════════════════════════════
 
   _resumeTradingAfterStuckTradePause() {
-    if (!this.running) {
-      this.log('Bot stopped during stuck trade pause — not resuming', 'info');
-      this.isPausedDueToStuckTrade = false;
-      return;
-    }
+    // if (!this.running) {
+    //   this.log('Bot stopped during stuck trade pause — not resuming', 'info');
+    //   this.isPausedDueToStuckTrade = false;
+    //   return;
+    // }
 
     this.isPausedDueToStuckTrade = false;
     this.canTrade = true;
