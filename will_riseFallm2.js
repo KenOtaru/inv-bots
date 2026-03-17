@@ -6,8 +6,8 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'wpr_riseFallM000000001-state.json');
-const HISTORY_FILE = path.join(__dirname, 'wpr_riseFallM000000001-history.json');
+const STATE_FILE = path.join(__dirname, 'wpr_riseFallM000000002-state.json');
+const HISTORY_FILE = path.join(__dirname, 'wpr_riseFallM000000002-history.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
@@ -1144,7 +1144,7 @@ const CONFIG = {
     // true  = only trade during defined session windows below (recovery allowed anytime)
     // false = trade 24/7 (ignore session windows entirely)
     // ============================================
-    USE_TRADING_SESSIONS: false,
+    USE_TRADING_SESSIONS: true,
 
     // ============================================
     // TRADING SESSION WINDOWS (GMT+1 hours)
@@ -2601,15 +2601,16 @@ class DerivBot {
         const isRecoveryMode = assetState.lastTradeWasWin === false;
 
         if (isRecoveryMode) {
-            // ── RECOVERY MODE: alternate direction from the previous losing trade ──
+            // RECOVERY MODE: After a loss, continue in the SAME direction
+            // This is a martingale continuation strategy - not a new breakout signal
             if (assetState.lastTradeDirection === 'CALLE') {
-                direction = 'PUTE';
-                signalReason = `Recovery (${symbol} Prev LOSS on RISE → now FALL)`;
-            } else {
                 direction = 'CALLE';
-                signalReason = `Recovery (${symbol} Prev LOSS on FALL → now RISE)`;
+                signalReason = `Recovery (${symbol} Prev LOSS on RISE → Continue RISE)`;
+            } else {
+                direction = 'PUTE';
+                signalReason = `Recovery (${symbol} Prev LOSS on FALL → Continue FALL)`;
             }
-            LOGGER.trade(`🔄 [${symbol}] RECOVERY MODE: ${signalReason}`);
+            LOGGER.trade(`🔄 [${symbol}] RECOVERY MODE: ${signalReason} (Martingale Level: ${assetState.martingaleLevel})`);
 
         } else {
             // ── NORMAL MODE: WPR crossover signal ─────────────────────────────
