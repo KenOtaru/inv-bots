@@ -1448,7 +1448,7 @@ class DerivPatternBot {
 
       const agreementRatios = analysis?.details?.consensus?.agreementRatio ? (analysis.details.consensus.agreementRatio * 100).toFixed(0) : 'N/A';
 
-      if (!analysis.shouldTrade && agreementRatios < DEFAULT_ASSET_CONFIG.MIN_AGREEMENT_RATIO_CONFIDENCE) {
+      if (!analysis.shouldTrade || agreementRatios < DEFAULT_ASSET_CONFIG.MIN_AGREEMENT_RATIO_CONFIDENCE) {
         LOGGER.info(`[${symbol}] No trade signal - Confidence too low`);
         assetState.canTrade = false;
         return;
