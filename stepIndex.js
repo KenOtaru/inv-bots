@@ -1224,7 +1224,9 @@ class STEPINDEXGridBot {
     );
 
     this._sendTelegram(
-      `📊 ${tradeType} TRADE OPEN | ${label}\n` +
+      `<b>${DEFAULT_CONFIG.symbol}</b>\n` +
+      `🚀 ${tradeType} TRADE OPEN\n` +
+      `📊 Direction: ${label}\n` +
       `📊 Stake: $${stake}\n` +
       `📊 <b>Grid Level:</b> ${this.currentGridLevel}\n` +
       `📊 Investment left: $${this.investmentRemaining.toFixed(2)}\n`
