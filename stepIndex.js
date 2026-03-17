@@ -535,7 +535,7 @@ class STEPINDEXGridBot {
           this.canTrade = true;
 
           if (this.running && !this.tradeInProgress && this.canTrade) {
-            this._placeTrade(DEFAULT_CONFIG.symbol);
+            this._placeTrade();
           }
         }
       }
@@ -622,7 +622,7 @@ class STEPINDEXGridBot {
       if (this.running) {
         if (this.running && !this.tradeInProgress) {
           this.log('Retrying trade after API error…');
-          this._placeTrade(DEFAULT_CONFIG.symbol);
+          this._placeTrade();
         }
       }
     }
@@ -691,7 +691,7 @@ class STEPINDEXGridBot {
         if (this.running && !this.tradeInProgress) {
           this.log('No open contract — will trade when candle signals (or immediately if in recovery)', 'success');
           setTimeout(() => {
-            if (this.running && !this.tradeInProgress && this.canTrade) this._placeTrade(DEFAULT_CONFIG.symbol);
+            if (this.running && !this.tradeInProgress && this.canTrade) this._placeTrade();
           }, 2000);
         }
       }
@@ -947,7 +947,7 @@ class STEPINDEXGridBot {
       this.log(`⚡ Recovery trade scheduled in 1s (L${this.currentGridLevel})…`, 'warning');
       setTimeout(() => {
         if (this.running && !this.tradeInProgress && this.canTrade) {
-          this._placeTrade(DEFAULT_CONFIG.symbol);
+          this._placeTrade();
         }
       }, 1000);
     } else if (this.running && !this.inRecoveryMode) {
@@ -1173,7 +1173,7 @@ class STEPINDEXGridBot {
   // PLACE TRADE
   // ══════════════════════════════════════════════════════════════════════════════
 
-  _placeTrade(symbol) {
+  _placeTrade() {
     if (!this.isAuthorized)   { this.log('Not authorized — cannot trade', 'error');  return; }
     if (!this.running)        { return; }
     if (this.tradeInProgress) { this.log('Trade already in progress…', 'warning');  return; }
@@ -1224,8 +1224,7 @@ class STEPINDEXGridBot {
     );
 
     this._sendTelegram(
-      `${symbol}</b>\n` +
-      `📊 ${tradeType} TRADE | ${label}\n`,
+      `📊 ${tradeType} TRADE OPEN | ${label}\n` +
       `📊 Stake: $${stake}\n` +
       `📊 <b>Grid Level:</b> ${this.currentGridLevel}\n` +
       `📊 Investment left: $${this.investmentRemaining.toFixed(2)}\n`
