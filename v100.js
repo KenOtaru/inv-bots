@@ -20,7 +20,7 @@ const path        = require('path');
 // ══════════════════════════════════════════════════════════════════════════════
 
 const DEFAULT_CONFIG = {
-  apiToken: 'Dz2V2KvRf4Uukt3',
+  apiToken: 'hsj0tA0XJoIzJG5',
   appId:    '1089',
 
   symbol:        'R_100',
@@ -145,7 +145,7 @@ class V100GridBot {
     // ── Trade Watchdog ───────────────────────────────────────────────────────
     this.tradeWatchdogTimer    = null;
     this.tradeWatchdogPollTimer = null;
-    this.tradeWatchdogMs       = 5000;
+    this.tradeWatchdogMs       = 10000;
     this.tradeStartTime        = null;
 
     // ── Stuck Trade Pause State ──────────────────────────────────────────────
