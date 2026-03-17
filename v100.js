@@ -23,7 +23,7 @@ const DEFAULT_CONFIG = {
   appId:    '1089',
 
   symbol:        'R_100',
-  tickDuration:  1,
+  tickDuration:  3,
   initialStake:  0.35,
   investmentAmount: 100,
 
