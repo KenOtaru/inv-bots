@@ -1087,8 +1087,6 @@ class STEPINDEXGridBot {
   // ══════════════════════════════════════════════════════════════════════════
 
   _recoverStuckTrade(reason) {
-    this._clearAllWatchdogTimers();
-
     const contractId  = this.currentContractId;
     const stakeInfo   = this.pendingTradeInfo;
     const openSeconds = this.tradeStartTime ? Math.round((Date.now() - this.tradeStartTime) / 1000) : '?';
@@ -1116,6 +1114,8 @@ class STEPINDEXGridBot {
     this.pendingTradeInfo  = null;
     this.currentContractId = null;
     this.tradeStartTime    = null;
+
+    this._clearAllWatchdogTimers();
 
     this.log(`🔄 Will retry trade in 3 seconds…`, 'warning');
 
