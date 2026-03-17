@@ -1224,12 +1224,12 @@ class STEPINDEXGridBot {
     );
 
     this._sendTelegram(
-      `<b>${DEFAULT_CONFIG.symbol}</b>\n` +
-      `🚀 ${tradeType} TRADE OPEN\n` +
+      `🚀 <b>${DEFAULT_CONFIG.symbol}: TRADE OPEN</b>\n` +
+      `📊 Type: ${tradeType}\n` +
       `📊 Direction: ${label}\n` +
       `📊 Stake: $${stake}\n` +
       `📊 <b>Grid Level:</b> ${this.currentGridLevel}\n` +
-      `📊 Investment left: $${this.investmentRemaining.toFixed(2)}\n`
+      `📊 <b>Investment left:</b> $${this.investmentRemaining.toFixed(2)}\n`
     );
 
     if (!this.inRecoveryMode) {
