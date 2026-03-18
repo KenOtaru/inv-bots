@@ -500,7 +500,7 @@ class STEPINDEXGridBot {
       case 'proposal_open_contract': this._onContract(msg);               break;
       case 'ohlc':                   this._handleOHLC(msg.ohlc);          break;
       case 'candles':                this._handleCandlesHistory(msg);     break;
-      case 'tick':                   this._onTickForExploit(msg.tick);    break;
+      case 'tick':                   this._onTickForExploit(msg.tick); this._onLiveTickForBias(msg.tick); break;
       case 'ticks':                  this._onTicksForBias(msg.ticks);     break;
       case 'history':                this._onTickHistoryForBias(msg);     break;  // ← NEW
       case 'contracts_for':          this._onContractsFor(msg);           break;
@@ -1624,28 +1624,30 @@ class STEPINDEXGridBot {
   // ══════════════════════════════════════════════════════════════════════════════
 
   _startBiasDetection() {
-    const HISTORY_COUNT = 5000; // bulk-load this many ticks up front
+    const HISTORY_COUNT = 5000;
 
     this.biasDetector = {
-      ticks:           [],
-      directions:      [],
+      rawPrices:       [],       // stores raw float prices (history + live combined)
+      directions:      [],       // derived +1/-1 direction array for analysis
       minSample:       this.config.biasDetectionMinSample,
       maxSample:       this.config.biasDetectionMaxSample,
       isCollecting:    true,
       startTime:       Date.now(),
-      historyLoaded:   false,  // flag: true once bulk history is seeded in
+      historyLoaded:   false,    // blocks live ticks until history seed is done
+      liveTickBuffer:  [],       // buffers live ticks that arrive before history loads
+      analysisRan:     {},       // tracks which checkpoints already triggered analysis
     };
 
     this.log('📊 PHASE 3: Starting RNG bias detection...', 'info');
-    this.log(`   Step 1/2: Requesting ${HISTORY_COUNT} tick history for stpRNG...`, 'info');
+    this.log(`   Step 1/2: Requesting ${HISTORY_COUNT} historical ticks for instant seeding...`, 'info');
 
     this._sendTelegram(
       `📊 <b>Phase 3: RNG Bias Detection Started</b>\n\n` +
-      `Step 1: Loading ${HISTORY_COUNT} historical ticks...\n` +
-      `Step 2: Live ticks will continue collection to ${this.config.biasDetectionMinSample}+`
+      `Step 1: Loading ${HISTORY_COUNT} historical ticks instantly...\n` +
+      `Step 2: Live ticks appended until ${this.config.biasDetectionMinSample}+ sample reached`
     );
 
-    // ── STEP 1: Bulk-load historical ticks (instant, no waiting) ──────────
+    // STEP 1: Bulk-load tick history (responds as msg_type: 'history')
     this._send({
       ticks_history: 'stpRNG',
       adjust_start_time: 1,
@@ -1655,8 +1657,8 @@ class STEPINDEXGridBot {
       style:  'ticks',
     });
 
-    // ── STEP 2: Also subscribe live — handler will wait for history first ─
-    // (live ticks arrive via 'tick' msg_type; history arrives via 'history')
+    // STEP 2: Subscribe live ticks (respond as msg_type: 'tick' individually)
+    // These are buffered in liveTickBuffer until history finishes seeding
     this._send({
       ticks: 'stpRNG',
       subscribe: 1,
@@ -1668,31 +1670,38 @@ class STEPINDEXGridBot {
   // Processes the bulk ticks_history response and seeds biasDetector
   // ══════════════════════════════════════════════════════════════════════════════
 
+  // ══════════════════════════════════════════════════════════════════════════════
+  // BIAS DETECTION — BULK HISTORY SEED (msg_type: 'history')
+  // Mirrors reference bot's handleTickHistory: map raw prices, seed directions,
+  // then flush any live ticks that buffered while history was in-flight
+  // ══════════════════════════════════════════════════════════════════════════════
+
   _onTickHistoryForBias(msg) {
-    // Only handle if we are in bias-detection phase and history not yet loaded
     if (this.exploitDetectionPhase !== 'bias-detection') return;
     if (!this.biasDetector || this.biasDetector.historyLoaded) return;
 
     if (msg.error) {
-      this.log(`⚠️ Tick history error: ${msg.error.message} — will rely on live ticks only`, 'warning');
-      this.biasDetector.historyLoaded = true; // unblock live ticks
+      this.log(`⚠️ Tick history error: ${msg.error.message} — flushing buffer and relying on live ticks`, 'warning');
+      this.biasDetector.historyLoaded = true;
+      this._flushLiveTickBuffer();
       return;
     }
 
     const history = msg.history;
     if (!history || !history.prices || history.prices.length === 0) {
-      this.log('⚠️ Tick history returned empty — relying on live ticks only', 'warning');
+      this.log('⚠️ Tick history returned empty — flushing buffer, relying on live ticks only', 'warning');
       this.biasDetector.historyLoaded = true;
+      this._flushLiveTickBuffer();
       return;
     }
 
-    const bd     = this.biasDetector;
+    const bd = this.biasDetector;
+
+    // ── Mirror reference bot's handleTickHistory pattern ──────────────────
+    // Map raw prices to floats, store in rawPrices, derive directions
     const prices = history.prices.map(p => parseFloat(p));
+    bd.rawPrices = [...prices];
 
-    // Seed the ticks array from historical data
-    bd.ticks = [...prices];
-
-    // Derive direction array from the price series
     for (let i = 1; i < prices.length; i++) {
       bd.directions.push(prices[i] > prices[i - 1] ? 1 : -1);
     }
@@ -1700,28 +1709,119 @@ class STEPINDEXGridBot {
     bd.historyLoaded = true;
 
     const elapsed = ((Date.now() - bd.startTime) / 1000).toFixed(1);
-    const ups     = bd.directions.filter(d => d === 1).length;
     const n       = bd.directions.length;
+    const ups     = bd.directions.filter(d => d === 1).length;
 
     this.log(
-      `📊 Tick history loaded: ${prices.length} prices → ${n} directions | ` +
+      `📊 Tick history seeded: ${prices.length} prices → ${n} directions | ` +
       `Up=${ups} (${(ups / n * 100).toFixed(1)}%) | ${elapsed}s`, 'success'
     );
+    this.log(`   Flushing ${bd.liveTickBuffer.length} buffered live ticks...`, 'info');
+
+    // ── Flush any live ticks that arrived while history was loading ────────
+    this._flushLiveTickBuffer();
+
+    const nAfterFlush = bd.directions.length;
     this.log(
-      `   Need ${Math.max(0, bd.minSample - n)} more ticks from live feed to hit minimum sample.`, 'info'
+      `   Total after flush: ${nAfterFlush} directions | ` +
+      `Need ${Math.max(0, bd.minSample - nAfterFlush)} more live ticks`, 'info'
     );
 
     this._sendTelegram(
-      `📊 <b>Tick History Loaded</b>\n\n` +
-      `✅ ${prices.length} historical ticks seeded\n` +
-      `📈 Directions so far: ${n}\n` +
-      `⏳ Need ${Math.max(0, bd.minSample - n)} more live ticks to reach ${bd.minSample} minimum`
+      `📊 <b>Tick History Seeded</b>\n\n` +
+      `✅ ${prices.length} historical ticks loaded\n` +
+      `➕ ${bd.liveTickBuffer.length} buffered live ticks flushed\n` +
+      `📈 Total directions: ${nAfterFlush}\n` +
+      `⏳ Need ${Math.max(0, bd.minSample - nAfterFlush)} more to reach ${bd.minSample} minimum`
     );
 
-    // If we already hit the minimum from history alone, run analysis now
-    if (n >= bd.minSample) {
-      this.log('📊 Minimum sample already met from history — running analysis now!', 'success');
-      this._runBiasAnalysis();
+    // Run analysis if minimum already met (history alone may be enough)
+    this._checkBiasAnalysisCheckpoint();
+  }
+
+  // ── Flush the live-tick buffer accumulated before history finished ───────
+  _flushLiveTickBuffer() {
+    const bd     = this.biasDetector;
+    const buffer = bd.liveTickBuffer || [];
+
+    buffer.forEach(price => {
+      bd.rawPrices.push(price);
+      if (bd.rawPrices.length >= 2) {
+        const prev = bd.rawPrices[bd.rawPrices.length - 2];
+        bd.directions.push(price > prev ? 1 : -1);
+      }
+    });
+
+    bd.liveTickBuffer = []; // clear after flush
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // BIAS DETECTION — LIVE TICK HANDLER (msg_type: 'tick')
+  // Mirrors reference bot's handleTickUpdate: append price, derive direction,
+  // trigger analysis at checkpoints. Buffers until history seed is complete.
+  // ══════════════════════════════════════════════════════════════════════════════
+
+  _onLiveTickForBias(tick) {
+    if (!this.biasDetector?.isCollecting) return;
+    if (this.exploitDetectionPhase !== 'bias-detection') return;
+
+    const price = parseFloat(tick.quote);
+    const bd    = this.biasDetector;
+
+    // ── If history hasn't loaded yet, buffer live ticks (not directions) ──
+    // We need contiguous price sequence to derive directions correctly
+    if (!bd.historyLoaded) {
+      bd.liveTickBuffer.push(price);
+      return;
+    }
+
+    // ── Mirror reference bot's handleTickUpdate pattern ───────────────────
+    bd.rawPrices.push(price);
+
+    // Cap raw price store to avoid memory growth (keep last 60k)
+    if (bd.rawPrices.length > 60000) {
+      bd.rawPrices.shift();
+    }
+
+    // Derive direction from the previous price
+    if (bd.rawPrices.length >= 2) {
+      const prev = bd.rawPrices[bd.rawPrices.length - 2];
+      bd.directions.push(price > prev ? 1 : -1);
+    }
+
+    const n = bd.directions.length;
+
+    // Progress log every 500 live ticks
+    if (n % 500 === 0) {
+      const ups     = bd.directions.filter(d => d === 1).length;
+      const elapsed = ((Date.now() - bd.startTime) / 60000).toFixed(1);
+      this.log(`📊 Live tick ${n}: Up=${(ups / n * 100).toFixed(2)}% (${ups}/${n}) | ${elapsed} min elapsed`);
+    }
+
+    // Cap directions array
+    if (bd.directions.length > bd.maxSample) {
+      bd.directions.shift();
+      bd.isCollecting = false;
+    }
+
+    this._checkBiasAnalysisCheckpoint();
+  }
+
+  // ── Check if we've hit an analysis checkpoint ─────────────────────────────
+  _checkBiasAnalysisCheckpoint() {
+    const bd = this.biasDetector;
+    if (!bd) return;
+
+    const n           = bd.directions.length;
+    const checkpoints = [bd.minSample, 10000, 20000, bd.maxSample];
+
+    for (const cp of checkpoints) {
+      if (n >= cp && !bd.analysisRan[cp]) {
+        bd.analysisRan[cp] = true;
+        this.log(`📊 Checkpoint reached: ${n} directions — running bias analysis...`, 'info');
+        this._runBiasAnalysis();
+        break; // run one checkpoint at a time
+      }
     }
   }
 
@@ -1734,10 +1834,6 @@ class STEPINDEXGridBot {
 
   _onTicksForBias(ticks) {
     if (!this.biasDetector?.isCollecting) return;
-
-    // Wait for bulk history to be seeded before accepting live ticks
-    // (prevents double-counting and out-of-order data)
-    if (!this.biasDetector.historyLoaded) return;
 
     const bd = this.biasDetector;
 
