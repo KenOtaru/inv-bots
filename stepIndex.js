@@ -26,18 +26,18 @@ const DEFAULT_CONFIG = {
   symbol:        'stpRNG',
   tickDuration:  3,
   initialStake:  0.35,
-  investmentAmount: 150,
+  investmentAmount: 153,
 
   martingaleMultiplier:  1.48,
   maxMartingaleLevel:    1,
   afterMaxLoss:          'continue',
   continueExtraLevels:   8,
-  extraLevelMultipliers: [1.8, 2.0, 2.0, 2.1, 2.1, 2.2, 2.2],
+  extraLevelMultipliers: [1.8, 2.1, 2.1, 2.1, 2.1, 2.1, 2.1],
 
   autoCompounding:    true,
   compoundPercentage: 0.24,
 
-  stopLoss:   150,
+  stopLoss:   153,
   takeProfit: 10000,
 
   // Stuck trade recovery settings - USER ADJUSTABLE
@@ -56,7 +56,7 @@ const DEFAULT_CONFIG = {
 // FILE PATHS
 // ══════════════════════════════════════════════════════════════════════════════
 
-const STATE_FILE          = path.join(__dirname, 'ST1-grid-state0001.json');
+const STATE_FILE          = path.join(__dirname, 'ST1-grid-state000002.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -846,24 +846,24 @@ class STEPINDEXGridBot {
         ? cfg.maxMartingaleLevel + cfg.continueExtraLevels
         : cfg.maxMartingaleLevel;
 
-      let nextDir = null;
-      if (this.currentGridLevel < 3) {
-        nextDir = this.currentDirection === 'CALLE' ? 'PUTE' : 'CALLE';
+      // === BEST RECOVERY STRATEGY FOR stpRNG ===
+      let nextDir;
+
+      if (this.currentGridLevel <= 3) {
+          // Strong mean reversion in early levels
+          nextDir = this.currentDirection === 'CALLE' ? 'PUTE' : 'CALLE';
       } 
-      else if (this.currentGridLevel >= 4 && this.currentGridLevel <= 5) {
-        nextDir = this.currentDirection === 'CALLE' ? 'CALLE' : 'PUTE';
-      } else if (this.currentGridLevel === 6) {
-        nextDir = this.currentDirection === 'CALLE' ? 'PUTE' : 'CALLE';
-      } else if (this.currentGridLevel === 7) {
-        nextDir = this.currentDirection === 'CALLE' ? 'CALLE' : 'PUTE';
-      } else if (this.currentGridLevel === 8) {
-        nextDir = this.currentDirection === 'CALLE' ? 'PUTE' : 'CALLE';
+      else if (this.currentGridLevel % 3 === 0) {
+          // Every 3rd level (6,9,12...) we continue direction (expecting breakout)
+          nextDir = this.currentDirection;
       } 
       else {
-        nextDir = this.currentDirection === 'CALLE' ? 'CALLE' : 'PUTE';
+          // Levels 4,5,7,8,10,11... → reverse
+          nextDir = this.currentDirection === 'CALLE' ? 'PUTE' : 'CALLE';
       }
-      
+
       this.currentDirection = nextDir;
+      
       this.currentGridLevel = nextLevel;
       this.inRecoveryMode = true;
       this.canTrade       = true;
@@ -962,7 +962,9 @@ class STEPINDEXGridBot {
   _startTradeWatchdog(contractId, customTimeoutMs) {
     this._clearAllWatchdogTimers();
 
-    const timeoutMs = this.tradeWatchdogMs;
+    const duration = this.getTickDuration(this.currentGridLevel);
+
+    const timeoutMs = duration > 3 ? (customTimeoutMs + 5000) : this.tradeWatchdogMs;
 
     this.tradeWatchdogTimer = setTimeout(() => {
       if (!this.tradeInProgress) return;
@@ -1169,6 +1171,14 @@ class STEPINDEXGridBot {
     this.log('⏳ Waiting for next new candle to place trade…', 'info');
   }
 
+  // Replace this.config.tickDuration with this method
+  getTickDuration(level) {
+      if (level === 0) return 3;           // Fresh trade
+      if (level <= 2) return 3;            // Early recovery
+      if (level <= 5) return 5;
+      return 5;                            // Deep recovery - more breathing room
+  }
+
   // ══════════════════════════════════════════════════════════════════════════════
   // PLACE TRADE
   // ══════════════════════════════════════════════════════════════════════════════
@@ -1218,6 +1228,8 @@ class STEPINDEXGridBot {
       return;
     }
 
+    const duration = this.getTickDuration(this.currentGridLevel);
+
     this.log(
       `📊 ${tradeType} TRADE | ${label} | L${this.currentGridLevel} | Stake: $${stake} | ` +
       `Investment left: $${this.investmentRemaining.toFixed(2)}`
@@ -1225,11 +1237,12 @@ class STEPINDEXGridBot {
 
     this._sendTelegram(
       `🚀 <b>${DEFAULT_CONFIG.symbol}: TRADE OPEN</b>\n` +
-      `📊 Type: ${tradeType}\n` +
+      `🕯️ Type: ${tradeType}\n` +
       `📊 Direction: ${label}\n` +
-      `📊 Stake: $${stake}\n` +
+      `💰 Stake: $${stake}\n` +
+      `⏱ Duration: ${duration} ticks\n` +
       `📊 <b>Grid Level:</b> ${this.currentGridLevel}\n` +
-      `📊 <b>Investment left:</b> $${this.investmentRemaining.toFixed(2)}\n`
+      `💵 <b>Investment left:</b> $${this.investmentRemaining.toFixed(2)}\n`
     );
 
     if (!this.inRecoveryMode) {
@@ -1251,7 +1264,7 @@ class STEPINDEXGridBot {
       basis:         'stake',
       contract_type: direction,
       currency:      this.currency,
-      duration:      this.config.tickDuration,
+      duration:      duration, // this.config.tickDuration,
       duration_unit: 't',
       symbol:        this.config.symbol,
     });
@@ -1325,7 +1338,7 @@ class STEPINDEXGridBot {
       `💵 Investment: $${cfg.investmentAmount}\n` +
       `📊 Base Stake: $${this.baseStake.toFixed(2)}\n` +
       `🔢 Multiplier: ${cfg.martingaleMultiplier}x | Max Level: ${cfg.maxMartingaleLevel}\n` +
-      `⏱ Duration: ${cfg.tickDuration} ticks\n` +
+      `⏱ Duration: {cfg.tickDuration} ticks\n` +
       `💰 Balance: ${this.currency} ${this.balance.toFixed(2)}\n` +
       `🕯️ Mode: Trade on new candle | Recovery until win\n` +
       `⏸️ Stuck trade pause: ${pauseMin} minute(s)`
