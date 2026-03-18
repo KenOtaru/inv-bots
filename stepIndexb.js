@@ -23,7 +23,7 @@ const DEFAULT_CONFIG = {
   apiToken: 'rgNedekYXvCaPeP',
   appId:    '1089',
 
-  symbol:        'stpRNG',
+  symbol:        'R_100',
   tickDuration:  1,                    // ODD DURATION ONLY (no ties on Step Index)
   initialStake:  0.35,
   investmentAmount: 150,
@@ -1262,7 +1262,7 @@ class STEPINDEXGridBot {
   scanAvailableContracts() {
     this.log('🔍 PHASE 1: Scanning available contracts for stpRNG...', 'info');
     this._send({
-      contracts_for: 'stpRNG',
+      contracts_for: this.config.symbol,
       currency: 'USD',
       product_type: 'basic',
     });
@@ -1392,7 +1392,7 @@ class STEPINDEXGridBot {
         currency:      this.currency,
         duration:      1,
         duration_unit: 't',
-        symbol:        'stpRNG',
+        symbol:        this.config.symbol,
       });
 
       if (proposal?.proposal) {
