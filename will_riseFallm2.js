@@ -6,8 +6,8 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'wpr_riseFallM200001-state.json');
-const HISTORY_FILE = path.join(__dirname, 'wpr_riseFallM200001-history.json');
+const STATE_FILE = path.join(__dirname, 'wpr_riseFallM2000001-state.json');
+const HISTORY_FILE = path.join(__dirname, 'wpr_riseFallM2000001-history.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
@@ -1209,13 +1209,13 @@ const CONFIG = {
     // Trade Settings — NOW PER ASSET
     MAX_OPEN_POSITIONS_PER_ASSET: 1,
     TRADE_DELAY: 1000,
-    MARTINGALE_MULTIPLIER: 2.0,
-    MARTINGALE_MULTIPLIER2: 2.1,
-    MARTINGALE_MULTIPLIER3: 2.2,
-    MARTINGALE_MULTIPLIER4: 2.3,
-    MARTINGALE_MULTIPLIER5: 2.4,
+    MARTINGALE_MULTIPLIER: 1.48,
+    MARTINGALE_MULTIPLIER2: 1.8,
+    MARTINGALE_MULTIPLIER3: 2.0,
+    MARTINGALE_MULTIPLIER4: 2.1,
+    MARTINGALE_MULTIPLIER5: 2.2,
     // MARTINGALE_MULTIPLIER6: 3.0,
-    MAX_MARTINGALE_STEPS: 8,
+    MAX_MARTINGALE_STEPS: 9,
     System: 1,
     iDirection: 'RISE',
 
@@ -1777,35 +1777,35 @@ class SessionManager {
             TradeHistoryManager.recordTrade(symbol, profit, assetState.martingaleLevel);
 
             // Martingale stake calculation (per-asset)
-            if (assetState.martingaleLevel <= 3) {
+            if (assetState.martingaleLevel === 1) {
                 assetState.currentStake =
                     Math.ceil(
                         assetState.currentStake *
                         CONFIG.MARTINGALE_MULTIPLIER *
                         100
                     ) / 100;
-            } else if (assetState.martingaleLevel >= 4 && assetState.martingaleLevel <= 5) {
+            } else if (assetState.martingaleLevel === 2) {
                 assetState.currentStake =
                     Math.ceil(
                         assetState.currentStake *
                         CONFIG.MARTINGALE_MULTIPLIER2 *
                         100
                     ) / 100;
-            } else if (assetState.martingaleLevel >= 6 && assetState.martingaleLevel <= 7) {
+            } else if (assetState.martingaleLevel >= 3 && assetState.martingaleLevel <= 4) {
                 assetState.currentStake =
                     Math.ceil(
                         assetState.currentStake *
                         CONFIG.MARTINGALE_MULTIPLIER3 *
                         100
                     ) / 100;
-            } else if (assetState.martingaleLevel === 8) {
+            } else if (assetState.martingaleLevel >= 5 && assetState.martingaleLevel <= 6) {
                 assetState.currentStake =
                     Math.ceil(
                         assetState.currentStake *
                         CONFIG.MARTINGALE_MULTIPLIER4 *
                         100
                     ) / 100;
-            } else if (assetState.martingaleLevel === 9) {
+            } else if (assetState.martingaleLevel >= 7) {
                 assetState.currentStake =
                     Math.ceil(
                         assetState.currentStake *
