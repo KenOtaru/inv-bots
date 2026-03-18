@@ -2273,7 +2273,7 @@ class STEPINDEXGridBot {
       return;
     }
 
-    const duration = this.getTickDuration(this.currentGridLevel);
+    const duration = 1; // 1 tick duration for digit trades
 
     if (stake < 0.35) {
       return;
@@ -2313,6 +2313,8 @@ class STEPINDEXGridBot {
       `📊 <b>Grid Level:</b> ${this.currentGridLevel}\n` +
       `💵 <b>Investment left:</b> $${this.investmentRemaining.toFixed(2)}\n`
     );
+
+    this.tradeInProgress  = true;
 
     this._send(request);
   }
