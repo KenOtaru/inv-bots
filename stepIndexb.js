@@ -2295,7 +2295,7 @@ class STEPINDEXGridBot {
       duration:      1,
       duration_unit: 't',
       symbol:        this.config.symbol,
-      barrier:       currentDigit,
+      // barrier:       currentDigit,
     };
 
     this.log(
