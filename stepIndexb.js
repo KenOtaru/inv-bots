@@ -27,6 +27,9 @@ const DEFAULT_CONFIG = {
   tickDuration:  1,                    // ODD DURATION ONLY (no ties on Step Index)
   initialStake:  0.35,
   investmentAmount: 153,
+  // Enable/disable strategies
+  enableGrid: false,
+  enableDigitExploit: true,
 
   // ── OPTIMIZED MARTINGALE (2.1x consistent multiplier) ──────────────────
   martingaleMultiplier:  1.48,           // Was: 1.48 (creates dead zones!)
@@ -185,8 +188,8 @@ class STEPINDEXGridBot {
     this.currentDirection      = 'CALLE';
     this.baseStake             = this.config.initialStake;
     this.chainBaseStake        = this.config.initialStake;
-    this.investmentRemaining   = 0;
-    this.investmentStartAmount = 0;
+    this.investmentRemaining   = this.config.investmentAmount || 0;
+    this.investmentStartAmount = this.config.investmentAmount || 0;
     this.totalProfit           = 0;
     this.totalTrades           = 0;
     this.wins                  = 0;
@@ -303,6 +306,13 @@ class STEPINDEXGridBot {
 
   calculateStake(level) {
     const cfg = this.config;
+
+    // If user enabled only one strategy, pick it explicitly
+    if (cfg.enableDigitExploit && !cfg.enableGrid) {
+      this.tradingMode = 'digit-exploit';
+    } else if (cfg.enableGrid && !cfg.enableDigitExploit) {
+      this.tradingMode = 'grid';
+    }
     let base  = this.baseStake;
 
     if (cfg.autoCompounding && this.investmentRemaining > 0) {
@@ -849,14 +859,11 @@ class STEPINDEXGridBot {
     if (this.tradingMode === 'grid') {
       this._handleGridStrategyResult(isWin, profit, payout);
     } else if (this.tradingMode === 'digit-exploit') {
-      // Digit exploit uses simple win/loss tracking (no martingale levels)
-      if (!isWin) {
-        this.log(`❌ LOSS -$${Math.abs(profit).toFixed(2)} | Retrying next tick`, 'warning');
-        this._sendTelegramTradeResult(isWin, profit);
-      } else {
-        this.log(`✅ WIN +$${profit.toFixed(2)} | Digit exploit confirmed!`, 'success');
-        this._sendTelegramTradeResult(isWin, profit);
-      }
+      // Route digit-exploit results through the grid result handler so the
+      // same stake/martingale/auto-compounding logic is used.
+      this._handleGridStrategyResult(isWin, profit, payout);
+      // ensure tradeInProgress false so next tick can place a new trade
+      this.tradeInProgress = false;
     }
   }
 
@@ -938,7 +945,7 @@ class STEPINDEXGridBot {
 
       if (shouldContinue) {
         const nextStake = this.calculateStake(this.currentGridLevel);
-        if (nextStake > this.investmentRemaining) {
+        if (this.investmentRemaining > 0 && nextStake > this.investmentRemaining) {
           this.log(`🛑 INSUFFICIENT INVESTMENT: next $${nextStake} > remaining $${this.investmentRemaining.toFixed(2)}`, 'error');
           shouldContinue      = false;
           this.inRecoveryMode = false;
@@ -964,12 +971,17 @@ class STEPINDEXGridBot {
     // NEXT TRADE SCHEDULING
     // ══════════════════════════════════════════════════════════════════════
     if (this.running && this.inRecoveryMode && this.canTrade) {
-      this.log(`⚡ Recovery trade scheduled in 1s (L${this.currentGridLevel})…`, 'warning');
-      setTimeout(() => {
-        if (this.running && !this.tradeInProgress && this.canTrade) {
-          this._placeTrade();
-        }
-      }, 1000);
+      if (this.tradingMode === 'grid') {
+        this.log(`⚡ Recovery trade scheduled in 1s (L${this.currentGridLevel})…`, 'warning');
+        setTimeout(() => {
+          if (this.running && !this.tradeInProgress && this.canTrade) {
+            this._placeTrade();
+          }
+        }, 1000);
+      } else if (this.tradingMode === 'digit-exploit') {
+        this.log(`⚡ Recovery active (digit-exploit) — will retry on next tick (L${this.currentGridLevel})…`, 'warning');
+        // digit-exploit places trades from tick handler; no grid scheduling here
+      }
     } else if (this.running && !this.inRecoveryMode) {
       this.log(`⏳ WIN — Next trade will be placed on next new candle`, 'success');
     }
@@ -1179,6 +1191,12 @@ class STEPINDEXGridBot {
     if (!this.running)        { return; }
     if (this.tradeInProgress) { this.log('Trade already in progress…', 'warning');  return; }
 
+    // Respect config: if grid trading disabled, skip grid trade placement
+    if (!this.config.enableGrid || (this.tradingMode === 'digit-exploit' && !this.config.enableGrid)) {
+      this.log('Grid trading disabled by config — skipping _placeTrade()', 'info');
+      return;
+    }
+
     if (this.isPausedDueToStuckTrade) {
       const remainingMs = this.stuckTradePauseTimer ?
         Math.max(0, this.stuckTradePauseTimer._idleTimeout - Date.now()) : 0;
@@ -1202,7 +1220,7 @@ class STEPINDEXGridBot {
     const label     = direction === 'CALLE' ? 'HIGHER' : 'LOWER';
     const tradeType = this.inRecoveryMode ? '⚡ RECOVERY' : '🕯️ NEW CANDLE';
 
-    if (stake > this.investmentRemaining) {
+    if (this.investmentRemaining > 0 && stake > this.investmentRemaining) {
       this.log(`Insufficient investment: stake $${stake} > remaining $${this.investmentRemaining.toFixed(2)}`, 'error');
       this.running = false;
       this.inRecoveryMode = false;
@@ -2248,6 +2266,12 @@ class STEPINDEXGridBot {
     if (!this.running)        { return; }
     if (this.tradeInProgress) { this.log('Trade already in progress…', 'warning');  return; }
 
+    // Respect config: if digit-exploit disabled, skip placing digit trades
+    if (!this.config.enableDigitExploit || (this.tradingMode === 'grid' && !this.config.enableDigitExploit)) {
+      this.log('Digit-exploit trades disabled by config — skipping', 'info');
+      return;
+    }
+
     // ── CHECK IF PAUSED DUE TO STUCK TRADE ─────────────────────────────────
     if (this.isPausedDueToStuckTrade) {
       const remainingMs = this.stuckTradePauseTimer ? 
@@ -2259,7 +2283,7 @@ class STEPINDEXGridBot {
 
     const stake = this.calculateStake(this.currentGridLevel);
 
-    if (stake > this.investmentRemaining) {
+    if (this.investmentRemaining > 0 && stake > this.investmentRemaining) {
       this.log(`Insufficient investment: stake $${stake} > remaining $${this.investmentRemaining.toFixed(2)}`, 'error');
       this.running = false;
       this.inRecoveryMode = false;
