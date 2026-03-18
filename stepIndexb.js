@@ -26,19 +26,20 @@ const DEFAULT_CONFIG = {
   symbol:        'R_100',
   tickDuration:  1,                    // ODD DURATION ONLY (no ties on Step Index)
   initialStake:  0.35,
-  investmentAmount: 150,
+  investmentAmount: 153,
 
   // ── OPTIMIZED MARTINGALE (2.1x consistent multiplier) ──────────────────
-  martingaleMultiplier:  2.1,           // Was: 1.48 (creates dead zones!)
-  maxMartingaleLevel:    7,             // 2.1^7 ≈ 378x base = ~$136 max
-  afterMaxLoss:          'stop',        // Don't extend beyond max
-  continueExtraLevels:   0,             // Not needed with 2.1x
-  extraLevelMultipliers: [],            // Simplified
+  martingaleMultiplier:  1.48,           // Was: 1.48 (creates dead zones!)
+  maxMartingaleLevel:    1,             // 2.1^7 ≈ 378x base = ~$136 max
+  afterMaxLoss:          'continue',        // Don't extend beyond max
+  continueExtraLevels:   8,             // Not needed with 2.1x
+  extraLevelMultipliers: [1.8, 2.1, 2.1, 2.1, 2.1, 2.1, 2.1],            // Simplified
+  maxMartingaleLevel:    9,             // 2.1^7 ≈ 378x base = ~$136 max
 
   autoCompounding:    true,
-  compoundPercentage: 0.5,              // Was: 0.24 (too slow)
+  compoundPercentage: 0.24,              // Was: 0.24 (too slow)
 
-  stopLoss:   150,
+  stopLoss:   153,
   takeProfit: 10000,
 
   stuckTradePauseDuration: 5 * 60 * 1000,
