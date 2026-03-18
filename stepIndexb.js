@@ -2242,13 +2242,15 @@ class STEPINDEXGridBot {
   }
 
   _placeDigitTrade(params, currentDigit) {
+    this.investmentRemaining = Number((this.investmentRemaining + stakeInfo.stake).toFixed(2));
+
     const stake = Math.min(
       this.baseStake,
       this.investmentRemaining,
       this.balance
     );
 
-    console.log(`Calculated stake: ${stake} | Base stake: ${this.baseStake} | Remaining investment: ${this.investmentRemaining} | Balance: ${this.balance}`);
+    console.log(`Calculated stake: ${stake.toFixed(2)} | Base stake: ${this.baseStake} | Remaining investment: ${this.investmentRemaining.toFixed(2)} | Balance: ${this.balance}`);
 
     if (stake < 0.35) {
       return;
@@ -2263,7 +2265,7 @@ class STEPINDEXGridBot {
 
     const request = {
       proposal:      1,
-      amount:        stake,
+      amount:        stake.toFixed(2),
       basis:         'stake',
       contract_type: params.contract_type,
       currency:      this.currency,
