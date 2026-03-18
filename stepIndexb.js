@@ -1699,7 +1699,7 @@ class STEPINDEXGridBot {
 
     // ── Mirror reference bot's handleTickHistory pattern ──────────────────
     // Map raw prices to floats, store in rawPrices, derive directions
-    const prices = history.prices.map(p => parseFloat(p));
+    const prices = history.prices.map(price => this._extractLastDigit(price, this.config.symbol));// extractLastDigit returns float like 123.45, we only care about the last digit for direction (history.prices.map(p => (p));
     bd.rawPrices = [...prices];
 
     for (let i = 1; i < prices.length; i++) {
@@ -2220,6 +2220,7 @@ class STEPINDEXGridBot {
   _extractLastDigit(quote, asset) {
         const quoteString = quote.toString();
         const [, fractionalPart = ''] = quoteString.split('.');
+        this.digitExploit.pipPosition = fractionalPart.length >= 2 ? 'hundredths' : 'tenths';
 
         if (['RDBULL', 'RDBEAR', 'R_75', 'R_50'].includes(asset)) {
             return fractionalPart.length >= 4 ? parseInt(fractionalPart[3]) : 0;
