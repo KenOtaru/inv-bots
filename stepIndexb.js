@@ -20,7 +20,7 @@ const path        = require('path');
 // ══════════════════════════════════════════════════════════════════════════════
 
 const DEFAULT_CONFIG = {
-  apiToken: 'Dz2V2KvRf4Uukt3',
+  apiToken: 'rgNedekYXvCaPeP',
   appId:    '1089',
 
   symbol:        'stpRNG',
@@ -57,7 +57,7 @@ const DEFAULT_CONFIG = {
 // FILE PATHS
 // ══════════════════════════════════════════════════════════════════════════════
 
-const STATE_FILE          = path.join(__dirname, 'ST1-grid-state00001.json');
+const STATE_FILE          = path.join(__dirname, 'STT-grid-state01.json');
 const STATE_SAVE_INTERVAL = 5000;
 const EXPLOIT_RESULTS_FILE = path.join(__dirname, 'exploit-detection-results.json');
 
