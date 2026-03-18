@@ -2184,8 +2184,11 @@ class STEPINDEXGridBot {
       this.digitExploit.tickHistory = this.digitExploit.tickHistory.slice(-500);
     }
 
+    console.log(`Tick: ${price} | Last digit: ${lastDigit} | Pip position: ${this.digitExploit.pipPosition || 'unknown'}`);
+
     // Place digit trade on each tick
     const tradeParams = this._getEvenOddTradeDigit(lastDigit);
+    console.log(`Prepared trade params: ${JSON.stringify(tradeParams)}`);
     if (tradeParams) {
       this._placeDigitTrade(tradeParams);
     }
