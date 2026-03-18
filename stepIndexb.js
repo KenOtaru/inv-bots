@@ -2243,17 +2243,37 @@ class STEPINDEXGridBot {
 
   _placeDigitTrade(params, currentDigit) {
 
-    const stakeInfo   = this.pendingTradeInfo;
-    
-    this.investmentRemaining = Number((this.investmentRemaining + stakeInfo.stake).toFixed(2));
+    if (!this.isAuthorized)   { this.log('Not authorized — cannot trade', 'error');  return; }
+    if (!this.running)        { return; }
+    if (this.tradeInProgress) { this.log('Trade already in progress…', 'warning');  return; }
 
-    const stake = Math.min(
-      this.baseStake,
-      this.investmentRemaining,
-      this.balance
-    );
+    // ── CHECK IF PAUSED DUE TO STUCK TRADE ─────────────────────────────────
+    if (this.isPausedDueToStuckTrade) {
+      const remainingMs = this.stuckTradePauseTimer ? 
+        Math.max(0, this.stuckTradePauseTimer._idleTimeout - Date.now()) : 0;
+      const remainingMin = Math.ceil(remainingMs / 60000);
+      this.log(`⏸️ Cannot place trade - paused due to stuck trade. Will resume in ${remainingMin} minute(s)`, 'warning');
+      return;
+    }
 
-    console.log(`Calculated stake: ${stake.toFixed(2)} | Base stake: ${this.baseStake} | Remaining investment: ${this.investmentRemaining.toFixed(2)} | Balance: ${this.balance}`);
+    const stake     = this.calculateStake(this.currentGridLevel);
+
+    if (stake > this.investmentRemaining) {
+      this.log(`Insufficient investment: stake $${stake} > remaining $${this.investmentRemaining.toFixed(2)}`, 'error');
+      this.running = false;
+      this.inRecoveryMode = false;
+      this.canTrade = false;
+      return;
+    }
+    if (stake > this.balance) {
+      this.log(`Insufficient balance: stake $${stake} > balance $${this.balance.toFixed(2)}`, 'error');
+      this.running = false;
+      this.inRecoveryMode = false;
+      this.canTrade = false;
+      return;
+    }
+
+    const duration = this.getTickDuration(this.currentGridLevel);
 
     if (stake < 0.35) {
       return;
@@ -2280,7 +2300,18 @@ class STEPINDEXGridBot {
 
     this.log(
       `🎯 DIGIT TRADE: ${params.contract_type} | Digit: ${currentDigit} | $${stake.toFixed(2)} | ` +
-      `P(win)=100% | ${params.reason}`
+      `P(win)=100% | ${params.reason}`+
+      `📊 Grid Level ${this.currentGridLevel}` +
+      `Investment left: $${this.investmentRemaining.toFixed(2)}`
+    );
+
+    this._sendTelegram(
+      `🚀 <b>${DEFAULT_CONFIG.symbol}: TRADE OPEN</b>\n` +
+      `📊 Direction: ${params.contract_type}\n` +
+      `💰 Stake: $${stake}\n` +
+      `⏱ Duration: ${duration} ticks\n` +
+      `📊 <b>Grid Level:</b> ${this.currentGridLevel}\n` +
+      `💵 <b>Investment left:</b> $${this.investmentRemaining.toFixed(2)}\n`
     );
 
     this._send(request);
