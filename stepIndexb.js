@@ -502,6 +502,7 @@ class STEPINDEXGridBot {
       case 'candles':                this._handleCandlesHistory(msg);     break;
       case 'tick':                   this._onTickForExploit(msg.tick);    break;
       case 'ticks':                  this._onTicksForBias(msg.ticks);     break;
+      case 'history':                this._onTickHistoryForBias(msg);     break;  // ← NEW
       case 'contracts_for':          this._onContractsFor(msg);           break;
       case 'ping':                   break;
     }
@@ -1623,31 +1624,105 @@ class STEPINDEXGridBot {
   // ══════════════════════════════════════════════════════════════════════════════
 
   _startBiasDetection() {
+    const HISTORY_COUNT = 5000; // bulk-load this many ticks up front
+
     this.biasDetector = {
-      ticks:        [],
-      directions:   [],
-      minSample:    this.config.biasDetectionMinSample,
-      maxSample:    this.config.biasDetectionMaxSample,
-      isCollecting: true,
-      startTime:    Date.now(),
+      ticks:           [],
+      directions:      [],
+      minSample:       this.config.biasDetectionMinSample,
+      maxSample:       this.config.biasDetectionMaxSample,
+      isCollecting:    true,
+      startTime:       Date.now(),
+      historyLoaded:   false,  // flag: true once bulk history is seeded in
     };
 
-    this.log('📊 PHASE 3: Starting RNG bias detection — collecting tick data...', 'info');
-    this.log(
-      `   Need ${this.biasDetector.minSample} ticks minimum (≈${Math.ceil(this.biasDetector.minSample / 60)} seconds)`,
-      'info'
-    );
+    this.log('📊 PHASE 3: Starting RNG bias detection...', 'info');
+    this.log(`   Step 1/2: Requesting ${HISTORY_COUNT} tick history for stpRNG...`, 'info');
 
     this._sendTelegram(
       `📊 <b>Phase 3: RNG Bias Detection Started</b>\n\n` +
-      `Collecting ${this.biasDetector.minSample} ticks for statistical analysis...\n` +
-      `This may take 1-2 minutes.`
+      `Step 1: Loading ${HISTORY_COUNT} historical ticks...\n` +
+      `Step 2: Live ticks will continue collection to ${this.config.biasDetectionMinSample}+`
     );
 
+    // ── STEP 1: Bulk-load historical ticks (instant, no waiting) ──────────
+    this._send({
+      ticks_history: 'stpRNG',
+      adjust_start_time: 1,
+      count:  HISTORY_COUNT,
+      end:    'latest',
+      start:  1,
+      style:  'ticks',
+    });
+
+    // ── STEP 2: Also subscribe live — handler will wait for history first ─
+    // (live ticks arrive via 'tick' msg_type; history arrives via 'history')
     this._send({
       ticks: 'stpRNG',
       subscribe: 1,
     });
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════════
+  // BIAS DETECTION — HISTORY SEED HANDLER
+  // Processes the bulk ticks_history response and seeds biasDetector
+  // ══════════════════════════════════════════════════════════════════════════════
+
+  _onTickHistoryForBias(msg) {
+    // Only handle if we are in bias-detection phase and history not yet loaded
+    if (this.exploitDetectionPhase !== 'bias-detection') return;
+    if (!this.biasDetector || this.biasDetector.historyLoaded) return;
+
+    if (msg.error) {
+      this.log(`⚠️ Tick history error: ${msg.error.message} — will rely on live ticks only`, 'warning');
+      this.biasDetector.historyLoaded = true; // unblock live ticks
+      return;
+    }
+
+    const history = msg.history;
+    if (!history || !history.prices || history.prices.length === 0) {
+      this.log('⚠️ Tick history returned empty — relying on live ticks only', 'warning');
+      this.biasDetector.historyLoaded = true;
+      return;
+    }
+
+    const bd     = this.biasDetector;
+    const prices = history.prices.map(p => parseFloat(p));
+
+    // Seed the ticks array from historical data
+    bd.ticks = [...prices];
+
+    // Derive direction array from the price series
+    for (let i = 1; i < prices.length; i++) {
+      bd.directions.push(prices[i] > prices[i - 1] ? 1 : -1);
+    }
+
+    bd.historyLoaded = true;
+
+    const elapsed = ((Date.now() - bd.startTime) / 1000).toFixed(1);
+    const ups     = bd.directions.filter(d => d === 1).length;
+    const n       = bd.directions.length;
+
+    this.log(
+      `📊 Tick history loaded: ${prices.length} prices → ${n} directions | ` +
+      `Up=${ups} (${(ups / n * 100).toFixed(1)}%) | ${elapsed}s`, 'success'
+    );
+    this.log(
+      `   Need ${Math.max(0, bd.minSample - n)} more ticks from live feed to hit minimum sample.`, 'info'
+    );
+
+    this._sendTelegram(
+      `📊 <b>Tick History Loaded</b>\n\n` +
+      `✅ ${prices.length} historical ticks seeded\n` +
+      `📈 Directions so far: ${n}\n` +
+      `⏳ Need ${Math.max(0, bd.minSample - n)} more live ticks to reach ${bd.minSample} minimum`
+    );
+
+    // If we already hit the minimum from history alone, run analysis now
+    if (n >= bd.minSample) {
+      this.log('📊 Minimum sample already met from history — running analysis now!', 'success');
+      this._runBiasAnalysis();
+    }
   }
 
   _onTickForExploit(tick) {
@@ -1659,6 +1734,10 @@ class STEPINDEXGridBot {
 
   _onTicksForBias(ticks) {
     if (!this.biasDetector?.isCollecting) return;
+
+    // Wait for bulk history to be seeded before accepting live ticks
+    // (prevents double-counting and out-of-order data)
+    if (!this.biasDetector.historyLoaded) return;
 
     const bd = this.biasDetector;
 
