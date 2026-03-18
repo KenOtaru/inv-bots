@@ -2181,7 +2181,7 @@ class STEPINDEXGridBot {
     if (this.tradeInProgress) return;
 
     const price     = parseFloat(tick.quote);
-    const lastDigit = this._extractLastDigit(price);
+    const lastDigit = this._extractLastDigit(price, this.config.symbol);
 
     this.digitExploit.tickHistory.push({ price, digit: lastDigit, epoch: tick.epoch });
     if (this.digitExploit.tickHistory.length > 1000) {
@@ -2198,24 +2198,39 @@ class STEPINDEXGridBot {
     }
   }
 
-  _extractLastDigit(price) {
-    const str = price.toFixed(2);
-    const tenths = parseInt(str[str.indexOf('.') + 1], 10);
+  // _extractLastDigit(price) {
+  //   const str = price.toFixed(2);
+  //   const tenths = parseInt(str[str.indexOf('.') + 1], 10);
 
-    if (this.digitExploit.tickHistory.length > 0) {
-      const prev = this.digitExploit.tickHistory[this.digitExploit.tickHistory.length - 1];
-      const prevStr = prev.price.toFixed(2);
-      const prevTenths = parseInt(prevStr[prevStr.indexOf('.') + 1], 10);
-      const diff = Math.abs(tenths - prevTenths);
+  //   if (this.digitExploit.tickHistory.length > 0) {
+  //     const prev = this.digitExploit.tickHistory[this.digitExploit.tickHistory.length - 1];
+  //     const prevStr = prev.price.toFixed(2);
+  //     const prevTenths = parseInt(prevStr[prevStr.indexOf('.') + 1], 10);
+  //     const diff = Math.abs(tenths - prevTenths);
 
-      if (diff === 1 || diff === 9) {
-        this.digitExploit.pipPosition = 'tenths';
-        return tenths;
-      }
+  //     if (diff === 1 || diff === 9) {
+  //       this.digitExploit.pipPosition = 'tenths';
+  //       return tenths;
+  //     }
+  //   }
+
+  //   return tenths;
+  // }
+
+  _extractLastDigit(quote, asset) {
+        const quoteString = quote.toString();
+        const [, fractionalPart = ''] = quoteString.split('.');
+
+        if (['RDBULL', 'RDBEAR', 'R_75', 'R_50'].includes(asset)) {
+            return fractionalPart.length >= 4 ? parseInt(fractionalPart[3]) : 0;
+        } else if (['R_10', 'R_25', '1HZ15V', '1HZ30V', '1HZ90V'].includes(asset)) {
+            return fractionalPart.length >= 3 ? parseInt(fractionalPart[2]) : 0;
+        } else if (['stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'].includes(asset)) {
+            return fractionalPart.length >= 1 ? parseInt(fractionalPart[0]) : 0;
+        } else {
+            return fractionalPart.length >= 2 ? parseInt(fractionalPart[1]) : 0;
+        }
     }
-
-    return tenths;
-  }
 
   _getEvenOddTradeDigit(currentDigit) {
     return {
