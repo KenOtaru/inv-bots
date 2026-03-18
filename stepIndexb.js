@@ -2194,7 +2194,7 @@ class STEPINDEXGridBot {
     const tradeParams = this._getEvenOddTradeDigit(lastDigit);
     console.log(`Prepared trade params: ${JSON.stringify(tradeParams)}`);
     if (tradeParams) {
-      this._placeDigitTrade(tradeParams);
+      this._placeDigitTrade(tradeParams, lastDigit);
     }
   }
 
@@ -2241,12 +2241,14 @@ class STEPINDEXGridBot {
     };
   }
 
-  _placeDigitTrade(params) {
+  _placeDigitTrade(params, currentDigit) {
     const stake = Math.min(
       this.baseStake,
       this.investmentRemaining,
       this.balance
     );
+
+    console.log(`Calculated stake: ${stake} | Base stake: ${this.baseStake} | Remaining investment: ${this.investmentRemaining} | Balance: ${this.balance}`);
 
     if (stake < 0.35) {
       return;
@@ -2268,10 +2270,11 @@ class STEPINDEXGridBot {
       duration:      1,
       duration_unit: 't',
       symbol:        this.config.symbol,
+      barrier:       currentDigit,
     };
 
     this.log(
-      `🎯 DIGIT TRADE: ${params.contract_type} | $${stake.toFixed(2)} | ` +
+      `🎯 DIGIT TRADE: ${params.contract_type} | Digit: ${currentDigit} | $${stake.toFixed(2)} | ` +
       `P(win)=100% | ${params.reason}`
     );
 
