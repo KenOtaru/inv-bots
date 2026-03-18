@@ -184,7 +184,7 @@ class STEPINDEXGridBot {
     this.currentDirection      = 'CALLE';
     this.baseStake             = this.config.initialStake;
     this.chainBaseStake        = this.config.initialStake;
-    this.investmentRemaining   = 0;
+    this.investmentRemaining   = this.config.investmentAmount;
     this.investmentStartAmount = 0;
     this.totalProfit           = 0;
     this.totalTrades           = 0;
@@ -2256,7 +2256,7 @@ class STEPINDEXGridBot {
       return;
     }
 
-    const stake     = this.calculateStake(this.currentGridLevel);
+    const stake = this.calculateStake(this.currentGridLevel);
 
     if (stake > this.investmentRemaining) {
       this.log(`Insufficient investment: stake $${stake} > remaining $${this.investmentRemaining.toFixed(2)}`, 'error');
