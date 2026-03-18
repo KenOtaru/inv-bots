@@ -2242,6 +2242,7 @@ class STEPINDEXGridBot {
   }
 
   _placeDigitTrade(params, currentDigit) {
+    
     this.investmentRemaining = Number((this.investmentRemaining + stakeInfo.stake).toFixed(2));
 
     const stake = Math.min(
