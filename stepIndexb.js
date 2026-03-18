@@ -1699,7 +1699,7 @@ class STEPINDEXGridBot {
 
     // ── Mirror reference bot's handleTickHistory pattern ──────────────────
     // Map raw prices to floats, store in rawPrices, derive directions
-    const prices = history.prices.map(price => this._extractLastDigit(price, this.config.symbol));
+    const prices = history.prices.map(p => parseFloat(p));
     bd.rawPrices = [...prices];
 
     for (let i = 1; i < prices.length; i++) {
