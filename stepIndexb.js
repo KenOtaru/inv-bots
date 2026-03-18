@@ -1827,7 +1827,10 @@ class STEPINDEXGridBot {
 
   _onTickForExploit(tick) {
     // If in digit exploit mode, track ticks for digit extraction
+    console.log('Live tick for digit exploit:', tick);
+    console.log('Moder:', this.tradingMode, 'Running:', this.running, 'Digit Exploit Enabled:', this.digitExploit?.enabled);
     if (this.tradingMode === 'digit-exploit' && this.running && this.digitExploit?.enabled) {
+      // console.log('Processing tick for digit exploit:', tick);
       this._onTickForDigitExploit(tick);
     }
   }
