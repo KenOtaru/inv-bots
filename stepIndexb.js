@@ -124,7 +124,7 @@ class StatePersistence {
     try {
       const payload = {
         timestamp: new Date().toISOString(),
-        symbol: 'stpRNG',
+        symbol: this.config.symbol,
         results,
       };
       fs.writeFileSync(EXPLOIT_RESULTS_FILE, JSON.stringify(payload, null, 2), 'utf8');
@@ -1428,7 +1428,7 @@ class STEPINDEXGridBot {
         currency:      this.currency,
         duration:      1,
         duration_unit: 't',
-        symbol:        'stpRNG',
+        symbol:        this.config.symbol,
       });
 
       if (proposal?.proposal) {
@@ -1464,7 +1464,7 @@ class STEPINDEXGridBot {
           currency:      this.currency,
           duration:      1,
           duration_unit: 't',
-          symbol:        'stpRNG',
+          symbol:        this.config.symbol,
           barrier:       String(predictDigit),
         });
 
@@ -1503,7 +1503,7 @@ class STEPINDEXGridBot {
           currency:      this.currency,
           duration:      1,
           duration_unit: 't',
-          symbol:        'stpRNG',
+          symbol:        this.config.symbol,
           barrier:       String(barrier),
         });
 
@@ -1649,7 +1649,7 @@ class STEPINDEXGridBot {
 
     // STEP 1: Bulk-load tick history (responds as msg_type: 'history')
     this._send({
-      ticks_history: 'stpRNG',
+      ticks_history: this.config.symbol,
       adjust_start_time: 1,
       count:  HISTORY_COUNT,
       end:    'latest',
@@ -1660,7 +1660,7 @@ class STEPINDEXGridBot {
     // STEP 2: Subscribe live ticks (respond as msg_type: 'tick' individually)
     // These are buffered in liveTickBuffer until history finishes seeding
     this._send({
-      ticks: 'stpRNG',
+      ticks: this.config.symbol,
       subscribe: 1,
     });
   }
@@ -2167,7 +2167,7 @@ class STEPINDEXGridBot {
 
     // Subscribe to ticks for digit extraction
     this._send({
-      ticks: 'stpRNG',
+      ticks: this.config.symbol,
       subscribe: 1,
     });
   }
@@ -2244,7 +2244,7 @@ class STEPINDEXGridBot {
       currency:      this.currency,
       duration:      1,
       duration_unit: 't',
-      symbol:        'stpRNG',
+      symbol:        this.config.symbol,
     };
 
     this.log(
