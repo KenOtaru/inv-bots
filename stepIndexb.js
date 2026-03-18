@@ -2134,6 +2134,7 @@ class STEPINDEXGridBot {
     if (found) {
       this.log(`✅ Positive-EV exploit detected: ${reason}`, 'success');
       this.log(`   Trading mode: ${this.tradingMode}`, 'success');
+      this.running = true; // Start trading immediately with the selected strategy
       this.log('');
     } else {
       this.log(`❌ No exploitable edge found: ${reason}`, 'warning');
