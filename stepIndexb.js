@@ -185,7 +185,7 @@ class STEPINDEXGridBot {
     this.currentDirection      = 'CALLE';
     this.baseStake             = this.config.initialStake;
     this.chainBaseStake        = this.config.initialStake;
-    this.investmentRemaining   = this.config.investmentAmount;
+    this.investmentRemaining   = 0;
     this.investmentStartAmount = 0;
     this.totalProfit           = 0;
     this.totalTrades           = 0;
