@@ -124,7 +124,7 @@ class StatePersistence {
     try {
       const payload = {
         timestamp: new Date().toISOString(),
-        symbol: this.config.symbol,
+        symbol: DEFAULT_CONFIG.symbol,
         results,
       };
       fs.writeFileSync(EXPLOIT_RESULTS_FILE, JSON.stringify(payload, null, 2), 'utf8');
