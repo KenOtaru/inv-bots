@@ -1333,7 +1333,7 @@ class STEPINDEXGridBot {
 
     if (hasDigitContracts) {
       this.log('', 'success');
-      this.log('🎯🎯🎯 DIGIT CONTRACTS FOUND ON STEP INDEX! 🎯🎯🎯', 'success');
+      this.log(`🎯🎯🎯 DIGIT CONTRACTS FOUND ON ${this.config.symbol}! 🎯🎯🎯' 'success'`);
       this.log('🎯 THE DIGIT EXPLOIT IS VIABLE!', 'success');
       this.log('🎯 Initiating exploit verification...', 'success');
       this.log('', 'success');
