@@ -2265,6 +2265,7 @@ class STEPINDEXGridBot {
     if (!this.isAuthorized)   { this.log('Not authorized — cannot trade', 'error');  return; }
     if (!this.running)        { return; }
     if (this.tradeInProgress) { this.log('Trade already in progress…', 'warning');  return; }
+    if (!this.canTrade)        { return; }
 
     // Respect config: if digit-exploit disabled, skip placing digit trades
     if (!this.config.enableDigitExploit || (this.tradingMode === 'grid' && !this.config.enableDigitExploit)) {
@@ -2296,6 +2297,13 @@ class STEPINDEXGridBot {
       this.inRecoveryMode = false;
       this.canTrade = false;
       return;
+    }
+
+    // Doji candles to allowed
+    this.currentDirection = candleType === 'BULLISH' ? 'CALLE' : 'PUTE';
+    if (candleType === 'DOJI') { 
+      this.log('Last Candle was a Doji', 'warning');  
+      return; 
     }
 
     const duration = 1; // 1 tick duration for digit trades
@@ -2332,7 +2340,9 @@ class STEPINDEXGridBot {
 
     this._sendTelegram(
       `🚀 <b>${DEFAULT_CONFIG.symbol}: TRADE OPEN</b>\n` +
+      `${candleEmoji ? `📊 Last Candle: ${candleEmoji} ${candleType}\n` : ''}` +
       `📊 Direction: ${params.contract_type}\n` +
+      `📊 Reason: $${params.reason}\n` +
       `💰 Stake: $${stake}\n` +
       `⏱ Duration: ${duration} ticks\n` +
       `📊 <b>Grid Level:</b> ${this.currentGridLevel}\n` +
