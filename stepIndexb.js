@@ -742,7 +742,7 @@ class STEPINDEXGridBot {
         this.log(`Re-subscribing to open contract ${this.currentContractId}…`);
         this.tradeInProgress = true;
         this._send({ proposal_open_contract: 1, contract_id: this.currentContractId, subscribe: 1 });
-        this._startTradeWatchdog(this.currentContractId, 5000);
+        this._startTradeWatchdog(this.currentContractId);
       } else {
         this.currentGridLevel = 0;
         if (this.inRecoveryMode) {
@@ -1001,7 +1001,7 @@ class STEPINDEXGridBot {
   // TRADE WATCHDOG — DETECT STUCK CONTRACTS
   // ══════════════════════════════════════════════════════════════════════════════
 
-  _startTradeWatchdog(contractId, customTimeoutMs) {
+  _startTradeWatchdog(contractId) {
     this._clearAllWatchdogTimers();
 
     const timeoutMs = this.tradeWatchdogMs;
@@ -1717,12 +1717,12 @@ class STEPINDEXGridBot {
     }
 
     const history = msg.history;
-    if (!history || !history.prices || history.prices.length === 0) {
-      this.log('⚠️ Tick history returned empty — flushing buffer, relying on live ticks only', 'warning');
-      this.biasDetector.historyLoaded = true;
-      this._flushLiveTickBuffer();
-      return;
-    }
+    // if (!history || !history.prices || history.prices.length === 0) {
+    //   this.log('⚠️ Tick history returned empty — flushing buffer, relying on live ticks only', 'warning');
+    //   this.biasDetector.historyLoaded = true;
+    //   this._flushLiveTickBuffer();
+    //   return;
+    // }
 
     const bd = this.biasDetector;
 
@@ -1745,6 +1745,11 @@ class STEPINDEXGridBot {
       `📊 Tick history seeded: ${prices.length} prices → ${n} directions | ` +
       `Up=${ups} (${(ups / n * 100).toFixed(1)}%) | ${elapsed}s`, 'success'
     );
+
+    console.log(`📊 Tick history seeded: ${prices.length} prices → ${n} directions | ` +
+      `Up=${ups} (${(ups / n * 100).toFixed(1)}%) | ${elapsed}s`, 'success'
+    );
+
     this.log(`   Flushing ${bd.liveTickBuffer.length} buffered live ticks...`, 'info');
 
     // ── Flush any live ticks that arrived while history was loading ────────
@@ -2217,7 +2222,7 @@ class STEPINDEXGridBot {
       this.digitExploit.tickHistory = this.digitExploit.tickHistory.slice(-500);
     }
 
-    console.log(`10Ticks: ${this.digitExploit.tickHistory.slice(-10).map(t => t.digit).join('')} | Last digit: ${lastDigit} | Pip position: ${this.digitExploit.pipPosition || 'unknown'}`);
+    console.log(`10Ticks: ${this.digitExploit.tickHistory.slice(-10).map(t => t.digit).join(',')} | Last digit: ${lastDigit} | Pip position: ${this.digitExploit.pipPosition || 'unknown'}`);
 
     // Place digit trade on each tick
     const tradeParams = this._getEvenOddTradeDigit(lastDigit);
@@ -2330,12 +2335,12 @@ class STEPINDEXGridBot {
       `Investment left: $${this.investmentRemaining.toFixed(2)}`
     ); 
 
-    const last10Digits = this.digitExploit.tickHistory.slice(-10).map(t => t.digit).join('');
+    const last10Digits = this.digitExploit.tickHistory.slice(-10).map(t => t.digit).join(',');
 
     this._sendTelegram(
       `🚀 <b>${DEFAULT_CONFIG.symbol}: TRADE OPEN</b>\n` +
       `${this.candleEmoji ? `📊 Last Candle: ${this.candleEmoji} ${this.candleType}\n` : ''}` +
-      `📊 Last10Digits: $${last10Digits}\n` +
+      `📊 Last10Digits: ${last10Digits}\n` +
       `📊 Direction: ${params.contract_type}\n` +
       `📊 Reason: $${params.reason}\n` +
       `💰 Stake: $${stake}\n` +
@@ -2485,7 +2490,7 @@ class STEPINDEXGridBot {
     const pnlStr   = (profit >= 0 ? '+' : '') + '$' + profit.toFixed(2);
     const dirLabel = this.currentDirection === 'CALLE' ? 'HIGHER' : 'LOWER';
 
-    const last10Digits = this.digitExploit.tickHistory.slice(-10).map(t => t.digit).join('');
+    const last10Digits = this.digitExploit.tickHistory.slice(-10).map(t => t.digit).join(',');
 
     if (this.tradingMode === 'digit-exploit') {
       this._sendTelegram(
