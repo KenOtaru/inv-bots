@@ -561,6 +561,9 @@ class STEPINDEXGridBot {
           `${symbol} ${candleEmoji} NEW CANDLE [${closeTime}] ${candleType}: O:${closedCandle.open.toFixed(5)} H:${closedCandle.high.toFixed(5)} L:${closedCandle.low.toFixed(5)} C:${closedCandle.close.toFixed(5)}`
         );
 
+        this.candleType = candleType;
+        this.candleEmoji = candleEmoji;
+
         if (this.tradingMode === 'grid') {
           if (this.inRecoveryMode) {
             this.log(`📊 NEW CANDLE — but in RECOVERY mode (L${this.currentGridLevel}), recovery trades continue independently`, 'info');
@@ -2300,8 +2303,8 @@ class STEPINDEXGridBot {
     }
 
     // Doji candles to allowed
-    this.currentDirection = candleType === 'BULLISH' ? 'CALLE' : 'PUTE';
-    if (candleType === 'DOJI') { 
+    this.currentDirection = this.candleType === 'BULLISH' ? 'CALLE' : 'PUTE';
+    if (this.candleType === 'DOJI') { 
       this.log('Last Candle was a Doji', 'warning');  
       return; 
     }
@@ -2340,7 +2343,7 @@ class STEPINDEXGridBot {
 
     this._sendTelegram(
       `🚀 <b>${DEFAULT_CONFIG.symbol}: TRADE OPEN</b>\n` +
-      `${candleEmoji ? `📊 Last Candle: ${candleEmoji} ${candleType}\n` : ''}` +
+      `${candleEmoji ? `📊 Last Candle: ${this.candleEmoji} ${this.candleType}\n` : ''}` +
       `📊 Direction: ${params.contract_type}\n` +
       `📊 Reason: $${params.reason}\n` +
       `💰 Stake: $${stake}\n` +
