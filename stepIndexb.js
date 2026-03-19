@@ -2217,7 +2217,7 @@ class STEPINDEXGridBot {
       this.digitExploit.tickHistory = this.digitExploit.tickHistory.slice(-500);
     }
 
-    console.log(`Tick: ${price} | Last digit: ${lastDigit} | Pip position: ${this.digitExploit.pipPosition || 'unknown'}`);
+    console.log(`10Ticks: ${this.digitExploit.tickHistory.slice(-10).map(t => t.digit).join('')} | Last digit: ${lastDigit} | Pip position: ${this.digitExploit.pipPosition || 'unknown'}`);
 
     // Place digit trade on each tick
     const tradeParams = this._getEvenOddTradeDigit(lastDigit);
@@ -2328,11 +2328,14 @@ class STEPINDEXGridBot {
       `P(win)=100% | ${params.reason}`+
       `📊 Grid Level ${this.currentGridLevel}` +
       `Investment left: $${this.investmentRemaining.toFixed(2)}`
-    );
+    ); 
+
+    const last10Digits = this.digitExploit.tickHistory.slice(-10).map(t => t.digit).join('');
 
     this._sendTelegram(
       `🚀 <b>${DEFAULT_CONFIG.symbol}: TRADE OPEN</b>\n` +
       `${this.candleEmoji ? `📊 Last Candle: ${this.candleEmoji} ${this.candleType}\n` : ''}` +
+      `📊 Last10Digits: $${last10Digits}\n` +
       `📊 Direction: ${params.contract_type}\n` +
       `📊 Reason: $${params.reason}\n` +
       `💰 Stake: $${stake}\n` +
