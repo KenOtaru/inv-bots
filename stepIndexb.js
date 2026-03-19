@@ -575,6 +575,10 @@ class STEPINDEXGridBot {
               this._placeTrade();
             }
           }
+        } else if (this.tradingMode === 'digit-exploit') {
+          this.log(`📊 NEW CANDLE — evaluating digit exploit opportunities…`, 'info');
+          this.canTrade = true;
+          this._onLiveTickForBias();
         }
       }
     }
@@ -1476,47 +1480,47 @@ class STEPINDEXGridBot {
     }
 
     // Test DIGITMATCH
-    if (availableDigitTypes.includes('DIGITMATCH')) {
-      for (const predictDigit of [0, 5]) {
-        const proposal = await this._requestProposalAsync({
-          proposal:      1,
-          amount:        testStake,
-          basis:         'stake',
-          contract_type: 'DIGITMATCH',
-          currency:      this.currency,
-          duration:      1,
-          duration_unit: 't',
-          symbol:        this.config.symbol,
-          barrier:       String(predictDigit),
-        });
+    // if (availableDigitTypes.includes('DIGITMATCH')) {
+    //   for (const predictDigit of [0, 5]) {
+    //     const proposal = await this._requestProposalAsync({
+    //       proposal:      1,
+    //       amount:        testStake,
+    //       basis:         'stake',
+    //       contract_type: 'DIGITMATCH',
+    //       currency:      this.currency,
+    //       duration:      1,
+    //       duration_unit: 't',
+    //       symbol:        this.config.symbol,
+    //       barrier:       String(predictDigit),
+    //     });
 
-        if (proposal?.proposal) {
-          const p = proposal.proposal;
-          const buyPrice  = parseFloat(p.ask_price);
-          const payout    = parseFloat(p.payout);
-          const impliedP  = buyPrice / payout;
-          const ourP      = 0.50;
-          const ev        = ourP * payout - buyPrice;
-          const evPct     = ((ev / buyPrice) * 100).toFixed(1);
+    //     if (proposal?.proposal) {
+    //       const p = proposal.proposal;
+    //       const buyPrice  = parseFloat(p.ask_price);
+    //       const payout    = parseFloat(p.payout);
+    //       const impliedP  = buyPrice / payout;
+    //       const ourP      = 0.50;
+    //       const ev        = ourP * payout - buyPrice;
+    //       const evPct     = ((ev / buyPrice) * 100).toFixed(1);
 
-          results.push({
-            type: `DIGITMATCH(${predictDigit})`,
-            buyPrice, payout, impliedP, ourP, ev, evPct,
-          });
+    //       results.push({
+    //         type: `DIGITMATCH(${predictDigit})`,
+    //         buyPrice, payout, impliedP, ourP, ev, evPct,
+    //       });
 
-          this.log(
-            `DIGITMATCH(${predictDigit}): Buy=$${buyPrice.toFixed(4)} Payout=$${payout.toFixed(4)} | ` +
-            `Deriv P=${(impliedP * 100).toFixed(1)}% | Our P=50% | ` +
-            `EV=${ev >= 0 ? '+' : ''}$${ev.toFixed(4)} (${evPct}%) ${ev > 0 ? '✅ EXPLOITABLE!' : '❌'}`
-          );
-        }
-        await this._delay(600);
-      }
-    }
+    //       this.log(
+    //         `DIGITMATCH(${predictDigit}): Buy=$${buyPrice.toFixed(4)} Payout=$${payout.toFixed(4)} | ` +
+    //         `Deriv P=${(impliedP * 100).toFixed(1)}% | Our P=50% | ` +
+    //         `EV=${ev >= 0 ? '+' : ''}$${ev.toFixed(4)} (${evPct}%) ${ev > 0 ? '✅ EXPLOITABLE!' : '❌'}`
+    //       );
+    //     }
+    //     await this._delay(600);
+    //   }
+    // }
 
     // Test DIGITOVER
     if (availableDigitTypes.includes('DIGITOVER')) {
-      for (const barrier of [3, 5, 6]) {
+      for (const barrier of [5, 6]) {
         const proposal = await this._requestProposalAsync({
           proposal:      1,
           amount:        testStake,
@@ -2220,25 +2224,7 @@ class STEPINDEXGridBot {
     }
   }
 
-  // _extractLastDigit(price) {
-  //   const str = price.toFixed(2);
-  //   const tenths = parseInt(str[str.indexOf('.') + 1], 10);
-
-  //   if (this.digitExploit.tickHistory.length > 0) {
-  //     const prev = this.digitExploit.tickHistory[this.digitExploit.tickHistory.length - 1];
-  //     const prevStr = prev.price.toFixed(2);
-  //     const prevTenths = parseInt(prevStr[prevStr.indexOf('.') + 1], 10);
-  //     const diff = Math.abs(tenths - prevTenths);
-
-  //     if (diff === 1 || diff === 9) {
-  //       this.digitExploit.pipPosition = 'tenths';
-  //       return tenths;
-  //     }
-  //   }
-
-  //   return tenths;
-  // }
-
+  //Extract the relevant digit based on asset type and price format
   _extractLastDigit(quote, asset) {
         const quoteString = quote.toString();
         const [, fractionalPart = ''] = quoteString.split('.');
