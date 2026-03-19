@@ -145,7 +145,7 @@ class V100GridBot {
     // ── Trade Watchdog ───────────────────────────────────────────────────────
     this.tradeWatchdogTimer    = null;
     this.tradeWatchdogPollTimer = null;
-    this.tradeWatchdogMs       = 5000;
+    this.tradeWatchdogMs       = 10000;
     this.tradeStartTime        = null;
 
     // ── Stuck Trade Pause State ──────────────────────────────────────────────
