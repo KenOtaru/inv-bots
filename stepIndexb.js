@@ -2329,7 +2329,7 @@ class STEPINDEXGridBot {
 
     this._sendTelegram(
       `🚀 <b>${DEFAULT_CONFIG.symbol}: TRADE OPEN</b>\n` +
-      `${candleEmoji ? `📊 Last Candle: ${this.candleEmoji} ${this.candleType}\n` : ''}` +
+      `${this.candleEmoji ? `📊 Last Candle: ${this.candleEmoji} ${this.candleType}\n` : ''}` +
       `📊 Direction: ${params.contract_type}\n` +
       `📊 Reason: $${params.reason}\n` +
       `💰 Stake: $${stake}\n` +
