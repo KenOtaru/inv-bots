@@ -2485,10 +2485,13 @@ class STEPINDEXGridBot {
     const pnlStr   = (profit >= 0 ? '+' : '') + '$' + profit.toFixed(2);
     const dirLabel = this.currentDirection === 'CALLE' ? 'HIGHER' : 'LOWER';
 
+    const last10Digits = this.digitExploit.tickHistory.slice(-10).map(t => t.digit).join('');
+
     if (this.tradingMode === 'digit-exploit') {
       this._sendTelegram(
         `${isWin ? '✅ WIN' : '❌ LOSS'} <b>— ${DEFAULT_CONFIG.symbol} Digit Exploit</b>\n\n` +
         `${isWin ? '🟢' : '🔴'} <b>P&L:</b> ${pnlStr}\n\n` +
+        `Last10Digits: ${last10Digits}\n` +
         `📈 <b>Session Stats:</b>\n` +
         `  Trades: ${this.totalTrades} | Wins: ${this.wins} | Losses: ${this.losses}\n` +
         `  Win Rate: ${wr}%\n` +
@@ -2502,6 +2505,7 @@ class STEPINDEXGridBot {
       this._sendTelegram(
         `${isWin ? '✅ WIN' : '❌ LOSS'} <b>— ${DEFAULT_CONFIG.symbol} Grid Bot</b>\n\n` +
         `${isWin ? '🟢' : '🔴'} <b>P&L:</b> ${pnlStr}\n` +
+        `Last10Digits: ${last10Digits}\n` +
         `📊 <b>Grid Level:</b> ${this.currentGridLevel} → ${isWin ? 'RESET L0' : `L${this.currentGridLevel}`}\n` +
         `🎯 <b>Next:</b> ${isWin ? '⏳ Waiting for new candle' : `${dirLabel} @ $${this.calculateStake(this.currentGridLevel).toFixed(2)} ⚡`}\n` +
         `🔄 <b>Mode:</b> ${isWin ? '🕯️ Wait for candle' : modeStr}\n\n` +
