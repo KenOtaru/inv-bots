@@ -145,7 +145,7 @@ class V100GridBot {
     // ── Trade Watchdog ───────────────────────────────────────────────────────
     this.tradeWatchdogTimer    = null;
     this.tradeWatchdogPollTimer = null;
-    this.tradeWatchdogMs       = 10000;
+    this.tradeWatchdogMs       = 20000;
     this.tradeStartTime        = null;
 
     // ── Stuck Trade Pause State ──────────────────────────────────────────────
@@ -1240,10 +1240,10 @@ class V100GridBot {
       `📊 Type: ${tradeType}\n` +
       `${candleEmoji ? `📊 Last Candle: ${candleEmoji} ${candleType}\n` : ''}` +
       `📊 Direction: ${label}\n` +
-      `📊 Stake: $${stake}\n` +
-      `📊 Duration: ${DEFAULT_CONFIG.tickDuration} ticks\n` +
+      `💰 Stake: $${stake}\n` +
+      `⏱ Duration: ${DEFAULT_CONFIG.tickDuration} ticks\n` +
       `📊 <b>Grid Level:</b> ${this.currentGridLevel}\n` +
-      `📊 <b>Investment left:</b> $${this.investmentRemaining.toFixed(2)}\n`
+      `💵 <b>Investment left:</b> $${this.investmentRemaining.toFixed(2)}\n`
     );
 
     if (!this.inRecoveryMode) {

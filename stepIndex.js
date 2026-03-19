@@ -535,7 +535,7 @@ class STEPINDEXGridBot {
           this.canTrade = true;
 
           if (this.running && !this.tradeInProgress && this.canTrade) {
-            this._placeTrade();
+            this._placeTrade(candleType, candleEmoji);
           }
         }
       }
@@ -1183,7 +1183,7 @@ class STEPINDEXGridBot {
   // PLACE TRADE
   // ══════════════════════════════════════════════════════════════════════════════
 
-  _placeTrade() {
+  _placeTrade(candleType, candleEmoji) {
     if (!this.isAuthorized)   { this.log('Not authorized — cannot trade', 'error');  return; }
     if (!this.running)        { return; }
     if (this.tradeInProgress) { this.log('Trade already in progress…', 'warning');  return; }
@@ -1205,6 +1205,15 @@ class STEPINDEXGridBot {
       } else {
         this.log('⏳ Waiting for new candle before trading… (canTrade=false)', 'info');
         return;
+      }
+    }
+
+    // Doji candles to allowed
+    if (!this.inRecoveryMode) {
+      this.currentDirection = candleType === 'BULLISH' ? 'CALLE' : 'PUTE';
+      if (candleType === 'DOJI') { 
+        this.log('Last Candle was a Doji', 'warning');  
+        return; 
       }
     }
 
@@ -1237,7 +1246,8 @@ class STEPINDEXGridBot {
 
     this._sendTelegram(
       `🚀 <b>${DEFAULT_CONFIG.symbol}: TRADE OPEN</b>\n` +
-      `🕯️ Type: ${tradeType}\n` +
+      `Type: ${tradeType}\n` +
+      `${candleEmoji ? `📊 Last Candle: ${candleEmoji} ${candleType}\n` : ''}` +
       `📊 Direction: ${label}\n` +
       `💰 Stake: $${stake}\n` +
       `⏱ Duration: ${duration} ticks\n` +
