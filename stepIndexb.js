@@ -928,7 +928,8 @@ class STEPINDEXGridBot {
       this.currentDirection = nextDir;
       this.currentGridLevel = nextLevel;
       this.inRecoveryMode = true;
-      this.canTrade       = true;
+      // this.canTrade       =  true;
+      this.canTrade       = this.tradingMode === 'digit-exploit' ? false : true;
 
       if (nextLevel > absoluteMax) {
         this.log(`🛑 ABSOLUTE CEILING L${absoluteMax} reached — stopping to protect investment`, 'error');
@@ -1482,43 +1483,43 @@ class STEPINDEXGridBot {
     }
 
     // Test DIGITMATCH
-    // if (availableDigitTypes.includes('DIGITMATCH')) {
-    //   for (const predictDigit of [0, 5]) {
-    //     const proposal = await this._requestProposalAsync({
-    //       proposal:      1,
-    //       amount:        testStake,
-    //       basis:         'stake',
-    //       contract_type: 'DIGITMATCH',
-    //       currency:      this.currency,
-    //       duration:      1,
-    //       duration_unit: 't',
-    //       symbol:        this.config.symbol,
-    //       barrier:       String(predictDigit),
-    //     });
+    if (availableDigitTypes.includes('DIGITMATCH')) {
+      for (const predictDigit of [0, 5]) {
+        const proposal = await this._requestProposalAsync({
+          proposal:      1,
+          amount:        testStake,
+          basis:         'stake',
+          contract_type: 'DIGITMATCH',
+          currency:      this.currency,
+          duration:      1,
+          duration_unit: 't',
+          symbol:        this.config.symbol,
+          barrier:       String(predictDigit),
+        });
 
-    //     if (proposal?.proposal) {
-    //       const p = proposal.proposal;
-    //       const buyPrice  = parseFloat(p.ask_price);
-    //       const payout    = parseFloat(p.payout);
-    //       const impliedP  = buyPrice / payout;
-    //       const ourP      = 0.50;
-    //       const ev        = ourP * payout - buyPrice;
-    //       const evPct     = ((ev / buyPrice) * 100).toFixed(1);
+        if (proposal?.proposal) {
+          const p = proposal.proposal;
+          const buyPrice  = parseFloat(p.ask_price);
+          const payout    = parseFloat(p.payout);
+          const impliedP  = buyPrice / payout;
+          const ourP      = 0.50;
+          const ev        = ourP * payout - buyPrice;
+          const evPct     = ((ev / buyPrice) * 100).toFixed(1);
 
-    //       results.push({
-    //         type: `DIGITMATCH(${predictDigit})`,
-    //         buyPrice, payout, impliedP, ourP, ev, evPct,
-    //       });
+          results.push({
+            type: `DIGITMATCH(${predictDigit})`,
+            buyPrice, payout, impliedP, ourP, ev, evPct,
+          });
 
-    //       this.log(
-    //         `DIGITMATCH(${predictDigit}): Buy=$${buyPrice.toFixed(4)} Payout=$${payout.toFixed(4)} | ` +
-    //         `Deriv P=${(impliedP * 100).toFixed(1)}% | Our P=50% | ` +
-    //         `EV=${ev >= 0 ? '+' : ''}$${ev.toFixed(4)} (${evPct}%) ${ev > 0 ? '✅ EXPLOITABLE!' : '❌'}`
-    //       );
-    //     }
-    //     await this._delay(600);
-    //   }
-    // }
+          this.log(
+            `DIGITMATCH(${predictDigit}): Buy=$${buyPrice.toFixed(4)} Payout=$${payout.toFixed(4)} | ` +
+            `Deriv P=${(impliedP * 100).toFixed(1)}% | Our P=50% | ` +
+            `EV=${ev >= 0 ? '+' : ''}$${ev.toFixed(4)} (${evPct}%) ${ev > 0 ? '✅ EXPLOITABLE!' : '❌'}`
+          );
+        }
+        await this._delay(600);
+      }
+    }
 
     // Test DIGITOVER
     if (availableDigitTypes.includes('DIGITOVER')) {
