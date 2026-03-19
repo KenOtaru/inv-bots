@@ -1241,6 +1241,7 @@ class V100GridBot {
       `${candleEmoji ? `📊 Last Candle: ${candleEmoji} ${candleType}\n` : ''}` +
       `📊 Direction: ${label}\n` +
       `📊 Stake: $${stake}\n` +
+      `📊 Duration: ${DEFAULT_CONFIG.tickDuration} ticks\n` +
       `📊 <b>Grid Level:</b> ${this.currentGridLevel}\n` +
       `📊 <b>Investment left:</b> $${this.investmentRemaining.toFixed(2)}\n`
     );
