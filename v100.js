@@ -1204,7 +1204,10 @@ class V100GridBot {
     // Doji candles to allowed
     if (!this.inRecoveryMode) {
       this.currentDirection = candleType === 'BULLISH' ? 'CALLE' : 'PUTE';
-      if (candleType !== 'BULLISH' || candleType !== 'BEARISH') { this.log('Last Candle was a Doji', 'warning');  return; }
+      if (candleType === 'DOJI') { 
+        this.log('Last Candle was a Doji', 'warning');  
+        return; 
+      }
     }
 
     const stake     = this.calculateStake(this.currentGridLevel);
