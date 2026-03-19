@@ -6,8 +6,8 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'KriseFallM2000001-state.json');
-const HISTORY_FILE = path.join(__dirname, 'KriseFallM2000001-history.json');
+const STATE_FILE = path.join(__dirname, 'KriseFallM201-state.json');
+const HISTORY_FILE = path.join(__dirname, 'KriseFallM201-history.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
@@ -813,7 +813,7 @@ class TelegramService {
 
             const message = `
             🤖 <b>DERIV RISE/FALL BOT STARTED</b>
-            Strategy: WPR Crossover — WPR(${CONFIG.WPR_PERIOD}) | OB:${CONFIG.WPR_OVERBOUGHT} OS:${CONFIG.WPR_OVERSOLD} Mid:${CONFIG.WPR_MIDLINE}
+            Strategy: Candle-pattern detection — lookback ${CONFIG.CANDLE_PATTERN_LOOKBACK || 7}
             Mode: <b>Independent Per-Asset Management</b>
             Capital: $${state.capital.toFixed(2)}
             Stake: $${CONFIG.STAKE}
@@ -1015,168 +1015,7 @@ class CandleAnalyzer {
 // ============================================
 // TECHNICAL INDICATORS — WILLIAMS %R (WPR) & EMA
 // ============================================
-class TechnicalIndicators {
-    /**
-     * Calculate Williams %R for a single bar using the last `period` closed candles.
-     * Formula (identical to MT5 iWPR):
-     *   WPR = (Highest_High - Close) / (Highest_High - Lowest_Low) * -100
-     * Range: 0 (overbought) to -100 (oversold)
-     * @param {Array}  candles - Array of candle objects with .high, .low, .close
-     * @param {number} period  - Lookback period (e.g. 80)
-     * @param {number} index   - Bar index to calculate (default: last bar)
-     * @returns {number|null}
-     */
-    static calculateWPR(candles, period, index = candles.length - 1) {
-        if (!candles || candles.length < period || index < period - 1) return null;
-        const slice = candles.slice(index - period + 1, index + 1);
-        const highestHigh = Math.max(...slice.map(c => c.high));
-        const lowestLow   = Math.min(...slice.map(c => c.low));
-        if (highestHigh === lowestLow) return -50; // flat market guard
-        return ((highestHigh - slice[slice.length - 1].close) / (highestHigh - lowestLow)) * -100;
-    }
-
-    /**
-     * Compute WPR signal from closed candles.
-     *
-     * Signal rules (matching the spec):
-     *   BUY  (BULL_CROSS): WPR crosses ABOVE -50, AND this is the FIRST such crossing
-     *                       after WPR was in oversold territory (≤ -80).
-     *   SELL (BEAR_CROSS): WPR crosses BELOW -50, AND this is the FIRST such crossing
-     *                       after WPR was in overbought territory (≥ -20).
-     *
-     * Returns:
-     *   { wprCurrent, wprPrev, signal, wasOversold, wasOverbought }
-     *
-     * @param {Array}  closedCandles
-     * @param {Object} assetState    - per-asset state (reads/writes wprWasOversold, wprWasOverbought)
-     * @returns {Object}
-     */
-    static getWPRSignal(closedCandles, assetState) {
-        const period = CONFIG.WPR_PERIOD;
-        const emptyResult = { wprCurrent: null, wprPrev: null, signal: null };
-
-        if (!closedCandles || closedCandles.length < period + 1) {
-            return emptyResult; // need at least period+1 bars to detect a cross
-        }
-
-        const len        = closedCandles.length;
-        const wprCurrent = this.calculateWPR(closedCandles, period, len - 1);
-        const wprPrev    = this.calculateWPR(closedCandles, period, len - 3); // look 2 bars back for previous WPR to confirm cross
-
-        if (wprCurrent === null || wprPrev === null) return emptyResult;
-
-        const OB = CONFIG.WPR_OVERBOUGHT; // -20
-        const OS = CONFIG.WPR_OVERSOLD;   // -80
-        const MID = CONFIG.WPR_MIDLINE;   // -50
-
-        // ── Track whether WPR has visited oversold / overbought since last cross ──
-        // These flags are stored on assetState so they persist across candles.
-        if (wprCurrent <= OS) assetState.wprWasOversold   = true;
-        if (wprCurrent >= OB) assetState.wprWasOverbought = true;
-
-        let signal = null;
-
-        // BUY: crosses above -50 AND flag shows we came from oversold
-        if (wprPrev <= MID && wprCurrent > MID) {
-            if (assetState.wprWasOversold) {
-                signal = 'BULL_CROSS';
-                // Reset the oversold flag — next BUY needs a fresh oversold visit
-                assetState.wprWasOversold = false;
-            }
-        }
-
-        // SELL: crosses below -50 AND flag shows we came from overbought
-        if (wprPrev >= MID && wprCurrent < MID) {
-            if (assetState.wprWasOverbought) {
-                signal = 'BEAR_CROSS';
-                // Reset the overbought flag — next SELL needs a fresh overbought visit
-                assetState.wprWasOverbought = false;
-            }
-        }
-
-        return { wprCurrent, wprPrev, signal };
-    }
-
-    /**
-     * Calculate Exponential Moving Average (EMA) for an array of close prices.
-     * Uses the standard EMA formula: EMA = price * k + prevEMA * (1 - k)
-     * where k = 2 / (period + 1)
-     * Returns array of EMA values aligned to the end of the candles array.
-     * Returns null values for indices where not enough data exists.
-     * @param {Array} closedCandles - Array of candle objects with .close property
-     * @param {number} period - EMA period (e.g. 20 or 50)
-     * @returns {Array} Array of EMA values (same length as closedCandles)
-     */
-    static calculateEMA(closedCandles, period) {
-        const result = new Array(closedCandles.length).fill(null);
-        if (!closedCandles || closedCandles.length < period) {
-            return result; // Not enough data
-        }
-
-        const k = 2 / (period + 1);
-
-        // Seed EMA with SMA of first `period` candles
-        let sum = 0;
-        for (let i = 0; i < period; i++) {
-            sum += closedCandles[i].close;
-        }
-        let ema = sum / period;
-        result[period - 1] = ema;
-
-        // Walk forward and compute EMA for each subsequent candle
-        for (let i = period; i < closedCandles.length; i++) {
-            ema = closedCandles[i].close * k + ema * (1 - k);
-            result[i] = ema;
-        }
-
-        return result;
-    }
-
-    /**
-     * Compute EMA crossover values from closed candles.
-     * Returns an object with:
-     *   - emaFast      {number|null}  Current fast EMA value
-     *   - emaSlow      {number|null}  Current slow EMA value
-     *   - prevEmaFast  {number|null}  Previous bar fast EMA value
-     *   - prevEmaSlow  {number|null}  Previous bar slow EMA value
-     *   - isAbove      {boolean|null} Whether fast EMA is currently above slow EMA
-     * @param {Array} closedCandles
-     * @returns {Object}
-     */
-    static getEMACrossoverSignal(closedCandles) {
-        const fastPeriod = CONFIG.EMA_FAST_PERIOD;
-        const slowPeriod = CONFIG.EMA_SLOW_PERIOD;
-
-        const emptyResult = {
-            emaFast: null,
-            emaSlow: null,
-            prevEmaFast: null,
-            prevEmaSlow: null,
-            isAbove: null
-        };
-
-        if (!closedCandles || closedCandles.length < slowPeriod + 1) {
-            return emptyResult; // Need at least slowPeriod+1 bars
-        }
-
-        const emaFastArr = this.calculateEMA(closedCandles, fastPeriod);
-        const emaSlowArr = this.calculateEMA(closedCandles, slowPeriod);
-
-        const len = closedCandles.length;
-        const curFast = emaFastArr[len - 1];
-        const curSlow = emaSlowArr[len - 1];
-        const prevFast = emaFastArr[len - 2];
-        const prevSlow = emaSlowArr[len - 2];
-
-        if (curFast === null || curSlow === null || prevFast === null || prevSlow === null) {
-            return emptyResult;
-        }
-
-        const isAbove = curFast > curSlow;
-
-        return { emaFast: curFast, emaSlow: curSlow, prevEmaFast: prevFast, prevEmaSlow: prevSlow, isAbove };
-    }
-}
+// TechnicalIndicators removed — trading now uses candle-pattern signals only.
 
 // ============================================
 // CONFIGURATION
@@ -1201,6 +1040,8 @@ const CONFIG = {
     TIMEFRAME_LABEL: '1m',
     MAX_CANDLES_STORED: 300,
     CANDLES_TO_LOAD: 300,
+
+    CANDLE_PATTERN_LOOKBACK: 6, // Number of previous candles to analyze for pattern detection (user configurable)
 
     // Default Trade Duration Settings (used if asset has no specific config)
     DURATION: 54,
@@ -1273,6 +1114,8 @@ const ASSET_CONFIGS = {
         TIMEFRAME_LABEL: '1m',
         MAX_CANDLES_STORED: 300,
         CANDLES_TO_LOAD: 300,
+        // Candle-pattern lookback for pattern detection (user configurable)
+        CANDLE_PATTERN_LOOKBACK: 7,
         DURATION: 54,
         DURATION_UNIT: 's'
     },
@@ -1906,7 +1749,7 @@ class ConnectionManager {
                     lastCrossSignalDirection: null, // Direction of last crossover that was traded ('CALLE'|'PUTE')
                     wprWasOversold: false,      // WPR visited oversold (≤ -80) since last BUY cross
                     wprWasOverbought: false,    // WPR visited overbought (≥ -20) since last SELL cross
-                    // NEW: Track first candle above/below middle level after WPR cross
+                    // NEW: Track first candle above/below middle level after pattern trigger
                     firstCandleAboveMid: null,  // First candle close above -50 after oversold → bull cross
                     firstCandleBelowMid: null,  // First candle close below -50 after overbought → bear cross
                     lastMidCrossOpenTime: null,  // Track when last mid-level cross occurred
@@ -2280,45 +2123,12 @@ class ConnectionManager {
                     `${symbol} ${candleEmoji} CANDLE CLOSED [${closeTime}] ${candleType}: O:${closedCandle.open.toFixed(5)} H:${closedCandle.high.toFixed(5)} L:${closedCandle.low.toFixed(5)} C:${closedCandle.close.toFixed(5)}`
                 );
 
-                // ── Update WPR values on every closed candle ─────────────────
-                const wprResult = TechnicalIndicators.getWPRSignal(assetState.closedCandles, assetState);
-
-                assetState.lastWprPrev    = assetState.lastWprCurrent;
-                assetState.lastWprCurrent = wprResult.wprCurrent;
-                assetState.lastWprSignal  = wprResult.signal;
-
-                if (wprResult.wprCurrent !== null) {
-                    const crossTag = wprResult.signal
-                        ? (wprResult.signal === 'BULL_CROSS' ? ' 🔔 BULL CROSS (WPR crossed above -50 from oversold)' : ' 🔔 BEAR CROSS (WPR crossed below -50 from overbought)')
-                        : '';
-                    const zone = wprResult.wprCurrent >= CONFIG.WPR_OVERBOUGHT
-                        ? ' [OVERBOUGHT]'
-                        : wprResult.wprCurrent <= CONFIG.WPR_OVERSOLD
-                            ? ' [OVERSOLD]'
-                            : '';
-                    LOGGER.info(
-                        `${symbol} 📊 WPR(${CONFIG.WPR_PERIOD}): ${wprResult.wprCurrent.toFixed(2)}${zone} | OB:${CONFIG.WPR_OVERBOUGHT} OS:${CONFIG.WPR_OVERSOLD} | WasOversold:${assetState.wprWasOversold} WasOverbought:${assetState.wprWasOverbought}${crossTag}`
-                    );
-                } else {
-                    const needed = CONFIG.WPR_PERIOD + 1;
-                    LOGGER.debug(
-                        `${symbol} ⏳ WPR not ready — ${assetState.closedCandles.length}/${needed} candles`
-                    );
-                }
-
-                // ── Update EMA values on every closed candle (for EMA filter) ─────────────────
-                if (CONFIG.USE_EMA_FILTER) {
-                    const emaResult = TechnicalIndicators.getEMACrossoverSignal(assetState.closedCandles);
-                    assetState.lastEmaFast = emaResult.emaFast;
-                    assetState.lastEmaSlow = emaResult.emaSlow;
-                    assetState.lastEmaIsAbove = emaResult.isAbove;
-
-                    if (emaResult.emaFast !== null && emaResult.emaSlow !== null) {
-                        LOGGER.info(
-                            `${symbol} 📈 EMA(${CONFIG.EMA_FAST_PERIOD}): ${emaResult.emaFast.toFixed(5)} | EMA(${CONFIG.EMA_SLOW_PERIOD}): ${emaResult.emaSlow.toFixed(5)} | Fast ${emaResult.isAbove ? 'ABOVE ▲' : 'BELOW ▼'} Slow`
-                        );
-                    }
-                }
+                // Use candle-pattern based signals (no technical indicator calculations)
+                const lastN = CONFIG.CANDLE_PATTERN_LOOKBACK || 7;
+                const recent = assetState.closedCandles.slice(-lastN);
+                const bullCount = recent.filter(c => CandleAnalyzer.isBullish(c)).length;
+                const bearCount = recent.filter(c => CandleAnalyzer.isBearish(c)).length;
+                LOGGER.info(`${symbol} 📊 Recent candles (last ${recent.length}): bulls=${bullCount} bears=${bearCount}`);
 
                 // TRIGGER TRADE ANALYSIS FOR THIS SPECIFIC ASSET
                 assetState.canTrade = true;
@@ -2387,44 +2197,23 @@ class ConnectionManager {
             lastCandle.open_time;
         state.assets[symbol].currentFormingCandle = null;
 
-        // Calculate initial WPR values from historical candles
-        // We intentionally do NOT call getWPRSignal here (which would fire a signal
-        // on historical data). We only seed the WPR value so the first live candle
-        // can correctly detect a crossover.
-        const wprCurrent = TechnicalIndicators.calculateWPR(candles, CONFIG.WPR_PERIOD);
-        const wprPrev    = TechnicalIndicators.calculateWPR(candles, CONFIG.WPR_PERIOD, candles.length - 2);
-        state.assets[symbol].lastWprCurrent = wprCurrent;
-        state.assets[symbol].lastWprPrev    = wprPrev;
-        state.assets[symbol].lastWprSignal  = null; // no signal from historical seed
-
-        // Pre-seed the oversold/overbought flags by scanning recent history
-        // so the bot doesn't miss the first valid cross after startup.
-        if (candles.length >= CONFIG.WPR_PERIOD) {
-            for (let i = Math.max(0, candles.length - CONFIG.WPR_PERIOD * 3); i < candles.length; i++) {
-                const w = TechnicalIndicators.calculateWPR(candles, CONFIG.WPR_PERIOD, i);
-                if (w !== null) {
-                    if (w <= CONFIG.WPR_OVERSOLD)   state.assets[symbol].wprWasOversold   = true;
-                    if (w >= CONFIG.WPR_OVERBOUGHT) state.assets[symbol].wprWasOverbought = true;
-                }
-            }
-        }
+        // No technical indicator seeding — candle-pattern strategy will be evaluated on live closes.
+        state.assets[symbol].lastWprCurrent = null;
+        state.assets[symbol].lastWprPrev = null;
+        state.assets[symbol].lastWprSignal = null;
 
         LOGGER.info(
             `📊 Loaded ${candles.length} ${assetConfig.TIMEFRAME_LABEL} candles for ${symbol}`
         );
 
-        if (wprCurrent !== null) {
-            const zone = wprCurrent >= CONFIG.WPR_OVERBOUGHT
-                ? ' [OVERBOUGHT]'
-                : wprCurrent <= CONFIG.WPR_OVERSOLD ? ' [OVERSOLD]' : '';
-            LOGGER.info(
-                `   📊 WPR(${CONFIG.WPR_PERIOD}): ${wprCurrent.toFixed(2)}${zone} | WasOversold:${state.assets[symbol].wprWasOversold} WasOverbought:${state.assets[symbol].wprWasOverbought}`
+        // Inform about readiness for pattern detection
+        const needed = CONFIG.CANDLE_PATTERN_LOOKBACK || 7;
+        if (candles.length < needed) {
+            LOGGER.warn(
+                `   ⏳ Insufficient candles for pattern detection — have ${candles.length}, need ≥ ${needed}. Waiting for more data...`
             );
         } else {
-            const needed = CONFIG.WPR_PERIOD + 1;
-            LOGGER.warn(
-                `   ⏳ Insufficient candles for WPR(${CONFIG.WPR_PERIOD}) — have ${candles.length}, need ≥ ${needed}. Waiting for more data...`
-            );
+            LOGGER.info(`   ✅ Ready for candle-pattern detection (lookback ${needed})`);
         }
     }
 
@@ -2536,7 +2325,7 @@ class DerivBot {
             `🔄 Max Positions Per Asset: ${CONFIG.MAX_OPEN_POSITIONS_PER_ASSET}`
         );
         console.log(
-            `📊 WPR Period: ${CONFIG.WPR_PERIOD} | OB: ${CONFIG.WPR_OVERBOUGHT} | OS: ${CONFIG.WPR_OVERSOLD} | Mid: ${CONFIG.WPR_MIDLINE} | Sessions: ${CONFIG.USE_TRADING_SESSIONS ? 'ON' : 'OFF (24/7)'}`
+            `📊 Candle Pattern Lookback: ${CONFIG.CANDLE_PATTERN_LOOKBACK || 7} candles | Sessions: ${CONFIG.USE_TRADING_SESSIONS ? 'ON' : 'OFF (24/7)'}`
         );
         console.log(
             `🕐 Trading Sessions: ${CONFIG.USE_TRADING_SESSIONS ? 'ENABLED (session windows apply)' : 'DISABLED (trading 24/7)'}`
@@ -2571,19 +2360,19 @@ class DerivBot {
         );
         console.log('═'.repeat(80));
         console.log(
-            '📋 Strategy: Williams %R (WPR) Crossover + Per-Asset Recovery System'
+            '📋 Strategy: Candle-pattern (per-asset) + Per-Asset Recovery System'
         );
         console.log(
-            `    📈 BUY  — WPR(${CONFIG.WPR_PERIOD}) crosses ABOVE ${CONFIG.WPR_MIDLINE} after visiting oversold (≤ ${CONFIG.WPR_OVERSOLD})`
+            `    📈 BUY  — if last ${CONFIG.CANDLE_PATTERN_LOOKBACK || 7} candles are NOT bullish (then BUY). Recovery continues until win.`
         );
         console.log(
-            `    📉 SELL — WPR(${CONFIG.WPR_PERIOD}) crosses BELOW ${CONFIG.WPR_MIDLINE} after visiting overbought (≥ ${CONFIG.WPR_OVERBOUGHT})`
+            `    📉 SELL — if last ${CONFIG.CANDLE_PATTERN_LOOKBACK || 7} candles are NOT bearish (then SELL). Recovery continues until win.`
         );
         console.log(
             '    🔄 Recovery: Each asset has its own martingale chain'
         );
         console.log(
-            '    🕐 Signal detected on every candle close (WPR recalculated)'
+            '    🕐 Signal detected on every candle close (pattern evaluated)'
         );
         console.log(
             '    🎯 Each asset manages its own stake, direction & recovery independently'
@@ -2645,7 +2434,7 @@ class DerivBot {
 
     /**
      * =========================================================
-     * TRADE EXECUTION — PER-ASSET WPR CROSSOVER LOGIC
+    * TRADE EXECUTION — PER-ASSET Candle-pattern Logic
      * =========================================================
      */
     executeNextTrade(symbol, lastClosedCandle) {
@@ -2682,7 +2471,7 @@ class DerivBot {
                 const now = Date.now();
                 if (now - state.lastSessionLogTime > 300000) {
                     LOGGER.info(
-                        `🕐 OUTSIDE TRADING SESSION — ${TradingSessionManager.getSessionStatusString()} | Skipping new WPR signals`
+                        `🕐 OUTSIDE TRADING SESSION — ${TradingSessionManager.getSessionStatusString()} | Skipping new pattern signals`
                     );
                     state.lastSessionLogTime = now;
                 }
@@ -2734,121 +2523,35 @@ class DerivBot {
             LOGGER.trade(`🔄 [${symbol}] RECOVERY MODE: ${signalReason} (Martingale Level: ${assetState.martingaleLevel})`);
 
         } else {
-            // ── NORMAL MODE: WPR crossover signal ─────────────────────────────
-            const wprCurrent = assetState.lastWprCurrent;
-            const wprSignal  = assetState.lastWprSignal;
-            const MID = CONFIG.WPR_MIDLINE;
+            // ── NORMAL MODE: Candle-pattern signal
+            const lookback = CONFIG.CANDLE_PATTERN_LOOKBACK || 7;
+            const closed = assetState.closedCandles || [];
 
-            // Guard: wait until we have enough candles for WPR calculation
-            if (wprCurrent === null) {
-                const needed = CONFIG.WPR_PERIOD + 1;
-                LOGGER.info(
-                    `${symbol} ⏳ Waiting for WPR data — ${assetState.closedCandles.length}/${needed} candles loaded`
-                );
+            if (closed.length < lookback) {
+                LOGGER.info(`${symbol} ⏳ Waiting for ${lookback} closed candles — have ${closed.length}`);
                 return;
             }
 
-            if (wprSignal === 'BULL_CROSS') {
-                // WPR crossed ABOVE -50 after coming from oversold → RISE signal
-                // NEW LOGIC: Only trade the FIRST candle that closes ABOVE the middle level
-                
-                // Check if we already have a pending first candle above mid tracked
-                if (assetState.lastCrossSignalDirection === 'CALLE') {
-                    // We've already traded this cross, wait for next valid cross
-                    LOGGER.debug(
-                        `${symbol} ⏭️ WPR BULL CROSS already traded — waiting for next valid cross`
-                    );
-                } else {
-                    // Check if we already tracked a first candle above mid for this cross
-                    if (assetState.firstCandleBelowMid === null) {
-                        // Check EMA filter condition: EMA 20 should be Above EMA 50 for SELL
-                        let emaFilterPassed = true;
-                        if (CONFIG.USE_EMA_FILTER && assetState.lastEmaFast !== null && assetState.lastEmaSlow !== null) {
-                            emaFilterPassed = assetState.lastEmaIsAbove === true;
-                            if (!emaFilterPassed) {
-                                LOGGER.info(
-                                    `${symbol} 🔽 EMA FILTER BLOCKED BUY — EMA(${CONFIG.EMA_FAST_PERIOD}) ${assetState.lastEmaFast.toFixed(5)} is ABOVE EMA(${CONFIG.EMA_SLOW_PERIOD}) ${assetState.lastEmaSlow.toFixed(5)}`
-                                );
-                            }
-                        }
-                        
-                        if (emaFilterPassed) {
-                            // This is the first candle above -50 after the cross
-                            assetState.firstCandleBelowMid = lastClosedCandle.open_time;
-                            direction = 'CALLE';
-                            signalReason = `WPR BULL CROSS - FIRST CANDLE ABOVE MID — WPR(${CONFIG.WPR_PERIOD}) ${wprCurrent.toFixed(2)} crossed ABOVE ${CONFIG.WPR_MIDLINE} (after oversold ≤ ${CONFIG.WPR_OVERBOUGHT}) | First candle Above mid: ${lastClosedCandle.open_time}`;
-                            LOGGER.trade(`⚡ [${symbol}] FIRST CANDLE ABOVE MID DETECTED: ${signalReason}`);
-                        }
-                        
-                    } else {
-                        // WPR is back below mid, reset the tracking
-                        assetState.firstCandleAboveMid = null;
-                        LOGGER.debug(
-                            `${symbol} 🔄 WPR BULL CROSS invalidated — WPR moved back below ${MID}`
-                        );
-                    }
-                }
-            } else if (wprSignal === 'BEAR_CROSS') {
-                // WPR crossed BELOW -50 after coming from overbought → FALL signal
-                // NEW LOGIC: Only trade the FIRST candle that closes BELOW the middle level
-                
-                if (assetState.lastCrossSignalDirection === 'PUTE') {
-                    LOGGER.debug(
-                        `${symbol} ⏭️ WPR BEAR CROSS already traded — waiting for next valid cross`
-                    );
-                } else {
-                    // Check if this is the first candle to close below -50 after the cross
-                    const lastClosedCandle = assetState.closedCandles[assetState.closedCandles.length - 1];
-                    
-                    // NEW: Only trade if WPR is currently below MID (the cross is still valid)
-                    if (wprCurrent < MID) {
-                        // Check if we already tracked a first candle below mid for this cross
-                        if (assetState.firstCandleBelowMid === null) {
-                            // Check EMA filter condition: EMA 20 should be Below EMA 50 for SELL
-                            let emaFilterPassed = true;
-                            if (CONFIG.USE_EMA_FILTER && assetState.lastEmaFast !== null && assetState.lastEmaSlow !== null) {
-                                emaFilterPassed = assetState.lastEmaIsAbove === false;
-                                if (!emaFilterPassed) {
-                                    LOGGER.info(
-                                        `${symbol} 🔽 EMA FILTER BLOCKED SELL — EMA(${CONFIG.EMA_FAST_PERIOD}) ${assetState.lastEmaFast.toFixed(5)} is ABOVE EMA(${CONFIG.EMA_SLOW_PERIOD}) ${assetState.lastEmaSlow.toFixed(5)}`
-                                    );
-                                }
-                            }
-                            
-                            if (emaFilterPassed) {
-                                // This is the first candle below -50 after the cross
-                                assetState.firstCandleBelowMid = lastClosedCandle.open_time;
-                                direction = 'PUTE';
-                                signalReason = `WPR BEAR CROSS - FIRST CANDLE BELOW MID — WPR(${CONFIG.WPR_PERIOD}) ${wprCurrent.toFixed(2)} crossed BELOW ${CONFIG.WPR_MIDLINE} (after overbought ≥ ${CONFIG.WPR_OVERBOUGHT}) | First candle below mid: ${lastClosedCandle.open_time}`;
-                                LOGGER.trade(`⚡ [${symbol}] FIRST CANDLE BELOW MID DETECTED: ${signalReason}`);
-                            }
-                        } else {
-                            // We've already had a candle below mid, wait for next cross
-                            LOGGER.debug(
-                                `${symbol} ⏭️ Already had first candle below mid (${assetState.firstCandleBelowMid}) — waiting for next WPR cross`
-                            );
-                        }
-                    } else {
-                        // WPR is back above mid, reset the tracking
-                        assetState.firstCandleBelowMid = null;
-                        LOGGER.debug(
-                            `${symbol} 🔄 WPR BEAR CROSS invalidated — WPR moved back above ${MID}`
-                        );
-                    }
-                }
+            const recent = closed.slice(-lookback);
+            const allNotBullish = recent.every(c => !CandleAnalyzer.isBullish(c));
+            const allNotBearish = recent.every(c => !CandleAnalyzer.isBearish(c));
+
+            if (allNotBullish && !allNotBearish) {
+                direction = 'CALLE';
+                signalReason = `Candle pattern: last ${lookback} candles NOT bullish (buy)`;
+                LOGGER.trade(`⚡ [${symbol}] PATTERN SIGNAL (BUY): ${signalReason}`);
+            } else if (allNotBearish && !allNotBullish) {
+                direction = 'PUTE';
+                signalReason = `Candle pattern: last ${lookback} candles NOT bearish (sell)`;
+                LOGGER.trade(`⚡ [${symbol}] PATTERN SIGNAL (SELL): ${signalReason}`);
             } else {
-                const zone = wprCurrent >= CONFIG.WPR_OVERBOUGHT
-                    ? `OVERBOUGHT (≥${CONFIG.WPR_OVERBOUGHT})`
-                    : wprCurrent <= CONFIG.WPR_OVERSOLD
-                        ? `OVERSOLD (≤${CONFIG.WPR_OVERSOLD})`
-                        : `NEUTRAL (${CONFIG.WPR_OVERSOLD} < WPR < ${CONFIG.WPR_OVERBOUGHT})`;
-                LOGGER.info(
-                    `${symbol} ⏸️ No WPR cross — WPR(${CONFIG.WPR_PERIOD}): ${wprCurrent.toFixed(2)} | Zone: ${zone} | WasOversold:${assetState.wprWasOversold} WasOverbought:${assetState.wprWasOverbought}`
-                );
+                const bulls = recent.filter(c => CandleAnalyzer.isBullish(c)).length;
+                const bears = recent.filter(c => CandleAnalyzer.isBearish(c)).length;
+                LOGGER.info(`${symbol} ⏸️ Candle pattern not met — last ${lookback}: bulls=${bulls} bears=${bears}`);
             }
 
             if (direction) {
-                LOGGER.trade(`⚡ [${symbol}] WPR SIGNAL: ${signalReason}`);
+                LOGGER.trade(`⚡ [${symbol}] PATTERN SIGNAL: ${signalReason}`);
             }
         }
 
@@ -2877,8 +2580,9 @@ class DerivBot {
             `   [${symbol}] Stake: $${stake.toFixed(2)} | Duration: ${assetConfig.DURATION} ${assetConfig.DURATION_UNIT} | Martingale Level: ${assetState.martingaleLevel}`
         );
         LOGGER.trade(`   [${symbol}] Reason: ${signalReason}`);
+        const lastDir = CandleAnalyzer.getCandleDirection(lastClosedCandle);
         LOGGER.trade(
-            `   [${symbol}] WPR(${CONFIG.WPR_PERIOD}): ${assetState.lastWprCurrent !== null ? assetState.lastWprCurrent.toFixed(2) : 'N/A'} | Close: ${lastClosedCandle.close.toFixed(5)}`
+            `   [${symbol}] Last candle: ${lastDir} | Close: ${lastClosedCandle.close.toFixed(5)}`
         );
         LOGGER.trade(
             `   [${symbol}] Asset Stats: ${assetState.tradesCount} trades, ${assetState.winsCount}W/${assetState.lossesCount}L, P/L: $${assetState.netPL.toFixed(2)}`
@@ -2922,7 +2626,7 @@ class DerivBot {
         if (!isRecoveryMode) {
             assetState.lastCrossSignalDirection = direction;
             LOGGER.info(
-                `${symbol} ✅ WPR cross direction '${direction}' marked as traded — will not re-trade until next valid cross`
+                `${symbol} ✅ pattern direction '${direction}' marked as traded — will not re-trade until next valid trigger`
             );
         }
     }
@@ -3052,12 +2756,15 @@ class DerivBot {
             if (a) {
                 const nextDir =
                     a.lastTradeWasWin === null
-                        ? 'Waiting for WPR cross signal'
+                        ? 'Waiting for pattern signal'
                         : a.lastTradeWasWin
-                            ? 'Waiting for WPR crossover'
+                            ? 'Waiting for pattern evaluation'
                             : a.lastTradeDirection === 'CALLE'
                                 ? 'PUTE (Recovery)'
                                 : 'CALLE (Recovery)';
+
+                const lastClosed = a.closedCandles && a.closedCandles.length ? a.closedCandles[a.closedCandles.length-1] : null;
+                const lastCandleDirection = lastClosed ? CandleAnalyzer.getCandleDirection(lastClosed) : null;
 
                 assetStatuses[symbol] = {
                     martingaleLevel: a.martingaleLevel,
@@ -3070,11 +2777,8 @@ class DerivBot {
                     wins: a.winsCount,
                     losses: a.lossesCount,
                     netPL: a.netPL,
-                    wprCurrent: a.lastWprCurrent,
-                    wprPrev: a.lastWprPrev,
-                    wprSignal: a.lastWprSignal,
-                    wprWasOversold: a.wprWasOversold,
-                    wprWasOverbought: a.wprWasOverbought,
+                    lastCandleDirection: lastCandleDirection,
+                    patternLookback: CONFIG.CANDLE_PATTERN_LOOKBACK || 7,
                     timeframe: ac.TIMEFRAME_LABEL,
                     duration: `${ac.DURATION}${ac.DURATION_UNIT}`
                 };
@@ -3163,13 +2867,13 @@ console.log(
     ' DERIV RISE/FALL WPR CROSSOVER BOT (Per-Asset Independent)'
 );
 console.log(
-    ` Base Stake: $${CONFIG.STAKE} | WPR(${CONFIG.WPR_PERIOD}) | OB:${CONFIG.WPR_OVERBOUGHT} OS:${CONFIG.WPR_OVERSOLD} Mid:${CONFIG.WPR_MIDLINE} | Sessions: ${CONFIG.USE_TRADING_SESSIONS ? 'ON' : 'OFF (24/7)'}`
+    ` Base Stake: $${CONFIG.STAKE} | Candle Lookback: ${CONFIG.CANDLE_PATTERN_LOOKBACK || 7} | Sessions: ${CONFIG.USE_TRADING_SESSIONS ? 'ON' : 'OFF (24/7)'}`
 );
 // console.log(
 //     ` 🕐 London: ${CONFIG.LONDON_START}:00-${CONFIG.LONDON_END}:00 | New York: ${CONFIG.NEWYORK_START}:00-${CONFIG.NEWYORK_END}:00 (GMT+1)`
 // );
 console.log('═'.repeat(80));
-console.log('\n🚀 Initializing WPR Crossover Bot (Per-Asset Independent Mode)...\n');
+console.log('\n🚀 Initializing Candle-pattern Bot (Per-Asset Independent Mode)...\n');
 
 bot.connection.connect();
 
@@ -3191,7 +2895,7 @@ setInterval(() => {
                 const winLoss = a.lastWasWin === null
                     ? '-'
                     : a.lastWasWin ? 'W' : 'L';
-                assetLines += `\n   ${sym} (${a.timeframe}/${a.duration}): M${a.martingaleLevel} $${a.currentStake.toFixed(2)} | ${a.trades}t ${a.wins}W/${a.losses}L | P/L:$${a.netPL.toFixed(2)} | Last:${dir}(${winLoss}) | Pos:${a.activePositions} | WPR(${CONFIG.WPR_PERIOD}):${a.wprCurrent !== null ? a.wprCurrent.toFixed(2) : '---'} | WasOS:${a.wprWasOversold ? 'Y' : 'N'} WasOB:${a.wprWasOverbought ? 'Y' : 'N'}`;
+                assetLines += `\n   ${sym} (${a.timeframe}/${a.duration}): M${a.martingaleLevel} $${a.currentStake.toFixed(2)} | ${a.trades}t ${a.wins}W/${a.losses}L | P/L:$${a.netPL.toFixed(2)} | Last:${dir}(${winLoss}) | Pos:${a.activePositions} | LastCandle:${a.lastCandleDirection || '---'} Lookback:${a.patternLookback}`;
             }
         });
 
