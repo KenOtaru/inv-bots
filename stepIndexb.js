@@ -165,7 +165,7 @@ class STEPINDEXGridBot {
     // ── Trade Watchdog ───────────────────────────────────────────────────────
     this.tradeWatchdogTimer    = null;
     this.tradeWatchdogPollTimer = null;
-    this.tradeWatchdogMs       = 5000;
+    this.tradeWatchdogMs       = 20000;
     this.tradeStartTime        = null;
 
     // ── Stuck Trade Pause State ──────────────────────────────────────────────
@@ -503,6 +503,8 @@ class STEPINDEXGridBot {
       return;
     }
 
+    this.newTick = msg.tick;
+
     switch (msg.msg_type) {
       case 'authorize':              this._onAuthorize(msg);              break;
       case 'balance':                this._onBalance(msg);                break;
@@ -578,7 +580,7 @@ class STEPINDEXGridBot {
         } else if (this.tradingMode === 'digit-exploit') {
           this.log(`📊 NEW CANDLE — evaluating digit exploit opportunities…`, 'info');
           this.canTrade = true;
-          this._onLiveTickForBias();
+          this._onLiveTickForBias(this.newTick);
         }
       }
     }
