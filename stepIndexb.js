@@ -2566,16 +2566,16 @@ class STEPINDEXGridBot {
       const hours = gmt1.getHours();
       const minutes = gmt1.getMinutes();
 
-      if (this.endOfDay && hours === 2 && minutes >= 0) {
-        this.log('📅 02:00 GMT+1 — reconnecting bot', 'success');
+      if (this.endOfDay && hours === 3 && minutes >= 0) {
+        this.log('📅 03:00 GMT+1 — reconnecting bot', 'success');
         this._resetDailyStats();
         this.endOfDay = false;
         this.connect();
         return;
       }
 
-      if (!this.endOfDay && this.isWinTrade && hours >= 18) {
-        this.log('📅 Past 18:00 GMT+1 — end-of-day stop', 'info');
+      if (!this.endOfDay && this.isWinTrade && hours >= 23) {
+        this.log('📅 Past 23:00 GMT+1 — end-of-day stop', 'info');
         this._sendHourlySummary();
         this.disconnect();
         this.endOfDay = true;
@@ -2627,6 +2627,8 @@ function main() {
   StatePersistence.startAutoSave(bot);
 
   if (bot.telegramBot) bot.startTelegramTimer();
+
+  bot.startTimeScheduler();
 
   bot.connect();
 

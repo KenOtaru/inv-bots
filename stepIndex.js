@@ -56,7 +56,7 @@ const DEFAULT_CONFIG = {
 // FILE PATHS
 // ══════════════════════════════════════════════════════════════════════════════
 
-const STATE_FILE          = path.join(__dirname, 'ST1-grid-state000003.json');
+const STATE_FILE          = path.join(__dirname, 'ST1-grid-state000004.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -681,7 +681,7 @@ class STEPINDEXGridBot {
         this.log(`Re-subscribing to open contract ${this.currentContractId}…`);
         this.tradeInProgress = true;
         this._send({ proposal_open_contract: 1, contract_id: this.currentContractId, subscribe: 1 });
-        this._startTradeWatchdog(this.currentContractId, 5000);
+        this._startTradeWatchdog(this.currentContractId);
       } else {
         this.currentGridLevel = 0;
         if (this.inRecoveryMode) {
@@ -959,7 +959,7 @@ class STEPINDEXGridBot {
   // TRADE WATCHDOG — DETECT STUCK CONTRACTS
   // ══════════════════════════════════════════════════════════════════════════════
 
-  _startTradeWatchdog(contractId, customTimeoutMs) {
+  _startTradeWatchdog(contractId) {
     this._clearAllWatchdogTimers();
 
     const duration = this.getTickDuration(this.currentGridLevel);
@@ -1486,16 +1486,16 @@ class STEPINDEXGridBot {
       //   return;
       // }
 
-      if (this.endOfDay && hours === 2 && minutes >= 0) {
-        this.log('📅 02:00 GMT+1 — reconnecting bot', 'success');
+      if (this.endOfDay && hours === 3 && minutes >= 0) {
+        this.log('📅 03:00 GMT+1 — reconnecting bot', 'success');
         this._resetDailyStats();
         this.endOfDay = false;
         this.connect();
         return;
       }
 
-      if (!this.endOfDay && this.isWinTrade && hours >= 18) {
-        this.log('📅 Past 18:00 GMT+1 — end-of-day stop', 'info');
+      if (!this.endOfDay && this.isWinTrade && hours >= 23) {
+        this.log('📅 Past 23:00 GMT+1 — end-of-day stop', 'info');
         this._sendHourlySummary();
         this.disconnect();
         this.endOfDay = true;
@@ -1546,7 +1546,7 @@ function main() {
 
   if (bot.telegramBot) bot.startTelegramTimer();
 
-  // bot.startTimeScheduler();
+  bot.startTimeScheduler();
 
   bot.connect();
 
