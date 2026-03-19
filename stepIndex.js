@@ -24,7 +24,7 @@ const DEFAULT_CONFIG = {
   appId:    '1089',
 
   symbol:        'stpRNG',
-  tickDuration:  3,
+  tickDuration:  5,
   initialStake:  0.35,
   investmentAmount: 153,
 
@@ -145,7 +145,7 @@ class STEPINDEXGridBot {
     // ── Trade Watchdog ───────────────────────────────────────────────────────
     this.tradeWatchdogTimer    = null;
     this.tradeWatchdogPollTimer = null;
-    this.tradeWatchdogMs       = 5000;
+    this.tradeWatchdogMs       = 10000;
     this.tradeStartTime        = null;
 
     // ── Stuck Trade Pause State ──────────────────────────────────────────────
@@ -1173,9 +1173,9 @@ class STEPINDEXGridBot {
 
   // Replace this.config.tickDuration with this method
   getTickDuration(level) {
-      if (level === 0) return 3;           // Fresh trade
-      if (level <= 2) return 3;            // Early recovery
-      if (level <= 5) return 5;
+      if (level === 0) return DEFAULT_CONFIG.tickDuration;           // Fresh trade
+      if (level <= 2) return DEFAULT_CONFIG.tickDuration;            // Early recovery
+      if (level <= 5) return DEFAULT_CONFIG.tickDuration + 2; // Mid recovery - add 1 tick for more breathing room
       return 5;                            // Deep recovery - more breathing room
   }
 
