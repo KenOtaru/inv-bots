@@ -339,17 +339,6 @@ class StatePersistence {
                     closedCandles: asset.closedCandles.slice(-assetConfig.MAX_CANDLES_STORED),
                     lastProcessedCandleOpenTime: asset.lastProcessedCandleOpenTime,
                     candlesLoaded: asset.candlesLoaded,
-                    // WPR data
-                    lastWprCurrent: asset.lastWprCurrent,
-                    lastWprPrev: asset.lastWprPrev,
-                    lastWprSignal: asset.lastWprSignal,
-                    lastCrossSignalDirection: asset.lastCrossSignalDirection,
-                    wprWasOversold: asset.wprWasOversold,
-                    wprWasOverbought: asset.wprWasOverbought,
-                    // Track first candle above middle level
-                    firstCandleAboveMid: asset.firstCandleAboveMid,
-                    firstCandleBelowMid: asset.firstCandleBelowMid,
-                    lastMidCrossOpenTime: asset.lastMidCrossOpenTime,
                     // Per-asset trade management
                     lastTradeDirection: asset.lastTradeDirection,
                     lastTradeWasWin: asset.lastTradeWasWin,
@@ -453,18 +442,6 @@ class StatePersistence {
                         asset.lastProcessedCandleOpenTime =
                             saved.lastProcessedCandleOpenTime || 0;
                         asset.candlesLoaded = saved.candlesLoaded || false;
-
-                        // WPR data
-                        asset.lastWprCurrent = saved.lastWprCurrent !== undefined ? saved.lastWprCurrent : null;
-                        asset.lastWprPrev    = saved.lastWprPrev    !== undefined ? saved.lastWprPrev    : null;
-                        asset.lastWprSignal  = saved.lastWprSignal  || null;
-                        asset.lastCrossSignalDirection = saved.lastCrossSignalDirection || null;
-                        asset.wprWasOversold   = saved.wprWasOversold   !== undefined ? saved.wprWasOversold   : false;
-                        asset.wprWasOverbought = saved.wprWasOverbought !== undefined ? saved.wprWasOverbought : false;
-                        // NEW: First candle above/below middle level tracking
-                        asset.firstCandleAboveMid = saved.firstCandleAboveMid !== undefined ? saved.firstCandleAboveMid : null;
-                        asset.firstCandleBelowMid = saved.firstCandleBelowMid !== undefined ? saved.firstCandleBelowMid : null;
-                        asset.lastMidCrossOpenTime = saved.lastMidCrossOpenTime !== undefined ? saved.lastMidCrossOpenTime : null;
 
                         // Per-asset trade management
                         asset.lastTradeDirection = saved.lastTradeDirection || null;
@@ -1013,11 +990,6 @@ class CandleAnalyzer {
 }
 
 // ============================================
-// TECHNICAL INDICATORS — WILLIAMS %R (WPR) & EMA
-// ============================================
-// TechnicalIndicators removed — trading now uses candle-pattern signals only.
-
-// ============================================
 // CONFIGURATION
 // ============================================
 const CONFIG = {
@@ -1035,7 +1007,6 @@ const CONFIG = {
     SESSION_STOP_LOSS: -250,
 
     // Default Candle Settings (used if asset has no specific config)
-    // NOTE: Should be > WPR_PERIOD to ensure enough data for WPR calculation
     GRANULARITY: 60,
     TIMEFRAME_LABEL: '1m',
     MAX_CANDLES_STORED: 300,
@@ -1061,27 +1032,11 @@ const CONFIG = {
     iDirection: 'RISE',
 
     // ============================================
-    // WILLIAMS %R (WPR) SETTINGS
-    // ============================================
-    WPR_PERIOD: 80,         // Williams %R lookback period — adjustable (MT5 default: 80)
-    WPR_OVERBOUGHT: -20,    // Overbought level  (WPR > -20  = overbought zone)
-    WPR_OVERSOLD:   -80,    // Oversold level    (WPR < -80  = oversold zone)
-    WPR_MIDLINE:    -50,    // Mid-line cross trigger level
-
-    // ============================================
-    // EMA CROSSOVER FILTER SETTINGS
-    // ============================================
-    EMA_FAST_PERIOD: 20,   // Fast EMA period for filter
-    EMA_SLOW_PERIOD: 50,   // Slow EMA period for filter
-    USE_EMA_FILTER: true,  // Enable EMA cross-over filter
-
-    // ============================================
     // TRADING SESSION TOGGLE
     // true  = only trade during defined session windows below (recovery allowed anytime)
     // false = trade 24/7 (ignore session windows entirely)
     // ============================================
     USE_TRADING_SESSIONS: false,
-
     // ============================================
     // TRADING SESSION WINDOWS (GMT+1 hours)
     // ============================================
@@ -1109,48 +1064,48 @@ const CONFIG = {
 // Override default candle/duration settings per asset.
 // Any setting not specified here will fall back to CONFIG defaults.
 const ASSET_CONFIGS = {
-    R_10: {
-        GRANULARITY: 60,
-        TIMEFRAME_LABEL: '1m',
-        MAX_CANDLES_STORED: 300,
-        CANDLES_TO_LOAD: 300,
-        // Candle-pattern lookback for pattern detection (user configurable)
-        CANDLE_PATTERN_LOOKBACK: 7,
-        DURATION: 54,
-        DURATION_UNIT: 's'
-    },
-    R_25: {
-        GRANULARITY: 60,
-        TIMEFRAME_LABEL: '1m',
-        MAX_CANDLES_STORED: 300,
-        CANDLES_TO_LOAD: 300,
-        DURATION: 54,
-        DURATION_UNIT: 's'
-    },
-    R_50: {
-        GRANULARITY: 60,        
-        TIMEFRAME_LABEL: '1m',
-        MAX_CANDLES_STORED: 300,
-        CANDLES_TO_LOAD: 300,
-        DURATION: 54,           
-        DURATION_UNIT: 's'
-    },
-    R_75: {
-        GRANULARITY: 60,
-        TIMEFRAME_LABEL: '1m',
-        MAX_CANDLES_STORED: 300,
-        CANDLES_TO_LOAD: 300,
-        DURATION: 54,
-        DURATION_UNIT: 's'
-    },
-    R_100: {
-        GRANULARITY: 60,        
-        TIMEFRAME_LABEL: '1m',
-        MAX_CANDLES_STORED: 300,
-        CANDLES_TO_LOAD: 300,
-        DURATION: 54,             
-        DURATION_UNIT: 's'      
-    }
+    // R_10: {
+    //     GRANULARITY: 60,
+    //     TIMEFRAME_LABEL: '1m',
+    //     MAX_CANDLES_STORED: 300,
+    //     CANDLES_TO_LOAD: 300,
+    //     // Candle-pattern lookback for pattern detection (user configurable)
+    //     CANDLE_PATTERN_LOOKBACK: 7,
+    //     DURATION: 54,
+    //     DURATION_UNIT: 's'
+    // },
+    // R_25: {
+    //     GRANULARITY: 60,
+    //     TIMEFRAME_LABEL: '1m',
+    //     MAX_CANDLES_STORED: 300,
+    //     CANDLES_TO_LOAD: 300,
+    //     DURATION: 54,
+    //     DURATION_UNIT: 's'
+    // },
+    // R_50: {
+    //     GRANULARITY: 60,        
+    //     TIMEFRAME_LABEL: '1m',
+    //     MAX_CANDLES_STORED: 300,
+    //     CANDLES_TO_LOAD: 300,
+    //     DURATION: 54,           
+    //     DURATION_UNIT: 's'
+    // },
+    // R_75: {
+    //     GRANULARITY: 60,
+    //     TIMEFRAME_LABEL: '1m',
+    //     MAX_CANDLES_STORED: 300,
+    //     CANDLES_TO_LOAD: 300,
+    //     DURATION: 54,
+    //     DURATION_UNIT: 's'
+    // },
+    // R_100: {
+    //     GRANULARITY: 60,        
+    //     TIMEFRAME_LABEL: '1m',
+    //     MAX_CANDLES_STORED: 300,
+    //     CANDLES_TO_LOAD: 300,
+    //     DURATION: 54,             
+    //     DURATION_UNIT: 's'      
+    // }
 };
 
 /**
@@ -1478,16 +1433,7 @@ class SessionManager {
                 asset.x7Losses = 0;
                 asset.x8Losses = 0;
                 asset.x9Losses = 0;
-                // Reset last-traded cross signal so WPR signal can re-fire on new day
                 asset.lastCrossSignalDirection = null;
-                // Reset first candle above/below mid flags for new day
-                asset.firstCandleAboveMid = null;
-                asset.firstCandleBelowMid = null;
-                asset.lastMidCrossOpenTime = null;
-
-                // NOTE: We do NOT reset martingaleLevel, currentStake,
-                // lastTradeWasWin, lastTradeDirection, wprWasOversold, wprWasOverbought here
-                // so recovery chains and WPR state carry over between days if needed
             }
         });
 
@@ -1570,8 +1516,6 @@ class SessionManager {
             assetState.martingaleLevel = 0;
             assetState.lastTradeWasWin = true;
             assetState.currentStake = CONFIG.STAKE;
-            assetState.wprWasOversold   = false; // Reset WPR flags on win
-            assetState.wprWasOverbought = false; // Reset WPR flags on win 
 
             // Record in persistent history
             TradeHistoryManager.recordTrade(symbol, profit, assetState.martingaleLevel);
@@ -1742,21 +1686,6 @@ class ConnectionManager {
                     currentFormingCandle: null,
                     lastProcessedCandleOpenTime: null,
                     candlesLoaded: false,
-                    // WPR data
-                    lastWprCurrent: null,       // Most recent WPR value
-                    lastWprPrev: null,          // Previous bar WPR value
-                    lastWprSignal: null,        // 'BULL_CROSS' | 'BEAR_CROSS' | null
-                    lastCrossSignalDirection: null, // Direction of last crossover that was traded ('CALLE'|'PUTE')
-                    wprWasOversold: false,      // WPR visited oversold (≤ -80) since last BUY cross
-                    wprWasOverbought: false,    // WPR visited overbought (≥ -20) since last SELL cross
-                    // NEW: Track first candle above/below middle level after pattern trigger
-                    firstCandleAboveMid: null,  // First candle close above -50 after oversold → bull cross
-                    firstCandleBelowMid: null,  // First candle close below -50 after overbought → bear cross
-                    lastMidCrossOpenTime: null,  // Track when last mid-level cross occurred
-                    // EMA filter data
-                    lastEmaFast: null,          // Fast EMA value (period 20)
-                    lastEmaSlow: null,          // Slow EMA value (period 50)
-                    lastEmaIsAbove: null,       // Whether fast EMA is above slow EMA
                     // === PER-ASSET TRADE MANAGEMENT ===
                     lastTradeDirection: null,
                     lastTradeWasWin: null,
@@ -2197,11 +2126,6 @@ class ConnectionManager {
             lastCandle.open_time;
         state.assets[symbol].currentFormingCandle = null;
 
-        // No technical indicator seeding — candle-pattern strategy will be evaluated on live closes.
-        state.assets[symbol].lastWprCurrent = null;
-        state.assets[symbol].lastWprPrev = null;
-        state.assets[symbol].lastWprSignal = null;
-
         LOGGER.info(
             `📊 Loaded ${candles.length} ${assetConfig.TIMEFRAME_LABEL} candles for ${symbol}`
         );
@@ -2304,7 +2228,7 @@ class DerivBot {
     async start() {
         console.log('\n' + '═'.repeat(80));
         console.log(
-            ' DERIV RISE/FALL WPR CROSSOVER BOT (Per-Asset Independent Management)'
+            ' DERIV RISE/FALL CANDLE PATTERN BOT (Per-Asset Independent Management)'
         );
         console.log('═'.repeat(80));
         console.log(`💰 Initial Capital: $${state.capital}`);
@@ -2837,7 +2761,7 @@ if (stateLoaded) {
 if (CONFIG.API_TOKEN === 'YOUR_API_TOKEN_HERE') {
     console.log('═'.repeat(80));
     console.log(
-        ' DERIV RISE/FALL WPR CROSSOVER BOT (Per-Asset Independent)'
+        ' DERIV RISE/FALL CANDLE PATTERN BOT (Per-Asset Independent)'
     );
     console.log('═'.repeat(80));
     console.log('\n⚠️ API Token not configured!\n');
@@ -2864,7 +2788,7 @@ if (CONFIG.API_TOKEN === 'YOUR_API_TOKEN_HERE') {
 
 console.log('═'.repeat(80));
 console.log(
-    ' DERIV RISE/FALL WPR CROSSOVER BOT (Per-Asset Independent)'
+    ' DERIV RISE/FALL CANDLE PATTERN CROSSOVER BOT (Per-Asset Independent)'
 );
 console.log(
     ` Base Stake: $${CONFIG.STAKE} | Candle Lookback: ${CONFIG.CANDLE_PATTERN_LOOKBACK || 7} | Sessions: ${CONFIG.USE_TRADING_SESSIONS ? 'ON' : 'OFF (24/7)'}`
