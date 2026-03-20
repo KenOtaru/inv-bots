@@ -180,7 +180,7 @@ const DEFAULT_CONFIG = {
   extraLevelMultipliers: [1.8, 2.1, 2.1, 2.1, 2.1, 2.1, 2.1],
 
   autoCompounding:    true,
-  compoundPercentage: 0.22,
+  compoundPercentage: 0.20,
 
   stopLoss:   5000,
   takeProfit: 10000,
