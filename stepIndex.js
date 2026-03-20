@@ -36,7 +36,7 @@ function getGMTTime() {
 // TRADE HISTORY MANAGER - Daily Stats Storage & Persistence
 // ══════════════════════════════════════════════════════════════════════════════
 
-const HISTORY_FILE = path.join(__dirname, 'ST1-grid-history.json');
+const HISTORY_FILE = path.join(__dirname, 'Index-grid-history.json');
 
 class TradeHistoryManager {
   static loadHistory() {
@@ -197,7 +197,7 @@ const DEFAULT_CONFIG = {
 // FILE PATHS
 // ══════════════════════════════════════════════════════════════════════════════
 
-const STATE_FILE          = path.join(__dirname, 'ST1-grid-state000005.json');
+const STATE_FILE          = path.join(__dirname, 'Index-grid-state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ══════════════════════════════════════════════════════════════════════════════
