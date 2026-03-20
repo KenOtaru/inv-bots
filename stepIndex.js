@@ -274,7 +274,7 @@ const DEFAULT_CONFIG = {
   initialStake:  0.35,
   
   // Base investment amount - will be auto-adjusted based on stake
-  investmentAmount: 153,
+  investmentAmount: 1743,
 
   // Martingale settings
   maxMartingaleLevel: 9,  // 0-9 = 10 levels total
@@ -285,7 +285,7 @@ const DEFAULT_CONFIG = {
   compoundPercentage: 0.24, // % of investment to use as base stake
   
   // Risk management
-  stopLoss:   153,
+  stopLoss:   5000,
   takeProfit: 10000,
   
   // Safety buffer for investment (1.1 = 10% buffer)
