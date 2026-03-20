@@ -4,6 +4,7 @@
 // ║   Volatility STEP Index | CALLE/PUTE | Low-Risk Hybrid                        ║
 // ║   NEW: Trade on new candle, recovery trades until win, then wait for candle    ║
 // ║   ENHANCED: Stuck trade recovery with pause and reset                          ║
+// ║   UPDATED: Enhanced resume logic + Daily stats storage & notifications          ║
 // ╚══════════════════════════════════════════════════════════════════════════════════╝
 
 'use strict';
@@ -14,6 +15,150 @@ const WebSocket   = require('ws');
 const TelegramBot = require('node-telegram-bot-api');
 const fs          = require('fs');
 const path        = require('path');
+
+// ══════════════════════════════════════════════════════════════════════════════
+// DATE/TIME HELPERS (GMT+1)
+// ══════════════════════════════════════════════════════════════════════════════
+
+function getGMTDateKey() {
+  const now = new Date();
+  const gmtPlus1 = new Date(now.getTime() + (1 * 60 * 60 * 1000));
+  return gmtPlus1.toISOString().split('T')[0]; // e.g. "2026-03-20"
+}
+
+function getGMTTime() {
+  const now = new Date();
+  const gmtPlus1 = new Date(now.getTime() + (1 * 60 * 60 * 1000));
+  return gmtPlus1.toISOString().split('T')[1].split('.')[0] + ' GMT+1';
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// TRADE HISTORY MANAGER - Daily Stats Storage & Persistence
+// ══════════════════════════════════════════════════════════════════════════════
+
+const HISTORY_FILE = path.join(__dirname, 'ST1-grid-history.json');
+
+class TradeHistoryManager {
+  static loadHistory() {
+    try {
+      if (!fs.existsSync(HISTORY_FILE)) {
+        console.log(`[History] No history file found, starting fresh`);
+        return {
+          overall: {
+            tradesCount: 0,
+            winsCount: 0,
+            lossesCount: 0,
+            profit: 0,
+            loss: 0,
+            netPL: 0,
+            firstTradeDate: null,
+            lastTradeDate: null
+          },
+          dailyHistory: {},
+          lastUpdated: Date.now()
+        };
+      }
+      const data = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
+      console.log(`[History] Loaded — ${Object.keys(data.dailyHistory || {}).length} days of history`);
+      return data;
+    } catch (error) {
+      console.error(`[History] Load error: ${error.message}`);
+      return {
+        overall: { tradesCount: 0, winsCount: 0, lossesCount: 0, profit: 0, loss: 0, netPL: 0, firstTradeDate: null, lastTradeDate: null },
+        dailyHistory: {},
+        lastUpdated: Date.now()
+      };
+    }
+  }
+
+  static saveHistory() {
+    try {
+      fs.writeFileSync(HISTORY_FILE, JSON.stringify(tradeHistory, null, 2));
+    } catch (error) {
+      console.error(`[History] Save error: ${error.message}`);
+    }
+  }
+
+  static ensureDayEntry(dateKey) {
+    if (!tradeHistory.dailyHistory[dateKey]) {
+      tradeHistory.dailyHistory[dateKey] = {
+        date: dateKey,
+        tradesCount: 0,
+        winsCount: 0,
+        lossesCount: 0,
+        profit: 0,
+        loss: 0,
+        netPL: 0,
+        startCapital: 0,
+        endCapital: 0
+      };
+    }
+  }
+
+  static recordTrade(profit, gridLevel, investmentRemaining, totalProfit) {
+    const dateKey = getGMTDateKey();
+    this.ensureDayEntry(dateKey);
+    
+    const dayStats = tradeHistory.dailyHistory[dateKey];
+    const overall = tradeHistory.overall;
+    
+    dayStats.tradesCount++;
+    overall.tradesCount++;
+    
+    if (!overall.firstTradeDate) overall.firstTradeDate = dateKey;
+    overall.lastTradeDate = dateKey;
+    
+    if (profit > 0) {
+      dayStats.winsCount++;
+      dayStats.profit += profit;
+      dayStats.netPL += profit;
+      overall.winsCount++;
+      overall.profit += profit;
+      overall.netPL += profit;
+    } else {
+      dayStats.lossesCount++;
+      dayStats.loss += Math.abs(profit);
+      dayStats.netPL += profit;
+      overall.lossesCount++;
+      overall.loss += Math.abs(profit);
+      overall.netPL += profit;
+    }
+    
+    dayStats.endCapital = investmentRemaining;
+    tradeHistory.lastUpdated = Date.now();
+    this.saveHistory();
+  }
+
+  static getTodayStats() {
+    const dateKey = getGMTDateKey();
+    this.ensureDayEntry(dateKey);
+    return tradeHistory.dailyHistory[dateKey];
+  }
+
+  static getOverallStats() {
+    return tradeHistory.overall;
+  }
+
+  static getAllDays() {
+    return Object.keys(tradeHistory.dailyHistory).sort();
+  }
+
+  static getRecentDays(n = 7) {
+    const days = this.getAllDays();
+    return days.slice(-n).map(dateKey => ({ date: dateKey, ...tradeHistory.dailyHistory[dateKey] }));
+  }
+
+  static checkDayChange(currentDay) {
+    const todayKey = getGMTDateKey();
+    if (currentDay && currentDay !== todayKey) {
+      return { changed: true, previousDay: currentDay, newDay: todayKey };
+    }
+    return { changed: false, previousDay: currentDay, newDay: todayKey };
+  }
+}
+
+// Initialize trade history
+let tradeHistory = TradeHistoryManager.loadHistory();
 
 // ══════════════════════════════════════════════════════════════════════════════
 // CONFIGURATION
@@ -41,10 +186,6 @@ const DEFAULT_CONFIG = {
   takeProfit: 10000,
 
   // Stuck trade recovery settings - USER ADJUSTABLE
-  // Default: 5 minutes (5 * 60 * 1000 = 300000ms)
-  // To change: set stuckTradePauseDuration to desired milliseconds
-  // Example: 3 minutes = 3 * 60 * 1000 = 180000
-  //          10 minutes = 10 * 60 * 1000 = 600000
   stuckTradePauseDuration: 5 * 60 * 1000,
 
   telegramToken:   '8343520432:AAGNxzjnljOEhfv_rE-y-F98fUDPmrqZuXc',
@@ -83,6 +224,7 @@ class StatePersistence {
           maxLossStreak:       bot.maxLossStreak,
           currentStreak:       bot.currentStreak,
           inRecoveryMode:      bot.inRecoveryMode,
+          currentTradeDay:     bot.currentTradeDay,
         },
       };
       fs.writeFileSync(STATE_FILE, JSON.stringify(payload, null, 2), 'utf8');
@@ -138,6 +280,7 @@ class STEPINDEXGridBot {
     this.reconnectDelay       = 5000;
     this.reconnectTimer       = null;
     this.isReconnecting       = false;
+    this.lastConnectedTime    = null;
 
     // ── Ping / Keepalive ────────────────────────────────────────────────────
     this.pingInterval = null;
@@ -183,6 +326,10 @@ class STEPINDEXGridBot {
     this.maxLossStreak         = 0;
     this.totalRecovered        = 0;
 
+    // ── Day tracking ────────────────────────────────────────────────────────
+    this.currentTradeDay = getGMTDateKey();
+    this.tradeDayStats = { trades: 0, pnl: 0, wins: 0, losses: 0 };
+
     // ── Candle tracking ─────────────────────────────────────────────────────
     this.assetState = {
       candles: [],
@@ -197,9 +344,7 @@ class STEPINDEXGridBot {
       CANDLES_TO_LOAD: 50
     };
 
-    // ══════════════════════════════════════════════════════════════════════
-    // NEW CANDLE-GATED TRADING + RECOVERY LOGIC
-    // ══════════════════════════════════════════════════════════════════════
+    // ── Candle-gated trading + recovery logic ──────────────────────────────
     this.canTrade       = false;
     this.inRecoveryMode = false;
 
@@ -255,11 +400,22 @@ class STEPINDEXGridBot {
     this.currentStreak       = t.currentStreak       || 0;
     this.inRecoveryMode      = t.inRecoveryMode      || false;
     this.canTrade            = this.inRecoveryMode;
+    this.currentTradeDay     = t.currentTradeDay     || getGMTDateKey();
     this.hasStartedOnce      = true;
+    
+    // Initialize today's trade day stats from history
+    const todayStats = TradeHistoryManager.getTodayStats();
+    this.tradeDayStats = {
+      trades: todayStats.tradesCount,
+      pnl: todayStats.netPL,
+      wins: todayStats.winsCount,
+      losses: todayStats.lossesCount
+    };
+    
     this.log(
       `State restored | Trades: ${this.totalTrades} | W/L: ${this.wins}/${this.losses} | ` +
       `P&L: $${this.totalProfit.toFixed(2)} | Level: ${this.currentGridLevel} | ` +
-      `Recovery: ${this.inRecoveryMode ? 'YES' : 'NO'}`,
+      `Recovery: ${this.inRecoveryMode ? 'YES' : 'NO'} | Day: ${this.currentTradeDay}`,
       'success'
     );
   }
@@ -327,10 +483,10 @@ class STEPINDEXGridBot {
     this.log('WebSocket connected ✅', 'success');
     this.isConnected       = true;
     this.reconnectAttempts = 0;
-    this.isReconnecting    = false;
+    this.isReconnecting   = false;
+    this.lastConnectedTime = Date.now();
 
     this._startPing();
-
     StatePersistence.startAutoSave(this);
 
     this._send({ authorize: this.config.apiToken });
@@ -348,8 +504,8 @@ class STEPINDEXGridBot {
     this._stopPing();
     this._clearAllWatchdogTimers();
 
-    this.tradeInProgress  = false;
-    this.pendingTradeInfo = null;
+    // FIXED: Don't clear tradeInProgress here - let the watchdog handle it
+    // This prevents the stuck trade issue after reconnection
 
     StatePersistence.save(this);
 
@@ -525,9 +681,7 @@ class STEPINDEXGridBot {
           `${symbol} ${candleEmoji} NEW CANDLE [${closeTime}] ${candleType}: O:${closedCandle.open.toFixed(5)} H:${closedCandle.high.toFixed(5)} L:${closedCandle.low.toFixed(5)} C:${closedCandle.close.toFixed(5)}`
         );
 
-        // ════════════════════════════════════════════════════════════════════════
-        // CANDLE-GATED TRADE TRIGGER
-        // ════════════════════════════════════════════════════════════════════════
+        // ── CANDLE-GATED TRADE TRIGGER ───────────────────────────────────
         if (this.inRecoveryMode) {
           this.log(`📊 NEW CANDLE — but in RECOVERY mode (L${this.currentGridLevel}), recovery trades continue independently`, 'info');
         } else {
@@ -651,6 +805,7 @@ class STEPINDEXGridBot {
     this._subscribeToCandles(this.config.symbol);
 
     if (!this.hasStartedOnce) {
+      // ── FRESH START ─────────────────────────────────────────────────────
       this._sendTelegram(
         `✅ <b>${DEFAULT_CONFIG.symbol} Grid Bot Connected</b>\n` +
         `Account: ${this.accountId}\n` +
@@ -659,7 +814,18 @@ class STEPINDEXGridBot {
       setTimeout(() => { if (!this.running) this.start(); }, 300);
 
     } else {
-      this.tradeInProgress = false;
+      // ── RECONNECTION HANDLER — FIXED FOR STUCK TRADE ISSUE ─────────────
+      const previousDay = this.currentTradeDay;
+      const todayKey = getGMTDateKey();
+      
+      // Check for day change during disconnect
+      if (previousDay !== todayKey) {
+        this.log(`📅 Day changed from ${previousDay} to ${todayKey} during disconnect`, 'info');
+        this._sendDayEndSummary(previousDay);
+        this._resetDailyStats();
+        this.currentTradeDay = todayKey;
+      }
+
       this.log(
         `🔄 Reconnected — resuming | L${this.currentGridLevel} | ` +
         `${this.currentDirection === 'CALLE' ? 'HIGHER' : 'LOWER'} | ` +
@@ -677,17 +843,37 @@ class STEPINDEXGridBot {
       );
 
       if (this.currentContractId) {
-        this.currentGridLevel = 0;
-        this.log(`Re-subscribing to open contract ${this.currentContractId}…`);
-        this.tradeInProgress = true;
+        // ── FIXED: Reconnection with open contract ───────────────────────
+        this.log(`Re-subscribing to contract ${this.currentContractId}…`);
         this._send({ proposal_open_contract: 1, contract_id: this.currentContractId, subscribe: 1 });
         this._startTradeWatchdog(this.currentContractId);
+        
+        // Start a timeout to detect if the contract was already settled during disconnect
+        setTimeout(() => {
+          if (this.tradeInProgress && this.currentContractId) {
+            this.log(`⚠️ Contract ${this.currentContractId} still showing as in progress after reconnect — checking status…`, 'warning');
+            this._send({ proposal_open_contract: 1, contract_id: this.currentContractId, subscribe: 1 });
+            
+            // Give it one more chance, then force recovery
+            setTimeout(() => {
+              if (this.tradeInProgress && this.currentContractId) {
+                this.log(`🚨 Contract ${this.currentContractId} appears stuck — forcing stuck trade recovery`, 'error');
+                this._recoverStuckTrade('reconnect-timeout');
+              }
+            }, 15000);
+          }
+        }, 10000);
+        
       } else {
+        // No contract was open during disconnect
         this.currentGridLevel = 0;
+        this.tradeInProgress = false;
+        
         if (this.inRecoveryMode) {
           this.canTrade = true;
           this.log('In recovery mode — will trade immediately after candle data loads', 'warning');
         }
+        
         if (this.running && !this.tradeInProgress) {
           this.log('No open contract — will trade when candle signals (or immediately if in recovery)', 'success');
           setTimeout(() => {
@@ -738,6 +924,8 @@ class STEPINDEXGridBot {
     if (!c.is_sold) return;
 
     const contractId = String(c.contract_id);
+    
+    // Check if this is a stale contract (from before reconnect)
     if (this.currentContractId && contractId !== String(this.currentContractId)) {
       this.log(
         `⚠️ Ignoring stale contract result: ${contractId} (current: ${this.currentContractId})`,
@@ -779,9 +967,18 @@ class STEPINDEXGridBot {
     if (isWin)  this.maxWinStreak  = Math.max(this.currentStreak, this.maxWinStreak);
     if (!isWin) this.maxLossStreak = Math.min(this.currentStreak, this.maxLossStreak);
 
+    // ── Hourly stats ──────────────────────────────────────────────────────
     this.hourlyStats.trades++;
     this.hourlyStats.pnl += profit;
     if (isWin) this.hourlyStats.wins++; else this.hourlyStats.losses++;
+
+    // ── Daily stats ───────────────────────────────────────────────────────
+    this.tradeDayStats.trades++;
+    this.tradeDayStats.pnl += profit;
+    if (isWin) this.tradeDayStats.wins++; else this.tradeDayStats.losses++;
+
+    // ── Record in persistent history ──────────────────────────────────────
+    TradeHistoryManager.recordTrade(profit, this.currentGridLevel, this.investmentRemaining, this.totalProfit);
 
     // ── Risk management ───────────────────────────────────────────────────
     if (this.totalProfit <= -this.config.stopLoss) {
@@ -790,6 +987,7 @@ class STEPINDEXGridBot {
       this.running = false;
       this.inRecoveryMode = false;
       this.canTrade = false;
+      this._sendDayEndSummary(getGMTDateKey());
       return;
     }
     if (this.totalProfit >= this.config.takeProfit) {
@@ -798,6 +996,7 @@ class STEPINDEXGridBot {
       this.running = false;
       this.inRecoveryMode = false;
       this.canTrade = false;
+      this._sendDayEndSummary(getGMTDateKey());
       return;
     }
 
@@ -846,24 +1045,19 @@ class STEPINDEXGridBot {
         ? cfg.maxMartingaleLevel + cfg.continueExtraLevels
         : cfg.maxMartingaleLevel;
 
-      // === BEST RECOVERY STRATEGY FOR stpRNG ===
       let nextDir;
 
       if (this.currentGridLevel <= 3) {
-          // Strong mean reversion in early levels
-          nextDir = this.currentDirection === 'CALLE' ? 'PUTE' : 'CALLE';
-      } 
+        nextDir = this.currentDirection === 'CALLE' ? 'PUTE' : 'CALLE';
+      }
       else if (this.currentGridLevel % 3 === 0) {
-          // Every 3rd level (6,9,12...) we continue direction (expecting breakout)
-          nextDir = this.currentDirection;
-      } 
+        nextDir = this.currentDirection;
+      }
       else {
-          // Levels 4,5,7,8,10,11... → reverse
-          nextDir = this.currentDirection === 'CALLE' ? 'PUTE' : 'CALLE';
+        nextDir = this.currentDirection === 'CALLE' ? 'PUTE' : 'CALLE';
       }
 
       this.currentDirection = nextDir;
-      
       this.currentGridLevel = nextLevel;
       this.inRecoveryMode = true;
       this.canTrade       = true;
@@ -937,6 +1131,7 @@ class STEPINDEXGridBot {
       this.inRecoveryMode = false;
       this.canTrade       = false;
       this._logSummary();
+      this._sendDayEndSummary(getGMTDateKey());
       return;
     }
 
@@ -963,7 +1158,6 @@ class STEPINDEXGridBot {
     this._clearAllWatchdogTimers();
 
     const duration = this.getTickDuration(this.currentGridLevel);
-
     const timeoutMs = duration > 3 ? (this.tradeWatchdogMs + 5000) : this.tradeWatchdogMs;
 
     this.tradeWatchdogTimer = setTimeout(() => {
@@ -1050,7 +1244,6 @@ class STEPINDEXGridBot {
       'error'
     );
 
-    // Increment stuck trade count
     this.stuckTradeCount++;
 
     if (stakeInfo && stakeInfo.stake > 0) {
@@ -1073,19 +1266,13 @@ class STEPINDEXGridBot {
 
     this._clearAllWatchdogTimers();
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // NEW: Pause trading, reset values, then resume after configured duration
-    // ─────────────────────────────────────────────────────────────────────────
-    
     const pauseDurationMs = this.config.stuckTradePauseDuration || (5 * 60 * 1000);
     const pauseDurationMin = Math.round(pauseDurationMs / 60000);
 
-    // Set pause state
     this.isPausedDueToStuckTrade = true;
     this.canTrade = false;
     this.inRecoveryMode = false;
 
-    // Reset Stake, Multiplier (grid level), and Martingale step count to default
     const previousGridLevel = this.currentGridLevel;
     const previousBaseStake = this.baseStake;
     this.currentGridLevel = 0;
@@ -1119,13 +1306,11 @@ class STEPINDEXGridBot {
 
     StatePersistence.save(this);
 
-    // Clear any existing pause timer
     if (this.stuckTradePauseTimer) {
       clearTimeout(this.stuckTradePauseTimer);
       this.stuckTradePauseTimer = null;
     }
 
-    // Set timer to resume trading after the configured pause duration
     this.stuckTradePauseTimer = setTimeout(() => {
       this._resumeTradingAfterStuckTradePause();
     }, pauseDurationMs);
@@ -1141,12 +1326,6 @@ class STEPINDEXGridBot {
   // ══════════════════════════════════════════════════════════════════════════════
 
   _resumeTradingAfterStuckTradePause() {
-    // if (!this.running) {
-    //   this.log('Bot stopped during stuck trade pause — not resuming', 'info');
-    //   this.isPausedDueToStuckTrade = false;
-    //   return;
-    // }
-
     this.isPausedDueToStuckTrade = false;
     this.canTrade = true;
 
@@ -1171,12 +1350,11 @@ class STEPINDEXGridBot {
     this.log('⏳ Waiting for next new candle to place trade…', 'info');
   }
 
-  // Replace this.config.tickDuration with this method
   getTickDuration(level) {
-      if (level === 0) return DEFAULT_CONFIG.tickDuration;           // Fresh trade
-      if (level <= 2) return DEFAULT_CONFIG.tickDuration;            // Early recovery
-      if (level <= 5) return DEFAULT_CONFIG.tickDuration + 2; // Mid recovery - add 1 tick for more breathing room
-      return 5;                            // Deep recovery - more breathing room
+    if (level === 0) return DEFAULT_CONFIG.tickDuration;
+    if (level <= 2) return DEFAULT_CONFIG.tickDuration;
+    if (level <= 5) return DEFAULT_CONFIG.tickDuration + 2;
+    return 5;
   }
 
   // ══════════════════════════════════════════════════════════════════════════════
@@ -1188,19 +1366,17 @@ class STEPINDEXGridBot {
     if (!this.running)        { return; }
     if (this.tradeInProgress) { this.log('Trade already in progress…', 'warning');  return; }
 
-    // ── CHECK IF PAUSED DUE TO STUCK TRADE ─────────────────────────────────
     if (this.isPausedDueToStuckTrade) {
-      const remainingMs = this.stuckTradePauseTimer ? 
+      const remainingMs = this.stuckTradePauseTimer ?
         Math.max(0, this.stuckTradePauseTimer._idleTimeout - Date.now()) : 0;
       const remainingMin = Math.ceil(remainingMs / 60000);
       this.log(`⏸️ Cannot place trade - paused due to stuck trade. Will resume in ${remainingMin} minute(s)`, 'warning');
       return;
     }
 
-    // ── CANDLE GATE CHECK ─────────────────────────────────────────────────
     if (!this.canTrade) {
       if (this.inRecoveryMode) {
-        this.log('⚡ Recovery mode but canTrade=false — this shouldn\'t happen, forcing canTrade=true', 'warning');
+        this.log('⚡ Recovery mode but canTrade=false — forcing canTrade=true', 'warning');
         this.canTrade = true;
       } else {
         this.log('⏳ Waiting for new candle before trading… (canTrade=false)', 'info');
@@ -1208,12 +1384,11 @@ class STEPINDEXGridBot {
       }
     }
 
-    // Doji candles to allowed
     if (!this.inRecoveryMode) {
       this.currentDirection = candleType === 'BULLISH' ? 'CALLE' : 'PUTE';
-      if (candleType === 'DOJI') { 
-        this.log('Last Candle was a Doji', 'warning');  
-        return; 
+      if (candleType === 'DOJI') {
+        this.log('Last Candle was a Doji', 'warning');
+        return;
       }
     }
 
@@ -1274,7 +1449,7 @@ class STEPINDEXGridBot {
       basis:         'stake',
       contract_type: direction,
       currency:      this.currency,
-      duration:      duration, // this.config.tickDuration,
+      duration:      duration,
       duration_unit: 't',
       symbol:        this.config.symbol,
     });
@@ -1322,8 +1497,9 @@ class STEPINDEXGridBot {
     this.isWinTrade            = false;
     this.reconnectAttempts     = 0;
     this.hasStartedOnce        = true;
+    this.currentTradeDay       = getGMTDateKey();
+    this.tradeDayStats        = { trades: 0, pnl: 0, wins: 0, losses: 0 };
 
-    // ── Initialize candle-gated trading ──────────────────────────────────
     this.inRecoveryMode        = false;
     this.canTrade              = false;
     this.isPausedDueToStuckTrade = false;
@@ -1339,7 +1515,6 @@ class STEPINDEXGridBot {
     this.log(`📈 Trading mode: NEW CANDLE → trade | LOSS → recovery until WIN → wait for new candle`);
     this.log(`⏳ Waiting for first new candle to start trading…`);
     
-    // Log stuck trade pause settings
     const pauseMin = Math.round((cfg.stuckTradePauseDuration || 300000) / 60000);
     this.log(`🛡️ Stuck trade pause duration: ${pauseMin} minute(s)`);
 
@@ -1348,7 +1523,7 @@ class STEPINDEXGridBot {
       `💵 Investment: $${cfg.investmentAmount}\n` +
       `📊 Base Stake: $${this.baseStake.toFixed(2)}\n` +
       `🔢 Multiplier: ${cfg.martingaleMultiplier}x | Max Level: ${cfg.maxMartingaleLevel}\n` +
-      `⏱ Duration: {cfg.tickDuration} ticks\n` +
+      `⏱ Duration: ${cfg.tickDuration} ticks\n` +
       `💰 Balance: ${this.currency} ${this.balance.toFixed(2)}\n` +
       `🕯️ Mode: Trade on new candle | Recovery until win\n` +
       `⏸️ Stuck trade pause: ${pauseMin} minute(s)`
@@ -1366,6 +1541,7 @@ class STEPINDEXGridBot {
     this.log('🛑 Bot stopped', 'warning');
     this._sendTelegram(`🛑 <b>${DEFAULT_CONFIG.symbol} Bot stopped</b>\nP&L: $${this.totalProfit.toFixed(2)} | Trades: ${this.totalTrades}`);
     this._logSummary();
+    this._sendDayEndSummary(getGMTDateKey());
   }
 
   emergencyStop() {
@@ -1377,6 +1553,7 @@ class STEPINDEXGridBot {
     this.log('🚨 EMERGENCY STOP — All activity halted!', 'error');
     this._sendTelegram(`🚨 <b>${DEFAULT_CONFIG.symbol} EMERGENCY STOP TRIGGERED</b>\nP&L: $${this.totalProfit.toFixed(2)} | Trades: ${this.totalTrades}`);
     this._logSummary();
+    this._sendDayEndSummary(getGMTDateKey());
   }
 
   // ══════════════════════════════════════════════════════════════════════════════
@@ -1453,6 +1630,64 @@ class STEPINDEXGridBot {
     this.hourlyStats = { trades: 0, wins: 0, losses: 0, pnl: 0, lastHour: new Date().getHours() };
   }
 
+  // ══════════════════════════════════════════════════════════════════════════════
+  // DAY END SUMMARY - NEW FUNCTION FOR DAILY STATS NOTIFICATION
+  // ══════════════════════════════════════════════════════════════════════════════
+
+  async _sendDayEndSummary(dateKey) {
+    const dayStats = TradeHistoryManager.getDayStats(dateKey);
+    const overall = TradeHistoryManager.getOverallStats();
+    const recentDays = TradeHistoryManager.getRecentDays(5);
+
+    if (!dayStats || dayStats.tradesCount === 0) {
+      this.log(`[DaySummary] No trades recorded for ${dateKey}`);
+      return;
+    }
+
+    const dayWinRate = dayStats.tradesCount > 0
+      ? ((dayStats.winsCount / dayStats.tradesCount) * 100).toFixed(1) + '%'
+      : '0.0%';
+
+    const overallWinRate = overall.tradesCount > 0
+      ? ((overall.winsCount / overall.tradesCount) * 100).toFixed(1) + '%'
+      : '0.0%';
+
+    const pnlEmoji = dayStats.netPL >= 0 ? '🟢' : '🔴';
+    const overallPnlEmoji = overall.netPL >= 0 ? '🟢' : '🔴';
+
+    let recentDaysStr = '';
+    recentDays.forEach(day => {
+      const wr = day.tradesCount > 0
+        ? ((day.winsCount / day.tradesCount) * 100).toFixed(1)
+        : '0.0';
+      const dayPnlEmoji = day.netPL >= 0 ? '🟢' : '🔴';
+      recentDaysStr += `\n  ${day.date}: ${day.tradesCount}t ${day.winsCount}W/${day.lossesCount}L (${wr}%) ${dayPnlEmoji} $${day.netPL.toFixed(2)}`;
+    });
+
+    await this._sendTelegram(
+      `🌙 <b>END OF DAY REPORT — ${dateKey}</b>\n\n` +
+      `${pnlEmoji} <b>Day Results:</b>\n` +
+      `├ Trades: ${dayStats.tradesCount}\n` +
+      `├ Wins: ${dayStats.winsCount} | Losses: ${dayStats.lossesCount}\n` +
+      `├ Win Rate: ${dayWinRate}\n` +
+      `├ Profit: $${dayStats.profit.toFixed(2)} | Loss: $${dayStats.loss.toFixed(2)}\n` +
+      `├ Net P/L: $${dayStats.netPL.toFixed(2)}\n` +
+      `├ Start Capital: $${dayStats.startCapital.toFixed(2)}\n` +
+      `└ End Capital: $${dayStats.endCapital.toFixed(2)}\n\n` +
+      `📊 <b>Overall Stats (All Time):</b>\n` +
+      `├ Total Days: ${TradeHistoryManager.getAllDays().length}\n` +
+      `├ Total Trades: ${overall.tradesCount}\n` +
+      `├ Total Wins: ${overall.winsCount} | Total Losses: ${overall.lossesCount}\n` +
+      `├ Overall Win Rate: ${overallWinRate}\n` +
+      `└ Overall P/L: ${overallPnlEmoji} $${overall.netPL.toFixed(2)}\n\n` +
+      `📆 <b>Recent Days:</b>${recentDaysStr || '\n  No history yet'}\n\n` +
+      `💰 Current Capital: $${this.balance.toFixed(2)}\n` +
+      `⏰ ${new Date().toLocaleString()}`
+    );
+
+    this.log(`📱 Day-end summary sent for ${dateKey}`);
+  }
+
   startTelegramTimer() {
     const now         = new Date();
     const nextHour    = new Date(now);
@@ -1480,21 +1715,14 @@ class STEPINDEXGridBot {
       const hours = gmt1.getHours();
       const minutes = gmt1.getMinutes();
 
-      const isWeekend =
-        day === 0 ||
-        (day === 6 && hours >= 23) ||
-        (day === 1 && hours < 2);
-
-      // if (isWeekend) {
-      //   if (!this.endOfDay) {
-      //     this.log('📅 Weekend trading pause (Sat 23:00 – Mon 07:00 GMT+1) — disconnecting', 'warning');
-      //     this._sendHourlySummary();
-      //     this.stop();
-      //     this.disconnect();
-      //     this.endOfDay = true;
-      //   }
-      //   return;
-      // }
+      // Check for day change
+      const dayChange = TradeHistoryManager.checkDayChange(this.currentTradeDay);
+      if (dayChange.changed) {
+        this.log(`📅 Day changed from ${dayChange.previousDay} to ${dayChange.newDay}`, 'info');
+        this._sendDayEndSummary(dayChange.previousDay);
+        this._resetDailyStats();
+        this.currentTradeDay = dayChange.newDay;
+      }
 
       if (this.endOfDay && hours === 3 && minutes >= 0) {
         this.log('📅 03:00 GMT+1 — reconnecting bot', 'success');
@@ -1507,6 +1735,7 @@ class STEPINDEXGridBot {
       if (!this.endOfDay && this.isWinTrade && hours >= 23) {
         this.log('📅 Past 23:00 GMT+1 — end-of-day stop', 'info');
         this._sendHourlySummary();
+        this._sendDayEndSummary(getGMTDateKey());
         this.disconnect();
         this.endOfDay = true;
         return;
@@ -1521,6 +1750,16 @@ class STEPINDEXGridBot {
     this.isWinTrade      = false;
     this.inRecoveryMode  = false;
     this.canTrade        = false;
+    this.currentTradeDay = getGMTDateKey();
+    this.tradeDayStats   = { trades: 0, pnl: 0, wins: 0, losses: 0 };
+    this.hourlyStats     = { trades: 0, wins: 0, losses: 0, pnl: 0, lastHour: new Date().getHours() };
+    
+    // Ensure today's history entry exists
+    TradeHistoryManager.ensureDayEntry(this.currentTradeDay);
+    tradeHistory.dailyHistory[this.currentTradeDay].startCapital = this.investmentRemaining;
+    TradeHistoryManager.saveHistory();
+    
+    this.log('📊 Daily stats reset for new trading day');
   }
 }
 
@@ -1534,6 +1773,7 @@ function printBanner() {
   console.log('║   Strategy: Trade on NEW CANDLE | Recovery until WIN               ║');
   console.log('║   CALLE/PUTE | Martingale Recovery                    ║');
   console.log('║   ENHANCED: Stuck trade recovery with pause and reset            ║');
+  console.log('║   NEW: Daily stats storage & notifications                        ║');
   console.log('╚══════════════════════════════════════════════════════════════════════╝\n');
   console.log('Flow: New Candle → Trade → WIN → Wait for Candle');
   console.log('      New Candle → Trade → LOSS → Recovery → Recovery → WIN → Wait for Candle');
@@ -1565,6 +1805,7 @@ function main() {
     bot.stop();
     bot.disconnect();
     StatePersistence.save(bot);
+    TradeHistoryManager.saveHistory();
     setTimeout(() => process.exit(0), 2000);
   };
   process.on('SIGINT',  () => shutdown('SIGINT'));
