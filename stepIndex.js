@@ -171,7 +171,7 @@ const DEFAULT_CONFIG = {
   symbol:        'stpRNG',
   tickDuration:  5,
   initialStake:  0.35,
-  investmentAmount: 153,
+  investmentAmount: 173,
 
   martingaleMultiplier:  1.48,
   maxMartingaleLevel:    1,
@@ -182,7 +182,7 @@ const DEFAULT_CONFIG = {
   autoCompounding:    true,
   compoundPercentage: 0.24,
 
-  stopLoss:   153,
+  stopLoss:   5000,
   takeProfit: 10000,
 
   // Stuck trade recovery settings - USER ADJUSTABLE
