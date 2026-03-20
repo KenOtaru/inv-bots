@@ -165,7 +165,7 @@ let tradeHistory = TradeHistoryManager.loadHistory();
 
 class MartingaleCalculator {
   // Payout percentage for stpRNG (typically ~80% for volatile indices)
-  static PAYOUT_RATE = 0.80;
+  static PAYOUT_RATE = 0.93;
   
   // Number of levels in the martingale chain (0 to MAX_LEVEL)
   static MAX_LEVEL = 9;
