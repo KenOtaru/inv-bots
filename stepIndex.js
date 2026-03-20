@@ -274,7 +274,7 @@ const DEFAULT_CONFIG = {
   initialStake:  0.35,
   
   // Base investment amount - will be auto-adjusted based on stake
-  investmentAmount: 1743,
+  investmentAmount: 174,
 
   // Martingale settings
   maxMartingaleLevel: 9,  // 0-9 = 10 levels total
