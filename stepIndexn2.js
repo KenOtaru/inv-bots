@@ -1509,14 +1509,7 @@ class STEPINDEXGridBot {
   }
 
   // ── Extract last digit of price (matches arbitrageRF.js pattern) ───────────
-  // _getLastDigit(quote) {
-  //   const s = quote.toString();
-  //   const [, frac = ''] = s.split('.');
-  //   // stpRNG uses the first decimal digit (e.g. 12345.6 → 6)
-  //   return frac.length >= 1 ? parseInt(frac[0]) : 0;
-  // }
-
-  _getLastDigit(quote, symbol) {
+  _getLastDigit(quote, asset) {
     const quoteString = quote.toString();
     const [, fractionalPart = ''] = quoteString.split('.');
 
@@ -1554,6 +1547,7 @@ class STEPINDEXGridBot {
       this.tickHistory.shift(); // keep rolling window at TICK_HISTORY_SIZE
     }
 
+    console.log('Total Tick History', this.tickHistory)
     console.log(this.config.symbol, 'Last10Ticks', this.tickHistory.slice(-10).join(', '), 'Current Digit', lastDigit);
   }
 
