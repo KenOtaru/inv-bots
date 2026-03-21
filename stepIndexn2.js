@@ -1539,7 +1539,7 @@ class STEPINDEXGridBot {
       this.tickHistory.shift(); // keep rolling window at TICK_HISTORY_SIZE
     }
 
-    console.log('Last10Ticks', this.tickHistory.slice(-10).join(', '), 'Current Digit', lastDigit);
+    // console.log('Last10Ticks', this.tickHistory.slice(-10).join(', '), 'Current Digit', lastDigit);
   }
 
   // ══════════════════════════════════════════════════════════════════════════════
