@@ -1885,6 +1885,7 @@ class STEPINDEXGridBot {
       const smartPercentage = this._lastPrediction.confidence;
       if (smartPercentage < 0.5) {
         this.canTrade = false;
+        this.log(`⚡ Recovery mode: low confidence (${(smartPercentage * 100).toFixed(2)}%) — waiting for better signal`);
         return;
       }
     }
