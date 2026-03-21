@@ -50,7 +50,7 @@ const DEFAULT_CONFIG = {
   stuckTradePauseDuration: 5 * 60 * 1000,
 
   //Tick History
-  tickHistorySize: 50,
+  tickHistorySize: 500,
 
   telegramToken: '8343520432:AAGNxzjnljOEhfv_rE-y-F98fUDPmrqZuXc',
   telegramChatId: '752497117',
@@ -1606,7 +1606,7 @@ class STEPINDEXGridBot {
 
     // ── Step 3: Fallback — overall recent direction bias ───────────────────
     if (bestConf === 0) {
-      const recent = dirs.slice(-20).filter(d => d !== 0);
+      const recent = dirs.slice(-100).filter(d => d !== 0);
       const riseNum = recent.filter(d => d === 1).length;
       const fallNum = recent.filter(d => d === -1).length;
       bestDir = riseNum >= fallNum ? 1 : -1;
