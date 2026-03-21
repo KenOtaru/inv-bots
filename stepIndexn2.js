@@ -1563,7 +1563,7 @@ class STEPINDEXGridBot {
   // ══════════════════════════════════════════════════════════════════════════════
 
   _predictRecoveryDirection() {
-    const h = this.tickHistory;
+    const h = this.tickHistory.slice(-500);
 
     if (!h || h.length < 10) {
       this.log('⚠️ Not enough tick data for predictor — defaulting to alternating', 'warning');
