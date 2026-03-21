@@ -242,6 +242,7 @@ class STEPINDEXGridBot {
     this.maxWinStreak = 0;
     this.maxLossStreak = 0;
     this.totalRecovered = 0;
+    this.tickDuration = this.config.tickDuration;
 
     // ── Candle tracking ─────────────────────────────────────────────────────
     this.assetState = {
@@ -1362,7 +1363,7 @@ class STEPINDEXGridBot {
           );
         } else if (cfg.afterMaxLoss === 'reset') {
           this.currentGridLevel = 0;
-          this.currentDirection = 'CALLE';
+          this.currentDirection = nextDir;
           this.inRecoveryMode = false;
           this.canTrade = false;
           this.log(
@@ -1572,12 +1573,12 @@ class STEPINDEXGridBot {
       dirs.push(getStep(h[i - 1], h[i]));
     }
 
-    // ── Step 2: Pattern scan — lengths 5 & 6 ──────────────────────────────
+    // ── Step 2: Pattern scan — lengths 5 or n ──────────────────────────────
     let bestDir = 0;
     let bestConf = 0;
     let bestInfo = '';
 
-    for (const patLen of [5, 6]) {
+    for (const patLen of [this.tickDuration]) {
       if (dirs.length < patLen + 1) continue;
 
       const currentPattern = dirs.slice(-patLen);
@@ -1905,6 +1906,7 @@ class STEPINDEXGridBot {
     }
 
     const duration = this.getTickDuration(this.currentGridLevel);
+    this.tickDuration = duration;
 
     // Log compounding info
     const compoundInfo = this.config.autoCompounding
