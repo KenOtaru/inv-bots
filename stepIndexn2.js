@@ -1547,8 +1547,8 @@ class STEPINDEXGridBot {
       this.tickHistory.shift(); // keep rolling window at TICK_HISTORY_SIZE
     }
 
-    console.log('Total Tick History', this.tickHistory.length)
-    console.log(this.config.symbol, 'Last10Ticks', this.tickHistory.slice(-10).join(', '), 'Current Digit', lastDigit);
+    // console.log('Total Tick History', this.tickHistory.length)
+    // console.log(this.config.symbol, 'Last10Ticks', this.tickHistory.slice(-10).join(', '), 'Current Digit', lastDigit);
 
     // Recovery mode — use smart pattern direction predictor
     this.currentDirection = this._predictRecoveryDirection();
