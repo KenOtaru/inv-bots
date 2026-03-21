@@ -1551,9 +1551,9 @@ class STEPINDEXGridBot {
     // console.log(this.config.symbol, 'Last10Ticks', this.tickHistory.slice(-10).join(', '), 'Current Digit', lastDigit);
 
     // Recovery mode — use smart pattern direction predictor
-    if (this.inRecoveryMode) {
-      this.currentDirection = this._predictRecoveryDirection();
-    }
+    // if (this.inRecoveryMode) {
+    //   this.currentDirection = this._predictRecoveryDirection();
+    // }
   }
 
   // ══════════════════════════════════════════════════════════════════════════════
@@ -1893,11 +1893,11 @@ class STEPINDEXGridBot {
       }
     } else {
       // Recovery mode — use smart pattern direction predictor
-      // this.currentDirection = this._predictRecoveryDirection();
+      this.currentDirection = this._predictRecoveryDirection();
 
       // Only trade if confidence is above 50%
       const smartPercentage = this._lastPrediction.confidence;
-      if (smartPercentage < 0.5) {
+      if (smartPercentage < 0.1) {
         this.canTrade = false;
         this.log(`⚡ Recovery mode: low confidence (${(smartPercentage * 100).toFixed(2)}%) — waiting for better signal`, 'info');
         return;
