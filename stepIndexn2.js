@@ -25,7 +25,7 @@ const DEFAULT_CONFIG = {
   appId: '1089',
 
   symbol: 'stpRNG',
-  tickDuration: 5,
+  tickDuration: 7,
   initialStake: 0.35,
   investmentAmount: 173,
 
@@ -1605,16 +1605,16 @@ class STEPINDEXGridBot {
     }
 
     // ── Step 3: Fallback — overall recent direction bias ───────────────────
-    // if (bestConf === 0) {
-    //   const recent = dirs.slice(-20).filter(d => d !== 0);
-    //   const riseNum = recent.filter(d => d === 1).length;
-    //   const fallNum = recent.filter(d => d === -1).length;
-    //   bestDir = riseNum >= fallNum ? 1 : -1;
-    //   bestConf = recent.length > 0
-    //     ? Math.max(riseNum, fallNum) / recent.length
-    //     : 0.5;
-    //   bestInfo = `bias: ${riseNum}R/${fallNum}F/20T`;
-    // }
+    if (bestConf === 0) {
+      const recent = dirs.slice(-20).filter(d => d !== 0);
+      const riseNum = recent.filter(d => d === 1).length;
+      const fallNum = recent.filter(d => d === -1).length;
+      bestDir = riseNum >= fallNum ? 1 : -1;
+      bestConf = recent.length > 0
+        ? Math.max(riseNum, fallNum) / recent.length
+        : 0.5;
+      bestInfo = `bias: ${riseNum}R/${fallNum}F/20T`;
+    }
 
     const prediction = bestDir >= 0 ? 'CALLE' : 'PUTE';
 
