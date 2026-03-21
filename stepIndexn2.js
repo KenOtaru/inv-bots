@@ -1313,7 +1313,7 @@ class STEPINDEXGridBot {
       // === RECOVERY STRATEGY — Smart Pattern Direction Predictor ===
       // Analyses the last 50 ticks (lastDigit rolling window) to predict
       // Rise (CALLE) or Fall (PUTE) using patterns of length 5 & 6.
-      const nextDir = this._predictRecoveryDirection();
+      const nextDir = this.currentDirection;
 
       this.currentDirection = nextDir;
       this.currentGridLevel = nextLevel;
@@ -1578,7 +1578,7 @@ class STEPINDEXGridBot {
     let bestConf = 0;
     let bestInfo = '';
 
-    for (const patLen of [5]) {
+    for (const patLen of [this.tickDuration]) {
       if (dirs.length < patLen + 1) continue;
 
       const currentPattern = dirs.slice(-patLen);
@@ -1875,6 +1875,15 @@ class STEPINDEXGridBot {
       if (candleType === 'DOJI') {
         this.log('Last Candle was a Doji — skipping', 'warning');
         this.canTrade = false;
+        return;
+      }
+    } else {
+      // Recovery mode — use smart pattern direction predictor
+      this.currentDirection = this._predictRecoveryDirection();
+
+      // Only trade if confidence is above 50%
+      const smartPercentage = this._lastPrediction.confidence;
+      if (smartPercentage < 0.5) {
         return;
       }
     }
