@@ -1551,7 +1551,9 @@ class STEPINDEXGridBot {
     // console.log(this.config.symbol, 'Last10Ticks', this.tickHistory.slice(-10).join(', '), 'Current Digit', lastDigit);
 
     // Recovery mode — use smart pattern direction predictor
-    this.currentDirection = this._predictRecoveryDirection();
+    if (this.inRecoveryMode) {
+      this.currentDirection = this._predictRecoveryDirection();
+    }
   }
 
   // ══════════════════════════════════════════════════════════════════════════════
