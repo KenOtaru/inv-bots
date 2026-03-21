@@ -204,7 +204,7 @@ class STEPINDEXGridBot {
     // ── Trade Watchdog ───────────────────────────────────────────────────────
     this.tradeWatchdogTimer = null;
     this.tradeWatchdogPollTimer = null;
-    this.tradeWatchdogMs = 10000;
+    this.tradeWatchdogMs = 20000;
     this.tradeStartTime = null;
 
     // ── Stuck Trade Pause State ──────────────────────────────────────────────
@@ -460,7 +460,7 @@ class STEPINDEXGridBot {
       `  Stuck Trades: ${s.stuckTradeCount}\n`;
 
     await this._sendTelegram(message);
-    this.log(`📅 Daily summary sent for ${s.date}`, 'success');
+    this.log(`📅 Daily summary2 sent for ${s.date}`, 'success');
   }
 
   // ══════════════════════════════════════════════════════════════════════════════
@@ -679,7 +679,7 @@ class STEPINDEXGridBot {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       this.log('Max reconnect attempts reached — will keep trying every 60s', 'error');
       this._sendTelegram(
-        `❌ <b>${DEFAULT_CONFIG.symbol} Max reconnect attempts reached</b>\n` +
+        `❌ <b>${DEFAULT_CONFIG.symbol} Max reconnect attempts2 reached</b>\n` +
         `Will keep trying every 60s…\n` +
         `Final P&L: $${this.totalProfit.toFixed(2)}`
       );
@@ -705,7 +705,7 @@ class STEPINDEXGridBot {
     );
 
     this._sendTelegram(
-      `⚠️ <b>${DEFAULT_CONFIG.symbol} CONNECTION LOST — RECONNECTING</b>\n` +
+      `⚠️ <b>${DEFAULT_CONFIG.symbol} CONNECTION LOST — RECONNECTING2</b>\n` +
       `Attempt: ${this.reconnectAttempts}/${this.maxReconnectAttempts}\n` +
       `Retrying in ${(delay / 1000).toFixed(1)}s\n` +
       `State preserved: ${this.totalTrades} trades | $${this.totalProfit.toFixed(2)} P&L | ` +
@@ -1033,7 +1033,7 @@ class STEPINDEXGridBot {
     if (msg.error) {
       this.log(`Authentication failed: ${msg.error.message}`, 'error');
       this._sendTelegram(
-        `❌ <b>${DEFAULT_CONFIG.symbol} Authentication Failed:</b> ${msg.error.message}`
+        `❌ <b>${DEFAULT_CONFIG.symbol} Authentication2 Failed:</b> ${msg.error.message}`
       );
       return;
     }
@@ -1059,7 +1059,7 @@ class STEPINDEXGridBot {
     if (!this.hasStartedOnce) {
       // First-time connection
       this._sendTelegram(
-        `✅ <b>${DEFAULT_CONFIG.symbol} Grid Bot Connected</b>\n` +
+        `✅ <b>${DEFAULT_CONFIG.symbol} Grid Bot Connected2</b>\n` +
         `Account: ${this.accountId}\n` +
         `Balance: ${this.currency} ${this.balance.toFixed(2)}`
       );
@@ -1079,7 +1079,7 @@ class STEPINDEXGridBot {
       );
 
       this._sendTelegram(
-        `🔄 <b>${DEFAULT_CONFIG.symbol} Reconnected — Resuming</b>\n` +
+        `🔄 <b>${DEFAULT_CONFIG.symbol} Reconnected2 — Resuming</b>\n` +
         `Account: ${this.accountId} | Balance: ${this.currency} ${this.balance.toFixed(2)}\n` +
         `Grid Level: ${this.currentGridLevel} | ` +
         `Next: ${this.currentDirection === 'CALLE' ? 'HIGHER' : 'LOWER'} @ $${this.calculateStake(this.currentGridLevel).toFixed(2)}\n` +
@@ -1249,7 +1249,7 @@ class STEPINDEXGridBot {
     if (this.totalProfit <= -this.config.stopLoss) {
       this.log(`🛑 STOP LOSS hit! P&L: $${this.totalProfit.toFixed(2)}`, 'error');
       this._sendTelegram(
-        `🛑 <b>${DEFAULT_CONFIG.symbol} STOP LOSS REACHED</b>\nFinal P&L: $${this.totalProfit.toFixed(2)}`
+        `🛑 <b>${DEFAULT_CONFIG.symbol} STOP LOSS REACHED2</b>\nFinal P&L: $${this.totalProfit.toFixed(2)}`
       );
       this._sendDailySummary();
       this.running = false;
@@ -1260,7 +1260,7 @@ class STEPINDEXGridBot {
     if (this.totalProfit >= this.config.takeProfit) {
       this.log(`🎉 TAKE PROFIT hit! P&L: $${this.totalProfit.toFixed(2)}`, 'success');
       this._sendTelegram(
-        `🎉 <b>${DEFAULT_CONFIG.symbol} TAKE PROFIT REACHED</b>\nFinal P&L: $${this.totalProfit.toFixed(2)}`
+        `🎉 <b>${DEFAULT_CONFIG.symbol} TAKE PROFIT REACHED2</b>\nFinal P&L: $${this.totalProfit.toFixed(2)}`
       );
       this._sendDailySummary();
       this.running = false;
@@ -1326,7 +1326,7 @@ class STEPINDEXGridBot {
           'error'
         );
         this._sendTelegram(
-          `🛑 <b>${DEFAULT_CONFIG.symbol} ABSOLUTE MAX LEVEL REACHED (L${absoluteMax})</b>\n` +
+          `🛑 <b>${DEFAULT_CONFIG.symbol} ABSOLUTE MAX LEVEL REACHED2 (L${absoluteMax})</b>\n` +
           `Investment remaining: $${this.investmentRemaining.toFixed(2)}\n` +
           `Total P&L: $${this.totalProfit.toFixed(2)}`
         );
@@ -1509,11 +1509,26 @@ class STEPINDEXGridBot {
   }
 
   // ── Extract last digit of price (matches arbitrageRF.js pattern) ───────────
-  _getLastDigit(quote) {
-    const s = quote.toString();
-    const [, frac = ''] = s.split('.');
-    // stpRNG uses the first decimal digit (e.g. 12345.6 → 6)
-    return frac.length >= 1 ? parseInt(frac[0]) : 0;
+  // _getLastDigit(quote) {
+  //   const s = quote.toString();
+  //   const [, frac = ''] = s.split('.');
+  //   // stpRNG uses the first decimal digit (e.g. 12345.6 → 6)
+  //   return frac.length >= 1 ? parseInt(frac[0]) : 0;
+  // }
+
+  _getLastDigit(quote, symbol) {
+    const quoteString = quote.toString();
+    const [, fractionalPart = ''] = quoteString.split('.');
+
+    if (['RDBULL', 'RDBEAR', 'R_75', 'R_50'].includes(asset)) {
+      return fractionalPart.length >= 4 ? parseInt(fractionalPart[3]) : 0;
+    } else if (['R_10', 'R_25', '1HZ15V', '1HZ30V', '1HZ90V'].includes(asset)) {
+      return fractionalPart.length >= 3 ? parseInt(fractionalPart[2]) : 0;
+    } else if (['stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'].includes(asset)) {
+      return fractionalPart.length >= 1 ? parseInt(fractionalPart[0]) : 0;
+    } else {
+      return fractionalPart.length >= 2 ? parseInt(fractionalPart[1]) : 0;
+    }
   }
 
   // ── Handle tick HISTORY response (msg_type === 'history') ──────────────────
@@ -1524,14 +1539,14 @@ class STEPINDEXGridBot {
     }
     if (!msg.history || !msg.history.prices) return;
     // Convert raw prices → last-digit values, store as rolling buffer
-    this.tickHistory = msg.history.prices.map(p => this._getLastDigit(p));
+    this.tickHistory = msg.history.prices.map(price => this.getLastDigit(price, this.config.symbol));
     this.log(`📈 Loaded ${this.tickHistory.length} historical digits for pattern predictor`);
   }
 
   // ── Handle LIVE tick update (msg_type === 'tick') ──────────────────────────
   _handleTickUpdate(tick) {
     if (!tick || tick.symbol !== this.config.symbol) return;
-    const lastDigit = this._getLastDigit(tick.quote);
+    const lastDigit = this._getLastDigit(tick.quote, this.config.symbol);
 
     if (!this.tickHistory) this.tickHistory = [];
     this.tickHistory.push(lastDigit);
@@ -1539,7 +1554,7 @@ class STEPINDEXGridBot {
       this.tickHistory.shift(); // keep rolling window at TICK_HISTORY_SIZE
     }
 
-    // console.log('Last10Ticks', this.tickHistory.slice(-10).join(', '), 'Current Digit', lastDigit);
+    console.log(this.config.symbol, 'Last10Ticks', this.tickHistory.slice(-10).join(', '), 'Current Digit', lastDigit);
   }
 
   // ══════════════════════════════════════════════════════════════════════════════
@@ -1746,7 +1761,7 @@ class STEPINDEXGridBot {
     );
 
     this._sendTelegram(
-      `🛑 <b>${DEFAULT_CONFIG.symbol} STUCK TRADE DETECTED — PAUSING TRADING</b>\n\n` +
+      `🛑 <b>${DEFAULT_CONFIG.symbol} STUCK TRADE DETECTED — PAUSING TRADING2</b>\n\n` +
       `⚠️ <b>Reason:</b> ${reason}\n` +
       `⏱️ <b>Contract was open for:</b> ${openSeconds}s\n` +
       `📊 <b>Stuck trade count:</b> ${this.stuckTradeCount}\n\n` +
@@ -1802,7 +1817,7 @@ class STEPINDEXGridBot {
     );
 
     this._sendTelegram(
-      `✅ <b>${DEFAULT_CONFIG.symbol} TRADING RESUMED</b>\n\n` +
+      `✅ <b>${DEFAULT_CONFIG.symbol} TRADING2 RESUMED</b>\n\n` +
       `⏰ <b>Pause duration completed</b>\n\n` +
       `📊 <b>Current State:</b>\n` +
       `  Grid Level: L${this.currentGridLevel}\n` +
@@ -1931,7 +1946,7 @@ class STEPINDEXGridBot {
     );
 
     this._sendTelegram(
-      `🚀 <b>${DEFAULT_CONFIG.symbol}: TRADE OPEN</b>\n` +
+      `🚀 <b>${DEFAULT_CONFIG.symbol}: TRADE2 OPEN</b>\n` +
       `Type: ${tradeType}\n` +
       `${candleEmoji ? `📊 Last Candle: ${candleEmoji} ${candleType}\n` : ''}` +
       `📊 Direction: ${label}\n` +
@@ -2070,7 +2085,7 @@ class STEPINDEXGridBot {
     this.log(`🛡️ Stuck trade pause duration: ${pauseMin} minute(s)`);
 
     this._sendTelegram(
-      `🚀 <b>${DEFAULT_CONFIG.symbol} Grid Bot STARTED</b>\n` +
+      `🚀 <b>${DEFAULT_CONFIG.symbol} Grid Bot2 STARTED</b>\n` +
       `💵 Investment: $${cfg.investmentAmount}\n` +
       `📊 Base Stake: $${this.baseStake.toFixed(2)}\n` +
       `🔢 Multiplier: ${cfg.martingaleMultiplier}x | Max Level: ${cfg.maxMartingaleLevel}\n` +
@@ -2096,7 +2111,7 @@ class STEPINDEXGridBot {
     this.log('🛑 Bot stopped', 'warning');
     this._sendDailySummary();
     this._sendTelegram(
-      `🛑 <b>${DEFAULT_CONFIG.symbol} Bot stopped</b>\nP&L: $${this.totalProfit.toFixed(2)} | Trades: ${this.totalTrades}`
+      `🛑 <b>${DEFAULT_CONFIG.symbol} Bot2 stopped</b>\nP&L: $${this.totalProfit.toFixed(2)} | Trades: ${this.totalTrades}`
     );
     this._logSummary();
     StatePersistence.save(this);
@@ -2112,7 +2127,7 @@ class STEPINDEXGridBot {
     this.log('🚨 EMERGENCY STOP — All activity halted!', 'error');
     this._sendDailySummary();
     this._sendTelegram(
-      `🚨 <b>${DEFAULT_CONFIG.symbol} EMERGENCY STOP TRIGGERED</b>\nP&L: $${this.totalProfit.toFixed(2)} | Trades: ${this.totalTrades}`
+      `🚨 <b>${DEFAULT_CONFIG.symbol} EMERGENCY STOP TRIGGERED2</b>\nP&L: $${this.totalProfit.toFixed(2)} | Trades: ${this.totalTrades}`
     );
     this._logSummary();
     StatePersistence.save(this);
@@ -2166,7 +2181,7 @@ class STEPINDEXGridBot {
       : '';
 
     this._sendTelegram(
-      `${isWin ? '✅ WIN' : '❌ LOSS'} <b>— ${DEFAULT_CONFIG.symbol} Grid Bot</b>\n\n` +
+      `${isWin ? '✅ WIN' : '❌ LOSS'} <b>— ${DEFAULT_CONFIG.symbol} Grid Bot2</b>\n\n` +
       `${isWin ? '🟢' : '🔴'} <b>P&L:</b> ${pnlStr}\n` +
       `📊 <b>Grid Level:</b> ${this.currentGridLevel} → ${isWin ? 'RESET L0' : `L${this.currentGridLevel}`}\n` +
       `🎯 <b>Next:</b> ${isWin ? '⏳ Waiting for new candle' : `${dirLabel} @ $${this.calculateStake(this.currentGridLevel).toFixed(2)} ⚡`}\n` +
@@ -2189,7 +2204,7 @@ class STEPINDEXGridBot {
     const pnlStr = (s.pnl >= 0 ? '+' : '') + '$' + s.pnl.toFixed(2);
 
     await this._sendTelegram(
-      `⏰ <b>${DEFAULT_CONFIG.symbol} Grid Bot — Hourly Summary</b>\n\n` +
+      `⏰ <b>${DEFAULT_CONFIG.symbol} Grid Bot2 — Hourly Summary</b>\n\n` +
       `📊 <b>Last Hour:</b>\n` +
       `  Trades: ${s.trades} | Wins: ${s.wins} | Losses: ${s.losses}\n` +
       `  Win Rate: ${wr}%\n` +
@@ -2208,7 +2223,7 @@ class STEPINDEXGridBot {
       `⏰ ${new Date().toLocaleString()}`
     );
 
-    this.log('📱 Telegram hourly summary sent');
+    this.log('📱 Telegram hourly summary2 sent');
     this.hourlyStats = {
       trades: 0, wins: 0, losses: 0, pnl: 0,
       lastHour: new Date().getHours(),
