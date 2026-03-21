@@ -1884,7 +1884,7 @@ class STEPINDEXGridBot {
       // Only trade if confidence is above 50%
       const smartPercentage = this._lastPrediction.confidence;
       if (smartPercentage < 0.5) {
-        his.canTrade = false;
+        this.canTrade = false;
         return;
       }
     }
