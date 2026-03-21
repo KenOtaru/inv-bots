@@ -27,7 +27,7 @@ const DEFAULT_CONFIG = {
   symbol: 'stpRNG',
   tickDuration: 7,
   initialStake: 0.35,
-  investmentAmount: 173,
+  investmentAmount: 153,
 
   martingaleMultiplier: 1.48,
   maxMartingaleLevel: 1,
