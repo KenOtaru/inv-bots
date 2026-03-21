@@ -318,8 +318,8 @@ class STEPINDEXGridBot {
     // Lagos / West Africa / Central European Standard Time calendar day.
     const gmt1 = new Date(Date.now() + 60 * 60 * 1000); // shift UTC → GMT+1
     const yyyy = gmt1.getUTCFullYear();
-    const mm   = String(gmt1.getUTCMonth() + 1).padStart(2, '0');
-    const dd   = String(gmt1.getUTCDate()).padStart(2, '0');
+    const mm = String(gmt1.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(gmt1.getUTCDate()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd}`;
   }
 
@@ -1537,6 +1537,8 @@ class STEPINDEXGridBot {
     if (this.tickHistory.length > this.TICK_HISTORY_SIZE) {
       this.tickHistory.shift(); // keep rolling window at TICK_HISTORY_SIZE
     }
+
+    console.log('Last10Ticks', this.tickHistory.slice(-10).join(', '), 'Current Digit', lastDigit);
   }
 
   // ══════════════════════════════════════════════════════════════════════════════
