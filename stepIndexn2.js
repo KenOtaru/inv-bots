@@ -1544,8 +1544,8 @@ class STEPINDEXGridBot {
 
   // ══════════════════════════════════════════════════════════════════════════════
   // SMART PATTERN DIRECTION PREDICTOR
-  // Analyses the last 50 lastDigit values to predict Rise (CALLE) or Fall (PUTE)
-  // Looks for repeating patterns of length 5 and 6, then uses statistical bias
+  // Analyses the last n lastDigit values to predict Rise (CALLE) or Fall (PUTE)
+  // Looks for repeating patterns of length n, then uses statistical bias
   // of what followed each matching pattern in history.
   // Handles stpRNG digit wrap-around: 9→0 = Rise (+1), 0→9 = Fall (-1)
   // ══════════════════════════════════════════════════════════════════════════════
@@ -1573,12 +1573,12 @@ class STEPINDEXGridBot {
       dirs.push(getStep(h[i - 1], h[i]));
     }
 
-    // ── Step 2: Pattern scan — lengths 5 or n ──────────────────────────────
+    // ── Step 2: Pattern scan — lengths n ──────────────────────────────
     let bestDir = 0;
     let bestConf = 0;
     let bestInfo = '';
 
-    for (const patLen of [this.tickDuration]) {
+    for (const patLen of [5]) {
       if (dirs.length < patLen + 1) continue;
 
       const currentPattern = dirs.slice(-patLen);
@@ -1605,16 +1605,16 @@ class STEPINDEXGridBot {
     }
 
     // ── Step 3: Fallback — overall recent direction bias ───────────────────
-    if (bestConf === 0) {
-      const recent = dirs.slice(-20).filter(d => d !== 0);
-      const riseNum = recent.filter(d => d === 1).length;
-      const fallNum = recent.filter(d => d === -1).length;
-      bestDir = riseNum >= fallNum ? 1 : -1;
-      bestConf = recent.length > 0
-        ? Math.max(riseNum, fallNum) / recent.length
-        : 0.5;
-      bestInfo = `bias: ${riseNum}R/${fallNum}F/20T`;
-    }
+    // if (bestConf === 0) {
+    //   const recent = dirs.slice(-20).filter(d => d !== 0);
+    //   const riseNum = recent.filter(d => d === 1).length;
+    //   const fallNum = recent.filter(d => d === -1).length;
+    //   bestDir = riseNum >= fallNum ? 1 : -1;
+    //   bestConf = recent.length > 0
+    //     ? Math.max(riseNum, fallNum) / recent.length
+    //     : 0.5;
+    //   bestInfo = `bias: ${riseNum}R/${fallNum}F/20T`;
+    // }
 
     const prediction = bestDir >= 0 ? 'CALLE' : 'PUTE';
 
