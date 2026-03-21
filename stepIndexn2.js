@@ -314,8 +314,13 @@ class STEPINDEXGridBot {
   // ══════════════════════════════════════════════════════════════════════════════
 
   _getTodayKey() {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    // Always use GMT+1 (UTC+1) for the daily key so stats align to the
+    // Lagos / West Africa / Central European Standard Time calendar day.
+    const gmt1 = new Date(Date.now() + 60 * 60 * 1000); // shift UTC → GMT+1
+    const yyyy = gmt1.getUTCFullYear();
+    const mm   = String(gmt1.getUTCMonth() + 1).padStart(2, '0');
+    const dd   = String(gmt1.getUTCDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
   }
 
   _initDailyStats() {
