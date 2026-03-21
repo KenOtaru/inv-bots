@@ -27,7 +27,7 @@ const DEFAULT_CONFIG = {
   symbol: 'stpRNG',
   tickDuration: 5,
   initialStake: 0.35,
-  investmentAmount: 173,
+  investmentAmount: 153,
 
   martingaleMultiplier: 1.48,
   maxMartingaleLevel: 1,
@@ -40,7 +40,7 @@ const DEFAULT_CONFIG = {
 
   // Auto-compounding step config:
   // baseStake increases by compoundStakeStep for every compoundInvestmentStep increase in investmentAmount
-  compoundInvestmentStep: 173,  // every 153 increase in investment
+  compoundInvestmentStep: 153,  // every 153 increase in investment
   compoundStakeStep: 0.35,  // increases baseStake by 0.5
 
   stopLoss: 5000,
@@ -58,8 +58,8 @@ const DEFAULT_CONFIG = {
 // FILE PATHS
 // ══════════════════════════════════════════════════════════════════════════════
 
-const STATE_FILE = path.join(__dirname, 'ST1n-grid-state000001.json');
-const DAILY_STATS_FILE = path.join(__dirname, 'ST1n-daily-stats.json');
+const STATE_FILE = path.join(__dirname, 'ST1n-grid-state0000001.json');
+const DAILY_STATS_FILE = path.join(__dirname, 'ST1n-daily-stats01.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -2110,7 +2110,7 @@ class STEPINDEXGridBot {
         return;
       }
 
-      if (!this.endOfDay && this.isWinTrade && hours >= 23) {
+      if (!this.endOfDay && this.isWinTrade && hours >= 23 && minutes >= 50) {
         this.log('📅 Past 23:00 GMT+1 — end-of-day stop', 'info');
         this._sendHourlySummary();
         this._sendDailySummary();
