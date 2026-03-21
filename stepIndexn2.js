@@ -1551,9 +1551,9 @@ class STEPINDEXGridBot {
     // console.log(this.config.symbol, 'Last10Ticks', this.tickHistory.slice(-10).join(', '), 'Current Digit', lastDigit);
 
     // Recovery mode — use smart pattern direction predictor
-    if (this.inRecoveryMode && this.canTrade) {
-      this._predictRecoveryDirection();
-    }
+    // if (this.inRecoveryMode && this.canTrade) {
+    //   this.currentDirection = this._predictRecoveryDirection();
+    // }
   }
 
   // ══════════════════════════════════════════════════════════════════════════════
@@ -1647,7 +1647,6 @@ class STEPINDEXGridBot {
       digits: h.length,
     };
 
-    this.currentDirection = prediction;
     return prediction;
   }
 
@@ -1894,7 +1893,7 @@ class STEPINDEXGridBot {
       }
     } else {
       // Recovery mode — use smart pattern direction predictor
-      // this.currentDirection = this._predictRecoveryDirection();
+      this.currentDirection = this._predictRecoveryDirection();
 
       // Only trade if confidence is above 50%
       const smartPercentage = this._lastPrediction.confidence;
