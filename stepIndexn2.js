@@ -1539,7 +1539,7 @@ class STEPINDEXGridBot {
     }
     if (!msg.history || !msg.history.prices) return;
     // Convert raw prices → last-digit values, store as rolling buffer
-    this.tickHistory = msg.history.prices.map(price => this.getLastDigit(price, this.config.symbol));
+    this.tickHistory = msg.history.prices.map(price => this._getLastDigit(price, this.config.symbol));
     this.log(`📈 Loaded ${this.tickHistory.length} historical digits for pattern predictor`);
   }
 
