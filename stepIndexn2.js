@@ -1549,11 +1549,6 @@ class STEPINDEXGridBot {
 
     // console.log('Total Tick History', this.tickHistory.length)
     // console.log(this.config.symbol, 'Last10Ticks', this.tickHistory.slice(-10).join(', '), 'Current Digit', lastDigit);
-
-    // Recovery mode — use smart pattern direction predictor
-    // if (this.inRecoveryMode && this.canTrade) {
-    //   this.currentDirection = this._predictRecoveryDirection();
-    // }
   }
 
   // ══════════════════════════════════════════════════════════════════════════════
@@ -1592,7 +1587,7 @@ class STEPINDEXGridBot {
     let bestConf = 0;
     let bestInfo = '';
 
-    for (const patLen of [this.tickDuration]) {
+    for (const patLen of [3, 4, 5, 6, 7, 8]) {
       if (dirs.length < patLen + 1) continue;
 
       const currentPattern = dirs.slice(-patLen);
@@ -1834,10 +1829,8 @@ class STEPINDEXGridBot {
 
   // Replace this.config.tickDuration with this method
   getTickDuration(level) {
-    if (level === 0) return DEFAULT_CONFIG.tickDuration;
-    if (level <= 2) return DEFAULT_CONFIG.tickDuration;
-    if (level <= 5) return DEFAULT_CONFIG.tickDuration + 2;
-    return 5;
+    if (level <= 1) return DEFAULT_CONFIG.tickDuration;
+    return 1;
   }
 
   // ══════════════════════════════════════════════════════════════════════════════
