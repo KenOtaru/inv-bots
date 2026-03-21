@@ -1867,7 +1867,7 @@ class STEPINDEXGridBot {
     // Determine direction for fresh trades
     if (!this.inRecoveryMode) {
       if (!candleType) {
-        this.log('⏳ No candle type info — waiting for next candle', 'info');
+        this.log('⏳ No candle type info — waiting for next candle');
         this.canTrade = false;
         return;
       }
@@ -1885,7 +1885,7 @@ class STEPINDEXGridBot {
       const smartPercentage = this._lastPrediction.confidence;
       if (smartPercentage < 0.5) {
         this.canTrade = false;
-        this.log(`⚡ Recovery mode: low confidence (${(smartPercentage * 100).toFixed(2)}%) — waiting for better signal`);
+        this.log(`⚡ Recovery mode: low confidence (${(smartPercentage * 100).toFixed(2)}%) — waiting for better signal`, 'info');
         return;
       }
     }
