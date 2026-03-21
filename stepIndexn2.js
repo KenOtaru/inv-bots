@@ -21,7 +21,7 @@ const path = require('path');
 // ══════════════════════════════════════════════════════════════════════════════
 
 const DEFAULT_CONFIG = {
-  apiToken: 'Dz2V2KvRf4Uukt3',
+  apiToken: 'DMylfkyce6VyZt7',
   appId: '1089',
 
   symbol: 'stpRNG',
@@ -40,7 +40,7 @@ const DEFAULT_CONFIG = {
 
   // Auto-compounding step config:
   // baseStake increases by compoundStakeStep for every compoundInvestmentStep increase in investmentAmount
-  compoundInvestmentStep: 173,  // every 153 increase in investment
+  compoundInvestmentStep: 153,  // every 153 increase in investment
   compoundStakeStep: 0.35,  // increases baseStake by 0.5
 
   stopLoss: 5000,
@@ -48,6 +48,9 @@ const DEFAULT_CONFIG = {
 
   // Stuck trade recovery settings
   stuckTradePauseDuration: 5 * 60 * 1000,
+
+  //Tick History
+  tickHistorySize: 50,
 
   telegramToken: '8343520432:AAGNxzjnljOEhfv_rE-y-F98fUDPmrqZuXc',
   telegramChatId: '752497117',
@@ -58,8 +61,8 @@ const DEFAULT_CONFIG = {
 // FILE PATHS
 // ══════════════════════════════════════════════════════════════════════════════
 
-const STATE_FILE = path.join(__dirname, 'ST1n-grid-state000001.json');
-const DAILY_STATS_FILE = path.join(__dirname, 'ST1n-daily-stats.json');
+const STATE_FILE = path.join(__dirname, 'ST1n-grid-state0000001.json');
+const DAILY_STATS_FILE = path.join(__dirname, 'ST1n-daily-stats01.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -259,7 +262,7 @@ class STEPINDEXGridBot {
 
     // ── Tick history for smart pattern predictor ─────────────────────────────
     this.tickHistory = [];   // rolling window of last 50 lastDigit values
-    this.TICK_HISTORY_SIZE = 50;
+    this.TICK_HISTORY_SIZE = DEFAULT_CONFIG.tickHistorySize;
     this._tickSubId = null; // live-tick subscription id
 
     // ══════════════════════════════════════════════════════════════════════
