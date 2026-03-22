@@ -1584,7 +1584,7 @@ class STEPINDEXGridBot {
     let bestConf = 0;
     let bestInfo = '';
 
-    for (const patLen of [3, 4, 5, 6, 7, 8]) {
+    for (const patLen of [5, 6, 7]) {  // Best signal-to-noise with 5000-tick history
       if (dirs.length < patLen + 1) continue;
 
       const currentPattern = dirs.slice(-patLen);
@@ -1601,6 +1601,7 @@ class STEPINDEXGridBot {
 
       const total = rises + falls;
       if (total === 0) continue;
+      if (total < 30) continue;  // Minimum sample guard — prevents false confidence on sparse patterns
 
       const conf = Math.max(rises, falls) / total;
       if (conf > bestConf) {
@@ -1824,10 +1825,12 @@ class STEPINDEXGridBot {
     this.log('⏳ Waiting for next new candle to place trade…', 'info');
   }
 
-  // Replace this.config.tickDuration with this method
+  // Tick duration: candle trades use config value, recovery trades use 3 ticks
+  // (3 ticks aligns closely with the tick-level predictor while giving safe
+  // WebSocket round-trip margin vs. 1-tick execution timing risk)
   getTickDuration(level) {
-    if (level <= 1) return DEFAULT_CONFIG.tickDuration;
-    return 1;
+    if (level <= 1) return DEFAULT_CONFIG.tickDuration; // fresh candle trade
+    return 3;  // recovery: 3 ticks — optimal predictor alignment + execution safety
   }
 
   // ══════════════════════════════════════════════════════════════════════════════
