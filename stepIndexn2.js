@@ -1583,6 +1583,7 @@ class STEPINDEXGridBot {
     let bestDir = 0;
     let bestConf = 0;
     let bestInfo = '';
+    let totalPatterns = 0;
 
     for (const patLen of [5, 6, 7]) {  // Best signal-to-noise with 5000-tick history
       if (dirs.length < patLen + 1) continue;
@@ -1600,6 +1601,7 @@ class STEPINDEXGridBot {
       }
 
       const total = rises + falls;
+      totalPatterns = total;
       if (total === 0) continue;
       if (total < 30) continue;  // Minimum sample guard — prevents false confidence on sparse patterns
 
@@ -1638,7 +1640,7 @@ class STEPINDEXGridBot {
       confidence: bestConf,
       prediction,
       digits: h.length,
-      total,
+      totalPatterns: totalPatterns,
     };
 
     return prediction;
@@ -1893,7 +1895,7 @@ class STEPINDEXGridBot {
 
       // Only trade if confidence is above 50%
       const smartPercentage = this._lastPrediction.confidence;
-      const totalPatterns = this._lastPrediction.total;
+      const totalPatterns = this._lastPrediction.totalPatterns;
       if (smartPercentage < 0.5 || totalPatterns < 30) {
         this.canTrade = true;
         this.log(`⚡ Recovery mode: low confidence (${(smartPercentage * 100).toFixed(2)}%) or total Patterns less than ${totalPatterns} — waiting for better signal`, 'info');
