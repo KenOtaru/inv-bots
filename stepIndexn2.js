@@ -21,7 +21,7 @@ const path = require('path');
 // ══════════════════════════════════════════════════════════════════════════════
 
 const DEFAULT_CONFIG = {
-  apiToken: 'DMylfkyce6VyZt7',
+  apiToken: 'Dz2V2KvRf4Uukt3',
   appId: '1089',
 
   symbol: 'stpRNG',
@@ -52,7 +52,7 @@ const DEFAULT_CONFIG = {
   //Tick History
   tickHistorySize: 5000,
 
-  telegramToken: '8343520432:AAGNxzjnljOEhfv_rE-y-F98fUDPmrqZuXc',
+  telegramToken: '8218636914:AAGvaKFh8MT769-_9eOEiU4XKufL0aHRhZ4',
   telegramChatId: '752497117',
   telegramEnabled: true,
 };
@@ -1638,6 +1638,7 @@ class STEPINDEXGridBot {
       confidence: bestConf,
       prediction,
       digits: h.length,
+      total: total,
     };
 
     return prediction;
@@ -1892,9 +1893,10 @@ class STEPINDEXGridBot {
 
       // Only trade if confidence is above 50%
       const smartPercentage = this._lastPrediction.confidence;
-      if (smartPercentage < 0.1) {
+      const totalPatterns = this._lastPrediction.total;
+      if (smartPercentage < 0.5 || totalPatterns < 30) {
         this.canTrade = true;
-        this.log(`⚡ Recovery mode: low confidence (${(smartPercentage * 100).toFixed(2)}%) — waiting for better signal`, 'info');
+        this.log(`⚡ Recovery mode: low confidence (${(smartPercentage * 100).toFixed(2)}%) or total Patterns less than ${totalPatterns} — waiting for better signal`, 'info');
         return;
       }
     }
