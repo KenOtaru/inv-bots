@@ -1585,7 +1585,7 @@ class STEPINDEXGridBot {
     let bestInfo = '';
     let totalPatterns = 0;
 
-    for (const patLen of [5, 6, 7]) {  // Best signal-to-noise with 5000-tick history
+    for (const patLen of [5]) {  // Best signal-to-noise with 5000-tick history
       if (dirs.length < patLen + 1) continue;
 
       const currentPattern = dirs.slice(-patLen);
