@@ -1896,7 +1896,7 @@ class STEPINDEXGridBot {
       // Only trade if confidence is above 50%
       const smartPercentage = this._lastPrediction.confidence;
       const totalPatterns = this._lastPrediction.totalPatterns;
-      if (smartPercentage < 0.5 || totalPatterns < 30) {
+      if (smartPercentage <= 0.51 || totalPatterns < 30) {
         this.canTrade = true;
         this.log(`⚡ Recovery mode: low confidence (${(smartPercentage * 100).toFixed(2)}%) or total Patterns less than ${totalPatterns} — waiting for better signal`, 'info');
         return;
