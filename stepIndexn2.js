@@ -1638,7 +1638,7 @@ class STEPINDEXGridBot {
       confidence: bestConf,
       prediction,
       digits: h.length,
-      total: total,
+      total,
     };
 
     return prediction;
