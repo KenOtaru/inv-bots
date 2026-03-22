@@ -1833,9 +1833,9 @@ class STEPINDEXGridBot {
   // WebSocket round-trip margin vs. 1-tick execution timing risk)
   getTickDuration(level) {
     if (level < 1) return DEFAULT_CONFIG.tickDuration; // fresh candle trade
-    if (level <= 5) return 1; // 1 tick — optimal predictor alignment but might have execution safety issues because Deriv WebSocket 
+    if (level <= 5) return 3; // recovery: 3 ticks — optimal predictor alignment + execution safety.
+    return 1;  // 1 tick — optimal predictor alignment but might have execution safety issues because Deriv WebSocket 
     // round-trip (proposal → buy confirmation) takes 300–500ms and ticks arrive every 1–2 seconds, you may miss the intended tick.
-    return 3;  // recovery: 3 ticks — optimal predictor alignment + execution safety
   }
 
   // ══════════════════════════════════════════════════════════════════════════════
