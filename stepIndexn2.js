@@ -1310,9 +1310,6 @@ class STEPINDEXGridBot {
         ? cfg.maxMartingaleLevel + cfg.continueExtraLevels
         : cfg.maxMartingaleLevel;
 
-      // === RECOVERY STRATEGY — Smart Pattern Direction Predictor ===
-      // Analyses the last 50 ticks (lastDigit rolling window) to predict
-      // Rise (CALLE) or Fall (PUTE) using patterns of length 5 & 6.
       const nextDir = this.currentDirection;
 
       this.currentDirection = nextDir;
