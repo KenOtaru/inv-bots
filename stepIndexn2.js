@@ -1615,12 +1615,12 @@ class STEPINDEXGridBot {
       console.log('PatterInfo', info)
 
       if (this.currentGridLevel < 1) {
-        if (confidence > 0.51 && totalPatterns > 30 && ((currentCandleType === 'BULLISH' && prediction === 'CALLE' && riseNum < 3) || (currentCandleType === 'BEARISH' && prediction === 'PUTE' && fallNum < 3))) {
+        if (confidence > 0.51 && totalPatterns > 30 && ((currentCandleType === 'BULLISH' && prediction === 'CALLE' && riseNum < 2) || (currentCandleType === 'BEARISH' && prediction === 'PUTE' && fallNum < 2))) {
           this.canTrade = true;
           this._placeTrade()
         }
       } else {
-        if (confidence > 0.51 && totalPatterns > 30 && ((currentCandleType === 'BULLISH' && prediction === 'CALLE' && riseNum < 3) || (currentCandleType === 'BEARISH' && prediction === 'PUTE' && fallNum < 3))) {
+        if (confidence > 0.51 && totalPatterns > 30 && ((currentCandleType === 'BULLISH' && prediction === 'CALLE' && riseNum < 2) || (currentCandleType === 'BEARISH' && prediction === 'PUTE' && fallNum < 2))) {
           if (this.awaitRiseConfidence) {
             this.canTrade = true;
             this._placeTrade()
