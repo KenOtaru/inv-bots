@@ -21,13 +21,13 @@ const path = require('path');
 // ══════════════════════════════════════════════════════════════════════════════
 
 const DEFAULT_CONFIG = {
-  apiToken: 'Dz2V2KvRf4Uukt3',
+  apiToken: 'rgNedekYXvCaPeP',
   appId: '1089',
 
   symbol: 'stpRNG',
   tickDuration: 9,
   initialStake: 0.35,
-  investmentAmount: 530,
+  investmentAmount: 153,
 
   martingaleMultiplier: 1.48,
   maxMartingaleLevel: 1,
@@ -40,7 +40,7 @@ const DEFAULT_CONFIG = {
 
   // Auto-compounding step config:
   // baseStake increases by compoundStakeStep for every compoundInvestmentStep increase in investmentAmount
-  compoundInvestmentStep: 530,  // every 153 increase in investment
+  compoundInvestmentStep: 153,  // every 153 increase in investment
   compoundStakeStep: 0.35,  // increases baseStake by 0.5
 
   stopLoss: 5000,
@@ -1608,7 +1608,7 @@ class STEPINDEXGridBot {
           : 'DOJI';
 
       // ── Pattern strategy (candle OFF): predictor sets direction ──────
-      // this.currentDirection = this._predictRecoveryDirection();
+      this.currentDirection = this._predictRecoveryDirection();
       let lastPred = this._lastPrediction;
       let { confidence, totalPatterns, prediction, info, riseNum, fallNum, neutral } = lastPred;
       console.log('Confidence: (', confidence.toFixed(2), '%) |', 'Total Patterns:', totalPatterns, '| Direction:', prediction, '| CandleType:', currentCandleType)
@@ -1616,13 +1616,8 @@ class STEPINDEXGridBot {
 
       // if (this.currentGridLevel < 1) {
       // if (confidence >= 0.56 && ((currentCandleType === 'BULLISH' && prediction === 'CALLE') || (currentCandleType === 'BEARISH' && prediction === 'PUTE'))) {
-      if (riseNum < 3 && prediction === 'CALLE') {
+      if ((riseNum < 3 && prediction === 'CALLE') || (fallNum < 3 && prediction === 'PUTE')) {
         this.canTrade = true;
-        this.currentDirection = "CALLE"
-        this._placeTrade();
-      } else if (fallNum < 3 && prediction === 'PUTE') {
-        this.canTrade = true;
-        this.currentDirection = "PUTE"
         this._placeTrade();
       }
       // } 
