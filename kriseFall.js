@@ -6,8 +6,8 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'KriseFallM201-state.json');
-const HISTORY_FILE = path.join(__dirname, 'KriseFallM201-history.json');
+const STATE_FILE = path.join(__dirname, 'KriseFallM2001-state.json');
+const HISTORY_FILE = path.join(__dirname, 'KriseFallM2001-history.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
@@ -622,7 +622,7 @@ class TelegramService {
                 Duration: ${duration} (${durationUnit == 't' ? 'Ticks' : durationUnit == 's' ? 'Seconds' : 'Minutes'})
                 Martingale Level: ${assetMartingale}
                 ${details.profit !== undefined
-                                ? `Profit: $${details.profit.toFixed(2)}
+                ? `Profit: $${details.profit.toFixed(2)}
 
                 📊 <b>Today's Stats:</b>
                 ${symbol} P&L: $${assetNetPL.toFixed(2)}
@@ -1599,7 +1599,7 @@ class SessionManager {
                         CONFIG.MARTINGALE_MULTIPLIER5 *
                         100
                     ) / 100;
-            } 
+            }
             // else if (assetState.martingaleLevel === 6) {
             //     assetState.currentStake =
             //         Math.ceil(
@@ -2687,7 +2687,7 @@ class DerivBot {
                                 ? 'PUTE (Recovery)'
                                 : 'CALLE (Recovery)';
 
-                const lastClosed = a.closedCandles && a.closedCandles.length ? a.closedCandles[a.closedCandles.length-1] : null;
+                const lastClosed = a.closedCandles && a.closedCandles.length ? a.closedCandles[a.closedCandles.length - 1] : null;
                 const lastCandleDirection = lastClosed ? CandleAnalyzer.getCandleDirection(lastClosed) : null;
 
                 assetStatuses[symbol] = {
