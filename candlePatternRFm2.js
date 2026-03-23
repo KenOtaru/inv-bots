@@ -22,7 +22,7 @@ const path = require('path');
 
 const CONFIG = {
   // API Settings
-  API_TOKEN: 'YOUR_API_TOKEN',
+  API_TOKEN: 'Dz2V2KvRf4Uukt3',
   APP_ID: '1089',
   WS_URL: 'wss://ws.derivws.com/websockets/v3',
 
