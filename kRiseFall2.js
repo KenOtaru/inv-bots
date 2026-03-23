@@ -919,36 +919,12 @@ class TelegramService {
 
         const timeUntilNextHour = nextHour.getTime() - now.getTime();
 
-        LOGGER.info(`📱 Hourly Telegram timer started (first summary in ${Math.ceil(timeUntilNextHour / 60000)} min)`);
-
         setTimeout(() => {
-            this.sendHourlySummary();
+            this.sendSessionSummary();
             setInterval(() => {
-                this.sendHourlySummary();
+                this.sendSessionSummary();
             }, 60 * 60 * 1000);
         }, timeUntilNextHour);
-    }
-
-    static startDailyTimer() {
-        const now = new Date();
-        const nextDay = new Date(now);
-        nextDay.setDate(nextDay.getDate() + 1);
-        nextDay.setHours(0, 0, 0, 0);
-
-        const timeUntilNextDay = nextDay.getTime() - now.getTime();
-
-        LOGGER.info(`📱 Daily Telegram timer started (first summary in ${Math.ceil(timeUntilNextDay / 60000 / 60)} hours)`);
-
-        setTimeout(() => {
-            if (typeof SessionManager !== 'undefined') {
-                SessionManager.checkDayChange();
-            }
-            setInterval(() => {
-                if (typeof SessionManager !== 'undefined') {
-                    SessionManager.checkDayChange();
-                }
-            }, 24 * 60 * 60 * 1000);
-        }, timeUntilNextDay);
     }
 }
 
@@ -2346,7 +2322,6 @@ class DerivBot {
 
         TelegramService.sendStartupMessage();
         TelegramService.startHourlyTimer();
-        TelegramService.startDailyTimer();
 
         this.startSessionTimeChecker();
 
