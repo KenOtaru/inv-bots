@@ -1609,18 +1609,18 @@ class STEPINDEXGridBot {
 
       // ── Pattern strategy (candle OFF): predictor sets direction ──────
       // this.currentDirection = this._predictRecoveryDirection();
-      let lastPred = this._lastPrediction || { confidence: 0, totalPatterns: 0, prediction: 'CALLE' };
+      let lastPred = this._lastPrediction;
       let { confidence, totalPatterns, prediction, info, riseNum, fallNum, neutral } = lastPred;
       console.log('Confidence: (', confidence.toFixed(2), '%) |', 'Total Patterns:', totalPatterns, '| Direction:', prediction, '| CandleType:', currentCandleType)
       console.log('PatterInfo', info)
 
       // if (this.currentGridLevel < 1) {
       // if (confidence >= 0.56 && ((currentCandleType === 'BULLISH' && prediction === 'CALLE') || (currentCandleType === 'BEARISH' && prediction === 'PUTE'))) {
-      if (riseNum < 3) {
+      if (riseNum < 3 && prediction === 'CALLE') {
         this.canTrade = true;
         this.currentDirection = "CALLE"
         this._placeTrade();
-      } else if (fallNum < 3) {
+      } else if (fallNum < 3 && prediction === 'PUTE') {
         this.canTrade = true;
         this.currentDirection = "PUTE"
         this._placeTrade();
