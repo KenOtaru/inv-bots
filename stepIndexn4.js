@@ -25,7 +25,7 @@ const DEFAULT_CONFIG = {
   appId: '1089',
 
   symbol: 'stpRNG',
-  tickDuration: 1,
+  tickDuration: 3,
   initialStake: 0.35,
   investmentAmount: 153,
 
@@ -1655,14 +1655,14 @@ class STEPINDEXGridBot {
       //   minAlignedCount   — alternative: require at least N steps to agree
       //                       (only used when requireAlignment is false)
 
-      const minConfidence = 0.52;
-      const requireAlignment = true;     // strongest filter
-      const minAlignedCount = 5;         // used only if requireAlignment = false
+      const minConfidence = 0.50;
+      const requireAlignment = false;     // strongest filter
+      const minAlignedCount = 2;         // used only if requireAlignment = false
 
       const confOk = confidence >= minConfidence;
       const alignOk = requireAlignment
         ? aligned                         // 3+ of 5 agree
-        : alignedCount >= minAlignedCount; // custom threshold
+        : alignedCount <= minAlignedCount; // custom threshold
 
       if (confOk && alignOk) { // && currentCandleType === 'BULLISH' && prediction === 'CALLE'
         this.canTrade = true;
@@ -2641,7 +2641,7 @@ function main() {
 
   if (bot.telegramBot) bot.startTelegramTimer();
 
-  bot.startTimeScheduler();
+  // bot.startTimeScheduler();
 
   bot.connect();
 
