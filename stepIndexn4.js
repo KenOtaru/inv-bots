@@ -1698,7 +1698,7 @@ class STEPINDEXGridBot {
 
   _predictRecoveryDirection() {
     const h = this.tickHistory;
-    const MAX_STEPS = 7;
+    const MAX_STEPS = 5;
 
     // ── Fallback when insufficient data ────────────────────────────────────
     if (!h || h.length < 15) {
