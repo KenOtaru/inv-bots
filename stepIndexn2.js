@@ -27,20 +27,20 @@ const DEFAULT_CONFIG = {
   symbol: 'stpRNG',
   tickDuration: 1,
   initialStake: 0.35,
-  investmentAmount: 530,
+  investmentAmount: 153,
 
-  martingaleMultiplier: 1,
+  martingaleMultiplier: 1.48,
   maxMartingaleLevel: 1,
   afterMaxLoss: 'continue',
-  continueExtraLevels: 12,
-  extraLevelMultipliers: [1, 1, 2.1, 2.1, 2.1, 2.1, 2.1, 2.1, 2.1, 2.1, 2.1],
+  continueExtraLevels: 8,
+  extraLevelMultipliers: [1.8, 2.1, 2.1, 2.1, 2.1, 2.1, 2.1],
 
   autoCompounding: true,
   compoundPercentage: 0.20,
 
   // Auto-compounding step config:
   // baseStake increases by compoundStakeStep for every compoundInvestmentStep increase in investmentAmount
-  compoundInvestmentStep: 530,  // every 153 increase in investment
+  compoundInvestmentStep: 153,  // every 153 increase in investment
   compoundStakeStep: 0.35,  // increases baseStake by 0.5
 
   stopLoss: 5000,
@@ -1595,7 +1595,7 @@ class STEPINDEXGridBot {
     }
 
     // console.log('Total Tick History', this.tickHistory.length)
-    // console.log(this.config.symbol, 'Last10Ticks', this.tickHistory.slice(-10).join(', '), 'Current Digit', lastDigit);
+    // console.log(this.config.symbol, 'Last10Ticks:', this.tickHistory.slice(-10).join(', '), 'Tick:', tick.quote);
 
     this._predictRecoveryDirection();
 
@@ -1607,61 +1607,108 @@ class STEPINDEXGridBot {
           ? 'BEARISH'
           : 'DOJI';
 
-      // ── Pattern strategy (candle OFF): predictor sets direction ──────
-      // this.currentDirection = this._predictRecoveryDirection();
-      let lastPred = this._lastPrediction || { confidence: 0, totalPatterns: 0, prediction: 'CALLE' };
-      let { confidence, totalPatterns, prediction, info, riseNum, fallNum, neutral } = lastPred;
-      console.log('Confidence: (', confidence.toFixed(2), '%) |', 'Total Patterns:', totalPatterns, '| Direction:', prediction, '| CandleType:', currentCandleType)
-      console.log('PatterInfo', info)
+      let lastPred = this._lastPrediction || {
+        confidence: 0,
+        totalPatterns: 0,
+        prediction: 'CALLE',
+        oneStepPrediction: 'CALLE',
+        oneStepConfidence: 0,
+        aligned: false,
+      };
 
-      // if (this.currentGridLevel < 1) {
-      if (confidence >= 0.56 && (currentCandleType === 'BULLISH' && prediction === 'CALLE')) {
+      let {
+        confidence,
+        totalPatterns,
+        prediction,
+        info,
+        riseNum,
+        fallNum,
+        neutral,
+        aligned,
+        oneStepConfidence,
+        oneStepPrediction,
+      } = lastPred;
+
+      console.log(
+        'Confidence:', `(${(confidence * 100).toFixed(2)}%)`,
+        '| 1-Step:', `(${(oneStepConfidence * 100).toFixed(2)}%)`,
+        '| Aligned:', aligned,
+        '| Total Patterns:', totalPatterns,
+        '| Direction:', prediction,
+        '| CandleType:', currentCandleType
+      );
+      console.log('PatternInfo', info);
+
+      // ── Trade entry: two-step prediction must meet threshold ──────────
+      // Optional: require alignment between 1-step and 2-step for extra safety
+      const minConfidence = 0.54;
+      const requireAlignment = true; // set false to trade on 2-step alone
+
+      const confidenceOk = confidence >= minConfidence && oneStepConfidence >= minConfidence;
+      const alignmentOk = !requireAlignment || aligned;
+
+      if (confidenceOk && alignmentOk) { // && currentCandleType === 'BULLISH' && prediction === 'CALLE'
         this.canTrade = true;
-        this.currentDirection = 'CALLE';
-        this._placeTrade();
-      } else if (confidence >= 0.56 && (currentCandleType === 'BEARISH' && prediction === 'PUTE')) {
-        this.canTrade = true;
-        this.currentDirection = 'PUTE';
+        this.currentDirection = prediction;
         this._placeTrade();
       }
-      // } 
-      // else {
-      //   if (confidence > 0.54 && totalPatterns > 30 && ((currentCandleType === 'BULLISH' && prediction === 'CALLE' && riseNum < 4) || (currentCandleType === 'BEARISH' && prediction === 'PUTE' && fallNum < 4))) {
-      //     if (this.awaitRiseConfidence) {
-      //       this.canTrade = true;
-      //       this._placeTrade()
-      //     }
-      //   } else {
-      //     this.awaitRiseConfidence = true;
-      //   }
+      // else if (confidenceOk && alignmentOk) {// && currentCandleType === 'BEARISH' && prediction === 'PUTE'
+      //   this.canTrade = true;
+      //   this.currentDirection = 'PUTE';
+      //   this._placeTrade();
       // }
     }
   }
 
   // ══════════════════════════════════════════════════════════════════════════════
-  // SMART PATTERN DIRECTION PREDICTOR
-  // Analyses the last n lastDigit values to predict Rise (CALLE) or Fall (PUTE)
-  // Looks for repeating patterns of length n, then uses statistical bias
-  // of what followed each matching pattern in history.
-  // Handles stpRNG digit wrap-around: 9→0 = Rise (+1), 0→9 = Fall (-1)
+  // SMART PATTERN DIRECTION PREDICTOR — FIXED TIMING OFFSET
+  //
+  // PROBLEM:  When tick T arrives we analyse patterns and predict direction for
+  //           tick T+1.  But the trade is only *placed* after T+1 arrives (because
+  //           _handleTickUpdate fires, checks the prediction, and calls _placeTrade).
+  //           The traded contract therefore settles based on tick T+2, NOT T+1.
+  //
+  // FIX:     Two-step-ahead prediction.  For every pattern match we look at the
+  //          direction step TWO positions after the match (index i + patLen + 1)
+  //          instead of ONE (i + patLen).  This way the prediction aligns with
+  //          the tick that actually determines the trade outcome.
+  //
+  //          Additionally we provide a "one-step" prediction as a secondary
+  //          confirmation signal (_lastPrediction.oneStepPrediction) so the
+  //          caller can optionally gate on both agreeing.
   // ══════════════════════════════════════════════════════════════════════════════
 
   _predictRecoveryDirection() {
     const h = this.tickHistory;
 
-    if (!h || h.length < 10) {
+    if (!h || h.length < 12) {
       this.log('⚠️ Not enough tick data for predictor — defaulting to alternating', 'warning');
-      return this.currentDirection === 'CALLE' ? 'PUTE' : 'CALLE';
+      const fallback = this.currentDirection === 'CALLE' ? 'PUTE' : 'CALLE';
+      this._lastPrediction = {
+        info: 'insufficient-data',
+        confidence: 0,
+        prediction: fallback,
+        digits: h ? h.length : 0,
+        totalPatterns: 0,
+        riseNum: 0,
+        fallNum: 0,
+        neutral: 0,
+        oneStepPrediction: fallback,
+        oneStepConfidence: 0,
+      };
+      return fallback;
     }
 
     // ── Step 1: Build digit-step sequence ──────────────────────────────────
-    // +1 = Rise (digit went up, or 9→0 wrap), -1 = Fall (digit went down, or 0→9 wrap), 0 = same
+    // +1 = Rise (digit went up, or 9→0 wrap)
+    // -1 = Fall (digit went down, or 0→9 wrap)
+    //  0 = same
     const getStep = (from, to) => {
       if (from === to) return 0;
       const diff = to - from;
-      if (diff === 1 || diff === -9) return 1;  // Rise (includes 9→0)
+      if (diff === 1 || diff === -9) return 1;   // Rise (includes 9→0)
       if (diff === -1 || diff === 9) return -1;  // Fall (includes 0→9)
-      return 0; // multi-step jump (skip)
+      return 0; // multi-step jump — treat as neutral
     };
 
     const dirs = [];
@@ -1669,75 +1716,108 @@ class STEPINDEXGridBot {
       dirs.push(getStep(h[i - 1], h[i]));
     }
 
-
-
-    // ── Step 2: Pattern scan — lengths 5 ──────────────────────────────
+    // ── Step 2: Pattern scan — TWO-STEP-AHEAD (primary) and ONE-STEP (secondary) ──
     let bestDir = 0;
     let bestConf = 0;
     let bestInfo = '';
-    let bestDir2 = 0;
-    let bestConf2 = 0;
-    let bestInfo2 = '';
-    let totalPatterns = 0;
+    let bestTotalPatterns = 0;
 
-    for (const patLen of [5]) {  // Best signal-to-noise with 5000-tick history
-      if (dirs.length < patLen + 1) continue;
+    // One-step prediction (secondary / confirmation)
+    let oneStepDir = 0;
+    let oneStepConf = 0;
+    let oneStepInfo = '';
+
+    for (const patLen of [5]) {
+      // We need at least patLen + 2 entries in dirs for two-step-ahead
+      if (dirs.length < patLen + 2) continue;
 
       const currentPattern = dirs.slice(-patLen);
-      let rises = 0;
-      let falls = 0;
 
-      for (let i = 0; i <= dirs.length - patLen - 1; i++) {
+      // --- Two-step-ahead counters (PRIMARY — matches traded tick) ---
+      let rises2 = 0;
+      let falls2 = 0;
+
+      // --- One-step-ahead counters (SECONDARY — confirmation) ---
+      let rises1 = 0;
+      let falls1 = 0;
+
+      // Scan all positions where the pattern could match AND we have
+      // at least 2 future steps available
+      for (let i = 0; i <= dirs.length - patLen - 2; i++) {
         const match = currentPattern.every((v, k) => v === dirs[i + k]);
         if (!match) continue;
-        const next = dirs[i + patLen];
-        if (next === 1) rises++;
-        if (next === -1) falls++;
+
+        // One-step-ahead (T+1 relative to pattern end)
+        const next1 = dirs[i + patLen];
+        if (next1 === 1) rises1++;
+        if (next1 === -1) falls1++;
+
+        // Two-step-ahead (T+2 relative to pattern end — the TRADED tick)
+        const next2 = dirs[i + patLen + 1];
+        if (next2 === 1) rises2++;
+        if (next2 === -1) falls2++;
       }
 
-      const total = rises + falls;
-      totalPatterns = total;
-      if (total === 0) continue;
-      if (total < 30) continue;  // Minimum sample guard — prevents false confidence on sparse patterns
+      // --- Evaluate two-step-ahead (primary) ---
+      const total2 = rises2 + falls2;
+      bestTotalPatterns = total2;
+      if (total2 >= 30) {
+        const conf2 = Math.max(rises2, falls2) / total2;
+        if (conf2 > bestConf) {
+          bestConf = conf2;
+          bestDir = rises2 >= falls2 ? 1 : -1;
+          bestInfo = `pat${patLen}-2step: ${rises2}R/${falls2}F/${total2}T`;
+        }
+      }
 
-      const conf = Math.max(rises, falls) / total;
-      if (conf > bestConf) {
-        bestConf = conf;
-        bestDir = rises >= falls ? 1 : -1;
-        bestInfo = `pat${patLen}: ${rises}R/${falls}F/${total}T`;
+      // --- Evaluate one-step-ahead (secondary / confirmation) ---
+      const total1 = rises1 + falls1;
+      if (total1 >= 30) {
+        const conf1 = Math.max(rises1, falls1) / total1;
+        if (conf1 > oneStepConf) {
+          oneStepConf = conf1;
+          oneStepDir = rises1 >= falls1 ? 1 : -1;
+          oneStepInfo = `pat${patLen}-1step: ${rises1}R/${falls1}F/${total1}T`;
+        }
       }
     }
 
-    // ── Trend direction bias ───────────────────
-    const recent = dirs.slice(-10).filter(d => d);
+    // ── Trend direction bias (last 10 steps) ───────────────────
+    const recent = dirs.slice(-10).filter(d => d !== undefined);
     const riseNum = recent.filter(d => d === 1).length;
     const fallNum = recent.filter(d => d === -1).length;
     const neutral = recent.filter(d => d === 0).length;
-    bestDir2 = riseNum >= fallNum ? 1 : -1;
-    bestConf2 = recent.length > 0
-      ? Math.max(riseNum, fallNum) / recent.length
-      : 0.5;
-    bestInfo2 = `TrendBias (${recent.length}): R: ${riseNum}/ N: ${neutral}/ F:${fallNum} (${recent.map(d => d === 1 ? '↑' : d === -1 ? '↓' : '·')})`;
+    const trendInfo = `TrendBias (${recent.length}): R:${riseNum}/ N:${neutral}/ F:${fallNum} (${recent.map(d => d === 1 ? '↑' : d === -1 ? '↓' : '·').join('')})`;
 
-    // Determine final prediction based on best pattern or trend bias if no strong pattern
+    // ── Final prediction (two-step-ahead is primary) ──────────────────────
     const prediction = bestDir >= 0 ? 'CALLE' : 'PUTE';
+    const oneStepPrediction = oneStepDir >= 0 ? 'CALLE' : 'PUTE';
 
+    // Log both for transparency
     this.log(
-      `🔮 Pattern Predictor (${bestInfo}) | confidence: ${(bestConf * 100).toFixed(1)}% | ` +
-      `prediction: ${prediction === 'CALLE' ? 'RISE ↑ (CALLE)' : 'FALL ↓ (PUTE)'} | ` +
-      `${bestInfo2}`,
+      `🔮 Pattern Predictor [2-STEP] (${bestInfo || 'no-match'}) | ` +
+      `confidence: ${(bestConf * 100).toFixed(1)}% | ` +
+      `prediction: ${prediction === 'CALLE' ? 'RISE ↑' : 'FALL ↓'} | ` +
+      `[1-step ${oneStepInfo || 'n/a'}: ${oneStepPrediction} ${(oneStepConf * 100).toFixed(1)}%] | ` +
+      `${trendInfo}`,
     );
 
-    // Store result so Telegram notification can reference it
+    // Store result for consumption by _handleTickUpdate and Telegram
     this._lastPrediction = {
-      info: bestInfo,
+      info: bestInfo || 'no-pattern',
       confidence: bestConf,
       prediction,
       digits: h.length,
-      totalPatterns: totalPatterns,
+      totalPatterns: bestTotalPatterns,
       riseNum,
       fallNum,
-      neutral
+      neutral,
+      // Secondary one-step prediction for optional confirmation gating
+      oneStepPrediction,
+      oneStepConfidence: oneStepConf,
+      oneStepInfo: oneStepInfo || 'no-pattern',
+      // Agreement flag — both horizons point the same way
+      aligned: prediction === oneStepPrediction,
     };
 
     return prediction;
