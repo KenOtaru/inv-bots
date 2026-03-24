@@ -1655,7 +1655,7 @@ class STEPINDEXGridBot {
       //   minAlignedCount   — alternative: require at least N steps to agree
       //                       (only used when requireAlignment is false)
 
-      const minConfidence = 0.50;
+      const minConfidence = 0.54;
       const requireAlignment = false;     // strongest filter
       const minAlignedCount = 2;         // used only if requireAlignment = false
 
