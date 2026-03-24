@@ -1698,7 +1698,7 @@ class STEPINDEXGridBot {
 
   _predictRecoveryDirection() {
     const h = this.tickHistory;
-    const MAX_STEPS = 5;
+    const MAX_STEPS = 7;
 
     // ── Fallback when insufficient data ────────────────────────────────────
     if (!h || h.length < 15) {
@@ -1837,7 +1837,7 @@ class STEPINDEXGridBot {
       }
     }
     // "Aligned" = at least 3 out of 5 steps agree with the primary
-    const aligned = alignedCount >= 3;
+    const aligned = alignedCount >= 5;
 
     // ── Logging ────────────────────────────────────────────────────────────
     const stepSummaries = stepResults.map((r, idx) => {
