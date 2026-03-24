@@ -1644,7 +1644,7 @@ class STEPINDEXGridBot {
       const minConfidence = 0.56;
       const requireAlignment = true; // set false to trade on 2-step alone
 
-      const confidenceOk = confidence >= minConfidence;
+      const confidenceOk = confidence >= minConfidence && oneStepConfidence >= minConfidence;
       const alignmentOk = !requireAlignment || aligned;
 
       if (confidenceOk && alignmentOk) { // && currentCandleType === 'BULLISH' && prediction === 'CALLE'
