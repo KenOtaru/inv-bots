@@ -74,8 +74,8 @@ const DEFAULT_CONFIG = {
 // FILE PATHS
 // ══════════════════════════════════════════════════════════════════════════════
 
-const STATE_FILE = path.join(__dirname, 'ST1n3-grid-state00001.json');
-const DAILY_STATS_FILE = path.join(__dirname, 'ST1n3-daily-stats00001.json');
+const STATE_FILE = path.join(__dirname, 'ST1n4-grid-state0001.json');
+const DAILY_STATS_FILE = path.join(__dirname, 'ST1n4-daily-stats0001.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1657,7 +1657,7 @@ class STEPINDEXGridBot {
 
       const minConfidence = 0.51;
       const requireAlignment = false;     // strongest filter
-      const minAlignedCount = 2;         // used only if requireAlignment = false
+      const minAlignedCount = 1;         // used only if requireAlignment = false
 
       const confOk = confidence < minConfidence;
       const alignOk = requireAlignment
@@ -1666,7 +1666,7 @@ class STEPINDEXGridBot {
 
       if (confOk && alignOk) { // && currentCandleType === 'BULLISH' && prediction === 'CALLE'
         this.canTrade = true;
-        this.currentDirection = prediction === "CALLE" ? "PUTE": "CALLE";
+        this.currentDirection = prediction === "CALLE" ? "PUTE" : "CALLE";
         this._placeTrade();
       }
       // else if (confOk && alignOk) {// && currentCandleType === 'BEARISH' && prediction === 'PUTE'
