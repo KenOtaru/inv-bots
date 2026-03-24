@@ -1655,7 +1655,7 @@ class STEPINDEXGridBot {
       //   minAlignedCount   — alternative: require at least N steps to agree
       //                       (only used when requireAlignment is false)
 
-      const minConfidence = 0.51;
+      const minConfidence = 0.59;
       const requireAlignment = false;     // strongest filter
       const minAlignedCount = 1;         // used only if requireAlignment = false
 
@@ -1664,7 +1664,7 @@ class STEPINDEXGridBot {
         ? aligned                         // 3+ of 5 agree
         : alignedCount <= minAlignedCount; // custom threshold
 
-      if (confOk && alignOk) { // && currentCandleType === 'BULLISH' && prediction === 'CALLE'
+      if (confOk && alignOk && minConfidence > 0) { // && currentCandleType === 'BULLISH' && prediction === 'CALLE'
         this.canTrade = true;
         this.currentDirection = prediction === "CALLE" ? "PUTE" : "CALLE";
         this._placeTrade();
