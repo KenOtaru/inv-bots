@@ -65,9 +65,9 @@ const DEFAULT_CONFIG = {
   //   Use 1 tick if you're using the Pattern strategy only.
   usePatternStrategy: true,
 
-  telegramToken: '8343520432:AAGNxzjnljOEhfv_rE-y-F98fUDPmrqZuXc',
+  telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
   telegramChatId: '752497117',
-  telegramEnabled: false,
+  telegramEnabled: true,
 };
 
 // ══════════════════════════════════════════════════════════════════════════════
