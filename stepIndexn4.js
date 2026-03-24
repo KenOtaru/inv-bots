@@ -1595,7 +1595,7 @@ class STEPINDEXGridBot {
     }
 
     // console.log('Total Tick History', this.tickHistory.length)
-    // console.log(this.config.symbol, 'Last10Ticks:', this.tickHistory.slice(-10).join(', '), 'Tick:', tick.quote);
+    console.log(this.config.symbol, 'Last10Ticks:', this.tickHistory.slice(-10).join(', '), 'Tick:', tick.quote);
 
     this._predictRecoveryDirection();
 
@@ -1655,7 +1655,7 @@ class STEPINDEXGridBot {
       //   minAlignedCount   — alternative: require at least N steps to agree
       //                       (only used when requireAlignment is false)
 
-      const minConfidence = 0.56;
+      const minConfidence = 0.52;
       const requireAlignment = true;     // strongest filter
       const minAlignedCount = 5;         // used only if requireAlignment = false
 
