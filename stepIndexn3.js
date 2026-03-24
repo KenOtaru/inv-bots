@@ -1616,11 +1616,11 @@ class STEPINDEXGridBot {
 
       // if (this.currentGridLevel < 1) {
       // if (confidence >= 0.56 && ((currentCandleType === 'BULLISH' && prediction === 'CALLE') || (currentCandleType === 'BEARISH' && prediction === 'PUTE'))) {
-      if (confidence >= 0.55 && riseNum < 1 && prediction === 'CALLE') {
+      if (confidence >= 0.51 && riseNum < 1 && prediction === 'CALLE') {
         this.canTrade = true;
         this.currentDirection = 'CALLE';
         this._placeTrade();
-      } else if (confidence >= 0.55 && fallNum < 1 && prediction === 'PUTE') {
+      } else if (confidence >= 0.51 && fallNum < 1 && prediction === 'PUTE') {
         this.canTrade = true;
         this.currentDirection = 'PUTE';
         this._placeTrade();
