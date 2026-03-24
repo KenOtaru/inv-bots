@@ -1664,12 +1664,12 @@ class STEPINDEXGridBot {
         ? aligned                         // 3+ of 5 agree
         : alignedCount >= minAlignedCount; // custom threshold
 
-      if (confOk && alignmentOk && alignOk) { // && currentCandleType === 'BULLISH' && prediction === 'CALLE'
+      if (confOk && alignOk) { // && currentCandleType === 'BULLISH' && prediction === 'CALLE'
         this.canTrade = true;
         this.currentDirection = prediction;
         this._placeTrade();
       }
-      // else if (confOk && alignmentOk) {// && currentCandleType === 'BEARISH' && prediction === 'PUTE'
+      // else if (confOk && alignOk) {// && currentCandleType === 'BEARISH' && prediction === 'PUTE'
       //   this.canTrade = true;
       //   this.currentDirection = 'PUTE';
       //   this._placeTrade();
