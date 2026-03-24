@@ -1655,25 +1655,25 @@ class STEPINDEXGridBot {
       //   minAlignedCount   — alternative: require at least N steps to agree
       //                       (only used when requireAlignment is false)
 
-      const minConfidence = 0.59;
+      const minConfidence = 0.51;
       const requireAlignment = false;     // strongest filter
-      const minAlignedCount = 1;         // used only if requireAlignment = false
+      const minAlignedCount = 5;         // used only if requireAlignment = false
 
-      const confOk = confidence < minConfidence;
+      const confOk = confidence >= minConfidence;
       const alignOk = requireAlignment
         ? aligned                         // 3+ of 5 agree
-        : alignedCount <= minAlignedCount; // custom threshold
+        : alignedCount >= minAlignedCount; // custom threshold
 
-      if (confOk && alignOk && minConfidence > 0) { // && currentCandleType === 'BULLISH' && prediction === 'CALLE'
+      if (confOk && alignOk && this.currentGridLevel < 1) { // && currentCandleType === 'BULLISH' && prediction === 'CALLE'
         this.canTrade = true;
-        this.currentDirection = prediction === "CALLE" ? "PUTE" : "CALLE";
+        this.currentDirection = prediction; // === "CALLE" ? "PUTE" : "CALLE";
         this._placeTrade();
       }
-      // else if (confOk && alignOk) {// && currentCandleType === 'BEARISH' && prediction === 'PUTE'
-      //   this.canTrade = true;
-      //   this.currentDirection = 'PUTE';
-      //   this._placeTrade();
-      // }
+      else if (confOk && alignOk && this.currentGridLevel >= 1) {// && currentCandleType === 'BEARISH' && prediction === 'PUTE'
+        this.canTrade = true;
+        this.currentDirection = this.currentDirection === "CALLE" ? "PUTE" : "CALLE";
+        this._placeTrade();
+      }
     }
   }
 
