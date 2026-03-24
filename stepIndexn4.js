@@ -1666,7 +1666,7 @@ class STEPINDEXGridBot {
 
       if (confOk && alignOk) { // && currentCandleType === 'BULLISH' && prediction === 'CALLE'
         this.canTrade = true;
-        this.currentDirection = prediction;
+        this.currentDirection = prediction === "CALLE" ? "PUTE": "CALLE";
         this._placeTrade();
       }
       // else if (confOk && alignOk) {// && currentCandleType === 'BEARISH' && prediction === 'PUTE'
