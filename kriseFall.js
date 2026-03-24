@@ -6,8 +6,8 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'KriseFallM20001-state.json');
-const HISTORY_FILE = path.join(__dirname, 'KriseFallM20001-history.json');
+const STATE_FILE = path.join(__dirname, 'KriseFallM2001-state.json');
+const HISTORY_FILE = path.join(__dirname, 'KriseFallM2001-history.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
@@ -2673,7 +2673,6 @@ class DerivBot {
                     );
                     // Send end-of-day summary
                     TelegramService.sendDayEndSummary(TradeHistoryManager.getDateKey());
-                    TelegramService.sendHourlySummary();
                     TelegramService.sendSessionSummary();
                     if (this.connection.ws)
                         this.connection.ws.close();
