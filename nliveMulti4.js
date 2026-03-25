@@ -1440,8 +1440,8 @@ class EnhancedAccumulatorBot {
         });
 
         // Telegram Configuration
-        this.telegramToken = process.env.TELEGRAM_BOT_TOKEN3 || '8196927342:AAHa8d0OrF3D6yYTA_QcCPOzz5G0SPj82xE';
-        this.telegramChatId = process.env.TELEGRAM_CHAT_ID2 || '752497117';
+        this.telegramToken = '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ';
+        this.telegramChatId = '752497117';
         this.telegramEnabled = true;
 
         if (this.telegramEnabled) {
@@ -1473,7 +1473,7 @@ class EnhancedAccumulatorBot {
 
         try {
             console.log('📂 Restoring bot state...');
-            
+
             // Restore trading state
             const t = savedState.trading;
             this.currentStake = t.currentStake;
@@ -1673,7 +1673,7 @@ class EnhancedAccumulatorBot {
         this.reconnectAttempts = 0;
         this.reconnectDelay = 5000;
         this.isReconnecting = false;
-        
+
         const authorizeRequest = { authorize: this.token };
         this.ws.send(JSON.stringify(authorizeRequest));
 
@@ -1697,7 +1697,7 @@ class EnhancedAccumulatorBot {
             this.wsReady = true;
             this.subscribeToTicks();
             this.processMessageQueue();
-            
+
             // Send a startup notification if it's a new connection (not a tiny blip)
             if (this.reconnectAttempts === 0) {
                 // this.sendTelegramMessage('🟢 <b>Bot Connected & Authorized</b>');
@@ -1728,7 +1728,7 @@ class EnhancedAccumulatorBot {
             this.isReconnecting = true;
             const delay = Math.min(this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts), 60000);
             console.log(`❌ Connection lost. Reconnecting in ${Math.round(delay / 1000)}s...`);
-            
+
             if (this.reconnectAttempts % 5 === 0) {
                 this.sendTelegramMessage(`⚠️ <b>Connection Lost</b>\nAttempting reconnection in ${Math.round(delay / 1000)}s...`);
             }
@@ -1747,7 +1747,7 @@ class EnhancedAccumulatorBot {
 
     handleApiError(error) {
         console.error('❌ API Error:', error.message || error);
-        
+
         if (error.code === 'RateLimit') {
             console.warn('⚠️ Rate limit hit. Increasing delay...');
             this.reconnectDelay = 30000;
@@ -2438,7 +2438,7 @@ class EnhancedAccumulatorBot {
 
         const resultEmoji = won ? '✅' : '❌';
         const resultText = won ? 'WIN' : 'LOSS';
-        
+
         console.log(`[${asset}] Trade outcome: ${won ? '✅ WON' : '❌ LOST'}`);
 
         // Record outcome for enhanced learning
