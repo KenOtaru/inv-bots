@@ -1466,7 +1466,7 @@ class EnhancedAccumulatorBot {
         this.reconnectDelay = 5000;
         this.reconnectTimer = null;
         this.isReconnecting = false;
-        
+
         // Heartbeat/Ping mechanism
         this.pingInterval = null;
         this.checkDataInterval = null;
@@ -1700,7 +1700,7 @@ class EnhancedAccumulatorBot {
         );
 
         console.log(`🔄 Reconnecting in ${(delay / 1000).toFixed(1)}s... (Attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
-        
+
         this.sendTelegramMessage(
             `⚠️ <b>CONNECTION LOST - RECONNECTING</b>\n` +
             `📊 Attempt: ${this.reconnectAttempts}/${this.maxReconnectAttempts}\n` +
@@ -1724,7 +1724,7 @@ class EnhancedAccumulatorBot {
         if (this.ws) {
             this.ws.removeAllListeners();
             if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
-                try { this.ws.close(); } catch (e) {}
+                try { this.ws.close(); } catch (e) { }
             }
             this.ws = null;
         }
@@ -1871,6 +1871,26 @@ class EnhancedAccumulatorBot {
         } else {
             return fractionalPart.length >= 2 ? parseInt(fractionalPart[1]) : 0;
         }
+    }
+
+    startTelegramTimer() {
+        const now = new Date();
+        const nextHour = new Date(now);
+        nextHour.setHours(nextHour.getHours() + 1);
+        nextHour.setMinutes(0);
+        nextHour.setSeconds(0);
+        nextHour.setMilliseconds(0);
+
+        const timeUntilNextHour = nextHour.getTime() - now.getTime();
+
+        setTimeout(() => {
+            this.sendHourlySummary();
+            setInterval(() => {
+                this.sendHourlySummary();
+            }, 60 * 60 * 1000);
+        }, timeUntilNextHour);
+
+        console.log(`📱 Hourly summaries scheduled. First in ${Math.ceil(timeUntilNextHour / 60000)} minutes.`);
     }
 
     initializeSubscriptions() {
@@ -2425,7 +2445,7 @@ class EnhancedAccumulatorBot {
         }
 
         console.log(`[${asset}] Trade outcome: ${won ? '✅ WON' : '❌ LOST'}`);
-        
+
         if (!this.hourlyStats) {
             this.hourlyStats = { trades: 0, wins: 0, losses: 0, pnl: 0, lastHour: new Date().getHours() };
         }
@@ -2433,12 +2453,12 @@ class EnhancedAccumulatorBot {
         this.hourlyStats.pnl += profit;
         if (won) this.hourlyStats.wins++;
         else this.hourlyStats.losses++;
-        
+
         const resultEmoji = won ? '✅ WIN' : '❌ LOSS';
         const pnlStr = (profit >= 0 ? '+' : '') + '$' + Math.abs(profit).toFixed(2);
         const pnlColor = profit >= 0 ? '🟢' : '🔴';
         const winRate = this.totalTrades > 0 ? ((this.totalWins / this.totalTrades) * 100).toFixed(1) : 0;
-        
+
         const telegramMsg = `
             ${resultEmoji} (Enhanced Accumulator Bot)
             
@@ -2725,7 +2745,7 @@ class EnhancedAccumulatorBot {
     // TIME-BASED CONTROLS (PRESERVED)
     // ========================================================================
 
-        checkTimeForDisconnectReconnect() {
+    checkTimeForDisconnectReconnect() {
         setInterval(() => {
             const now = new Date();
             const gmtPlus1Time = new Date(now.getTime() + (1 * 60 * 60 * 1000));
