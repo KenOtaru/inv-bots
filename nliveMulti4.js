@@ -1695,15 +1695,17 @@ class EnhancedAccumulatorBot {
         if (msgType === 'authorize') {
             console.log('👤 Authorized successfully');
             this.wsReady = true;
-            this.subscribeToTicks();
+            this.initializeSubscriptions();
             this.processMessageQueue();
-
-            // Send a startup notification if it's a new connection (not a tiny blip)
+            
             if (this.reconnectAttempts === 0) {
                 // this.sendTelegramMessage('🟢 <b>Bot Connected & Authorized</b>');
             }
         } else if (msgType === 'tick') {
-            this.handleTick(response.tick);
+            this.handleTickUpdate(response.tick);
+        } else if (msgType === 'history') {
+            const asset = response.echo_req.ticks_history;
+            this.handleTickHistory(asset, response.history);
         } else if (msgType === 'proposal') {
             this.handleProposal(response.proposal);
         } else if (msgType === 'buy') {
