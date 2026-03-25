@@ -6,8 +6,8 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'KriseFallM20001-state.json');
-const HISTORY_FILE = path.join(__dirname, 'KriseFallM20001-history.json');
+const STATE_FILE = path.join(__dirname, 'KriseFallM200001-state.json');
+const HISTORY_FILE = path.join(__dirname, 'KriseFallM200001-history.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
@@ -2700,10 +2700,6 @@ class DerivBot {
                 }
             }
         }, 20000);
-    }
-
-    checkTimeForDisconnectReconnect() {
-        this.startSessionTimeChecker();
     }
 
     resetDailyStats() {
