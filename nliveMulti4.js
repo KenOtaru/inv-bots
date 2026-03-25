@@ -2407,12 +2407,34 @@ class EnhancedAccumulatorBot {
             return;
         }
 
+        if (this.detectDangerousPattern(asset)) {
+            console.log(`[${asset}] ⚠️ Trade blocked due to dangerous pattern`);
+            return;
+        }
+
+        if (this.detectDangerousPattern2(asset)) {
+            console.log(`[${asset}] ⚠️ Trade blocked due to dangerous pattern`);
+            return;
+        }
+
         const request = {
             buy: assetState.currentProposalId,
             price: this.currentStake.toFixed(2)
         };
 
         console.log(`🚀 Placing trade for Asset: [${asset}] | Stake: ${this.currentStake.toFixed(2)}`);
+
+        const telegramMsg = `
+            🚀 Placing trade for Asset:
+            
+            📊 <b>${asset}</b>
+            
+            📊 <b>Current Stake:</b> $${this.currentStake.toFixed(2)}
+            
+            ⏰ ${new Date().toLocaleTimeString()}
+        `.trim();
+        this.sendTelegramMessage(telegramMsg);
+
         this.sendRequest(request);
         this.tradeInProgress = true;
         assetState.tradeInProgress = true;
@@ -2590,13 +2612,16 @@ class EnhancedAccumulatorBot {
             return;
         }
 
-        if (!this.endOfDay) {
-            setTimeout(() => {
-                this.tradeInProgress = false;
-                this.Pause = false;
-                this.connect();
-            }, randomWaitTime);
-        }
+        this.tradeInProgress = false;
+        this.Pause = false;
+
+        // if (!this.endOfDay) {
+        //     setTimeout(() => {
+        //         this.tradeInProgress = false;
+        //         this.Pause = false;
+        //         this.connect();
+        //     }, randomWaitTime);
+        // }
     }
 
     //Reset
