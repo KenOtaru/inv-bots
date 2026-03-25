@@ -2429,7 +2429,6 @@ class EnhancedAccumulatorBot {
             📊 <b>TRADE SIGNAL: ${decision.ensembleScore.toFixed(4)} | ${decision.confidence.toFixed(2)}</b>
             📊 <b>Model contributions: ${JSON.stringify(decision.modelContributions)}</b>
             📊 <b>Current Stake:</b> $${this.currentStake.toFixed(2)}
-            📊 <b>Current Balance:</b> $${this.balance.toFixed(2)}
         `.trim();
         this.sendTelegramMessage(telegramMsg);
 
