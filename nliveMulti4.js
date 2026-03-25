@@ -2831,206 +2831,86 @@ class EnhancedAccumulatorBot {
     }
 
     // ========================================================================
-    // EMAIL METHODS (ENHANCED)
+    // TELEGRAM METHODS (ENHANCED)
     // ========================================================================
 
-    startEmailTimer() {
-        setInterval(() => {
-            if (!this.endOfDay) {
-                this.sendEmailSummary();
-            }
-        }, 1800000);
+    async sendTelegramMessage(message) {
+        if (!this.telegramEnabled || !this.telegramBot) return;
+        try {
+            await this.telegramBot.sendMessage(this.telegramChatId, message, { parse_mode: 'HTML' });
+        } catch (error) {
+            console.error(`❌ Failed to send Telegram message: ${error.message}`);
+        }
     }
 
-    async sendEmailSummary() {
-        const transporter = nodemailer.createTransport(this.emailConfig);
+    async sendHourlySummary() {
+        if (!this.hourlyStats) return;
+        const stats = this.hourlyStats;
+        const winRate = stats.wins + stats.losses > 0
+            ? ((stats.wins / (stats.wins + stats.losses)) * 100).toFixed(1)
+            : 0;
+        const pnlEmoji = stats.pnl >= 0 ? '🟢' : '🔴';
+        const pnlStr = (stats.pnl >= 0 ? '+' : '') + '$' + Math.abs(stats.pnl).toFixed(2);
 
         // Neural network metrics
-        const neuralMetrics = this.neuralEngine.getPerformanceMetrics();
-
+        const neuralMetrics = this.config.enableNeuralNetwork && this.neuralEngine.initialized ? this.neuralEngine.getPerformanceMetrics() : { accuracy: 0 };
         // Ensemble performance
         const ensemblePerf = this.ensembleDecisionMaker.getPerformanceSummary();
 
-        // Model performance
-        const modelPerf = Object.entries(ensemblePerf.models)
-            .map(([model, stats]) => `${model}: ${stats.accuracy} (${stats.samples} samples, weight: ${stats.weight})`)
-            .join('\n        ');
+        const message = `
+            ⏰ <b>Enhanced Accumulator Session Summary</b>
 
-        const summaryText = `
-    ==================== Enhanced Trading Summary ====================
-    
-    TRADING PERFORMANCE:
-    Total Trades: ${this.totalTrades}
-    Total Wins: ${this.totalWins}
-    Total Losses: ${this.totalLosses}
-    Win Rate: ${((this.totalWins / this.totalTrades) * 100).toFixed(2)}%
-    
-    Consecutive Losses: ${this.consecutiveLosses}
-    x2 Losses: ${this.consecutiveLosses2}
-    x3 Losses: ${this.consecutiveLosses3}
+            📊 <b>Session Stats</b>
+            ├ Trades: ${stats.trades}
+            ├ Wins: ${stats.wins} | Losses: ${stats.losses}
+            ├ Win Rate: ${winRate}%
+            └ ${pnlEmoji} <b>P&L:</b> ${pnlStr}
 
-    FINANCIAL:
-    Current Stake: $${this.currentStake.toFixed(2)}
-    Total P/L: $${this.totalProfitLoss.toFixed(2)}
-    
-    AI LEARNING SYSTEM PERFORMANCE:
-    ─────────────────────────────────
-    Neural Network:
-        Accuracy: ${(neuralMetrics.accuracy * 100).toFixed(1)}%
-        Loss Trend: ${neuralMetrics.trend}
-        Training Samples: ${this.neuralEngine.trainingHistory.length}
-    
-    Ensemble Decision Maker:
-        Adaptive Threshold: ${ensemblePerf.adaptiveThreshold}
-        Total Decisions: ${ensemblePerf.totalDecisions}
-    
-    Model Performance:
-        ${modelPerf || 'No model data yet'}
-    
-    MARKET CONDITIONS:
-    ${this.assets.map(a => {
-            const vol = this.learningSystem.volatilityScores[a] || 0;
-            const regime = this.patternEngine.regimeStates[a] || { regime: 'unknown' };
-            const bayesian = this.statisticalEngine.getBayesianEstimate(a);
-            return `${a}: Vol=${(vol * 100).toFixed(1)}%, Regime=${regime.regime}, Bayesian=${(bayesian.mean * 100).toFixed(1)}%`;
-        }).join('\n    ')}
-    
-    ===================================================================
-        `;
+            📈 <b>All-Time/Daily Totals</b>
+            ├ Total Trades: ${this.totalTrades}
+            ├ Total W/L: ${this.totalWins}/${this.totalLosses}
+            ├ x2-x5 Losses: ${this.consecutiveLosses2}/${this.consecutiveLosses3}/${this.consecutiveLosses4}/${this.consecutiveLosses5}
+            ├ Total P&L: ${(this.totalProfitLoss >= 0 ? '+' : '')}$${Math.abs(this.totalProfitLoss).toFixed(2)}
+            └ Current Stake: $${this.currentStake.toFixed(2)}
+            
+            🧠 <b>AI System State</b>
+            ├ Neural Accuracy: ${(neuralMetrics.accuracy * 100).toFixed(1)}%
+            └ Adaptive Threshold: ${ensemblePerf.adaptiveThreshold}
 
-        const mailOptions = {
-            from: this.emailConfig.auth.user,
-            to: this.emailRecipient,
-            subject: 'Enhanced AI Accumulator Bot - Performance Summary',
-            text: summaryText
-        };
+            ⏰ ${new Date().toLocaleString()}
+        `.trim();
 
         try {
-            await transporter.sendMail(mailOptions);
+            await this.sendTelegramMessage(message);
+            console.log('📱 Telegram: Session Summary sent');
         } catch (error) {
-            console.error('Error sending email:', error);
+            console.error(`❌ Telegram session summary failed: ${error.message}`);
         }
+
+        this.hourlyStats = {
+            trades: 0,
+            wins: 0,
+            losses: 0,
+            pnl: 0,
+            lastHour: new Date().getHours()
+        };
     }
 
-    async sendLossEmail(asset) {
-        const transporter = nodemailer.createTransport(this.emailConfig);
-        const history = this.tickHistories[asset];
-        const lastFewTicks = history.slice(-10);
-        const assetState = this.assetStates[asset];
-
-        const recentLosses = this.learningSystem.lossPatterns[asset]?.slice(-5) || [];
-        const lossAnalysis = recentLosses.map(l =>
-            `Digit: ${l.digitCount}, Vol: ${(l.volatility * 100).toFixed(1)}%`
-        ).join('\n        ');
-
-        // Get regime info
-        const regime = this.patternEngine.detectRegime(asset, this.extendedStayedIn[asset]);
-
-        // Neural prediction at time of loss
-        const neuralMetrics = this.neuralEngine.getPerformanceMetrics();
-
-        const summaryText = `
-    ==================== LOSS ALERT ====================
-    
-    TRADE SUMMARY:
-    Total Trades: ${this.totalTrades}
-    Wins: ${this.totalWins} | Losses: ${this.totalLosses}
-    Win Rate: ${((this.totalWins / this.totalTrades) * 100).toFixed(2)}%
-    Consecutive Losses: ${this.consecutiveLosses}
-
-    LOSS ANALYSIS [${asset}]:
-    ─────────────────────────────
-    Traded Digit: ${assetState.tradedDigitArray.slice(-1)[0]}
-    Volatility: ${(this.learningSystem.volatilityScores[asset] * 100 || 0).toFixed(1)}%
-    Asset Win Rate: ${(this.calculateAssetWinRate(asset) * 100).toFixed(1)}%
-    Market Regime: ${regime.regime} (confidence: ${(regime.confidence * 100).toFixed(1)}%)
-    
-    AI System State:
-        Neural Accuracy: ${(neuralMetrics.accuracy * 100).toFixed(1)}%
-        Adaptive Threshold: ${this.ensembleDecisionMaker.adaptiveThreshold.toFixed(3)}
-        Survival Estimate: ${this.survivalNum ? this.survivalNum.toFixed(4) : 'N/A'}
-    
-    Recent Loss Pattern:
-        ${lossAnalysis || 'No pattern data'}
-    
-    Last 10 Digits: ${lastFewTicks.join(', ')}
-
-    FINANCIAL:
-    Total P/L: $${this.totalProfitLoss.toFixed(2)}
-    Current Stake: $${this.currentStake.toFixed(2)}
-    
-    NEXT ACTION:
-    Waiting: ${this.waitTime} minutes before next trade
-    
-    ====================================================
-        `;
-
-        const mailOptions = {
-            from: this.emailConfig.auth.user,
-            to: this.emailRecipient,
-            subject: `Enhanced AI Bot - Loss Alert [${asset}]`,
-            text: summaryText
-        };
-
-        try {
-            await transporter.sendMail(mailOptions);
-        } catch (error) {
-            console.error('Error sending loss email:', error);
-        }
+    sendEmailSummary() {
+        // Redirect legacy email summary calls to telegram summary
+        this.sendHourlySummary();
     }
-
-    async sendDisconnectResumptionEmailSummary() {
-        const transporter = nodemailer.createTransport(this.emailConfig);
-
-        const now = new Date();
-        const currentHours = now.getHours();
-        const currentMinutes = now.getMinutes();
-
-        const summaryText = `
-    Disconnect/Reconnect Email: Time (${currentHours}:${currentMinutes})
-
-    ==================== Trading Summary ====================
-    Total Trades: ${this.totalTrades}
-    Total Wins: ${this.totalWins}
-    Total Losses: ${this.totalLosses}
-    Win Rate: ${((this.totalWins / this.totalTrades) * 100).toFixed(2)}%
     
-    Current Stake: $${this.currentStake.toFixed(2)}
-    Total P/L: $${this.totalProfitLoss.toFixed(2)}
-    
-    AI System Status: Active
-    Neural Net Accuracy: ${(this.neuralEngine.getPerformanceMetrics().accuracy * 100).toFixed(1)}%
-    =========================================================
-        `;
-
-        const mailOptions = {
-            from: this.emailConfig.auth.user,
-            to: this.emailRecipient,
-            subject: 'Enhanced AI Bot - Performance Summary',
-            text: summaryText
-        };
-
-        try {
-            await transporter.sendMail(mailOptions);
-        } catch (error) {
-            console.error('Error sending email:', error);
-        }
+    sendDisconnectResumptionEmailSummary() {
+        this.sendHourlySummary();
     }
-
-    async sendErrorEmail(errorMessage) {
-        const transporter = nodemailer.createTransport(this.emailConfig);
-        const mailOptions = {
-            from: this.emailConfig.auth.user,
-            to: this.emailRecipient,
-            subject: 'Enhanced AI Bot - Error Report',
-            text: `An error occurred: ${errorMessage}`
-        };
-
-        try {
-            await transporter.sendMail(mailOptions);
-        } catch (error) {
-            console.error('Error sending error email:', error);
-        }
+    
+    sendLossEmail(asset) {
+        // Handled intrinsically by handleTradeResult
+    }
+    
+    sendErrorEmail(errorMessage) {
+        this.sendTelegramMessage(`❌ <b>ERROR REPORT</b>\n\n${errorMessage}`);
     }
 
     // ========================================================================
