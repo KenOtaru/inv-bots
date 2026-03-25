@@ -2799,8 +2799,8 @@ class EnhancedAccumulatorBot {
             }
 
             if (this.isWinTrade && !this.endOfDay) {
-                if (currentHours >= 11 && currentMinutes >= 0) {
-                    console.log("It's past 11:00 PM GMT+1 after a win trade, disconnecting the bot.");
+                if (currentHours >= 23 && currentMinutes >= 30) {
+                    console.log("It's past 11:30 PM GMT+1 after a win trade, disconnecting the bot.");
                     this.sendHourlySummary();
                     this.disconnect();
                     this.endOfDay = true;
