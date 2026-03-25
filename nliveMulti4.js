@@ -1969,7 +1969,7 @@ class EnhancedAccumulatorBot {
         const regime = this.patternEngine.detectRegime(asset, this.extendedStayedIn[asset]);
 
         // Too volatile or unpredictable regime
-        if (volatilityData.changeRate > 0.92 || regime.regime === 'volatile') {
+        if (volatilityData.changeRate > 0.90 || regime.regime === 'volatile') {
             console.log(`[${asset}] Market too volatile (${volatilityData.changeRate.toFixed(2)}), regime: ${regime.regime}`);
             return false;
         }
