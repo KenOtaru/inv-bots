@@ -1440,7 +1440,7 @@ class EnhancedAccumulatorBot {
         });
 
         // Telegram Configuration
-        this.telegramToken = '8578702717:AAFShpdLRtat7PHqjZMUqhY4UNKlWyaGtmo';
+        this.telegramToken = '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ';
         this.telegramChatId = '752497117';
         this.telegramEnabled = true;
 
@@ -2758,26 +2758,26 @@ class EnhancedAccumulatorBot {
                 (currentDay === 6 && currentHours >= 23) || // Saturday after 11pm
                 (currentDay === 1 && currentHours < 8);    // Monday before 8am
 
-            if (isWeekend) {
-                if (!this.endOfDay) {
-                    console.log("Weekend trading suspension (Saturday 11pm - Monday 8am). Disconnecting...");
-                    this.sendHourlySummary();
-                    this.disconnect();
-                    this.endOfDay = true;
-                }
-                return; // Prevent any reconnection logic during the weekend
-            }
+            // if (isWeekend) {
+            //     if (!this.endOfDay) {
+            //         console.log("Weekend trading suspension (Saturday 11pm - Monday 8am). Disconnecting...");
+            //         this.sendHourlySummary();
+            //         this.disconnect();
+            //         this.endOfDay = true;
+            //     }
+            //     return; // Prevent any reconnection logic during the weekend
+            // }
 
-            if (this.endOfDay && currentHours === 8 && currentMinutes >= 0) {
-                console.log("It's 8:00 AM GMT+1, reconnecting the bot.");
+            if (this.endOfDay && currentHours === 2 && currentMinutes >= 0) {
+                console.log("It's 2:00 AM GMT+1, reconnecting the bot.");
                 this.resetForNewDay();
                 this.endOfDay = false;
                 this.connect();
             }
 
             if (this.isWinTrade && !this.endOfDay) {
-                if (currentHours >= 17 && currentMinutes >= 0) {
-                    console.log("It's past 5:00 PM GMT+1 after a win trade, disconnecting the bot.");
+                if (currentHours >= 11 && currentMinutes >= 0) {
+                    console.log("It's past 11:00 PM GMT+1 after a win trade, disconnecting the bot.");
                     this.sendHourlySummary();
                     this.disconnect();
                     this.endOfDay = true;
@@ -2900,15 +2900,15 @@ class EnhancedAccumulatorBot {
         // Redirect legacy email summary calls to telegram summary
         this.sendHourlySummary();
     }
-    
+
     sendDisconnectResumptionEmailSummary() {
         this.sendHourlySummary();
     }
-    
+
     sendLossEmail(asset) {
         // Handled intrinsically by handleTradeResult
     }
-    
+
     sendErrorEmail(errorMessage) {
         this.sendTelegramMessage(`❌ <b>ERROR REPORT</b>\n\n${errorMessage}`);
     }
