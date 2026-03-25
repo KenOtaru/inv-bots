@@ -539,6 +539,9 @@ class StatePersistence {
 // ============================================
 // TELEGRAM SERVICE
 // ============================================
+// ============================================
+// TELEGRAM SERVICE (FIXED VERSION)
+// ============================================
 class TelegramService {
     static async sendMessage(message) {
         if (!CONFIG.TELEGRAM_ENABLED) return;
@@ -556,14 +559,17 @@ class TelegramService {
                 parse_mode: 'HTML'
             });
 
-            console.log(`[DEBUG] Sending Telegram message (${message.length} chars, ${data.length} bytes)`);
+            // FIX 1: Use Buffer.byteLength instead of data.length
+            const byteLength = Buffer.byteLength(data, 'utf8');
+
+            console.log(`[DEBUG] Sending Telegram message (${message.length} chars, ${byteLength} bytes)`);
             console.log(`[DEBUG] Message preview: ${message.substring(0, 100)}...`);
 
             const options = {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Content-Length': data.length
+                    'Content-Length': byteLength  // FIX: correct byte length
                 }
             };
 
@@ -573,13 +579,18 @@ class TelegramService {
                     res.on('data', chunk => (body += chunk));
                     res.on('end', () => {
                         if (res.statusCode === 200) {
+                            console.log(`[DEBUG] Telegram API response: OK`);
                             resolve(true);
                         } else {
+                            console.error(`[DEBUG] Telegram API error response: ${body}`);
                             reject(new Error(`HTTP ${res.statusCode}: ${body}`));
                         }
                     });
                 });
-                req.on('error', reject);
+                req.on('error', (err) => {
+                    console.error(`[DEBUG] Telegram request error: ${err.message}`);
+                    reject(err);
+                });
                 req.write(data);
                 req.end();
             }).then(() => {
@@ -621,27 +632,26 @@ class TelegramService {
         const today = TradeHistoryManager.getTodayStats();
 
         const message = `
-                ${emoji} <b>${type} TRADE ALERT</b>
-                Asset: ${symbol}
-                Direction: ${direction}
-                Stake: $${stake.toFixed(2)}
-                Duration: ${duration} (${durationUnit == 't' ? 'Ticks' : durationUnit == 's' ? 'Seconds' : 'Minutes'})
-                Martingale Level: ${assetMartingale}
-                ${details.profit !== undefined
+${emoji} <b>${type} TRADE ALERT</b>
+Asset: ${symbol}
+Direction: ${direction}
+Stake: $${stake.toFixed(2)}
+Duration: ${duration} (${durationUnit == 't' ? 'Ticks' : durationUnit == 's' ? 'Seconds' : 'Minutes'})
+Martingale Level: ${assetMartingale}
+${details.profit !== undefined
                 ? `Profit: $${details.profit.toFixed(2)}
 
-                📊 <b>Today's Stats:</b>
-                ${symbol} P&L: $${assetNetPL.toFixed(2)}
-                ${symbol} W/L: ${assetWins}/${assetLosses}
-                Today P&L: $${today.netPL.toFixed(2)}
-                Today W/L: ${today.winsCount}/${today.lossesCount}
+📊 <b>Today's Stats:</b>
+${symbol} P&amp;L: $${assetNetPL.toFixed(2)}
+${symbol} W/L: ${assetWins}/${assetLosses}
+Today P&amp;L: $${(today.netPL || 0).toFixed(2)}
+Today W/L: ${today.winsCount || 0}/${today.lossesCount || 0}
 
-                📈 <b>Overall Stats:</b>
-                Overall P&L: $${overall.netPL.toFixed(2)}
-                Overall W/L: ${overall.winsCount}/${overall.lossesCount}
-                Total Trades: ${overall.tradesCount}
-                Capital: $${state.capital.toFixed(2)}
-            `
+📈 <b>Overall Stats:</b>
+Overall P&amp;L: $${(overall.netPL || 0).toFixed(2)}
+Overall W/L: ${overall.winsCount || 0}/${overall.lossesCount || 0}
+Total Trades: ${overall.tradesCount || 0}
+Capital: $${state.capital.toFixed(2)}`
                 : ''
             }`.trim();
         await this.sendMessage(message);
@@ -649,9 +659,17 @@ class TelegramService {
 
     static async sendSessionSummary() {
         try {
+            console.log('[DEBUG] sendSessionSummary() called');
+
             const stats = SessionManager.getSessionStats();
             const today = TradeHistoryManager.getTodayStats();
             const overall = TradeHistoryManager.getOverallStats();
+
+            console.log('[DEBUG] Session stats:', JSON.stringify(stats));
+            console.log('[DEBUG] Today stats:', JSON.stringify({
+                tradesCount: today.tradesCount,
+                netPL: today.netPL
+            }));
 
             // Build per-asset breakdown (today)
             let assetBreakdown = '';
@@ -687,51 +705,61 @@ class TelegramService {
                     ? ((day.winsCount / day.tradesCount) * 100).toFixed(1)
                     : '0.0';
                 const pnlEmoji = day.netPL >= 0 ? '🟢' : '🔴';
-                recentDaysStr += `\n  ${day.date}: ${day.tradesCount}t ${day.winsCount}W/${day.lossesCount}L (${wr}%) ${pnlEmoji} $${day.netPL.toFixed(2)}`;
+                recentDaysStr += `\n  ${day.date}: ${day.tradesCount}t ${day.winsCount}W/${day.lossesCount}L (${wr}%) ${pnlEmoji} $${(day.netPL || 0).toFixed(2)}`;
             });
 
             const overallWinRate = overall.tradesCount > 0
                 ? ((overall.winsCount / overall.tradesCount) * 100).toFixed(1) + '%'
                 : '0.0%';
 
-            const message = `
-            📊 <b>SESSION SUMMARY</b>
+            const message = [
+                `📊 <b>SESSION SUMMARY</b>`,
+                ``,
+                `📅 <b>Today (${TradeHistoryManager.getDateKey()}):</b>`,
+                `Duration: ${stats.duration}`,
+                `Trades: ${stats.trades}`,
+                `Wins: ${stats.wins} | Losses: ${stats.losses}`,
+                `Win Rate: ${stats.winRate}`,
+                `Loss Stats: x2:${today.x2Losses || 0} | x3:${today.x3Losses || 0} | x4:${today.x4Losses || 0} | x5:${today.x5Losses || 0} | x6:${today.x6Losses || 0} | x7:${today.x7Losses || 0} | x8:${today.x8Losses || 0} | x9:${today.x9Losses || 0}`,
+                `Today P/L: $${(today.netPL || 0).toFixed(2)}`,
+                ``,
+                `📈 <b>Today's Per-Asset:</b>${assetBreakdown || '\n  No trades yet'}`,
+                ``,
+                `📊 <b>Overall Stats (${overall.firstTradeDate || 'N/A'} to ${overall.lastTradeDate || 'N/A'}):</b>`,
+                `Total Trades: ${overall.tradesCount || 0}`,
+                `Total Wins: ${overall.winsCount || 0} | Total Losses: ${overall.lossesCount || 0}`,
+                `Overall Win Rate: ${overallWinRate}`,
+                `Overall P/L: $${(overall.netPL || 0).toFixed(2)}`,
+                `Loss Stats: x2:${overall.x2Losses || 0} | x3:${overall.x3Losses || 0} | x4:${overall.x4Losses || 0} | x5:${overall.x5Losses || 0} | x6:${overall.x6Losses || 0} | x7:${overall.x7Losses || 0} | x8:${overall.x8Losses || 0} | x9:${overall.x9Losses || 0}`,
+                ``,
+                `📈 <b>Overall Per-Asset:</b>${overallAssetBreakdown || '\n  No trades yet'}`,
+                ``,
+                `📆 <b>Recent Days:</b>${recentDaysStr || '\n  No history yet'}`,
+                ``,
+                `💰 Current Capital: $${state.capital.toFixed(2)}`
+            ].join('\n');
 
-            📅 <b>Today (${TradeHistoryManager.getDateKey()}):</b>
-            Duration: ${stats.duration}
-            Trades: ${stats.trades}
-            Wins: ${stats.wins} | Losses: ${stats.losses}
-            Win Rate: ${stats.winRate}
-            Loss Stats: x2:${today.x2Losses} | x3:${today.x3Losses} | x4:${today.x4Losses} | x5:${today.x5Losses} | x6:${today.x6Losses} | x7:${today.x7Losses} | x8:${today.x8Losses} | x9:${today.x9Losses}
-            Today P/L: $${today.netPL.toFixed(2)}
+            console.log(`[DEBUG] Session summary message built (${message.length} chars)`);
+            console.log(`[DEBUG] Session summary preview: ${message.substring(0, 150)}...`);
 
-            📈 <b>Today's Per-Asset:</b>${assetBreakdown || '\n  No trades yet'}
-
-            📊 <b>Overall Stats (${overall.firstTradeDate || 'N/A'} to ${overall.lastTradeDate || 'N/A'}):</b>
-            Total Trades: ${overall.tradesCount}
-            Total Wins: ${overall.winsCount} | Total Losses: ${overall.lossesCount}
-            Overall Win Rate: ${overallWinRate}
-            Overall P/L: $${overall.netPL.toFixed(2)}
-            Loss Stats: x2:${overall.x2Losses} | x3:${overall.x3Losses} | x4:${overall.x4Losses} | x5:${overall.x5Losses} | x6:${overall.x6Losses} | x7:${overall.x7Losses} | x8:${overall.x8Losses} | x9:${overall.x9Losses}
-
-            📈 <b>Overall Per-Asset:</b>${overallAssetBreakdown || '\n  No trades yet'}
-
-            📆 <b>Recent Days:</b>${recentDaysStr || '\n  No history yet'}
-
-            💰 Current Capital: $${state.capital.toFixed(2)}
-        `.trim();
             await this.sendMessage(message);
         } catch (err) {
             LOGGER.error(`❌ sendSessionSummary crashed: ${err.message}`);
+            console.error('[DEBUG] sendSessionSummary full error:', err);
         }
     }
 
     static async sendDayEndSummary(dateKey) {
         try {
+            console.log(`[DEBUG] sendDayEndSummary() called for ${dateKey}`);
+
             const dayStats = TradeHistoryManager.getDayStats(dateKey);
             const overall = TradeHistoryManager.getOverallStats();
 
-            if (!dayStats || dayStats.tradesCount === 0) return;
+            if (!dayStats || dayStats.tradesCount === 0) {
+                console.log('[DEBUG] No day stats or zero trades, skipping day end summary');
+                return;
+            }
 
             const dayWinRate = dayStats.tradesCount > 0
                 ? ((dayStats.winsCount / dayStats.tradesCount) * 100).toFixed(1) + '%'
@@ -747,42 +775,45 @@ class TelegramService {
                     const a = dayStats.assets[symbol];
                     if (a && a.tradesCount > 0) {
                         const wr = ((a.winsCount / a.tradesCount) * 100).toFixed(1);
-                        assetBreakdown += `\n  ${symbol}: ${a.tradesCount}t ${a.winsCount}W/${a.lossesCount}L (${wr}%) P/L: $${a.netPL.toFixed(2)}`;
+                        assetBreakdown += `\n  ${symbol}: ${a.tradesCount}t ${a.winsCount}W/${a.lossesCount}L (${wr}%) P/L: $${(a.netPL || 0).toFixed(2)}`;
                     }
                 });
             }
 
-            const pnlEmoji = dayStats.netPL >= 0 ? '🟢' : '🔴';
+            const pnlEmoji = (dayStats.netPL || 0) >= 0 ? '🟢' : '🔴';
 
-            const message = `
-            🌙 <b>END OF DAY REPORT — ${dateKey}</b>
+            const message = [
+                `🌙 <b>END OF DAY REPORT - ${dateKey}</b>`,
+                ``,
+                `${pnlEmoji} <b>Day Results:</b>`,
+                `├ Trades: ${dayStats.tradesCount}`,
+                `├ Wins: ${dayStats.winsCount} | Losses: ${dayStats.lossesCount}`,
+                `├ Win Rate: ${dayWinRate}`,
+                `├ Profit: $${(dayStats.profit || 0).toFixed(2)} | Loss: $${(dayStats.loss || 0).toFixed(2)}`,
+                `├ Net P/L: $${(dayStats.netPL || 0).toFixed(2)}`,
+                `├ Start Capital: $${(dayStats.startCapital || 0).toFixed(2)}`,
+                `└ End Capital: $${(dayStats.endCapital || 0).toFixed(2)}`,
+                ``,
+                `📊 Loss Stats: x2:${dayStats.x2Losses || 0} x3:${dayStats.x3Losses || 0} x4:${dayStats.x4Losses || 0} x5:${dayStats.x5Losses || 0} x6:${dayStats.x6Losses || 0} x7:${dayStats.x7Losses || 0} x8:${dayStats.x8Losses || 0} x9:${dayStats.x9Losses || 0}`,
+                ``,
+                `📈 <b>Per-Asset:</b>${assetBreakdown || '\n  No trades'}`,
+                ``,
+                `📊 <b>Overall Stats (All Time):</b>`,
+                `├ Total Days: ${TradeHistoryManager.getAllDays().length}`,
+                `├ Total Trades: ${overall.tradesCount || 0}`,
+                `├ Total Wins: ${overall.winsCount || 0} | Total Losses: ${overall.lossesCount || 0}`,
+                `├ Overall Win Rate: ${overallWinRate}`,
+                `├ Overall P/L: $${(overall.netPL || 0).toFixed(2)}`,
+                `└ Loss Stats: x2:${overall.x2Losses || 0} x3:${overall.x3Losses || 0} x4:${overall.x4Losses || 0} x5:${overall.x5Losses || 0} x6:${overall.x6Losses || 0} x7:${overall.x7Losses || 0} x8:${overall.x8Losses || 0} x9:${overall.x9Losses || 0}`,
+                ``,
+                `💰 Current Capital: $${state.capital.toFixed(2)}`
+            ].join('\n');
 
-            ${pnlEmoji} <b>Day Results:</b>
-            ├ Trades: ${dayStats.tradesCount}
-            ├ Wins: ${dayStats.winsCount} | Losses: ${dayStats.lossesCount}
-            ├ Win Rate: ${dayWinRate}
-            ├ Profit: $${dayStats.profit.toFixed(2)} | Loss: $${dayStats.loss.toFixed(2)}
-            ├ Net P/L: $${dayStats.netPL.toFixed(2)}
-            ├ Start Capital: $${dayStats.startCapital.toFixed(2)}
-            └ End Capital: $${dayStats.endCapital.toFixed(2)}
-
-            📊 Loss Stats: x2:${dayStats.x2Losses} x3:${dayStats.x3Losses} x4:${dayStats.x4Losses} x5:${dayStats.x5Losses} x6:${dayStats.x6Losses} x7:${dayStats.x7Losses} x8:${dayStats.x8Losses} x9:${dayStats.x9Losses}
-
-            📈 <b>Per-Asset:</b>${assetBreakdown || '\n  No trades'}
-
-            📊 <b>Overall Stats (All Time):</b>
-            ├ Total Days: ${TradeHistoryManager.getAllDays().length}
-            ├ Total Trades: ${overall.tradesCount}
-            ├ Total Wins: ${overall.winsCount} | Total Losses: ${overall.lossesCount}
-            ├ Overall Win Rate: ${overallWinRate}
-            ├ Overall P/L: $${overall.netPL.toFixed(2)}
-            └ Loss Stats: x2:${overall.x2Losses} x3:${overall.x3Losses} x4:${overall.x4Losses} x5:${overall.x5Losses} x6:${overall.x6Losses} x7:${overall.x7Losses} x8:${overall.x8Losses} x9:${overall.x9Losses}
-
-            💰 Current Capital: $${state.capital.toFixed(2)}
-        `.trim();
+            console.log(`[DEBUG] Day end summary message built (${message.length} chars)`);
             await this.sendMessage(message);
         } catch (err) {
             LOGGER.error(`❌ sendDayEndSummary crashed: ${err.message}`);
+            console.error('[DEBUG] sendDayEndSummary full error:', err);
         }
     }
 
@@ -797,38 +828,37 @@ class TelegramService {
                 assetConfigInfo += `\n  ${symbol}: ${ac.TIMEFRAME_LABEL} candles, Duration: ${ac.DURATION}${ac.DURATION_UNIT}`;
             });
 
-            // Validate CONFIG values before using them
             console.log('[DEBUG] CONFIG Session Values:');
             console.log(`  TOKYO_START: ${CONFIG.TOKYO_START}, TOKYO_END: ${CONFIG.TOKYO_END}`);
             console.log(`  LONDON_START: ${CONFIG.LONDON_START}, LONDON_END: ${CONFIG.LONDON_END}`);
             console.log(`  NEWYORK_START: ${CONFIG.NEWYORK_START}, NEWYORK_END: ${CONFIG.NEWYORK_END}`);
             console.log(`  SYDNEY_START: ${CONFIG.SYDNEY_START}, SYDNEY_END: ${CONFIG.SYDNEY_END}`);
 
-            const message = `
-            🤖 <b>DERIV RISE/FALL BOT STARTED</b>
-            Strategy: Candle-pattern detection — lookback ${CONFIG.CANDLE_PATTERN_LOOKBACK || 7}
-            Mode: <b>Independent Per-Asset Management</b>
-            Capital: $${state.capital.toFixed(2)}
-            Stake: $${CONFIG.STAKE}
-
-            🔧 <b>Asset Configurations:</b>${assetConfigInfo}
-
-            Max Positions Per Asset: ${CONFIG.MAX_OPEN_POSITIONS_PER_ASSET}
-            Session Target: $${CONFIG.SESSION_PROFIT_TARGET}
-            Stop Loss: $${CONFIG.SESSION_STOP_LOSS}
-            Trading Sessions: ${CONFIG.USE_TRADING_SESSIONS ? 'ENABLED' : 'DISABLED (24/7)'}
-
-            📊 <b>Historical Stats:</b>
-            ├ Trading Days: ${totalDays}
-            ├ Total Trades: ${overall.tradesCount}
-            ├ Overall P/L: $${overall.netPL.toFixed(2)}
-            └ Period: ${overall.firstTradeDate || 'N/A'} to ${overall.lastTradeDate || 'N/A'}
-
-            🕐 TOKYO Session: ${CONFIG.TOKYO_START || 'UNDEFINED'}:00 - ${CONFIG.TOKYO_END || 'UNDEFINED'}:00 (GMT+1)
-            🕐 London Session: ${CONFIG.LONDON_START || 'UNDEFINED'}:00 - ${CONFIG.LONDON_END || 'UNDEFINED'}:00 (GMT+1)
-            🕐 New York Session: ${CONFIG.NEWYORK_START || 'UNDEFINED'}:00 - ${CONFIG.NEWYORK_END || 'UNDEFINED'}:00 (GMT+1)
-            🕐 SYDNEY Session: ${CONFIG.SYDNEY_START || 'UNDEFINED'}:00 - ${CONFIG.SYDNEY_END || 'UNDEFINED'}:00 (GMT+1)
-        `.trim();
+            const message = [
+                `🤖 <b>DERIV RISE/FALL BOT STARTED</b>`,
+                `Strategy: Candle-pattern detection - lookback ${CONFIG.CANDLE_PATTERN_LOOKBACK || 7}`,
+                `Mode: <b>Independent Per-Asset Management</b>`,
+                `Capital: $${state.capital.toFixed(2)}`,
+                `Stake: $${CONFIG.STAKE}`,
+                ``,
+                `🔧 <b>Asset Configurations:</b>${assetConfigInfo}`,
+                ``,
+                `Max Positions Per Asset: ${CONFIG.MAX_OPEN_POSITIONS_PER_ASSET}`,
+                `Session Target: $${CONFIG.SESSION_PROFIT_TARGET}`,
+                `Stop Loss: $${CONFIG.SESSION_STOP_LOSS}`,
+                `Trading Sessions: ${CONFIG.USE_TRADING_SESSIONS ? 'ENABLED' : 'DISABLED (24/7)'}`,
+                ``,
+                `📊 <b>Historical Stats:</b>`,
+                `├ Trading Days: ${totalDays}`,
+                `├ Total Trades: ${overall.tradesCount || 0}`,
+                `├ Overall P/L: $${(overall.netPL || 0).toFixed(2)}`,
+                `└ Period: ${overall.firstTradeDate || 'N/A'} to ${overall.lastTradeDate || 'N/A'}`,
+                ``,
+                `🕐 TOKYO: ${CONFIG.TOKYO_START || 0}:00 - ${CONFIG.TOKYO_END || 0}:00 (GMT+1)`,
+                `🕐 London: ${CONFIG.LONDON_START || 0}:00 - ${CONFIG.LONDON_END || 0}:00 (GMT+1)`,
+                `🕐 New York: ${CONFIG.NEWYORK_START || 0}:00 - ${CONFIG.NEWYORK_END || 0}:00 (GMT+1)`,
+                `🕐 SYDNEY: ${CONFIG.SYDNEY_START || 0}:00 - ${CONFIG.SYDNEY_END || 0}:00 (GMT+1)`
+            ].join('\n');
 
             if (!message || message.length === 0) {
                 LOGGER.error('[TELEGRAM] ❌ Message is empty before sending!');
@@ -848,7 +878,11 @@ class TelegramService {
 
     static async sendHourlySummary() {
         try {
+            console.log('[DEBUG] sendHourlySummary() called');
+
             const statsSnapshot = { ...state.hourlyStats };
+
+            console.log('[DEBUG] Hourly stats snapshot:', JSON.stringify(statsSnapshot));
 
             if (statsSnapshot.trades === 0) {
                 LOGGER.info(
@@ -861,7 +895,7 @@ class TelegramService {
             const winRate =
                 totalTrades > 0
                     ? ((statsSnapshot.wins / totalTrades) * 100).toFixed(1)
-                    : 0;
+                    : '0.0';
             const pnlEmoji = statsSnapshot.pnl >= 0 ? '🟢' : '🔴';
             const pnlStr =
                 (statsSnapshot.pnl >= 0 ? '+' : '') +
@@ -881,29 +915,31 @@ class TelegramService {
                 }
             });
 
-            const message = `
-            ⏰ <b>Rise/Fall Bot Hourly Summary</b>
+            const message = [
+                `⏰ <b>Rise/Fall Bot Hourly Summary</b>`,
+                ``,
+                `📊 <b>Last Hour</b>`,
+                `├ Trades: ${statsSnapshot.trades}`,
+                `├ Wins: ${statsSnapshot.wins} | Losses: ${statsSnapshot.losses}`,
+                `├ Win Rate: ${winRate}%`,
+                `└ ${pnlEmoji} <b>P&amp;L:</b> ${pnlStr}`,
+                ``,
+                `📅 <b>Today (${TradeHistoryManager.getDateKey()})</b>`,
+                `├ Total Trades: ${today.tradesCount || 0}`,
+                `├ Total W/L: ${today.winsCount || 0}/${today.lossesCount || 0}`,
+                `└ Today P&amp;L: ${(today.netPL || 0) >= 0 ? '+' : ''}$${(today.netPL || 0).toFixed(2)}`,
+                ``,
+                `📈 <b>Overall (All Time)</b>`,
+                `├ Total Trades: ${overall.tradesCount || 0}`,
+                `├ Total W/L: ${overall.winsCount || 0}/${overall.lossesCount || 0}`,
+                `└ Overall P&amp;L: ${(overall.netPL || 0) >= 0 ? '+' : ''}$${(overall.netPL || 0).toFixed(2)}`,
+                ``,
+                `💰 Current Capital: $${state.capital.toFixed(2)}`,
+                ``,
+                `🔧 <b>Per-Asset Status:</b>${assetInfo}`
+            ].join('\n');
 
-            📊 <b>Last Hour</b>
-            ├ Trades: ${statsSnapshot.trades}
-            ├ Wins: ${statsSnapshot.wins} | Losses: ${statsSnapshot.losses}
-            ├ Win Rate: ${winRate}%
-            └ ${pnlEmoji} <b>P&L:</b> ${pnlStr}
-
-            📅 <b>Today (${TradeHistoryManager.getDateKey()})</b>
-            ├ Total Trades: ${today.tradesCount}
-            ├ Total W/L: ${today.winsCount}/${today.lossesCount}
-            └ Today P&L: ${today.netPL >= 0 ? '+' : ''}$${today.netPL.toFixed(2)}
-
-            📈 <b>Overall (All Time)</b>
-            ├ Total Trades: ${overall.tradesCount}
-            ├ Total W/L: ${overall.winsCount}/${overall.lossesCount}
-            └ Overall P&L: ${overall.netPL >= 0 ? '+' : ''}$${overall.netPL.toFixed(2)}
-
-            💰 Current Capital: $${state.capital.toFixed(2)}
-
-            🔧 <b>Per-Asset Status:</b>${assetInfo}
-        `.trim();
+            console.log(`[DEBUG] Hourly summary message built (${message.length} chars)`);
 
             try {
                 await this.sendMessage(message);
@@ -917,6 +953,7 @@ class TelegramService {
                 );
             }
 
+            // Reset hourly stats
             state.hourlyStats = {
                 trades: 0,
                 wins: 0,
@@ -926,6 +963,7 @@ class TelegramService {
             };
         } catch (err) {
             LOGGER.error(`❌ sendHourlySummary crashed: ${err.message}`);
+            console.error('[DEBUG] sendHourlySummary full error:', err);
         }
     }
 
@@ -941,11 +979,13 @@ class TelegramService {
 
         LOGGER.info(`📱 Hourly Telegram timer started (first summary in ${Math.ceil(timeUntilNextHour / 60000)} min)`);
 
+        // FIX 2: Bind explicitly to TelegramService to be safe
+        const self = this;
         setTimeout(() => {
-            this.sendHourlySummary();
+            self.sendHourlySummary();
             setInterval(() => {
-                this.sendHourlySummary();
-            }, 60 * 60 * 1000); // Every hour
+                self.sendHourlySummary();
+            }, 60 * 60 * 1000);
         }, timeUntilNextHour);
     }
 
