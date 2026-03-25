@@ -1083,12 +1083,12 @@ const CONFIG = {
     WS_URL: 'wss://ws.derivws.com/websockets/v3',
 
     // Capital Settings
-    INITIAL_CAPITAL: 500,
+    INITIAL_CAPITAL: 250,
     STAKE: 0.35,
 
     // Session Targets
-    SESSION_PROFIT_TARGET: 50000,
-    SESSION_STOP_LOSS: -250,
+    SESSION_PROFIT_TARGET: 500000,
+    SESSION_STOP_LOSS: -5000,
 
     // Default Candle Settings (used if asset has no specific config)
     GRANULARITY: 60,
@@ -1096,10 +1096,10 @@ const CONFIG = {
     MAX_CANDLES_STORED: 300,
     CANDLES_TO_LOAD: 300,
 
-    CANDLE_PATTERN_LOOKBACK: 6, // Number of previous candles to analyze for pattern detection (user configurable)
+    CANDLE_PATTERN_LOOKBACK: 9, // Number of previous candles to analyze for pattern detection (user configurable)
 
     // Default Trade Duration Settings (used if asset has no specific config)
-    DURATION: 54,
+    DURATION: 57,
     DURATION_UNIT: 's',
 
     // Trade Settings — NOW PER ASSET
@@ -1107,7 +1107,7 @@ const CONFIG = {
     TRADE_DELAY: 1000,
     MARTINGALE_MULTIPLIER: 1.48,
     MARTINGALE_MULTIPLIER2: 1.8,
-    MARTINGALE_MULTIPLIER3: 2.0,
+    MARTINGALE_MULTIPLIER3: 2.1,
     MARTINGALE_MULTIPLIER4: 2.1,
     MARTINGALE_MULTIPLIER5: 2.2,
     // MARTINGALE_MULTIPLIER6: 3.0,
