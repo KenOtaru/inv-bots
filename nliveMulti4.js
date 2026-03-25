@@ -2339,6 +2339,12 @@ class EnhancedAccumulatorBot {
      * Detect dangerous patterns from historical losses
      */
     detectDangerousPattern(asset, currentDigitCount, stayedInArray) {
+
+        // FIX: Guard against undefined/null arguments
+        if (!stayedInArray || !Array.isArray(stayedInArray) || stayedInArray.length === 0) {
+            return false;
+        }
+
         const recentLosses = this.learningSystem.lossPatterns[asset] || [];
 
         if (recentLosses.length === 0) {
@@ -2368,6 +2374,11 @@ class EnhancedAccumulatorBot {
      */
     detectDangerousPattern2(asset) {
         const history = this.extendedStayedIn[asset];
+
+        // FIX: Guard against undefined/null/non-array
+        if (!history || !Array.isArray(history) || history.length < 10) {
+            return false;
+        }
 
         if (!history || history.length < 10) {
             return false;
@@ -2407,9 +2418,17 @@ class EnhancedAccumulatorBot {
             return;
         }
 
-        if (this.detectDangerousPattern(asset)) {
-            console.log(`[${asset}] ⚠️ Trade blocked due to dangerous pattern`);
-            return;
+        // FIX: Pass the required arguments from assetState
+        const stayedInArray = assetState.stayedInArray;
+        const currentDigitCount = (stayedInArray && stayedInArray.length >= 100)
+            ? stayedInArray[99] + 1
+            : null;
+
+        if (currentDigitCount !== null && stayedInArray) {
+            if (this.detectDangerousPattern(asset, currentDigitCount, stayedInArray)) {
+                console.log(`[${asset}] ⚠️ Trade blocked due to dangerous pattern`);
+                return;
+            }
         }
 
         if (this.detectDangerousPattern2(asset)) {
