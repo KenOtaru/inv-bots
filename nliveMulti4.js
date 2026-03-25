@@ -2176,7 +2176,7 @@ class EnhancedAccumulatorBot {
                 if (decision.shouldTrade) {
                     console.log(`[${asset}] 🎯 TRADE SIGNAL | Score: ${decision.ensembleScore.toFixed(4)} | Confidence: ${decision.confidence.toFixed(2)}`);
                     console.log(`[${asset}] Model contributions: ${JSON.stringify(decision.modelContributions)}`);
-                    this.placeTrade(asset);
+                    this.placeTrade(asset, decision);
                 }
             }
         }
@@ -2399,7 +2399,7 @@ class EnhancedAccumulatorBot {
     // TRADE EXECUTION (PRESERVED)
     // ========================================================================
 
-    placeTrade(asset) {
+    placeTrade(asset, decision) {
         if (this.tradeInProgress) return;
         const assetState = this.assetStates[asset];
         if (!assetState || !assetState.currentProposalId) {
@@ -2425,13 +2425,11 @@ class EnhancedAccumulatorBot {
         console.log(`🚀 Placing trade for Asset: [${asset}] | Stake: ${this.currentStake.toFixed(2)}`);
 
         const telegramMsg = `
-            🚀 Placing trade for Asset:
-            
-            📊 <b>${asset}</b>
-            
+            🚀 Placing trade for Asset ${asset}
+            📊 <b>TRADE SIGNAL: ${decision.ensembleScore.toFixed(4)} | ${decision.confidence.toFixed(2)}</b>
+            📊 <b>Model contributions: ${JSON.stringify(decision.modelContributions)}</b>
             📊 <b>Current Stake:</b> $${this.currentStake.toFixed(2)}
-            
-            ⏰ ${new Date().toLocaleTimeString()}
+            📊 <b>Current Balance:</b> $${this.balance.toFixed(2)}
         `.trim();
         this.sendTelegramMessage(telegramMsg);
 
