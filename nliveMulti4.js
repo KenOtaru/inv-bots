@@ -1291,9 +1291,6 @@ class EnsembleDecisionMaker {
 //     }
 // }
 
-// ============================================================================
-// MAIN ENHANCED TRADING BOT
-// ============================================================================
 
 class EnhancedAccumulatorBot {
     constructor(token, config = {}) {
@@ -1301,7 +1298,7 @@ class EnhancedAccumulatorBot {
         this.ws = null;
         this.connected = false;
         this.wsReady = false;
-        this.assets = config.assets || ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'];
+        this.assets = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'];
 
         this.config = {
             initialStake: config.initialStake || 1,
