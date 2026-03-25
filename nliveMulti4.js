@@ -20,7 +20,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'nliveMulti4-state001.json');
+const STATE_FILE = path.join(__dirname, 'nliveMulti4-state0001.json');
 const STATE_SAVE_INTERVAL = 5000; // Save every 5 seconds
 
 class StatePersistence {
@@ -2436,6 +2436,11 @@ class EnhancedAccumulatorBot {
             return;
         }
 
+        if (decision.confidence < 0.55) {
+            console.log(`[${asset}] ⚠️ Trade blocked due to low confidence`);
+            return;
+        }
+
         const request = {
             buy: assetState.currentProposalId,
             price: this.currentStake.toFixed(2)
@@ -2445,9 +2450,10 @@ class EnhancedAccumulatorBot {
 
         const telegramMsg = `
             🚀 Placing trade for Asset ${asset}
-            📊 <b>TRADE SIGNAL: ${decision.ensembleScore.toFixed(4)} | ${decision.confidence.toFixed(2)}</b>
-            📊 <b>Model contributions: ${JSON.stringify(decision.modelContributions)}</b>
-            📊 <b>Current Stake:</b> $${this.currentStake.toFixed(2)}
+            <b>TRADE SIGNAL: ${decision.ensembleScore.toFixed(4)}</b>
+            <b>CONFIDENCE: ${decision.confidence.toFixed(2)}</b>
+            <b>Model contributions: ${JSON.stringify(decision.modelContributions)}</b>
+            <b>Current Stake:</b> $${this.currentStake.toFixed(2)}
         `.trim();
         this.sendTelegramMessage(telegramMsg);
 
