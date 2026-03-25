@@ -1697,7 +1697,7 @@ class EnhancedAccumulatorBot {
             this.wsReady = true;
             this.initializeSubscriptions();
             this.processMessageQueue();
-            
+
             if (this.reconnectAttempts === 0) {
                 // this.sendTelegramMessage('🟢 <b>Bot Connected & Authorized</b>');
             }
@@ -2698,20 +2698,20 @@ class EnhancedAccumulatorBot {
             const currentMinutes = gmtPlus1Time.getUTCMinutes();
 
             // Weekend logic: Saturday 11pm to Monday 8am GMT+1 -> Disconnect and stay disconnected
-            const isWeekend = (currentDay === 0) || // Sunday
-                (currentDay === 6 && currentHours >= 23) || // Saturday after 11pm
-                (currentDay === 1 && currentHours < 8);    // Monday before 8am
+            // const isWeekend = (currentDay === 0) || // Sunday
+            //     (currentDay === 6 && currentHours >= 23) || // Saturday after 11pm
+            //     (currentDay === 1 && currentHours < 8);    // Monday before 8am
 
-            if (isWeekend) {
-                if (!this.endOfDay) {
-                    console.log("Weekend trading suspension (Saturday 11pm - Monday 8am). Disconnecting...");
-                    this.sendHourlySummary();
-                    this.sendTelegramMessage("🛌 <b>Weekend Trading Suspension</b>\nMarket is closed until Monday 8:00 AM GMT+1.");
-                    this.disconnect();
-                    this.endOfDay = true;
-                }
-                return; // Prevent any reconnection logic during the weekend
-            }
+            // if (isWeekend) {
+            //     if (!this.endOfDay) {
+            //         console.log("Weekend trading suspension (Saturday 11pm - Monday 8am). Disconnecting...");
+            //         this.sendHourlySummary();
+            //         this.sendTelegramMessage("🛌 <b>Weekend Trading Suspension</b>\nMarket is closed until Monday 8:00 AM GMT+1.");
+            //         this.disconnect();
+            //         this.endOfDay = true;
+            //     }
+            //     return; // Prevent any reconnection logic during the weekend
+            // }
 
             if (this.endOfDay && currentHours === 8 && currentMinutes >= 0) {
                 console.log("It's 8:00 AM GMT+1, reconnecting the bot.");
@@ -2805,10 +2805,10 @@ class EnhancedAccumulatorBot {
         StatePersistence.startAutoSave(this);
 
         this.connect();
-        this.checkTimeForDisconnectReconnect();
+        // this.checkTimeForDisconnectReconnect();
 
         this.sendTelegramMessage(
-            `🚀 <b>Bot Started</b>\n` +
+            `🚀 <b>STARTED ENHANCED AI ACCUMULATOR TRADING BOT v2.5</b>\n` +
             `Initial Stake: $${this.config.initialStake.toFixed(2)}\n` +
             `Stop Loss: $${this.config.stopLoss}\n` +
             `Take Profit: $${this.config.takeProfit}`
