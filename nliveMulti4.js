@@ -2277,7 +2277,7 @@ class EnhancedAccumulatorBot {
                 const decision = this.makeEnhancedTradeDecision(asset, stayedInArray);
 
                 if (decision.shouldTrade) {
-                    console.log(`[${asset}] 🎯 TRADE SIGNAL | Score: ${decision.ensembleScore.toFixed(4)} | Confidence: ${decision.confidence.toFixed(2)}`);
+                    console.log(`[${asset}] 🎯 TRADE SIGNAL | Score: ${decision.ensembleScore.toFixed(4)} | Confidence: ${decision.confidence.toFixed(2)} | SurvivalProb: ${decision.survivalProb.toFixed(2)} | Threshold: ${decision.threshold.toFixed(2)}`);
                     console.log(`[${asset}] Model contributions: ${JSON.stringify(decision.modelContributions)}`);
                     this.placeTrade(asset, decision);
                 }
