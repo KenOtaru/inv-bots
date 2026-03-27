@@ -70,7 +70,7 @@ class StatePersistence {
             });
 
             fs.writeFileSync(STATE_FILE, JSON.stringify(persistableState, null, 2));
-            console.log(`💾 State saved successfully at ${new Date().toLocaleTimeString()}`);
+            // console.log(`💾 State saved successfully at ${new Date().toLocaleTimeString()}`);
             return true;
         } catch (error) {
             console.error(`❌ Failed to save state: ${error.message}`);
