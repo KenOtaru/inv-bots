@@ -2544,6 +2544,13 @@ class EnhancedAccumulatorBot {
             return;
         }
 
+        if (this.consecutiveLosses > 0) {
+            if (this.lastEnsemblePredictions.pattern.value > 0.55) {
+                console.log(`[${asset}] ⚠️ Trade blocked due to low Pattern Model confidence`);
+                return;
+            }
+        }
+
         const request = {
             buy: assetState.currentProposalId,
             price: this.currentStake.toFixed(2)
@@ -2554,8 +2561,20 @@ class EnhancedAccumulatorBot {
         const telegramMsg = `
             🚀 Placing trade for Asset ${asset}
             <b>TRADE SIGNAL: ${decision.ensembleScore.toFixed(4)}</b>
-            <b>CONFIDENCE: ${decision.confidence.toFixed(2)}</b>
-            <b>Model contributions: ${JSON.stringify(decision.modelContributions)}</b>
+
+            <b>DECISION: </b>
+            <b>EnsembleScore: ${decision.ensembleScore.toFixed(2)}</b>
+            <b>Confidence: ${decision.confidence.toFixed(2)}</b>
+            <b>SurvivalProb: ${decision.survivalProb.toFixed(2)}</b>
+            <b>Threshold: ${decision.threshold.toFixed(2)}</b>
+            <br>
+            <b>ModelContributions: </b>
+            <b>kaplanMeier: ${decision.modelContributions?.kaplanMeier} </b>
+            <b>bayesian: ${decision.modelContributions?.bayesian}</b>
+            <b>markov: ${decision.modelContributions?.markov}</b>
+            <b>neural: ${decision.modelContributions?.neural} </b>
+            <b>Pattern: ${decision.modelContributions?.pattern} </b>
+            <br>
             <b>Current Stake:</b> $${this.currentStake.toFixed(2)}
         `.trim();
         this.sendTelegramMessage(telegramMsg);
