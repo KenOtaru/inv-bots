@@ -1047,7 +1047,7 @@ class EnsembleDecisionMaker {
             .filter(p => p !== null && p !== undefined)
             .map(p => p.value);
 
-        const agreement = values.length > 1 ?
+        const agreement = values.length > 2 ?
             1 - (Math.max(...values) - Math.min(...values)) : 0;
 
         // console.log('Adaptive Threshold:', this.adaptiveThreshold);
@@ -2409,13 +2409,6 @@ class EnhancedAccumulatorBot {
             console.log(`[${asset}] ⚠️ Trade blocked due to low confidence`);
             return;
         }
-
-        // if (this.consecutiveLosses > 0) {
-        if (this.lastEnsemblePredictions?.pattern?.confidence < 0.55 || this.lastEnsemblePredictions?.pattern?.confidence === null) {
-            console.log(`[${asset}] ⚠️ Trade blocked due to low or No Pattern Model confidence`);
-            return;
-        }
-        // }
 
         const request = {
             buy: assetState.currentProposalId,
