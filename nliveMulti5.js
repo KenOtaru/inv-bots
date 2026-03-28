@@ -8852,6 +8852,14 @@ class EnhancedAccumulatorBot {
             });
         }
 
+        console.log(`[${asset}] Ensemble Decision: score=${ensemble.score.toFixed(3)} ` +
+            `(threshold=${ensemble.threshold.toFixed(3)}) | ` +
+            `agreement=${ensemble.agreement.toFixed(3)} | ` +
+            `survivalProb=${survivalProb.toFixed(3)} | ` +
+            `Model Contributions: ${JSON.stringify(modelContributions)} | ` +
+            `reason=${ensemble.reason} | ` +
+            `shouldTrade=${ensemble.shouldTrade}`);
+
         return {
             shouldTrade,
             ensembleScore: ensemble.score,
