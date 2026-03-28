@@ -7877,7 +7877,7 @@ class EnhancedAccumulatorBot {
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
             console.error('❌ Max reconnection attempts reached');
             this.sendTelegramMessage(
-                `❌ <b>Max Reconnection Attempts Reached</b>\n` +
+                `❌ <b>Max Reconnection Attempts Reached 2</b>\n` +
                 `Please restart the bot manually.\n` +
                 `Final P&L: $${this.totalProfitLoss.toFixed(2)}`
             );
@@ -7896,7 +7896,7 @@ class EnhancedAccumulatorBot {
         console.log(`🔄 Reconnecting in ${(delay / 1000).toFixed(1)}s... (Attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
 
         this.sendTelegramMessage(
-            `⚠️ <b>CONNECTION LOST - RECONNECTING</b>\n` +
+            `⚠️ <b>CONNECTION LOST - RECONNECTING 2</b>\n` +
             `📊 Attempt: ${this.reconnectAttempts}/${this.maxReconnectAttempts}\n` +
             `⏱️ Retrying in ${(delay / 1000).toFixed(1)}s`
         );
@@ -8005,7 +8005,7 @@ class EnhancedAccumulatorBot {
         if (message.msg_type === 'authorize') {
             if (message.error) {
                 console.error('Authentication failed:', message.error.message);
-                this.sendTelegramMessage(`❌ <b>Authentication Failed:</b> ${message.error.message}`);
+                this.sendTelegramMessage(`❌ <b>Authentication Failed 2:</b> ${message.error.message}`);
                 this.disconnect();
                 return;
             }
@@ -8733,36 +8733,36 @@ class EnhancedAccumulatorBot {
 
         // 1. Safety Checks (Pre-Decision)
         if (this.detectDangerousPattern(asset, currentDigitCount, stayedInArray)) {
-            return { 
-                shouldTrade: false, 
-                ensembleScore: 0, 
+            return {
+                shouldTrade: false,
+                ensembleScore: 0,
                 agreement: 0,
                 survivalProb: 0,
                 threshold: this.ensembleDecisionMaker.adaptiveThreshold,
                 modelContributions: {},
-                reason: 'dangerous_pattern' 
+                reason: 'dangerous_pattern'
             };
         }
         if (this.detectDangerousPattern2(asset)) {
-            return { 
-                shouldTrade: false, 
-                ensembleScore: 0, 
+            return {
+                shouldTrade: false,
+                ensembleScore: 0,
                 agreement: 0,
                 survivalProb: 0,
                 threshold: this.ensembleDecisionMaker.adaptiveThreshold,
                 modelContributions: {},
-                reason: 'short_run_pattern' 
+                reason: 'short_run_pattern'
             };
         }
         if (!this.isMarketConditionFavorable(asset)) {
-            return { 
-                shouldTrade: false, 
-                ensembleScore: 0, 
+            return {
+                shouldTrade: false,
+                ensembleScore: 0,
                 agreement: 0,
                 survivalProb: 0,
                 threshold: this.ensembleDecisionMaker.adaptiveThreshold,
                 modelContributions: {},
-                reason: 'unfavorable_market' 
+                reason: 'unfavorable_market'
             };
         }
 
@@ -9103,7 +9103,7 @@ class EnhancedAccumulatorBot {
         const riskMetrics = this.ensembleDecisionMaker.riskMetrics;
 
         const telegramMsg = `
-            🚀 <b>NEW TRADE SIGNAL</b> - ${asset}
+            🚀 <b>NEW TRADE SIGNAL 2</b> - ${asset}
 
             📊 <b>Ensemble Analysis</b>
             ├ Score: <b>${decision.ensembleScore.toFixed(4)}</b>
@@ -9310,7 +9310,7 @@ class EnhancedAccumulatorBot {
         const winRate = this.totalTrades > 0 ? ((this.totalWins / this.totalTrades) * 100).toFixed(1) : 0;
 
         const telegramMsg = `
-            ${resultEmoji} (Enhanced Accumulator Bot)
+            ${resultEmoji} (Enhanced Accumulator Bot 2)
             
             📊 <b>${asset}</b>
             ${pnlColor} <b>P&L:</b> ${pnlStr}
@@ -9698,7 +9698,7 @@ class EnhancedAccumulatorBot {
         }).join('\n');
 
         const message = `
-            ⏰ <b>Enhanced Accumulator Session Summary</b>
+            ⏰ <b>Enhanced Accumulator Session Summary 2</b>
 
             📊 <b>Session Stats</b>
             ├ Trades: ${stats.trades}
@@ -9730,9 +9730,9 @@ class EnhancedAccumulatorBot {
 
         try {
             await this.sendTelegramMessage(message);
-            console.log('📱 Telegram: Session Summary sent');
+            console.log('📱 Telegram: Session Summary sent 2');
         } catch (error) {
-            console.error(`❌ Telegram session summary failed: ${error.message}`);
+            console.error(`❌ Telegram session summary failed 2: ${error.message}`);
         }
 
         this.hourlyStats = {
@@ -9758,7 +9758,7 @@ class EnhancedAccumulatorBot {
     }
 
     sendErrorEmail(errorMessage) {
-        this.sendTelegramMessage(`❌ <b>ERROR REPORT</b>\n\n${errorMessage}`);
+        this.sendTelegramMessage(`❌ <b>ERROR REPORT 2</b>\n\n${errorMessage}`);
     }
 
     // ========================================================================
