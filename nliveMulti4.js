@@ -1140,7 +1140,7 @@ class EnsembleDecisionMaker {
 
             this.recentDecisions.forEach(decision => {
                 const ensemble = this.combinePredicitions(decision.predictions);
-                if (ensemble.score > threshold) {
+                if (ensemble.score > threshold && ensemble.agreement > 0.5) {
                     trades++;
                     if (decision.outcome) {
                         wins++;
@@ -1159,9 +1159,21 @@ class EnsembleDecisionMaker {
                 if (score > bestScore) {
                     bestScore = score;
                     bestThreshold = threshold;
+                    // this.ensembleScore = score;
+                    // this.ensembleAgreement = ensemble.agreement;
+                    // this.ensembleShouldTrade = ensemble.shouldTrade;
                 }
             }
+
+            this.ensembleScore = score;
+            this.ensembleAgreement = ensemble.agreement;
         });
+
+        // this.ensembleScore = score;
+        // this.ensembleAgreement = ensemble.agreement;
+        // this.ensembleShouldTrade = ensemble.shouldTrade;
+
+        console.log('kEnsemble Score:', this.ensembleScore.toFixed(3), 'Ensemble Agreement:', this.ensembleAgreement.toFixed(2));
 
         // Smooth transition to new threshold
         this.adaptiveThreshold = 0.8 * this.adaptiveThreshold + 0.2 * bestThreshold;
