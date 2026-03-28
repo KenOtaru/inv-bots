@@ -2254,7 +2254,7 @@ class EnhancedAccumulatorBot {
 
         // Combine all predictions
         const ensemble = this.ensembleDecisionMaker.combinePredicitions(predictions);
-        const ensembleAgreement = ensemble.agreement;
+        const ensembleAgreement = ensemble.ensembleAgreement;
         const ensembleAgreementScore = ensemble.agreementScore;
         console.log('Ensemble Decision:', ensemble.score.toFixed(2), ' (', this.ensembleDecisionMaker.adaptiveThreshold, ') |', ensemble.agreement.toFixed(2), '(0.5) |', 'shouldTrade:', ensemble.shouldTrade);
         console.log('Ensemble Agreement:', ensembleAgreement, ' (', ensembleAgreementScore, ')');
