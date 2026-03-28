@@ -2539,17 +2539,17 @@ class EnhancedAccumulatorBot {
             return;
         }
 
-        // if (decision.confidence < 0.6) {
-        //     console.log(`[${asset}] ⚠️ Trade blocked due to low confidence`);
-        //     return;
-        // }
+        if (decision.confidence < 0.6) {
+            console.log(`[${asset}] ⚠️ Trade blocked due to low confidence`);
+            return;
+        }
 
-        // if (this.consecutiveLosses > 0) {
-        // if (this.lastEnsemblePredictions?.pattern?.confidence < 0.55) {
-        //     console.log(`[${asset}] ⚠️ Trade blocked due to low or No Pattern Model confidence`);
-        //     return;
-        // }
-        // }
+        if (this.consecutiveLosses > 0) {
+            if (this.lastEnsemblePredictions?.pattern?.confidence < 0.55) {
+                console.log(`[${asset}] ⚠️ Trade blocked due to low or No Pattern Model confidence`);
+                return;
+            }
+        }
 
         const request = {
             buy: assetState.currentProposalId,
@@ -2559,20 +2559,20 @@ class EnhancedAccumulatorBot {
         console.log(`🚀 Placing trade for Asset: [${asset}] | Stake: ${this.currentStake.toFixed(2)}`);
 
         const telegramMsg = `
-            🚀 Placing trade for Asset ${asset}
+            🚀 <b>Placing trade for Asset ${asset}</b>
             <b>SIGNAL THRESHOLD: ${decision.ensembleScore.toFixed(4)} (${decision.threshold.toFixed(2)})</b>
 
-            <b>DECISION: </b>
+            <b>DECISION:</b>
             <b>EnsembleScore: ${decision.ensembleScore.toFixed(2)}</b>
             <b>Confidence: ${decision.confidence.toFixed(2)}</b>
             <b>SurvivalProb: ${decision.survivalProb.toFixed(2)}</b>
 
-            <b>ModelContributions: </b>
-            <b>kaplanMeier: ${decision.modelContributions?.kaplanMeier} </b>
+            <b>ModelContributions:</b>
+            <b>kaplanMeier: ${decision.modelContributions?.kaplanMeier}</b>
             <b>bayesian: ${decision.modelContributions?.bayesian}</b>
             <b>markov: ${decision.modelContributions?.markov}</b>
-            <b>neural: ${decision.modelContributions?.neural} </b>
-            <b>Pattern: ${decision.modelContributions?.pattern} </b>
+            <b>neural: ${decision.modelContributions?.neural}</b>
+            <b>Pattern: ${decision.modelContributions?.pattern}</b>
 
             <b>Current Stake:</b> $${this.currentStake.toFixed(2)}
         `.trim();
@@ -2709,7 +2709,7 @@ class EnhancedAccumulatorBot {
             📊 <b>Current Stake:</b> $${this.currentStake.toFixed(2)}
 
             🎯 <b>Win Rate:</b> ${winRate}%
-            📈 <b>Total P&L:</b> ${(this.totalProfitLoss >= 0 ? '+' : '')}$${Math.abs(this.totalProfitLoss).toFixed(2)}
+            📈 <b>Total P&L:</b> ${(this.totalProfitLoss >= 0 ? '+' : '-')}$${Math.abs(this.totalProfitLoss).toFixed(2)}
 
             
             ⏰ ${new Date().toLocaleTimeString()}
