@@ -2545,8 +2545,8 @@ class EnhancedAccumulatorBot {
         }
 
         // if (this.consecutiveLosses > 0) {
-        if (this.lastEnsemblePredictions.pattern.confidence < 0.55) {
-            console.log(`[${asset}] ⚠️ Trade blocked due to low Pattern Model confidence`);
+        if (this.lastEnsemblePredictions?.pattern?.confidence < 0.55) {
+            console.log(`[${asset}] ⚠️ Trade blocked due to low or No Pattern Model confidence`);
             return;
         }
         // }
