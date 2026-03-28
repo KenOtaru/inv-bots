@@ -13,9 +13,154 @@
 
 require('dotenv').config();
 const WebSocket = require('ws');
-const nodemailer = require('nodemailer');
+const TelegramBot = require('node-telegram-bot-api');
 const fs = require('fs');
 const path = require('path');
+
+
+// ============================================
+// STATE PERSISTENCE MANAGER
+// ============================================
+const STATE_FILE = path.join(__dirname, 'nliveMulti4-state04.json');
+const STATE_SAVE_INTERVAL = 5000; // Save every 5 seconds
+
+class StatePersistence {
+    static saveState(bot) {
+        try {
+            const persistableState = {
+                savedAt: Date.now(),
+                config: bot.config,
+                trading: {
+                    currentStake: bot.currentStake,
+                    consecutiveLosses: bot.consecutiveLosses,
+                    totalTrades: bot.totalTrades,
+                    totalWins: bot.totalWins,
+                    totalLosses: bot.totalLosses,
+                    consecutiveLosses2: bot.consecutiveLosses2,
+                    consecutiveLosses3: bot.consecutiveLosses3,
+                    consecutiveLosses4: bot.consecutiveLosses4,
+                    consecutiveLosses5: bot.consecutiveLosses5,
+                    totalProfitLoss: bot.totalProfitLoss,
+                    Pause: bot.Pause,
+                    sys: bot.sys,
+                    sysCount: bot.sysCount,
+                    sys2: bot.sys2,
+                    sys2WinCount: bot.sys2WinCount,
+                    isWinTrade: bot.isWinTrade,
+                },
+                neuralEngine: bot.neuralEngine.exportWeights(),
+                ensembleDecisionMaker: bot.ensembleDecisionMaker.exportState(),
+                learningSystem: bot.learningSystem,
+                extendedStayedIn: bot.extendedStayedIn,
+                previousStayedIn: bot.previousStayedIn,
+                assetStates: bot.assetStates,
+                subscriptions: {
+                    tickSubscriptionIds: { ...bot.tickSubscriptionIds }
+                },
+                assets: {},
+                hourlyStats: bot.hourlyStats,
+                observationCount: bot.observationCount,
+                learningMode: bot.learningMode
+            };
+
+            bot.assets.forEach(asset => {
+                persistableState.assets[asset] = {
+                    tickHistory: bot.tickHistories[asset] || []
+                };
+            });
+
+            fs.writeFileSync(STATE_FILE, JSON.stringify(persistableState, null, 2));
+            // console.log(`💾 State saved successfully at ${new Date().toLocaleTimeString()}`);
+            return true;
+        } catch (error) {
+            console.error(`❌ Failed to save state: ${error.message}`);
+            return false;
+        }
+    }
+
+    static loadState() {
+        try {
+            if (!fs.existsSync(STATE_FILE)) {
+                console.log('📂 No previous state file found, starting fresh');
+                return null;
+            }
+
+            const fileContent = fs.readFileSync(STATE_FILE, 'utf8');
+            const savedData = JSON.parse(fileContent);
+
+            const ageMinutes = (Date.now() - savedData.savedAt) / 60000;
+
+            if (ageMinutes > 30) {
+                console.warn(`⚠️ Saved state is ${ageMinutes.toFixed(1)} minutes old, starting fresh`);
+                // Optionally backup old state before deleting
+                const backupFile = STATE_FILE.replace('.json', `_backup_${Date.now()}.json`);
+                fs.renameSync(STATE_FILE, backupFile);
+                console.log(`📦 Old state backed up to: ${backupFile}`);
+                return null;
+            }
+
+            console.log(`📂 Restoring state from ${ageMinutes.toFixed(1)} minutes ago`);
+            return savedData;
+        } catch (error) {
+            console.error(`❌ Failed to load state: ${error.message}`);
+            if (error.code === 'ENOENT') {
+                console.log('📂 State file not found, starting fresh');
+            } else if (error instanceof SyntaxError) {
+                console.error('⚠️ State file corrupted, starting fresh');
+                // Backup corrupted file
+                try {
+                    const backupFile = STATE_FILE.replace('.json', `_corrupted_${Date.now()}.json`);
+                    fs.renameSync(STATE_FILE, backupFile);
+                    console.log(`📦 Corrupted file backed up to: ${backupFile}`);
+                } catch (backupError) {
+                    console.error('Failed to backup corrupted file:', backupError.message);
+                }
+            }
+            return null;
+        }
+    }
+
+    static startAutoSave(bot) {
+        // Clear any existing auto-save interval
+        if (bot.autoSaveInterval) {
+            clearInterval(bot.autoSaveInterval);
+        }
+
+        bot.autoSaveInterval = setInterval(() => {
+            if (bot.connected && !bot.endOfDay) {
+                StatePersistence.saveState(bot);
+            }
+        }, STATE_SAVE_INTERVAL);
+
+        console.log(`🔄 Auto-save started (every ${STATE_SAVE_INTERVAL / 1000} seconds)`);
+
+        // Save on process exit
+        const exitHandler = (options) => {
+            console.log('\n🛑 Shutting down, saving final state...');
+            StatePersistence.saveState(bot);
+            if (options.exit) {
+                process.exit();
+            }
+        };
+
+        // Handle different exit events
+        process.on('exit', exitHandler.bind(null, { cleanup: true }));
+        process.on('SIGINT', exitHandler.bind(null, { exit: true }));
+        process.on('SIGTERM', exitHandler.bind(null, { exit: true }));
+        process.on('uncaughtException', (err) => {
+            console.error('Uncaught Exception:', err);
+            exitHandler({ exit: true });
+        });
+    }
+
+    static stopAutoSave(bot) {
+        if (bot.autoSaveInterval) {
+            clearInterval(bot.autoSaveInterval);
+            bot.autoSaveInterval = null;
+            console.log('🔄 Auto-save stopped');
+        }
+    }
+}
 
 // ============================================================================
 // TIER 1: STATISTICAL LEARNING ENGINE
@@ -503,343 +648,1307 @@ class PatternEngine {
 }
 
 // ============================================================================
-// TIER 3: NEURAL NETWORK PREDICTOR
+// TIER 3: ADVANCED NEURAL NETWORK PREDICTOR
 // ============================================================================
 
 class NeuralEngine {
-    constructor(inputSize = 60, hiddenSizes = [32, 16], outputSize = 1) {
+    constructor(inputSize = 90, hiddenSizes = [128, 64, 32], outputSize = 3) {
         this.inputSize = inputSize;
         this.hiddenSizes = hiddenSizes;
-        this.outputSize = outputSize;
-        this.learningRate = 0.01;
-        this.momentum = 0.9;
-        this.weights = {};
-        this.biases = {};
-        this.velocities = {};
-        this.trainingHistory = [];
-        this.initialized = false;
+        this.outputSize = outputSize; // [survivalProb, confidence, regimeScore]
 
+        // Adam optimizer parameters
+        this.learningRate = 0.001;
+        this.beta1 = 0.9;
+        this.beta2 = 0.999;
+        this.epsilon = 1e-8;
+        this.timestep = 0;
+        this.lrSchedule = { warmup: 100, decay: 0.9999, minLr: 0.0001 };
+
+        // Regularization
+        this.dropoutRate = 0.2;
+        this.l2Lambda = 0.0001;
+        this.maxGradNorm = 5.0;
+
+        // Network layers
+        this.layers = [];
+        this.gatingLayers = [];     // LSTM-like gates
+        this.attentionWeights = {}; // Attention mechanism
+        this.batchNormParams = {};  // Batch normalization
+
+        // Adam state
+        this.mWeights = {};
+        this.vWeights = {};
+
+        // Training
+        this.trainingHistory = [];
+        this.replayBuffer = [];
+        this.replayBufferSize = 2000;
+        this.miniBatchSize = 32;
+        this.trainingEpochsPerUpdate = 3;
+
+        // Performance tracking
+        this.predictionLog = [];
+        this.rollingAccuracy = [];
+        this.bestAccuracy = 0;
+        this.epochsSinceImprovement = 0;
+        this.earlyStoppingPatience = 500;
+
+        // Feature engineering state
+        this.featureStats = { means: null, stds: null, count: 0 };
+        this.sequenceMemory = {};  // Per-asset LSTM-like hidden state
+
+        this.initialized = false;
         this.initializeNetwork();
     }
 
+    // ====================================================================
+    // NETWORK INITIALIZATION
+    // ====================================================================
+
     initializeNetwork() {
-        const layers = [this.inputSize, ...this.hiddenSizes, this.outputSize];
+        const allSizes = [this.inputSize, ...this.hiddenSizes, this.outputSize];
 
-        for (let i = 0; i < layers.length - 1; i++) {
-            const fanIn = layers[i];
-            const fanOut = layers[i + 1];
+        for (let i = 0; i < allSizes.length - 1; i++) {
+            const fanIn = allSizes[i];
+            const fanOut = allSizes[i + 1];
+            const layerKey = `layer_${i}`;
 
-            // Xavier initialization
-            const scale = Math.sqrt(2.0 / (fanIn + fanOut));
+            // He initialization for ReLU variants
+            const scale = Math.sqrt(2.0 / fanIn);
 
-            this.weights[i] = [];
-            this.velocities[`w${i}`] = [];
+            // Main weights
+            this.layers.push({
+                weights: this._createMatrix(fanOut, fanIn, scale),
+                biases: new Array(fanOut).fill(0),
+            });
 
-            for (let j = 0; j < fanOut; j++) {
-                this.weights[i][j] = [];
-                this.velocities[`w${i}`][j] = [];
+            // Gating layer (input gate + forget gate for LSTM-like behavior)
+            if (i < allSizes.length - 2) { // Not for output layer
+                this.gatingLayers.push({
+                    inputGate: {
+                        weights: this._createMatrix(fanOut, fanIn, scale * 0.5),
+                        biases: new Array(fanOut).fill(1.0), // Bias toward keeping
+                    },
+                    forgetGate: {
+                        weights: this._createMatrix(fanOut, fanOut, scale * 0.5),
+                        biases: new Array(fanOut).fill(1.0),
+                    },
+                    cellState: new Array(fanOut).fill(0),
+                });
 
-                for (let k = 0; k < fanIn; k++) {
-                    this.weights[i][j][k] = (Math.random() * 2 - 1) * scale;
-                    this.velocities[`w${i}`][j][k] = 0;
-                }
+                // Batch normalization parameters
+                this.batchNormParams[layerKey] = {
+                    gamma: new Array(fanOut).fill(1.0),
+                    beta: new Array(fanOut).fill(0.0),
+                    runningMean: new Array(fanOut).fill(0.0),
+                    runningVar: new Array(fanOut).fill(1.0),
+                    momentum: 0.1,
+                };
             }
 
-            this.biases[i] = new Array(fanOut).fill(0).map(() => (Math.random() * 2 - 1) * 0.1);
-            this.velocities[`b${i}`] = new Array(fanOut).fill(0);
+            // Initialize Adam states
+            this.mWeights[`w_${i}`] = this._createMatrix(fanOut, fanIn, 0);
+            this.vWeights[`w_${i}`] = this._createMatrix(fanOut, fanIn, 0);
+            this.mWeights[`b_${i}`] = new Array(fanOut).fill(0);
+            this.vWeights[`b_${i}`] = new Array(fanOut).fill(0);
+
+            if (i < allSizes.length - 2) {
+                // Gate Adam states
+                this.mWeights[`ig_w_${i}`] = this._createMatrix(fanOut, fanIn, 0);
+                this.vWeights[`ig_w_${i}`] = this._createMatrix(fanOut, fanIn, 0);
+                this.mWeights[`ig_b_${i}`] = new Array(fanOut).fill(0);
+                this.vWeights[`ig_b_${i}`] = new Array(fanOut).fill(0);
+
+                this.mWeights[`fg_w_${i}`] = this._createMatrix(fanOut, fanOut, 0);
+                this.vWeights[`fg_w_${i}`] = this._createMatrix(fanOut, fanOut, 0);
+                this.mWeights[`fg_b_${i}`] = new Array(fanOut).fill(0);
+                this.vWeights[`fg_b_${i}`] = new Array(fanOut).fill(0);
+
+                // Batch norm Adam states
+                this.mWeights[`bn_g_${i}`] = new Array(fanOut).fill(0);
+                this.vWeights[`bn_g_${i}`] = new Array(fanOut).fill(0);
+                this.mWeights[`bn_b_${i}`] = new Array(fanOut).fill(0);
+                this.vWeights[`bn_b_${i}`] = new Array(fanOut).fill(0);
+            }
+        }
+
+        // Attention mechanism weights (self-attention over hidden features)
+        const attentionDim = this.hiddenSizes[0];
+        this.attentionWeights = {
+            query: this._createMatrix(attentionDim, attentionDim, Math.sqrt(2.0 / attentionDim)),
+            key: this._createMatrix(attentionDim, attentionDim, Math.sqrt(2.0 / attentionDim)),
+            value: this._createMatrix(attentionDim, attentionDim, Math.sqrt(2.0 / attentionDim)),
+            outputProj: this._createMatrix(attentionDim, attentionDim, Math.sqrt(2.0 / attentionDim)),
+        };
+
+        // Attention Adam states
+        ['query', 'key', 'value', 'outputProj'].forEach(key => {
+            this.mWeights[`att_${key}`] = this._createMatrix(attentionDim, attentionDim, 0);
+            this.vWeights[`att_${key}`] = this._createMatrix(attentionDim, attentionDim, 0);
+        });
+
+        // Residual projection layers (for dimension mismatches)
+        this.residualProjections = {};
+        for (let i = 0; i < this.hiddenSizes.length - 1; i++) {
+            if (this.hiddenSizes[i] !== this.hiddenSizes[i + 1]) {
+                this.residualProjections[i] = {
+                    weights: this._createMatrix(
+                        this.hiddenSizes[i + 1],
+                        this.hiddenSizes[i],
+                        Math.sqrt(2.0 / this.hiddenSizes[i])
+                    ),
+                };
+                this.mWeights[`res_${i}`] = this._createMatrix(this.hiddenSizes[i + 1], this.hiddenSizes[i], 0);
+                this.vWeights[`res_${i}`] = this._createMatrix(this.hiddenSizes[i + 1], this.hiddenSizes[i], 0);
+            }
         }
 
         this.initialized = true;
+        console.log(`🧠 Advanced Neural Network initialized: [${allSizes.join(' → ')}]`);
+        console.log(`   Total parameters: ~${this._countParameters()}`);
     }
 
-    // Activation functions
-    relu(x) {
-        return Math.max(0, x);
+    _createMatrix(rows, cols, scale) {
+        const matrix = [];
+        for (let i = 0; i < rows; i++) {
+            matrix[i] = [];
+            for (let j = 0; j < cols; j++) {
+                matrix[i][j] = scale === 0 ? 0 : (Math.random() * 2 - 1) * scale;
+            }
+        }
+        return matrix;
     }
 
-    reluDerivative(x) {
-        return x > 0 ? 1 : 0;
+    _countParameters() {
+        let count = 0;
+        this.layers.forEach((layer, i) => {
+            count += layer.weights.length * layer.weights[0].length;
+            count += layer.biases.length;
+        });
+        this.gatingLayers.forEach(gate => {
+            count += gate.inputGate.weights.length * gate.inputGate.weights[0].length * 2;
+            count += gate.inputGate.biases.length * 2;
+        });
+        const attDim = this.hiddenSizes[0];
+        count += attDim * attDim * 4; // Q, K, V, Output
+        return count;
+    }
+
+    // ====================================================================
+    // ACTIVATION FUNCTIONS
+    // ====================================================================
+
+    leakyRelu(x, alpha = 0.01) {
+        return x > 0 ? x : alpha * x;
+    }
+
+    leakyReluDerivative(x, alpha = 0.01) {
+        return x > 0 ? 1 : alpha;
+    }
+
+    swish(x) {
+        const sig = this.sigmoid(x);
+        return x * sig;
+    }
+
+    swishDerivative(x) {
+        const sig = this.sigmoid(x);
+        return sig + x * sig * (1 - sig);
+    }
+
+    gelu(x) {
+        // Approximation: 0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))
+        const c = Math.sqrt(2 / Math.PI);
+        const inner = c * (x + 0.044715 * x * x * x);
+        return 0.5 * x * (1 + Math.tanh(inner));
+    }
+
+    geluDerivative(x) {
+        const c = Math.sqrt(2 / Math.PI);
+        const x3 = x * x * x;
+        const inner = c * (x + 0.044715 * x3);
+        const tanhInner = Math.tanh(inner);
+        const sech2 = 1 - tanhInner * tanhInner;
+        const dinnerDx = c * (1 + 3 * 0.044715 * x * x);
+        return 0.5 * (1 + tanhInner) + 0.5 * x * sech2 * dinnerDx;
     }
 
     sigmoid(x) {
-        return 1 / (1 + Math.exp(-Math.max(-500, Math.min(500, x))));
+        const clipped = Math.max(-500, Math.min(500, x));
+        return 1 / (1 + Math.exp(-clipped));
     }
 
-    sigmoidDerivative(x) {
-        const s = this.sigmoid(x);
-        return s * (1 - s);
+    sigmoidDerivative(output) {
+        return output * (1 - output);
     }
 
-    /**
-     * Forward pass through the network
-     */
-    forward(input) {
-        if (input.length !== this.inputSize) {
-            console.error(`Input size mismatch: expected ${this.inputSize}, got ${input.length}`);
-            return { output: 0.5, activations: [] };
+    softmax(arr) {
+        const max = Math.max(...arr);
+        const exps = arr.map(x => Math.exp(Math.min(x - max, 500)));
+        const sum = exps.reduce((a, b) => a + b, 0);
+        return exps.map(e => e / sum);
+    }
+
+    // ====================================================================
+    // BATCH NORMALIZATION
+    // ====================================================================
+
+    batchNorm(values, layerKey, isTraining = true) {
+        const params = this.batchNormParams[layerKey];
+        if (!params) return values;
+
+        const n = values.length;
+        const result = new Array(n);
+
+        if (isTraining) {
+            // Compute batch statistics (single sample approximation)
+            const mean = values.reduce((a, b) => a + b, 0) / n;
+            const variance = values.reduce((a, b) => a + (b - mean) ** 2, 0) / n + this.epsilon;
+
+            // Update running statistics
+            for (let i = 0; i < n; i++) {
+                params.runningMean[i] = (1 - params.momentum) * params.runningMean[i] +
+                    params.momentum * values[i];
+                params.runningVar[i] = (1 - params.momentum) * params.runningVar[i] +
+                    params.momentum * ((values[i] - mean) ** 2);
+            }
+
+            // Normalize
+            const std = Math.sqrt(variance);
+            for (let i = 0; i < n; i++) {
+                const normalized = (values[i] - mean) / std;
+                result[i] = params.gamma[i] * normalized + params.beta[i];
+            }
+        } else {
+            // Use running statistics for inference
+            for (let i = 0; i < n; i++) {
+                const normalized = (values[i] - params.runningMean[i]) /
+                    Math.sqrt(params.runningVar[i] + this.epsilon);
+                result[i] = params.gamma[i] * normalized + params.beta[i];
+            }
         }
 
-        const activations = [input];
-        let current = input;
+        return result;
+    }
 
-        const numLayers = Object.keys(this.weights).length;
+    // ====================================================================
+    // ATTENTION MECHANISM
+    // ====================================================================
+
+    selfAttention(features) {
+        const dim = features.length;
+        const attDim = this.attentionWeights.query.length;
+
+        // Ensure dimension compatibility
+        if (dim !== attDim) return features;
+
+        // Compute Q, K, V
+        const Q = this._matVecMul(this.attentionWeights.query, features);
+        const K = this._matVecMul(this.attentionWeights.key, features);
+        const V = this._matVecMul(this.attentionWeights.value, features);
+
+        // Scaled dot-product attention (self-attention with single vector)
+        // We create a simple attention over feature dimensions
+        const scaleFactor = Math.sqrt(dim);
+
+        // Compute attention scores
+        const attentionScores = new Array(dim);
+        for (let i = 0; i < dim; i++) {
+            attentionScores[i] = Q[i] * K[i] / scaleFactor;
+        }
+
+        // Softmax
+        const attentionWeights = this.softmax(attentionScores);
+
+        // Apply attention to values
+        const attended = new Array(dim);
+        for (let i = 0; i < dim; i++) {
+            attended[i] = attentionWeights[i] * V[i];
+        }
+
+        // Output projection
+        const output = this._matVecMul(this.attentionWeights.outputProj, attended);
+
+        // Residual connection
+        const result = new Array(dim);
+        for (let i = 0; i < dim; i++) {
+            result[i] = features[i] + output[i];
+        }
+
+        return { output: result, attentionWeights };
+    }
+
+    // ====================================================================
+    // GATING MECHANISM (LSTM-INSPIRED)
+    // ====================================================================
+
+    applyGating(input, layerIdx, prevHidden) {
+        const gate = this.gatingLayers[layerIdx];
+        if (!gate) return input;
+
+        const size = input.length;
+
+        // Input gate: controls how much new information to let in
+        const inputGateRaw = this._matVecMul(gate.inputGate.weights, input.length <= gate.inputGate.weights[0].length ? input : input.slice(0, gate.inputGate.weights[0].length));
+        const inputGateVals = new Array(size);
+        for (let i = 0; i < size; i++) {
+            inputGateVals[i] = this.sigmoid(
+                (i < inputGateRaw.length ? inputGateRaw[i] : 0) + gate.inputGate.biases[i]
+            );
+        }
+
+        // Forget gate: controls how much of previous cell state to keep
+        const prevState = gate.cellState;
+        const forgetGateRaw = this._matVecMul(gate.forgetGate.weights, prevState);
+        const forgetGateVals = new Array(size);
+        for (let i = 0; i < size; i++) {
+            forgetGateVals[i] = this.sigmoid(
+                (i < forgetGateRaw.length ? forgetGateRaw[i] : 0) + gate.forgetGate.biases[i]
+            );
+        }
+
+        // Update cell state
+        const newCellState = new Array(size);
+        for (let i = 0; i < size; i++) {
+            newCellState[i] = forgetGateVals[i] * prevState[i] + inputGateVals[i] * input[i];
+        }
+        gate.cellState = newCellState;
+
+        // Output: tanh(cell state) gated by input gate
+        const output = new Array(size);
+        for (let i = 0; i < size; i++) {
+            output[i] = Math.tanh(newCellState[i]) * inputGateVals[i];
+        }
+
+        return output;
+    }
+
+    // ====================================================================
+    // DROPOUT
+    // ====================================================================
+
+    applyDropout(values, isTraining = true) {
+        if (!isTraining || this.dropoutRate === 0) return { values, mask: null };
+
+        const mask = values.map(() => Math.random() > this.dropoutRate ? 1 : 0);
+        const scale = 1 / (1 - this.dropoutRate);
+        const dropped = values.map((v, i) => v * mask[i] * scale);
+
+        return { values: dropped, mask };
+    }
+
+    // ====================================================================
+    // FORWARD PASS
+    // ====================================================================
+
+    forward(input, isTraining = true) {
+        if (input.length !== this.inputSize) {
+            // Pad or truncate
+            const adjusted = new Array(this.inputSize).fill(0);
+            for (let i = 0; i < Math.min(input.length, this.inputSize); i++) {
+                adjusted[i] = input[i];
+            }
+            input = adjusted;
+        }
+
+        const cache = {
+            activations: [input],
+            preActivations: [],
+            gateValues: [],
+            dropoutMasks: [],
+            attentionCache: null,
+            batchNormCache: [],
+            residualInputs: [],
+        };
+
+        let current = input;
+        const numLayers = this.layers.length;
 
         for (let i = 0; i < numLayers; i++) {
-            const nextLayer = [];
+            const layer = this.layers[i];
+            const isOutputLayer = i === numLayers - 1;
+            const isFirstHidden = i === 0;
 
-            for (let j = 0; j < this.weights[i].length; j++) {
-                let sum = this.biases[i][j];
-
-                for (let k = 0; k < current.length; k++) {
-                    sum += current[k] * this.weights[i][j][k];
+            // Linear transformation
+            const preActivation = new Array(layer.weights.length);
+            for (let j = 0; j < layer.weights.length; j++) {
+                let sum = layer.biases[j];
+                const weights_j = layer.weights[j];
+                const inputLen = Math.min(current.length, weights_j.length);
+                for (let k = 0; k < inputLen; k++) {
+                    sum += current[k] * weights_j[k];
                 }
-
-                // Use ReLU for hidden layers, sigmoid for output
-                if (i < numLayers - 1) {
-                    nextLayer.push(this.relu(sum));
-                } else {
-                    nextLayer.push(this.sigmoid(sum));
-                }
+                preActivation[j] = sum;
             }
 
-            current = nextLayer;
-            activations.push(current);
+            cache.preActivations.push(preActivation);
+
+            let activated;
+
+            if (isOutputLayer) {
+                // Output layer: sigmoid for each output
+                activated = preActivation.map(x => this.sigmoid(x));
+            } else {
+                // Hidden layers: Batch Norm → GELU → Gating → Dropout
+
+                // Batch normalization
+                const layerKey = `layer_${i}`;
+                let normalized = this.batchNorm(preActivation, layerKey, isTraining);
+                cache.batchNormCache.push(normalized);
+
+                // GELU activation
+                activated = normalized.map(x => this.gelu(x));
+
+                // Apply gating mechanism
+                if (i < this.gatingLayers.length) {
+                    const gated = this.applyGating(activated, i, current);
+                    cache.gateValues.push(gated);
+                    activated = gated;
+                }
+
+                // Self-attention after first hidden layer
+                if (isFirstHidden && activated.length === this.attentionWeights.query.length) {
+                    const { output: attendedOutput, attentionWeights: attWeights } =
+                        this.selfAttention(activated);
+                    cache.attentionCache = attWeights;
+                    activated = attendedOutput;
+                }
+
+                // Residual connection (if dimensions match or we have projection)
+                if (i > 0 && i < numLayers - 1) {
+                    const prevActivation = cache.activations[cache.activations.length - 1];
+                    cache.residualInputs.push(prevActivation);
+
+                    if (prevActivation.length === activated.length) {
+                        // Direct residual
+                        activated = activated.map((v, idx) => v + prevActivation[idx]);
+                    } else if (this.residualProjections[i - 1]) {
+                        // Projected residual
+                        const projected = this._matVecMul(
+                            this.residualProjections[i - 1].weights,
+                            prevActivation
+                        );
+                        activated = activated.map((v, idx) =>
+                            v + (idx < projected.length ? projected[idx] : 0)
+                        );
+                    }
+                }
+
+                // Dropout
+                const { values: droppedOut, mask } = this.applyDropout(activated, isTraining);
+                cache.dropoutMasks.push(mask);
+                activated = droppedOut;
+            }
+
+            current = activated;
+            cache.activations.push(current);
         }
 
-        return {
-            output: current[0],
-            activations
+        // Parse multi-head output
+        const output = {
+            survivalProb: current[0] || 0.5,
+            confidence: current.length > 1 ? current[1] : 0.5,
+            regimeScore: current.length > 2 ? current[2] : 0.5,
         };
+
+        return { output, rawOutput: current, cache };
     }
 
-    /**
-     * Backward pass with gradient descent
-     */
-    backward(input, target, activations) {
-        const numLayers = Object.keys(this.weights).length;
+    // ====================================================================
+    // BACKWARD PASS WITH GRADIENT COMPUTATION
+    // ====================================================================
+
+    backward(cache, target) {
+        const numLayers = this.layers.length;
         const gradients = {};
 
-        // Output layer error
-        const output = activations[activations.length - 1][0];
-        let delta = [(output - target) * this.sigmoidDerivative(output)];
+        // Target is [survivalTarget, confidenceTarget, regimeTarget]
+        const targetArr = Array.isArray(target) ? target : [target, 0.5, 0.5];
+        const outputActivation = cache.activations[cache.activations.length - 1];
 
-        // Backpropagate
+        // Output layer gradient (BCE loss derivative)
+        let delta = new Array(this.outputSize);
+        for (let i = 0; i < this.outputSize; i++) {
+            const output = outputActivation[i] || 0.5;
+            const t = targetArr[i] || 0.5;
+            // Clamp to prevent log(0)
+            const clampedOutput = Math.max(1e-7, Math.min(1 - 1e-7, output));
+            delta[i] = (clampedOutput - t); // BCE gradient
+        }
+
+        // Backpropagate through layers
         for (let i = numLayers - 1; i >= 0; i--) {
-            gradients[`w${i}`] = [];
-            gradients[`b${i}`] = [...delta];
+            const layer = this.layers[i];
+            const prevActivation = cache.activations[i];
+            const isOutputLayer = i === numLayers - 1;
 
-            const prevActivation = activations[i];
+            // Weight gradients
+            gradients[`w_${i}`] = [];
+            gradients[`b_${i}`] = [...delta];
 
-            for (let j = 0; j < this.weights[i].length; j++) {
-                gradients[`w${i}`][j] = [];
-
-                for (let k = 0; k < this.weights[i][j].length; k++) {
-                    gradients[`w${i}`][j][k] = delta[j] * prevActivation[k];
+            for (let j = 0; j < layer.weights.length; j++) {
+                gradients[`w_${i}`][j] = [];
+                for (let k = 0; k < layer.weights[j].length; k++) {
+                    const grad = delta[j] * (k < prevActivation.length ? prevActivation[k] : 0);
+                    // L2 regularization
+                    gradients[`w_${i}`][j][k] = grad + this.l2Lambda * layer.weights[j][k];
                 }
             }
 
+            // Propagate gradient to previous layer
             if (i > 0) {
-                const newDelta = [];
+                const newDelta = new Array(prevActivation.length).fill(0);
 
-                for (let k = 0; k < this.weights[i][0].length; k++) {
+                for (let k = 0; k < prevActivation.length; k++) {
                     let sum = 0;
-
-                    for (let j = 0; j < this.weights[i].length; j++) {
-                        sum += delta[j] * this.weights[i][j][k];
+                    for (let j = 0; j < delta.length; j++) {
+                        if (k < layer.weights[j].length) {
+                            sum += delta[j] * layer.weights[j][k];
+                        }
                     }
 
-                    newDelta.push(sum * this.reluDerivative(prevActivation[k]));
+                    // Apply activation derivative (GELU for hidden layers)
+                    if (!isOutputLayer) {
+                        const preAct = cache.preActivations[i - 1];
+                        const preActVal = k < preAct.length ? preAct[k] : 0;
+                        sum *= this.geluDerivative(preActVal);
+                    }
+
+                    // Apply dropout mask
+                    const mask = cache.dropoutMasks[i - 1];
+                    if (mask && k < mask.length) {
+                        sum *= mask[k] ? (1 / (1 - this.dropoutRate)) : 0;
+                    }
+
+                    newDelta[k] = sum;
                 }
 
                 delta = newDelta;
             }
+
+            // Batch norm gradients (simplified)
+            if (!isOutputLayer && this.batchNormParams[`layer_${i}`]) {
+                const bnParams = this.batchNormParams[`layer_${i}`];
+                gradients[`bn_g_${i}`] = delta.map((d, idx) =>
+                    idx < bnParams.gamma.length ? d * (cache.batchNormCache[i]?.[idx] || 0) : 0
+                );
+                gradients[`bn_b_${i}`] = delta.slice(0, bnParams.beta.length);
+            }
         }
+
+        // Gradient clipping
+        this._clipGradients(gradients);
 
         return gradients;
     }
 
-    /**
-     * Update weights using gradients with momentum
-     */
-    updateWeights(gradients) {
-        const numLayers = Object.keys(this.weights).length;
+    // ====================================================================
+    // ADAM OPTIMIZER UPDATE
+    // ====================================================================
 
-        for (let i = 0; i < numLayers; i++) {
-            for (let j = 0; j < this.weights[i].length; j++) {
-                for (let k = 0; k < this.weights[i][j].length; k++) {
-                    const grad = gradients[`w${i}`][j][k];
+    updateWeightsAdam(gradients) {
+        this.timestep++;
 
-                    // Momentum update
-                    this.velocities[`w${i}`][j][k] =
-                        this.momentum * this.velocities[`w${i}`][j][k] - this.learningRate * grad;
+        // Learning rate schedule with warmup and decay
+        let lr = this.learningRate;
+        if (this.timestep < this.lrSchedule.warmup) {
+            lr *= this.timestep / this.lrSchedule.warmup;
+        } else {
+            lr *= Math.pow(this.lrSchedule.decay, this.timestep - this.lrSchedule.warmup);
+        }
+        lr = Math.max(lr, this.lrSchedule.minLr);
 
-                    this.weights[i][j][k] += this.velocities[`w${i}`][j][k];
+        const bc1 = 1 - Math.pow(this.beta1, this.timestep);
+        const bc2 = 1 - Math.pow(this.beta2, this.timestep);
+
+        // Update main layer weights
+        for (let i = 0; i < this.layers.length; i++) {
+            const wKey = `w_${i}`;
+            const bKey = `b_${i}`;
+
+            if (gradients[wKey]) {
+                for (let j = 0; j < this.layers[i].weights.length; j++) {
+                    for (let k = 0; k < this.layers[i].weights[j].length; k++) {
+                        if (gradients[wKey][j] && gradients[wKey][j][k] !== undefined) {
+                            const g = gradients[wKey][j][k];
+
+                            // Adam update
+                            this.mWeights[wKey][j][k] = this.beta1 * this.mWeights[wKey][j][k] + (1 - this.beta1) * g;
+                            this.vWeights[wKey][j][k] = this.beta2 * this.vWeights[wKey][j][k] + (1 - this.beta2) * g * g;
+
+                            const mHat = this.mWeights[wKey][j][k] / bc1;
+                            const vHat = this.vWeights[wKey][j][k] / bc2;
+
+                            this.layers[i].weights[j][k] -= lr * mHat / (Math.sqrt(vHat) + this.epsilon);
+                        }
+                    }
                 }
+            }
 
-                // Bias update
-                const biasGrad = gradients[`b${i}`][j];
-                this.velocities[`b${i}`][j] =
-                    this.momentum * this.velocities[`b${i}`][j] - this.learningRate * biasGrad;
+            if (gradients[bKey]) {
+                for (let j = 0; j < this.layers[i].biases.length; j++) {
+                    if (gradients[bKey][j] !== undefined) {
+                        const g = gradients[bKey][j];
 
-                this.biases[i][j] += this.velocities[`b${i}`][j];
+                        this.mWeights[bKey][j] = this.beta1 * this.mWeights[bKey][j] + (1 - this.beta1) * g;
+                        this.vWeights[bKey][j] = this.beta2 * this.vWeights[bKey][j] + (1 - this.beta2) * g * g;
+
+                        const mHat = this.mWeights[bKey][j] / bc1;
+                        const vHat = this.vWeights[bKey][j] / bc2;
+
+                        this.layers[i].biases[j] -= lr * mHat / (Math.sqrt(vHat) + this.epsilon);
+                    }
+                }
+            }
+
+            // Update batch norm parameters
+            const bnGKey = `bn_g_${i}`;
+            const bnBKey = `bn_b_${i}`;
+            if (gradients[bnGKey] && this.batchNormParams[`layer_${i}`]) {
+                const bnParams = this.batchNormParams[`layer_${i}`];
+                for (let j = 0; j < bnParams.gamma.length; j++) {
+                    if (gradients[bnGKey][j] !== undefined) {
+                        this.mWeights[bnGKey][j] = this.beta1 * (this.mWeights[bnGKey][j] || 0) + (1 - this.beta1) * gradients[bnGKey][j];
+                        this.vWeights[bnGKey][j] = this.beta2 * (this.vWeights[bnGKey][j] || 0) + (1 - this.beta2) * gradients[bnGKey][j] ** 2;
+                        const mH = this.mWeights[bnGKey][j] / bc1;
+                        const vH = this.vWeights[bnGKey][j] / bc2;
+                        bnParams.gamma[j] -= lr * mH / (Math.sqrt(vH) + this.epsilon);
+                    }
+                }
+                for (let j = 0; j < bnParams.beta.length; j++) {
+                    if (gradients[bnBKey] && gradients[bnBKey][j] !== undefined) {
+                        this.mWeights[bnBKey][j] = this.beta1 * (this.mWeights[bnBKey][j] || 0) + (1 - this.beta1) * gradients[bnBKey][j];
+                        this.vWeights[bnBKey][j] = this.beta2 * (this.vWeights[bnBKey][j] || 0) + (1 - this.beta2) * gradients[bnBKey][j] ** 2;
+                        const mH = this.mWeights[bnBKey][j] / bc1;
+                        const vH = this.vWeights[bnBKey][j] / bc2;
+                        bnParams.beta[j] -= lr * mH / (Math.sqrt(vH) + this.epsilon);
+                    }
+                }
             }
         }
     }
 
-    /**
-     * Train on a single sample (online learning)
-     */
-    trainOnSample(input, target) {
-        const { output, activations } = this.forward(input);
-        const gradients = this.backward(input, target, activations);
-        this.updateWeights(gradients);
+    // ====================================================================
+    // GRADIENT CLIPPING
+    // ====================================================================
 
-        const loss = 0.5 * (output - target) ** 2;
-        this.trainingHistory.push({ loss, prediction: output, target });
+    _clipGradients(gradients) {
+        let totalNorm = 0;
 
-        // Keep only recent history
-        if (this.trainingHistory.length > 1000) {
-            this.trainingHistory.shift();
+        // Compute total gradient norm
+        Object.values(gradients).forEach(grad => {
+            if (Array.isArray(grad)) {
+                grad.forEach(row => {
+                    if (Array.isArray(row)) {
+                        row.forEach(val => { totalNorm += val * val; });
+                    } else if (typeof row === 'number') {
+                        totalNorm += row * row;
+                    }
+                });
+            }
+        });
+
+        totalNorm = Math.sqrt(totalNorm);
+
+        if (totalNorm > this.maxGradNorm) {
+            const clipCoeff = this.maxGradNorm / totalNorm;
+
+            Object.keys(gradients).forEach(key => {
+                if (Array.isArray(gradients[key])) {
+                    gradients[key] = gradients[key].map(row => {
+                        if (Array.isArray(row)) {
+                            return row.map(val => val * clipCoeff);
+                        } else if (typeof row === 'number') {
+                            return row * clipCoeff;
+                        }
+                        return row;
+                    });
+                }
+            });
         }
-
-        return { loss, prediction: output };
     }
 
-    /**
-     * Predict survival probability
-     */
+    // ====================================================================
+    // MATRIX-VECTOR MULTIPLICATION
+    // ====================================================================
+
+    _matVecMul(matrix, vector) {
+        const result = new Array(matrix.length);
+        for (let i = 0; i < matrix.length; i++) {
+            let sum = 0;
+            const row = matrix[i];
+            const len = Math.min(row.length, vector.length);
+            for (let j = 0; j < len; j++) {
+                sum += row[j] * vector[j];
+            }
+            result[i] = sum;
+        }
+        return result;
+    }
+
+    // ====================================================================
+    // EXPERIENCE REPLAY
+    // ====================================================================
+
+    addToReplayBuffer(input, target) {
+        this.replayBuffer.push({ input, target, timestamp: Date.now() });
+
+        if (this.replayBuffer.length > this.replayBufferSize) {
+            // Remove oldest experiences, but keep some for diversity
+            this.replayBuffer.splice(0, Math.floor(this.replayBufferSize * 0.1));
+        }
+    }
+
+    trainFromReplay() {
+        if (this.replayBuffer.length < this.miniBatchSize) return;
+
+        let totalLoss = 0;
+        const batchSize = Math.min(this.miniBatchSize, this.replayBuffer.length);
+
+        for (let epoch = 0; epoch < this.trainingEpochsPerUpdate; epoch++) {
+            // Sample random mini-batch with prioritized recent samples
+            const batch = this._samplePrioritizedBatch(batchSize);
+
+            batch.forEach(sample => {
+                const { output, rawOutput, cache } = this.forward(sample.input, true);
+                const gradients = this.backward(cache, sample.target);
+                this.updateWeightsAdam(gradients);
+
+                // Calculate loss
+                const targetArr = Array.isArray(sample.target) ? sample.target : [sample.target, 0.5, 0.5];
+                let loss = 0;
+                for (let i = 0; i < rawOutput.length; i++) {
+                    const o = Math.max(1e-7, Math.min(1 - 1e-7, rawOutput[i]));
+                    const t = targetArr[i] || 0.5;
+                    loss -= t * Math.log(o) + (1 - t) * Math.log(1 - o);
+                }
+                totalLoss += loss;
+            });
+        }
+
+        return totalLoss / (batchSize * this.trainingEpochsPerUpdate);
+    }
+
+    _samplePrioritizedBatch(batchSize) {
+        const buffer = this.replayBuffer;
+        const n = buffer.length;
+        const batch = [];
+
+        // 70% recent, 30% random for diversity
+        const recentCount = Math.floor(batchSize * 0.7);
+        const randomCount = batchSize - recentCount;
+
+        // Recent samples
+        const recentStart = Math.max(0, n - Math.floor(n * 0.3));
+        for (let i = 0; i < recentCount; i++) {
+            const idx = recentStart + Math.floor(Math.random() * (n - recentStart));
+            batch.push(buffer[idx]);
+        }
+
+        // Random samples for diversity
+        for (let i = 0; i < randomCount; i++) {
+            const idx = Math.floor(Math.random() * n);
+            batch.push(buffer[idx]);
+        }
+
+        return batch;
+    }
+
+    // ====================================================================
+    // TRAINING INTERFACE
+    // ====================================================================
+
+    trainOnSample(input, target) {
+        // Forward pass
+        const { output, rawOutput, cache } = this.forward(input, true);
+
+        // Backward pass
+        const targetArr = Array.isArray(target) ? target : [target, 0.5, 0.5];
+        const gradients = this.backward(cache, targetArr);
+
+        // Update weights
+        this.updateWeightsAdam(gradients);
+
+        // Calculate BCE loss
+        let loss = 0;
+        for (let i = 0; i < rawOutput.length; i++) {
+            const o = Math.max(1e-7, Math.min(1 - 1e-7, rawOutput[i]));
+            const t = targetArr[i] || 0.5;
+            loss -= t * Math.log(o) + (1 - t) * Math.log(1 - o);
+        }
+        loss /= rawOutput.length;
+
+        // Add to replay buffer
+        this.addToReplayBuffer(input, targetArr);
+
+        // Periodically train from replay buffer
+        if (this.timestep % 10 === 0) {
+            this.trainFromReplay();
+        }
+
+        // Track training history
+        this.trainingHistory.push({
+            loss,
+            prediction: output.survivalProb,
+            target: targetArr[0],
+            timestamp: Date.now()
+        });
+
+        if (this.trainingHistory.length > 2000) {
+            this.trainingHistory = this.trainingHistory.slice(-1500);
+        }
+
+        // Track rolling accuracy
+        const correct = (output.survivalProb >= 0.5) === (targetArr[0] >= 0.5);
+        this.rollingAccuracy.push(correct ? 1 : 0);
+        if (this.rollingAccuracy.length > 200) {
+            this.rollingAccuracy.shift();
+        }
+
+        // Early stopping check
+        if (this.rollingAccuracy.length >= 100) {
+            const currentAccuracy = this.rollingAccuracy.slice(-100).reduce((a, b) => a + b, 0) / 100;
+            if (currentAccuracy > this.bestAccuracy) {
+                this.bestAccuracy = currentAccuracy;
+                this.epochsSinceImprovement = 0;
+            } else {
+                this.epochsSinceImprovement++;
+            }
+
+            // If no improvement, reduce learning rate
+            if (this.epochsSinceImprovement > this.earlyStoppingPatience) {
+                this.learningRate *= 0.5;
+                this.learningRate = Math.max(this.learningRate, this.lrSchedule.minLr);
+                this.epochsSinceImprovement = 0;
+                console.log(`🧠 Learning rate reduced to ${this.learningRate.toFixed(6)}`);
+            }
+        }
+
+        return { loss, prediction: output.survivalProb };
+    }
+
+    // ====================================================================
+    // PREDICTION INTERFACE
+    // ====================================================================
+
     predict(input) {
-        const { output } = this.forward(input);
+        const { output } = this.forward(input, false); // isTraining = false
+        return output.survivalProb;
+    }
+
+    predictFull(input) {
+        const { output } = this.forward(input, false);
         return output;
     }
 
-    /**
-     * Get prediction with uncertainty (dropout-like)
-     */
-    predictWithUncertainty(input, numSamples = 10) {
+    predictWithUncertainty(input, numSamples = 20) {
         const predictions = [];
+        const confidences = [];
+        const regimes = [];
 
         for (let i = 0; i < numSamples; i++) {
-            // Add small noise for Monte Carlo estimation
-            const noisyInput = input.map(x => x + (Math.random() - 0.5) * 0.1);
-            predictions.push(this.predict(noisyInput));
+            // Monte Carlo Dropout: keep isTraining = true for dropout
+            const { output } = this.forward(input, true);
+            predictions.push(output.survivalProb);
+            confidences.push(output.confidence);
+            regimes.push(output.regimeScore);
         }
 
         const mean = predictions.reduce((a, b) => a + b, 0) / numSamples;
         const variance = predictions.reduce((a, b) => a + (b - mean) ** 2, 0) / numSamples;
+        const std = Math.sqrt(variance);
+
+        const meanConfidence = confidences.reduce((a, b) => a + b, 0) / numSamples;
+        const meanRegime = regimes.reduce((a, b) => a + b, 0) / numSamples;
+
+        // Predictive entropy (measure of total uncertainty)
+        const predictiveEntropy = -(
+            mean * Math.log(Math.max(1e-7, mean)) +
+            (1 - mean) * Math.log(Math.max(1e-7, 1 - mean))
+        );
+
+        // Epistemic uncertainty (model uncertainty from MC Dropout)
+        const epistemicUncertainty = variance;
+
+        // Aleatoric uncertainty (inherent data noise)
+        const aleatoricUncertainty = Math.max(0, predictiveEntropy - epistemicUncertainty);
 
         return {
             prediction: mean,
-            uncertainty: Math.sqrt(variance),
-            confidence: 1 - Math.min(1, Math.sqrt(variance) * 2)
+            uncertainty: std,
+            confidence: Math.max(0, 1 - std * 3), // Scale to [0, 1]
+            epistemicUncertainty,
+            aleatoricUncertainty,
+            predictiveEntropy,
+            modelConfidence: meanConfidence,
+            regimeScore: meanRegime,
+            numSamples,
+            percentiles: {
+                p5: this._percentile(predictions, 5),
+                p25: this._percentile(predictions, 25),
+                p50: this._percentile(predictions, 50),
+                p75: this._percentile(predictions, 75),
+                p95: this._percentile(predictions, 95),
+            }
         };
     }
 
-    /**
-     * Prepare input features from market data
-     */
+    _percentile(arr, p) {
+        const sorted = [...arr].sort((a, b) => a - b);
+        const idx = Math.ceil((p / 100) * sorted.length) - 1;
+        return sorted[Math.max(0, idx)];
+    }
+
+    // ====================================================================
+    // ADVANCED FEATURE ENGINEERING
+    // ====================================================================
+
     prepareFeatures(tickHistory, runLengths, currentRunLength, volatility) {
         const features = [];
 
-        // Last 30 digits (normalized)
+        // === Section 1: Last 30 digits (normalized) [30 features] ===
         const recentDigits = tickHistory.slice(-30);
         while (recentDigits.length < 30) recentDigits.unshift(5);
         recentDigits.forEach(d => features.push(d / 9));
 
-        // Digit frequency distribution (10 features)
+        // === Section 2: Digit frequency distribution [10 features] ===
         const digitFreq = new Array(10).fill(0);
-        tickHistory.slice(-100).forEach(d => digitFreq[d]++);
-        const total = Math.max(1, tickHistory.slice(-100).length);
+        const last100 = tickHistory.slice(-100);
+        last100.forEach(d => digitFreq[d]++);
+        const total = Math.max(1, last100.length);
         digitFreq.forEach(f => features.push(f / total));
 
-        // Run length statistics (10 features)
-        const recentRuns = runLengths.slice(-20);
-        while (recentRuns.length < 20) recentRuns.unshift(5);
+        // === Section 3: Run length statistics [12 features] ===
+        const recentRuns = runLengths.slice(-30);
+        while (recentRuns.length < 30) recentRuns.unshift(5);
 
-        // Mean, std, min, max of recent runs
         const runMean = recentRuns.reduce((a, b) => a + b, 0) / recentRuns.length;
         const runStd = Math.sqrt(recentRuns.reduce((a, b) => a + (b - runMean) ** 2, 0) / recentRuns.length);
         const runMin = Math.min(...recentRuns);
         const runMax = Math.max(...recentRuns);
+        const runMedian = this._percentile(recentRuns, 50);
+        const runSkewness = recentRuns.reduce((a, b) => a + Math.pow((b - runMean) / (runStd || 1), 3), 0) / recentRuns.length;
+        const runKurtosis = recentRuns.reduce((a, b) => a + Math.pow((b - runMean) / (runStd || 1), 4), 0) / recentRuns.length - 3;
 
         features.push(runMean / 50);
         features.push(runStd / 20);
         features.push(runMin / 50);
         features.push(runMax / 50);
-
-        // Current run length (normalized)
+        features.push(runMedian / 50);
+        features.push(Math.tanh(runSkewness / 3)); // Normalize skewness
+        features.push(Math.tanh(runKurtosis / 10)); // Normalize kurtosis
         features.push(currentRunLength / 50);
+        features.push(Math.min(1, currentRunLength / (runMean || 1))); // Relative to mean
 
-        // Volatility
-        features.push(volatility);
+        // Coefficient of variation
+        features.push(runStd / (runMean || 1));
 
-        // Trend features
-        const shortMean = recentRuns.slice(-5).reduce((a, b) => a + b, 0) / 5;
-        const longMean = recentRuns.slice(-15).reduce((a, b) => a + b, 0) / 15;
-        features.push((shortMean - longMean) / 20 + 0.5);
+        // Percentiles of run lengths
+        features.push(this._percentile(recentRuns, 25) / 50);
+        features.push(this._percentile(recentRuns, 75) / 50);
 
-        // Momentum
-        const momentum = recentRuns.length >= 2 ?
-            (recentRuns[recentRuns.length - 1] - recentRuns[recentRuns.length - 2]) / 20 + 0.5 : 0.5;
-        features.push(momentum);
+        // === Section 4: Trend features [8 features] ===
+        const shortWindow = recentRuns.slice(-5);
+        const medWindow = recentRuns.slice(-10);
+        const longWindow = recentRuns.slice(-20);
 
-        // Pad to input size
-        while (features.length < this.inputSize) {
+        const shortMean = shortWindow.reduce((a, b) => a + b, 0) / shortWindow.length;
+        const medMean = medWindow.reduce((a, b) => a + b, 0) / medWindow.length;
+        const longMean = longWindow.reduce((a, b) => a + b, 0) / longWindow.length;
+
+        // Moving average crossovers
+        features.push(Math.tanh((shortMean - medMean) / 10));
+        features.push(Math.tanh((shortMean - longMean) / 10));
+        features.push(Math.tanh((medMean - longMean) / 10));
+
+        // Rate of change
+        if (recentRuns.length >= 2) {
+            features.push(Math.tanh((recentRuns[recentRuns.length - 1] - recentRuns[recentRuns.length - 2]) / 10));
+        } else {
+            features.push(0);
+        }
+
+        // Acceleration
+        if (recentRuns.length >= 3) {
+            const vel1 = recentRuns[recentRuns.length - 1] - recentRuns[recentRuns.length - 2];
+            const vel2 = recentRuns[recentRuns.length - 2] - recentRuns[recentRuns.length - 3];
+            features.push(Math.tanh((vel1 - vel2) / 10));
+        } else {
+            features.push(0);
+        }
+
+        // Streak detection
+        let currentStreak = 0;
+        let streakDirection = 0; // 1 = increasing, -1 = decreasing
+        for (let i = recentRuns.length - 1; i > 0; i--) {
+            if (recentRuns[i] > recentRuns[i - 1]) {
+                if (streakDirection === 1 || streakDirection === 0) {
+                    currentStreak++;
+                    streakDirection = 1;
+                } else break;
+            } else if (recentRuns[i] < recentRuns[i - 1]) {
+                if (streakDirection === -1 || streakDirection === 0) {
+                    currentStreak++;
+                    streakDirection = -1;
+                } else break;
+            } else break;
+        }
+        features.push(currentStreak / 10);
+        features.push(streakDirection * 0.5 + 0.5); // Normalize to [0, 1]
+
+        // Volatility of volatility (stability of run length distribution)
+        const runVolatilities = [];
+        for (let i = 5; i < recentRuns.length; i++) {
+            const window = recentRuns.slice(i - 5, i);
+            const wMean = window.reduce((a, b) => a + b, 0) / window.length;
+            const wStd = Math.sqrt(window.reduce((a, b) => a + (b - wMean) ** 2, 0) / window.length);
+            runVolatilities.push(wStd);
+        }
+        if (runVolatilities.length > 0) {
+            const volOfVol = Math.sqrt(
+                runVolatilities.reduce((a, b) => a + (b - runVolatilities.reduce((x, y) => x + y, 0) / runVolatilities.length) ** 2, 0) /
+                runVolatilities.length
+            );
+            features.push(Math.min(1, volOfVol / 10));
+        } else {
             features.push(0.5);
         }
 
-        return features.slice(0, this.inputSize);
-    }
+        // === Section 5: Volatility and entropy [5 features] ===
+        features.push(typeof volatility === 'object' ? volatility.combined || 0.5 : volatility);
 
-    /**
-     * Get training performance metrics
-     */
-    getPerformanceMetrics() {
-        if (this.trainingHistory.length < 10) {
-            return { accuracy: 0, recentLoss: 1, trend: 'insufficient_data' };
+        // Digit transition entropy
+        const transitionCounts = {};
+        for (let i = 1; i < last100.length; i++) {
+            const key = `${last100[i - 1]}_${last100[i]}`;
+            transitionCounts[key] = (transitionCounts[key] || 0) + 1;
+        }
+        const transTotal = Math.max(1, last100.length - 1);
+        let transEntropy = 0;
+        Object.values(transitionCounts).forEach(c => {
+            const p = c / transTotal;
+            if (p > 0) transEntropy -= p * Math.log2(p);
+        });
+        features.push(transEntropy / Math.log2(100)); // Normalize
+
+        // Auto-correlation at lag 1
+        const meanDigit = last100.reduce((a, b) => a + b, 0) / last100.length;
+        let autoCorr = 0;
+        let variance2 = 0;
+        for (let i = 1; i < last100.length; i++) {
+            autoCorr += (last100[i] - meanDigit) * (last100[i - 1] - meanDigit);
+            variance2 += (last100[i] - meanDigit) ** 2;
+        }
+        features.push(variance2 > 0 ? Math.tanh(autoCorr / variance2) : 0);
+
+        // Recent short run ratio
+        const shortRunCount = recentRuns.filter(r => r <= 3).length;
+        features.push(shortRunCount / recentRuns.length);
+
+        // Recent long run ratio
+        const longRunCount = recentRuns.filter(r => r >= 10).length;
+        features.push(longRunCount / recentRuns.length);
+
+        // === Section 6: Time-based features [5 features] ===
+        const now = new Date();
+        features.push(now.getHours() / 23); // Hour of day
+        features.push(now.getMinutes() / 59); // Minute
+        features.push(now.getDay() / 6); // Day of week
+        features.push(Math.sin(2 * Math.PI * now.getHours() / 24)); // Cyclic hour
+        features.push(Math.cos(2 * Math.PI * now.getHours() / 24)); // Cyclic hour
+
+        // === Normalize features ===
+        this._updateFeatureStats(features);
+
+        const normalizedFeatures = this._normalizeFeatures(features);
+
+        // Pad or truncate to input size
+        while (normalizedFeatures.length < this.inputSize) {
+            normalizedFeatures.push(0);
         }
 
-        const recent = this.trainingHistory.slice(-100);
+        return normalizedFeatures.slice(0, this.inputSize);
+    }
+
+    _updateFeatureStats(features) {
+        if (!this.featureStats.means) {
+            this.featureStats.means = [...features];
+            this.featureStats.stds = features.map(() => 1);
+            this.featureStats.count = 1;
+            return;
+        }
+
+        const alpha = 0.01; // Exponential moving average factor
+        for (let i = 0; i < features.length && i < this.featureStats.means.length; i++) {
+            this.featureStats.means[i] = (1 - alpha) * this.featureStats.means[i] + alpha * features[i];
+            const diff = features[i] - this.featureStats.means[i];
+            this.featureStats.stds[i] = Math.sqrt(
+                (1 - alpha) * (this.featureStats.stds[i] ** 2) + alpha * diff * diff
+            );
+        }
+        this.featureStats.count++;
+    }
+
+    _normalizeFeatures(features) {
+        if (!this.featureStats.means || this.featureStats.count < 10) {
+            return features; // Not enough data for reliable normalization
+        }
+
+        return features.map((f, i) => {
+            if (i < this.featureStats.means.length) {
+                const std = Math.max(this.featureStats.stds[i], 1e-7);
+                return (f - this.featureStats.means[i]) / std;
+            }
+            return f;
+        });
+    }
+
+    // ====================================================================
+    // PERFORMANCE METRICS
+    // ====================================================================
+
+    getPerformanceMetrics() {
+        if (this.trainingHistory.length < 10) {
+            return {
+                accuracy: 0,
+                recentLoss: 1,
+                trend: 'insufficient_data',
+                learningRate: this.learningRate,
+                bestAccuracy: this.bestAccuracy,
+                replayBufferSize: this.replayBuffer.length,
+            };
+        }
+
+        const recent = this.trainingHistory.slice(-200);
         const avgLoss = recent.reduce((a, b) => a + b.loss, 0) / recent.length;
 
-        // Binary accuracy (threshold at 0.5)
+        // Binary accuracy
         const correct = recent.filter(h =>
             (h.prediction >= 0.5 && h.target >= 0.5) ||
             (h.prediction < 0.5 && h.target < 0.5)
         ).length;
-
         const accuracy = correct / recent.length;
 
-        // Trend
-        const firstHalf = recent.slice(0, 50).reduce((a, b) => a + b.loss, 0) / 50;
-        const secondHalf = recent.slice(-50).reduce((a, b) => a + b.loss, 0) / 50;
-        const trend = secondHalf < firstHalf * 0.9 ? 'improving' :
-            secondHalf > firstHalf * 1.1 ? 'degrading' : 'stable';
+        // Trend analysis
+        const firstHalf = recent.slice(0, Math.floor(recent.length / 2));
+        const secondHalf = recent.slice(Math.floor(recent.length / 2));
+        const firstLoss = firstHalf.reduce((a, b) => a + b.loss, 0) / firstHalf.length;
+        const secondLoss = secondHalf.reduce((a, b) => a + b.loss, 0) / secondHalf.length;
 
-        return { accuracy, recentLoss: avgLoss, trend };
-    }
+        const trend = secondLoss < firstLoss * 0.9 ? 'improving' :
+            secondLoss > firstLoss * 1.1 ? 'degrading' : 'stable';
 
-    /**
-     * Export weights for persistence
-     */
-    exportWeights() {
+        // Calibration (how well probabilities match outcomes)
+        const calibrationBins = {};
+        recent.forEach(h => {
+            const bin = Math.floor(h.prediction * 10) / 10;
+            if (!calibrationBins[bin]) calibrationBins[bin] = { count: 0, positive: 0 };
+            calibrationBins[bin].count++;
+            if (h.target >= 0.5) calibrationBins[bin].positive++;
+        });
+
+        let calibrationError = 0;
+        let calibrationCount = 0;
+        Object.entries(calibrationBins).forEach(([bin, stats]) => {
+            if (stats.count >= 5) {
+                const expectedProb = parseFloat(bin) + 0.05;
+                const actualProb = stats.positive / stats.count;
+                calibrationError += Math.abs(expectedProb - actualProb);
+                calibrationCount++;
+            }
+        });
+        const avgCalibrationError = calibrationCount > 0 ? calibrationError / calibrationCount : 0.5;
+
         return {
-            weights: this.weights,
-            biases: this.biases,
-            velocities: this.velocities,
-            trainingHistory: this.trainingHistory.slice(-500)
+            accuracy,
+            recentLoss: avgLoss,
+            trend,
+            learningRate: this.learningRate,
+            bestAccuracy: this.bestAccuracy,
+            replayBufferSize: this.replayBuffer.length,
+            totalTrainingSamples: this.timestep,
+            calibrationError: avgCalibrationError,
+            epochsSinceImprovement: this.epochsSinceImprovement,
         };
     }
 
-    /**
-     * Import weights from saved state
-     */
+    // ====================================================================
+    // STATE PERSISTENCE
+    // ====================================================================
+
+    exportWeights() {
+        return {
+            layers: this.layers.map(l => ({
+                weights: l.weights,
+                biases: l.biases,
+            })),
+            gatingLayers: this.gatingLayers.map(g => ({
+                inputGate: { weights: g.inputGate.weights, biases: g.inputGate.biases },
+                forgetGate: { weights: g.forgetGate.weights, biases: g.forgetGate.biases },
+                cellState: g.cellState,
+            })),
+            attentionWeights: this.attentionWeights,
+            batchNormParams: this.batchNormParams,
+            residualProjections: this.residualProjections,
+            mWeights: this.mWeights,
+            vWeights: this.vWeights,
+            timestep: this.timestep,
+            learningRate: this.learningRate,
+            bestAccuracy: this.bestAccuracy,
+            epochsSinceImprovement: this.epochsSinceImprovement,
+            featureStats: this.featureStats,
+            trainingHistory: this.trainingHistory.slice(-500),
+            rollingAccuracy: this.rollingAccuracy.slice(-200),
+            // Don't export full replay buffer to save space - keep last 500
+            replayBuffer: this.replayBuffer.slice(-500),
+        };
+    }
+
     importWeights(state) {
-        if (state.weights) this.weights = state.weights;
-        if (state.biases) this.biases = state.biases;
-        if (state.velocities) this.velocities = state.velocities;
-        if (state.trainingHistory) this.trainingHistory = state.trainingHistory;
-        this.initialized = true;
+        try {
+            if (state.layers) {
+                state.layers.forEach((savedLayer, i) => {
+                    if (this.layers[i]) {
+                        this.layers[i].weights = savedLayer.weights;
+                        this.layers[i].biases = savedLayer.biases;
+                    }
+                });
+            }
+
+            if (state.gatingLayers) {
+                state.gatingLayers.forEach((savedGate, i) => {
+                    if (this.gatingLayers[i]) {
+                        this.gatingLayers[i].inputGate.weights = savedGate.inputGate.weights;
+                        this.gatingLayers[i].inputGate.biases = savedGate.inputGate.biases;
+                        this.gatingLayers[i].forgetGate.weights = savedGate.forgetGate.weights;
+                        this.gatingLayers[i].forgetGate.biases = savedGate.forgetGate.biases;
+                        this.gatingLayers[i].cellState = savedGate.cellState;
+                    }
+                });
+            }
+
+            if (state.attentionWeights) this.attentionWeights = state.attentionWeights;
+            if (state.batchNormParams) this.batchNormParams = state.batchNormParams;
+            if (state.residualProjections) this.residualProjections = state.residualProjections;
+            if (state.mWeights) this.mWeights = state.mWeights;
+            if (state.vWeights) this.vWeights = state.vWeights;
+            if (state.timestep) this.timestep = state.timestep;
+            if (state.learningRate) this.learningRate = state.learningRate;
+            if (state.bestAccuracy) this.bestAccuracy = state.bestAccuracy;
+            if (state.epochsSinceImprovement) this.epochsSinceImprovement = state.epochsSinceImprovement;
+            if (state.featureStats) this.featureStats = state.featureStats;
+            if (state.trainingHistory) this.trainingHistory = state.trainingHistory;
+            if (state.rollingAccuracy) this.rollingAccuracy = state.rollingAccuracy;
+            if (state.replayBuffer) this.replayBuffer = state.replayBuffer;
+
+            this.initialized = true;
+            console.log(`  ✓ Advanced neural network restored (${this.timestep} training steps, best accuracy: ${(this.bestAccuracy * 100).toFixed(1)}%)`);
+        } catch (error) {
+            console.error(`  ✗ Error importing neural network state: ${error.message}`);
+            console.log('  ↻ Re-initializing network...');
+            this.initializeNetwork();
+        }
     }
 }
 
@@ -867,7 +1976,7 @@ class EnsembleDecisionMaker {
 
         this.recentDecisions = [];
         this.thresholdHistory = [];
-        this.adaptiveThreshold = 0.7;
+        this.adaptiveThreshold = 0.7; // Default threshold;
     }
 
     /**
@@ -1070,145 +2179,6 @@ class EnsembleDecisionMaker {
     }
 }
 
-// ============================================================================
-// TIER 5: PERSISTENCE MANAGER
-// ============================================================================
-
-// class PersistenceManager {
-//     constructor(baseDir = './bot_memory2') {
-//         this.baseDir = baseDir;
-//         this.ensureDirectory();
-//     }
-
-//     ensureDirectory() {
-//         if (!fs.existsSync(this.baseDir)) {
-//             fs.mkdirSync(this.baseDir, { recursive: true });
-//             console.log(`📁 Created memory directory: ${this.baseDir}`);
-//         }
-//     }
-
-//     /**
-//      * Save learning data to file
-//      */
-//     save(filename, data) {
-//         try {
-//             const filepath = path.join(this.baseDir, filename);
-//             fs.writeFileSync(filepath, JSON.stringify(data, null, 2));
-//             console.log(`💾 Saved: ${filename}`);
-//             return true;
-//         } catch (error) {
-//             console.error(`Error saving ${filename}:`, error.message);
-//             return false;
-//         }
-//     }
-
-//     /**
-//      * Load learning data from file
-//      */
-//     // load(filename) {
-//     //     try {
-//     //         const filepath = path.join(this.baseDir, filename);
-//     //         if (fs.existsSync(filepath)) {
-//     //             const data = JSON.parse(fs.readFileSync(filepath, 'utf8'));
-//     //             console.log(`📂 Loaded: ${filename}`);
-//     //             return data;
-//     //         }
-//     //         return null;
-//     //     } catch (error) {
-//     //         console.error(`Error loading ${filename}:`, error.message);
-//     //         return null;
-//     //     }
-//     // }
-
-//     /**
-//      * Save all bot state
-//      */
-//     saveFullState(bot) {
-//         const state = {
-//             timestamp: Date.now(),
-//             statisticalEngine: {
-//                 bayesianPriors: bot.statisticalEngine.bayesianPriors
-//             },
-//             patternEngine: {
-//                 ngramModels: bot.patternEngine.ngramModels,
-//                 markovChains: bot.patternEngine.markovChains,
-//                 regimeStates: bot.patternEngine.regimeStates
-//             },
-//             neuralEngine: bot.neuralEngine.exportWeights(),
-//             ensembleDecisionMaker: bot.ensembleDecisionMaker.exportState(),
-//             learningSystem: bot.learningSystem,
-//             extendedStayedIn: bot.extendedStayedIn,
-//             performanceHistory: {
-//                 totalTrades: bot.totalTrades,
-//                 totalWins: bot.totalWins,
-//                 totalLosses: bot.totalLosses,
-//                 totalProfitLoss: bot.totalProfitLoss
-//             }
-//         };
-
-//         return this.save('bot_state.json', state);
-//     }
-
-//     /**
-//      * Load all bot state
-//      */
-//     loadFullState() {
-//         return this.load('bot_state.json');
-//     }
-
-//     /**
-//      * Save performance log
-//      */
-//     appendPerformanceLog(entry) {
-//         const logFile = 'performance_log.json';
-//         let log = this.load(logFile) || [];
-//         log.push({ ...entry, timestamp: Date.now() });
-
-//         // Keep last 10000 entries
-//         if (log.length > 10000) {
-//             log = log.slice(-10000);
-//         }
-
-//         return this.save(logFile, log);
-//     }
-
-//     /**
-//      * Get performance statistics
-//      */
-//     getPerformanceStats() {
-//         const log = this.load('performance_log.json') || [];
-//         if (log.length === 0) return null;
-
-//         const wins = log.filter(e => e.won).length;
-//         const losses = log.filter(e => !e.won).length;
-
-//         // Daily breakdown
-//         const dailyStats = {};
-//         log.forEach(entry => {
-//             const date = new Date(entry.timestamp).toISOString().split('T')[0];
-//             if (!dailyStats[date]) {
-//                 dailyStats[date] = { wins: 0, losses: 0, profit: 0 };
-//             }
-//             if (entry.won) {
-//                 dailyStats[date].wins++;
-//             } else {
-//                 dailyStats[date].losses++;
-//             }
-//             dailyStats[date].profit += entry.profit || 0;
-//         });
-
-//         return {
-//             total: { wins, losses, winRate: wins / (wins + losses) },
-//             daily: dailyStats,
-//             recentTrend: log.slice(-50)
-//         };
-//     }
-// }
-
-// ============================================================================
-// MAIN ENHANCED TRADING BOT
-// ============================================================================
-
 class EnhancedAccumulatorBot {
     constructor(token, config = {}) {
         this.token = token;
@@ -1219,14 +2189,13 @@ class EnhancedAccumulatorBot {
 
         this.config = {
             initialStake: config.initialStake || 1,
+            initialStake2: config.initialStake2 || 5,
             multiplier: config.multiplier || 21,
-            multiplier2: config.multiplier2 || 100,
-            multiplier3: config.multiplier3 || 1000,
             maxConsecutiveLosses: config.maxConsecutiveLosses || 3,
             stopLoss: config.stopLoss || 400,
             takeProfit: config.takeProfit || 5000,
-            growthRate: 0.05,
-            accuTakeProfit: 0.01,
+            growthRate: config.growthRate || 0.05,
+            accuTakeProfit: config.accuTakeProfit || 0.01,
             requiredHistoryLength: config.requiredHistoryLength || 200,
             winProbabilityThreshold: config.winProbabilityThreshold || 100,
             maxReconnectAttempts: config.maxReconnectAttempts || 10000,
@@ -1266,6 +2235,8 @@ class EnhancedAccumulatorBot {
         this.sys = 1;
         this.sysCount = 0;
         this.stopLossStake = false;
+        this.sys2 = false;
+        this.sys2WinCount = 0;
 
         // Asset-specific data
         this.digitCounts = {};
@@ -1290,7 +2261,7 @@ class EnhancedAccumulatorBot {
         this.patternEngine = new PatternEngine();
 
         // Tier 3: Neural Engine
-        this.neuralEngine = new NeuralEngine(60, [32, 16], 1);
+        this.neuralEngine = new NeuralEngine(90, [128, 64, 32], 3);
 
         // Tier 4: Ensemble Decision Maker
         this.ensembleDecisionMaker = new EnsembleDecisionMaker();
@@ -1355,149 +2326,338 @@ class EnhancedAccumulatorBot {
             this.statisticalEngine.initBayesianPrior(asset);
         });
 
-        // Email Configuration
-        this.emailConfig = {
-            service: 'gmail',
-            auth: {
-                user: 'kenzkdp2@gmail.com',
-                pass: 'jfjhtmussgfpbgpk'
-            }
+        // Telegram Configuration
+        this.telegramToken = '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ';
+        this.telegramChatId = '752497117';
+        this.telegramEnabled = true;
+
+        if (this.telegramEnabled) {
+            this.telegramBot = new TelegramBot(this.telegramToken, { polling: false });
+            this.startTelegramTimer();
+        } else {
+            console.log('📱 Telegram notifications disabled (missing API keys).');
+        }
+
+        // Stats tracking for Telegram summaries
+        this.hourlyStats = {
+            trades: 0,
+            wins: 0,
+            losses: 0,
+            pnl: 0,
+            lastHour: new Date().getHours()
         };
-        this.emailRecipient = 'kenotaru@gmail.com';
-        this.startEmailTimer();
 
+        // Reconnection logic
         this.reconnectAttempts = 0;
-        this.kLoss = 0.01;
+        this.maxReconnectAttempts = 50;
+        this.reconnectDelay = 5000;
+        this.reconnectTimer = null;
+        this.isReconnecting = false;
 
-        // Load saved state
-        // this.loadSavedState();
+        // Heartbeat/Ping mechanism
+        this.pingInterval = null;
+        this.checkDataInterval = null;
+        this.pongTimeout = null;
+        this.lastPongTime = Date.now();
+        this.lastDataTime = Date.now();
+        this.pingIntervalMs = 20000;
+        this.pongTimeoutMs = 10000;
+        this.dataTimeoutMs = 60000;
 
-        // Start periodic save
-        // this.startPeriodicSave();
+        // Message queue for failed sends
+        this.messageQueue = [];
+        this.maxQueueSize = 50;
+
+        // Load saved state if available
+        this.loadSavedState();
     }
 
     // ========================================================================
     // PERSISTENCE METHODS
     // ========================================================================
 
-    // loadSavedState() {
-    //     const state = this.persistenceManager.loadFullState();
-    //     if (state) {
-    //         console.log('📂 Loading saved learning state...');
+    loadSavedState() {
+        const state = StatePersistence.loadState();
 
-    //         // Restore statistical engine
-    //         if (state.statisticalEngine) {
-    //             this.statisticalEngine.bayesianPriors = state.statisticalEngine.bayesianPriors || {};
-    //         }
+        // Check if state was successfully loaded
+        if (!state) {
+            console.log('🆕 No saved state found or state too old. Starting fresh learning.');
+            return;
+        }
 
-    //         // Restore pattern engine
-    //         if (state.patternEngine) {
-    //             this.patternEngine.ngramModels = state.patternEngine.ngramModels || {};
-    //             this.patternEngine.markovChains = state.patternEngine.markovChains || {};
-    //             this.patternEngine.regimeStates = state.patternEngine.regimeStates || {};
-    //         }
+        console.log('📂 Loading saved learning state...');
 
-    //         // Restore neural engine
-    //         if (state.neuralEngine) {
-    //             this.neuralEngine.importWeights(state.neuralEngine);
-    //         }
+        try {
+            // Restore trading state
+            if (state.trading) {
+                const trading = state.trading;
+                this.currentStake = trading.currentStake || this.config.initialStake;
+                this.consecutiveLosses = trading.consecutiveLosses || 0;
+                this.totalTrades = trading.totalTrades || 0;
+                this.totalWins = trading.totalWins || 0;
+                this.totalLosses = trading.totalLosses || 0;
+                this.consecutiveLosses2 = trading.consecutiveLosses2 || 0;
+                this.consecutiveLosses3 = trading.consecutiveLosses3 || 0;
+                this.consecutiveLosses4 = trading.consecutiveLosses4 || 0;
+                this.consecutiveLosses5 = trading.consecutiveLosses5 || 0;
+                this.totalProfitLoss = trading.totalProfitLoss || 0;
+                this.Pause = trading.Pause || false;
+                this.sys = trading.sys || 1;
+                this.sysCount = trading.sysCount || 0;
+                this.sys2 = trading.sys2 || false;
+                this.sys2WinCount = trading.sys2WinCount || 0;
+                this.isWinTrade = trading.isWinTrade || false;
+            }
 
-    //         // Restore ensemble decision maker
-    //         if (state.ensembleDecisionMaker) {
-    //             this.ensembleDecisionMaker.importState(state.ensembleDecisionMaker);
-    //         }
+            // Restore hourly stats
+            if (state.hourlyStats) {
+                this.hourlyStats = state.hourlyStats;
+            }
 
-    //         // Restore learning system
-    //         if (state.learningSystem) {
-    //             this.learningSystem = { ...this.learningSystem, ...state.learningSystem };
-    //         }
+            // Restore learning mode state
+            if (state.observationCount !== undefined) {
+                this.observationCount = state.observationCount;
+            }
+            if (state.learningMode !== undefined) {
+                this.learningMode = state.learningMode;
+            }
 
-    //         // Restore extended stayed in
-    //         if (state.extendedStayedIn) {
-    //             this.extendedStayedIn = state.extendedStayedIn;
-    //         }
+            // Restore neural network weights
+            if (state.neuralEngine) {
+                this.neuralEngine.importWeights(state.neuralEngine);
+                console.log('  ✓ Neural network weights restored');
+            }
 
-    //         console.log('✅ Learning state restored successfully');
-    //     } else {
-    //         console.log('🆕 No saved state found. Starting fresh learning.');
-    //     }
-    // }
+            // Restore ensemble decision maker
+            if (state.ensembleDecisionMaker) {
+                this.ensembleDecisionMaker.importState(state.ensembleDecisionMaker);
+                console.log('  ✓ Ensemble decision maker restored');
+            }
 
-    // startPeriodicSave() {
-    //     setInterval(() => {
-    //         this.persistenceManager.saveFullState(this);
-    //     }, this.config.saveInterval);
-    // }
+            // Restore learning system
+            if (state.learningSystem) {
+                this.learningSystem = { ...this.learningSystem, ...state.learningSystem };
+                console.log('  ✓ Learning system restored');
+            }
+
+            // Restore extended stayed-in data
+            if (state.extendedStayedIn) {
+                this.extendedStayedIn = state.extendedStayedIn;
+                console.log('  ✓ Extended stayed-in data restored');
+            }
+
+            // Restore previous stayed-in data
+            if (state.previousStayedIn) {
+                this.previousStayedIn = state.previousStayedIn;
+            }
+
+            // Restore asset states
+            if (state.assetStates) {
+                this.assetStates = state.assetStates;
+                console.log('  ✓ Asset states restored');
+            }
+
+            // Restore tick histories
+            if (state.assets) {
+                Object.keys(state.assets).forEach(asset => {
+                    if (this.tickHistories[asset] && state.assets[asset].tickHistory) {
+                        this.tickHistories[asset] = state.assets[asset].tickHistory;
+                    }
+                });
+                console.log('  ✓ Tick histories restored');
+            }
+
+            console.log('✅ Learning state restored successfully');
+            console.log(`📊 Restored ${this.totalTrades} trades, P&L: $${this.totalProfitLoss.toFixed(2)}`);
+
+        } catch (error) {
+            console.error(`❌ Error restoring state: ${error.message}`);
+            console.log('⚠️ Continuing with fresh state...');
+        }
+    }
 
     // ========================================================================
-    // WEBSOCKET METHODS (PRESERVED)
+    // WEBSOCKET & CONNECTION METHODS
     // ========================================================================
 
     connect() {
-        if (!this.Pause) {
-            console.log('Attempting to connect to Deriv API...');
-            this.ws = new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            console.log('Already connected');
+            return;
+        }
 
-            this.ws.on('open', () => {
-                console.log('Connected to Deriv API');
-                this.connected = true;
-                this.wsReady = true;
-                this.reconnectAttempts = 0;
-                this.authenticate();
-            });
+        console.log('🔌 Connecting to Deriv API...');
+        this.cleanup();
 
-            this.ws.on('message', (data) => {
+        this.ws = new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
+
+        this.ws.on('open', () => {
+            console.log('✅ Connected to Deriv API');
+            this.connected = true;
+            this.wsReady = false; // Wait for auth
+            this.reconnectAttempts = 0;
+            this.isReconnecting = false;
+            this.lastPongTime = Date.now();
+            this.lastDataTime = Date.now();
+
+            this.startMonitor();
+            this.authenticate();
+        });
+
+        this.ws.on('message', (data) => {
+            this.lastPongTime = Date.now();
+            this.lastDataTime = Date.now();
+            try {
                 const message = JSON.parse(data);
                 this.handleMessage(message);
-            });
+            } catch (error) {
+                console.error('Error parsing message:', error);
+            }
+        });
 
-            this.ws.on('error', (error) => {
-                console.error('WebSocket error:', error);
-                this.handleDisconnect();
-            });
+        this.ws.on('error', (error) => {
+            console.error('WebSocket error:', error.message);
+        });
 
-            this.ws.on('close', () => {
-                console.log('Disconnected from Deriv API');
-                this.connected = false;
-                if (!this.Pause) {
-                    this.handleDisconnect();
-                }
-            });
-        }
+        this.ws.on('close', (code, reason) => {
+            console.log(`Disconnected from Deriv API (Code: ${code}, Reason: ${reason || 'None'})`);
+            this.handleDisconnect();
+        });
+
+        this.ws.on('pong', () => {
+            this.lastPongTime = Date.now();
+        });
+    }
+
+    startMonitor() {
+        this.stopMonitor();
+
+        this.pingInterval = setInterval(() => {
+            if (this.connected && this.ws && this.ws.readyState === WebSocket.OPEN) {
+                this.ws.ping();
+
+                this.pongTimeout = setTimeout(() => {
+                    const timeSinceLastPong = Date.now() - this.lastPongTime;
+                    if (timeSinceLastPong > this.pongTimeoutMs) {
+                        console.warn('⚠️ No pong received, connection may be dead');
+                    }
+                }, this.pongTimeoutMs);
+            }
+        }, this.pingIntervalMs);
+
+        this.checkDataInterval = setInterval(() => {
+            if (!this.connected) return;
+
+            const silenceDuration = Date.now() - this.lastDataTime;
+            if (silenceDuration > this.dataTimeoutMs) {
+                console.error(`⚠️ No data for ${Math.round(silenceDuration / 1000)}s - Forcing reconnection...`);
+                StatePersistence.saveState(this);
+                if (this.ws) this.ws.terminate();
+            }
+        }, 10000);
+    }
+
+    stopMonitor() {
+        if (this.pingInterval) clearInterval(this.pingInterval);
+        if (this.checkDataInterval) clearInterval(this.checkDataInterval);
+        if (this.pongTimeout) clearTimeout(this.pongTimeout);
+        this.pingInterval = null;
+        this.checkDataInterval = null;
+        this.pongTimeout = null;
     }
 
     sendRequest(request) {
-        if (this.connected && this.wsReady) {
+        if (!this.connected || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
+            console.warn('Cannot send request: WebSocket not ready');
+            if (this.messageQueue && this.messageQueue.length < this.maxQueueSize) {
+                this.messageQueue.push(request);
+            }
+            return false;
+        }
+
+        try {
             this.ws.send(JSON.stringify(request));
-        } else if (this.connected && !this.wsReady) {
-            console.log('WebSocket not ready. Queueing request...');
-            setTimeout(() => this.sendRequest(request), this.config.reconnectInterval);
-        } else {
-            console.error('Not connected to Deriv API. Unable to send request:', request);
+            return true;
+        } catch (error) {
+            console.error('Error sending request:', error.message);
+            if (this.messageQueue && this.messageQueue.length < this.maxQueueSize) {
+                this.messageQueue.push(request);
+            }
+            return false;
         }
     }
 
+    processMessageQueue() {
+        if (!this.messageQueue || this.messageQueue.length === 0) return;
+        const queue = [...this.messageQueue];
+        this.messageQueue = [];
+        queue.forEach(message => this.sendRequest(message));
+    }
+
     handleDisconnect() {
-        this.connected = false;
-        this.wsReady = false;
-        if (this.reconnectAttempts < this.config.maxReconnectAttempts) {
-            console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.config.maxReconnectAttempts})...`);
-            setTimeout(() => this.connect(), this.config.reconnectInterval);
+        if (this.endOfDay) {
+            console.log('Planned shutdown, not reconnecting.');
+            this.cleanup();
+            return;
         }
 
-        this.tradeInProgress = false;
-        this.predictionInProgress = false;
-        this.resetForNewDay();
-        this.survivalNum = null;
-        this.tickSubscriptionIds = {};
+        if (this.isReconnecting) return;
 
-        //unsubscribe from all assets
-        this.unsubscribeAllTicks();
+        this.connected = false;
+        this.wsReady = false;
+        this.stopMonitor();
+        StatePersistence.saveState(this);
 
-        //unsubscribe from all assets
-        this.assets.forEach(asset => {
-            this.unsubscribeFromTicks(asset);
-        });
+        if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+            console.error('❌ Max reconnection attempts reached');
+            this.sendTelegramMessage(
+                `❌ <b>Max Reconnection Attempts Reached</b>\n` +
+                `Please restart the bot manually.\n` +
+                `Final P&L: $${this.totalProfitLoss.toFixed(2)}`
+            );
+            this.isReconnecting = false;
+            return;
+        }
+
+        this.isReconnecting = true;
+        this.reconnectAttempts++;
+
+        const delay = Math.min(
+            this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1),
+            30000
+        );
+
+        console.log(`🔄 Reconnecting in ${(delay / 1000).toFixed(1)}s... (Attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+
+        this.sendTelegramMessage(
+            `⚠️ <b>CONNECTION LOST - RECONNECTING</b>\n` +
+            `📊 Attempt: ${this.reconnectAttempts}/${this.maxReconnectAttempts}\n` +
+            `⏱️ Retrying in ${(delay / 1000).toFixed(1)}s`
+        );
+
+        if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+
+        this.reconnectTimer = setTimeout(() => {
+            this.isReconnecting = false;
+            this.connect();
+        }, delay);
+    }
+
+    cleanup() {
+        this.stopMonitor();
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
+        if (this.ws) {
+            this.ws.removeAllListeners();
+            if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+                try { this.ws.close(); } catch (e) { }
+            }
+            this.ws = null;
+        }
+        this.connected = false;
+        this.wsReady = false;
     }
 
     handleApiError(error) {
@@ -1560,7 +2720,7 @@ class EnhancedAccumulatorBot {
             symbol: asset,
             growth_rate: this.config.growthRate,
             limit_order: {
-                take_profit: this.kLoss
+                take_profit: this.config.accuTakeProfit
             }
         };
         this.sendRequest(proposal);
@@ -1571,19 +2731,27 @@ class EnhancedAccumulatorBot {
     // ========================================================================
 
     handleMessage(message) {
+        if (message.msg_type === 'ping') {
+            this.sendRequest({ ping: 1 });
+            return;
+        }
+
         if (message.msg_type === 'authorize') {
             if (message.error) {
                 console.error('Authentication failed:', message.error.message);
+                this.sendTelegramMessage(`❌ <b>Authentication Failed:</b> ${message.error.message}`);
                 this.disconnect();
                 return;
             }
-            console.log('Authentication successful');
+            console.log('✅ Authenticated successfully');
+            this.wsReady = true;
+
+            this.processMessageQueue();
 
             this.tradeInProgress = false;
             this.predictionInProgress = false;
-            this.resetForNewDay();
+            // Removed: this.resetForNewDay(); - so we don't wipe memory during a reconnect
             this.survivalNum = null;
-            this.tickSubscriptionIds = {};
             this.retryCount = 0;
             this.initializeSubscriptions();
 
@@ -1631,6 +2799,26 @@ class EnhancedAccumulatorBot {
         } else {
             return fractionalPart.length >= 2 ? parseInt(fractionalPart[1]) : 0;
         }
+    }
+
+    startTelegramTimer() {
+        const now = new Date();
+        const nextHour = new Date(now);
+        nextHour.setHours(nextHour.getHours() + 1);
+        nextHour.setMinutes(0);
+        nextHour.setSeconds(0);
+        nextHour.setMilliseconds(0);
+
+        const timeUntilNextHour = nextHour.getTime() - now.getTime();
+
+        setTimeout(() => {
+            this.sendHourlySummary();
+            setInterval(() => {
+                this.sendHourlySummary();
+            }, 60 * 60 * 1000);
+        }, timeUntilNextHour);
+
+        console.log(`📱 Hourly summaries scheduled. First in ${Math.ceil(timeUntilNextHour / 60000)} minutes.`);
     }
 
     initializeSubscriptions() {
@@ -1743,10 +2931,10 @@ class EnhancedAccumulatorBot {
         }
 
         // Check consecutive losses
-        if (assetState.consecutiveLosses >= 2) {
-            console.log(`[${asset}] Too many consecutive losses on this asset`);
-            return false;
-        }
+        // if (assetState.consecutiveLosses >= 2) {
+        //     console.log(`[${asset}] Too many consecutive losses on this asset`);
+        //     return false;
+        // }
 
         // Check Bayesian confidence
         const bayesian = this.statisticalEngine.getBayesianEstimate(asset);
@@ -1808,7 +2996,17 @@ class EnhancedAccumulatorBot {
                 volatility
             );
 
-            const target = won ? 1 : 0;
+            // Multi-head target: [survived, confidence_target, regime_target]
+            const regime = this.patternEngine.detectRegime(asset, this.extendedStayedIn[asset]);
+            const regimeTarget = regime.regime === 'stable' ? 0.8 :
+                regime.regime === 'normal' ? 0.6 :
+                    regime.regime === 'volatile' ? 0.3 : 0.2;
+
+            const confidenceTarget = won ?
+                Math.min(1, 0.7 + (digitCount / 100)) :
+                Math.max(0, 0.3 - (this.consecutiveLosses * 0.1));
+
+            const target = [won ? 1 : 0, confidenceTarget, regimeTarget];
             const { loss, prediction } = this.neuralEngine.trainOnSample(features, target);
 
             // Track prediction accuracy
@@ -1822,7 +3020,11 @@ class EnhancedAccumulatorBot {
 
             if (this.totalTrades % 10 === 0) {
                 const metrics = this.neuralEngine.getPerformanceMetrics();
-                console.log(`🧠 Neural Network: Accuracy=${(metrics.accuracy * 100).toFixed(1)}%, Trend=${metrics.trend}`);
+                console.log(`🧠 Neural Network: Accuracy=${(metrics.accuracy * 100).toFixed(1)}%, ` +
+                    `Loss=${metrics.recentLoss.toFixed(4)}, Trend=${metrics.trend}, ` +
+                    `LR=${metrics.learningRate.toFixed(6)}, ` +
+                    `Replay=${metrics.replayBufferSize}, ` +
+                    `Calibration=${metrics.calibrationError.toFixed(3)}`);
             }
         }
 
@@ -1914,9 +3116,9 @@ class EnhancedAccumulatorBot {
                 const decision = this.makeEnhancedTradeDecision(asset, stayedInArray);
 
                 if (decision.shouldTrade) {
-                    console.log(`[${asset}] 🎯 TRADE SIGNAL | Score: ${decision.ensembleScore.toFixed(4)} | Confidence: ${decision.confidence.toFixed(2)}`);
+                    console.log(`[${asset}] 🎯 TRADE SIGNAL | Score: ${decision.ensembleScore.toFixed(4)} | Confidence: ${decision.confidence.toFixed(2)} | SurvivalProb: ${decision.survivalProb.toFixed(2)} | Threshold: ${decision.threshold.toFixed(2)}`);
                     console.log(`[${asset}] Model contributions: ${JSON.stringify(decision.modelContributions)}`);
-                    this.placeTrade(asset);
+                    this.placeTrade(asset, decision);
                 }
             }
         }
@@ -1985,11 +3187,24 @@ class EnhancedAccumulatorBot {
                 volatilityData.combined
             );
 
-            const neural = this.neuralEngine.predictWithUncertainty(features);
+            const neural = this.neuralEngine.predictWithUncertainty(features, 20);
             predictions.neural = {
                 value: neural.prediction,
                 confidence: neural.confidence
             };
+
+            // Use the neural network's regime assessment as additional signal
+            if (neural.regimeScore < 0.3) {
+                console.log(`[${asset}] 🧠 Neural regime warning: ${neural.regimeScore.toFixed(3)}`);
+                // Could optionally block trade here
+            }
+
+            // Log detailed uncertainty metrics periodically
+            if (this.totalTrades % 25 === 0) {
+                console.log(`[${asset}] 🧠 Neural Uncertainty: epistemic=${neural.epistemicUncertainty.toFixed(4)}, ` +
+                    `aleatoric=${neural.aleatoricUncertainty.toFixed(4)}, ` +
+                    `CI=[${neural.percentiles.p5.toFixed(3)}, ${neural.percentiles.p95.toFixed(3)}]`);
+            }
         }
 
         // 5. Pattern-based Prediction
@@ -2079,6 +3294,12 @@ class EnhancedAccumulatorBot {
      * Detect dangerous patterns from historical losses
      */
     detectDangerousPattern(asset, currentDigitCount, stayedInArray) {
+
+        // FIX: Guard against undefined/null arguments
+        if (!stayedInArray || !Array.isArray(stayedInArray) || stayedInArray.length === 0) {
+            return false;
+        }
+
         const recentLosses = this.learningSystem.lossPatterns[asset] || [];
 
         if (recentLosses.length === 0) {
@@ -2108,6 +3329,11 @@ class EnhancedAccumulatorBot {
      */
     detectDangerousPattern2(asset) {
         const history = this.extendedStayedIn[asset];
+
+        // FIX: Guard against undefined/null/non-array
+        if (!history || !Array.isArray(history) || history.length < 10) {
+            return false;
+        }
 
         if (!history || history.length < 10) {
             return false;
@@ -2139,12 +3365,42 @@ class EnhancedAccumulatorBot {
     // TRADE EXECUTION (PRESERVED)
     // ========================================================================
 
-    placeTrade(asset) {
+    placeTrade(asset, decision) {
         if (this.tradeInProgress) return;
         const assetState = this.assetStates[asset];
         if (!assetState || !assetState.currentProposalId) {
             console.log(`Cannot place trade. Missing proposal for asset ${asset}.`);
             return;
+        }
+
+        // FIX: Pass the required arguments from assetState
+        const stayedInArray = assetState.stayedInArray;
+        const currentDigitCount = (stayedInArray && stayedInArray.length >= 100)
+            ? stayedInArray[99] + 1
+            : null;
+
+        if (currentDigitCount !== null && stayedInArray) {
+            if (this.detectDangerousPattern(asset, currentDigitCount, stayedInArray)) {
+                console.log(`[${asset}] ⚠️ Trade blocked due to dangerous pattern`);
+                return;
+            }
+        }
+
+        if (this.detectDangerousPattern2(asset)) {
+            console.log(`[${asset}] ⚠️ Trade blocked due to dangerous pattern`);
+            return;
+        }
+
+        if (decision.confidence < 0.50) {
+            console.log(`[${asset}] ⚠️ Trade blocked due to low confidence`);
+            return;
+        }
+
+        if (this.consecutiveLosses > 0) {
+            if (this.lastEnsemblePredictions?.pattern?.confidence < 0.55) {
+                console.log(`[${asset}] ⚠️ Trade blocked due to low or No Pattern Model confidence`);
+                return;
+            }
         }
 
         const request = {
@@ -2153,6 +3409,27 @@ class EnhancedAccumulatorBot {
         };
 
         console.log(`🚀 Placing trade for Asset: [${asset}] | Stake: ${this.currentStake.toFixed(2)}`);
+
+        const telegramMsg = `
+            🚀 <b>Placing trade for Asset ${asset}</b>
+            <b>SIGNAL THRESHOLD: ${decision.ensembleScore.toFixed(4)} (${decision.threshold.toFixed(2)})</b>
+
+            <b>DECISION:</b>
+            <b>EnsembleScore: ${decision.ensembleScore.toFixed(2)}</b>
+            <b>Confidence: ${decision.confidence.toFixed(2)}</b>
+            <b>SurvivalProb: ${decision.survivalProb.toFixed(2)}</b>
+
+            <b>ModelContributions:</b>
+            <b>kaplanMeier: ${decision.modelContributions?.kaplanMeier}</b>
+            <b>bayesian: ${decision.modelContributions?.bayesian}</b>
+            <b>markov: ${decision.modelContributions?.markov}</b>
+            <b>neural: ${decision.modelContributions?.neural}</b>
+            <b>Pattern: ${decision.modelContributions?.pattern}</b>
+
+            <b>Current Stake:</b> $${this.currentStake.toFixed(2)}
+        `.trim();
+        this.sendTelegramMessage(telegramMsg);
+
         this.sendRequest(request);
         this.tradeInProgress = true;
         assetState.tradeInProgress = true;
@@ -2179,17 +3456,12 @@ class EnhancedAccumulatorBot {
         const profit = parseFloat(contract.profit);
         const assetState = this.assetStates[asset];
 
-        if (assetState) {
-            assetState.tradeInProgress = false;
-            assetState.lastTradeResult = won ? 'win' : 'loss';
-        }
-
         console.log(`[${asset}] Trade outcome: ${won ? '✅ WON' : '❌ LOST'}`);
 
-        // Record outcome for enhanced learning
-        const digitCount = assetState.stayedInArray[99] + 1;
-        const filterUsed = this.learningSystem.adaptiveFilters[asset];
-        this.recordTradeOutcome(asset, won, digitCount, filterUsed, assetState.stayedInArray);
+        this.hourlyStats.trades++;
+        this.hourlyStats.pnl += profit;
+        if (won) this.hourlyStats.wins++;
+        else this.hourlyStats.losses++;
 
         this.totalTrades++;
 
@@ -2210,11 +3482,23 @@ class EnhancedAccumulatorBot {
             //     }
             // }
 
-            this.currentStake = this.config.initialStake;
-
-            if (assetState) {
-                assetState.consecutiveLosses = 0;
+            if (this.sys2) {
+                this.currentStake = this.config.initialStake2;
+                this.sys2WinCount++;
+                if (this.sys2WinCount === 50) {
+                    this.currentStake = this.config.initialStake;
+                    this.sys2WinCount = 0;
+                    this.sys2 = false;
+                }
+            } else {
+                this.currentStake = this.config.initialStake;
             }
+
+            this.consecutiveLosses = 0;
+
+            // if (assetState) {
+            //     assetState.consecutiveLosses = 0;
+            // }
         } else {
             this.totalLosses++;
             this.consecutiveLosses++;
@@ -2229,17 +3513,69 @@ class EnhancedAccumulatorBot {
             else if (this.consecutiveLosses === 4) this.consecutiveLosses4++;
             else if (this.consecutiveLosses === 5) this.consecutiveLosses5++;
 
-            this.currentStake = Math.ceil(this.currentStake * this.config.multiplier * 100) / 100;
+            if (this.consecutiveLosses === 2) {
+                if (this.sys2) {
+                    this.consecutiveLosses = 4
+                };
+                this.sys2 = true
+                this.currentStake = this.config.initialStake2;
+            } else {
+                this.currentStake = Math.ceil(this.currentStake * this.config.multiplier * 100) / 100;
+            }
+            // this.suspendAsset(asset);
         }
 
         this.totalProfitLoss += profit;
+
+        if (!this.hourlyStats) {
+            this.hourlyStats = { trades: 0, wins: 0, losses: 0, pnl: 0, lastHour: new Date().getHours() };
+        }
+
+        if (assetState) {
+            assetState.tradeInProgress = false;
+            assetState.lastTradeResult = won ? 'win' : 'loss';
+        }
+
+        // Record outcome for enhanced learning
+        const digitCount = assetState.stayedInArray[99] + 1;
+        const filterUsed = this.learningSystem.adaptiveFilters[asset];
+        this.recordTradeOutcome(asset, won, digitCount, filterUsed, assetState.stayedInArray);
+
+
+        const resultEmoji = won ? '✅ WIN' : '❌ LOSS';
+        const pnlStr = (profit >= 0 ? '+' : '-') + '$' + Math.abs(profit).toFixed(2);
+        const pnlColor = profit >= 0 ? '🟢' : '🔴';
+        const winRate = this.totalTrades > 0 ? ((this.totalWins / this.totalTrades) * 100).toFixed(1) : 0;
+
+        const telegramMsg = `
+            ${resultEmoji} (Enhanced Accumulator Bot)
+            
+            📊 <b>${asset}</b>
+            ${pnlColor} <b>P&L:</b> ${pnlStr}
+            
+            📊 <b>Trades Today:</b> ${this.totalTrades}
+            📊 <b>Wins Today:</b> ${this.totalWins}
+            📊 <b>Losses Today:</b> ${this.totalLosses}
+            📊 <b>x2-x5 Losses:</b> ${this.consecutiveLosses2}/${this.consecutiveLosses3}/${this.consecutiveLosses4}/${this.consecutiveLosses5}
+            
+            📊 <b>Current Stake:</b> $${this.currentStake.toFixed(2)}
+
+            🎯 <b>Win Rate:</b> ${winRate}%
+            📈 <b>Total P&L:</b> ${(this.totalProfitLoss >= 0 ? '+' : '-')}$${Math.abs(this.totalProfitLoss).toFixed(2)}
+
+            
+            ⏰ ${new Date().toLocaleTimeString()}
+        `.trim();
+        this.sendTelegramMessage(telegramMsg);
+
+
         this.Pause = true;
 
         let baseWaitTime = this.config.minWaitTime;
 
         if (!won) {
             baseWaitTime = this.config.minWaitTime;
-            this.sendLossEmail(asset);
+            // Loss handled by trade result telegram message.
             this.suspendAsset(asset);
 
             // if (this.consecutiveLosses >= 2) {
@@ -2297,15 +3633,16 @@ class EnhancedAccumulatorBot {
             return;
         }
 
-        this.disconnect();
+        this.tradeInProgress = false;
+        this.Pause = false;
 
-        if (!this.endOfDay) {
-            setTimeout(() => {
-                this.tradeInProgress = false;
-                this.Pause = false;
-                this.connect();
-            }, randomWaitTime);
-        }
+        // if (!this.endOfDay) {
+        //     setTimeout(() => {
+        //         this.tradeInProgress = false;
+        //         this.Pause = false;
+        //         this.connect();
+        //     }, randomWaitTime);
+        // }
     }
 
     //Reset
@@ -2333,7 +3670,7 @@ class EnhancedAccumulatorBot {
         this.patternEngine = new PatternEngine();
 
         // Tier 3: Neural Engine
-        this.neuralEngine = new NeuralEngine(60, [32, 16], 1);
+        this.neuralEngine = new NeuralEngine(90, [128, 64, 32], 3);
 
         // Tier 4: Ensemble Decision Maker
         this.ensembleDecisionMaker = new EnsembleDecisionMaker();
@@ -2342,8 +3679,8 @@ class EnhancedAccumulatorBot {
         // this.persistenceManager = new PersistenceManager();
 
         // Learning mode counter
-        // this.observationCount = 0;
-        // this.learningMode = true;
+        this.observationCount = 0;
+        this.learningMode = true;
 
         // Legacy learning system (enhanced)
         // this.learningSystem = {
@@ -2454,57 +3791,55 @@ class EnhancedAccumulatorBot {
 
     checkTimeForDisconnectReconnect() {
         setInterval(() => {
-            // Always use GMT +1 time regardless of server location
             const now = new Date();
-            const gmtPlus1Time = new Date(now.getTime() + (1 * 60 * 60 * 1000)); // Convert UTC → GMT+1
+            const gmtPlus1Time = new Date(now.getTime() + (1 * 60 * 60 * 1000));
+            const currentDay = gmtPlus1Time.getUTCDay(); // 0: Sunday, 1: Monday, ..., 6: Saturday
             const currentHours = gmtPlus1Time.getUTCHours();
             const currentMinutes = gmtPlus1Time.getUTCMinutes();
-            const currentDay = gmtPlus1Time.getUTCDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
 
-            // Optional: log current GMT+1 time for monitoring
-            // console.log(
-            // "Current GMT+1 time:",
-            // gmtPlus1Time.toISOString().replace("T", " ").substring(0, 19)
-            // );
+            // Weekend logic: Saturday 11pm to Monday 2am GMT+1 -> Disconnect and stay disconnected
+            const isWeekend = (currentDay === 0) || // Sunday
+                (currentDay === 6 && currentHours >= 23) || // Saturday after 11pm
+                (currentDay === 1 && currentHours < 8);    // Monday before 8am
 
-            // Check if it's Sunday - no trading on Sundays
-            if (currentDay === 0) {
-                if (!this.endOfDay) {
-                    console.log("It's Sunday, disconnecting the bot. No trading on Sundays.");
-                    this.Pause = true;
-                    this.disconnect();
-                    this.endOfDay = true;
-                }
-                return; // Skip all other checks on Sunday
-            }
+            // if (isWeekend) {
+            //     if (!this.endOfDay) {
+            //         console.log("Weekend trading suspension (Saturday 11pm - Monday 8am). Disconnecting...");
+            //         this.sendHourlySummary();
+            //         this.disconnect();
+            //         this.endOfDay = true;
+            //     }
+            //     return; // Prevent any reconnection logic during the weekend
+            // }
 
-            // Check for Morning resume condition (7:00 AM GMT+1) - but not on Sunday
-            if (this.endOfDay && currentHours === 7 && currentMinutes >= 0) {
-                console.log("It's 7:00 AM GMT+1, reconnecting the bot.");
+            if (this.endOfDay && currentHours === 2 && currentMinutes >= 0) {
+                console.log("It's 2:00 AM GMT+1, reconnecting the bot.");
                 this.resetForNewDay();
-                this.RestartTrading = true;
-                this.Pause = false;
                 this.endOfDay = false;
                 this.connect();
             }
 
-            // Check for evening stop condition (after 5:00 PM GMT+1)
             if (this.isWinTrade && !this.endOfDay) {
-                if (currentHours >= 17 && currentMinutes >= 0) {
-                    console.log("It's past 5:00 PM GMT+1 after a win trade, disconnecting the bot.");
-                    this.sendDisconnectResumptionEmailSummary();
-                    this.Pause = true;
+                if (currentHours >= 23 && currentMinutes >= 30) {
+                    console.log("It's past 11:30 PM GMT+1 after a win trade, disconnecting the bot.");
+                    this.sendHourlySummary();
                     this.disconnect();
                     this.endOfDay = true;
                 }
             }
-        }, 5000); // Check every 5 seconds
+        }, 20000);
     }
 
     disconnect() {
-        if (this.connected) {
-            this.ws.close();
-        }
+        console.log('🛑 Disconnecting bot...');
+        // Save final state
+        StatePersistence.saveState(this);
+        // Stop auto-save
+        StatePersistence.stopAutoSave(this);
+
+        this.endOfDay = true; // Prevent reconnection
+        this.cleanup();
+        console.log('✅ Bot disconnected successfully');
     }
 
     // ========================================================================
@@ -2544,206 +3879,86 @@ class EnhancedAccumulatorBot {
     }
 
     // ========================================================================
-    // EMAIL METHODS (ENHANCED)
+    // TELEGRAM METHODS (ENHANCED)
     // ========================================================================
 
-    startEmailTimer() {
-        setInterval(() => {
-            if (!this.endOfDay) {
-                this.sendEmailSummary();
-            }
-        }, 1800000);
+    async sendTelegramMessage(message) {
+        if (!this.telegramEnabled || !this.telegramBot) return;
+        try {
+            await this.telegramBot.sendMessage(this.telegramChatId, message, { parse_mode: 'HTML' });
+        } catch (error) {
+            console.error(`❌ Failed to send Telegram message: ${error.message}`);
+        }
     }
 
-    async sendEmailSummary() {
-        const transporter = nodemailer.createTransport(this.emailConfig);
+    async sendHourlySummary() {
+        if (!this.hourlyStats) return;
+        const stats = this.hourlyStats;
+        const winRate = stats.wins + stats.losses > 0
+            ? ((stats.wins / (stats.wins + stats.losses)) * 100).toFixed(1)
+            : 0;
+        const pnlEmoji = stats.pnl >= 0 ? '🟢' : '🔴';
+        const pnlStr = (stats.pnl >= 0 ? '+' : '') + '$' + Math.abs(stats.pnl).toFixed(2);
 
         // Neural network metrics
-        const neuralMetrics = this.neuralEngine.getPerformanceMetrics();
-
+        const neuralMetrics = this.config.enableNeuralNetwork && this.neuralEngine.initialized ? this.neuralEngine.getPerformanceMetrics() : { accuracy: 0 };
         // Ensemble performance
         const ensemblePerf = this.ensembleDecisionMaker.getPerformanceSummary();
 
-        // Model performance
-        const modelPerf = Object.entries(ensemblePerf.models)
-            .map(([model, stats]) => `${model}: ${stats.accuracy} (${stats.samples} samples, weight: ${stats.weight})`)
-            .join('\n        ');
+        const message = `
+            ⏰ <b>Enhanced Accumulator Session Summary</b>
 
-        const summaryText = `
-    ==================== Enhanced Trading Summary ====================
-    
-    TRADING PERFORMANCE:
-    Total Trades: ${this.totalTrades}
-    Total Wins: ${this.totalWins}
-    Total Losses: ${this.totalLosses}
-    Win Rate: ${((this.totalWins / this.totalTrades) * 100).toFixed(2)}%
-    
-    Consecutive Losses: ${this.consecutiveLosses}
-    x2 Losses: ${this.consecutiveLosses2}
-    x3 Losses: ${this.consecutiveLosses3}
+            📊 <b>Session Stats</b>
+            ├ Trades: ${stats.trades}
+            ├ Wins: ${stats.wins} | Losses: ${stats.losses}
+            ├ Win Rate: ${winRate}%
+            └ ${pnlEmoji} <b>P&L:</b> ${pnlStr}
 
-    FINANCIAL:
-    Current Stake: $${this.currentStake.toFixed(2)}
-    Total P/L: $${this.totalProfitLoss.toFixed(2)}
-    
-    AI LEARNING SYSTEM PERFORMANCE:
-    ─────────────────────────────────
-    Neural Network:
-        Accuracy: ${(neuralMetrics.accuracy * 100).toFixed(1)}%
-        Loss Trend: ${neuralMetrics.trend}
-        Training Samples: ${this.neuralEngine.trainingHistory.length}
-    
-    Ensemble Decision Maker:
-        Adaptive Threshold: ${ensemblePerf.adaptiveThreshold}
-        Total Decisions: ${ensemblePerf.totalDecisions}
-    
-    Model Performance:
-        ${modelPerf || 'No model data yet'}
-    
-    MARKET CONDITIONS:
-    ${this.assets.map(a => {
-            const vol = this.learningSystem.volatilityScores[a] || 0;
-            const regime = this.patternEngine.regimeStates[a] || { regime: 'unknown' };
-            const bayesian = this.statisticalEngine.getBayesianEstimate(a);
-            return `${a}: Vol=${(vol * 100).toFixed(1)}%, Regime=${regime.regime}, Bayesian=${(bayesian.mean * 100).toFixed(1)}%`;
-        }).join('\n    ')}
-    
-    ===================================================================
-        `;
+            📈 <b>All-Time/Daily Totals</b>
+            ├ Total Trades: ${this.totalTrades}
+            ├ Total W/L: ${this.totalWins}/${this.totalLosses}
+            ├ x2-x5 Losses: ${this.consecutiveLosses2}/${this.consecutiveLosses3}/${this.consecutiveLosses4}/${this.consecutiveLosses5}
+            ├ Total P&L: ${(this.totalProfitLoss >= 0 ? '+' : '')}$${Math.abs(this.totalProfitLoss).toFixed(2)}
+            └ Current Stake: $${this.currentStake.toFixed(2)}
+            
+            🧠 <b>AI System State</b>
+            ├ Neural Accuracy: ${(neuralMetrics.accuracy * 100).toFixed(1)}%
+            └ Adaptive Threshold: ${ensemblePerf.adaptiveThreshold}
 
-        const mailOptions = {
-            from: this.emailConfig.auth.user,
-            to: this.emailRecipient,
-            subject: 'Enhanced AI Accumulator Bot - Performance Summary',
-            text: summaryText
-        };
+            ⏰ ${new Date().toLocaleString()}
+        `.trim();
 
         try {
-            await transporter.sendMail(mailOptions);
+            await this.sendTelegramMessage(message);
+            console.log('📱 Telegram: Session Summary sent');
         } catch (error) {
-            console.error('Error sending email:', error);
+            console.error(`❌ Telegram session summary failed: ${error.message}`);
         }
+
+        this.hourlyStats = {
+            trades: 0,
+            wins: 0,
+            losses: 0,
+            pnl: 0,
+            lastHour: new Date().getHours()
+        };
     }
 
-    async sendLossEmail(asset) {
-        const transporter = nodemailer.createTransport(this.emailConfig);
-        const history = this.tickHistories[asset];
-        const lastFewTicks = history.slice(-10);
-        const assetState = this.assetStates[asset];
-
-        const recentLosses = this.learningSystem.lossPatterns[asset]?.slice(-5) || [];
-        const lossAnalysis = recentLosses.map(l =>
-            `Digit: ${l.digitCount}, Vol: ${(l.volatility * 100).toFixed(1)}%`
-        ).join('\n        ');
-
-        // Get regime info
-        const regime = this.patternEngine.detectRegime(asset, this.extendedStayedIn[asset]);
-
-        // Neural prediction at time of loss
-        const neuralMetrics = this.neuralEngine.getPerformanceMetrics();
-
-        const summaryText = `
-    ==================== LOSS ALERT ====================
-    
-    TRADE SUMMARY:
-    Total Trades: ${this.totalTrades}
-    Wins: ${this.totalWins} | Losses: ${this.totalLosses}
-    Win Rate: ${((this.totalWins / this.totalTrades) * 100).toFixed(2)}%
-    Consecutive Losses: ${this.consecutiveLosses}
-
-    LOSS ANALYSIS [${asset}]:
-    ─────────────────────────────
-    Traded Digit: ${assetState.tradedDigitArray.slice(-1)[0]}
-    Volatility: ${(this.learningSystem.volatilityScores[asset] * 100 || 0).toFixed(1)}%
-    Asset Win Rate: ${(this.calculateAssetWinRate(asset) * 100).toFixed(1)}%
-    Market Regime: ${regime.regime} (confidence: ${(regime.confidence * 100).toFixed(1)}%)
-    
-    AI System State:
-        Neural Accuracy: ${(neuralMetrics.accuracy * 100).toFixed(1)}%
-        Adaptive Threshold: ${this.ensembleDecisionMaker.adaptiveThreshold.toFixed(3)}
-        Survival Estimate: ${this.survivalNum ? this.survivalNum.toFixed(4) : 'N/A'}
-    
-    Recent Loss Pattern:
-        ${lossAnalysis || 'No pattern data'}
-    
-    Last 10 Digits: ${lastFewTicks.join(', ')}
-
-    FINANCIAL:
-    Total P/L: $${this.totalProfitLoss.toFixed(2)}
-    Current Stake: $${this.currentStake.toFixed(2)}
-    
-    NEXT ACTION:
-    Waiting: ${this.waitTime} minutes before next trade
-    
-    ====================================================
-        `;
-
-        const mailOptions = {
-            from: this.emailConfig.auth.user,
-            to: this.emailRecipient,
-            subject: `Enhanced AI Bot - Loss Alert [${asset}]`,
-            text: summaryText
-        };
-
-        try {
-            await transporter.sendMail(mailOptions);
-        } catch (error) {
-            console.error('Error sending loss email:', error);
-        }
+    sendEmailSummary() {
+        // Redirect legacy email summary calls to telegram summary
+        this.sendHourlySummary();
     }
 
-    async sendDisconnectResumptionEmailSummary() {
-        const transporter = nodemailer.createTransport(this.emailConfig);
-
-        const now = new Date();
-        const currentHours = now.getHours();
-        const currentMinutes = now.getMinutes();
-
-        const summaryText = `
-    Disconnect/Reconnect Email: Time (${currentHours}:${currentMinutes})
-
-    ==================== Trading Summary ====================
-    Total Trades: ${this.totalTrades}
-    Total Wins: ${this.totalWins}
-    Total Losses: ${this.totalLosses}
-    Win Rate: ${((this.totalWins / this.totalTrades) * 100).toFixed(2)}%
-    
-    Current Stake: $${this.currentStake.toFixed(2)}
-    Total P/L: $${this.totalProfitLoss.toFixed(2)}
-    
-    AI System Status: Active
-    Neural Net Accuracy: ${(this.neuralEngine.getPerformanceMetrics().accuracy * 100).toFixed(1)}%
-    =========================================================
-        `;
-
-        const mailOptions = {
-            from: this.emailConfig.auth.user,
-            to: this.emailRecipient,
-            subject: 'Enhanced AI Bot - Performance Summary',
-            text: summaryText
-        };
-
-        try {
-            await transporter.sendMail(mailOptions);
-        } catch (error) {
-            console.error('Error sending email:', error);
-        }
+    sendDisconnectResumptionEmailSummary() {
+        this.sendHourlySummary();
     }
 
-    async sendErrorEmail(errorMessage) {
-        const transporter = nodemailer.createTransport(this.emailConfig);
-        const mailOptions = {
-            from: this.emailConfig.auth.user,
-            to: this.emailRecipient,
-            subject: 'Enhanced AI Bot - Error Report',
-            text: `An error occurred: ${errorMessage}`
-        };
+    sendLossEmail(asset) {
+        // Handled intrinsically by handleTradeResult
+    }
 
-        try {
-            await transporter.sendMail(mailOptions);
-        } catch (error) {
-            console.error('Error sending error email:', error);
-        }
+    sendErrorEmail(errorMessage) {
+        this.sendTelegramMessage(`❌ <b>ERROR REPORT</b>\n\n${errorMessage}`);
     }
 
     // ========================================================================
@@ -2768,6 +3983,9 @@ class EnhancedAccumulatorBot {
         console.log('═══════════════════════════════════════════════════════════');
         console.log('');
 
+        // Start auto-save
+        StatePersistence.startAutoSave(this);
+
         this.connect();
         this.checkTimeForDisconnectReconnect();
     }
@@ -2781,13 +3999,17 @@ const token = 'rgNedekYXvCaPeP'; //|| process.env.DERIV_TOKEN;
 
 const bot = new EnhancedAccumulatorBot(token, {
     initialStake: 1,
-    stopLoss: 400,
-    takeProfit: 2.5,
+    initialStake2: 10,
+    multiplier: 21,
+    stopLoss: 242,
+    takeProfit: 50000,
+    growthRate: 0.05,
+    accuTakeProfit: 0.01,
     enableNeuralNetwork: true,
     enablePatternRecognition: true,
     learningModeThreshold: 100,
     survivalThreshold: 0.9,
-    maxConsecutiveLosses: 3,
+    maxConsecutiveLosses: 4,
     minWaitTime: 2000,
     maxWaitTime: 2000,
 });
