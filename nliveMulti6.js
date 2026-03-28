@@ -7203,12 +7203,12 @@ class EnhancedAccumulatorBot {
             return;
         }
 
-        if (this.consecutiveLosses > 0) {
-            if (this.lastEnsemblePredictions?.pattern?.confidence < 0.55) {
-                console.log(`[${asset}] ⚠️ Trade blocked due to low or No Pattern Model confidence`);
-                return;
-            }
-        }
+        // if (this.consecutiveLosses > 0) {
+        //     if (this.lastEnsemblePredictions?.pattern?.confidence < 0.55) {
+        //         console.log(`[${asset}] ⚠️ Trade blocked due to low or No Pattern Model confidence`);
+        //         return;
+        //     }
+        // }
 
         const request = {
             buy: assetState.currentProposalId,
