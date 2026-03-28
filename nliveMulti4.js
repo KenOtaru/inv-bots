@@ -1052,8 +1052,8 @@ class EnsembleDecisionMaker {
 
         console.log('Agreement:', ' (', values.length, ')', 'Score:', agreement.toFixed(2));
 
-        this.ensembleAgreement = values.length;
-        this.agreementScore = agreement.toFixed(2);
+        const ensembleAgreement = values.length;
+        const agreementScore = agreement.toFixed(2);
 
         // console.log('Adaptive Threshold:', this.adaptiveThreshold);
 
@@ -1061,7 +1061,9 @@ class EnsembleDecisionMaker {
             score: ensembleScore,
             agreement,
             details,
-            shouldTrade: ensembleScore >= this.adaptiveThreshold && agreement > 0.5
+            shouldTrade: ensembleScore >= this.adaptiveThreshold && agreement > 0.5,
+            ensembleAgreement,
+            agreementScore,
         };
     }
 
@@ -2148,10 +2150,11 @@ class EnhancedAccumulatorBot {
 
             if (!assetState.tradeInProgress) {
                 const decision = this.makeEnhancedTradeDecision(asset, stayedInArray);
+                const ensemble = this.combinePredicitions(decision.predictions);
 
-                console.log(`[${asset}] Ken's Agreement: ${this.ensembleAgreement} | Score: ${this.agreementScore}`);
-                this.ensembleAgreement = decision.agreement;
-                this.agreementScore = decision.agreementScore;
+                console.log(`[${asset}] Ken's Agreement: ${ensemble.ensembleAgreement} | Score: ${ensemble.agreementScore}`);
+                this.ensembleAgreement = ensemble.ensembleAgreement;
+                this.agreementScore = ensemble.agreementScore;
                 console.log(`[${asset}] Ken's Agreement: ${this.ensembleAgreement} | Score: ${this.agreementScore}`);
 
                 if (this.ensembleAgreement > 4 && this.agreementScore > 0.6) {//decision.shouldTrade
