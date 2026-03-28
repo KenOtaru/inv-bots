@@ -2225,6 +2225,7 @@ class EnhancedAccumulatorBot {
         if (this.config.enablePatternRecognition) {
             const recentDigits = runLengths.slice(-5);
             const ngramPred = this.patternEngine.predictFromNgram(asset, recentDigits, 3);
+            console.log('Ngram Prediction:', ngramPred);
             if (ngramPred) {
                 // Higher probability of specific digit = more predictable = potentially favorable
                 predictions.pattern = {
