@@ -21,7 +21,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'nliveMulti4-state06.json');
+const STATE_FILE = path.join(__dirname, 'nliveMulti4-state07.json');
 const STATE_SAVE_INTERVAL = 5000; // Save every 5 seconds
 
 class StatePersistence {
@@ -1047,7 +1047,7 @@ class EnsembleDecisionMaker {
             .filter(p => p !== null && p !== undefined)
             .map(p => p.value);
 
-        const agreement = values.length > 2 ?
+        const agreement = values.length > 4 ?
             1 - (Math.max(...values) - Math.min(...values)) : 0;
 
         // console.log('Adaptive Threshold:', this.adaptiveThreshold);
@@ -2223,7 +2223,7 @@ class EnhancedAccumulatorBot {
 
         // 5. Pattern-based Prediction
         if (this.config.enablePatternRecognition) {
-            const recentDigits = this.tickHistories[asset].slice(-5);
+            const recentDigits = runLengths.slice(-5);
             const ngramPred = this.patternEngine.predictFromNgram(asset, recentDigits, 3);
             if (ngramPred) {
                 // Higher probability of specific digit = more predictable = potentially favorable
@@ -2409,6 +2409,13 @@ class EnhancedAccumulatorBot {
             console.log(`[${asset}] ⚠️ Trade blocked due to low confidence`);
             return;
         }
+
+        // if (this.consecutiveLosses > 0) {
+        if (decision.survivalProb < 0.95) {
+            console.log(`[${asset}] ⚠️ Trade blocked due to low survival probability`);
+            return;
+        }
+        // }
 
         const request = {
             buy: assetState.currentProposalId,
