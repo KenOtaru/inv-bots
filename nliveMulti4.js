@@ -1050,7 +1050,11 @@ class EnsembleDecisionMaker {
         const agreement = values.length > 4 ?
             1 - (Math.max(...values) - Math.min(...values)) : 0;
 
-        console.log('Agreement:', agreement.toFixed(2), ' (', values.length, ')');
+        console.log('Agreement:', ' (', values.length, ')', 'Score:', agreement.toFixed(2));
+
+        this.ensembleAgreement = values.length;
+        this.agreementScore = agreement.toFixed(2);
+
         // console.log('Adaptive Threshold:', this.adaptiveThreshold);
 
         return {
@@ -1159,21 +1163,9 @@ class EnsembleDecisionMaker {
                 if (score > bestScore) {
                     bestScore = score;
                     bestThreshold = threshold;
-                    // this.ensembleScore = score;
-                    // this.ensembleAgreement = ensemble.agreement;
-                    // this.ensembleShouldTrade = ensemble.shouldTrade;
                 }
             }
-
-            this.ensembleScore = score;
-            this.ensembleAgreement = ensemble.agreement;
         });
-
-        // this.ensembleScore = score;
-        // this.ensembleAgreement = ensemble.agreement;
-        // this.ensembleShouldTrade = ensemble.shouldTrade;
-
-        console.log('kEnsemble Score:', this.ensembleScore.toFixed(3), 'Ensemble Agreement:', this.ensembleAgreement.toFixed(2));
 
         // Smooth transition to new threshold
         this.adaptiveThreshold = 0.8 * this.adaptiveThreshold + 0.2 * bestThreshold;
@@ -1291,6 +1283,8 @@ class EnhancedAccumulatorBot {
         this.stopLossStake = false;
         this.sys2 = false;
         this.sys2WinCount = 0;
+        this.ensembleAgreement = null;
+        this.agreementScore = null;
 
         // Asset-specific data
         this.digitCounts = {};
@@ -2155,9 +2149,15 @@ class EnhancedAccumulatorBot {
             if (!assetState.tradeInProgress) {
                 const decision = this.makeEnhancedTradeDecision(asset, stayedInArray);
 
-                if (decision.shouldTrade) {
+                console.log(`[${asset}] Ken's Agreement: ${this.ensembleAgreement} | Score: ${this.agreementScore}`);
+                this.ensembleAgreement = decision.agreement;
+                this.agreementScore = decision.agreementScore;
+                console.log(`[${asset}] Ken's Agreement: ${this.ensembleAgreement} | Score: ${this.agreementScore}`);
+
+                if (this.ensembleAgreement > 4 && this.agreementScore > 0.6) {//decision.shouldTrade
                     console.log(`[${asset}] 🎯 TRADE SIGNAL | Score: ${decision.ensembleScore.toFixed(4)} | Confidence: ${decision.confidence.toFixed(2)} | SurvivalProb: ${decision.survivalProb.toFixed(2)} | Threshold: ${decision.threshold.toFixed(2)}`);
                     console.log(`[${asset}] Model contributions: ${JSON.stringify(decision.modelContributions)}`);
+                    console.log(`[${asset}] 🎯 Agreement: ${this.ensembleAgreement} | Score: ${this.agreementScore}`);
                     this.placeTrade(asset, decision);
                 }
             }

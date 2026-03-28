@@ -5655,7 +5655,7 @@ class EnsembleDecisionMaker {
         // ================================================================
         // THRESHOLD MANAGEMENT
         // ================================================================
-        this.adaptiveThreshold = 0.7;
+        this.adaptiveThreshold = 0.55;
         this.thresholdHistory = [];
         this.thresholdOptimizer = {
             candidates: [0.55, 0.60, 0.625, 0.65, 0.675, 0.70, 0.725, 0.75, 0.775, 0.80, 0.825, 0.85],
