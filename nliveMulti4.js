@@ -2539,10 +2539,10 @@ class EnhancedAccumulatorBot {
             return;
         }
 
-        if (decision.confidence < 0.55) {
-            console.log(`[${asset}] ⚠️ Trade blocked due to low confidence`);
-            return;
-        }
+        // if (decision.confidence < 0.55) {
+        //     console.log(`[${asset}] ⚠️ Trade blocked due to low confidence`);
+        //     return;
+        // }
 
         // if (this.consecutiveLosses > 0) {
         if (this.lastEnsemblePredictions?.pattern?.confidence < 0.55) {
