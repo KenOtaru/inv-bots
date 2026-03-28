@@ -7219,7 +7219,7 @@ class EnhancedAccumulatorBot {
 
         const telegramMsg = `
             🚀 <b>Placing trade for Asset ${asset}</b>
-            <b>SIGNAL THRESHOLD: ${decision.ensembleScore.toFixed(4)} (${decision.threshold.toFixed(2)})</b>
+            <b>SIGNAL: ${decision.ensembleScore.toFixed(4)} (${decision.threshold.toFixed(2)})</b>
 
             <b>DECISION:</b>
             <b>EnsembleScore: ${decision.ensembleScore.toFixed(2)}</b>
