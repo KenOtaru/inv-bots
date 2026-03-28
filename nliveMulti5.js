@@ -163,78 +163,303 @@ class StatePersistence {
 }
 
 // ============================================================================
-// TIER 1: STATISTICAL LEARNING ENGINE
+// TIER 1: ADVANCED STATISTICAL LEARNING ENGINE
 // ============================================================================
 
 class StatisticalEngine {
     constructor() {
+        // Survival analysis
         this.survivalData = {};
+        this.survivalCurves = {};
+        this.cumulativeHazards = {};
+
+        // Bayesian inference
         this.bayesianPriors = {};
+        this.bayesianHistory = {};
+        this.hierarchicalPriors = {};
+
+        // Hazard rate estimation
         this.hazardRates = {};
+        this.kernelHazardCache = {};
+
+        // Entropy and information theory
         this.entropyScores = {};
+        this.mutualInformationCache = {};
+        this.divergenceCache = {};
+
+        // Kernel density estimation
+        this.kdeModels = {};
+        this.bandwidthCache = {};
+
+        // Exponentially weighted statistics
+        this.ewmStats = {};
+
+        // Bootstrap results
+        this.bootstrapCache = {};
+
+        // Extreme value theory
+        this.evtModels = {};
+
+        // Mixture models
+        this.mixtureModels = {};
+
+        // SPRT state
+        this.sprtState = {};
+
+        // Rank correlation cache
+        this.rankCorrelations = {};
+
+        // Cox model
+        this.coxModels = {};
+
+        // Configuration
+        this.config = {
+            bootstrapSamples: 200,
+            kdeDefaultBandwidth: 'silverman',
+            ewmAlpha: 0.05,
+            ewmSpan: 20,
+            bayesianDecayRate: 0.998,
+            bayesianMinAlpha: 1.5,
+            bayesianMinBeta: 1.5,
+            mixtureMaxComponents: 3,
+            mixtureMaxIterations: 50,
+            mixtureConvergenceTol: 1e-4,
+            sprtAlpha: 0.05,
+            sprtBeta: 0.05,
+            evtBlockSize: 10,
+        };
     }
 
+    // ====================================================================
+    // KAPLAN-MEIER SURVIVAL ANALYSIS (ENHANCED)
+    // ====================================================================
+
     /**
-     * Kaplan-Meier Survival Estimator
-     * Calculates survival probability with confidence intervals
+     * Full Kaplan-Meier estimator with Greenwood variance,
+     * confidence intervals, and median survival
      */
-    kaplanMeierEstimate(runLengths, targetLength) {
+    kaplanMeierEstimate(runLengths, targetLength, options = {}) {
         if (!runLengths || runLengths.length < 10) {
-            return { survival: 0.5, ci_lower: 0.3, ci_upper: 0.7, variance: 0.1 };
+            return {
+                survival: 0.5,
+                ci_lower: 0.3,
+                ci_upper: 0.7,
+                variance: 0.1,
+                sampleSize: 0,
+                medianSurvival: null,
+                hazardAtTarget: 0.1,
+                conditionalSurvival: 0.5,
+            };
         }
 
-        // Sort run lengths
         const sorted = [...runLengths].sort((a, b) => a - b);
         const n = sorted.length;
-
-        // Calculate number at risk and events at each time point
         const timePoints = [...new Set(sorted)].sort((a, b) => a - b);
+
+        // Build full survival curve
         let survival = 1.0;
-        let variance = 0;
+        let greenwoodVariance = 0;
+        const survivalCurve = [{ time: 0, survival: 1.0, variance: 0, atRisk: n, events: 0 }];
+        let medianSurvival = null;
 
         for (const t of timePoints) {
-            if (t > targetLength) break;
-
             const atRisk = runLengths.filter(l => l >= t).length;
             const events = runLengths.filter(l => l === t).length;
 
-            if (atRisk > 0) {
+            if (atRisk > 0 && events > 0) {
                 const hazard = events / atRisk;
                 survival *= (1 - hazard);
 
                 // Greenwood's formula for variance
                 if (atRisk > events) {
-                    variance += events / (atRisk * (atRisk - events));
+                    greenwoodVariance += events / (atRisk * (atRisk - events));
+                }
+
+                survivalCurve.push({
+                    time: t,
+                    survival,
+                    variance: greenwoodVariance,
+                    atRisk,
+                    events,
+                    hazard,
+                });
+
+                // Track median survival
+                if (medianSurvival === null && survival <= 0.5) {
+                    medianSurvival = t;
                 }
             }
         }
 
-        // 95% confidence interval
-        const se = survival * Math.sqrt(variance);
-        const z = 1.96;
+        // Get survival at target length
+        let survivalAtTarget = 1.0;
+        let varianceAtTarget = 0;
+
+        for (const point of survivalCurve) {
+            if (point.time <= targetLength) {
+                survivalAtTarget = point.survival;
+                varianceAtTarget = point.variance;
+            }
+        }
+
+        // Standard error and confidence intervals
+        const se = survivalAtTarget * Math.sqrt(varianceAtTarget);
+        const z = options.z || 1.96; // 95% CI by default
+
+        // Log-log transform for better CI behavior near boundaries
+        let ci_lower, ci_upper;
+        if (survivalAtTarget > 0 && survivalAtTarget < 1) {
+            const logLogS = Math.log(-Math.log(survivalAtTarget));
+            const logLogSE = se / (survivalAtTarget * Math.abs(Math.log(survivalAtTarget)));
+
+            ci_lower = Math.exp(-Math.exp(logLogS + z * logLogSE));
+            ci_upper = Math.exp(-Math.exp(logLogS - z * logLogSE));
+        } else {
+            ci_lower = Math.max(0, survivalAtTarget - z * se);
+            ci_upper = Math.min(1, survivalAtTarget + z * se);
+        }
+
+        // Conditional survival: P(T > targetLength + k | T > targetLength)
+        // For k = 1, 2, 3 steps ahead
+        const conditionalSurvival = {};
+        for (let k = 1; k <= 5; k++) {
+            const futureTarget = targetLength + k;
+            let futureSurvival = 1.0;
+            for (const point of survivalCurve) {
+                if (point.time <= futureTarget) {
+                    futureSurvival = point.survival;
+                }
+            }
+            conditionalSurvival[k] = survivalAtTarget > 0 ?
+                futureSurvival / survivalAtTarget : 0;
+        }
+
+        // Hazard at target
+        let hazardAtTarget = 0;
+        const targetPoint = survivalCurve.find(p => p.time === targetLength);
+        if (targetPoint) {
+            hazardAtTarget = targetPoint.hazard || 0;
+        }
+
+        // Store the full survival curve for this asset
+        const cacheKey = `km_${targetLength}`;
+        this.survivalCurves[cacheKey] = survivalCurve;
 
         return {
-            survival: Math.max(0, Math.min(1, survival)),
-            ci_lower: Math.max(0, survival - z * se),
-            ci_upper: Math.min(1, survival + z * se),
-            variance: variance,
-            sampleSize: n
+            survival: Math.max(0, Math.min(1, survivalAtTarget)),
+            ci_lower: Math.max(0, ci_lower),
+            ci_upper: Math.min(1, ci_upper),
+            variance: varianceAtTarget,
+            standardError: se,
+            sampleSize: n,
+            medianSurvival,
+            hazardAtTarget,
+            conditionalSurvival,
+            survivalCurve: survivalCurve.slice(-20), // Keep last 20 points
         };
     }
 
     /**
-     * Nelson-Aalen Cumulative Hazard Estimator
+     * Log-Rank Test: compare survival between two groups
+     * Useful for comparing different market conditions
+     */
+    logRankTest(group1, group2) {
+        if (!group1 || !group2 || group1.length < 10 || group2.length < 10) {
+            return { statistic: 0, pValue: 1, significant: false };
+        }
+
+        const allTimes = [...new Set([...group1, ...group2])].sort((a, b) => a - b);
+
+        let observedMinusExpected = 0;
+        let varianceSum = 0;
+
+        for (const t of allTimes) {
+            const d1 = group1.filter(x => x === t).length;
+            const d2 = group2.filter(x => x === t).length;
+            const d = d1 + d2;
+
+            const n1 = group1.filter(x => x >= t).length;
+            const n2 = group2.filter(x => x >= t).length;
+            const n = n1 + n2;
+
+            if (n === 0 || d === 0) continue;
+
+            const e1 = (n1 * d) / n;
+            observedMinusExpected += d1 - e1;
+
+            if (n > 1) {
+                varianceSum += (n1 * n2 * d * (n - d)) / (n * n * (n - 1));
+            }
+        }
+
+        const statistic = varianceSum > 0 ?
+            (observedMinusExpected * observedMinusExpected) / varianceSum : 0;
+
+        // Approximate p-value (chi-squared with 1 df)
+        const pValue = 1 - this._chiSquaredCDF(statistic, 1);
+
+        return {
+            statistic,
+            pValue,
+            significant: pValue < 0.05,
+            observedMinusExpected,
+            interpretation: observedMinusExpected > 0 ?
+                'group1_survives_longer' : 'group2_survives_longer',
+        };
+    }
+
+    /**
+     * Stratified Kaplan-Meier: survival estimates conditioned on covariates
+     */
+    stratifiedKaplanMeier(runLengths, covariates, targetLength) {
+        if (!runLengths || !covariates || runLengths.length !== covariates.length) {
+            return null;
+        }
+
+        // Group by covariate levels
+        const groups = {};
+        covariates.forEach((cov, i) => {
+            const key = typeof cov === 'string' ? cov : this._discretizeContinuous(cov);
+            if (!groups[key]) groups[key] = [];
+            groups[key].push(runLengths[i]);
+        });
+
+        const results = {};
+        Object.entries(groups).forEach(([key, lengths]) => {
+            if (lengths.length >= 10) {
+                results[key] = this.kaplanMeierEstimate(lengths, targetLength);
+            }
+        });
+
+        return results;
+    }
+
+    // ====================================================================
+    // NELSON-AALEN CUMULATIVE HAZARD ESTIMATOR (ENHANCED)
+    // ====================================================================
+
+    /**
+     * Nelson-Aalen estimator with Breslow variance and confidence bands
      */
     nelsonAalenHazard(runLengths, targetLength) {
         if (!runLengths || runLengths.length < 10) {
-            return { cumulativeHazard: 0.5, hazardRate: 0.1 };
+            return {
+                cumulativeHazard: 0.5,
+                hazardRate: 0.1,
+                survivalFromHazard: 0.6,
+                variance: 0.1,
+            };
         }
 
         const sorted = [...runLengths].sort((a, b) => a - b);
+        const n = sorted.length;
         const timePoints = [...new Set(sorted)].sort((a, b) => a - b);
 
         let cumulativeHazard = 0;
         let lastHazard = 0;
+        let breslowVariance = 0;
+
+        const hazardCurve = [{ time: 0, cumulativeHazard: 0, variance: 0 }];
 
         for (const t of timePoints) {
             if (t > targetLength) break;
@@ -245,92 +470,662 @@ class StatisticalEngine {
             if (atRisk > 0) {
                 lastHazard = events / atRisk;
                 cumulativeHazard += lastHazard;
+
+                // Breslow variance
+                breslowVariance += events / (atRisk * atRisk);
+
+                hazardCurve.push({
+                    time: t,
+                    cumulativeHazard,
+                    hazardRate: lastHazard,
+                    variance: breslowVariance,
+                    atRisk,
+                    events,
+                });
             }
         }
+
+        // Confidence bands (EP / Hall-Wellner style approximation)
+        const se = Math.sqrt(breslowVariance);
+        const z = 1.96;
+
+        // Fleming-Harrington survival estimate (more robust than direct exp)
+        const survivalFH = Math.exp(-cumulativeHazard);
+
+        // Smoothed instantaneous hazard rate at target
+        const smoothedHazard = this._kernelSmoothedHazardInternal(
+            runLengths, targetLength, this._computeOptimalBandwidth(runLengths)
+        );
 
         return {
             cumulativeHazard,
             hazardRate: lastHazard,
-            survivalFromHazard: Math.exp(-cumulativeHazard)
+            smoothedHazardRate: smoothedHazard,
+            survivalFromHazard: survivalFH,
+            variance: breslowVariance,
+            standardError: se,
+            ci_lower_hazard: Math.max(0, cumulativeHazard - z * se),
+            ci_upper_hazard: cumulativeHazard + z * se,
+            ci_lower_survival: Math.exp(-(cumulativeHazard + z * se)),
+            ci_upper_survival: Math.exp(-Math.max(0, cumulativeHazard - z * se)),
+            hazardCurve: hazardCurve.slice(-15),
+            sampleSize: n,
+        };
+    }
+
+    // ====================================================================
+    // BAYESIAN INFERENCE (ENHANCED)
+    // ====================================================================
+
+    /**
+     * Initialize Bayesian prior with optional informative prior
+     */
+    initBayesianPrior(asset, alpha = 2, beta = 2) {
+        this.bayesianPriors[asset] = {
+            alpha,
+            beta,
+            observations: 0,
+            lastUpdate: Date.now(),
+        };
+
+        this.bayesianHistory[asset] = [];
+
+        // Hierarchical prior (hyper-parameters for learning the learning rate)
+        this.hierarchicalPriors[asset] = {
+            hyperAlpha: 1.0,
+            hyperBeta: 1.0,
+            effectiveDecay: this.config.bayesianDecayRate,
+            adaptiveWeight: 1.0,
         };
     }
 
     /**
-     * Bayesian Probability Updater
-     * Uses Beta-Binomial conjugate prior
+     * Update Bayesian posterior with new observation
+     * Includes adaptive decay and hierarchical updating
      */
-    initBayesianPrior(asset, alpha = 2, beta = 2) {
-        this.bayesianPriors[asset] = { alpha, beta };
-    }
-
-    updateBayesian(asset, survived) {
+    updateBayesian(asset, survived, context = {}) {
         if (!this.bayesianPriors[asset]) {
             this.initBayesianPrior(asset);
         }
 
-        if (survived) {
-            this.bayesianPriors[asset].alpha += 1;
-        } else {
-            this.bayesianPriors[asset].beta += 1;
+        const prior = this.bayesianPriors[asset];
+        const hierarchical = this.hierarchicalPriors[asset];
+
+        // Context-dependent weighting
+        let weight = 1.0;
+        if (context.volatility !== undefined) {
+            // Weight recent observations less during high volatility
+            weight *= (1 - context.volatility * 0.3);
         }
+        if (context.regimeConfidence !== undefined) {
+            // Weight more when regime is clear
+            weight *= (0.7 + 0.3 * context.regimeConfidence);
+        }
+
+        weight *= hierarchical.adaptiveWeight;
+        weight = Math.max(0.3, Math.min(2.0, weight));
+
+        // Update posterior
+        if (survived) {
+            prior.alpha += weight;
+        } else {
+            prior.beta += weight;
+        }
+
+        prior.observations++;
+        prior.lastUpdate = Date.now();
+
+        // Adaptive decay: decay faster when predictions are poor
+        const currentMean = prior.alpha / (prior.alpha + prior.beta);
+        const predictionError = Math.abs((survived ? 1 : 0) - currentMean);
+
+        // Adjust hierarchical adaptive weight
+        // If prediction errors are high, weight new data more heavily
+        hierarchical.adaptiveWeight = 0.95 * hierarchical.adaptiveWeight +
+            0.05 * (0.8 + predictionError * 0.4);
 
         // Apply decay to prevent over-confidence from old data
-        const decay = 0.999;
-        this.bayesianPriors[asset].alpha *= decay;
-        this.bayesianPriors[asset].beta *= decay;
+        const decay = hierarchical.effectiveDecay;
+        prior.alpha *= decay;
+        prior.beta *= decay;
 
-        // Keep minimum values
-        this.bayesianPriors[asset].alpha = Math.max(1, this.bayesianPriors[asset].alpha);
-        this.bayesianPriors[asset].beta = Math.max(1, this.bayesianPriors[asset].beta);
+        // Enforce minimum values
+        prior.alpha = Math.max(this.config.bayesianMinAlpha, prior.alpha);
+        prior.beta = Math.max(this.config.bayesianMinBeta, prior.beta);
+
+        // Track history for trend analysis
+        this.bayesianHistory[asset].push({
+            mean: prior.alpha / (prior.alpha + prior.beta),
+            alpha: prior.alpha,
+            beta: prior.beta,
+            survived,
+            weight,
+            timestamp: Date.now(),
+        });
+
+        if (this.bayesianHistory[asset].length > 500) {
+            this.bayesianHistory[asset] = this.bayesianHistory[asset].slice(-400);
+        }
     }
 
+    /**
+     * Get comprehensive Bayesian estimate with credible intervals
+     */
     getBayesianEstimate(asset) {
         if (!this.bayesianPriors[asset]) {
-            return { mean: 0.5, variance: 0.25, ci_lower: 0.25, ci_upper: 0.75 };
+            return {
+                mean: 0.5,
+                variance: 0.25,
+                ci_lower: 0.25,
+                ci_upper: 0.75,
+                confidence: 0,
+                mode: 0.5,
+                trend: 'stable',
+                predictionStrength: 'weak',
+            };
         }
 
-        const { alpha, beta } = this.bayesianPriors[asset];
-        const mean = alpha / (alpha + beta);
-        const variance = (alpha * beta) / ((alpha + beta) ** 2 * (alpha + beta + 1));
+        const { alpha, beta, observations } = this.bayesianPriors[asset];
+        const totalConcentration = alpha + beta;
+
+        // Beta distribution statistics
+        const mean = alpha / totalConcentration;
+        const variance = (alpha * beta) / (totalConcentration * totalConcentration * (totalConcentration + 1));
         const std = Math.sqrt(variance);
+
+        // Mode (most probable value)
+        let mode = 0.5;
+        if (alpha > 1 && beta > 1) {
+            mode = (alpha - 1) / (totalConcentration - 2);
+        } else if (alpha <= 1 && beta > 1) {
+            mode = 0;
+        } else if (alpha > 1 && beta <= 1) {
+            mode = 1;
+        }
+
+        // Credible intervals (using normal approximation to Beta for speed)
+        const z95 = 1.96;
+        const z90 = 1.645;
+        const z99 = 2.576;
+
+        // Highest Density Interval (HDI) approximation
+        const ci_90_lower = Math.max(0, mean - z90 * std);
+        const ci_90_upper = Math.min(1, mean + z90 * std);
+        const ci_95_lower = Math.max(0, mean - z95 * std);
+        const ci_95_upper = Math.min(1, mean + z95 * std);
+        const ci_99_lower = Math.max(0, mean - z99 * std);
+        const ci_99_upper = Math.min(1, mean + z99 * std);
+
+        // Trend analysis from history
+        const trend = this._analyzeBayesianTrend(asset);
+
+        // Prediction strength
+        const ciWidth = ci_95_upper - ci_95_lower;
+        let predictionStrength;
+        if (ciWidth < 0.1) predictionStrength = 'very_strong';
+        else if (ciWidth < 0.2) predictionStrength = 'strong';
+        else if (ciWidth < 0.35) predictionStrength = 'moderate';
+        else if (ciWidth < 0.5) predictionStrength = 'weak';
+        else predictionStrength = 'very_weak';
+
+        // Bayes factor: evidence ratio for survival vs non-survival
+        const bayesFactor = alpha / beta;
+
+        // Probability that true rate exceeds threshold
+        const exceedanceProb = this._betaSurvivalFunction(0.5, alpha, beta);
 
         return {
             mean,
+            mode,
             variance,
-            ci_lower: Math.max(0, mean - 1.96 * std),
-            ci_upper: Math.min(1, mean + 1.96 * std),
-            confidence: alpha + beta // Higher = more confident
+            standardDeviation: std,
+            ci_lower: ci_95_lower,
+            ci_upper: ci_95_upper,
+            credibleIntervals: {
+                ci90: [ci_90_lower, ci_90_upper],
+                ci95: [ci_95_lower, ci_95_upper],
+                ci99: [ci_99_lower, ci_99_upper],
+            },
+            confidence: totalConcentration,
+            observations,
+            bayesFactor,
+            exceedanceProb,
+            trend,
+            predictionStrength,
+            ciWidth,
         };
     }
 
     /**
-     * Shannon Entropy Calculator
-     * Measures market predictability (lower = more predictable)
+     * Analyze trend in Bayesian estimates over time
+     */
+    _analyzeBayesianTrend(asset) {
+        const history = this.bayesianHistory[asset];
+        if (!history || history.length < 10) return 'stable';
+
+        const recent = history.slice(-20);
+        const firstHalf = recent.slice(0, Math.floor(recent.length / 2));
+        const secondHalf = recent.slice(Math.floor(recent.length / 2));
+
+        const firstMean = firstHalf.reduce((a, b) => a + b.mean, 0) / firstHalf.length;
+        const secondMean = secondHalf.reduce((a, b) => a + b.mean, 0) / secondHalf.length;
+
+        const diff = secondMean - firstMean;
+
+        if (diff > 0.05) return 'improving';
+        if (diff < -0.05) return 'deteriorating';
+        return 'stable';
+    }
+
+    /**
+     * Beta survival function approximation: P(X > x) for Beta(alpha, beta)
+     */
+    _betaSurvivalFunction(x, alpha, beta) {
+        // Use normal approximation for speed
+        const mean = alpha / (alpha + beta);
+        const variance = (alpha * beta) / ((alpha + beta) ** 2 * (alpha + beta + 1));
+        const z = (x - mean) / Math.sqrt(variance);
+        return 1 - this._normalCDF(z);
+    }
+
+    /**
+     * Bayesian model comparison for two time periods
+     */
+    compareBayesianPeriods(asset, splitIndex) {
+        const history = this.bayesianHistory[asset];
+        if (!history || history.length < 20) return null;
+
+        const split = splitIndex || Math.floor(history.length / 2);
+        const period1 = history.slice(0, split);
+        const period2 = history.slice(split);
+
+        const wins1 = period1.filter(h => h.survived).length;
+        const losses1 = period1.length - wins1;
+        const wins2 = period2.filter(h => h.survived).length;
+        const losses2 = period2.length - wins2;
+
+        const rate1 = wins1 / period1.length;
+        const rate2 = wins2 / period2.length;
+
+        // Two-proportion z-test
+        const pooledRate = (wins1 + wins2) / (period1.length + period2.length);
+        const se = Math.sqrt(pooledRate * (1 - pooledRate) *
+            (1 / period1.length + 1 / period2.length));
+        const zStat = se > 0 ? (rate1 - rate2) / se : 0;
+        const pValue = 2 * (1 - this._normalCDF(Math.abs(zStat)));
+
+        return {
+            period1: { rate: rate1, wins: wins1, total: period1.length },
+            period2: { rate: rate2, wins: wins2, total: period2.length },
+            zStatistic: zStat,
+            pValue,
+            significantDifference: pValue < 0.05,
+            direction: rate2 > rate1 ? 'improving' : 'deteriorating',
+        };
+    }
+
+    // ====================================================================
+    // KERNEL DENSITY ESTIMATION
+    // ====================================================================
+
+    /**
+     * Gaussian KDE for run length distribution with optimal bandwidth
+     */
+    kernelDensityEstimate(asset, runLengths, evalPoints = null) {
+        if (!runLengths || runLengths.length < 15) return null;
+
+        const n = runLengths.length;
+        const bandwidth = this._computeOptimalBandwidth(runLengths);
+
+        // Default evaluation points
+        if (!evalPoints) {
+            const min = Math.max(0, Math.min(...runLengths) - 2 * bandwidth);
+            const max = Math.max(...runLengths) + 2 * bandwidth;
+            const step = (max - min) / 100;
+            evalPoints = [];
+            for (let x = min; x <= max; x += step) {
+                evalPoints.push(x);
+            }
+        }
+
+        // Gaussian kernel
+        const gaussKernel = (u) => Math.exp(-0.5 * u * u) / Math.sqrt(2 * Math.PI);
+
+        const density = evalPoints.map(x => {
+            let sum = 0;
+            for (let i = 0; i < n; i++) {
+                sum += gaussKernel((x - runLengths[i]) / bandwidth);
+            }
+            return {
+                x,
+                density: sum / (n * bandwidth),
+            };
+        });
+
+        // Find modes (peaks in density)
+        const modes = [];
+        for (let i = 1; i < density.length - 1; i++) {
+            if (density[i].density > density[i - 1].density &&
+                density[i].density > density[i + 1].density) {
+                modes.push(density[i]);
+            }
+        }
+        modes.sort((a, b) => b.density - a.density);
+
+        // CDF at specific points
+        const cdf = (x) => {
+            let sum = 0;
+            for (let i = 0; i < n; i++) {
+                sum += this._normalCDF((x - runLengths[i]) / bandwidth);
+            }
+            return sum / n;
+        };
+
+        this.kdeModels[asset] = {
+            bandwidth,
+            density,
+            modes,
+            cdf,
+            numModes: modes.length,
+            isMultiModal: modes.length > 1,
+            primaryMode: modes.length > 0 ? modes[0].x : null,
+        };
+
+        return this.kdeModels[asset];
+    }
+
+    /**
+     * Compute optimal bandwidth using Silverman's rule of thumb
+     * with Sheather-Jones improvement
+     */
+    _computeOptimalBandwidth(data) {
+        const n = data.length;
+        const mean = data.reduce((a, b) => a + b, 0) / n;
+        const std = Math.sqrt(data.reduce((a, b) => a + (b - mean) ** 2, 0) / n);
+
+        // IQR-based estimate (more robust)
+        const sorted = [...data].sort((a, b) => a - b);
+        const q1 = sorted[Math.floor(n * 0.25)];
+        const q3 = sorted[Math.floor(n * 0.75)];
+        const iqr = q3 - q1;
+
+        // Silverman's rule with robustification
+        const silverman = 0.9 * Math.min(std, iqr / 1.34) * Math.pow(n, -0.2);
+
+        return Math.max(0.5, silverman); // Minimum bandwidth of 0.5
+    }
+
+    /**
+     * Evaluate density at a single point
+     */
+    evaluateKDE(asset, point) {
+        if (!this.kdeModels[asset]) return null;
+
+        const kde = this.kdeModels[asset];
+        // Find nearest density point
+        let closestDensity = 0;
+        let minDist = Infinity;
+
+        kde.density.forEach(d => {
+            const dist = Math.abs(d.x - point);
+            if (dist < minDist) {
+                minDist = dist;
+                closestDensity = d.density;
+            }
+        });
+
+        const cdfValue = kde.cdf(point);
+
+        return {
+            density: closestDensity,
+            cdf: cdfValue,
+            survivalFunction: 1 - cdfValue,
+            percentile: cdfValue * 100,
+        };
+    }
+
+    // ====================================================================
+    // EXPONENTIALLY WEIGHTED MOVING STATISTICS
+    // ====================================================================
+
+    /**
+     * Initialize EWMA tracking for an asset
+     */
+    initEWMStats(asset) {
+        const alpha = this.config.ewmAlpha;
+
+        this.ewmStats[asset] = {
+            mean: null,
+            variance: null,
+            skewness: null,
+            kurtosis: null,
+            count: 0,
+            alpha,
+            history: [],
+            // Centered moments
+            m2: 0,
+            m3: 0,
+            m4: 0,
+        };
+    }
+
+    /**
+     * Update EWMA statistics with new observation
+     */
+    updateEWMStats(asset, value) {
+        if (!this.ewmStats[asset]) {
+            this.initEWMStats(asset);
+        }
+
+        const stats = this.ewmStats[asset];
+        const alpha = stats.alpha;
+
+        if (stats.mean === null) {
+            stats.mean = value;
+            stats.variance = 0;
+            stats.m2 = 0;
+            stats.m3 = 0;
+            stats.m4 = 0;
+        } else {
+            const diff = value - stats.mean;
+
+            // Update mean
+            const newMean = (1 - alpha) * stats.mean + alpha * value;
+
+            // Update centered moments using Welford-like online algorithm
+            const delta = value - stats.mean;
+            const newDelta = value - newMean;
+
+            stats.m2 = (1 - alpha) * (stats.m2 + alpha * delta * delta);
+            stats.m3 = (1 - alpha) * (stats.m3 + alpha * delta * delta * delta * (1 - alpha) -
+                3 * alpha * delta * stats.m2 / (1 - alpha));
+            stats.m4 = (1 - alpha) * (stats.m4 + alpha * Math.pow(delta, 4) * (1 - alpha) -
+                4 * alpha * delta * stats.m3 / (1 - alpha));
+
+            stats.mean = newMean;
+            stats.variance = stats.m2;
+        }
+
+        stats.count++;
+
+        // Compute derived statistics
+        const std = Math.sqrt(Math.max(0, stats.variance));
+        stats.skewness = std > 0 ? stats.m3 / Math.pow(std, 3) : 0;
+        stats.kurtosis = stats.variance > 0 ? stats.m4 / (stats.variance * stats.variance) - 3 : 0;
+
+        // Track z-score of current observation
+        const zScore = std > 0 ? (value - stats.mean) / std : 0;
+
+        // Store in history
+        stats.history.push({
+            value,
+            mean: stats.mean,
+            variance: stats.variance,
+            zScore,
+            timestamp: Date.now(),
+        });
+
+        if (stats.history.length > 200) {
+            stats.history = stats.history.slice(-150);
+        }
+
+        return {
+            mean: stats.mean,
+            variance: stats.variance,
+            std,
+            skewness: stats.skewness,
+            kurtosis: stats.kurtosis,
+            zScore,
+            isOutlier: Math.abs(zScore) > 2.5,
+            isExtreme: Math.abs(zScore) > 3.5,
+        };
+    }
+
+    /**
+     * Get current EWMA statistics
+     */
+    getEWMStats(asset) {
+        if (!this.ewmStats[asset]) return null;
+
+        const stats = this.ewmStats[asset];
+        const std = Math.sqrt(Math.max(0, stats.variance));
+
+        return {
+            mean: stats.mean,
+            variance: stats.variance,
+            std,
+            skewness: stats.skewness,
+            kurtosis: stats.kurtosis,
+            count: stats.count,
+            // Bollinger-band-like bounds
+            upperBound: stats.mean + 2 * std,
+            lowerBound: stats.mean - 2 * std,
+        };
+    }
+
+    // ====================================================================
+    // BOOTSTRAP CONFIDENCE INTERVALS
+    // ====================================================================
+
+    /**
+     * Bootstrap estimate of survival probability with confidence intervals
+     */
+    bootstrapSurvival(runLengths, targetLength, numSamples = null) {
+        const B = numSamples || this.config.bootstrapSamples;
+
+        if (!runLengths || runLengths.length < 15) {
+            return { mean: 0.5, ci_lower: 0.2, ci_upper: 0.8, std: 0.2 };
+        }
+
+        const n = runLengths.length;
+        const bootstrapEstimates = [];
+
+        for (let b = 0; b < B; b++) {
+            // Resample with replacement
+            const sample = [];
+            for (let i = 0; i < n; i++) {
+                sample.push(runLengths[Math.floor(Math.random() * n)]);
+            }
+
+            // Compute KM survival on bootstrap sample
+            const km = this.kaplanMeierEstimate(sample, targetLength);
+            bootstrapEstimates.push(km.survival);
+        }
+
+        // Sort for percentile calculation
+        bootstrapEstimates.sort((a, b) => a - b);
+
+        const mean = bootstrapEstimates.reduce((a, b) => a + b, 0) / B;
+        const std = Math.sqrt(
+            bootstrapEstimates.reduce((a, b) => a + (b - mean) ** 2, 0) / B
+        );
+
+        // Percentile method CI
+        const ci_lower = bootstrapEstimates[Math.floor(B * 0.025)];
+        const ci_upper = bootstrapEstimates[Math.floor(B * 0.975)];
+
+        // BCa (Bias-Corrected and accelerated) adjustment
+        const biasFactor = bootstrapEstimates.filter(e => e < mean).length / B;
+        const z0 = this._normalQuantile(biasFactor);
+
+        return {
+            mean,
+            std,
+            ci_lower: Math.max(0, ci_lower),
+            ci_upper: Math.min(1, ci_upper),
+            biasFactor: z0,
+            percentiles: {
+                p5: bootstrapEstimates[Math.floor(B * 0.05)],
+                p10: bootstrapEstimates[Math.floor(B * 0.10)],
+                p25: bootstrapEstimates[Math.floor(B * 0.25)],
+                p50: bootstrapEstimates[Math.floor(B * 0.50)],
+                p75: bootstrapEstimates[Math.floor(B * 0.75)],
+                p90: bootstrapEstimates[Math.floor(B * 0.90)],
+                p95: bootstrapEstimates[Math.floor(B * 0.95)],
+            },
+            numSamples: B,
+        };
+    }
+
+    // ====================================================================
+    // INFORMATION THEORY
+    // ====================================================================
+
+    /**
+     * Shannon Entropy (normalized to [0, 1])
      */
     calculateEntropy(sequence) {
         if (!sequence || sequence.length < 10) return 1.0;
 
         const freq = {};
-        sequence.forEach(d => {
-            freq[d] = (freq[d] || 0) + 1;
-        });
+        sequence.forEach(d => { freq[d] = (freq[d] || 0) + 1; });
 
         let entropy = 0;
         const n = sequence.length;
 
         Object.values(freq).forEach(count => {
             const p = count / n;
-            if (p > 0) {
-                entropy -= p * Math.log2(p);
-            }
+            if (p > 0) entropy -= p * Math.log2(p);
         });
 
-        // Normalize to [0, 1] (max entropy for 10 digits is log2(10) ≈ 3.32)
-        return entropy / Math.log2(10);
+        const numSymbols = Object.keys(freq).length;
+        const maxEntropy = Math.log2(numSymbols);
+
+        return maxEntropy > 0 ? entropy / maxEntropy : 1.0;
     }
 
     /**
-     * Conditional Entropy - measures uncertainty given recent history
+     * Rényi Entropy of order q
+     * q=0: Hartley entropy (log of support size)
+     * q=1: Shannon entropy (limit)
+     * q=2: Collision entropy
+     * q→∞: Min-entropy
+     */
+    renyiEntropy(sequence, q = 2) {
+        if (!sequence || sequence.length < 10) return 1.0;
+
+        const freq = {};
+        sequence.forEach(d => { freq[d] = (freq[d] || 0) + 1; });
+
+        const n = sequence.length;
+        const probs = Object.values(freq).map(c => c / n);
+
+        if (Math.abs(q - 1) < 1e-10) {
+            // Limit as q → 1 is Shannon entropy
+            return this.calculateEntropy(sequence);
+        }
+
+        let sum = 0;
+        probs.forEach(p => { sum += Math.pow(p, q); });
+
+        const entropy = (1 / (1 - q)) * Math.log2(sum);
+        const maxEntropy = Math.log2(probs.length);
+
+        return maxEntropy > 0 ? entropy / maxEntropy : 1.0;
+    }
+
+    /**
+     * Conditional Entropy H(Y|X) with configurable order
      */
     calculateConditionalEntropy(sequence, order = 2) {
         if (!sequence || sequence.length < order + 10) return 1.0;
@@ -353,7 +1148,6 @@ class StatisticalEngine {
         Object.entries(jointCounts).forEach(([joint, count]) => {
             const [context] = joint.split('|');
             const pJoint = count / n;
-            const pContext = contextCounts[context] / n;
             const pConditional = count / contextCounts[context];
 
             if (pConditional > 0) {
@@ -361,28 +1155,199 @@ class StatisticalEngine {
             }
         });
 
-        return conditionalEntropy / Math.log2(10);
+        const numSymbols = new Set(sequence).size;
+        const maxEntropy = Math.log2(numSymbols);
+
+        return maxEntropy > 0 ? conditionalEntropy / maxEntropy : 1.0;
     }
 
     /**
-     * Kernel-smoothed hazard rate estimation
+     * Mutual Information I(X; Y) between consecutive segments
      */
-    kernelSmoothedHazard(runLengths, targetLength, bandwidth = 2) {
+    calculateMutualInformation(asset, sequence, segmentLength = 20) {
+        if (!sequence || sequence.length < segmentLength * 2 + 10) return null;
+
+        // Split into overlapping segments
+        const n = sequence.length;
+        const miValues = [];
+
+        for (let start = 0; start <= n - segmentLength * 2; start += segmentLength) {
+            const seg1 = sequence.slice(start, start + segmentLength);
+            const seg2 = sequence.slice(start + segmentLength, start + segmentLength * 2);
+
+            // Compute distributions
+            const dist1 = this._computeDistribution(seg1);
+            const dist2 = this._computeDistribution(seg2);
+
+            // Joint distribution
+            const jointDist = {};
+            for (let i = 0; i < segmentLength; i++) {
+                const key = `${seg1[i]},${seg2[i]}`;
+                jointDist[key] = (jointDist[key] || 0) + 1 / segmentLength;
+            }
+
+            // MI = sum p(x,y) * log(p(x,y) / (p(x) * p(y)))
+            let mi = 0;
+            Object.entries(jointDist).forEach(([key, pxy]) => {
+                const [x, y] = key.split(',');
+                const px = dist1[x] || 1e-10;
+                const py = dist2[y] || 1e-10;
+                if (pxy > 0) {
+                    mi += pxy * Math.log2(pxy / (px * py));
+                }
+            });
+
+            miValues.push(Math.max(0, mi));
+        }
+
+        if (miValues.length === 0) return null;
+
+        const meanMI = miValues.reduce((a, b) => a + b, 0) / miValues.length;
+        const stdMI = Math.sqrt(
+            miValues.reduce((a, b) => a + (b - meanMI) ** 2, 0) / miValues.length
+        );
+
+        this.mutualInformationCache[asset] = {
+            mean: meanMI,
+            std: stdMI,
+            values: miValues,
+            trend: miValues.length >= 3 ?
+                (miValues[miValues.length - 1] > miValues[0] ? 'increasing' : 'decreasing') : 'stable',
+            // Higher MI = more predictable relationship between segments
+            predictability: Math.min(1, meanMI * 2),
+        };
+
+        return this.mutualInformationCache[asset];
+    }
+
+    /**
+     * KL Divergence D_KL(P || Q) from observed to expected distribution
+     */
+    klDivergence(observed, expected) {
+        let divergence = 0;
+        const allKeys = new Set([...Object.keys(observed), ...Object.keys(expected)]);
+
+        allKeys.forEach(key => {
+            const p = observed[key] || 1e-10;
+            const q = expected[key] || 1e-10;
+            if (p > 0) {
+                divergence += p * Math.log(p / q);
+            }
+        });
+
+        return Math.max(0, divergence);
+    }
+
+    /**
+     * Jensen-Shannon Divergence (symmetric, bounded)
+     */
+    jsDivergence(dist1, dist2) {
+        const allKeys = new Set([...Object.keys(dist1), ...Object.keys(dist2)]);
+        const m = {};
+
+        allKeys.forEach(key => {
+            m[key] = ((dist1[key] || 0) + (dist2[key] || 0)) / 2;
+        });
+
+        return (this.klDivergence(dist1, m) + this.klDivergence(dist2, m)) / 2;
+    }
+
+    /**
+     * Transfer Entropy: measure of directed information transfer
+     * TE(X→Y) measures how much X helps predict Y beyond Y's own past
+     */
+    transferEntropy(source, target, order = 1) {
+        if (!source || !target || source.length < order + 20 ||
+            source.length !== target.length) return null;
+
+        const n = source.length;
+        const counts = {
+            targetGivenBoth: {},
+            targetGivenTarget: {},
+            both: {},
+            target: {},
+        };
+
+        for (let i = order; i < n; i++) {
+            const targetPast = target.slice(i - order, i).join(',');
+            const sourcePast = source.slice(i - order, i).join(',');
+            const nextTarget = target[i];
+
+            const bothKey = `${targetPast}|${sourcePast}`;
+            const targetNextBothKey = `${nextTarget}|${bothKey}`;
+            const targetNextTargetKey = `${nextTarget}|${targetPast}`;
+
+            counts.targetGivenBoth[targetNextBothKey] =
+                (counts.targetGivenBoth[targetNextBothKey] || 0) + 1;
+            counts.targetGivenTarget[targetNextTargetKey] =
+                (counts.targetGivenTarget[targetNextTargetKey] || 0) + 1;
+            counts.both[bothKey] = (counts.both[bothKey] || 0) + 1;
+            counts.target[targetPast] = (counts.target[targetPast] || 0) + 1;
+        }
+
+        // Compute TE
+        let te = 0;
+        const total = n - order;
+
+        Object.entries(counts.targetGivenBoth).forEach(([key, count]) => {
+            const parts = key.split('|');
+            const nextTarget = parts[0];
+            const bothKey = parts.slice(1).join('|');
+            const targetPast = bothKey.split('|')[0];
+            const targetNextTargetKey = `${nextTarget}|${targetPast}`;
+
+            const pTargetGivenBoth = count / (counts.both[bothKey] || 1);
+            const pTargetGivenTarget = (counts.targetGivenTarget[targetNextTargetKey] || 1) /
+                (counts.target[targetPast] || 1);
+
+            const pJoint = count / total;
+
+            if (pTargetGivenBoth > 0 && pTargetGivenTarget > 0) {
+                te += pJoint * Math.log2(pTargetGivenBoth / pTargetGivenTarget);
+            }
+        });
+
+        return {
+            transferEntropy: Math.max(0, te),
+            normalized: Math.min(1, te / Math.log2(10)),
+            interpretation: te > 0.1 ? 'significant_transfer' :
+                te > 0.01 ? 'weak_transfer' : 'no_transfer',
+        };
+    }
+
+    // ====================================================================
+    // KERNEL-SMOOTHED HAZARD RATE ESTIMATION
+    // ====================================================================
+
+    /**
+     * Adaptive bandwidth kernel-smoothed hazard rate estimation
+     */
+    kernelSmoothedHazard(runLengths, targetLength, bandwidth = null) {
         if (!runLengths || runLengths.length < 20) {
             return 0.1;
         }
 
-        // Gaussian kernel
-        const kernel = (u) => Math.exp(-0.5 * u * u) / Math.sqrt(2 * Math.PI);
+        const bw = bandwidth || this._computeOptimalBandwidth(runLengths);
+        return this._kernelSmoothedHazardInternal(runLengths, targetLength, bw);
+    }
+
+    _kernelSmoothedHazardInternal(runLengths, targetLength, bandwidth) {
+        // Epanechnikov kernel (optimal in MSE sense)
+        const epanechnikovKernel = (u) => {
+            return Math.abs(u) <= 1 ? 0.75 * (1 - u * u) : 0;
+        };
+
+        // Gaussian kernel for comparison
+        const gaussianKernel = (u) => Math.exp(-0.5 * u * u) / Math.sqrt(2 * Math.PI);
 
         let numerator = 0;
         let denominator = 0;
 
         runLengths.forEach(l => {
             const u = (targetLength - l) / bandwidth;
-            const k = kernel(u);
+            const k = gaussianKernel(u);
 
-            if (l === targetLength) {
+            if (l === targetLength || Math.abs(l - targetLength) < 0.5) {
                 numerator += k;
             }
             if (l >= targetLength) {
@@ -391,6 +1356,1031 @@ class StatisticalEngine {
         });
 
         return denominator > 0 ? numerator / denominator : 0.1;
+    }
+
+    /**
+     * Compute hazard function at multiple points
+     */
+    computeHazardFunction(asset, runLengths, evalPoints = null) {
+        if (!runLengths || runLengths.length < 20) return null;
+
+        const maxRun = Math.max(...runLengths);
+        const bandwidth = this._computeOptimalBandwidth(runLengths);
+
+        if (!evalPoints) {
+            evalPoints = [];
+            for (let t = 1; t <= maxRun; t++) {
+                evalPoints.push(t);
+            }
+        }
+
+        const hazardFunction = evalPoints.map(t => ({
+            time: t,
+            hazard: this._kernelSmoothedHazardInternal(runLengths, t, bandwidth),
+        }));
+
+        // Find increasing/decreasing hazard (IFR/DFR)
+        let increasing = 0;
+        let decreasing = 0;
+        for (let i = 1; i < hazardFunction.length; i++) {
+            if (hazardFunction[i].hazard > hazardFunction[i - 1].hazard) increasing++;
+            else decreasing++;
+        }
+
+        const hazardShape = increasing > decreasing * 1.5 ? 'increasing' :
+            decreasing > increasing * 1.5 ? 'decreasing' : 'bathtub_or_flat';
+
+        this.hazardRates[asset] = {
+            function: hazardFunction,
+            shape: hazardShape,
+            bandwidth,
+            maxHazard: Math.max(...hazardFunction.map(h => h.hazard)),
+            meanHazard: hazardFunction.reduce((a, h) => a + h.hazard, 0) / hazardFunction.length,
+        };
+
+        return this.hazardRates[asset];
+    }
+
+    // ====================================================================
+    // EXTREME VALUE THEORY
+    // ====================================================================
+
+    /**
+     * Block Maxima approach with GEV distribution fitting
+     */
+    fitExtremeValueModel(asset, runLengths) {
+        if (!runLengths || runLengths.length < 30) return null;
+
+        const blockSize = this.config.evtBlockSize;
+        const numBlocks = Math.floor(runLengths.length / blockSize);
+
+        if (numBlocks < 5) return null;
+
+        // Extract block maxima and minima
+        const blockMaxima = [];
+        const blockMinima = [];
+
+        for (let i = 0; i < numBlocks; i++) {
+            const block = runLengths.slice(i * blockSize, (i + 1) * blockSize);
+            blockMaxima.push(Math.max(...block));
+            blockMinima.push(Math.min(...block));
+        }
+
+        // Fit GEV to maxima using method of moments
+        const gevMaxima = this._fitGEV(blockMaxima);
+
+        // Fit GEV to minima (reversed)
+        const gevMinima = this._fitGEV(blockMinima);
+
+        // Compute return levels
+        const returnLevels = {};
+        [5, 10, 20, 50, 100].forEach(period => {
+            returnLevels[period] = this._gevReturnLevel(gevMaxima, period);
+        });
+
+        // Probability of exceeding threshold
+        const thresholdProbs = {};
+        [5, 10, 20, 30, 50].forEach(threshold => {
+            thresholdProbs[threshold] = this._gevExceedanceProb(gevMaxima, threshold);
+        });
+
+        this.evtModels[asset] = {
+            maxima: {
+                params: gevMaxima,
+                blockMaxima,
+            },
+            minima: {
+                params: gevMinima,
+                blockMinima,
+            },
+            returnLevels,
+            thresholdProbs,
+            blockSize,
+            numBlocks,
+        };
+
+        return this.evtModels[asset];
+    }
+
+    /**
+     * Fit GEV distribution using probability-weighted moments
+     */
+    _fitGEV(data) {
+        const n = data.length;
+        const sorted = [...data].sort((a, b) => a - b);
+
+        // Probability-weighted moments
+        let b0 = 0, b1 = 0, b2 = 0;
+        for (let i = 0; i < n; i++) {
+            const pi = (i + 0.35) / n;
+            b0 += sorted[i];
+            b1 += pi * sorted[i];
+            b2 += pi * (1 - pi) * sorted[i]; // Simplified L-moment estimate
+        }
+        b0 /= n;
+        b1 /= n;
+        b2 /= n;
+
+        // L-moments
+        const l1 = b0;
+        const l2 = 2 * b1 - b0;
+        const l3 = 6 * b2 - 6 * b1 + b0; // Approximate
+
+        // Estimate GEV parameters
+        const t3 = l2 !== 0 ? l3 / l2 : 0;
+
+        // Shape parameter (xi) estimate
+        let xi;
+        if (Math.abs(t3) < 0.01) {
+            xi = 0; // Gumbel
+        } else {
+            // Approximate using L-moment ratios
+            xi = -t3 * 0.5; // Simplified
+            xi = Math.max(-0.5, Math.min(0.5, xi));
+        }
+
+        // Scale parameter (sigma)
+        let sigma;
+        if (Math.abs(xi) < 0.01) {
+            sigma = l2 / Math.LN2;
+        } else {
+            sigma = l2 * Math.abs(xi) / (this._gamma(1 + xi) * (1 - Math.pow(2, -xi)));
+            sigma = Math.max(0.1, sigma);
+        }
+
+        // Location parameter (mu)
+        const mu = l1 - sigma * (this._gamma(1 + xi) - 1) / xi;
+
+        return {
+            xi,  // shape
+            sigma, // scale
+            mu, // location
+            type: Math.abs(xi) < 0.05 ? 'Gumbel' :
+                xi > 0 ? 'Frechet' : 'Weibull',
+        };
+    }
+
+    /**
+     * GEV return level for a given return period
+     */
+    _gevReturnLevel(params, period) {
+        const { xi, sigma, mu } = params;
+        const yp = -Math.log(1 - 1 / period);
+
+        if (Math.abs(xi) < 0.01) {
+            // Gumbel
+            return mu - sigma * Math.log(yp);
+        } else {
+            return mu + (sigma / xi) * (Math.pow(yp, -xi) - 1);
+        }
+    }
+
+    /**
+     * GEV exceedance probability P(X > x)
+     */
+    _gevExceedanceProb(params, x) {
+        const { xi, sigma, mu } = params;
+        const t = (x - mu) / sigma;
+
+        if (Math.abs(xi) < 0.01) {
+            // Gumbel
+            return 1 - Math.exp(-Math.exp(-t));
+        } else {
+            const inner = 1 + xi * t;
+            if (inner <= 0) return xi > 0 ? 0 : 1;
+            return 1 - Math.exp(-Math.pow(inner, -1 / xi));
+        }
+    }
+
+    // ====================================================================
+    // MIXTURE MODEL (EM ALGORITHM)
+    // ====================================================================
+
+    /**
+     * Fit Gaussian Mixture Model to run length distribution
+     * Useful for identifying distinct regimes in run lengths
+     */
+    fitMixtureModel(asset, runLengths, numComponents = null) {
+        if (!runLengths || runLengths.length < 30) return null;
+
+        const K = numComponents || this._estimateOptimalComponents(runLengths);
+        const n = runLengths.length;
+        const data = [...runLengths];
+
+        // Initialize parameters using k-means++ inspired approach
+        const params = this._initializeMixtureParams(data, K);
+
+        let prevLogLikelihood = -Infinity;
+        let converged = false;
+
+        for (let iter = 0; iter < this.config.mixtureMaxIterations; iter++) {
+            // E-step: compute responsibilities
+            const responsibilities = new Array(n);
+
+            for (let i = 0; i < n; i++) {
+                responsibilities[i] = new Array(K);
+                let total = 0;
+
+                for (let k = 0; k < K; k++) {
+                    const prob = params.weights[k] *
+                        this._gaussianPDF(data[i], params.means[k], params.variances[k]);
+                    responsibilities[i][k] = prob;
+                    total += prob;
+                }
+
+                // Normalize
+                for (let k = 0; k < K; k++) {
+                    responsibilities[i][k] = total > 0 ?
+                        responsibilities[i][k] / total : 1 / K;
+                }
+            }
+
+            // M-step: update parameters
+            for (let k = 0; k < K; k++) {
+                let nk = 0;
+                let sumX = 0;
+                let sumX2 = 0;
+
+                for (let i = 0; i < n; i++) {
+                    nk += responsibilities[i][k];
+                    sumX += responsibilities[i][k] * data[i];
+                }
+
+                if (nk > 0.1) {
+                    params.means[k] = sumX / nk;
+
+                    for (let i = 0; i < n; i++) {
+                        sumX2 += responsibilities[i][k] *
+                            Math.pow(data[i] - params.means[k], 2);
+                    }
+
+                    params.variances[k] = Math.max(0.5, sumX2 / nk);
+                    params.weights[k] = nk / n;
+                }
+            }
+
+            // Normalize weights
+            const weightSum = params.weights.reduce((a, b) => a + b, 0);
+            params.weights = params.weights.map(w => w / weightSum);
+
+            // Compute log-likelihood
+            let logLikelihood = 0;
+            for (let i = 0; i < n; i++) {
+                let prob = 0;
+                for (let k = 0; k < K; k++) {
+                    prob += params.weights[k] *
+                        this._gaussianPDF(data[i], params.means[k], params.variances[k]);
+                }
+                logLikelihood += Math.log(Math.max(1e-300, prob));
+            }
+
+            // Check convergence
+            if (Math.abs(logLikelihood - prevLogLikelihood) < this.config.mixtureConvergenceTol) {
+                converged = true;
+                break;
+            }
+            prevLogLikelihood = logLikelihood;
+        }
+
+        // BIC for model selection
+        const numParams = K * 3 - 1; // means + variances + weights - 1
+        const bic = -2 * prevLogLikelihood + numParams * Math.log(n);
+
+        // Sort components by mean
+        const components = [];
+        for (let k = 0; k < K; k++) {
+            components.push({
+                mean: params.means[k],
+                variance: params.variances[k],
+                std: Math.sqrt(params.variances[k]),
+                weight: params.weights[k],
+            });
+        }
+        components.sort((a, b) => a.mean - b.mean);
+
+        // Classify current observation
+        const classify = (x) => {
+            let bestK = 0;
+            let bestProb = 0;
+            components.forEach((comp, k) => {
+                const prob = comp.weight * this._gaussianPDF(x, comp.mean, comp.variance);
+                if (prob > bestProb) {
+                    bestProb = prob;
+                    bestK = k;
+                }
+            });
+            return { component: bestK, probability: bestProb };
+        };
+
+        this.mixtureModels[asset] = {
+            components,
+            numComponents: K,
+            bic,
+            logLikelihood: prevLogLikelihood,
+            converged,
+            classify,
+            isMultiModal: K > 1 && components.every(c => c.weight > 0.1),
+        };
+
+        return this.mixtureModels[asset];
+    }
+
+    _initializeMixtureParams(data, K) {
+        const n = data.length;
+        const sorted = [...data].sort((a, b) => a - b);
+
+        const means = [];
+        const variances = [];
+        const weights = [];
+
+        // Initialize means using quantiles
+        for (let k = 0; k < K; k++) {
+            const idx = Math.floor((k + 0.5) * n / K);
+            means.push(sorted[idx]);
+            variances.push(
+                data.reduce((a, b) => a + (b - sorted[idx]) ** 2, 0) / n / K
+            );
+            weights.push(1 / K);
+        }
+
+        return { means, variances, weights };
+    }
+
+    _estimateOptimalComponents(data) {
+        // Simple heuristic based on multimodality
+        const n = data.length;
+        const mean = data.reduce((a, b) => a + b, 0) / n;
+        const std = Math.sqrt(data.reduce((a, b) => a + (b - mean) ** 2, 0) / n);
+        const cv = std / (mean || 1);
+        const skewness = data.reduce((a, b) => a + Math.pow((b - mean) / (std || 1), 3), 0) / n;
+
+        if (cv > 1.5 || Math.abs(skewness) > 2) return 3;
+        if (cv > 0.8 || Math.abs(skewness) > 1) return 2;
+        return Math.min(this.config.mixtureMaxComponents, 2);
+    }
+
+    _gaussianPDF(x, mean, variance) {
+        const std = Math.sqrt(Math.max(1e-10, variance));
+        const z = (x - mean) / std;
+        return Math.exp(-0.5 * z * z) / (std * Math.sqrt(2 * Math.PI));
+    }
+
+    // ====================================================================
+    // SEQUENTIAL PROBABILITY RATIO TEST (SPRT)
+    // ====================================================================
+
+    /**
+     * SPRT for detecting if survival probability has shifted
+     * Tests H0: p = p0 vs H1: p = p1
+     */
+    initSPRT(asset, p0 = 0.5, p1 = 0.7) {
+        this.sprtState[asset] = {
+            p0,
+            p1,
+            logLikelihoodRatio: 0,
+            upperBound: Math.log((1 - this.config.sprtBeta) / this.config.sprtAlpha),
+            lowerBound: Math.log(this.config.sprtBeta / (1 - this.config.sprtAlpha)),
+            decision: 'continue',
+            observations: 0,
+            history: [],
+        };
+    }
+
+    updateSPRT(asset, survived) {
+        if (!this.sprtState[asset]) {
+            this.initSPRT(asset);
+        }
+
+        const state = this.sprtState[asset];
+        const { p0, p1 } = state;
+
+        // Log likelihood ratio increment
+        const x = survived ? 1 : 0;
+        const increment = x * Math.log(p1 / p0) + (1 - x) * Math.log((1 - p1) / (1 - p0));
+
+        state.logLikelihoodRatio += increment;
+        state.observations++;
+
+        // Decision
+        if (state.logLikelihoodRatio >= state.upperBound) {
+            state.decision = 'reject_H0'; // Evidence for H1 (higher survival)
+        } else if (state.logLikelihoodRatio <= state.lowerBound) {
+            state.decision = 'accept_H0'; // Evidence for H0 (base rate)
+        } else {
+            state.decision = 'continue';
+        }
+
+        state.history.push({
+            llr: state.logLikelihoodRatio,
+            decision: state.decision,
+            survived,
+        });
+
+        if (state.history.length > 200) {
+            state.history = state.history.slice(-150);
+        }
+
+        return {
+            decision: state.decision,
+            logLikelihoodRatio: state.logLikelihoodRatio,
+            upperBound: state.upperBound,
+            lowerBound: state.lowerBound,
+            observations: state.observations,
+            strengthOfEvidence: Math.abs(state.logLikelihoodRatio) /
+                Math.max(Math.abs(state.upperBound), Math.abs(state.lowerBound)),
+        };
+    }
+
+    /**
+     * Reset SPRT after a decision is made
+     */
+    resetSPRT(asset) {
+        if (this.sprtState[asset]) {
+            const { p0, p1 } = this.sprtState[asset];
+            this.initSPRT(asset, p0, p1);
+        }
+    }
+
+    // ====================================================================
+    // RANK CORRELATION ANALYSIS
+    // ====================================================================
+
+    /**
+     * Spearman Rank Correlation between run lengths and time
+     */
+    spearmanCorrelation(x, y) {
+        if (!x || !y || x.length !== y.length || x.length < 10) {
+            return { rho: 0, pValue: 1, significant: false };
+        }
+
+        const n = x.length;
+        const rankX = this._computeRanks(x);
+        const rankY = this._computeRanks(y);
+
+        // Pearson correlation on ranks
+        let sumD2 = 0;
+        for (let i = 0; i < n; i++) {
+            sumD2 += Math.pow(rankX[i] - rankY[i], 2);
+        }
+
+        const rho = 1 - (6 * sumD2) / (n * (n * n - 1));
+
+        // Approximate t-test for significance
+        const t = rho * Math.sqrt((n - 2) / (1 - rho * rho));
+        const df = n - 2;
+        const pValue = 2 * (1 - this._tDistCDF(Math.abs(t), df));
+
+        return {
+            rho,
+            pValue,
+            significant: pValue < 0.05,
+            interpretation: rho > 0.3 ? 'positive_trend' :
+                rho < -0.3 ? 'negative_trend' : 'no_trend',
+        };
+    }
+
+    /**
+     * Kendall Tau correlation (more robust than Spearman)
+     */
+    kendallTau(x, y) {
+        if (!x || !y || x.length !== y.length || x.length < 10) {
+            return { tau: 0, pValue: 1, significant: false };
+        }
+
+        const n = x.length;
+        let concordant = 0;
+        let discordant = 0;
+
+        for (let i = 0; i < n - 1; i++) {
+            for (let j = i + 1; j < n; j++) {
+                const xDiff = x[j] - x[i];
+                const yDiff = y[j] - y[i];
+
+                if (xDiff * yDiff > 0) concordant++;
+                else if (xDiff * yDiff < 0) discordant++;
+            }
+        }
+
+        const totalPairs = n * (n - 1) / 2;
+        const tau = (concordant - discordant) / totalPairs;
+
+        // Significance test
+        const variance = (2 * (2 * n + 5)) / (9 * n * (n - 1));
+        const z = tau / Math.sqrt(variance);
+        const pValue = 2 * (1 - this._normalCDF(Math.abs(z)));
+
+        return {
+            tau,
+            pValue,
+            significant: pValue < 0.05,
+            concordant,
+            discordant,
+            interpretation: tau > 0.2 ? 'positive_association' :
+                tau < -0.2 ? 'negative_association' : 'no_association',
+        };
+    }
+
+    /**
+     * Compute run length trend correlation
+     */
+    computeRunLengthTrend(asset, runLengths) {
+        if (!runLengths || runLengths.length < 10) return null;
+
+        const indices = runLengths.map((_, i) => i);
+
+        const spearman = this.spearmanCorrelation(indices, runLengths);
+        const kendall = this.kendallTau(indices, runLengths);
+
+        this.rankCorrelations[asset] = {
+            spearman,
+            kendall,
+            overallTrend: (spearman.rho + kendall.tau) / 2 > 0.15 ? 'increasing' :
+                (spearman.rho + kendall.tau) / 2 < -0.15 ? 'decreasing' : 'stable',
+        };
+
+        return this.rankCorrelations[asset];
+    }
+
+    // ====================================================================
+    // COX PROPORTIONAL HAZARDS (SIMPLIFIED)
+    // ====================================================================
+
+    /**
+     * Simplified Cox PH model with a single covariate
+     * Estimates how a covariate affects the hazard rate
+     */
+    fitCoxModel(asset, runLengths, covariates) {
+        if (!runLengths || !covariates || runLengths.length < 20 ||
+            runLengths.length !== covariates.length) return null;
+
+        const n = runLengths.length;
+
+        // Newton-Raphson for partial likelihood maximization (simplified)
+        let beta = 0;
+        const maxIter = 20;
+        const tol = 1e-6;
+
+        for (let iter = 0; iter < maxIter; iter++) {
+            let score = 0;
+            let information = 0;
+
+            // Sort by event time
+            const sorted = runLengths.map((l, i) => ({ time: l, x: covariates[i] }))
+                .sort((a, b) => a.time - b.time);
+
+            for (let i = 0; i < n; i++) {
+                const ti = sorted[i].time;
+                const xi = sorted[i].x;
+
+                // Risk set at time ti
+                let s0 = 0, s1 = 0, s2 = 0;
+                for (let j = i; j < n; j++) {
+                    const xj = sorted[j].x;
+                    const expBX = Math.exp(Math.min(100, beta * xj));
+                    s0 += expBX;
+                    s1 += xj * expBX;
+                    s2 += xj * xj * expBX;
+                }
+
+                if (s0 > 0) {
+                    score += xi - s1 / s0;
+                    information += s2 / s0 - (s1 / s0) * (s1 / s0);
+                }
+            }
+
+            // Newton-Raphson update
+            if (information > 0) {
+                const update = score / information;
+                beta += update;
+                if (Math.abs(update) < tol) break;
+            }
+        }
+
+        // Hazard ratio
+        const hazardRatio = Math.exp(beta);
+
+        // Wald test
+        const seBeta = 1 / Math.sqrt(Math.max(0.01, information || 1));
+        const zStat = beta / seBeta;
+        const pValue = 2 * (1 - this._normalCDF(Math.abs(zStat)));
+
+        this.coxModels[asset] = {
+            beta,
+            hazardRatio,
+            standardError: seBeta,
+            zStatistic: zStat,
+            pValue,
+            significant: pValue < 0.05,
+            interpretation: hazardRatio > 1.2 ? 'covariate_increases_hazard' :
+                hazardRatio < 0.8 ? 'covariate_decreases_hazard' : 'no_effect',
+        };
+
+        return this.coxModels[asset];
+    }
+
+    // ====================================================================
+    // COMPREHENSIVE STATISTICAL ANALYSIS
+    // ====================================================================
+
+    /**
+     * Run all statistical analyses and return comprehensive report
+     */
+    getComprehensiveStatisticalReport(asset, runLengths, tickHistory, targetLength) {
+        const report = {
+            asset,
+            timestamp: Date.now(),
+            targetLength,
+        };
+
+        // Kaplan-Meier
+        if (runLengths && runLengths.length >= 10) {
+            report.kaplanMeier = this.kaplanMeierEstimate(runLengths, targetLength);
+        }
+
+        // Nelson-Aalen
+        if (runLengths && runLengths.length >= 10) {
+            report.nelsonAalen = this.nelsonAalenHazard(runLengths, targetLength);
+        }
+
+        // Bayesian
+        report.bayesian = this.getBayesianEstimate(asset);
+
+        // Bootstrap
+        if (runLengths && runLengths.length >= 15) {
+            report.bootstrap = this.bootstrapSurvival(runLengths, targetLength, 100);
+        }
+
+        // EWMA stats
+        report.ewma = this.getEWMStats(asset);
+
+        // Kernel-smoothed hazard
+        if (runLengths && runLengths.length >= 20) {
+            report.smoothedHazard = this.kernelSmoothedHazard(runLengths, targetLength);
+        }
+
+        // KDE
+        if (runLengths && runLengths.length >= 15) {
+            const kde = this.kernelDensityEstimate(asset, runLengths);
+            if (kde) {
+                report.kde = {
+                    isMultiModal: kde.isMultiModal,
+                    numModes: kde.numModes,
+                    primaryMode: kde.primaryMode,
+                    bandwidth: kde.bandwidth,
+                    densityAtTarget: this.evaluateKDE(asset, targetLength),
+                };
+            }
+        }
+
+        // Entropy
+        if (tickHistory && tickHistory.length >= 10) {
+            report.entropy = {
+                shannon: this.calculateEntropy(tickHistory),
+                renyi2: this.renyiEntropy(tickHistory, 2),
+                conditional: this.calculateConditionalEntropy(tickHistory, 2),
+            };
+        }
+
+        // SPRT
+        if (this.sprtState[asset]) {
+            report.sprt = {
+                decision: this.sprtState[asset].decision,
+                llr: this.sprtState[asset].logLikelihoodRatio,
+                observations: this.sprtState[asset].observations,
+            };
+        }
+
+        // Rank correlations
+        if (runLengths && runLengths.length >= 10) {
+            report.trend = this.computeRunLengthTrend(asset, runLengths);
+        }
+
+        // Mixture model
+        if (this.mixtureModels[asset]) {
+            const mm = this.mixtureModels[asset];
+            report.mixture = {
+                numComponents: mm.numComponents,
+                isMultiModal: mm.isMultiModal,
+                components: mm.components.map(c => ({
+                    mean: c.mean.toFixed(1),
+                    std: c.std.toFixed(1),
+                    weight: (c.weight * 100).toFixed(1) + '%',
+                })),
+            };
+        }
+
+        // Extreme value model
+        if (this.evtModels[asset]) {
+            report.evt = {
+                type: this.evtModels[asset].maxima.params.type,
+                returnLevels: this.evtModels[asset].returnLevels,
+            };
+        }
+
+        // Composite survival score
+        report.compositeScore = this._computeCompositeSurvivalScore(report);
+
+        return report;
+    }
+
+    /**
+     * Compute composite survival score from all statistical analyses
+     */
+    _computeCompositeSurvivalScore(report) {
+        let score = 0;
+        let totalWeight = 0;
+
+        // Kaplan-Meier
+        if (report.kaplanMeier) {
+            const km = report.kaplanMeier;
+            const weight = 3.0 * Math.min(1, km.sampleSize / 50);
+            score += km.survival * weight;
+            totalWeight += weight;
+        }
+
+        // Nelson-Aalen
+        if (report.nelsonAalen) {
+            const na = report.nelsonAalen;
+            const weight = 2.5;
+            score += na.survivalFromHazard * weight;
+            totalWeight += weight;
+
+            // Penalize if smoothed hazard is high
+            if (na.smoothedHazardRate > 0.2) {
+                score -= (na.smoothedHazardRate - 0.2) * weight * 0.5;
+            }
+        }
+
+        // Bayesian
+        if (report.bayesian) {
+            const bay = report.bayesian;
+            const weight = 2.0 * Math.min(1, bay.confidence / 30);
+            score += bay.mean * weight;
+            totalWeight += weight;
+
+            // Bonus for strong predictions
+            if (bay.predictionStrength === 'strong' || bay.predictionStrength === 'very_strong') {
+                score += 0.1 * weight;
+            }
+        }
+
+        // Bootstrap
+        if (report.bootstrap) {
+            const boot = report.bootstrap;
+            const weight = 2.0;
+            score += boot.mean * weight;
+            totalWeight += weight;
+
+            // Penalize wide confidence intervals (high uncertainty)
+            const ciWidth = boot.ci_upper - boot.ci_lower;
+            if (ciWidth > 0.3) {
+                score -= (ciWidth - 0.3) * weight * 0.3;
+            }
+        }
+
+        // Entropy (lower = more predictable = better)
+        if (report.entropy) {
+            const ent = report.entropy;
+            const predictability = 1 - ent.conditional;
+            const weight = 1.0;
+            score += predictability * weight * 0.7;
+            totalWeight += weight;
+        }
+
+        // EWMA (current state relative to average)
+        if (report.ewma && report.ewma.mean !== null) {
+            const ewma = report.ewma;
+            // If current average is healthy (not extreme), that's good
+            const zAdjusted = 1 / (1 + Math.exp(-0.5 * (ewma.mean - 5))); // Sigmoid transform
+            score += zAdjusted * 1.0;
+            totalWeight += 1.0;
+        }
+
+        // Smoothed hazard (lower = safer)
+        if (report.smoothedHazard !== undefined) {
+            const safetyScore = Math.max(0, 1 - report.smoothedHazard * 3);
+            score += safetyScore * 1.5;
+            totalWeight += 1.5;
+        }
+
+        // SPRT
+        if (report.sprt && report.sprt.decision !== 'continue') {
+            if (report.sprt.decision === 'reject_H0') {
+                // Evidence for higher survival
+                score += 0.7 * 0.5;
+            } else {
+                // Evidence for base rate (not great)
+                score += 0.4 * 0.5;
+            }
+            totalWeight += 0.5;
+        }
+
+        // Trend (improving is good)
+        if (report.trend && report.trend.overallTrend) {
+            const trendScore = report.trend.overallTrend === 'increasing' ? 0.7 :
+                report.trend.overallTrend === 'decreasing' ? 0.3 : 0.5;
+            score += trendScore * 0.8;
+            totalWeight += 0.8;
+        }
+
+        return totalWeight > 0 ? Math.max(0, Math.min(1, score / totalWeight)) : 0.5;
+    }
+
+    // ====================================================================
+    // HELPER METHODS
+    // ====================================================================
+
+    _computeDistribution(arr) {
+        const dist = {};
+        arr.forEach(v => { dist[v] = (dist[v] || 0) + 1 / arr.length; });
+        return dist;
+    }
+
+    _computeRanks(arr) {
+        const indexed = arr.map((v, i) => ({ value: v, index: i }));
+        indexed.sort((a, b) => a.value - b.value);
+
+        const ranks = new Array(arr.length);
+        let i = 0;
+        while (i < indexed.length) {
+            let j = i;
+            while (j < indexed.length - 1 && indexed[j + 1].value === indexed[j].value) {
+                j++;
+            }
+            // Average rank for ties
+            const avgRank = (i + j) / 2 + 1;
+            for (let k = i; k <= j; k++) {
+                ranks[indexed[k].index] = avgRank;
+            }
+            i = j + 1;
+        }
+
+        return ranks;
+    }
+
+    _discretizeContinuous(value) {
+        if (value < -1) return 'very_low';
+        if (value < -0.3) return 'low';
+        if (value < 0.3) return 'medium';
+        if (value < 1) return 'high';
+        return 'very_high';
+    }
+
+    _normalCDF(x) {
+        const a1 = 0.254829592;
+        const a2 = -0.284496736;
+        const a3 = 1.421413741;
+        const a4 = -1.453152027;
+        const a5 = 1.061405429;
+        const p = 0.3275911;
+
+        const sign = x >= 0 ? 1 : -1;
+        x = Math.abs(x) / Math.SQRT2;
+
+        const t = 1.0 / (1.0 + p * x);
+        const y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
+
+        return 0.5 * (1.0 + sign * y);
+    }
+
+    _normalQuantile(p) {
+        // Rational approximation for the inverse normal CDF
+        if (p <= 0) return -5;
+        if (p >= 1) return 5;
+        if (p === 0.5) return 0;
+
+        const a = [
+            -3.969683028665376e+01, 2.209460984245205e+02,
+            -2.759285104469687e+02, 1.383577518672690e+02,
+            -3.066479806614716e+01, 2.506628277459239e+00
+        ];
+        const b = [
+            -5.447609879822406e+01, 1.615858368580409e+02,
+            -1.556989798598866e+02, 6.680131188771972e+01,
+            -1.328068155288572e+01
+        ];
+
+        const pLow = 0.02425;
+        const pHigh = 1 - pLow;
+
+        let q, r;
+
+        if (p < pLow) {
+            q = Math.sqrt(-2 * Math.log(p));
+            return (((((a[0] * q + a[1]) * q + a[2]) * q + a[3]) * q + a[4]) * q + a[5]) /
+                ((((b[0] * q + b[1]) * q + b[2]) * q + b[3]) * q + b[4] + 1);
+        } else if (p <= pHigh) {
+            q = p - 0.5;
+            r = q * q;
+            return (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q /
+                (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
+        } else {
+            q = Math.sqrt(-2 * Math.log(1 - p));
+            return -(((((a[0] * q + a[1]) * q + a[2]) * q + a[3]) * q + a[4]) * q + a[5]) /
+                ((((b[0] * q + b[1]) * q + b[2]) * q + b[3]) * q + b[4] + 1);
+        }
+    }
+
+    _chiSquaredCDF(x, k) {
+        // Approximation for chi-squared CDF
+        if (x <= 0) return 0;
+        return this._regularizedGammaP(k / 2, x / 2);
+    }
+
+    _regularizedGammaP(a, x) {
+        // Series expansion for lower incomplete gamma
+        if (x < a + 1) {
+            let sum = 1 / a;
+            let term = 1 / a;
+            for (let n = 1; n < 100; n++) {
+                term *= x / (a + n);
+                sum += term;
+                if (Math.abs(term) < 1e-10) break;
+            }
+            return sum * Math.exp(-x + a * Math.log(x) - this._logGamma(a));
+        } else {
+            // Continued fraction
+            return 1 - this._regularizedGammaQ(a, x);
+        }
+    }
+
+    _regularizedGammaQ(a, x) {
+        // Continued fraction for upper incomplete gamma
+        let f = 1 + x - a;
+        let c = 1 / 1e-30;
+        let d = 1 / f;
+        let h = d;
+
+        for (let n = 1; n < 100; n++) {
+            const an = n * (a - n);
+            const bn = 2 * n + 1 + x - a;
+
+            d = bn + an * d;
+            if (Math.abs(d) < 1e-30) d = 1e-30;
+            c = bn + an / c;
+            if (Math.abs(c) < 1e-30) c = 1e-30;
+
+            d = 1 / d;
+            const delta = d * c;
+            h *= delta;
+
+            if (Math.abs(delta - 1) < 1e-10) break;
+        }
+
+        return Math.exp(-x + a * Math.log(x) - this._logGamma(a)) * h;
+    }
+
+    _logGamma(z) {
+        const c = [
+            76.18009172947146, -86.50532032941677,
+            24.01409824083091, -1.231739572450155,
+            0.1208650973866179e-2, -0.5395239384953e-5
+        ];
+
+        let x = z;
+        let y = z;
+        let tmp = x + 5.5;
+        tmp -= (x + 0.5) * Math.log(tmp);
+        let ser = 1.000000000190015;
+
+        for (let j = 0; j < 6; j++) {
+            y++;
+            ser += c[j] / y;
+        }
+
+        return -tmp + Math.log(2.5066282746310005 * ser / x);
+    }
+
+    _gamma(z) {
+        return Math.exp(this._logGamma(z));
+    }
+
+    _tDistCDF(t, df) {
+        // Approximation using normal for large df
+        if (df > 30) return this._normalCDF(t);
+
+        const x = df / (df + t * t);
+        return 1 - 0.5 * this._regularizedBeta(x, df / 2, 0.5);
+    }
+
+    _regularizedBeta(x, a, b) {
+        // Simplified incomplete beta using series expansion
+        if (x === 0) return 0;
+        if (x === 1) return 1;
+
+        const lnBeta = this._logGamma(a) + this._logGamma(b) - this._logGamma(a + b);
+        const prefix = Math.exp(a * Math.log(x) + b * Math.log(1 - x) - lnBeta) / a;
+
+        // Continued fraction
+        let sum = 1;
+        let term = 1;
+        for (let n = 1; n < 100; n++) {
+            term *= (n - b) * x / (a + n);
+            sum += term;
+            if (Math.abs(term) < 1e-10) break;
+        }
+
+        return Math.min(1, Math.max(0, prefix * sum));
     }
 }
 
@@ -4464,6 +6454,11 @@ class EnhancedAccumulatorBot {
             this.tickHistories[asset].shift();
         }
 
+        if (this.tickHistories[asset].length < this.config.requiredHistoryLength) {
+            console.log(`[${asset}] Not enough history for analysis: ${this.tickHistories[asset].length}/${this.config.requiredHistoryLength}`);
+            return;
+        }
+
         this.digitCounts[asset][lastDigit]++;
         this.observationCount++;
 
@@ -4492,8 +6487,46 @@ class EnhancedAccumulatorBot {
             }
         }
 
-        if (this.tickHistories[asset].length < this.config.requiredHistoryLength) {
-            return;
+        // Deep statistical analysis periodically
+        if (this.observationCount % 100 === 0 && this.config.enablePatternRecognition) {
+            const runLengths = this.extendedStayedIn[asset];
+
+            if (runLengths && runLengths.length > 30) {
+                // Fit mixture model
+                const mixture = this.statisticalEngine.fitMixtureModel(asset, runLengths);
+                if (mixture) {
+                    console.log(`[${asset}] 📊 Mixture Model: ${mixture.numComponents} components, ` +
+                        `multimodal: ${mixture.isMultiModal}`);
+                }
+
+                // Fit extreme value model
+                const evt = this.statisticalEngine.fitExtremeValueModel(asset, runLengths);
+                if (evt) {
+                    console.log(`[${asset}] 📊 EVT: ${evt.maxima.params.type} distribution`);
+                }
+
+                // Compute hazard function
+                const hazard = this.statisticalEngine.computeHazardFunction(asset, runLengths);
+                if (hazard) {
+                    console.log(`[${asset}] 📊 Hazard shape: ${hazard.shape}, ` +
+                        `mean: ${hazard.meanHazard.toFixed(3)}`);
+                }
+
+                // Mutual information
+                const mi = this.statisticalEngine.calculateMutualInformation(
+                    asset, this.tickHistories[asset]
+                );
+                if (mi) {
+                    console.log(`[${asset}] 📊 Mutual Information: ${mi.mean.toFixed(4)} ` +
+                        `(predictability: ${(mi.predictability * 100).toFixed(1)}%)`);
+                }
+
+                // Bayesian period comparison
+                const comparison = this.statisticalEngine.compareBayesianPeriods(asset);
+                if (comparison && comparison.significantDifference) {
+                    console.log(`[${asset}] ⚠️ Significant performance shift: ${comparison.direction}`);
+                }
+            }
         }
 
         // Check learning mode
@@ -4549,7 +6582,8 @@ class EnhancedAccumulatorBot {
         const regime = this.patternEngine.detectRegime(asset, this.extendedStayedIn[asset]);
 
         // Too volatile or unpredictable regime
-        if (volatilityData.changeRate > 0.90 || regime.regime === 'volatile') {
+        if (volatilityData.changeRate > 0.90 ||
+            (regime.regime === 'volatile' && regime.confidence > 0.4)) {
             console.log(`[${asset}] Market too volatile (${volatilityData.changeRate.toFixed(2)}), regime: ${regime.regime}`);
             return false;
         }
@@ -4560,17 +6594,32 @@ class EnhancedAccumulatorBot {
             return false;
         }
 
-        // Check consecutive losses
-        // if (assetState.consecutiveLosses >= 2) {
-        //     console.log(`[${asset}] Too many consecutive losses on this asset`);
-        //     return false;
-        // }
-
         // Check Bayesian confidence
         const bayesian = this.statisticalEngine.getBayesianEstimate(asset);
         if (bayesian.mean < 0.4 && bayesian.confidence > 20) {
             console.log(`[${asset}] Low Bayesian probability (${bayesian.mean.toFixed(3)})`);
             return false;
+        }
+
+        // Enhanced: Check regime stability
+        const stability = this.patternEngine.getRegimeStability(asset);
+        if (stability.currentRegime === 'volatile' && stability.currentDuration > 5) {
+            console.log(`[${asset}] Persistent volatile regime (${stability.currentDuration} observations)`);
+            return false;
+        }
+
+        // Enhanced: Check change point proximity
+        const changePoints = this.patternEngine.detectChangePoints(asset, this.extendedStayedIn[asset]);
+        if (changePoints.isNearChangePoint && changePoints.currentTrend === 'decreasing') {
+            console.log(`[${asset}] Near downward change point - elevated risk`);
+            return false;
+        }
+
+        // Enhanced: Check Hurst exponent (strongly mean-reverting + short current run = risky)
+        const hurst = this.patternEngine.hurstExponents[asset];
+        if (hurst && hurst.hurst < 0.35 && hurst.confidence > 0.5) {
+            console.log(`[${asset}] Strongly mean-reverting market (H=${hurst.hurst.toFixed(3)}) - caution`);
+            // Don't block entirely, but log warning
         }
 
         return true;
@@ -4614,8 +6663,20 @@ class EnhancedAccumulatorBot {
             this.learningSystem.lossPatterns[asset].shift();
         }
 
-        // Update Bayesian model
-        this.statisticalEngine.updateBayesian(asset, won);
+        // Update Bayesian model with context
+        const volatilityVal = this.learningSystem.volatilityScores[asset] || 0;
+        const regime = this.patternEngine.detectRegime(asset, this.extendedStayedIn[asset]);
+
+        this.statisticalEngine.updateBayesian(asset, won, {
+            volatility: volatilityVal,
+            regimeConfidence: regime ? regime.confidence : 0.5,
+        });
+
+        // Update SPRT
+        this.statisticalEngine.updateSPRT(asset, won);
+
+        // Update EWMA
+        this.statisticalEngine.updateEWMStats(asset, digitCount);
 
         // Train neural network
         if (this.config.enableNeuralNetwork && this.neuralEngine.initialized) {
@@ -4778,20 +6839,36 @@ class EnhancedAccumulatorBot {
         // Collect predictions from all models
         const predictions = {};
 
-        // 1. Kaplan-Meier Survival
+        // 1. Statistical Composite Score
         if (runLengths.length >= this.config.minSamplesForEstimate) {
-            const km = this.statisticalEngine.kaplanMeierEstimate(runLengths, currentDigitCount);
-            predictions.kaplanMeier = {
-                value: km.survival,
-                confidence: Math.min(1, km.sampleSize / 100)
-            };
+            const statReport = this.statisticalEngine.getComprehensiveStatisticalReport(
+                asset, runLengths, this.tickHistories[asset], currentDigitCount
+            );
+
+            // Kaplan-Meier
+            if (statReport.kaplanMeier) {
+                predictions.kaplanMeier = {
+                    value: statReport.kaplanMeier.survival,
+                    confidence: Math.min(1, statReport.kaplanMeier.sampleSize / 100)
+                };
+            }
+
+            // Use composite statistical score as additional signal
+            if (statReport.compositeScore !== undefined) {
+                // This replaces the old simple Bayesian prediction with
+                // a composite of all statistical methods
+            }
         }
 
-        // 2. Bayesian Estimate
+        // 2. Bayesian Estimate (enhanced)
         const bayesian = this.statisticalEngine.getBayesianEstimate(asset);
         predictions.bayesian = {
             value: bayesian.mean,
-            confidence: Math.min(1, bayesian.confidence / 50)
+            confidence: Math.min(1, bayesian.confidence / 50) *
+                (bayesian.predictionStrength === 'very_weak' ? 0.3 :
+                    bayesian.predictionStrength === 'weak' ? 0.5 :
+                        bayesian.predictionStrength === 'moderate' ? 0.7 :
+                            bayesian.predictionStrength === 'strong' ? 0.9 : 1.0)
         };
 
         // 3. Markov Chain Prediction
@@ -4942,27 +7019,80 @@ class EnhancedAccumulatorBot {
             return false;
         }
 
-        // Use Kaplan-Meier for primary estimate
-        const km = this.statisticalEngine.kaplanMeierEstimate(history, currentDigitCount);
+        // Get comprehensive statistical report
+        const statReport = this.statisticalEngine.getComprehensiveStatisticalReport(
+            asset, history, this.tickHistories[asset], currentDigitCount
+        );
 
-        // Use Nelson-Aalen as secondary
-        const na = this.statisticalEngine.nelsonAalenHazard(history, currentDigitCount);
+        // Primary estimates
+        const km = statReport.kaplanMeier;
+        const na = statReport.nelsonAalen;
 
-        // Kernel-smoothed hazard for additional validation
-        const kernelHazard = this.statisticalEngine.kernelSmoothedHazard(history, currentDigitCount);
+        // Bootstrap for robust CI
+        const bootstrap = statReport.bootstrap;
 
-        // Combine estimates
-        const combinedSurvival = (km.survival + na.survivalFromHazard) / 2;
+        // Combined survival estimate (weighted average of methods)
+        let combinedSurvival = 0;
+        let totalWeight = 0;
 
-        // Check if hazard is too high
-        if (kernelHazard > 0.3) {
-            console.log(`[${asset}] High hazard rate detected (${kernelHazard.toFixed(3)}), skipping`);
+        if (km) {
+            const weight = 2.5 * Math.min(1, km.sampleSize / 50);
+            combinedSurvival += km.survival * weight;
+            totalWeight += weight;
+        }
+
+        if (na) {
+            combinedSurvival += na.survivalFromHazard * 2.0;
+            totalWeight += 2.0;
+        }
+
+        if (bootstrap) {
+            combinedSurvival += bootstrap.mean * 1.5;
+            totalWeight += 1.5;
+        }
+
+        combinedSurvival = totalWeight > 0 ? combinedSurvival / totalWeight : 0.5;
+
+        // Check kernel-smoothed hazard
+        const smoothedHazard = statReport.smoothedHazard || 0.1;
+        if (smoothedHazard > 0.25) {
+            console.log(`[${asset}] High smoothed hazard rate (${smoothedHazard.toFixed(3)}), skipping`);
             return false;
         }
 
+        // Check conditional survival (next few steps)
+        if (km && km.conditionalSurvival) {
+            const nextStepSurvival = km.conditionalSurvival[1] || 0;
+            if (nextStepSurvival < 0.85) {
+                console.log(`[${asset}] Low conditional survival for next step (${nextStepSurvival.toFixed(3)})`);
+                return false;
+            }
+        }
+
+        // Check bootstrap lower CI
+        if (bootstrap && bootstrap.ci_lower < this.config.survivalThreshold * 0.8) {
+            console.log(`[${asset}] Bootstrap lower CI too low (${bootstrap.ci_lower.toFixed(3)})`);
+            return false;
+        }
+
+        // Update EWMA stats
+        this.statisticalEngine.updateEWMStats(asset, currentDigitCount);
+
+        // Update SPRT
+        this.statisticalEngine.updateSPRT(asset, combinedSurvival > 0.5);
+
+        // Update Bayesian with context
+        const volatilityData = this.calculateVolatility(asset);
+
         this.survivalNum = combinedSurvival;
 
-        console.log(`[${asset}] Survival Analysis: kHazard=${kernelHazard.toFixed(3)}, KM=${km.survival.toFixed(4)}, NA=${na.survivalFromHazard.toFixed(4)}, Combined=${combinedSurvival.toFixed(4)}`);
+        console.log(`[${asset}] Statistical Analysis: ` +
+            `KM=${km ? km.survival.toFixed(4) : 'N/A'}, ` +
+            `NA=${na ? na.survivalFromHazard.toFixed(4) : 'N/A'}, ` +
+            `Boot=${bootstrap ? bootstrap.mean.toFixed(4) : 'N/A'}, ` +
+            `Hazard=${smoothedHazard.toFixed(3)}, ` +
+            `Combined=${combinedSurvival.toFixed(4)}, ` +
+            `Composite=${statReport.compositeScore.toFixed(4)}`);
 
         return combinedSurvival > this.config.survivalThreshold;
     }
