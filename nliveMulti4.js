@@ -2539,16 +2539,16 @@ class EnhancedAccumulatorBot {
             return;
         }
 
-        // if (decision.confidence < 0.55) {
+        // if (decision.confidence < 0.6) {
         //     console.log(`[${asset}] ⚠️ Trade blocked due to low confidence`);
         //     return;
         // }
 
         // if (this.consecutiveLosses > 0) {
-        if (this.lastEnsemblePredictions?.pattern?.confidence < 0.55) {
-            console.log(`[${asset}] ⚠️ Trade blocked due to low or No Pattern Model confidence`);
-            return;
-        }
+        // if (this.lastEnsemblePredictions?.pattern?.confidence < 0.55) {
+        //     console.log(`[${asset}] ⚠️ Trade blocked due to low or No Pattern Model confidence`);
+        //     return;
+        // }
         // }
 
         const request = {
@@ -2560,21 +2560,20 @@ class EnhancedAccumulatorBot {
 
         const telegramMsg = `
             🚀 Placing trade for Asset ${asset}
-            <b>TRADE SIGNAL: ${decision.ensembleScore.toFixed(4)}</b>
+            <b>SIGNAL THRESHOLD: ${decision.ensembleScore.toFixed(4)} (${decision.threshold.toFixed(2)})</b>
 
             <b>DECISION: </b>
             <b>EnsembleScore: ${decision.ensembleScore.toFixed(2)}</b>
             <b>Confidence: ${decision.confidence.toFixed(2)}</b>
             <b>SurvivalProb: ${decision.survivalProb.toFixed(2)}</b>
-            <b>Threshold: ${decision.threshold.toFixed(2)}</b>
-            <br>
+
             <b>ModelContributions: </b>
             <b>kaplanMeier: ${decision.modelContributions?.kaplanMeier} </b>
             <b>bayesian: ${decision.modelContributions?.bayesian}</b>
             <b>markov: ${decision.modelContributions?.markov}</b>
             <b>neural: ${decision.modelContributions?.neural} </b>
             <b>Pattern: ${decision.modelContributions?.pattern} </b>
-            <br>
+
             <b>Current Stake:</b> $${this.currentStake.toFixed(2)}
         `.trim();
         this.sendTelegramMessage(telegramMsg);
@@ -2692,7 +2691,7 @@ class EnhancedAccumulatorBot {
 
 
         const resultEmoji = won ? '✅ WIN' : '❌ LOSS';
-        const pnlStr = (profit >= 0 ? '+' : '') + '$' + Math.abs(profit).toFixed(2);
+        const pnlStr = (profit >= 0 ? '+' : '-') + '$' + Math.abs(profit).toFixed(2);
         const pnlColor = profit >= 0 ? '🟢' : '🔴';
         const winRate = this.totalTrades > 0 ? ((this.totalWins / this.totalTrades) * 100).toFixed(1) : 0;
 
@@ -2781,10 +2780,6 @@ class EnhancedAccumulatorBot {
             this.disconnect();
             return;
         }
-
-        // Learning mode counter
-        this.observationCount = 0;
-        this.learningMode = true;
 
         this.tradeInProgress = false;
         this.Pause = false;
