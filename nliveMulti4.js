@@ -2150,17 +2150,15 @@ class EnhancedAccumulatorBot {
 
             if (!assetState.tradeInProgress) {
                 const decision = this.makeEnhancedTradeDecision(asset, stayedInArray);
-                const ensemble = this.combinePredicitions();
 
-                console.log(`[${asset}] Ken's Agreement: ${ensemble.ensembleAgreement} | Score: ${ensemble.agreementScore}`);
-                // this.ensembleAgreement = ensemble.ensembleAgreement;
-                // this.agreementScore = ensemble.agreementScore;
-                // console.log(`[${asset}] Ken's Agreement: ${this.ensembleAgreement} | Score: ${this.agreementScore}`);
+                this.ensembleAgreement = decision.ensembleAgreement;
+                this.agreementScore = decision.ensembleAgreementScore;
+                console.log(`[${asset}] Ken's Agreement: ${this.ensembleAgreement} | Score: ${this.agreementScore}`);
 
-                if (ensemble.ensembleAgreement > 4 && ensemble.agreementScore > 0.6) {//decision.shouldTrade
+                if (this.ensembleAgreement > 4 && this.agreementScore > 0.6) {//decision.shouldTrade
                     console.log(`[${asset}] 🎯 TRADE SIGNAL | Score: ${decision.ensembleScore.toFixed(4)} | Confidence: ${decision.confidence.toFixed(2)} | SurvivalProb: ${decision.survivalProb.toFixed(2)} | Threshold: ${decision.threshold.toFixed(2)}`);
                     console.log(`[${asset}] Model contributions: ${JSON.stringify(decision.modelContributions)}`);
-                    console.log(`[${asset}] 🎯 Agreement: ${ensemble.ensembleAgreement} | Score: ${ensemble.agreementScore}`);
+                    console.log(`[${asset}] 🎯 Agreement: ${this.ensembleAgreement} | Score: ${this.agreementScore}`);
                     this.placeTrade(asset, decision);
                 }
             }
@@ -2256,7 +2254,10 @@ class EnhancedAccumulatorBot {
 
         // Combine all predictions
         const ensemble = this.ensembleDecisionMaker.combinePredicitions(predictions);
+        const ensembleAgreement = ensemble.agreement;
+        const ensembleAgreementScore = ensemble.agreementScore;
         console.log('Ensemble Decision:', ensemble.score.toFixed(2), ' (', this.ensembleDecisionMaker.adaptiveThreshold, ') |', ensemble.agreement.toFixed(2), '(0.5) |', 'shouldTrade:', ensemble.shouldTrade);
+        console.log('Ensemble Agreement:', ensembleAgreement, ' (', ensembleAgreementScore, ')');
 
         // Additional check with survival threshold
         const survivalCheck = this.shouldTradeBasedOnSurvivalProb(asset, stayedInArray);
@@ -2281,7 +2282,9 @@ class EnhancedAccumulatorBot {
             confidence: ensemble.agreement,
             survivalProb: this.survivalNum,
             modelContributions,
-            threshold: this.ensembleDecisionMaker.adaptiveThreshold
+            threshold: this.ensembleDecisionMaker.adaptiveThreshold,
+            ensembleAgreement,
+            ensembleAgreementScore
         };
     }
 
