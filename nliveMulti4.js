@@ -2150,17 +2150,17 @@ class EnhancedAccumulatorBot {
 
             if (!assetState.tradeInProgress) {
                 const decision = this.makeEnhancedTradeDecision(asset, stayedInArray);
-                const ensemble = this.combinePredicitions(decision.predictions);
+                const ensemble = this.combinePredicitions();
 
                 console.log(`[${asset}] Ken's Agreement: ${ensemble.ensembleAgreement} | Score: ${ensemble.agreementScore}`);
-                this.ensembleAgreement = ensemble.ensembleAgreement;
-                this.agreementScore = ensemble.agreementScore;
-                console.log(`[${asset}] Ken's Agreement: ${this.ensembleAgreement} | Score: ${this.agreementScore}`);
+                // this.ensembleAgreement = ensemble.ensembleAgreement;
+                // this.agreementScore = ensemble.agreementScore;
+                // console.log(`[${asset}] Ken's Agreement: ${this.ensembleAgreement} | Score: ${this.agreementScore}`);
 
-                if (this.ensembleAgreement > 4 && this.agreementScore > 0.6) {//decision.shouldTrade
+                if (ensemble.ensembleAgreement > 4 && ensemble.agreementScore > 0.6) {//decision.shouldTrade
                     console.log(`[${asset}] 🎯 TRADE SIGNAL | Score: ${decision.ensembleScore.toFixed(4)} | Confidence: ${decision.confidence.toFixed(2)} | SurvivalProb: ${decision.survivalProb.toFixed(2)} | Threshold: ${decision.threshold.toFixed(2)}`);
                     console.log(`[${asset}] Model contributions: ${JSON.stringify(decision.modelContributions)}`);
-                    console.log(`[${asset}] 🎯 Agreement: ${this.ensembleAgreement} | Score: ${this.agreementScore}`);
+                    console.log(`[${asset}] 🎯 Agreement: ${ensemble.ensembleAgreement} | Score: ${ensemble.agreementScore}`);
                     this.placeTrade(asset, decision);
                 }
             }
