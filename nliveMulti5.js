@@ -395,137 +395,1741 @@ class StatisticalEngine {
 }
 
 // ============================================================================
-// TIER 2: PATTERN RECOGNITION ENGINE
+// TIER 2: ADVANCED PATTERN RECOGNITION ENGINE
 // ============================================================================
 
 class PatternEngine {
     constructor() {
+        // N-Gram models with multiple orders
         this.ngramModels = {};
+        this.ngramModelStats = {};
+
+        // Markov Chain models
         this.markovChains = {};
+        this.markovSteadyStates = {};
+
+        // Run length models
         this.runLengthModels = {};
+
+        // Regime detection
         this.regimeStates = {};
+        this.regimeHistory = {};
+        this.regimeTransitionMatrix = {};
+
+        // Motif discovery cache
+        this.discoveredMotifs = {};
+        this.motifOccurrences = {};
+
+        // Change point detection
+        this.changePoints = {};
+        this.cusumState = {};
+
+        // Autocorrelation cache
+        this.autocorrelations = {};
+
+        // Sequential pattern mining
+        this.frequentPatterns = {};
+        this.patternSupport = {};
+
+        // Fractal analysis
+        this.fractalDimensions = {};
+        this.hurstExponents = {};
+
+        // Performance tracking
+        this.predictionAccuracy = {};
+        this.modelConfidence = {};
+
+        // Configuration
+        this.config = {
+            maxNgramOrder: 6,
+            maxMarkovOrder: 4,
+            motifMinLength: 3,
+            motifMaxLength: 8,
+            changePointThreshold: 3.0,
+            minPatternSupport: 0.02,
+            autocorrMaxLag: 30,
+            regimeWindowSize: 25,
+            regimeHistorySize: 50,
+        };
+    }
+
+    // ====================================================================
+    // N-GRAM PATTERN ANALYZER (ENHANCED)
+    // ====================================================================
+
+    /**
+     * Build N-Gram models with multiple orders and track statistics
+     * Uses modified Kneser-Ney-inspired smoothing for better probability estimates
+     */
+    buildNgramModel(asset, sequence, maxOrder = null) {
+        const order = maxOrder || this.config.maxNgramOrder;
+
+        if (!sequence || sequence.length < order + 20) return;
+
+        this.ngramModels[asset] = {};
+        this.ngramModelStats[asset] = {};
+
+        for (let n = 1; n <= order; n++) {
+            this.ngramModels[asset][n] = {};
+            let totalContexts = 0;
+            let totalUniqueNexts = 0;
+
+            for (let i = n; i < sequence.length; i++) {
+                const context = sequence.slice(i - n, i).join(',');
+                const next = sequence[i];
+
+                if (!this.ngramModels[asset][n][context]) {
+                    this.ngramModels[asset][n][context] = {};
+                    totalContexts++;
+                }
+
+                if (!this.ngramModels[asset][n][context][next]) {
+                    totalUniqueNexts++;
+                }
+
+                this.ngramModels[asset][n][context][next] =
+                    (this.ngramModels[asset][n][context][next] || 0) + 1;
+            }
+
+            // Calculate continuation counts for smoothing
+            const continuationCounts = {};
+            Object.entries(this.ngramModels[asset][n]).forEach(([context, nexts]) => {
+                continuationCounts[context] = Object.keys(nexts).length;
+            });
+
+            this.ngramModelStats[asset][n] = {
+                totalContexts,
+                totalUniqueNexts,
+                continuationCounts,
+                sequenceLength: sequence.length,
+            };
+        }
     }
 
     /**
-     * N-Gram Pattern Analyzer
-     * Detects recurring sequences of digits
+     * Predict next value using backoff smoothing across N-gram orders
+     * Falls back to lower-order models when higher-order contexts are unseen
      */
-    buildNgramModel(asset, sequence, maxOrder = 5) {
-        if (!sequence || sequence.length < maxOrder + 10) return;
+    predictFromNgram(asset, recentSequence, maxOrder = null) {
+        const order = maxOrder || this.config.maxNgramOrder;
 
-        this.ngramModels[asset] = {};
+        if (!this.ngramModels[asset]) return null;
 
-        for (let order = 1; order <= maxOrder; order++) {
-            this.ngramModels[asset][order] = {};
+        // Try from highest order down (backoff strategy)
+        const aggregatedProbabilities = {};
+        let bestOrder = 0;
+        let bestConfidence = 0;
+        let totalWeight = 0;
 
-            for (let i = order; i < sequence.length; i++) {
-                const context = sequence.slice(i - order, i).join(',');
-                const next = sequence[i];
+        for (let n = Math.min(order, recentSequence.length); n >= 1; n--) {
+            if (!this.ngramModels[asset][n]) continue;
 
-                if (!this.ngramModels[asset][order][context]) {
-                    this.ngramModels[asset][order][context] = {};
+            const context = recentSequence.slice(-n).join(',');
+            const predictions = this.ngramModels[asset][n][context];
+
+            if (!predictions) continue;
+
+            const total = Object.values(predictions).reduce((a, b) => a + b, 0);
+            if (total < 3) continue; // Minimum sample requirement
+
+            // Weight by order (higher order = more specific = higher weight)
+            // But penalize if sample count is low
+            const sampleWeight = Math.min(1, total / 20);
+            const orderWeight = Math.pow(n, 1.5) * sampleWeight;
+
+            Object.entries(predictions).forEach(([digit, count]) => {
+                const prob = count / total;
+                if (!aggregatedProbabilities[digit]) {
+                    aggregatedProbabilities[digit] = 0;
                 }
+                aggregatedProbabilities[digit] += prob * orderWeight;
+            });
 
-                this.ngramModels[asset][order][context][next] =
-                    (this.ngramModels[asset][order][context][next] || 0) + 1;
+            totalWeight += orderWeight;
+
+            if (orderWeight > bestConfidence) {
+                bestConfidence = orderWeight;
+                bestOrder = n;
             }
         }
-    }
 
-    predictFromNgram(asset, recentSequence, order = 3) {
-        if (!this.ngramModels[asset] || !this.ngramModels[asset][order]) {
-            return null;
-        }
+        if (totalWeight === 0) return null;
 
-        const context = recentSequence.slice(-order).join(',');
-        const predictions = this.ngramModels[asset][order][context];
-
-        if (!predictions) return null;
-
-        const total = Object.values(predictions).reduce((a, b) => a + b, 0);
-        const probabilities = {};
-
-        Object.entries(predictions).forEach(([digit, count]) => {
-            probabilities[digit] = count / total;
+        // Normalize probabilities
+        const normalizedProbs = {};
+        Object.entries(aggregatedProbabilities).forEach(([digit, weightedProb]) => {
+            normalizedProbs[digit] = weightedProb / totalWeight;
         });
 
-        // Find most likely next digit
-        const mostLikely = Object.entries(probabilities)
-            .sort((a, b) => b[1] - a[1])[0];
+        // Find most likely and compute entropy
+        const sortedPredictions = Object.entries(normalizedProbs)
+            .sort((a, b) => b[1] - a[1]);
+
+        const topPrediction = sortedPredictions[0];
+        const entropy = this._calculateDistributionEntropy(normalizedProbs);
+
+        // Confidence based on: entropy (lower = more confident), sample size, order
+        const maxEntropy = Math.log2(Object.keys(normalizedProbs).length || 10);
+        const entropyConfidence = 1 - (entropy / maxEntropy);
+
+        const confidence = Math.min(1,
+            entropyConfidence * 0.4 +
+            (bestOrder / order) * 0.3 +
+            Math.min(1, bestConfidence / 5) * 0.3
+        );
 
         return {
-            digit: parseInt(mostLikely[0]),
-            probability: mostLikely[1],
-            distribution: probabilities,
-            confidence: total > 20 ? 'high' : total > 10 ? 'medium' : 'low'
+            digit: parseInt(topPrediction[0]),
+            probability: topPrediction[1],
+            distribution: normalizedProbs,
+            sortedPredictions: sortedPredictions.slice(0, 5),
+            entropy,
+            confidence,
+            bestOrder,
+            confidenceLevel: confidence > 0.7 ? 'high' : confidence > 0.45 ? 'medium' : 'low',
         };
     }
 
     /**
-     * Markov Chain Analyzer
-     * Multi-order transition matrices for run length prediction
+     * Compute conditional surprise: how unexpected is the current observation?
      */
-    buildMarkovChain(asset, runLengths, maxOrder = 3) {
-        if (!runLengths || runLengths.length < 20) return;
+    computeSurprise(asset, recentSequence, observedDigit) {
+        const prediction = this.predictFromNgram(asset, recentSequence.slice(0, -1));
+        if (!prediction || !prediction.distribution) return 0.5;
+
+        const expectedProb = prediction.distribution[observedDigit] || 0.01;
+        const surprise = -Math.log2(Math.max(1e-10, expectedProb));
+
+        // Normalize: max surprise for 10 digits is -log2(0.01) ≈ 6.64
+        return Math.min(1, surprise / 7);
+    }
+
+    // ====================================================================
+    // MARKOV CHAIN ANALYZER (ENHANCED)
+    // ====================================================================
+
+    /**
+     * Build multi-order Markov chains with state discretization options
+     */
+    buildMarkovChain(asset, runLengths, maxOrder = null) {
+        const order = maxOrder || this.config.maxMarkovOrder;
+
+        if (!runLengths || runLengths.length < 25) return;
 
         this.markovChains[asset] = {};
 
         // Discretize run lengths into states
         const states = runLengths.map(l => this.discretizeRunLength(l));
 
-        for (let order = 1; order <= maxOrder; order++) {
-            this.markovChains[asset][order] = {};
+        for (let n = 1; n <= order; n++) {
+            this.markovChains[asset][n] = {
+                transitions: {},
+                stateCounts: {},
+                totalTransitions: 0,
+            };
 
-            for (let i = order; i < states.length; i++) {
-                const context = states.slice(i - order, i).join(',');
+            for (let i = n; i < states.length; i++) {
+                const context = states.slice(i - n, i).join(',');
                 const next = states[i];
 
-                if (!this.markovChains[asset][order][context]) {
-                    this.markovChains[asset][order][context] = {};
+                if (!this.markovChains[asset][n].transitions[context]) {
+                    this.markovChains[asset][n].transitions[context] = {};
                 }
 
-                this.markovChains[asset][order][context][next] =
-                    (this.markovChains[asset][order][context][next] || 0) + 1;
+                this.markovChains[asset][n].transitions[context][next] =
+                    (this.markovChains[asset][n].transitions[context][next] || 0) + 1;
+
+                this.markovChains[asset][n].stateCounts[context] =
+                    (this.markovChains[asset][n].stateCounts[context] || 0) + 1;
+
+                this.markovChains[asset][n].totalTransitions++;
             }
         }
+
+        // Compute steady-state distribution for order 1
+        this._computeSteadyState(asset);
     }
 
+    /**
+     * Finer-grained run length discretization
+     */
     discretizeRunLength(length) {
-        if (length <= 2) return 'very_short';
-        if (length <= 5) return 'short';
-        if (length <= 10) return 'medium';
-        if (length <= 20) return 'long';
-        return 'very_long';
+        if (length <= 1) return 'micro';
+        if (length <= 3) return 'very_short';
+        if (length <= 6) return 'short';
+        if (length <= 10) return 'medium_short';
+        if (length <= 15) return 'medium';
+        if (length <= 25) return 'medium_long';
+        if (length <= 40) return 'long';
+        if (length <= 60) return 'very_long';
+        return 'extreme';
     }
 
-    predictNextRunState(asset, recentRuns, order = 2) {
-        if (!this.markovChains[asset] || !this.markovChains[asset][order]) {
-            return null;
+    /**
+     * Get numeric midpoint for a state (for scoring)
+     */
+    _stateToNumericMidpoint(state) {
+        const midpoints = {
+            'micro': 1,
+            'very_short': 2,
+            'short': 4.5,
+            'medium_short': 8,
+            'medium': 12.5,
+            'medium_long': 20,
+            'long': 32,
+            'very_long': 50,
+            'extreme': 70,
+        };
+        return midpoints[state] || 5;
+    }
+
+    /**
+     * Predict next run state with confidence and expected duration
+     */
+    predictNextRunState(asset, recentRuns, order = null) {
+        const maxOrder = order || this.config.maxMarkovOrder;
+
+        if (!this.markovChains[asset]) return null;
+
+        // Try multiple orders with backoff
+        const aggregatedPredictions = {};
+        let totalWeight = 0;
+
+        for (let n = Math.min(maxOrder, recentRuns.length); n >= 1; n--) {
+            if (!this.markovChains[asset][n]) continue;
+
+            const recentStates = recentRuns.slice(-n).map(l => this.discretizeRunLength(l));
+            const context = recentStates.join(',');
+            const transitions = this.markovChains[asset][n].transitions[context];
+
+            if (!transitions) continue;
+
+            const contextCount = this.markovChains[asset][n].stateCounts[context];
+            if (contextCount < 3) continue;
+
+            const total = Object.values(transitions).reduce((a, b) => a + b, 0);
+            const weight = Math.pow(n, 1.5) * Math.min(1, contextCount / 15);
+
+            Object.entries(transitions).forEach(([state, count]) => {
+                const prob = count / total;
+                aggregatedPredictions[state] = (aggregatedPredictions[state] || 0) + prob * weight;
+            });
+
+            totalWeight += weight;
         }
 
-        const recentStates = recentRuns.slice(-order).map(l => this.discretizeRunLength(l));
-        const context = recentStates.join(',');
-        const transitions = this.markovChains[asset][order][context];
+        if (totalWeight === 0) return null;
 
-        if (!transitions) return null;
-
-        const total = Object.values(transitions).reduce((a, b) => a + b, 0);
+        // Normalize
         const probabilities = {};
+        Object.entries(aggregatedPredictions).forEach(([state, weightedProb]) => {
+            probabilities[state] = weightedProb / totalWeight;
+        });
 
-        Object.entries(transitions).forEach(([state, count]) => {
-            probabilities[state] = count / total;
+        const sortedPredictions = Object.entries(probabilities)
+            .sort((a, b) => b[1] - a[1]);
+
+        // Calculate expected run length from distribution
+        let expectedRunLength = 0;
+        Object.entries(probabilities).forEach(([state, prob]) => {
+            expectedRunLength += this._stateToNumericMidpoint(state) * prob;
+        });
+
+        // Calculate variance of prediction
+        let varianceRunLength = 0;
+        Object.entries(probabilities).forEach(([state, prob]) => {
+            varianceRunLength += Math.pow(this._stateToNumericMidpoint(state) - expectedRunLength, 2) * prob;
         });
 
         return {
             predictions: probabilities,
-            mostLikely: Object.entries(probabilities).sort((a, b) => b[1] - a[1])[0],
-            confidence: total
+            mostLikely: sortedPredictions[0],
+            sortedPredictions,
+            expectedRunLength,
+            stdRunLength: Math.sqrt(varianceRunLength),
+            confidence: totalWeight,
+            entropy: this._calculateDistributionEntropy(probabilities),
         };
     }
 
     /**
-     * Run Length Distribution Modeler
-     * Fits Weibull/Exponential distributions
+     * Compute steady-state distribution of Markov chain
+     * Uses power iteration method
+     */
+    _computeSteadyState(asset) {
+        if (!this.markovChains[asset] || !this.markovChains[asset][1]) return;
+
+        const transitions = this.markovChains[asset][1].transitions;
+        const states = [...new Set([
+            ...Object.keys(transitions),
+            ...Object.values(transitions).flatMap(t => Object.keys(t))
+        ])];
+
+        if (states.length === 0) return;
+
+        const n = states.length;
+        const stateIndex = {};
+        states.forEach((s, i) => stateIndex[s] = i);
+
+        // Build transition matrix
+        const matrix = Array.from({ length: n }, () => new Array(n).fill(0));
+
+        Object.entries(transitions).forEach(([from, tos]) => {
+            const fromIdx = stateIndex[from];
+            const total = Object.values(tos).reduce((a, b) => a + b, 0);
+            Object.entries(tos).forEach(([to, count]) => {
+                if (stateIndex[to] !== undefined) {
+                    matrix[fromIdx][stateIndex[to]] = count / total;
+                }
+            });
+        });
+
+        // Power iteration (50 iterations)
+        let distribution = new Array(n).fill(1 / n);
+
+        for (let iter = 0; iter < 50; iter++) {
+            const newDist = new Array(n).fill(0);
+            for (let i = 0; i < n; i++) {
+                for (let j = 0; j < n; j++) {
+                    newDist[j] += distribution[i] * matrix[i][j];
+                }
+            }
+            // Normalize
+            const sum = newDist.reduce((a, b) => a + b, 0);
+            if (sum > 0) {
+                for (let i = 0; i < n; i++) newDist[i] /= sum;
+            }
+            distribution = newDist;
+        }
+
+        this.markovSteadyStates[asset] = {};
+        states.forEach((s, i) => {
+            this.markovSteadyStates[asset][s] = distribution[i];
+        });
+    }
+
+    /**
+     * Detect if current state deviates from steady state
+     * Returns deviation score (higher = more anomalous)
+     */
+    getSteadyStateDeviation(asset, recentRuns, windowSize = 20) {
+        if (!this.markovSteadyStates[asset] || !recentRuns || recentRuns.length < windowSize) {
+            return { deviation: 0, details: {} };
+        }
+
+        const recent = recentRuns.slice(-windowSize);
+        const states = recent.map(l => this.discretizeRunLength(l));
+
+        // Observed state frequency
+        const observed = {};
+        states.forEach(s => { observed[s] = (observed[s] || 0) + 1; });
+        Object.keys(observed).forEach(s => { observed[s] /= states.length; });
+
+        // Chi-squared-like deviation
+        let totalDeviation = 0;
+        const details = {};
+
+        Object.entries(this.markovSteadyStates[asset]).forEach(([state, expected]) => {
+            const obs = observed[state] || 0;
+            if (expected > 0.01) {
+                const deviation = Math.pow(obs - expected, 2) / expected;
+                totalDeviation += deviation;
+                details[state] = {
+                    observed: obs.toFixed(3),
+                    expected: expected.toFixed(3),
+                    deviation: deviation.toFixed(3),
+                };
+            }
+        });
+
+        return { deviation: totalDeviation, details };
+    }
+
+    // ====================================================================
+    // MOTIF DISCOVERY ENGINE
+    // ====================================================================
+
+    /**
+     * Discover recurring motifs (subsequences) in the data
+     * Uses frequency counting with sliding window
+     */
+    discoverMotifs(asset, sequence, minLength = null, maxLength = null) {
+        const minLen = minLength || this.config.motifMinLength;
+        const maxLen = maxLength || this.config.motifMaxLength;
+
+        if (!sequence || sequence.length < maxLen + 20) return;
+
+        this.discoveredMotifs[asset] = {};
+        this.motifOccurrences[asset] = {};
+
+        const seqLength = sequence.length;
+        const minCount = Math.max(3, Math.floor(seqLength * this.config.minPatternSupport));
+
+        for (let len = minLen; len <= maxLen; len++) {
+            const patternCounts = {};
+            const patternPositions = {};
+
+            for (let i = 0; i <= seqLength - len; i++) {
+                const pattern = sequence.slice(i, i + len).join(',');
+
+                patternCounts[pattern] = (patternCounts[pattern] || 0) + 1;
+
+                if (!patternPositions[pattern]) patternPositions[pattern] = [];
+                patternPositions[pattern].push(i);
+            }
+
+            // Filter by minimum support
+            Object.entries(patternCounts).forEach(([pattern, count]) => {
+                if (count >= minCount) {
+                    const support = count / (seqLength - len + 1);
+                    const positions = patternPositions[pattern];
+
+                    // Calculate average gap between occurrences
+                    let avgGap = 0;
+                    if (positions.length > 1) {
+                        for (let i = 1; i < positions.length; i++) {
+                            avgGap += positions[i] - positions[i - 1];
+                        }
+                        avgGap /= (positions.length - 1);
+                    }
+
+                    // Check if pattern appeared recently (within last 20% of sequence)
+                    const recentThreshold = Math.floor(seqLength * 0.8);
+                    const recentOccurrences = positions.filter(p => p >= recentThreshold).length;
+                    const isRecent = recentOccurrences > 0;
+
+                    this.discoveredMotifs[asset][pattern] = {
+                        count,
+                        support,
+                        length: len,
+                        avgGap,
+                        isRecent,
+                        recentOccurrences,
+                        lastPosition: positions[positions.length - 1],
+                    };
+
+                    this.motifOccurrences[asset][pattern] = positions;
+                }
+            });
+        }
+
+        return this.discoveredMotifs[asset];
+    }
+
+    /**
+     * Check if current sequence matches any discovered motifs
+     * and predict what typically follows the motif
+     */
+    matchMotifAndPredict(asset, sequence, recentWindow) {
+        if (!this.discoveredMotifs[asset] || !sequence || !recentWindow) return null;
+
+        const matches = [];
+        const recent = recentWindow;
+
+        Object.entries(this.discoveredMotifs[asset]).forEach(([patternStr, motifInfo]) => {
+            const pattern = patternStr.split(',').map(Number);
+            const patternLen = pattern.length;
+
+            // Check if the end of recent window matches this motif
+            if (recent.length >= patternLen) {
+                const tail = recent.slice(-patternLen);
+                let isMatch = true;
+                for (let i = 0; i < patternLen; i++) {
+                    if (tail[i] !== pattern[i]) {
+                        isMatch = false;
+                        break;
+                    }
+                }
+
+                if (isMatch) {
+                    // Find what typically follows this motif
+                    const positions = this.motifOccurrences[asset][patternStr] || [];
+                    const followers = {};
+                    let followerCount = 0;
+
+                    positions.forEach(pos => {
+                        const nextIdx = pos + patternLen;
+                        if (nextIdx < sequence.length) {
+                            const next = sequence[nextIdx];
+                            followers[next] = (followers[next] || 0) + 1;
+                            followerCount++;
+                        }
+                    });
+
+                    if (followerCount > 0) {
+                        const followerProbs = {};
+                        Object.entries(followers).forEach(([digit, count]) => {
+                            followerProbs[digit] = count / followerCount;
+                        });
+
+                        matches.push({
+                            pattern: patternStr,
+                            motifInfo,
+                            followerDistribution: followerProbs,
+                            followerCount,
+                            confidence: Math.min(1, followerCount / 15) *
+                                Math.min(1, motifInfo.support * 50),
+                        });
+                    }
+                }
+            }
+        });
+
+        if (matches.length === 0) return null;
+
+        // Sort by confidence
+        matches.sort((a, b) => b.confidence - a.confidence);
+
+        // Aggregate predictions from top motif matches
+        const aggregated = {};
+        let totalWeight = 0;
+
+        matches.slice(0, 5).forEach(match => {
+            const weight = match.confidence;
+            Object.entries(match.followerDistribution).forEach(([digit, prob]) => {
+                aggregated[digit] = (aggregated[digit] || 0) + prob * weight;
+            });
+            totalWeight += weight;
+        });
+
+        if (totalWeight === 0) return null;
+
+        // Normalize
+        Object.keys(aggregated).forEach(k => {
+            aggregated[k] /= totalWeight;
+        });
+
+        return {
+            matches: matches.slice(0, 5),
+            aggregatedPrediction: aggregated,
+            topMatch: matches[0],
+            numMatches: matches.length,
+            confidence: matches[0].confidence,
+        };
+    }
+
+    // ====================================================================
+    // CHANGE POINT DETECTION (CUSUM)
+    // ====================================================================
+
+    /**
+     * CUSUM (Cumulative Sum) change point detection
+     * Detects shifts in mean of run lengths
+     */
+    detectChangePoints(asset, runLengths) {
+        if (!runLengths || runLengths.length < 20) {
+            return { changePoints: [], currentTrend: 'stable' };
+        }
+
+        // Initialize CUSUM state
+        if (!this.cusumState[asset]) {
+            this.cusumState[asset] = {
+                sPlus: 0,
+                sMinus: 0,
+                lastReset: 0,
+                detectedChanges: [],
+            };
+        }
+
+        const n = runLengths.length;
+        const overallMean = runLengths.reduce((a, b) => a + b, 0) / n;
+        const overallStd = Math.sqrt(
+            runLengths.reduce((a, b) => a + Math.pow(b - overallMean, 2), 0) / n
+        );
+
+        const threshold = this.config.changePointThreshold * (overallStd || 1);
+        const drift = 0.5 * (overallStd || 1);
+
+        const changePoints = [];
+        let sPlus = 0;
+        let sMinus = 0;
+
+        for (let i = 0; i < n; i++) {
+            const deviation = runLengths[i] - overallMean;
+
+            // Positive CUSUM (detect upward shift)
+            sPlus = Math.max(0, sPlus + deviation - drift);
+            // Negative CUSUM (detect downward shift)
+            sMinus = Math.max(0, sMinus - deviation - drift);
+
+            if (sPlus > threshold) {
+                changePoints.push({
+                    index: i,
+                    type: 'increase',
+                    magnitude: sPlus,
+                    value: runLengths[i],
+                });
+                sPlus = 0;
+            }
+
+            if (sMinus > threshold) {
+                changePoints.push({
+                    index: i,
+                    type: 'decrease',
+                    magnitude: sMinus,
+                    value: runLengths[i],
+                });
+                sMinus = 0;
+            }
+        }
+
+        // Update state
+        this.cusumState[asset].sPlus = sPlus;
+        this.cusumState[asset].sMinus = sMinus;
+        this.cusumState[asset].detectedChanges = changePoints;
+
+        // Determine current trend
+        let currentTrend = 'stable';
+        if (sPlus > threshold * 0.5) currentTrend = 'increasing';
+        else if (sMinus > threshold * 0.5) currentTrend = 'decreasing';
+
+        // Check recent change proximity
+        const recentChanges = changePoints.filter(cp => cp.index > n - 10);
+        const isNearChangePoint = recentChanges.length > 0;
+
+        this.changePoints[asset] = {
+            changePoints,
+            recentChanges,
+            currentTrend,
+            isNearChangePoint,
+            cusumPlus: sPlus,
+            cusumMinus: sMinus,
+            threshold,
+        };
+
+        return this.changePoints[asset];
+    }
+
+    // ====================================================================
+    // AUTOCORRELATION ANALYSIS
+    // ====================================================================
+
+    /**
+     * Compute autocorrelation function for multiple lags
+     */
+    computeAutocorrelation(asset, sequence, maxLag = null) {
+        const lag = maxLag || this.config.autocorrMaxLag;
+
+        if (!sequence || sequence.length < lag + 10) return null;
+
+        const n = sequence.length;
+        const mean = sequence.reduce((a, b) => a + b, 0) / n;
+        const variance = sequence.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / n;
+
+        if (variance === 0) {
+            this.autocorrelations[asset] = {
+                values: new Array(lag).fill(0),
+                significantLags: [],
+                isRandom: true,
+            };
+            return this.autocorrelations[asset];
+        }
+
+        const acf = [];
+        const significantLags = [];
+        const significanceThreshold = 1.96 / Math.sqrt(n); // 95% CI for white noise
+
+        for (let k = 1; k <= lag; k++) {
+            let autoCorr = 0;
+            for (let i = k; i < n; i++) {
+                autoCorr += (sequence[i] - mean) * (sequence[i - k] - mean);
+            }
+            autoCorr /= (n * variance);
+            acf.push(autoCorr);
+
+            if (Math.abs(autoCorr) > significanceThreshold) {
+                significantLags.push({
+                    lag: k,
+                    value: autoCorr,
+                    direction: autoCorr > 0 ? 'positive' : 'negative',
+                });
+            }
+        }
+
+        // Ljung-Box test statistic (portmanteau test for randomness)
+        let ljungBox = 0;
+        const testLags = Math.min(10, acf.length);
+        for (let k = 0; k < testLags; k++) {
+            ljungBox += (acf[k] * acf[k]) / (n - k - 1);
+        }
+        ljungBox *= n * (n + 2);
+
+        // Approximate p-value (chi-squared with testLags degrees of freedom)
+        // Simplified: compare to critical value
+        const criticalValue = testLags + 2 * Math.sqrt(2 * testLags); // Approx 95% critical
+        const isRandom = ljungBox < criticalValue;
+
+        // Dominant period detection (find lag with highest positive autocorrelation)
+        let dominantPeriod = null;
+        let maxPositiveAcf = 0;
+        for (let k = 2; k < acf.length; k++) {
+            if (acf[k] > maxPositiveAcf && acf[k] > significanceThreshold) {
+                maxPositiveAcf = acf[k];
+                dominantPeriod = k + 1;
+            }
+        }
+
+        this.autocorrelations[asset] = {
+            values: acf,
+            significantLags,
+            isRandom,
+            ljungBoxStatistic: ljungBox,
+            dominantPeriod,
+            significanceThreshold,
+        };
+
+        return this.autocorrelations[asset];
+    }
+
+    // ====================================================================
+    // RUNS TEST FOR RANDOMNESS (Wald-Wolfowitz)
+    // ====================================================================
+
+    /**
+     * Wald-Wolfowitz runs test
+     * Tests whether a sequence of observations is random
+     */
+    waldsWolfowitzRunsTest(sequence) {
+        if (!sequence || sequence.length < 20) {
+            return { isRandom: true, zScore: 0, pValue: 0.5 };
+        }
+
+        const n = sequence.length;
+        const median = this._median(sequence);
+
+        // Convert to binary (above/below median)
+        const binary = sequence.map(x => x >= median ? 1 : 0);
+
+        // Count runs
+        let numRuns = 1;
+        for (let i = 1; i < n; i++) {
+            if (binary[i] !== binary[i - 1]) numRuns++;
+        }
+
+        // Count n1 (above median) and n2 (below median)
+        const n1 = binary.filter(x => x === 1).length;
+        const n2 = binary.filter(x => x === 0).length;
+
+        if (n1 === 0 || n2 === 0) {
+            return { isRandom: false, zScore: 0, pValue: 0, numRuns, n1, n2 };
+        }
+
+        // Expected number of runs
+        const expectedRuns = (2 * n1 * n2) / (n1 + n2) + 1;
+
+        // Standard deviation of runs
+        const varRuns = (2 * n1 * n2 * (2 * n1 * n2 - n1 - n2)) /
+            ((n1 + n2) * (n1 + n2) * (n1 + n2 - 1));
+        const stdRuns = Math.sqrt(varRuns);
+
+        // Z-score
+        const zScore = stdRuns > 0 ? (numRuns - expectedRuns) / stdRuns : 0;
+
+        // Approximate p-value (two-tailed)
+        const pValue = 2 * (1 - this._normalCDF(Math.abs(zScore)));
+
+        return {
+            isRandom: Math.abs(zScore) < 1.96, // 95% confidence
+            zScore,
+            pValue,
+            numRuns,
+            expectedRuns,
+            n1,
+            n2,
+            interpretation: zScore > 1.96 ? 'too_many_alternations' :
+                zScore < -1.96 ? 'too_few_alternations' : 'random',
+        };
+    }
+
+    // ====================================================================
+    // FRACTAL DIMENSION (Higuchi Method)
+    // ====================================================================
+
+    /**
+     * Estimate fractal dimension using Higuchi's method
+     * Higher values (~1.5-2.0) indicate more complex/random patterns
+     * Lower values (~1.0-1.3) indicate more structured/predictable patterns
+     */
+    computeHiguchiFractalDimension(asset, sequence, kMax = 10) {
+        if (!sequence || sequence.length < kMax * 4) {
+            return { dimension: 1.5, confidence: 0 };
+        }
+
+        const n = sequence.length;
+        const logK = [];
+        const logL = [];
+
+        for (let k = 1; k <= kMax; k++) {
+            let lk = 0;
+
+            for (let m = 1; m <= k; m++) {
+                let lm = 0;
+                const upperBound = Math.floor((n - m) / k);
+
+                for (let i = 1; i <= upperBound; i++) {
+                    lm += Math.abs(sequence[m - 1 + i * k] - sequence[m - 1 + (i - 1) * k]);
+                }
+
+                lm = (lm * (n - 1)) / (Math.floor((n - m) / k) * k * k);
+                lk += lm;
+            }
+
+            lk /= k;
+
+            if (lk > 0) {
+                logK.push(Math.log(1 / k));
+                logL.push(Math.log(lk));
+            }
+        }
+
+        if (logK.length < 3) {
+            return { dimension: 1.5, confidence: 0 };
+        }
+
+        // Linear regression to find slope (fractal dimension)
+        const regression = this._linearRegression(logK, logL);
+
+        this.fractalDimensions[asset] = {
+            dimension: Math.max(1, Math.min(2, regression.slope)),
+            rSquared: regression.rSquared,
+            confidence: regression.rSquared,
+            interpretation: regression.slope < 1.3 ? 'structured' :
+                regression.slope < 1.6 ? 'mixed' : 'complex',
+        };
+
+        return this.fractalDimensions[asset];
+    }
+
+    // ====================================================================
+    // HURST EXPONENT ESTIMATION
+    // ====================================================================
+
+    /**
+     * Estimate Hurst exponent using rescaled range (R/S) analysis
+     * H < 0.5: mean-reverting (anti-persistent)
+     * H = 0.5: random walk
+     * H > 0.5: trending (persistent)
+     */
+    computeHurstExponent(asset, sequence) {
+        if (!sequence || sequence.length < 40) {
+            return { hurst: 0.5, interpretation: 'insufficient_data', confidence: 0 };
+        }
+
+        const n = sequence.length;
+        const logN = [];
+        const logRS = [];
+
+        // Try different subdivision sizes
+        const sizes = [];
+        for (let s = 8; s <= Math.floor(n / 2); s = Math.floor(s * 1.5)) {
+            sizes.push(s);
+        }
+
+        sizes.forEach(size => {
+            const numBlocks = Math.floor(n / size);
+            if (numBlocks < 2) return;
+
+            let totalRS = 0;
+            let validBlocks = 0;
+
+            for (let b = 0; b < numBlocks; b++) {
+                const block = sequence.slice(b * size, (b + 1) * size);
+                const mean = block.reduce((a, c) => a + c, 0) / block.length;
+
+                // Cumulative deviation from mean
+                const cumDev = [];
+                let sum = 0;
+                for (let i = 0; i < block.length; i++) {
+                    sum += block[i] - mean;
+                    cumDev.push(sum);
+                }
+
+                const range = Math.max(...cumDev) - Math.min(...cumDev);
+                const std = Math.sqrt(
+                    block.reduce((a, c) => a + Math.pow(c - mean, 2), 0) / block.length
+                );
+
+                if (std > 0) {
+                    totalRS += range / std;
+                    validBlocks++;
+                }
+            }
+
+            if (validBlocks > 0) {
+                logN.push(Math.log(size));
+                logRS.push(Math.log(totalRS / validBlocks));
+            }
+        });
+
+        if (logN.length < 3) {
+            return { hurst: 0.5, interpretation: 'insufficient_data', confidence: 0 };
+        }
+
+        const regression = this._linearRegression(logN, logRS);
+        const hurst = Math.max(0, Math.min(1, regression.slope));
+
+        let interpretation;
+        if (hurst < 0.4) interpretation = 'strongly_mean_reverting';
+        else if (hurst < 0.48) interpretation = 'mean_reverting';
+        else if (hurst < 0.52) interpretation = 'random_walk';
+        else if (hurst < 0.6) interpretation = 'mildly_trending';
+        else interpretation = 'strongly_trending';
+
+        this.hurstExponents[asset] = {
+            hurst,
+            interpretation,
+            rSquared: regression.rSquared,
+            confidence: regression.rSquared,
+        };
+
+        return this.hurstExponents[asset];
+    }
+
+    // ====================================================================
+    // REGIME DETECTION (ENHANCED)
+    // ====================================================================
+
+    /**
+     * Multi-feature regime detection with transition tracking
+     */
+    detectRegime(asset, recentRuns, windowSize = null) {
+        const window = windowSize || this.config.regimeWindowSize;
+
+        if (!recentRuns || recentRuns.length < window) {
+            return { regime: 'unknown', confidence: 0, features: {} };
+        }
+
+        const recent = recentRuns.slice(-window);
+
+        // Feature extraction
+        const mean = recent.reduce((a, b) => a + b, 0) / recent.length;
+        const variance = recent.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / recent.length;
+        const std = Math.sqrt(variance);
+        const cv = mean > 0 ? std / mean : 0;
+
+        const shortRuns = recent.filter(l => l <= 3).length;
+        const mediumRuns = recent.filter(l => l > 3 && l <= 10).length;
+        const longRuns = recent.filter(l => l > 10).length;
+
+        const shortRunRatio = shortRuns / recent.length;
+        const mediumRunRatio = mediumRuns / recent.length;
+        const longRunRatio = longRuns / recent.length;
+
+        // Trend detection
+        const halfPoint = Math.floor(recent.length / 2);
+        const firstHalfMean = recent.slice(0, halfPoint).reduce((a, b) => a + b, 0) / halfPoint;
+        const secondHalfMean = recent.slice(halfPoint).reduce((a, b) => a + b, 0) / (recent.length - halfPoint);
+        const trendSlope = (secondHalfMean - firstHalfMean) / firstHalfMean;
+
+        // Consecutive short run detection
+        let maxConsecutiveShort = 0;
+        let currentConsecutiveShort = 0;
+        recent.forEach(r => {
+            if (r <= 3) {
+                currentConsecutiveShort++;
+                maxConsecutiveShort = Math.max(maxConsecutiveShort, currentConsecutiveShort);
+            } else {
+                currentConsecutiveShort = 0;
+            }
+        });
+
+        // Run length entropy
+        const runBins = {};
+        recent.forEach(r => {
+            const bin = this.discretizeRunLength(r);
+            runBins[bin] = (runBins[bin] || 0) + 1;
+        });
+        const runEntropy = this._calculateDistributionEntropy(
+            Object.fromEntries(Object.entries(runBins).map(([k, v]) => [k, v / recent.length]))
+        );
+
+        // Regime classification using multi-feature scoring
+        const scores = {
+            volatile: 0,
+            choppy: 0,
+            stable: 0,
+            trending_up: 0,
+            trending_down: 0,
+            normal: 0,
+            unpredictable: 0,
+        };
+
+        // Volatile: many short runs, high variance
+        scores.volatile += shortRunRatio > 0.5 ? 2 : shortRunRatio > 0.35 ? 1 : 0;
+        scores.volatile += cv > 1.2 ? 1.5 : cv > 0.8 ? 0.5 : 0;
+        scores.volatile += maxConsecutiveShort > 4 ? 1.5 : maxConsecutiveShort > 3 ? 0.5 : 0;
+
+        // Choppy: alternating short and medium, no clear trend
+        scores.choppy += (shortRunRatio > 0.3 && mediumRunRatio > 0.3) ? 1.5 : 0;
+        scores.choppy += Math.abs(trendSlope) < 0.1 ? 1 : 0;
+        scores.choppy += cv > 0.7 && cv < 1.3 ? 0.5 : 0;
+
+        // Stable: many long runs, low variance
+        scores.stable += longRunRatio > 0.3 ? 2 : longRunRatio > 0.2 ? 1 : 0;
+        scores.stable += cv < 0.6 ? 1.5 : cv < 0.8 ? 0.5 : 0;
+        scores.stable += mean > 10 ? 1 : mean > 7 ? 0.5 : 0;
+
+        // Trending up: increasing run lengths
+        scores.trending_up += trendSlope > 0.2 ? 2 : trendSlope > 0.1 ? 1 : 0;
+        scores.trending_up += secondHalfMean > firstHalfMean * 1.2 ? 1 : 0;
+
+        // Trending down: decreasing run lengths
+        scores.trending_down += trendSlope < -0.2 ? 2 : trendSlope < -0.1 ? 1 : 0;
+        scores.trending_down += secondHalfMean < firstHalfMean * 0.8 ? 1 : 0;
+
+        // Normal: balanced distribution
+        scores.normal += (shortRunRatio < 0.4 && longRunRatio < 0.4) ? 1 : 0;
+        scores.normal += cv > 0.5 && cv < 1.0 ? 1 : 0;
+        scores.normal += runEntropy > 0.6 ? 0.5 : 0;
+
+        // Unpredictable: high entropy, no clear pattern
+        scores.unpredictable += runEntropy > 0.85 ? 1.5 : 0;
+        scores.unpredictable += cv > 1.5 ? 1.5 : 0;
+
+        // Select regime with highest score
+        const sortedRegimes = Object.entries(scores).sort((a, b) => b[1] - a[1]);
+        const topRegime = sortedRegimes[0];
+        const secondRegime = sortedRegimes[1];
+
+        const regime = topRegime[0];
+        const confidence = topRegime[1] > 0 ?
+            (topRegime[1] - secondRegime[1]) / topRegime[1] : 0;
+
+        // Track regime transitions
+        if (!this.regimeHistory[asset]) {
+            this.regimeHistory[asset] = [];
+        }
+
+        const prevRegime = this.regimeHistory[asset].length > 0 ?
+            this.regimeHistory[asset][this.regimeHistory[asset].length - 1].regime : null;
+
+        this.regimeHistory[asset].push({
+            regime,
+            confidence,
+            timestamp: Date.now(),
+            features: { mean, std, cv, shortRunRatio, longRunRatio, trendSlope },
+        });
+
+        if (this.regimeHistory[asset].length > this.config.regimeHistorySize) {
+            this.regimeHistory[asset].shift();
+        }
+
+        // Track regime transitions
+        if (prevRegime && prevRegime !== regime) {
+            if (!this.regimeTransitionMatrix[asset]) {
+                this.regimeTransitionMatrix[asset] = {};
+            }
+            const transKey = `${prevRegime}->${regime}`;
+            this.regimeTransitionMatrix[asset][transKey] =
+                (this.regimeTransitionMatrix[asset][transKey] || 0) + 1;
+        }
+
+        const result = {
+            regime,
+            confidence,
+            scores,
+            sortedRegimes,
+            features: {
+                mean, std, cv, variance,
+                shortRunRatio, mediumRunRatio, longRunRatio,
+                trendSlope,
+                maxConsecutiveShort,
+                runEntropy,
+            },
+            prevRegime,
+            isTransition: prevRegime !== null && prevRegime !== regime,
+            shortRuns,
+            longRuns,
+        };
+
+        this.regimeStates[asset] = result;
+        return result;
+    }
+
+    /**
+     * Get regime stability (how long current regime has lasted)
+     */
+    getRegimeStability(asset) {
+        if (!this.regimeHistory[asset] || this.regimeHistory[asset].length < 2) {
+            return { stability: 0, currentDuration: 0 };
+        }
+
+        const history = this.regimeHistory[asset];
+        const currentRegime = history[history.length - 1].regime;
+
+        let duration = 0;
+        for (let i = history.length - 1; i >= 0; i--) {
+            if (history[i].regime === currentRegime) {
+                duration++;
+            } else {
+                break;
+            }
+        }
+
+        // Count total regime changes
+        let changes = 0;
+        for (let i = 1; i < history.length; i++) {
+            if (history[i].regime !== history[i - 1].regime) changes++;
+        }
+
+        const stability = 1 - (changes / (history.length - 1));
+
+        return {
+            stability,
+            currentDuration: duration,
+            totalChanges: changes,
+            currentRegime,
+        };
+    }
+
+    // ====================================================================
+    // PATTERN SIMILARITY (DYNAMIC TIME WARPING)
+    // ====================================================================
+
+    /**
+     * Dynamic Time Warping distance between two sequences
+     * More robust than Euclidean distance for time series comparison
+     */
+    dtwDistance(seq1, seq2) {
+        const n = seq1.length;
+        const m = seq2.length;
+
+        if (n === 0 || m === 0) return Infinity;
+
+        // Cost matrix
+        const dtw = Array.from({ length: n + 1 }, () => new Array(m + 1).fill(Infinity));
+        dtw[0][0] = 0;
+
+        for (let i = 1; i <= n; i++) {
+            for (let j = 1; j <= m; j++) {
+                const cost = Math.abs(seq1[i - 1] - seq2[j - 1]);
+                dtw[i][j] = cost + Math.min(
+                    dtw[i - 1][j],     // insertion
+                    dtw[i][j - 1],     // deletion
+                    dtw[i - 1][j - 1]  // match
+                );
+            }
+        }
+
+        return dtw[n][m] / Math.max(n, m); // Normalize by length
+    }
+
+    /**
+     * Find similar historical patterns using DTW
+     */
+    findSimilarPatterns(sequence, pattern, maxResults = 5, maxDistance = null) {
+        if (!sequence || !pattern || sequence.length < pattern.length + 5) {
+            return [];
+        }
+
+        const patternLength = pattern.length;
+        const matches = [];
+
+        // Sliding window comparison
+        for (let i = 0; i <= sequence.length - patternLength - 1; i++) {
+            const candidate = sequence.slice(i, i + patternLength);
+            const distance = this.dtwDistance(candidate, pattern);
+
+            const nextValue = sequence[i + patternLength];
+
+            matches.push({
+                index: i,
+                distance,
+                pattern: candidate,
+                nextValue,
+            });
+        }
+
+        // Sort by distance and filter
+        matches.sort((a, b) => a.distance - b.distance);
+
+        const threshold = maxDistance || (matches.length > 0 ?
+            matches[Math.floor(matches.length * 0.1)].distance * 1.5 : Infinity);
+
+        const filtered = matches
+            .filter(m => m.distance <= threshold && m.nextValue !== undefined)
+            .slice(0, maxResults);
+
+        // Aggregate predictions from similar patterns
+        if (filtered.length > 0) {
+            const nextValueDist = {};
+            let totalWeight = 0;
+
+            filtered.forEach(match => {
+                const weight = 1 / (match.distance + 0.01); // Inverse distance weighting
+                nextValueDist[match.nextValue] = (nextValueDist[match.nextValue] || 0) + weight;
+                totalWeight += weight;
+            });
+
+            // Normalize
+            Object.keys(nextValueDist).forEach(k => {
+                nextValueDist[k] /= totalWeight;
+            });
+
+            return {
+                matches: filtered,
+                prediction: nextValueDist,
+                confidence: filtered.length >= 3 ? Math.min(1, 1 / (filtered[0].distance + 0.1)) : 0,
+            };
+        }
+
+        return { matches: filtered, prediction: null, confidence: 0 };
+    }
+
+    // ====================================================================
+    // MOMENTUM AND MEAN REVERSION INDICATORS
+    // ====================================================================
+
+    /**
+     * Calculate momentum indicators for run lengths
+     */
+    calculateMomentumIndicators(asset, runLengths) {
+        if (!runLengths || runLengths.length < 20) {
+            return null;
+        }
+
+        const n = runLengths.length;
+
+        // Simple Moving Averages
+        const sma5 = this._sma(runLengths, 5);
+        const sma10 = this._sma(runLengths, 10);
+        const sma20 = this._sma(runLengths, 20);
+
+        // Exponential Moving Average
+        const ema5 = this._ema(runLengths, 5);
+        const ema10 = this._ema(runLengths, 10);
+
+        // Rate of Change (ROC)
+        const roc5 = n >= 6 ? (runLengths[n - 1] - runLengths[n - 6]) / (runLengths[n - 6] || 1) : 0;
+        const roc10 = n >= 11 ? (runLengths[n - 1] - runLengths[n - 11]) / (runLengths[n - 11] || 1) : 0;
+
+        // Relative Strength Index (RSI) - adapted for run lengths
+        const rsi = this._computeRSI(runLengths, 14);
+
+        // Bollinger Band position
+        const bbPosition = this._bollingerBandPosition(runLengths, 20, 2);
+
+        // MACD-like indicator
+        const macdLine = ema5 - ema10;
+        const signalStrength = Math.abs(macdLine) / (sma10 || 1);
+
+        // Mean reversion score
+        // How far current is from long-term average relative to std
+        const longMean = runLengths.reduce((a, b) => a + b, 0) / n;
+        const longStd = Math.sqrt(runLengths.reduce((a, b) => a + Math.pow(b - longMean, 2), 0) / n);
+        const currentZScore = longStd > 0 ? (runLengths[n - 1] - longMean) / longStd : 0;
+        const meanReversionProbability = this.sigmoid(-currentZScore); // Higher when below mean
+
+        return {
+            sma: { sma5, sma10, sma20 },
+            ema: { ema5, ema10 },
+            roc: { roc5, roc10 },
+            rsi,
+            bollingerPosition: bbPosition,
+            macd: { line: macdLine, signalStrength },
+            zScore: currentZScore,
+            meanReversionProbability,
+            momentum: {
+                shortTerm: sma5 > sma10 ? 'bullish' : 'bearish',
+                mediumTerm: sma10 > sma20 ? 'bullish' : 'bearish',
+                strength: signalStrength,
+            },
+        };
+    }
+
+    sigmoid(x) {
+        return 1 / (1 + Math.exp(-Math.max(-500, Math.min(500, x))));
+    }
+
+    _sma(arr, period) {
+        if (arr.length < period) return arr.reduce((a, b) => a + b, 0) / arr.length;
+        return arr.slice(-period).reduce((a, b) => a + b, 0) / period;
+    }
+
+    _ema(arr, period) {
+        if (arr.length === 0) return 0;
+        const k = 2 / (period + 1);
+        let ema = arr[0];
+        for (let i = 1; i < arr.length; i++) {
+            ema = arr[i] * k + ema * (1 - k);
+        }
+        return ema;
+    }
+
+    _computeRSI(arr, period) {
+        if (arr.length < period + 1) return 50;
+
+        const recent = arr.slice(-(period + 1));
+        let gains = 0;
+        let losses = 0;
+
+        for (let i = 1; i < recent.length; i++) {
+            const change = recent[i] - recent[i - 1];
+            if (change > 0) gains += change;
+            else losses -= change;
+        }
+
+        const avgGain = gains / period;
+        const avgLoss = losses / period;
+
+        if (avgLoss === 0) return 100;
+        const rs = avgGain / avgLoss;
+        return 100 - (100 / (1 + rs));
+    }
+
+    _bollingerBandPosition(arr, period, numStd) {
+        if (arr.length < period) return 0.5;
+
+        const recent = arr.slice(-period);
+        const mean = recent.reduce((a, b) => a + b, 0) / period;
+        const std = Math.sqrt(recent.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / period);
+
+        const upper = mean + numStd * std;
+        const lower = mean - numStd * std;
+        const current = arr[arr.length - 1];
+
+        if (upper === lower) return 0.5;
+        return (current - lower) / (upper - lower);
+    }
+
+    // ====================================================================
+    // SEQUENTIAL PATTERN MINING
+    // ====================================================================
+
+    /**
+     * Mine frequent sequential patterns from run length states
+     * Returns patterns that occur more frequently than random chance
+     */
+    mineSequentialPatterns(asset, runLengths, minSupport = null) {
+        const support = minSupport || this.config.minPatternSupport;
+
+        if (!runLengths || runLengths.length < 30) return;
+
+        const states = runLengths.map(l => this.discretizeRunLength(l));
+        const n = states.length;
+        const minCount = Math.max(3, Math.floor(n * support));
+
+        this.frequentPatterns[asset] = {};
+        this.patternSupport[asset] = {};
+
+        // Mine patterns of length 2 to 5
+        for (let len = 2; len <= 5; len++) {
+            const patternCounts = {};
+
+            for (let i = 0; i <= n - len; i++) {
+                const pattern = states.slice(i, i + len).join('→');
+                patternCounts[pattern] = (patternCounts[pattern] || 0) + 1;
+            }
+
+            Object.entries(patternCounts).forEach(([pattern, count]) => {
+                if (count >= minCount) {
+                    const patternSupport = count / (n - len + 1);
+
+                    // Check if pattern is significantly more frequent than expected
+                    // by comparing to product of individual state probabilities
+                    const parts = pattern.split('→');
+                    const expectedProb = parts.reduce((prob, state) => {
+                        const stateCount = states.filter(s => s === state).length;
+                        return prob * (stateCount / n);
+                    }, 1);
+
+                    const lift = patternSupport / (expectedProb || 0.001);
+
+                    if (lift > 1.5) { // Pattern is at least 1.5x more frequent than expected
+                        this.frequentPatterns[asset][pattern] = {
+                            count,
+                            support: patternSupport,
+                            lift,
+                            length: len,
+                        };
+                    }
+                }
+            });
+        }
+
+        // Find what follows each frequent pattern
+        Object.keys(this.frequentPatterns[asset]).forEach(pattern => {
+            const parts = pattern.split('→');
+            const followers = {};
+            let followerTotal = 0;
+
+            for (let i = 0; i <= n - parts.length - 1; i++) {
+                const candidate = states.slice(i, i + parts.length).join('→');
+                if (candidate === pattern) {
+                    const next = states[i + parts.length];
+                    followers[next] = (followers[next] || 0) + 1;
+                    followerTotal++;
+                }
+            }
+
+            if (followerTotal > 0) {
+                this.frequentPatterns[asset][pattern].followers = {};
+                Object.entries(followers).forEach(([state, count]) => {
+                    this.frequentPatterns[asset][pattern].followers[state] = count / followerTotal;
+                });
+                this.frequentPatterns[asset][pattern].followerCount = followerTotal;
+            }
+        });
+
+        return this.frequentPatterns[asset];
+    }
+
+    /**
+     * Match current state sequence against mined patterns and predict
+     */
+    predictFromSequentialPatterns(asset, recentRuns) {
+        if (!this.frequentPatterns[asset] || !recentRuns || recentRuns.length < 2) {
+            return null;
+        }
+
+        const states = recentRuns.slice(-5).map(l => this.discretizeRunLength(l));
+        const matches = [];
+
+        Object.entries(this.frequentPatterns[asset]).forEach(([pattern, info]) => {
+            if (!info.followers) return;
+
+            const parts = pattern.split('→');
+            const patternLen = parts.length;
+
+            if (states.length >= patternLen) {
+                const tail = states.slice(-patternLen).join('→');
+                if (tail === pattern) {
+                    matches.push({
+                        pattern,
+                        info,
+                        confidence: Math.min(1,
+                            (info.lift / 5) * 0.4 +
+                            Math.min(1, info.followerCount / 10) * 0.3 +
+                            Math.min(1, info.support * 20) * 0.3
+                        ),
+                    });
+                }
+            }
+        });
+
+        if (matches.length === 0) return null;
+
+        matches.sort((a, b) => b.confidence - a.confidence);
+
+        // Aggregate follower predictions
+        const aggregated = {};
+        let totalWeight = 0;
+
+        matches.forEach(match => {
+            const weight = match.confidence;
+            Object.entries(match.info.followers).forEach(([state, prob]) => {
+                aggregated[state] = (aggregated[state] || 0) + prob * weight;
+            });
+            totalWeight += weight;
+        });
+
+        if (totalWeight > 0) {
+            Object.keys(aggregated).forEach(k => { aggregated[k] /= totalWeight; });
+        }
+
+        // Convert state predictions to favorable/unfavorable probability
+        const favorableStates = ['medium', 'medium_long', 'long', 'very_long', 'extreme'];
+        const favorableProb = favorableStates.reduce((sum, state) =>
+            sum + (aggregated[state] || 0), 0);
+
+        return {
+            matches,
+            statePrediction: aggregated,
+            favorableProb,
+            confidence: matches[0].confidence,
+            numMatches: matches.length,
+        };
+    }
+
+    // ====================================================================
+    // COMPREHENSIVE ANALYSIS
+    // ====================================================================
+
+    /**
+     * Run all analyses and return comprehensive pattern report
+     */
+    getComprehensiveAnalysis(asset, tickHistory, runLengths) {
+        const report = {
+            asset,
+            timestamp: Date.now(),
+        };
+
+        // N-gram analysis
+        if (tickHistory && tickHistory.length > 20) {
+            report.ngram = this.predictFromNgram(asset, tickHistory.slice(-6));
+        }
+
+        // Markov chain analysis
+        if (runLengths && runLengths.length > 10) {
+            report.markov = this.predictNextRunState(asset, runLengths);
+        }
+
+        // Regime detection
+        if (runLengths && runLengths.length > 20) {
+            report.regime = this.detectRegime(asset, runLengths);
+            report.regimeStability = this.getRegimeStability(asset);
+        }
+
+        // Change point detection
+        if (runLengths && runLengths.length > 20) {
+            report.changePoints = this.detectChangePoints(asset, runLengths);
+        }
+
+        // Autocorrelation
+        if (runLengths && runLengths.length > 30) {
+            report.autocorrelation = this.computeAutocorrelation(asset, runLengths);
+        }
+
+        // Fractal dimension
+        if (runLengths && runLengths.length > 40) {
+            report.fractal = this.computeHiguchiFractalDimension(asset, runLengths);
+        }
+
+        // Hurst exponent
+        if (runLengths && runLengths.length > 40) {
+            report.hurst = this.computeHurstExponent(asset, runLengths);
+        }
+
+        // Momentum indicators
+        if (runLengths && runLengths.length > 20) {
+            report.momentum = this.calculateMomentumIndicators(asset, runLengths);
+        }
+
+        // Runs test
+        if (runLengths && runLengths.length > 20) {
+            report.runsTest = this.waldsWolfowitzRunsTest(runLengths);
+        }
+
+        // Sequential pattern mining
+        if (runLengths && runLengths.length > 30) {
+            report.sequentialPatterns = this.predictFromSequentialPatterns(asset, runLengths);
+        }
+
+        // Steady state deviation
+        if (runLengths && runLengths.length > 20) {
+            report.steadyStateDeviation = this.getSteadyStateDeviation(asset, runLengths);
+        }
+
+        // Motif matching
+        if (tickHistory && tickHistory.length > 30) {
+            report.motifMatch = this.matchMotifAndPredict(
+                asset, tickHistory, tickHistory.slice(-8)
+            );
+        }
+
+        // Composite pattern score
+        report.compositeScore = this._computeCompositePatternScore(report);
+
+        return report;
+    }
+
+    /**
+     * Compute a composite pattern favorability score from all analyses
+     */
+    _computeCompositePatternScore(report) {
+        let score = 0;
+        let totalWeight = 0;
+
+        // Regime favorability
+        if (report.regime) {
+            const regimeScores = {
+                'stable': 0.85,
+                'normal': 0.65,
+                'trending_up': 0.7,
+                'trending_down': 0.4,
+                'choppy': 0.35,
+                'volatile': 0.2,
+                'unpredictable': 0.25,
+            };
+            const regimeScore = regimeScores[report.regime.regime] || 0.5;
+            const weight = 2.0 * (report.regime.confidence || 0.5);
+            score += regimeScore * weight;
+            totalWeight += weight;
+        }
+
+        // Hurst exponent favorability
+        if (report.hurst && report.hurst.confidence > 0.3) {
+            // Trending (H > 0.5) is good for survival continuation
+            const hurstScore = report.hurst.hurst > 0.5 ? 0.7 : 0.35;
+            const weight = 1.5 * report.hurst.confidence;
+            score += hurstScore * weight;
+            totalWeight += weight;
+        }
+
+        // Change point proximity (near change point = risky)
+        if (report.changePoints) {
+            const cpScore = report.changePoints.isNearChangePoint ? 0.25 : 0.7;
+            score += cpScore * 1.0;
+            totalWeight += 1.0;
+        }
+
+        // Autocorrelation (non-random = more predictable = better)
+        if (report.autocorrelation) {
+            const acScore = report.autocorrelation.isRandom ? 0.4 : 0.65;
+            score += acScore * 1.0;
+            totalWeight += 1.0;
+        }
+
+        // Momentum indicators
+        if (report.momentum) {
+            const momScore = report.momentum.meanReversionProbability;
+            const rsiScore = report.momentum.rsi > 30 && report.momentum.rsi < 70 ? 0.65 : 0.35;
+            score += ((momScore + rsiScore) / 2) * 1.5;
+            totalWeight += 1.5;
+        }
+
+        // Fractal dimension (lower = more structured = better)
+        if (report.fractal && report.fractal.confidence > 0.3) {
+            const fractalScore = report.fractal.dimension < 1.4 ? 0.7 :
+                report.fractal.dimension < 1.6 ? 0.5 : 0.3;
+            score += fractalScore * report.fractal.confidence;
+            totalWeight += report.fractal.confidence;
+        }
+
+        // Sequential pattern prediction
+        if (report.sequentialPatterns && report.sequentialPatterns.confidence > 0.3) {
+            score += report.sequentialPatterns.favorableProb * 1.5 * report.sequentialPatterns.confidence;
+            totalWeight += 1.5 * report.sequentialPatterns.confidence;
+        }
+
+        // Markov prediction
+        if (report.markov) {
+            const favorableStates = ['medium', 'medium_long', 'long', 'very_long', 'extreme'];
+            let markovFavorable = 0;
+            Object.entries(report.markov.predictions).forEach(([state, prob]) => {
+                if (favorableStates.includes(state)) markovFavorable += prob;
+            });
+            const weight = 1.5 * Math.min(1, report.markov.confidence / 10);
+            score += markovFavorable * weight;
+            totalWeight += weight;
+        }
+
+        // Steady state deviation
+        if (report.steadyStateDeviation) {
+            // High deviation = anomalous = risky
+            const devScore = report.steadyStateDeviation.deviation < 0.5 ? 0.7 :
+                report.steadyStateDeviation.deviation < 1.0 ? 0.5 : 0.25;
+            score += devScore * 0.8;
+            totalWeight += 0.8;
+        }
+
+        // Runs test
+        if (report.runsTest) {
+            // Non-random patterns can be exploited
+            const runsScore = report.runsTest.isRandom ? 0.45 : 0.6;
+            score += runsScore * 0.5;
+            totalWeight += 0.5;
+        }
+
+        return totalWeight > 0 ? score / totalWeight : 0.5;
+    }
+
+    // ====================================================================
+    // RUN LENGTH DISTRIBUTION FITTING
+    // ====================================================================
+
+    /**
+     * Fit run length distribution (Weibull/Exponential)
      */
     fitRunLengthDistribution(runLengths) {
         if (!runLengths || runLengths.length < 20) {
@@ -533,37 +2137,110 @@ class PatternEngine {
         }
 
         const mean = runLengths.reduce((a, b) => a + b, 0) / runLengths.length;
-        const variance = runLengths.reduce((a, b) => a + (b - mean) ** 2, 0) / runLengths.length;
+        const variance = runLengths.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / runLengths.length;
         const std = Math.sqrt(variance);
-        const cv = std / mean; // Coefficient of variation
+        const cv = std / (mean || 1);
 
-        // Estimate distribution type based on CV
-        // CV = 1 suggests exponential, CV < 1 suggests Weibull with shape > 1
         if (cv > 0.9 && cv < 1.1) {
-            // Exponential distribution
             return {
                 type: 'exponential',
                 params: { lambda: 1 / mean },
-                survivalProb: (t) => Math.exp(-t / mean)
+                survivalProb: (t) => Math.exp(-t / mean),
+                mean,
+                std,
+                cv,
             };
         } else {
-            // Weibull distribution - estimate parameters
-            // Using method of moments approximation
-            const shape = (1.2 / cv) ** 1.1; // Approximate shape parameter
-            const scale = mean / this.gamma(1 + 1 / shape);
+            const shape = Math.pow(1.2 / cv, 1.1);
+            const scale = mean / this._gamma(1 + 1 / shape);
 
             return {
                 type: 'weibull',
                 params: { shape, scale },
-                survivalProb: (t) => Math.exp(-Math.pow(t / scale, shape))
+                survivalProb: (t) => Math.exp(-Math.pow(t / scale, shape)),
+                mean,
+                std,
+                cv,
+                hazardIncreasing: shape > 1,
             };
         }
     }
 
-    gamma(z) {
-        // Stirling's approximation for gamma function
+    // ====================================================================
+    // HELPER METHODS
+    // ====================================================================
+
+    _calculateDistributionEntropy(distribution) {
+        let entropy = 0;
+        Object.values(distribution).forEach(p => {
+            if (p > 0) {
+                entropy -= p * Math.log2(p);
+            }
+        });
+        return entropy;
+    }
+
+    _median(arr) {
+        const sorted = [...arr].sort((a, b) => a - b);
+        const mid = Math.floor(sorted.length / 2);
+        return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+    }
+
+    _normalCDF(x) {
+        // Approximation of the standard normal CDF
+        const a1 = 0.254829592;
+        const a2 = -0.284496736;
+        const a3 = 1.421413741;
+        const a4 = -1.453152027;
+        const a5 = 1.061405429;
+        const p = 0.3275911;
+
+        const sign = x >= 0 ? 1 : -1;
+        x = Math.abs(x) / Math.SQRT2;
+
+        const t = 1.0 / (1.0 + p * x);
+        const y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
+
+        return 0.5 * (1.0 + sign * y);
+    }
+
+    _linearRegression(x, y) {
+        const n = Math.min(x.length, y.length);
+        if (n < 2) return { slope: 0, intercept: 0, rSquared: 0 };
+
+        let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0, sumYY = 0;
+
+        for (let i = 0; i < n; i++) {
+            sumX += x[i];
+            sumY += y[i];
+            sumXY += x[i] * y[i];
+            sumXX += x[i] * x[i];
+            sumYY += y[i] * y[i];
+        }
+
+        const denom = n * sumXX - sumX * sumX;
+        if (Math.abs(denom) < 1e-10) return { slope: 0, intercept: 0, rSquared: 0 };
+
+        const slope = (n * sumXY - sumX * sumY) / denom;
+        const intercept = (sumY - slope * sumX) / n;
+
+        // R-squared
+        const ssRes = y.reduce((sum, yi, i) => {
+            const predicted = slope * x[i] + intercept;
+            return sum + Math.pow(yi - predicted, 2);
+        }, 0);
+
+        const meanY = sumY / n;
+        const ssTot = y.reduce((sum, yi) => sum + Math.pow(yi - meanY, 2), 0);
+
+        const rSquared = ssTot > 0 ? 1 - ssRes / ssTot : 0;
+
+        return { slope, intercept, rSquared };
+    }
+
+    _gamma(z) {
         if (z < 0.5) {
-            return Math.PI / (Math.sin(Math.PI * z) * this.gamma(1 - z));
+            return Math.PI / (Math.sin(Math.PI * z) * this._gamma(1 - z));
         }
         z -= 1;
         const g = 7;
@@ -578,72 +2255,6 @@ class PatternEngine {
         }
         const t = z + g + 0.5;
         return Math.sqrt(2 * Math.PI) * Math.pow(t, z + 0.5) * Math.exp(-t) * x;
-    }
-
-    /**
-     * Regime Detector
-     * Hidden Markov Model-like regime detection
-     */
-    detectRegime(asset, recentRuns, windowSize = 20) {
-        if (!recentRuns || recentRuns.length < windowSize) {
-            return { regime: 'unknown', confidence: 0 };
-        }
-
-        const recent = recentRuns.slice(-windowSize);
-        const mean = recent.reduce((a, b) => a + b, 0) / recent.length;
-        const variance = recent.reduce((a, b) => a + (b - mean) ** 2, 0) / recent.length;
-        const shortRuns = recent.filter(l => l <= 3).length;
-        const longRuns = recent.filter(l => l >= 10).length;
-
-        // Determine regime
-        let regime, confidence;
-
-        if (shortRuns > windowSize * 0.5) {
-            regime = 'volatile';
-            confidence = shortRuns / windowSize;
-        } else if (longRuns > windowSize * 0.3) {
-            regime = 'stable';
-            confidence = longRuns / windowSize;
-        } else if (variance > mean * 2) {
-            regime = 'unpredictable';
-            confidence = Math.min(1, variance / (mean * 4));
-        } else {
-            regime = 'normal';
-            confidence = 1 - (variance / (mean * 2));
-        }
-
-        this.regimeStates[asset] = { regime, confidence, mean, variance };
-
-        return { regime, confidence, mean, variance, shortRuns, longRuns };
-    }
-
-    /**
-     * Pattern Similarity Detector
-     * Finds similar historical patterns
-     */
-    findSimilarPatterns(sequence, pattern, tolerance = 1) {
-        const matches = [];
-        const patternLength = pattern.length;
-
-        for (let i = 0; i <= sequence.length - patternLength; i++) {
-            const candidate = sequence.slice(i, i + patternLength);
-            let differences = 0;
-
-            for (let j = 0; j < patternLength; j++) {
-                if (candidate[j] !== pattern[j]) differences++;
-            }
-
-            if (differences <= tolerance) {
-                matches.push({
-                    index: i,
-                    pattern: candidate,
-                    nextValue: sequence[i + patternLength] || null,
-                    differences
-                });
-            }
-        }
-
-        return matches;
     }
 }
 
@@ -2858,8 +4469,27 @@ class EnhancedAccumulatorBot {
 
         // Update pattern models periodically
         if (this.observationCount % 2 === 0 && this.config.enablePatternRecognition) {
-            this.patternEngine.buildNgramModel(asset, this.tickHistories[asset], 5);
-            this.patternEngine.buildMarkovChain(asset, this.extendedStayedIn[asset], 3);
+            this.patternEngine.buildNgramModel(asset, this.tickHistories[asset]);
+            this.patternEngine.buildMarkovChain(asset, this.extendedStayedIn[asset]);
+
+            // Periodically run deeper analyses
+            if (this.observationCount % 50 === 0) {
+                // Discover motifs
+                this.patternEngine.discoverMotifs(asset, this.tickHistories[asset]);
+
+                // Mine sequential patterns from run lengths
+                this.patternEngine.mineSequentialPatterns(asset, this.extendedStayedIn[asset]);
+
+                // Compute Hurst exponent
+                if (this.extendedStayedIn[asset] && this.extendedStayedIn[asset].length > 40) {
+                    const hurst = this.patternEngine.computeHurstExponent(
+                        asset, this.extendedStayedIn[asset]
+                    );
+                    if (hurst.confidence > 0.3) {
+                        console.log(`[${asset}] 📐 Hurst: ${hurst.hurst.toFixed(3)} (${hurst.interpretation})`);
+                    }
+                }
+            }
         }
 
         if (this.tickHistories[asset].length < this.config.requiredHistoryLength) {
@@ -3207,16 +4837,63 @@ class EnhancedAccumulatorBot {
             }
         }
 
-        // 5. Pattern-based Prediction
+        // 5. Pattern-based Prediction (ENHANCED)
         if (this.config.enablePatternRecognition) {
-            const recentDigits = this.tickHistories[asset].slice(-5);
-            const ngramPred = this.patternEngine.predictFromNgram(asset, recentDigits, 3);
-            if (ngramPred) {
-                // Higher probability of specific digit = more predictable = potentially favorable
+            const runLengths = this.extendedStayedIn[asset];
+
+            // Get comprehensive pattern analysis
+            const patternReport = this.patternEngine.getComprehensiveAnalysis(
+                asset,
+                this.tickHistories[asset],
+                runLengths
+            );
+
+            if (patternReport.compositeScore !== undefined) {
+                // Use composite score from all pattern analyses
+                const patternConfidence = Math.min(1,
+                    (patternReport.regime ? patternReport.regime.confidence : 0) * 0.3 +
+                    (patternReport.hurst ? patternReport.hurst.confidence : 0) * 0.2 +
+                    (patternReport.sequentialPatterns ? patternReport.sequentialPatterns.confidence : 0) * 0.25 +
+                    (patternReport.markov ? Math.min(1, patternReport.markov.confidence / 10) : 0) * 0.25
+                );
+
                 predictions.pattern = {
-                    value: ngramPred.probability > 0.15 ? 0.6 : 0.4,
-                    confidence: ngramPred.confidence === 'high' ? 0.8 : 0.5
+                    value: patternReport.compositeScore,
+                    confidence: patternConfidence
                 };
+
+                // Log detailed pattern report periodically
+                if (this.totalTrades % 15 === 0 && patternReport.regime) {
+                    console.log(`[${asset}] 📊 Pattern Report:`);
+                    console.log(`  Regime: ${patternReport.regime.regime} (${(patternReport.regime.confidence * 100).toFixed(1)}%)`);
+                    if (patternReport.hurst) {
+                        console.log(`  Hurst: ${patternReport.hurst.hurst.toFixed(3)} (${patternReport.hurst.interpretation})`);
+                    }
+                    if (patternReport.changePoints) {
+                        console.log(`  Near Change Point: ${patternReport.changePoints.isNearChangePoint}, Trend: ${patternReport.changePoints.currentTrend}`);
+                    }
+                    if (patternReport.momentum) {
+                        console.log(`  RSI: ${patternReport.momentum.rsi.toFixed(1)}, Z-Score: ${patternReport.momentum.zScore.toFixed(2)}`);
+                    }
+                    if (patternReport.fractal) {
+                        console.log(`  Fractal Dim: ${patternReport.fractal.dimension.toFixed(3)} (${patternReport.fractal.interpretation})`);
+                    }
+                    console.log(`  Composite Score: ${patternReport.compositeScore.toFixed(4)}`);
+                }
+
+                // Additional regime-based safety checks
+                if (patternReport.regime &&
+                    (patternReport.regime.regime === 'volatile' || patternReport.regime.regime === 'unpredictable') &&
+                    patternReport.regime.confidence > 0.5) {
+                    console.log(`[${asset}] 🚨 Pattern engine warns: ${patternReport.regime.regime} regime detected`);
+                }
+
+                // Near change point warning
+                if (patternReport.changePoints && patternReport.changePoints.isNearChangePoint) {
+                    console.log(`[${asset}] ⚠️ Near change point detected - increased risk`);
+                    // Reduce pattern confidence near change points
+                    predictions.pattern.confidence *= 0.7;
+                }
             }
         }
 
