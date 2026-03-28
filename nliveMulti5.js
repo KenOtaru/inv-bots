@@ -8733,13 +8733,37 @@ class EnhancedAccumulatorBot {
 
         // 1. Safety Checks (Pre-Decision)
         if (this.detectDangerousPattern(asset, currentDigitCount, stayedInArray)) {
-            return { shouldTrade: false, ensembleScore: 0, reason: 'dangerous_pattern' };
+            return { 
+                shouldTrade: false, 
+                ensembleScore: 0, 
+                agreement: 0,
+                survivalProb: 0,
+                threshold: this.ensembleDecisionMaker.adaptiveThreshold,
+                modelContributions: {},
+                reason: 'dangerous_pattern' 
+            };
         }
         if (this.detectDangerousPattern2(asset)) {
-            return { shouldTrade: false, ensembleScore: 0, reason: 'short_run_pattern' };
+            return { 
+                shouldTrade: false, 
+                ensembleScore: 0, 
+                agreement: 0,
+                survivalProb: 0,
+                threshold: this.ensembleDecisionMaker.adaptiveThreshold,
+                modelContributions: {},
+                reason: 'short_run_pattern' 
+            };
         }
         if (!this.isMarketConditionFavorable(asset)) {
-            return { shouldTrade: false, ensembleScore: 0, reason: 'unfavorable_market' };
+            return { 
+                shouldTrade: false, 
+                ensembleScore: 0, 
+                agreement: 0,
+                survivalProb: 0,
+                threshold: this.ensembleDecisionMaker.adaptiveThreshold,
+                modelContributions: {},
+                reason: 'unfavorable_market' 
+            };
         }
 
         // 2. Collect Predictions from All Models
