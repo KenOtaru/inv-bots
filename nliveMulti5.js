@@ -9795,7 +9795,7 @@ class EnhancedAccumulatorBot {
 // RUN THE BOT
 // ============================================================================
 
-const token = 'rgNedekYXvCaPeP'; //|| process.env.DERIV_TOKEN;
+const token = 'hsj0tA0XJoIzJG5'; //|| process.env.DERIV_TOKEN;
 
 const bot = new EnhancedAccumulatorBot(token, {
     initialStake: 1,
