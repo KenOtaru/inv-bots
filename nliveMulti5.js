@@ -8512,260 +8512,64 @@ class EnhancedAccumulatorBot {
      * Make enhanced trade decision using ensemble of all models
      * Returns a structured decision object for placeTrade()
      */
-    // makeEnhancedTradeDecision(asset, stayedInArray) {
-    //     const currentDigitCount = stayedInArray[99] + 1;
-    //     const runLengths = this.extendedStayedIn[asset];
-    //     const volatilityData = this.calculateVolatility(asset);
-
-    //     // Check dangerous patterns first
-    //     if (this.detectDangerousPattern(asset, currentDigitCount, stayedInArray)) {
-    //         return { shouldTrade: false, reason: 'dangerous_pattern' };
-    //     }
-
-    //     if (this.detectDangerousPattern2(asset)) {
-    //         return { shouldTrade: false, reason: 'short_run_pattern' };
-    //     }
-
-    //     if (!this.isMarketConditionFavorable(asset)) {
-    //         return { shouldTrade: false, reason: 'unfavorable_market' };
-    //     }
-
-    //     // Collect predictions from all models
-    //     const predictions = {};
-
-    //     // 1. Statistical Composite Score
-    //     if (runLengths.length >= this.config.minSamplesForEstimate) {
-    //         const statReport = this.statisticalEngine.getComprehensiveStatisticalReport(
-    //             asset, runLengths, this.tickHistories[asset], currentDigitCount
-    //         );
-
-    //         // Kaplan-Meier
-    //         if (statReport.kaplanMeier) {
-    //             predictions.kaplanMeier = {
-    //                 value: statReport.kaplanMeier.survival,
-    //                 confidence: Math.min(1, statReport.kaplanMeier.sampleSize / 100)
-    //             };
-    //         }
-
-    //         // Use composite statistical score as additional signal
-    //         if (statReport.compositeScore !== undefined) {
-    //             // This replaces the old simple Bayesian prediction with
-    //             // a composite of all statistical methods
-    //         }
-    //     }
-
-    //     // 2. Bayesian Estimate (enhanced)
-    //     const bayesian = this.statisticalEngine.getBayesianEstimate(asset);
-    //     predictions.bayesian = {
-    //         value: bayesian.mean,
-    //         confidence: Math.min(1, bayesian.confidence / 50) *
-    //             (bayesian.predictionStrength === 'very_weak' ? 0.3 :
-    //                 bayesian.predictionStrength === 'weak' ? 0.5 :
-    //                     bayesian.predictionStrength === 'moderate' ? 0.7 :
-    //                         bayesian.predictionStrength === 'strong' ? 0.9 : 1.0)
-    //     };
-
-    //     // 3. Markov Chain Prediction
-    //     if (runLengths.length >= 20) {
-    //         const markov = this.patternEngine.predictNextRunState(asset, runLengths, 2);
-    //         if (markov) {
-    //             const favorableStates = ['medium', 'long', 'very_long'];
-    //             const favorableProb = favorableStates.reduce((sum, state) =>
-    //                 sum + (markov.predictions[state] || 0), 0);
-    //             predictions.markov = {
-    //                 value: favorableProb,
-    //                 confidence: Math.min(1, markov.confidence / 30)
-    //             };
-    //         }
-    //     }
-
-    //     // 4. Neural Network Prediction
-    //     if (this.config.enableNeuralNetwork && this.neuralEngine.initialized) {
-    //         const features = this.neuralEngine.prepareFeatures(
-    //             this.tickHistories[asset],
-    //             runLengths,
-    //             currentDigitCount,
-    //             volatilityData.combined
-    //         );
-
-    //         const neural = this.neuralEngine.predictWithUncertainty(features, 20);
-    //         predictions.neural = {
-    //             value: neural.prediction,
-    //             confidence: neural.confidence
-    //         };
-
-    //         // Use the neural network's regime assessment as additional signal
-    //         if (neural.regimeScore < 0.3) {
-    //             console.log(`[${asset}] 🧠 Neural regime warning: ${neural.regimeScore.toFixed(3)}`);
-    //             // Could optionally block trade here
-    //         }
-
-    //         // Log detailed uncertainty metrics periodically
-    //         if (this.totalTrades % 25 === 0) {
-    //             console.log(`[${asset}] 🧠 Neural Uncertainty: epistemic=${neural.epistemicUncertainty.toFixed(4)}, ` +
-    //                 `aleatoric=${neural.aleatoricUncertainty.toFixed(4)}, ` +
-    //                 `CI=[${neural.percentiles.p5.toFixed(3)}, ${neural.percentiles.p95.toFixed(3)}]`);
-    //         }
-    //     }
-
-    //     // 5. Pattern-based Prediction (ENHANCED)
-    //     if (this.config.enablePatternRecognition) {
-    //         const runLengths = this.extendedStayedIn[asset];
-
-    //         // Get comprehensive pattern analysis
-    //         const patternReport = this.patternEngine.getComprehensiveAnalysis(
-    //             asset,
-    //             this.tickHistories[asset],
-    //             runLengths
-    //         );
-
-    //         if (patternReport.compositeScore !== undefined) {
-    //             // Use composite score from all pattern analyses
-    //             const patternConfidence = Math.min(1,
-    //                 (patternReport.regime ? patternReport.regime.confidence : 0) * 0.3 +
-    //                 (patternReport.hurst ? patternReport.hurst.confidence : 0) * 0.2 +
-    //                 (patternReport.sequentialPatterns ? patternReport.sequentialPatterns.confidence : 0) * 0.25 +
-    //                 (patternReport.markov ? Math.min(1, patternReport.markov.confidence / 10) : 0) * 0.25
-    //             );
-
-    //             predictions.pattern = {
-    //                 value: patternReport.compositeScore,
-    //                 confidence: patternConfidence
-    //             };
-
-    //             // Log detailed pattern report periodically
-    //             if (this.totalTrades % 15 === 0 && patternReport.regime) {
-    //                 console.log(`[${asset}] 📊 Pattern Report:`);
-    //                 console.log(`  Regime: ${patternReport.regime.regime} (${(patternReport.regime.confidence * 100).toFixed(1)}%)`);
-    //                 if (patternReport.hurst) {
-    //                     console.log(`  Hurst: ${patternReport.hurst.hurst.toFixed(3)} (${patternReport.hurst.interpretation})`);
-    //                 }
-    //                 if (patternReport.changePoints) {
-    //                     console.log(`  Near Change Point: ${patternReport.changePoints.isNearChangePoint}, Trend: ${patternReport.changePoints.currentTrend}`);
-    //                 }
-    //                 if (patternReport.momentum) {
-    //                     console.log(`  RSI: ${patternReport.momentum.rsi.toFixed(1)}, Z-Score: ${patternReport.momentum.zScore.toFixed(2)}`);
-    //                 }
-    //                 if (patternReport.fractal) {
-    //                     console.log(`  Fractal Dim: ${patternReport.fractal.dimension.toFixed(3)} (${patternReport.fractal.interpretation})`);
-    //                 }
-    //                 console.log(`  Composite Score: ${patternReport.compositeScore.toFixed(4)}`);
-    //             }
-
-    //             // Additional regime-based safety checks
-    //             if (patternReport.regime &&
-    //                 (patternReport.regime.regime === 'volatile' || patternReport.regime.regime === 'unpredictable') &&
-    //                 patternReport.regime.confidence > 0.5) {
-    //                 console.log(`[${asset}] 🚨 Pattern engine warns: ${patternReport.regime.regime} regime detected`);
-    //             }
-
-    //             // Near change point warning
-    //             if (patternReport.changePoints && patternReport.changePoints.isNearChangePoint) {
-    //                 console.log(`[${asset}] ⚠️ Near change point detected - increased risk`);
-    //                 // Reduce pattern confidence near change points
-    //                 predictions.pattern.confidence *= 0.7;
-    //             }
-    //         }
-    //     }
-
-    //     // Store for later recording
-    //     this.lastEnsemblePredictions = predictions;
-
-    //     // Build context for ensemble
-    //     const regime = this.patternEngine.detectRegime(asset, this.extendedStayedIn[asset]);
-    //     const ensembleContext = {
-    //         regime: regime ? regime.regime : 'unknown',
-    //         regimeConfidence: regime ? regime.confidence : 0,
-    //         consecutiveLosses: this.consecutiveLosses,
-    //         asset,
-    //         currentDigitCount,
-    //         volatility: volatilityData.combined,
-    //         stake: this.currentStake,
-    //     };
-
-    //     // Combine all predictions through advanced ensemble
-    //     const ensemble = this.ensembleDecisionMaker.combinePredicitions(predictions, ensembleContext);
-
-    //     console.log(`[${asset}] Ensemble Decision: score=${ensemble.score.toFixed(3)} ` +
-    //         `(threshold=${ensemble.threshold.toFixed(3)}) | ` +
-    //         `agreement=${ensemble.agreement.toFixed(3)} | ` +
-    //         `reason=${ensemble.reason} | ` +
-    //         `shouldTrade=${ensemble.shouldTrade}`);
-
-    //     if (ensemble.details && ensemble.details.combinationMethods) {
-    //         const methods = ensemble.details.combinationMethods;
-    //         console.log(`[${asset}]   Methods: weighted=${methods.weighted.score.toFixed(3)}, ` +
-    //             `stacking=${methods.stacking.score.toFixed(3)}, ` +
-    //             `bandit=${methods.bandit.score.toFixed(3)}, ` +
-    //             `rank=${methods.rank.score.toFixed(3)}`);
-    //     }
-
-    //     // Additional check with survival threshold
-    //     const survivalCheck = this.shouldTradeBasedOnSurvivalProb(asset, stayedInArray);
-
-    //     // Final decision
-    //     const shouldTrade = ensemble.shouldTrade &&
-    //         survivalCheck &&
-    //         this.survivalNum > this.config.survivalThreshold;
-
-    //     // Extract model contributions for logging
-    //     const modelContributions = {};
-    //     Object.entries(predictions).forEach(([model, pred]) => {
-    //         if (pred) {
-    //             modelContributions[model] = (pred.value * 100).toFixed(1) + '%';
-    //         }
-    //     });
-
-    //     return {
-    //         shouldTrade,
-    //         ensembleScore: ensemble.score,
-    //         confidence: ensemble.agreement,
-    //         survivalProb: this.survivalNum,
-    //         modelContributions,
-    //         threshold: this.ensembleDecisionMaker.adaptiveThreshold
-    //     };
-    // }
-
     makeEnhancedTradeDecision(asset, stayedInArray) {
         const currentDigitCount = stayedInArray[99] + 1;
         const runLengths = this.extendedStayedIn[asset];
         const volatilityData = this.calculateVolatility(asset);
 
-        // 1. Safety Checks (Pre-Decision)
+        // Check dangerous patterns first
         if (this.detectDangerousPattern(asset, currentDigitCount, stayedInArray)) {
-            return { shouldTrade: false, ensembleScore: 0, reason: 'dangerous_pattern' };
-        }
-        if (this.detectDangerousPattern2(asset)) {
-            return { shouldTrade: false, ensembleScore: 0, reason: 'short_run_pattern' };
-        }
-        if (!this.isMarketConditionFavorable(asset)) {
-            return { shouldTrade: false, ensembleScore: 0, reason: 'unfavorable_market' };
+            return { shouldTrade: false, reason: 'dangerous_pattern' };
         }
 
-        // 2. Collect Predictions from All Models
+        if (this.detectDangerousPattern2(asset)) {
+            return { shouldTrade: false, reason: 'short_run_pattern' };
+        }
+
+        if (!this.isMarketConditionFavorable(asset)) {
+            return { shouldTrade: false, reason: 'unfavorable_market' };
+        }
+
+        // Collect predictions from all models
         const predictions = {};
 
-        // --- Kaplan-Meier Survival ---
+        // 1. Statistical Composite Score
         if (runLengths.length >= this.config.minSamplesForEstimate) {
-            const km = this.statisticalEngine.kaplanMeierEstimate(runLengths, currentDigitCount);
-            predictions.kaplanMeier = {
-                value: km.survival,
-                confidence: Math.min(1, km.sampleSize / 100)
-            };
+            const statReport = this.statisticalEngine.getComprehensiveStatisticalReport(
+                asset, runLengths, this.tickHistories[asset], currentDigitCount
+            );
+
+            // Kaplan-Meier
+            if (statReport.kaplanMeier) {
+                predictions.kaplanMeier = {
+                    value: statReport.kaplanMeier.survival,
+                    confidence: Math.min(1, statReport.kaplanMeier.sampleSize / 100)
+                };
+            }
+
+            // Use composite statistical score as additional signal
+            if (statReport.compositeScore !== undefined) {
+                // This replaces the old simple Bayesian prediction with
+                // a composite of all statistical methods
+            }
         }
 
-        // --- Bayesian Estimate ---
+        // 2. Bayesian Estimate (enhanced)
         const bayesian = this.statisticalEngine.getBayesianEstimate(asset);
         predictions.bayesian = {
             value: bayesian.mean,
-            confidence: Math.min(1, bayesian.confidence / 50)
+            confidence: Math.min(1, bayesian.confidence / 50) *
+                (bayesian.predictionStrength === 'very_weak' ? 0.3 :
+                    bayesian.predictionStrength === 'weak' ? 0.5 :
+                        bayesian.predictionStrength === 'moderate' ? 0.7 :
+                            bayesian.predictionStrength === 'strong' ? 0.9 : 1.0)
         };
 
-        // --- Markov Chain Prediction ---
+        // 3. Markov Chain Prediction
         if (runLengths.length >= 20) {
             const markov = this.patternEngine.predictNextRunState(asset, runLengths, 2);
             if (markov) {
-                const favorableStates = ['medium', 'medium_long', 'long', 'very_long', 'extreme'];
+                const favorableStates = ['medium', 'long', 'very_long'];
                 const favorableProb = favorableStates.reduce((sum, state) =>
                     sum + (markov.predictions[state] || 0), 0);
                 predictions.markov = {
@@ -8775,7 +8579,7 @@ class EnhancedAccumulatorBot {
             }
         }
 
-        // --- Neural Network Prediction ---
+        // 4. Neural Network Prediction
         if (this.config.enableNeuralNetwork && this.neuralEngine.initialized) {
             const features = this.neuralEngine.prepareFeatures(
                 this.tickHistories[asset],
@@ -8784,15 +8588,31 @@ class EnhancedAccumulatorBot {
                 volatilityData.combined
             );
 
-            const neural = this.neuralEngine.predictWithUncertainty(features);
+            const neural = this.neuralEngine.predictWithUncertainty(features, 20);
             predictions.neural = {
                 value: neural.prediction,
                 confidence: neural.confidence
             };
+
+            // Use the neural network's regime assessment as additional signal
+            if (neural.regimeScore < 0.3) {
+                console.log(`[${asset}] 🧠 Neural regime warning: ${neural.regimeScore.toFixed(3)}`);
+                // Could optionally block trade here
+            }
+
+            // Log detailed uncertainty metrics periodically
+            if (this.totalTrades % 25 === 0) {
+                console.log(`[${asset}] 🧠 Neural Uncertainty: epistemic=${neural.epistemicUncertainty.toFixed(4)}, ` +
+                    `aleatoric=${neural.aleatoricUncertainty.toFixed(4)}, ` +
+                    `CI=[${neural.percentiles.p5.toFixed(3)}, ${neural.percentiles.p95.toFixed(3)}]`);
+            }
         }
 
-        // --- Pattern-Based Prediction ---
+        // 5. Pattern-based Prediction (ENHANCED)
         if (this.config.enablePatternRecognition) {
+            const runLengths = this.extendedStayedIn[asset];
+
+            // Get comprehensive pattern analysis
             const patternReport = this.patternEngine.getComprehensiveAnalysis(
                 asset,
                 this.tickHistories[asset],
@@ -8800,6 +8620,7 @@ class EnhancedAccumulatorBot {
             );
 
             if (patternReport.compositeScore !== undefined) {
+                // Use composite score from all pattern analyses
                 const patternConfidence = Math.min(1,
                     (patternReport.regime ? patternReport.regime.confidence : 0) * 0.3 +
                     (patternReport.hurst ? patternReport.hurst.confidence : 0) * 0.2 +
@@ -8811,13 +8632,46 @@ class EnhancedAccumulatorBot {
                     value: patternReport.compositeScore,
                     confidence: patternConfidence
                 };
+
+                // Log detailed pattern report periodically
+                if (this.totalTrades % 15 === 0 && patternReport.regime) {
+                    console.log(`[${asset}] 📊 Pattern Report:`);
+                    console.log(`  Regime: ${patternReport.regime.regime} (${(patternReport.regime.confidence * 100).toFixed(1)}%)`);
+                    if (patternReport.hurst) {
+                        console.log(`  Hurst: ${patternReport.hurst.hurst.toFixed(3)} (${patternReport.hurst.interpretation})`);
+                    }
+                    if (patternReport.changePoints) {
+                        console.log(`  Near Change Point: ${patternReport.changePoints.isNearChangePoint}, Trend: ${patternReport.changePoints.currentTrend}`);
+                    }
+                    if (patternReport.momentum) {
+                        console.log(`  RSI: ${patternReport.momentum.rsi.toFixed(1)}, Z-Score: ${patternReport.momentum.zScore.toFixed(2)}`);
+                    }
+                    if (patternReport.fractal) {
+                        console.log(`  Fractal Dim: ${patternReport.fractal.dimension.toFixed(3)} (${patternReport.fractal.interpretation})`);
+                    }
+                    console.log(`  Composite Score: ${patternReport.compositeScore.toFixed(4)}`);
+                }
+
+                // Additional regime-based safety checks
+                if (patternReport.regime &&
+                    (patternReport.regime.regime === 'volatile' || patternReport.regime.regime === 'unpredictable') &&
+                    patternReport.regime.confidence > 0.5) {
+                    console.log(`[${asset}] 🚨 Pattern engine warns: ${patternReport.regime.regime} regime detected`);
+                }
+
+                // Near change point warning
+                if (patternReport.changePoints && patternReport.changePoints.isNearChangePoint) {
+                    console.log(`[${asset}] ⚠️ Near change point detected - increased risk`);
+                    // Reduce pattern confidence near change points
+                    predictions.pattern.confidence *= 0.7;
+                }
             }
         }
 
         // Store for later recording
         this.lastEnsemblePredictions = predictions;
 
-        // 3. Build Context for Ensemble
+        // Build context for ensemble
         const regime = this.patternEngine.detectRegime(asset, this.extendedStayedIn[asset]);
         const ensembleContext = {
             regime: regime ? regime.regime : 'unknown',
@@ -8829,40 +8683,186 @@ class EnhancedAccumulatorBot {
             stake: this.currentStake,
         };
 
-        // 4. Combine Predictions via Advanced Ensemble
+        // Combine all predictions through advanced ensemble
         const ensemble = this.ensembleDecisionMaker.combinePredicitions(predictions, ensembleContext);
 
-        // 5. Calculate Survival Probability (Primary Filter)
-        const survivalCheck = this.shouldTradeBasedOnSurvivalProb(asset, stayedInArray);
-        const survivalProb = this.survivalNum || 0.5;
+        console.log(`[${asset}] Ensemble Decision: score=${ensemble.score.toFixed(3)} ` +
+            `(threshold=${ensemble.threshold.toFixed(3)}) | ` +
+            `agreement=${ensemble.agreement.toFixed(3)} | ` +
+            `reason=${ensemble.reason} | ` +
+            `shouldTrade=${ensemble.shouldTrade}`);
 
-        // 6. Final Decision Logic
-        const shouldTrade = ensemble.shouldTrade &&
-            survivalCheck &&
-            survivalProb > this.config.survivalThreshold;
-
-        // 7. Extract Model Contributions for Logging
-        const modelContributions = {};
         if (ensemble.details && ensemble.details.combinationMethods) {
             const methods = ensemble.details.combinationMethods;
-            Object.keys(predictions).forEach(model => {
-                if (methods.weighted && methods.weighted.contributions && methods.weighted.contributions[model]) {
-                    modelContributions[model] = (methods.weighted.contributions[model].contribution * 100).toFixed(1) + '%';
-                }
-            });
+            console.log(`[${asset}]   Methods: weighted=${methods.weighted.score.toFixed(3)}, ` +
+                `stacking=${methods.stacking.score.toFixed(3)}, ` +
+                `bandit=${methods.bandit.score.toFixed(3)}, ` +
+                `rank=${methods.rank.score.toFixed(3)}`);
         }
+
+        // Additional check with survival threshold
+        const survivalCheck = this.shouldTradeBasedOnSurvivalProb(asset, stayedInArray);
+
+        // Final decision
+        const shouldTrade = ensemble.shouldTrade &&
+            survivalCheck &&
+            this.survivalNum > this.config.survivalThreshold;
+
+        // Extract model contributions for logging
+        const modelContributions = {};
+        Object.entries(predictions).forEach(([model, pred]) => {
+            if (pred) {
+                modelContributions[model] = (pred.value * 100).toFixed(1) + '%';
+            }
+        });
 
         return {
             shouldTrade,
             ensembleScore: ensemble.score,
-            agreement: ensemble.agreement,
-            survivalProb: survivalProb,
-            threshold: ensemble.threshold,
+            confidence: ensemble.agreement,
+            survivalProb: this.survivalNum,
             modelContributions,
-            reason: ensemble.reason,
-            details: ensemble.details
+            threshold: this.ensembleDecisionMaker.adaptiveThreshold
         };
     }
+
+    // makeEnhancedTradeDecision(asset, stayedInArray) {
+    //     const currentDigitCount = stayedInArray[99] + 1;
+    //     const runLengths = this.extendedStayedIn[asset];
+    //     const volatilityData = this.calculateVolatility(asset);
+
+    //     // 1. Safety Checks (Pre-Decision)
+    //     if (this.detectDangerousPattern(asset, currentDigitCount, stayedInArray)) {
+    //         return { shouldTrade: false, ensembleScore: 0, reason: 'dangerous_pattern' };
+    //     }
+    //     if (this.detectDangerousPattern2(asset)) {
+    //         return { shouldTrade: false, ensembleScore: 0, reason: 'short_run_pattern' };
+    //     }
+    //     if (!this.isMarketConditionFavorable(asset)) {
+    //         return { shouldTrade: false, ensembleScore: 0, reason: 'unfavorable_market' };
+    //     }
+
+    //     // 2. Collect Predictions from All Models
+    //     const predictions = {};
+
+    //     // --- Kaplan-Meier Survival ---
+    //     if (runLengths.length >= this.config.minSamplesForEstimate) {
+    //         const km = this.statisticalEngine.kaplanMeierEstimate(runLengths, currentDigitCount);
+    //         predictions.kaplanMeier = {
+    //             value: km.survival,
+    //             confidence: Math.min(1, km.sampleSize / 100)
+    //         };
+    //     }
+
+    //     // --- Bayesian Estimate ---
+    //     const bayesian = this.statisticalEngine.getBayesianEstimate(asset);
+    //     predictions.bayesian = {
+    //         value: bayesian.mean,
+    //         confidence: Math.min(1, bayesian.confidence / 50)
+    //     };
+
+    //     // --- Markov Chain Prediction ---
+    //     if (runLengths.length >= 20) {
+    //         const markov = this.patternEngine.predictNextRunState(asset, runLengths, 2);
+    //         if (markov) {
+    //             const favorableStates = ['medium', 'medium_long', 'long', 'very_long', 'extreme'];
+    //             const favorableProb = favorableStates.reduce((sum, state) =>
+    //                 sum + (markov.predictions[state] || 0), 0);
+    //             predictions.markov = {
+    //                 value: favorableProb,
+    //                 confidence: Math.min(1, markov.confidence / 30)
+    //             };
+    //         }
+    //     }
+
+    //     // --- Neural Network Prediction ---
+    //     if (this.config.enableNeuralNetwork && this.neuralEngine.initialized) {
+    //         const features = this.neuralEngine.prepareFeatures(
+    //             this.tickHistories[asset],
+    //             runLengths,
+    //             currentDigitCount,
+    //             volatilityData.combined
+    //         );
+
+    //         const neural = this.neuralEngine.predictWithUncertainty(features);
+    //         predictions.neural = {
+    //             value: neural.prediction,
+    //             confidence: neural.confidence
+    //         };
+    //     }
+
+    //     // --- Pattern-Based Prediction ---
+    //     if (this.config.enablePatternRecognition) {
+    //         const patternReport = this.patternEngine.getComprehensiveAnalysis(
+    //             asset,
+    //             this.tickHistories[asset],
+    //             runLengths
+    //         );
+
+    //         if (patternReport.compositeScore !== undefined) {
+    //             const patternConfidence = Math.min(1,
+    //                 (patternReport.regime ? patternReport.regime.confidence : 0) * 0.3 +
+    //                 (patternReport.hurst ? patternReport.hurst.confidence : 0) * 0.2 +
+    //                 (patternReport.sequentialPatterns ? patternReport.sequentialPatterns.confidence : 0) * 0.25 +
+    //                 (patternReport.markov ? Math.min(1, patternReport.markov.confidence / 10) : 0) * 0.25
+    //             );
+
+    //             predictions.pattern = {
+    //                 value: patternReport.compositeScore,
+    //                 confidence: patternConfidence
+    //             };
+    //         }
+    //     }
+
+    //     // Store for later recording
+    //     this.lastEnsemblePredictions = predictions;
+
+    //     // 3. Build Context for Ensemble
+    //     const regime = this.patternEngine.detectRegime(asset, this.extendedStayedIn[asset]);
+    //     const ensembleContext = {
+    //         regime: regime ? regime.regime : 'unknown',
+    //         regimeConfidence: regime ? regime.confidence : 0,
+    //         consecutiveLosses: this.consecutiveLosses,
+    //         asset,
+    //         currentDigitCount,
+    //         volatility: volatilityData.combined,
+    //         stake: this.currentStake,
+    //     };
+
+    //     // 4. Combine Predictions via Advanced Ensemble
+    //     const ensemble = this.ensembleDecisionMaker.combinePredicitions(predictions, ensembleContext);
+
+    //     // 5. Calculate Survival Probability (Primary Filter)
+    //     const survivalCheck = this.shouldTradeBasedOnSurvivalProb(asset, stayedInArray);
+    //     const survivalProb = this.survivalNum || 0.5;
+
+    //     // 6. Final Decision Logic
+    //     const shouldTrade = ensemble.shouldTrade &&
+    //         survivalCheck &&
+    //         survivalProb > this.config.survivalThreshold;
+
+    //     // 7. Extract Model Contributions for Logging
+    //     const modelContributions = {};
+    //     if (ensemble.details && ensemble.details.combinationMethods) {
+    //         const methods = ensemble.details.combinationMethods;
+    //         Object.keys(predictions).forEach(model => {
+    //             if (methods.weighted && methods.weighted.contributions && methods.weighted.contributions[model]) {
+    //                 modelContributions[model] = (methods.weighted.contributions[model].contribution * 100).toFixed(1) + '%';
+    //             }
+    //         });
+    //     }
+
+    //     return {
+    //         shouldTrade,
+    //         ensembleScore: ensemble.score,
+    //         agreement: ensemble.agreement,
+    //         survivalProb: survivalProb,
+    //         threshold: ensemble.threshold,
+    //         modelContributions,
+    //         reason: ensemble.reason,
+    //         details: ensemble.details
+    //     };
+    // }
 
     /**
      * Survival probability check (enhanced from original)
