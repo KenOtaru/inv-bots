@@ -2106,10 +2106,10 @@ class EnhancedAccumulatorBot {
         }
 
         // Check consecutive losses
-        if (assetState.consecutiveLosses >= 2) {
-            console.log(`[${asset}] Too many consecutive losses on this asset`);
-            return false;
-        }
+        // if (assetState.consecutiveLosses >= 2) {
+        //     console.log(`[${asset}] Too many consecutive losses on this asset`);
+        //     return false;
+        // }
 
         // Check Bayesian confidence
         const bayesian = this.statisticalEngine.getBayesianEstimate(asset);
@@ -2605,25 +2605,12 @@ class EnhancedAccumulatorBot {
         const profit = parseFloat(contract.profit);
         const assetState = this.assetStates[asset];
 
-        if (assetState) {
-            assetState.tradeInProgress = false;
-            assetState.lastTradeResult = won ? 'win' : 'loss';
-        }
-
         console.log(`[${asset}] Trade outcome: ${won ? '✅ WON' : '❌ LOST'}`);
 
-        if (!this.hourlyStats) {
-            this.hourlyStats = { trades: 0, wins: 0, losses: 0, pnl: 0, lastHour: new Date().getHours() };
-        }
         this.hourlyStats.trades++;
         this.hourlyStats.pnl += profit;
         if (won) this.hourlyStats.wins++;
         else this.hourlyStats.losses++;
-
-        // Record outcome for enhanced learning
-        const digitCount = assetState.stayedInArray[99] + 1;
-        const filterUsed = this.learningSystem.adaptiveFilters[asset];
-        this.recordTradeOutcome(asset, won, digitCount, filterUsed, assetState.stayedInArray);
 
         this.totalTrades++;
 
@@ -2656,9 +2643,11 @@ class EnhancedAccumulatorBot {
                 this.currentStake = this.config.initialStake;
             }
 
-            if (assetState) {
-                assetState.consecutiveLosses = 0;
-            }
+            this.consecutiveLosses = 0;
+
+            // if (assetState) {
+            //     assetState.consecutiveLosses = 0;
+            // }
         } else {
             this.totalLosses++;
             this.consecutiveLosses++;
@@ -2686,6 +2675,21 @@ class EnhancedAccumulatorBot {
         }
 
         this.totalProfitLoss += profit;
+
+        if (!this.hourlyStats) {
+            this.hourlyStats = { trades: 0, wins: 0, losses: 0, pnl: 0, lastHour: new Date().getHours() };
+        }
+
+        if (assetState) {
+            assetState.tradeInProgress = false;
+            assetState.lastTradeResult = won ? 'win' : 'loss';
+        }
+
+        // Record outcome for enhanced learning
+        const digitCount = assetState.stayedInArray[99] + 1;
+        const filterUsed = this.learningSystem.adaptiveFilters[asset];
+        this.recordTradeOutcome(asset, won, digitCount, filterUsed, assetState.stayedInArray);
+
 
         const resultEmoji = won ? '✅ WIN' : '❌ LOSS';
         const pnlStr = (profit >= 0 ? '+' : '') + '$' + Math.abs(profit).toFixed(2);
@@ -2777,6 +2781,10 @@ class EnhancedAccumulatorBot {
             this.disconnect();
             return;
         }
+
+        // Learning mode counter
+        this.observationCount = 0;
+        this.learningMode = true;
 
         this.tradeInProgress = false;
         this.Pause = false;
