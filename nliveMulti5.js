@@ -5554,229 +5554,1894 @@ class NeuralEngine {
 }
 
 // ============================================================================
-// TIER 4: ENSEMBLE DECISION MAKER
+// TIER 4: ADVANCED ENSEMBLE DECISION MAKER
 // ============================================================================
 
 class EnsembleDecisionMaker {
     constructor() {
-        this.modelWeights = {
-            kaplanMeier: 0.25,
-            bayesian: 0.20,
-            markov: 0.15,
-            neural: 0.25,
-            pattern: 0.15
-        };
+        // ================================================================
+        // MODEL REGISTRY
+        // ================================================================
+        this.registeredModels = [
+            'kaplanMeier', 'bayesian', 'markov', 'neural', 'pattern'
+        ];
 
-        this.modelPerformance = {
-            kaplanMeier: { correct: 0, total: 0 },
-            bayesian: { correct: 0, total: 0 },
-            markov: { correct: 0, total: 0 },
-            neural: { correct: 0, total: 0 },
-            pattern: { correct: 0, total: 0 }
-        };
+        // ================================================================
+        // DYNAMIC WEIGHTS
+        // ================================================================
+        this.modelWeights = {};
+        this.registeredModels.forEach(m => { this.modelWeights[m] = 1 / this.registeredModels.length; });
 
+        // Per-model performance tracking with recency weighting
+        this.modelPerformance = {};
+        this.registeredModels.forEach(m => {
+            this.modelPerformance[m] = {
+                correct: 0,
+                total: 0,
+                recentCorrect: [],    // sliding window of booleans
+                recentPredictions: [], // sliding window of {prediction, actual, timestamp}
+                calibration: {        // calibration bins
+                    bins: {},
+                    totalSamples: 0,
+                },
+                streaks: {
+                    currentCorrect: 0,
+                    currentWrong: 0,
+                    maxCorrect: 0,
+                    maxWrong: 0,
+                },
+                regimePerformance: {},    // performance per market regime
+                timeOfDayPerformance: {}, // performance per hour
+                confidencePerformance: {  // performance at different confidence levels
+                    high: { correct: 0, total: 0 },
+                    medium: { correct: 0, total: 0 },
+                    low: { correct: 0, total: 0 },
+                },
+            };
+        });
+
+        // ================================================================
+        // STACKING META-LEARNER
+        // ================================================================
+        this.stackingWeights = null;
+        this.stackingBias = 0;
+        this.stackingHistory = [];
+        this.stackingLearningRate = 0.01;
+        this.stackingMomentum = 0.9;
+        this.stackingVelocity = null;
+
+        // ================================================================
+        // CONTEXTUAL BANDIT
+        // ================================================================
+        this.banditState = {};
+        this.registeredModels.forEach(m => {
+            this.banditState[m] = {
+                alpha: 1,  // successes
+                beta: 1,   // failures
+                pulls: 0,
+            };
+        });
+        this.banditExplorationRate = 0.15;
+        this.banditDecayRate = 0.995;
+
+        // ================================================================
+        // CONFIDENCE CALIBRATION (Platt Scaling)
+        // ================================================================
+        this.calibrationParams = {};
+        this.registeredModels.forEach(m => {
+            this.calibrationParams[m] = { a: 1, b: 0 }; // sigmoid: 1/(1+exp(a*x+b))
+        });
+        this.calibrationHistory = {};
+        this.registeredModels.forEach(m => {
+            this.calibrationHistory[m] = [];
+        });
+
+        // ================================================================
+        // MODEL CORRELATION TRACKING
+        // ================================================================
+        this.modelPredictionHistory = {};
+        this.registeredModels.forEach(m => {
+            this.modelPredictionHistory[m] = [];
+        });
+        this.correlationMatrix = {};
+
+        // ================================================================
+        // DECISION HISTORY & JOURNALING
+        // ================================================================
         this.recentDecisions = [];
+        this.decisionJournal = [];
+        this.counterfactualLog = [];
+
+        // ================================================================
+        // THRESHOLD MANAGEMENT
+        // ================================================================
+        this.adaptiveThreshold = 0.7;
         this.thresholdHistory = [];
-        this.adaptiveThreshold = 0.7; // Default threshold;
+        this.thresholdOptimizer = {
+            candidates: [0.55, 0.60, 0.625, 0.65, 0.675, 0.70, 0.725, 0.75, 0.775, 0.80, 0.825, 0.85],
+            performance: {},
+            bayesianParams: {},
+        };
+        this.thresholdOptimizer.candidates.forEach(t => {
+            this.thresholdOptimizer.performance[t] = { wins: 0, losses: 0, trades: 0, pnl: 0 };
+            this.thresholdOptimizer.bayesianParams[t] = { alpha: 1, beta: 1 };
+        });
+
+        // ================================================================
+        // MULTI-TIMEFRAME STATE
+        // ================================================================
+        this.timeframeWindows = {
+            short: 30,
+            medium: 100,
+            long: 300,
+        };
+        this.timeframePerformance = {};
+        Object.keys(this.timeframeWindows).forEach(tf => {
+            this.timeframePerformance[tf] = {
+                decisions: [],
+                winRate: 0.5,
+                avgScore: 0.5,
+            };
+        });
+
+        // ================================================================
+        // CASCADING PIPELINE
+        // ================================================================
+        this.cascadeStages = [
+            { name: 'safety_check', threshold: 0.30, action: 'reject' },
+            { name: 'minimum_agreement', minAgreement: 0.25, action: 'reject' },
+            { name: 'confidence_gate', minConfidence: 0.35, action: 'reject' },
+            { name: 'regime_filter', blockedRegimes: ['volatile', 'unpredictable'], action: 'reject' },
+            { name: 'final_decision', threshold: null, action: 'evaluate' }, // uses adaptive
+        ];
+
+        // ================================================================
+        // RISK MANAGEMENT
+        // ================================================================
+        this.riskMetrics = {
+            kellyFraction: 0,
+            sharpeRatio: 0,
+            maxDrawdown: 0,
+            currentDrawdown: 0,
+            peakPnL: 0,
+            volatilityOfReturns: 0,
+            winStreak: 0,
+            lossStreak: 0,
+            returnsHistory: [],
+        };
+
+        // ================================================================
+        // CONFIGURATION
+        // ================================================================
+        this.config = {
+            recentWindowSize: 100,
+            minSamplesForWeightUpdate: 15,
+            weightUpdateInterval: 5,
+            correlationWindowSize: 50,
+            calibrationInterval: 25,
+            stackingMinSamples: 30,
+            maxDecisionHistory: 1000,
+            maxJournalSize: 500,
+            kellyFractionalMultiplier: 0.25, // Quarter-Kelly for safety
+            thresholdSmoothingFactor: 0.15,
+            minModelsForDecision: 2,
+            diversityBonus: 0.05,
+        };
     }
 
+    // ====================================================================
+    // MAIN DECISION PIPELINE
+    // ====================================================================
+
     /**
-     * Combine predictions from all models
+     * Primary entry point: combine predictions through cascading pipeline
      */
-    combinePredicitions(predictions) {
-        let weightedSum = 0;
-        let totalWeight = 0;
-        const details = {};
+    combinePredicitions(predictions, context = {}) {
+        const startTime = Date.now();
+
+        // Step 0: Validate and filter predictions
+        const validPredictions = this._validatePredictions(predictions);
+        const numValidModels = Object.keys(validPredictions).length;
+
+        if (numValidModels < this.config.minModelsForDecision) {
+            return this._createDecisionResult(0.5, 0, false, 'insufficient_models', {}, context);
+        }
+
+        // Step 1: Calibrate raw predictions
+        const calibratedPredictions = this._calibratePredictions(validPredictions);
+
+        // Step 2: Run cascading pipeline
+        const cascadeResult = this._runCascadePipeline(calibratedPredictions, context);
+        if (cascadeResult.rejected) {
+            return this._createDecisionResult(
+                cascadeResult.score, cascadeResult.agreement, false,
+                `cascade_rejected:${cascadeResult.stage}`, cascadeResult.details, context
+            );
+        }
+
+        // Step 3: Compute ensemble score using multiple combination methods
+        const weightedScore = this._weightedAverageScore(calibratedPredictions);
+        const stackingScore = this._stackingScore(calibratedPredictions);
+        const banditScore = this._banditWeightedScore(calibratedPredictions);
+        const rankScore = this._rankBasedScore(calibratedPredictions);
+
+        // Step 4: Combine combination methods (meta-ensemble)
+        const metaWeights = this._getMetaCombinationWeights();
+        const ensembleScore =
+            metaWeights.weighted * weightedScore.score +
+            metaWeights.stacking * stackingScore.score +
+            metaWeights.bandit * banditScore.score +
+            metaWeights.rank * rankScore.score;
+
+        // Step 5: Compute agreement and diversity metrics
+        const agreementMetrics = this._computeAgreementMetrics(calibratedPredictions);
+
+        // Step 6: Multi-timeframe consensus
+        const timeframeConsensus = this._multiTimeframeConsensus(ensembleScore, context);
+
+        // Step 7: Risk-adjusted decision
+        const riskAdjustedScore = this._applyRiskAdjustment(ensembleScore, agreementMetrics);
+
+        // Step 8: Final threshold comparison
+        const effectiveThreshold = this._getEffectiveThreshold(context);
+        const shouldTrade =
+            riskAdjustedScore >= effectiveThreshold &&
+            agreementMetrics.calibratedAgreement > 0.35 &&
+            timeframeConsensus.consensus >= 0.5;
+
+        // Build detailed decision breakdown
+        const details = {
+            rawScores: {},
+            calibratedScores: {},
+            combinationMethods: {
+                weighted: weightedScore,
+                stacking: stackingScore,
+                bandit: banditScore,
+                rank: rankScore,
+            },
+            metaWeights,
+            agreementMetrics,
+            timeframeConsensus,
+            riskAdjustedScore,
+            effectiveThreshold,
+            cascadeResult,
+            processingTimeMs: Date.now() - startTime,
+        };
+
+        Object.entries(validPredictions).forEach(([model, pred]) => {
+            details.rawScores[model] = pred.value;
+        });
+        Object.entries(calibratedPredictions).forEach(([model, pred]) => {
+            details.calibratedScores[model] = pred.calibratedValue;
+        });
+
+        return this._createDecisionResult(
+            riskAdjustedScore, agreementMetrics.calibratedAgreement,
+            shouldTrade, shouldTrade ? 'approved' : 'below_threshold',
+            details, context
+        );
+    }
+
+    // ====================================================================
+    // PREDICTION VALIDATION & CALIBRATION
+    // ====================================================================
+
+    _validatePredictions(predictions) {
+        const valid = {};
 
         Object.entries(predictions).forEach(([model, pred]) => {
-            if (pred !== null && pred !== undefined && !isNaN(pred.value)) {
-                const weight = this.modelWeights[model] || 0.1;
-                const confidence = pred.confidence || 1;
-                const adjustedWeight = weight * confidence;
+            if (pred !== null && pred !== undefined &&
+                typeof pred === 'object' &&
+                typeof pred.value === 'number' &&
+                !isNaN(pred.value) &&
+                pred.value >= 0 && pred.value <= 1) {
 
-                weightedSum += pred.value * adjustedWeight;
-                totalWeight += adjustedWeight;
-
-                details[model] = {
-                    value: pred.value,
-                    weight: adjustedWeight,
-                    contribution: pred.value * adjustedWeight
+                valid[model] = {
+                    ...pred,
+                    confidence: Math.max(0, Math.min(1, pred.confidence || 0.5)),
                 };
             }
         });
 
-        const ensembleScore = totalWeight > 0 ? weightedSum / totalWeight : 0.5;
-
-        // Calculate agreement (how much models agree)
-        const values = Object.values(predictions)
-            .filter(p => p !== null && p !== undefined)
-            .map(p => p.value);
-
-        const agreement = values.length > 1 ?
-            1 - (Math.max(...values) - Math.min(...values)) : 0;
-
-        // console.log('Adaptive Threshold:', this.adaptiveThreshold);
-
-        return {
-            score: ensembleScore,
-            agreement,
-            details,
-            shouldTrade: ensembleScore >= this.adaptiveThreshold && agreement > 0.5
-        };
+        return valid;
     }
 
-    /**
-     * Record outcome and update model weights
-     */
-    recordOutcome(predictions, actualOutcome) {
+    _calibratePredictions(predictions) {
+        const calibrated = {};
+
         Object.entries(predictions).forEach(([model, pred]) => {
-            if (pred !== null && pred !== undefined) {
-                const predicted = pred.value >= 0.5;
-                const actual = actualOutcome;
+            const params = this.calibrationParams[model] || { a: 1, b: 0 };
+            const rawValue = pred.value;
 
-                this.modelPerformance[model].total++;
-                if (predicted === actual) {
-                    this.modelPerformance[model].correct++;
-                }
-            }
-        });
+            // Platt scaling: calibrated = sigmoid(a * raw + b)
+            const logit = params.a * rawValue + params.b;
+            const calibratedValue = 1 / (1 + Math.exp(-Math.max(-500, Math.min(500, logit))));
 
-        // Update weights based on performance
-        this.updateModelWeights();
-
-        // Record decision for threshold optimization
-        this.recentDecisions.push({
-            predictions,
-            outcome: actualOutcome,
-            timestamp: Date.now()
-        });
-
-        if (this.recentDecisions.length > 500) {
-            this.recentDecisions.shift();
-        }
-    }
-
-    /**
-     * Update model weights based on recent performance
-     */
-    updateModelWeights() {
-        const minSamples = 20;
-        let totalAccuracy = 0;
-        const accuracies = {};
-
-        Object.entries(this.modelPerformance).forEach(([model, perf]) => {
-            if (perf.total >= minSamples) {
-                const accuracy = perf.correct / perf.total;
-                accuracies[model] = accuracy;
-                totalAccuracy += accuracy;
-            }
-        });
-
-        // Normalize weights by accuracy
-        if (totalAccuracy > 0 && Object.keys(accuracies).length > 0) {
-            Object.entries(accuracies).forEach(([model, accuracy]) => {
-                // Exponential weighting favors better models
-                this.modelWeights[model] = Math.pow(accuracy, 2) / totalAccuracy;
-            });
-
-            // Normalize to sum to 1
-            const sum = Object.values(this.modelWeights).reduce((a, b) => a + b, 0);
-            Object.keys(this.modelWeights).forEach(model => {
-                this.modelWeights[model] /= sum;
-            });
-        }
-    }
-
-    /**
-     * Optimize trading threshold based on historical performance
-     */
-    optimizeThreshold() {
-        if (this.recentDecisions.length < 5) return;
-
-        const thresholds = [0.6, 0.65, 0.7, 0.75, 0.8]; //[0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8];
-        let bestThreshold = 0.7;
-        let bestScore = -Infinity;
-
-        thresholds.forEach(threshold => {
-            let wins = 0;
-            let losses = 0;
-            let trades = 0;
-
-            this.recentDecisions.forEach(decision => {
-                const ensemble = this.combinePredicitions(decision.predictions);
-                if (ensemble.score > threshold) {
-                    trades++;
-                    if (decision.outcome) {
-                        wins++;
-                    } else {
-                        losses++;
-                    }
-                }
-            });
-
-            // Score = win rate * sqrt(trade frequency)
-            if (trades > 10) {
-                const winRate = wins / trades;
-                const frequency = trades / this.recentDecisions.length;
-                const score = winRate * Math.sqrt(frequency);
-
-                if (score > bestScore) {
-                    bestScore = score;
-                    bestThreshold = threshold;
-                }
-            }
-        });
-
-        // Smooth transition to new threshold
-        this.adaptiveThreshold = 0.8 * this.adaptiveThreshold + 0.2 * bestThreshold;
-
-        this.thresholdHistory.push({
-            threshold: this.adaptiveThreshold,
-            timestamp: Date.now()
-        });
-    }
-
-    /**
-     * Get current model performance summary
-     */
-    getPerformanceSummary() {
-        const summary = {};
-
-        Object.entries(this.modelPerformance).forEach(([model, perf]) => {
-            summary[model] = {
-                accuracy: perf.total > 0 ? (perf.correct / perf.total * 100).toFixed(1) + '%' : 'N/A',
-                samples: perf.total,
-                weight: (this.modelWeights[model] * 100).toFixed(1) + '%'
+            calibrated[model] = {
+                ...pred,
+                rawValue,
+                calibratedValue,
+                calibratedConfidence: Math.max(0, Math.min(1,
+                    pred.confidence * (1 - this._getCalibrationError(model))
+                )),
             };
         });
 
+        return calibrated;
+    }
+
+    _getCalibrationError(model) {
+        const history = this.calibrationHistory[model];
+        if (!history || history.length < 20) return 0.3;
+
+        // Expected Calibration Error (ECE)
+        const bins = {};
+        history.slice(-100).forEach(h => {
+            const bin = Math.floor(h.prediction * 10) / 10;
+            if (!bins[bin]) bins[bin] = { predicted: 0, actual: 0, count: 0 };
+            bins[bin].predicted += h.prediction;
+            bins[bin].actual += h.actual ? 1 : 0;
+            bins[bin].count++;
+        });
+
+        let ece = 0;
+        let totalCount = 0;
+        Object.values(bins).forEach(bin => {
+            if (bin.count >= 3) {
+                const avgPred = bin.predicted / bin.count;
+                const avgActual = bin.actual / bin.count;
+                ece += Math.abs(avgPred - avgActual) * bin.count;
+                totalCount += bin.count;
+            }
+        });
+
+        return totalCount > 0 ? ece / totalCount : 0.3;
+    }
+
+    // ====================================================================
+    // CASCADING DECISION PIPELINE
+    // ====================================================================
+
+    _runCascadePipeline(predictions, context) {
+        const values = Object.values(predictions).map(p => p.calibratedValue);
+        const meanScore = values.reduce((a, b) => a + b, 0) / values.length;
+
+        // Stage 1: Safety check - reject if average score too low
+        if (meanScore < this.cascadeStages[0].threshold) {
+            return {
+                rejected: true,
+                stage: 'safety_check',
+                score: meanScore,
+                agreement: 0,
+                details: { meanScore, threshold: this.cascadeStages[0].threshold },
+            };
+        }
+
+        // Stage 2: Minimum agreement
+        const range = Math.max(...values) - Math.min(...values);
+        const agreement = 1 - range;
+        if (agreement < this.cascadeStages[1].minAgreement) {
+            return {
+                rejected: true,
+                stage: 'minimum_agreement',
+                score: meanScore,
+                agreement,
+                details: { range, agreement, minRequired: this.cascadeStages[1].minAgreement },
+            };
+        }
+
+        // Stage 3: Confidence gate
+        const avgConfidence = Object.values(predictions)
+            .reduce((a, p) => a + p.calibratedConfidence, 0) / Object.keys(predictions).length;
+        if (avgConfidence < this.cascadeStages[2].minConfidence) {
+            return {
+                rejected: true,
+                stage: 'confidence_gate',
+                score: meanScore,
+                agreement,
+                details: { avgConfidence, minRequired: this.cascadeStages[2].minConfidence },
+            };
+        }
+
+        // Stage 4: Regime filter
+        if (context.regime && this.cascadeStages[3].blockedRegimes.includes(context.regime)) {
+            const regimeConfidence = context.regimeConfidence || 0;
+            if (regimeConfidence > 0.5) {
+                return {
+                    rejected: true,
+                    stage: 'regime_filter',
+                    score: meanScore,
+                    agreement,
+                    details: { regime: context.regime, regimeConfidence },
+                };
+            }
+        }
+
         return {
-            models: summary,
-            adaptiveThreshold: this.adaptiveThreshold.toFixed(3),
-            totalDecisions: this.recentDecisions.length
+            rejected: false,
+            score: meanScore,
+            agreement,
+            details: { passedAllStages: true, avgConfidence },
+        };
+    }
+
+    // ====================================================================
+    // COMBINATION METHODS
+    // ====================================================================
+
+    /**
+     * Method 1: Dynamic Weighted Average with recency-aware weights
+     */
+    _weightedAverageScore(predictions) {
+        let weightedSum = 0;
+        let totalWeight = 0;
+        const contributions = {};
+
+        Object.entries(predictions).forEach(([model, pred]) => {
+            const baseWeight = this.modelWeights[model] || (1 / this.registeredModels.length);
+            const confidenceMultiplier = 0.5 + 0.5 * pred.calibratedConfidence;
+
+            // Recency-adjusted accuracy
+            const recentAccuracy = this._getRecentAccuracy(model, 50);
+            const accuracyMultiplier = 0.3 + 0.7 * recentAccuracy;
+
+            const effectiveWeight = baseWeight * confidenceMultiplier * accuracyMultiplier;
+
+            weightedSum += pred.calibratedValue * effectiveWeight;
+            totalWeight += effectiveWeight;
+
+            contributions[model] = {
+                value: pred.calibratedValue,
+                weight: effectiveWeight,
+                contribution: pred.calibratedValue * effectiveWeight,
+                recentAccuracy,
+            };
+        });
+
+        const score = totalWeight > 0 ? weightedSum / totalWeight : 0.5;
+
+        return { score, contributions, totalWeight };
+    }
+
+    /**
+     * Method 2: Stacking Meta-Learner (logistic regression on model outputs)
+     */
+    _stackingScore(predictions) {
+        const modelKeys = this.registeredModels;
+        const numModels = modelKeys.length;
+
+        // Initialize stacking weights if needed
+        if (!this.stackingWeights) {
+            this.stackingWeights = new Array(numModels).fill(1 / numModels);
+            this.stackingVelocity = new Array(numModels).fill(0);
+        }
+
+        // Build input vector from predictions
+        const inputVector = modelKeys.map(model => {
+            const pred = predictions[model];
+            return pred ? pred.calibratedValue : 0.5;
+        });
+
+        // Linear combination + sigmoid
+        let logit = this.stackingBias;
+        for (let i = 0; i < numModels; i++) {
+            logit += this.stackingWeights[i] * inputVector[i];
+        }
+
+        const score = 1 / (1 + Math.exp(-Math.max(-500, Math.min(500, logit))));
+
+        return {
+            score,
+            logit,
+            weights: [...this.stackingWeights],
+            bias: this.stackingBias,
+            hasSufficientData: this.stackingHistory.length >= this.config.stackingMinSamples,
         };
     }
 
     /**
-     * Export state for persistence
+     * Method 3: Contextual Bandit Weighted Score (Thompson Sampling)
      */
+    _banditWeightedScore(predictions) {
+        const sampledWeights = {};
+        let totalSampled = 0;
+
+        // Thompson Sampling: draw from Beta posteriors
+        Object.entries(this.banditState).forEach(([model, state]) => {
+            const sample = this._betaSample(state.alpha, state.beta);
+            sampledWeights[model] = sample;
+            totalSampled += sample;
+        });
+
+        // Normalize
+        if (totalSampled > 0) {
+            Object.keys(sampledWeights).forEach(m => {
+                sampledWeights[m] /= totalSampled;
+            });
+        }
+
+        let score = 0;
+        Object.entries(predictions).forEach(([model, pred]) => {
+            const weight = sampledWeights[model] || (1 / this.registeredModels.length);
+            score += pred.calibratedValue * weight;
+        });
+
+        return {
+            score,
+            sampledWeights,
+            explorationRate: this.banditExplorationRate,
+        };
+    }
+
+    /**
+     * Method 4: Rank-Based Aggregation (Borda Count inspired)
+     */
+    _rankBasedScore(predictions) {
+        const models = Object.keys(predictions);
+        const n = models.length;
+
+        if (n === 0) return { score: 0.5 };
+
+        // Rank predictions
+        const sorted = models
+            .map(m => ({ model: m, value: predictions[m].calibratedValue }))
+            .sort((a, b) => b.value - a.value);
+
+        // Assign ranks (higher prediction = higher rank)
+        const ranks = {};
+        sorted.forEach((item, idx) => {
+            ranks[item.model] = (n - idx) / n; // Normalized to [0, 1]
+        });
+
+        // Weight by model reliability
+        let weightedRankSum = 0;
+        let totalWeight = 0;
+
+        Object.entries(ranks).forEach(([model, rank]) => {
+            const reliability = this._getRecentAccuracy(model, 30);
+            const weight = 0.3 + 0.7 * reliability;
+            weightedRankSum += rank * weight;
+            totalWeight += weight;
+        });
+
+        // Combine rank score with mean prediction
+        const rankScore = totalWeight > 0 ? weightedRankSum / totalWeight : 0.5;
+        const meanPred = Object.values(predictions)
+            .reduce((a, p) => a + p.calibratedValue, 0) / n;
+
+        // Blend rank score with mean (rank provides ordering, mean provides scale)
+        const score = 0.4 * rankScore + 0.6 * meanPred;
+
+        return { score, ranks, meanPrediction: meanPred };
+    }
+
+    /**
+     * Get meta-combination weights (how much to trust each combination method)
+     */
+    _getMetaCombinationWeights() {
+        // Start with equal weights and adjust based on stacking availability
+        const weights = {
+            weighted: 0.35,
+            stacking: 0.25,
+            bandit: 0.20,
+            rank: 0.20,
+        };
+
+        // Reduce stacking weight if insufficient training data
+        if (this.stackingHistory.length < this.config.stackingMinSamples) {
+            const deficit = weights.stacking * 0.6;
+            weights.stacking *= 0.4;
+            weights.weighted += deficit * 0.5;
+            weights.bandit += deficit * 0.3;
+            weights.rank += deficit * 0.2;
+        }
+
+        // Normalize
+        const sum = Object.values(weights).reduce((a, b) => a + b, 0);
+        Object.keys(weights).forEach(k => { weights[k] /= sum; });
+
+        return weights;
+    }
+
+    // ====================================================================
+    // AGREEMENT & DIVERSITY METRICS
+    // ====================================================================
+
+    _computeAgreementMetrics(predictions) {
+        const values = Object.values(predictions).map(p => p.calibratedValue);
+        const confidences = Object.values(predictions).map(p => p.calibratedConfidence);
+        const n = values.length;
+
+        if (n < 2) {
+            return {
+                rawAgreement: 0,
+                calibratedAgreement: 0,
+                diversity: 0,
+                unanimity: false,
+                splitDecision: false,
+            };
+        }
+
+        // Range-based agreement
+        const range = Math.max(...values) - Math.min(...values);
+        const rawAgreement = 1 - range;
+
+        // Standard deviation-based agreement
+        const mean = values.reduce((a, b) => a + b, 0) / n;
+        const std = Math.sqrt(values.reduce((a, b) => a + (b - mean) ** 2, 0) / n);
+        const stdAgreement = Math.max(0, 1 - std * 3); // Scale so std=0.33 → agreement=0
+
+        // Confidence-weighted agreement
+        let confWeightedMean = 0;
+        let confTotalWeight = 0;
+        values.forEach((v, i) => {
+            confWeightedMean += v * confidences[i];
+            confTotalWeight += confidences[i];
+        });
+        confWeightedMean = confTotalWeight > 0 ? confWeightedMean / confTotalWeight : mean;
+
+        let confWeightedVar = 0;
+        values.forEach((v, i) => {
+            confWeightedVar += confidences[i] * (v - confWeightedMean) ** 2;
+        });
+        confWeightedVar = confTotalWeight > 0 ? confWeightedVar / confTotalWeight : std * std;
+        const calibratedAgreement = Math.max(0, 1 - Math.sqrt(confWeightedVar) * 3);
+
+        // Direction agreement: how many models agree on trade/no-trade
+        const threshold = 0.5;
+        const bullish = values.filter(v => v >= threshold).length;
+        const bearish = values.filter(v => v < threshold).length;
+        const directionAgreement = Math.max(bullish, bearish) / n;
+
+        // Check unanimity (all models agree on direction)
+        const unanimity = bullish === n || bearish === n;
+
+        // Split decision (close to 50/50)
+        const splitDecision = Math.abs(bullish - bearish) <= 1 && n > 2;
+
+        // Diversity score (model correlation-based)
+        const diversity = this._computePredictionDiversity(predictions);
+
+        // Effective number of independent models
+        // (accounts for correlation between models)
+        const effectiveModels = diversity > 0 ? n * diversity : 1;
+
+        return {
+            rawAgreement,
+            stdAgreement,
+            calibratedAgreement,
+            directionAgreement,
+            unanimity,
+            splitDecision,
+            diversity,
+            effectiveModels,
+            mean,
+            std,
+            range,
+            bullishCount: bullish,
+            bearishCount: bearish,
+        };
+    }
+
+    /**
+     * Compute prediction diversity using pairwise correlation analysis
+     */
+    _computePredictionDiversity(predictions) {
+        const models = Object.keys(predictions);
+        const n = models.length;
+
+        if (n < 2) return 0;
+
+        // Check historical correlation
+        let totalCorrelation = 0;
+        let pairCount = 0;
+
+        for (let i = 0; i < n; i++) {
+            for (let j = i + 1; j < n; j++) {
+                const m1 = models[i];
+                const m2 = models[j];
+                const key = `${m1}_${m2}`;
+
+                if (this.correlationMatrix[key] !== undefined) {
+                    totalCorrelation += Math.abs(this.correlationMatrix[key]);
+                    pairCount++;
+                } else {
+                    // Use current prediction similarity as proxy
+                    const v1 = predictions[m1].calibratedValue;
+                    const v2 = predictions[m2].calibratedValue;
+                    totalCorrelation += 1 - Math.abs(v1 - v2);
+                    pairCount++;
+                }
+            }
+        }
+
+        const avgCorrelation = pairCount > 0 ? totalCorrelation / pairCount : 0.5;
+        const diversity = 1 - avgCorrelation; // Higher = more diverse
+
+        return Math.max(0, Math.min(1, diversity));
+    }
+
+    /**
+     * Update model correlation matrix
+     */
+    _updateCorrelationMatrix() {
+        const windowSize = this.config.correlationWindowSize;
+        const models = this.registeredModels;
+
+        for (let i = 0; i < models.length; i++) {
+            for (let j = i + 1; j < models.length; j++) {
+                const m1 = models[i];
+                const m2 = models[j];
+                const key = `${m1}_${m2}`;
+
+                const history1 = this.modelPredictionHistory[m1] || [];
+                const history2 = this.modelPredictionHistory[m2] || [];
+
+                const len = Math.min(history1.length, history2.length, windowSize);
+                if (len < 10) continue;
+
+                const recent1 = history1.slice(-len);
+                const recent2 = history2.slice(-len);
+
+                // Pearson correlation
+                const mean1 = recent1.reduce((a, b) => a + b, 0) / len;
+                const mean2 = recent2.reduce((a, b) => a + b, 0) / len;
+
+                let cov = 0, var1 = 0, var2 = 0;
+                for (let k = 0; k < len; k++) {
+                    const d1 = recent1[k] - mean1;
+                    const d2 = recent2[k] - mean2;
+                    cov += d1 * d2;
+                    var1 += d1 * d1;
+                    var2 += d2 * d2;
+                }
+
+                const denom = Math.sqrt(var1 * var2);
+                this.correlationMatrix[key] = denom > 0 ? cov / denom : 0;
+            }
+        }
+    }
+
+    // ====================================================================
+    // MULTI-TIMEFRAME CONSENSUS
+    // ====================================================================
+
+    _multiTimeframeConsensus(currentScore, context) {
+        const result = {};
+        let consensusScore = 0;
+        let totalWeight = 0;
+
+        Object.entries(this.timeframeWindows).forEach(([tf, windowSize]) => {
+            const tfData = this.timeframePerformance[tf];
+            const recent = tfData.decisions.slice(-windowSize);
+
+            if (recent.length >= 5) {
+                const avgScore = recent.reduce((a, d) => a + d.score, 0) / recent.length;
+                const wins = recent.filter(d => d.outcome === true).length;
+                const total = recent.filter(d => d.outcome !== undefined).length;
+                const winRate = total > 0 ? wins / total : 0.5;
+
+                // Weight by recency and number of samples
+                const weight = Math.min(1, recent.length / windowSize) *
+                    (tf === 'short' ? 1.5 : tf === 'medium' ? 1.0 : 0.7);
+
+                result[tf] = {
+                    avgScore,
+                    winRate,
+                    sampleSize: recent.length,
+                    weight,
+                };
+
+                consensusScore += winRate * weight;
+                totalWeight += weight;
+            } else {
+                result[tf] = { avgScore: 0.5, winRate: 0.5, sampleSize: 0, weight: 0 };
+            }
+        });
+
+        const consensus = totalWeight > 0 ? consensusScore / totalWeight : 0.5;
+
+        // Check for timeframe disagreement
+        const tfValues = Object.values(result).filter(r => r.sampleSize >= 5);
+        const tfDisagreement = tfValues.length >= 2 ?
+            Math.max(...tfValues.map(r => r.winRate)) - Math.min(...tfValues.map(r => r.winRate)) : 0;
+
+        return {
+            consensus,
+            timeframes: result,
+            hasDisagreement: tfDisagreement > 0.2,
+            disagreementMagnitude: tfDisagreement,
+        };
+    }
+
+    // ====================================================================
+    // RISK-ADJUSTED SCORING
+    // ====================================================================
+
+    _applyRiskAdjustment(score, agreementMetrics) {
+        let adjusted = score;
+
+        // 1. Diversity bonus: reward decisions where diverse models agree
+        if (agreementMetrics.diversity > 0.3 && agreementMetrics.calibratedAgreement > 0.5) {
+            adjusted += this.config.diversityBonus * agreementMetrics.diversity;
+        }
+
+        // 2. Drawdown penalty: reduce score during drawdowns
+        if (this.riskMetrics.currentDrawdown > 0.1) {
+            const drawdownPenalty = Math.min(0.15,
+                this.riskMetrics.currentDrawdown * 0.3);
+            adjusted -= drawdownPenalty;
+        }
+
+        // 3. Loss streak penalty
+        if (this.riskMetrics.lossStreak >= 2) {
+            adjusted -= 0.03 * this.riskMetrics.lossStreak;
+        }
+
+        // 4. Win streak dampening (regression to mean)
+        if (this.riskMetrics.winStreak >= 5) {
+            adjusted -= 0.02 * (this.riskMetrics.winStreak - 4);
+        }
+
+        // 5. Volatility of returns adjustment
+        if (this.riskMetrics.volatilityOfReturns > 0.5) {
+            adjusted -= (this.riskMetrics.volatilityOfReturns - 0.5) * 0.1;
+        }
+
+        // 6. Split decision penalty
+        if (agreementMetrics.splitDecision) {
+            adjusted -= 0.05;
+        }
+
+        // 7. Unanimity bonus
+        if (agreementMetrics.unanimity && agreementMetrics.calibratedAgreement > 0.7) {
+            adjusted += 0.03;
+        }
+
+        return Math.max(0, Math.min(1, adjusted));
+    }
+
+    /**
+     * Compute Kelly Criterion fraction for position sizing
+     */
+    computeKellyFraction() {
+        const recent = this.recentDecisions.slice(-100)
+            .filter(d => d.outcome !== undefined);
+
+        if (recent.length < 20) return 0.02;
+
+        const wins = recent.filter(d => d.outcome === true).length;
+        const losses = recent.length - wins;
+        const winRate = wins / recent.length;
+        const avgWinSize = 0.01; // Accumulator typical win
+        const avgLossSize = 1.0; // Full stake loss
+
+        // Kelly formula: f = (bp - q) / b
+        // where b = avgWin/avgLoss, p = winRate, q = 1-p
+        const b = avgWinSize / avgLossSize;
+        const kelly = (b * winRate - (1 - winRate)) / b;
+
+        // Apply fractional Kelly for safety
+        const fractionalKelly = Math.max(0, kelly * this.config.kellyFractionalMultiplier);
+
+        this.riskMetrics.kellyFraction = fractionalKelly;
+
+        return fractionalKelly;
+    }
+
+    // ====================================================================
+    // THRESHOLD MANAGEMENT
+    // ====================================================================
+
+    _getEffectiveThreshold(context) {
+        let threshold = this.adaptiveThreshold;
+
+        // Context-based adjustments
+        if (context.consecutiveLosses >= 2) {
+            threshold += 0.03 * context.consecutiveLosses;
+        }
+
+        if (context.regime === 'volatile' || context.regime === 'choppy') {
+            threshold += 0.05;
+        } else if (context.regime === 'stable') {
+            threshold -= 0.02;
+        }
+
+        // Time-of-day adjustment
+        const hour = new Date().getHours();
+        if (hour >= 22 || hour <= 4) {
+            threshold += 0.02; // Slightly more conservative at night
+        }
+
+        // Drawdown adjustment
+        if (this.riskMetrics.currentDrawdown > 0.15) {
+            threshold += 0.05;
+        }
+
+        return Math.max(0.5, Math.min(0.95, threshold));
+    }
+
+    /**
+     * Optimize threshold using Bayesian optimization approach
+     */
+    optimizeThreshold() {
+        if (this.recentDecisions.length < 30) return;
+
+        // Update performance for each candidate threshold
+        this.thresholdOptimizer.candidates.forEach(threshold => {
+            let wins = 0, losses = 0, trades = 0;
+
+            this.recentDecisions.slice(-200).forEach(decision => {
+                if (decision.score >= threshold && decision.outcome !== undefined) {
+                    trades++;
+                    if (decision.outcome) wins++;
+                    else losses++;
+                }
+            });
+
+            this.thresholdOptimizer.performance[threshold] = {
+                wins, losses, trades,
+                winRate: trades > 0 ? wins / trades : 0,
+                frequency: trades / Math.max(1, this.recentDecisions.slice(-200).length),
+            };
+
+            // Update Bayesian parameters
+            this.thresholdOptimizer.bayesianParams[threshold] = {
+                alpha: 1 + wins,
+                beta: 1 + losses,
+            };
+        });
+
+        // Find optimal threshold using expected improvement
+        let bestThreshold = this.adaptiveThreshold;
+        let bestEI = -Infinity;
+
+        this.thresholdOptimizer.candidates.forEach(threshold => {
+            const params = this.thresholdOptimizer.bayesianParams[threshold];
+            const perf = this.thresholdOptimizer.performance[threshold];
+
+            if (perf.trades < 5) return;
+
+            // Expected value: mean of Beta distribution
+            const expectedWinRate = params.alpha / (params.alpha + params.beta);
+
+            // Confidence: concentration parameter
+            const concentration = params.alpha + params.beta;
+            const confidenceFactor = Math.min(1, concentration / 50);
+
+            // Trade frequency penalty (too selective = fewer trades = less learning)
+            const frequencyFactor = Math.sqrt(Math.min(1, perf.frequency * 5));
+
+            // Expected improvement score
+            const ei = expectedWinRate * confidenceFactor * frequencyFactor;
+
+            if (ei > bestEI) {
+                bestEI = ei;
+                bestThreshold = threshold;
+            }
+        });
+
+        // Smooth transition
+        this.adaptiveThreshold = (1 - this.config.thresholdSmoothingFactor) * this.adaptiveThreshold +
+            this.config.thresholdSmoothingFactor * bestThreshold;
+
+        this.thresholdHistory.push({
+            threshold: this.adaptiveThreshold,
+            bestCandidate: bestThreshold,
+            bestEI,
+            timestamp: Date.now(),
+        });
+
+        if (this.thresholdHistory.length > 200) {
+            this.thresholdHistory = this.thresholdHistory.slice(-150);
+        }
+    }
+
+    // ====================================================================
+    // OUTCOME RECORDING & LEARNING
+    // ====================================================================
+
+    /**
+     * Record outcome and update all learning components
+     */
+    recordOutcome(predictions, actualOutcome, context = {}) {
+        const validPredictions = this._validatePredictions(predictions);
+
+        // 1. Update per-model performance
+        this._updateModelPerformance(validPredictions, actualOutcome, context);
+
+        // 2. Update model weights
+        if (this._shouldUpdateWeights()) {
+            this._updateDynamicWeights();
+        }
+
+        // 3. Update stacking meta-learner
+        this._updateStackingLearner(validPredictions, actualOutcome);
+
+        // 4. Update contextual bandit
+        this._updateBandit(validPredictions, actualOutcome);
+
+        // 5. Update calibration
+        this._updateCalibration(validPredictions, actualOutcome);
+
+        // 6. Update correlation matrix periodically
+        if (this.recentDecisions.length % 10 === 0) {
+            this._updateCorrelationMatrix();
+        }
+
+        // 7. Record prediction history for correlation tracking
+        Object.entries(validPredictions).forEach(([model, pred]) => {
+            if (!this.modelPredictionHistory[model]) {
+                this.modelPredictionHistory[model] = [];
+            }
+            this.modelPredictionHistory[model].push(pred.value);
+            if (this.modelPredictionHistory[model].length > 200) {
+                this.modelPredictionHistory[model] = this.modelPredictionHistory[model].slice(-150);
+            }
+        });
+
+        // 8. Update risk metrics
+        this._updateRiskMetrics(actualOutcome, context);
+
+        // 9. Update multi-timeframe data
+        this._updateTimeframeData(validPredictions, actualOutcome);
+
+        // 10. Decision journaling with counterfactual
+        this._journalDecision(validPredictions, actualOutcome, context);
+
+        // 11. Optimize threshold periodically
+        if (this.recentDecisions.length % this.config.weightUpdateInterval === 0) {
+            this.optimizeThreshold();
+        }
+
+        // 12. Record in decision history
+        const calibrated = this._calibratePredictions(validPredictions);
+        const values = Object.values(calibrated).map(p => p.calibratedValue);
+        const score = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0.5;
+
+        this.recentDecisions.push({
+            predictions: validPredictions,
+            outcome: actualOutcome,
+            score,
+            timestamp: Date.now(),
+            context,
+        });
+
+        if (this.recentDecisions.length > this.config.maxDecisionHistory) {
+            this.recentDecisions = this.recentDecisions.slice(
+                -Math.floor(this.config.maxDecisionHistory * 0.8)
+            );
+        }
+    }
+
+    // ====================================================================
+    // MODEL PERFORMANCE TRACKING
+    // ====================================================================
+
+    _updateModelPerformance(predictions, outcome, context) {
+        Object.entries(predictions).forEach(([model, pred]) => {
+            if (!this.modelPerformance[model]) {
+                this.modelPerformance[model] = this._createDefaultModelPerf();
+            }
+
+            const perf = this.modelPerformance[model];
+            const predicted = pred.value >= 0.5;
+            const correct = predicted === outcome;
+
+            // Overall stats
+            perf.total++;
+            if (correct) perf.correct++;
+
+            // Recent sliding window
+            perf.recentCorrect.push(correct ? 1 : 0);
+            if (perf.recentCorrect.length > this.config.recentWindowSize) {
+                perf.recentCorrect.shift();
+            }
+
+            perf.recentPredictions.push({
+                prediction: pred.value,
+                actual: outcome,
+                correct,
+                confidence: pred.confidence,
+                timestamp: Date.now(),
+            });
+            if (perf.recentPredictions.length > this.config.recentWindowSize) {
+                perf.recentPredictions.shift();
+            }
+
+            // Streaks
+            if (correct) {
+                perf.streaks.currentCorrect++;
+                perf.streaks.currentWrong = 0;
+                perf.streaks.maxCorrect = Math.max(perf.streaks.maxCorrect, perf.streaks.currentCorrect);
+            } else {
+                perf.streaks.currentWrong++;
+                perf.streaks.currentCorrect = 0;
+                perf.streaks.maxWrong = Math.max(perf.streaks.maxWrong, perf.streaks.currentWrong);
+            }
+
+            // Regime-specific performance
+            if (context.regime) {
+                if (!perf.regimePerformance[context.regime]) {
+                    perf.regimePerformance[context.regime] = { correct: 0, total: 0 };
+                }
+                perf.regimePerformance[context.regime].total++;
+                if (correct) perf.regimePerformance[context.regime].correct++;
+            }
+
+            // Time-of-day performance
+            const hour = new Date().getHours();
+            const hourKey = `h${hour}`;
+            if (!perf.timeOfDayPerformance[hourKey]) {
+                perf.timeOfDayPerformance[hourKey] = { correct: 0, total: 0 };
+            }
+            perf.timeOfDayPerformance[hourKey].total++;
+            if (correct) perf.timeOfDayPerformance[hourKey].correct++;
+
+            // Confidence-bucketed performance
+            const confBucket = pred.confidence > 0.7 ? 'high' :
+                pred.confidence > 0.4 ? 'medium' : 'low';
+            perf.confidencePerformance[confBucket].total++;
+            if (correct) perf.confidencePerformance[confBucket].correct++;
+        });
+    }
+
+    _createDefaultModelPerf() {
+        return {
+            correct: 0,
+            total: 0,
+            recentCorrect: [],
+            recentPredictions: [],
+            calibration: { bins: {}, totalSamples: 0 },
+            streaks: { currentCorrect: 0, currentWrong: 0, maxCorrect: 0, maxWrong: 0 },
+            regimePerformance: {},
+            timeOfDayPerformance: {},
+            confidencePerformance: {
+                high: { correct: 0, total: 0 },
+                medium: { correct: 0, total: 0 },
+                low: { correct: 0, total: 0 },
+            },
+        };
+    }
+
+    _getRecentAccuracy(model, window = 50) {
+        const perf = this.modelPerformance[model];
+        if (!perf || perf.recentCorrect.length < 5) return 0.5;
+
+        const recent = perf.recentCorrect.slice(-window);
+        return recent.reduce((a, b) => a + b, 0) / recent.length;
+    }
+
+    _shouldUpdateWeights() {
+        const totalSamples = Object.values(this.modelPerformance)
+            .reduce((a, p) => a + p.total, 0);
+        return totalSamples >= this.config.minSamplesForWeightUpdate &&
+            totalSamples % this.config.weightUpdateInterval === 0;
+    }
+
+    // ====================================================================
+    // DYNAMIC WEIGHT UPDATES
+    // ====================================================================
+
+    _updateDynamicWeights() {
+        const accuracies = {};
+        let totalScore = 0;
+
+        this.registeredModels.forEach(model => {
+            const perf = this.modelPerformance[model];
+            if (!perf || perf.total < 10) {
+                accuracies[model] = 0.5;
+            } else {
+                // Blend overall and recent accuracy
+                const overallAcc = perf.correct / perf.total;
+                const recentAcc = this._getRecentAccuracy(model, 30);
+
+                // Recency-weighted blend
+                const blendedAcc = 0.3 * overallAcc + 0.7 * recentAcc;
+
+                // Bonus for consistent performance (low streak variance)
+                const consistencyBonus = perf.streaks.maxWrong <= 3 ? 0.05 : 0;
+
+                accuracies[model] = Math.max(0.01, blendedAcc + consistencyBonus);
+            }
+
+            // Softmax-like exponential weighting (sharper differentiation)
+            const temperature = 2.0; // Higher = more differentiation
+            totalScore += Math.pow(accuracies[model], temperature);
+        });
+
+        // Normalize
+        if (totalScore > 0) {
+            this.registeredModels.forEach(model => {
+                const temperature = 2.0;
+                this.modelWeights[model] = Math.pow(accuracies[model], temperature) / totalScore;
+            });
+        }
+    }
+
+    // ====================================================================
+    // STACKING META-LEARNER UPDATE
+    // ====================================================================
+
+    _updateStackingLearner(predictions, outcome) {
+        const modelKeys = this.registeredModels;
+        const numModels = modelKeys.length;
+
+        if (!this.stackingWeights) {
+            this.stackingWeights = new Array(numModels).fill(1 / numModels);
+            this.stackingVelocity = new Array(numModels).fill(0);
+        }
+
+        // Build input vector
+        const inputVector = modelKeys.map(model => {
+            const pred = predictions[model];
+            return pred ? pred.value : 0.5;
+        });
+
+        // Forward pass
+        let logit = this.stackingBias;
+        for (let i = 0; i < numModels; i++) {
+            logit += this.stackingWeights[i] * inputVector[i];
+        }
+        const predicted = 1 / (1 + Math.exp(-Math.max(-500, Math.min(500, logit))));
+
+        // Gradient (BCE loss derivative)
+        const target = outcome ? 1 : 0;
+        const error = predicted - target;
+
+        // Update weights with momentum
+        for (let i = 0; i < numModels; i++) {
+            const gradient = error * inputVector[i];
+
+            this.stackingVelocity[i] = this.stackingMomentum * this.stackingVelocity[i] -
+                this.stackingLearningRate * gradient;
+
+            this.stackingWeights[i] += this.stackingVelocity[i];
+
+            // Clamp weights
+            this.stackingWeights[i] = Math.max(-5, Math.min(5, this.stackingWeights[i]));
+        }
+
+        // Update bias
+        this.stackingBias -= this.stackingLearningRate * error;
+        this.stackingBias = Math.max(-3, Math.min(3, this.stackingBias));
+
+        // Track history
+        this.stackingHistory.push({
+            input: inputVector,
+            prediction: predicted,
+            target,
+            loss: -target * Math.log(Math.max(1e-7, predicted)) -
+                (1 - target) * Math.log(Math.max(1e-7, 1 - predicted)),
+        });
+
+        if (this.stackingHistory.length > 500) {
+            this.stackingHistory = this.stackingHistory.slice(-400);
+        }
+    }
+
+    // ====================================================================
+    // CONTEXTUAL BANDIT UPDATE
+    // ====================================================================
+
+    _updateBandit(predictions, outcome) {
+        Object.entries(predictions).forEach(([model, pred]) => {
+            if (!this.banditState[model]) {
+                this.banditState[model] = { alpha: 1, beta: 1, pulls: 0 };
+            }
+
+            const predicted = pred.value >= 0.5;
+            const correct = predicted === outcome;
+
+            this.banditState[model].pulls++;
+
+            if (correct) {
+                this.banditState[model].alpha += 1;
+            } else {
+                this.banditState[model].beta += 1;
+            }
+
+            // Decay to prevent over-confidence from old data
+            this.banditState[model].alpha *= this.banditDecayRate;
+            this.banditState[model].beta *= this.banditDecayRate;
+
+            // Enforce minimums
+            this.banditState[model].alpha = Math.max(1, this.banditState[model].alpha);
+            this.banditState[model].beta = Math.max(1, this.banditState[model].beta);
+        });
+
+        // Decay exploration rate
+        this.banditExplorationRate = Math.max(0.05,
+            this.banditExplorationRate * 0.999);
+    }
+
+    // ====================================================================
+    // CALIBRATION UPDATE
+    // ====================================================================
+
+    _updateCalibration(predictions, outcome) {
+        Object.entries(predictions).forEach(([model, pred]) => {
+            if (!this.calibrationHistory[model]) {
+                this.calibrationHistory[model] = [];
+            }
+
+            this.calibrationHistory[model].push({
+                prediction: pred.value,
+                actual: outcome,
+            });
+
+            if (this.calibrationHistory[model].length > 300) {
+                this.calibrationHistory[model] = this.calibrationHistory[model].slice(-250);
+            }
+
+            // Refit Platt scaling periodically
+            if (this.calibrationHistory[model].length % this.config.calibrationInterval === 0 &&
+                this.calibrationHistory[model].length >= 30) {
+                this._fitPlattScaling(model);
+            }
+        });
+    }
+
+    /**
+     * Fit Platt scaling parameters using gradient descent
+     */
+    _fitPlattScaling(model) {
+        const history = this.calibrationHistory[model];
+        if (!history || history.length < 20) return;
+
+        let a = this.calibrationParams[model].a;
+        let b = this.calibrationParams[model].b;
+        const lr = 0.01;
+
+        // Mini-batch gradient descent
+        for (let epoch = 0; epoch < 30; epoch++) {
+            let gradA = 0, gradB = 0;
+
+            const batch = history.slice(-100);
+            batch.forEach(sample => {
+                const logit = a * sample.prediction + b;
+                const calibrated = 1 / (1 + Math.exp(-Math.max(-500, Math.min(500, logit))));
+                const target = sample.actual ? 1 : 0;
+                const error = calibrated - target;
+
+                gradA += error * sample.prediction;
+                gradB += error;
+            });
+
+            gradA /= batch.length;
+            gradB /= batch.length;
+
+            a -= lr * gradA;
+            b -= lr * gradB;
+
+            // Clamp
+            a = Math.max(0.1, Math.min(5, a));
+            b = Math.max(-3, Math.min(3, b));
+        }
+
+        this.calibrationParams[model] = { a, b };
+    }
+
+    // ====================================================================
+    // RISK METRICS UPDATE
+    // ====================================================================
+
+    _updateRiskMetrics(outcome, context) {
+        const pnl = outcome ? (context.stake || 1) * 0.01 : -(context.stake || 1);
+
+        // Returns history
+        this.riskMetrics.returnsHistory.push(pnl);
+        if (this.riskMetrics.returnsHistory.length > 500) {
+            this.riskMetrics.returnsHistory = this.riskMetrics.returnsHistory.slice(-400);
+        }
+
+        // Cumulative PnL
+        const cumPnL = this.riskMetrics.returnsHistory.reduce((a, b) => a + b, 0);
+
+        // Update peak and drawdown
+        if (cumPnL > this.riskMetrics.peakPnL) {
+            this.riskMetrics.peakPnL = cumPnL;
+        }
+        this.riskMetrics.currentDrawdown = this.riskMetrics.peakPnL > 0 ?
+            (this.riskMetrics.peakPnL - cumPnL) / this.riskMetrics.peakPnL : 0;
+        this.riskMetrics.maxDrawdown = Math.max(
+            this.riskMetrics.maxDrawdown,
+            this.riskMetrics.currentDrawdown
+        );
+
+        // Streaks
+        if (outcome) {
+            this.riskMetrics.winStreak++;
+            this.riskMetrics.lossStreak = 0;
+        } else {
+            this.riskMetrics.lossStreak++;
+            this.riskMetrics.winStreak = 0;
+        }
+
+        // Volatility of returns
+        if (this.riskMetrics.returnsHistory.length >= 10) {
+            const returns = this.riskMetrics.returnsHistory.slice(-50);
+            const meanReturn = returns.reduce((a, b) => a + b, 0) / returns.length;
+            const variance = returns.reduce((a, b) => a + (b - meanReturn) ** 2, 0) / returns.length;
+            this.riskMetrics.volatilityOfReturns = Math.sqrt(variance);
+
+            // Sharpe ratio (annualized approximation)
+            const riskFreeRate = 0;
+            this.riskMetrics.sharpeRatio = this.riskMetrics.volatilityOfReturns > 0 ?
+                (meanReturn - riskFreeRate) / this.riskMetrics.volatilityOfReturns : 0;
+        }
+
+        // Update Kelly
+        this.computeKellyFraction();
+    }
+
+    // ====================================================================
+    // MULTI-TIMEFRAME UPDATE
+    // ====================================================================
+
+    _updateTimeframeData(predictions, outcome) {
+        const values = Object.values(predictions).map(p => p.value);
+        const score = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0.5;
+
+        Object.keys(this.timeframeWindows).forEach(tf => {
+            this.timeframePerformance[tf].decisions.push({
+                score,
+                outcome,
+                timestamp: Date.now(),
+            });
+
+            const maxSize = this.timeframeWindows[tf] * 2;
+            if (this.timeframePerformance[tf].decisions.length > maxSize) {
+                this.timeframePerformance[tf].decisions =
+                    this.timeframePerformance[tf].decisions.slice(-this.timeframeWindows[tf]);
+            }
+        });
+    }
+
+    // ====================================================================
+    // DECISION JOURNALING
+    // ====================================================================
+
+    _journalDecision(predictions, outcome, context) {
+        const calibrated = this._calibratePredictions(predictions);
+        const values = Object.values(calibrated).map(p => p.calibratedValue);
+        const score = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0.5;
+
+        const entry = {
+            timestamp: Date.now(),
+            predictions: {},
+            outcome,
+            score,
+            threshold: this.adaptiveThreshold,
+            wouldHaveTraded: score >= this.adaptiveThreshold,
+            actuallyTraded: context.traded || false,
+            context: {
+                regime: context.regime,
+                consecutiveLosses: context.consecutiveLosses,
+            },
+        };
+
+        Object.entries(predictions).forEach(([model, pred]) => {
+            entry.predictions[model] = {
+                raw: pred.value,
+                calibrated: calibrated[model] ? calibrated[model].calibratedValue : pred.value,
+                confidence: pred.confidence,
+                correct: (pred.value >= 0.5) === outcome,
+            };
+        });
+
+        // Counterfactual analysis: what if we used a different threshold?
+        const counterfactual = {};
+        [0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85].forEach(t => {
+            const wouldTrade = score >= t;
+            counterfactual[t] = {
+                wouldTrade,
+                correctDecision: (wouldTrade && outcome) || (!wouldTrade && !outcome),
+            };
+        });
+        entry.counterfactual = counterfactual;
+
+        this.decisionJournal.push(entry);
+        if (this.decisionJournal.length > this.config.maxJournalSize) {
+            this.decisionJournal = this.decisionJournal.slice(
+                -Math.floor(this.config.maxJournalSize * 0.8)
+            );
+        }
+
+        // Aggregate counterfactual log
+        this.counterfactualLog.push(counterfactual);
+        if (this.counterfactualLog.length > 500) {
+            this.counterfactualLog = this.counterfactualLog.slice(-400);
+        }
+    }
+
+    // ====================================================================
+    // RESULT CONSTRUCTION
+    // ====================================================================
+
+    _createDecisionResult(score, agreement, shouldTrade, reason, details, context) {
+        return {
+            score,
+            agreement,
+            shouldTrade,
+            reason,
+            details,
+            threshold: this.adaptiveThreshold,
+            riskMetrics: {
+                kellyFraction: this.riskMetrics.kellyFraction,
+                currentDrawdown: this.riskMetrics.currentDrawdown,
+                sharpeRatio: this.riskMetrics.sharpeRatio,
+                winStreak: this.riskMetrics.winStreak,
+                lossStreak: this.riskMetrics.lossStreak,
+            },
+        };
+    }
+
+    // ====================================================================
+    // PERFORMANCE REPORTING
+    // ====================================================================
+
+    /**
+     * Get comprehensive performance summary
+     */
+    getPerformanceSummary() {
+        const summary = {
+            models: {},
+            ensemble: {},
+            risk: {},
+            threshold: {},
+            stacking: {},
+            bandit: {},
+            calibration: {},
+            timeframes: {},
+        };
+
+        // Per-model performance
+        this.registeredModels.forEach(model => {
+            const perf = this.modelPerformance[model];
+            if (!perf) return;
+
+            const recentAcc = this._getRecentAccuracy(model, 50);
+
+            summary.models[model] = {
+                accuracy: perf.total > 0 ?
+                    (perf.correct / perf.total * 100).toFixed(1) + '%' : 'N/A',
+                recentAccuracy: (recentAcc * 100).toFixed(1) + '%',
+                samples: perf.total,
+                weight: ((this.modelWeights[model] || 0) * 100).toFixed(1) + '%',
+                currentStreak: perf.streaks.currentCorrect > 0 ?
+                    `+${perf.streaks.currentCorrect}` : `-${perf.streaks.currentWrong}`,
+                calibrationError: (this._getCalibrationError(model) * 100).toFixed(1) + '%',
+            };
+        });
+
+        // Ensemble metrics
+        summary.ensemble = {
+            adaptiveThreshold: this.adaptiveThreshold.toFixed(3),
+            totalDecisions: this.recentDecisions.length,
+            recentWinRate: this._getEnsembleWinRate(50),
+        };
+
+        // Risk metrics
+        summary.risk = {
+            kellyFraction: (this.riskMetrics.kellyFraction * 100).toFixed(2) + '%',
+            sharpeRatio: this.riskMetrics.sharpeRatio.toFixed(3),
+            maxDrawdown: (this.riskMetrics.maxDrawdown * 100).toFixed(1) + '%',
+            currentDrawdown: (this.riskMetrics.currentDrawdown * 100).toFixed(1) + '%',
+            volatility: this.riskMetrics.volatilityOfReturns.toFixed(4),
+        };
+
+        // Threshold optimizer
+        const thresholdPerf = {};
+        Object.entries(this.thresholdOptimizer.performance).forEach(([t, p]) => {
+            if (p.trades >= 5) {
+                thresholdPerf[t] = {
+                    winRate: (p.winRate * 100).toFixed(1) + '%',
+                    trades: p.trades,
+                };
+            }
+        });
+        summary.threshold = {
+            current: this.adaptiveThreshold.toFixed(3),
+            candidates: thresholdPerf,
+        };
+
+        // Stacking meta-learner
+        if (this.stackingWeights) {
+            summary.stacking = {
+                weights: this.stackingWeights.map((w, i) =>
+                    `${this.registeredModels[i]}: ${w.toFixed(3)}`
+                ),
+                bias: this.stackingBias.toFixed(3),
+                trainingSamples: this.stackingHistory.length,
+            };
+        }
+
+        // Bandit state
+        summary.bandit = {};
+        Object.entries(this.banditState).forEach(([model, state]) => {
+            summary.bandit[model] = {
+                expectedValue: (state.alpha / (state.alpha + state.beta)).toFixed(3),
+                pulls: state.pulls,
+            };
+        });
+
+        // Model correlations
+        summary.correlations = {};
+        Object.entries(this.correlationMatrix).forEach(([key, corr]) => {
+            summary.correlations[key] = corr.toFixed(3);
+        });
+
+        // Timeframe performance
+        Object.entries(this.timeframePerformance).forEach(([tf, data]) => {
+            const decisions = data.decisions.filter(d => d.outcome !== undefined);
+            const wins = decisions.filter(d => d.outcome === true).length;
+            summary.timeframes[tf] = {
+                winRate: decisions.length > 0 ?
+                    (wins / decisions.length * 100).toFixed(1) + '%' : 'N/A',
+                samples: decisions.length,
+            };
+        });
+
+        // Counterfactual summary
+        if (this.counterfactualLog.length >= 20) {
+            summary.counterfactual = {};
+            [0.5, 0.6, 0.7, 0.8].forEach(t => {
+                const correct = this.counterfactualLog
+                    .filter(cf => cf[t] && cf[t].correctDecision).length;
+                summary.counterfactual[t] = {
+                    correctRate: (correct / this.counterfactualLog.length * 100).toFixed(1) + '%',
+                };
+            });
+        }
+
+        return summary;
+    }
+
+    _getEnsembleWinRate(window = 50) {
+        const recent = this.recentDecisions.slice(-window)
+            .filter(d => d.outcome !== undefined);
+        if (recent.length === 0) return 'N/A';
+        const wins = recent.filter(d => d.outcome === true).length;
+        return (wins / recent.length * 100).toFixed(1) + '%';
+    }
+
+    /**
+     * Get performance attribution: which models contributed most to wins/losses
+     */
+    getPerformanceAttribution() {
+        const attribution = {};
+
+        this.registeredModels.forEach(model => {
+            const perf = this.modelPerformance[model];
+            if (!perf || perf.recentPredictions.length < 10) return;
+
+            const recent = perf.recentPredictions.slice(-50);
+
+            // Brier score (lower = better calibration)
+            const brierScore = recent.reduce((sum, p) => {
+                const target = p.actual ? 1 : 0;
+                return sum + (p.prediction - target) ** 2;
+            }, 0) / recent.length;
+
+            // Information value
+            const correctHighConf = recent.filter(p =>
+                p.correct && Math.abs(p.prediction - 0.5) > 0.2
+            ).length;
+            const incorrectHighConf = recent.filter(p =>
+                !p.correct && Math.abs(p.prediction - 0.5) > 0.2
+            ).length;
+
+            // Discrimination ability
+            const winPredictions = recent.filter(p => p.actual).map(p => p.prediction);
+            const lossPredictions = recent.filter(p => !p.actual).map(p => p.prediction);
+
+            let aucApprox = 0.5;
+            if (winPredictions.length > 0 && lossPredictions.length > 0) {
+                const meanWin = winPredictions.reduce((a, b) => a + b, 0) / winPredictions.length;
+                const meanLoss = lossPredictions.reduce((a, b) => a + b, 0) / lossPredictions.length;
+                aucApprox = meanWin > meanLoss ? 0.5 + (meanWin - meanLoss) : 0.5;
+                aucApprox = Math.min(1, Math.max(0, aucApprox));
+            }
+
+            attribution[model] = {
+                brierScore: brierScore.toFixed(4),
+                auc: aucApprox.toFixed(3),
+                correctHighConfidence: correctHighConf,
+                incorrectHighConfidence: incorrectHighConf,
+                weight: ((this.modelWeights[model] || 0) * 100).toFixed(1) + '%',
+                bestRegime: this._getBestRegime(model),
+                worstRegime: this._getWorstRegime(model),
+            };
+        });
+
+        return attribution;
+    }
+
+    _getBestRegime(model) {
+        const perf = this.modelPerformance[model];
+        if (!perf) return 'N/A';
+
+        let bestRegime = 'N/A';
+        let bestRate = 0;
+
+        Object.entries(perf.regimePerformance).forEach(([regime, stats]) => {
+            if (stats.total >= 5) {
+                const rate = stats.correct / stats.total;
+                if (rate > bestRate) {
+                    bestRate = rate;
+                    bestRegime = regime;
+                }
+            }
+        });
+
+        return bestRegime;
+    }
+
+    _getWorstRegime(model) {
+        const perf = this.modelPerformance[model];
+        if (!perf) return 'N/A';
+
+        let worstRegime = 'N/A';
+        let worstRate = 1;
+
+        Object.entries(perf.regimePerformance).forEach(([regime, stats]) => {
+            if (stats.total >= 5) {
+                const rate = stats.correct / stats.total;
+                if (rate < worstRate) {
+                    worstRate = rate;
+                    worstRegime = regime;
+                }
+            }
+        });
+
+        return worstRegime;
+    }
+
+    // ====================================================================
+    // UTILITY METHODS
+    // ====================================================================
+
+    _betaSample(alpha, beta) {
+        // Approximation using gamma sampling
+        const x = this._gammaSample(alpha);
+        const y = this._gammaSample(beta);
+        return x / (x + y);
+    }
+
+    _gammaSample(alpha) {
+        // Marsaglia and Tsang's method for alpha >= 1
+        if (alpha < 1) {
+            return this._gammaSample(alpha + 1) * Math.pow(Math.random(), 1 / alpha);
+        }
+
+        const d = alpha - 1 / 3;
+        const c = 1 / Math.sqrt(9 * d);
+
+        while (true) {
+            let x, v;
+            do {
+                x = this._normalSample();
+                v = 1 + c * x;
+            } while (v <= 0);
+
+            v = v * v * v;
+            const u = Math.random();
+
+            if (u < 1 - 0.0331 * (x * x) * (x * x)) return d * v;
+            if (Math.log(u) < 0.5 * x * x + d * (1 - v + Math.log(v))) return d * v;
+        }
+    }
+
+    _normalSample() {
+        // Box-Muller transform
+        const u1 = Math.random();
+        const u2 = Math.random();
+        return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+    }
+
+    // ====================================================================
+    // STATE PERSISTENCE
+    // ====================================================================
+
     exportState() {
         return {
             modelWeights: this.modelWeights,
             modelPerformance: this.modelPerformance,
             adaptiveThreshold: this.adaptiveThreshold,
-            recentDecisions: this.recentDecisions.slice(-200)
+            thresholdHistory: this.thresholdHistory.slice(-100),
+            thresholdOptimizer: {
+                performance: this.thresholdOptimizer.performance,
+                bayesianParams: this.thresholdOptimizer.bayesianParams,
+            },
+            recentDecisions: this.recentDecisions.slice(-300),
+            stackingWeights: this.stackingWeights,
+            stackingBias: this.stackingBias,
+            stackingVelocity: this.stackingVelocity,
+            stackingHistory: this.stackingHistory.slice(-200),
+            banditState: this.banditState,
+            banditExplorationRate: this.banditExplorationRate,
+            calibrationParams: this.calibrationParams,
+            calibrationHistory: (() => {
+                const trimmed = {};
+                Object.entries(this.calibrationHistory).forEach(([m, h]) => {
+                    trimmed[m] = h.slice(-100);
+                });
+                return trimmed;
+            })(),
+            correlationMatrix: this.correlationMatrix,
+            modelPredictionHistory: (() => {
+                const trimmed = {};
+                Object.entries(this.modelPredictionHistory).forEach(([m, h]) => {
+                    trimmed[m] = h.slice(-100);
+                });
+                return trimmed;
+            })(),
+            riskMetrics: {
+                ...this.riskMetrics,
+                returnsHistory: this.riskMetrics.returnsHistory.slice(-200),
+            },
+            timeframePerformance: (() => {
+                const trimmed = {};
+                Object.entries(this.timeframePerformance).forEach(([tf, data]) => {
+                    trimmed[tf] = {
+                        decisions: data.decisions.slice(-200),
+                        winRate: data.winRate,
+                        avgScore: data.avgScore,
+                    };
+                });
+                return trimmed;
+            })(),
+            decisionJournal: this.decisionJournal.slice(-200),
+            cascadeStages: this.cascadeStages,
         };
     }
 
-    /**
-     * Import state from saved data
-     */
     importState(state) {
-        if (state.modelWeights) this.modelWeights = state.modelWeights;
-        if (state.modelPerformance) this.modelPerformance = state.modelPerformance;
-        if (state.adaptiveThreshold) this.adaptiveThreshold = state.adaptiveThreshold;
-        if (state.recentDecisions) this.recentDecisions = state.recentDecisions;
+        if (!state) return;
+
+        try {
+            if (state.modelWeights) this.modelWeights = state.modelWeights;
+            if (state.modelPerformance) {
+                Object.entries(state.modelPerformance).forEach(([model, perf]) => {
+                    if (this.modelPerformance[model]) {
+                        this.modelPerformance[model] = {
+                            ...this._createDefaultModelPerf(),
+                            ...perf,
+                        };
+                    }
+                });
+            }
+            if (state.adaptiveThreshold) this.adaptiveThreshold = state.adaptiveThreshold;
+            if (state.thresholdHistory) this.thresholdHistory = state.thresholdHistory;
+            if (state.thresholdOptimizer) {
+                if (state.thresholdOptimizer.performance) {
+                    this.thresholdOptimizer.performance = state.thresholdOptimizer.performance;
+                }
+                if (state.thresholdOptimizer.bayesianParams) {
+                    this.thresholdOptimizer.bayesianParams = state.thresholdOptimizer.bayesianParams;
+                }
+            }
+            if (state.recentDecisions) this.recentDecisions = state.recentDecisions;
+            if (state.stackingWeights) this.stackingWeights = state.stackingWeights;
+            if (state.stackingBias !== undefined) this.stackingBias = state.stackingBias;
+            if (state.stackingVelocity) this.stackingVelocity = state.stackingVelocity;
+            if (state.stackingHistory) this.stackingHistory = state.stackingHistory;
+            if (state.banditState) this.banditState = state.banditState;
+            if (state.banditExplorationRate) this.banditExplorationRate = state.banditExplorationRate;
+            if (state.calibrationParams) this.calibrationParams = state.calibrationParams;
+            if (state.calibrationHistory) this.calibrationHistory = state.calibrationHistory;
+            if (state.correlationMatrix) this.correlationMatrix = state.correlationMatrix;
+            if (state.modelPredictionHistory) this.modelPredictionHistory = state.modelPredictionHistory;
+            if (state.riskMetrics) this.riskMetrics = { ...this.riskMetrics, ...state.riskMetrics };
+            if (state.timeframePerformance) this.timeframePerformance = state.timeframePerformance;
+            if (state.decisionJournal) this.decisionJournal = state.decisionJournal;
+            if (state.cascadeStages) this.cascadeStages = state.cascadeStages;
+
+            console.log('  ✓ Advanced ensemble decision maker restored');
+        } catch (error) {
+            console.error(`  ✗ Error importing ensemble state: ${error.message}`);
+        }
     }
 }
 
@@ -6720,21 +8385,33 @@ class EnhancedAccumulatorBot {
         }
 
         // Update ensemble decision maker
-        this.ensembleDecisionMaker.recordOutcome(this.lastEnsemblePredictions || {}, won);
+        this.ensembleDecisionMaker.recordOutcome(
+            this.lastEnsemblePredictions || {},
+            won,
+            {
+                regime: regime ? regime.regime : 'unknown',
+                regimeConfidence: regime ? regime.confidence : 0,
+                consecutiveLosses: this.consecutiveLosses,
+                asset,
+                stake: this.currentStake,
+                traded: true,
+            }
+        );
 
         // Optimize threshold periodically
-        if (this.totalTrades % 20 === 0) {
+        if (this.totalTrades % 10 === 0) {
             this.ensembleDecisionMaker.optimizeThreshold();
         }
 
-        // Persist performance log
-        // this.persistenceManager.appendPerformanceLog({
-        //     asset,
-        //     won,
-        //     profit: won ? this.currentStake * 0.01 : -this.currentStake,
-        //     digitCount,
-        //     volatility
-        // });
+        // Log performance attribution periodically
+        if (this.totalTrades % 25 === 0) {
+            const attribution = this.ensembleDecisionMaker.getPerformanceAttribution();
+            console.log('🎯 Performance Attribution:');
+            Object.entries(attribution).forEach(([model, attr]) => {
+                console.log(`   ${model}: Brier=${attr.brierScore}, AUC=${attr.auc}, ` +
+                    `Weight=${attr.weight}, Best=${attr.bestRegime}, Worst=${attr.worstRegime}`);
+            });
+        }
     }
 
     // ========================================================================
@@ -6977,13 +8654,37 @@ class EnhancedAccumulatorBot {
         // Store for later recording
         this.lastEnsemblePredictions = predictions;
 
-        // Combine all predictions
-        const ensemble = this.ensembleDecisionMaker.combinePredicitions(predictions);
-        console.log('Ensemble Decision:', ensemble.score.toFixed(2), ' (', this.ensembleDecisionMaker.adaptiveThreshold, ') |', ensemble.agreement.toFixed(2), '(0.5) |', 'shouldTrade:', ensemble.shouldTrade);
+        // Build context for ensemble
+        const regime = this.patternEngine.detectRegime(asset, this.extendedStayedIn[asset]);
+        const ensembleContext = {
+            regime: regime ? regime.regime : 'unknown',
+            regimeConfidence: regime ? regime.confidence : 0,
+            consecutiveLosses: this.consecutiveLosses,
+            asset,
+            currentDigitCount,
+            volatility: volatilityData.combined,
+            stake: this.currentStake,
+        };
+
+        // Combine all predictions through advanced ensemble
+        const ensemble = this.ensembleDecisionMaker.combinePredicitions(predictions, ensembleContext);
+
+        console.log(`[${asset}] Ensemble Decision: score=${ensemble.score.toFixed(3)} ` +
+            `(threshold=${ensemble.threshold.toFixed(3)}) | ` +
+            `agreement=${ensemble.agreement.toFixed(3)} | ` +
+            `reason=${ensemble.reason} | ` +
+            `shouldTrade=${ensemble.shouldTrade}`);
+
+        if (ensemble.details && ensemble.details.combinationMethods) {
+            const methods = ensemble.details.combinationMethods;
+            console.log(`[${asset}]   Methods: weighted=${methods.weighted.score.toFixed(3)}, ` +
+                `stacking=${methods.stacking.score.toFixed(3)}, ` +
+                `bandit=${methods.bandit.score.toFixed(3)}, ` +
+                `rank=${methods.rank.score.toFixed(3)}`);
+        }
 
         // Additional check with survival threshold
         const survivalCheck = this.shouldTradeBasedOnSurvivalProb(asset, stayedInArray);
-        console.log('Survival Check:', survivalCheck);
 
         // Final decision
         const shouldTrade = ensemble.shouldTrade &&
