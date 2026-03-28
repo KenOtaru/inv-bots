@@ -9377,9 +9377,31 @@ class EnhancedAccumulatorBot {
             console.log(`Neural Net Accuracy: ${(neuralMetrics.accuracy * 100).toFixed(1)}% | Trend: ${neuralMetrics.trend}`);
         }
 
-        // Ensemble performance
+        // Enhanced ensemble performance
         const ensemblePerf = this.ensembleDecisionMaker.getPerformanceSummary();
-        console.log(`Adaptive Threshold: ${ensemblePerf.adaptiveThreshold}`);
+        console.log(`Adaptive Threshold: ${ensemblePerf.ensemble.adaptiveThreshold}`);
+        console.log(`Ensemble Win Rate: ${ensemblePerf.ensemble.recentWinRate}`);
+
+        // Risk metrics
+        if (ensemblePerf.risk) {
+            console.log(`Kelly Fraction: ${ensemblePerf.risk.kellyFraction}`);
+            console.log(`Sharpe Ratio: ${ensemblePerf.risk.sharpeRatio}`);
+            console.log(`Max Drawdown: ${ensemblePerf.risk.maxDrawdown}`);
+        }
+
+        // Model weights
+        console.log('Model Weights:');
+        Object.entries(ensemblePerf.models).forEach(([model, data]) => {
+            console.log(`  ${model}: Acc=${data.accuracy}, Recent=${data.recentAccuracy}, ` +
+                `Weight=${data.weight}, Streak=${data.currentStreak}, CalErr=${data.calibrationError}`);
+        });
+
+        // Timeframe performance
+        console.log('Timeframe Performance:');
+        Object.entries(ensemblePerf.timeframes).forEach(([tf, data]) => {
+            console.log(`  ${tf}: WinRate=${data.winRate}, Samples=${data.samples}`);
+        });
+
         console.log('───────────────────────────────────────────────────────────');
         console.log(`Suspended Assets: ${Array.from(this.suspendedAssets).join(', ') || 'None'}`);
         console.log(`Wait Time: ${this.waitTime} minutes (${this.waitSeconds} ms)`);
@@ -9408,10 +9430,17 @@ class EnhancedAccumulatorBot {
         const pnlEmoji = stats.pnl >= 0 ? '🟢' : '🔴';
         const pnlStr = (stats.pnl >= 0 ? '+' : '') + '$' + Math.abs(stats.pnl).toFixed(2);
 
+        // Enhanced ensemble info
+        const ensemblePerf = this.ensembleDecisionMaker.getPerformanceSummary();
+        const riskInfo = ensemblePerf.risk || {};
+
         // Neural network metrics
         const neuralMetrics = this.config.enableNeuralNetwork && this.neuralEngine.initialized ? this.neuralEngine.getPerformanceMetrics() : { accuracy: 0 };
-        // Ensemble performance
-        const ensemblePerf = this.ensembleDecisionMaker.getPerformanceSummary();
+
+        // Model weights
+        const modelWeights = Object.entries(ensemblePerf.models).map(([model, data]) => {
+            return `├ ${model}: ${data.weight.toFixed(2)} (Acc: ${(data.accuracy * 100).toFixed(1)}%)`;
+        }).join('\n');
 
         const message = `
             ⏰ <b>Enhanced Accumulator Session Summary</b>
@@ -9432,6 +9461,14 @@ class EnhancedAccumulatorBot {
             🧠 <b>AI System State</b>
             ├ Neural Accuracy: ${(neuralMetrics.accuracy * 100).toFixed(1)}%
             └ Adaptive Threshold: ${ensemblePerf.adaptiveThreshold}
+
+            🎲 <b>Ensemble System</b> 
+            ├ Threshold: ${ensemblePerf.ensemble.adaptiveThreshold}
+            ├ Ensemble WR: ${ensemblePerf.ensemble.recentWinRate}
+            ├ Model Weights: ${modelWeights}
+            ├ Kelly: ${riskInfo.kellyFraction || 'N/A'}
+            ├ Sharpe: ${riskInfo.sharpeRatio || 'N/A'}
+            └ Drawdown: ${riskInfo.currentDrawdown || 'N/A'}
 
             ⏰ ${new Date().toLocaleString()}
         `.trim();
