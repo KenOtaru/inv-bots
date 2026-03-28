@@ -1050,6 +1050,7 @@ class EnsembleDecisionMaker {
         const agreement = values.length > 4 ?
             1 - (Math.max(...values) - Math.min(...values)) : 0;
 
+        console.log('Agreement:', agreement.toFixed(2), ' (', values.length, ')');
         // console.log('Adaptive Threshold:', this.adaptiveThreshold);
 
         return {
