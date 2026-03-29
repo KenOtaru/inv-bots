@@ -1096,7 +1096,7 @@ const CONFIG = {
     MAX_CANDLES_STORED: 300,
     CANDLES_TO_LOAD: 300,
 
-    CANDLE_PATTERN_LOOKBACK: 3, // Number of previous candles to analyze for pattern detection (user configurable)
+    CANDLE_PATTERN_LOOKBACK: 7, // Number of previous candles to analyze for pattern detection (user configurable)
 
     // Default Trade Duration Settings (used if asset has no specific config)
     DURATION: 58,
@@ -2371,10 +2371,10 @@ class DerivBot {
             '📋 Strategy: Candle-pattern (per-asset) + Per-Asset Recovery System'
         );
         console.log(
-            `    📈 BUY  (CALLE) — 3-candle pattern: Bearish→Bearish→Bullish. Recovery continues until win.`
+            `    📈 BUY  — if last ${CONFIG.CANDLE_PATTERN_LOOKBACK || 7} candles are NOT bullish (then BUY). Recovery continues until win.`
         );
         console.log(
-            `    📉 SELL (PUTE)  — 3-candle pattern: Bullish→Bearish→Bearish. Recovery continues until win.`
+            `    📉 SELL — if last ${CONFIG.CANDLE_PATTERN_LOOKBACK || 7} candles are NOT bearish (then SELL). Recovery continues until win.`
         );
         console.log(
             '    🔄 Recovery: Each asset has its own martingale chain'
@@ -2532,39 +2532,35 @@ class DerivBot {
             LOGGER.trade(`🔄 [${symbol}] RECOVERY MODE: ${signalReason} (Martingale Level: ${assetState.martingaleLevel})`);
 
         } else {
-            // ── NORMAL MODE: 3-Candle sequence signal
-            // CALLE  → Bearish, Bearish, Bullish  (most recent last)
-            // PUTE   → Bullish, Bearish, Bearish  (most recent last)
+            // ── NORMAL MODE: Candle-pattern signal
+            const lookback = CONFIG.CANDLE_PATTERN_LOOKBACK || 7;
             const closed = assetState.closedCandles || [];
 
-            if (closed.length < 3) {
-                LOGGER.info(`${symbol} ⏳ Waiting for at least 3 closed candles — have ${closed.length}`);
+            if (closed.length < lookback) {
+                LOGGER.info(`${symbol} ⏳ Waiting for ${lookback} closed candles — have ${closed.length}`);
                 return;
             }
 
-            // c1 = 3rd most recent, c2 = 2nd most recent, c3 = most recent
-            const c1 = closed[closed.length - 3];
-            const c2 = closed[closed.length - 2];
-            const c3 = closed[closed.length - 1];
+            const recent = closed.slice(-lookback);
+            const allNotBullish = recent.every(c => !CandleAnalyzer.isBullish(c));
+            const allNotBearish = recent.every(c => !CandleAnalyzer.isBearish(c));
 
-            const d1 = CandleAnalyzer.getCandleDirection(c1); // oldest of the three
-            const d2 = CandleAnalyzer.getCandleDirection(c2);
-            const d3 = CandleAnalyzer.getCandleDirection(c3); // most recent
-
-            LOGGER.info(`${symbol} 🕯️ Last 3 candles: [${d1}] [${d2}] [${d3}]`);
-
-            // Bearish - Bearish - Bullish → SELL
-            if (d1 === 'BEARISH' && d2 === 'BULLISH' && d3 === 'BULLISH') {
-                direction = 'PUTE';
-                signalReason = `3-candle pattern: ${d1}→${d2}→${d3} (Bearish-Bullish-Bullish → SELL)`;
-                LOGGER.trade(`⚡ [${symbol}] PATTERN SIGNAL (SELL): ${signalReason}`);
-                // Bullish - Bearish - Bearish → BUY
-            } else if (d1 === 'BULLISH' && d2 === 'BEARISH' && d3 === 'BEARISH') {
+            if (allNotBullish && !allNotBearish) {
                 direction = 'CALLE';
-                signalReason = `3-candle pattern: ${d1}→${d2}→${d3} (Bullish-Bearish-Bearish → BUY)`;
+                signalReason = `Candle pattern: last ${lookback} candles NOT bullish (buy)`;
                 LOGGER.trade(`⚡ [${symbol}] PATTERN SIGNAL (BUY): ${signalReason}`);
+            } else if (allNotBearish && !allNotBullish) {
+                direction = 'PUTE';
+                signalReason = `Candle pattern: last ${lookback} candles NOT bearish (sell)`;
+                LOGGER.trade(`⚡ [${symbol}] PATTERN SIGNAL (SELL): ${signalReason}`);
             } else {
-                LOGGER.info(`${symbol} ⏸️ No matching 3-candle pattern — [${d1}] [${d2}] [${d3}]`);
+                const bulls = recent.filter(c => CandleAnalyzer.isBullish(c)).length;
+                const bears = recent.filter(c => CandleAnalyzer.isBearish(c)).length;
+                LOGGER.info(`${symbol} ⏸️ Candle pattern not met — last ${lookback}: bulls=${bulls} bears=${bears}`);
+            }
+
+            if (direction) {
+                LOGGER.trade(`⚡ [${symbol}] PATTERN SIGNAL: ${signalReason}`);
             }
         }
 
