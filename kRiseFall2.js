@@ -6,8 +6,8 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'KriseFallM200000002-state.json');
-const HISTORY_FILE = path.join(__dirname, 'KriseFallM200000002-history.json');
+const STATE_FILE = path.join(__dirname, 'KriseFallM301-state.json');
+const HISTORY_FILE = path.join(__dirname, 'KriseFallM301-history.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
@@ -2541,22 +2541,25 @@ class DerivBot {
                 return;
             }
 
-            const recent = closed.slice(-lookback);
-            const allNotBullish = recent.every(c => !CandleAnalyzer.isBullish(c));
-            const allNotBearish = recent.every(c => !CandleAnalyzer.isBearish(c));
+            const recent = closed.slice(-3);
+            const c3 = recent[0]; // 3rd most recent
+            const c2 = recent[1]; // 2nd most recent
+            const c1 = recent[2]; // 1st most recent
 
-            if (allNotBullish && !allNotBearish) {
+            const allNotBullish = CandleAnalyzer.isBearish(c3) && CandleAnalyzer.isBullish(c2) && CandleAnalyzer.isBullish(c1);
+            const allNotBearish = CandleAnalyzer.isBullish(c3) && CandleAnalyzer.isBearish(c2) && CandleAnalyzer.isBearish(c1);
+
+            if (allNotBullish) {
                 direction = 'CALLE';
-                signalReason = `Candle pattern: last ${lookback} candles NOT bullish (buy)`;
+                signalReason = `Candle pattern: [BEAR, BULL, BULL] detected`;
                 LOGGER.trade(`⚡ [${symbol}] PATTERN SIGNAL (BUY): ${signalReason}`);
-            } else if (allNotBearish && !allNotBullish) {
+            } else if (allNotBearish) {
                 direction = 'PUTE';
-                signalReason = `Candle pattern: last ${lookback} candles NOT bearish (sell)`;
+                signalReason = `Candle pattern: [BULL, BEAR, BEAR] detected`;
                 LOGGER.trade(`⚡ [${symbol}] PATTERN SIGNAL (SELL): ${signalReason}`);
             } else {
-                const bulls = recent.filter(c => CandleAnalyzer.isBullish(c)).length;
-                const bears = recent.filter(c => CandleAnalyzer.isBearish(c)).length;
-                LOGGER.info(`${symbol} ⏸️ Candle pattern not met — last ${lookback}: bulls=${bulls} bears=${bears}`);
+                const patterns = recent.map(c => CandleAnalyzer.getCandleDirection(c).substring(0, 4));
+                LOGGER.info(`${symbol} ⏸️ Pattern not met — last 3: [${patterns.join(', ')}]`);
             }
 
             if (direction) {
