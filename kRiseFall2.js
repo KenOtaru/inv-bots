@@ -1096,7 +1096,7 @@ const CONFIG = {
     MAX_CANDLES_STORED: 300,
     CANDLES_TO_LOAD: 300,
 
-    CANDLE_PATTERN_LOOKBACK: 7, // Number of previous candles to analyze for pattern detection (user configurable)
+    CANDLE_PATTERN_LOOKBACK: 4, // Number of previous candles to analyze for pattern detection (user configurable)
 
     // Default Trade Duration Settings (used if asset has no specific config)
     DURATION: 58,
@@ -2523,11 +2523,11 @@ class DerivBot {
             // RECOVERY MODE: After a loss, continue in the SAME direction
             // This is a martingale continuation strategy - not a new breakout signal
             if (assetState.lastTradeDirection === 'CALLE') {
-                direction = 'CALLE';
-                signalReason = `Recovery (${symbol} Prev LOSS on RISE → Continue RISE)`;
-            } else {
                 direction = 'PUTE';
-                signalReason = `Recovery (${symbol} Prev LOSS on FALL → Continue FALL)`;
+                signalReason = `Recovery (${symbol} Prev LOSS on RISE → ALTERNATE FALL)`;
+            } else {
+                direction = 'CALLE';
+                signalReason = `Recovery (${symbol} Prev LOSS on FALL → ALTERNATE RISE)`;
             }
             LOGGER.trade(`🔄 [${symbol}] RECOVERY MODE: ${signalReason} (Martingale Level: ${assetState.martingaleLevel})`);
 
