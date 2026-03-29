@@ -2541,25 +2541,22 @@ class DerivBot {
                 return;
             }
 
-            const recent = closed.slice(-3);
-            const c3 = recent[0]; // 3rd most recent
-            const c2 = recent[1]; // 2nd most recent
-            const c1 = recent[2]; // 1st most recent
+            const recent = closed.slice(-lookback);
+            const allNotBullish = recent.every(c => !CandleAnalyzer.isBullish(c));
+            const allNotBearish = recent.every(c => !CandleAnalyzer.isBearish(c));
 
-            const allNotBullish = CandleAnalyzer.isBearish(c3) && CandleAnalyzer.isBullish(c2) && CandleAnalyzer.isBullish(c1);
-            const allNotBearish = CandleAnalyzer.isBullish(c3) && CandleAnalyzer.isBearish(c2) && CandleAnalyzer.isBearish(c1);
-
-            if (allNotBullish) {
+            if (allNotBullish && !allNotBearish) {
                 direction = 'CALLE';
-                signalReason = `Candle pattern: [BEAR, BULL, BULL] detected`;
+                signalReason = `Candle pattern: last ${lookback} candles NOT bullish (buy)`;
                 LOGGER.trade(`⚡ [${symbol}] PATTERN SIGNAL (BUY): ${signalReason}`);
-            } else if (allNotBearish) {
+            } else if (allNotBearish && !allNotBullish) {
                 direction = 'PUTE';
-                signalReason = `Candle pattern: [BULL, BEAR, BEAR] detected`;
+                signalReason = `Candle pattern: last ${lookback} candles NOT bearish (sell)`;
                 LOGGER.trade(`⚡ [${symbol}] PATTERN SIGNAL (SELL): ${signalReason}`);
             } else {
-                const patterns = recent.map(c => CandleAnalyzer.getCandleDirection(c).substring(0, 4));
-                LOGGER.info(`${symbol} ⏸️ Pattern not met — last 3: [${patterns.join(', ')}]`);
+                const bulls = recent.filter(c => CandleAnalyzer.isBullish(c)).length;
+                const bears = recent.filter(c => CandleAnalyzer.isBearish(c)).length;
+                LOGGER.info(`${symbol} ⏸️ Candle pattern not met — last ${lookback}: bulls=${bulls} bears=${bears}`);
             }
 
             if (direction) {
