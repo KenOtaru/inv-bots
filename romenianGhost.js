@@ -23,24 +23,27 @@ class RomanianGhostUltimate {
             assets: [
                 'R_10', 'R_25', 'R_50', 'R_75', 'RDBULL', 'RDBEAR',
             ],  // Multi-asset support
-            requiredHistoryLength: 3000,
+            requiredHistoryLength: 3500,
             minHistoryForTrading: 2000,
 
             // Z-Score thresholds (CORRECTED - uses AVERAGE not sum)
-            minAvgZScore: 2.5,           // Average Z-score per window
-            minParticipation: 8,          // Digit must dominate 8+ windows
+            minAvgZScore: 2.88, //3.15          // Average Z-score per window
+            minParticipation: 8, //9,          // Digit must dominate 8+ windows
+            minConsistency: 0.65, //0.62
 
             // Volatility thresholds (CORRECTED - realistic values)
-            minConcentration: 0.023,      // Minimum concentration for ultra-low
-            maxConcentration: 0.25,       // Maximum (avoid extreme anomalies)
+            minConcentration: 0.041, //0.048, //0.023,      // Minimum concentration for ultra-low
+            maxConcentration: 0.135, //0.25,       // Maximum (avoid extreme anomalies)
+
+            minSignalScore: 68,               // New: Overall confluence score
 
             // Confirmation layers
             minStreakLength: 2,           // Minimum current streak
-            maxStreakLength: 8,           // Maximum before exhaustion
+            maxStreakLength: 7, //8          // Maximum before exhaustion
 
             // Cooldown (prevents overtrading)
-            cooldownTicks: 15,            // Wait 15 ticks between trades
-            cooldownAfterLoss: 30,        // Wait 30 ticks after loss
+            cooldownTicks: 18,            // Wait 15 ticks between trades
+            cooldownAfterLoss: 37,        // Wait 30 ticks after loss
 
             // Money management
             baseStake: 2.20,
@@ -54,6 +57,42 @@ class RomanianGhostUltimate {
             // Time filters (avoid volatile periods)
             avoidMinutesAroundHour: 5,    // Avoid first/last 5 min of hour
             tradingHoursUTC: { start: 0, end: 24 },  // 24/7 for synthetics
+
+            // Asset-specific Z-Score overrides (Recommended)
+            assetSpecific: {
+                'R_10': { minAvgZScore: 2.76 },
+                'R_25': { minAvgZScore: 2.88 },
+                'R_50': { minAvgZScore: 2.97 },
+                'R_75': { minAvgZScore: 3.05 },
+                'RDBULL': { minAvgZScore: 2.83 },
+                'RDBEAR': { minAvgZScore: 2.84 }
+            },
+
+            // ==================== DIGIT BLACKLIST ====================
+            digitBlacklist: {
+                'R_10': [3, 7],
+                'R_25': [4, 9],
+                'R_50': [0, 5],
+                'R_75': [0, 5],
+                'RDBULL': [0, 1, 2],
+                'RDBEAR': [7, 8, 9]
+            },
+
+            // Dynamic blacklist sensitivity per regime
+            blacklistAggression: {
+                strong_bias: 1.0,
+                mean_reverting: 0.7,
+                chaotic: 1.3,
+                neutral: 1.0
+            },
+
+            // ==================== REGIME DETECTION ====================
+            regimeSettings: {
+                strong_bias: { minAvgZScore: 2.65, minSignalScore: 62, minConcentration: 0.038 },
+                mean_reverting: { minAvgZScore: 2.78, minSignalScore: 66, minConcentration: 0.042 },
+                neutral: { minAvgZScore: 2.95, minSignalScore: 72, minConcentration: 0.045 },
+                chaotic: { minAvgZScore: 3.40, minSignalScore: 85, minConcentration: 0.055 } // Almost disables trading
+            }
         };
 
         // ====== TRADING STATE ======
@@ -89,6 +128,16 @@ class RomanianGhostUltimate {
         // Performance tracking (for adaptive thresholds)
         this.recentTrades = [];  // Last 50 trades for analysis
         this.maxRecentTrades = 50;
+
+        // Additional optimized state
+        this.dailyPnL = 0;
+        this.currentDay = new Date().getUTCDate();
+        this.minConsistency = this.config.minConsistency;
+        this.minSignalScore = this.config.minSignalScore;
+
+        this.currentRegime = 'neutral';
+        this.regimeHistory = [];
+        this.lastRegimeChange = Date.now();
 
         // Hourly stats
         this.hourly = { trades: 0, wins: 0, losses: 0, pnl: 0 };
@@ -324,6 +373,8 @@ class RomanianGhostUltimate {
         // Consistency bonus (max 15 points)
         const consistencyScore = best.consistency * 15;
 
+        if (best.consistency < this.config.minConsistency) return null; // Reject inconsistent signals
+
         // Participation bonus (max 10 points)
         const participationScore = (best.participation / 10) * 10;
 
@@ -344,11 +395,11 @@ class RomanianGhostUltimate {
             if (streak.currentStreak >= 5) streakScore += 5; // Bonus for strong streak
         }
 
+        // Recent appearance check
         const totalScore = zScore + consistencyScore + participationScore +
             volScore + trendScore + streakScore;
 
-        // Recent appearance check
-        const inRecent = history.slice(-9).includes(digit);
+        const inRecent = history.slice(-10).includes(digit);   // Changed from -9 to -10
 
         return {
             digit,
@@ -364,7 +415,9 @@ class RomanianGhostUltimate {
             avgZScore: best.avgZScore,
             participation: best.participation,
             inRecent,
-            isValid: totalScore >= 65 && inRecent  // Minimum 60 points to trade
+            isValid: totalScore >= this.minSignalScore &&
+                best.consistency >= this.minConsistency &&
+                inRecent
         };
     }
 
@@ -407,32 +460,106 @@ class RomanianGhostUltimate {
     // ENHANCEMENT #6: ADAPTIVE THRESHOLDS
     // ========================================================================
     getAdaptiveThresholds() {
-        if (this.recentTrades.length < 20) {
-            return {
-                minScore: 60,
-                minZScore: this.config.minAvgZScore
-            };
+        const base = this.config.regimeSettings[this.currentRegime] ||
+            this.config.regimeSettings.neutral;
+
+        let minZ = base.minAvgZScore;
+        let minScore = base.minSignalScore;
+
+        // Performance-based adjustment
+        if (this.recentTrades.length >= 25) {
+            const winRate = this.recentTrades.filter(t => t.won).length / this.recentTrades.length;
+
+            if (winRate < 0.78) {
+                minZ += 0.25;
+                minScore += 8;
+            } else if (winRate > 0.89) {
+                minZ -= 0.12;
+            }
         }
 
-        // Calculate recent win rate
-        const recentWins = this.recentTrades.filter(t => t.won).length;
-        const recentWinRate = recentWins / this.recentTrades.length;
+        return {
+            minAvgZScore: minZ,
+            minSignalScore: minScore
+        };
+    }
 
-        // Adjust thresholds based on performance
-        let minScore = 60;
-        let minZScore = this.config.minAvgZScore;
+    // ========================================================================
+    // DIGIT BLACKLIST PER ASSET + REGIME
+    // ========================================================================
+    isBlacklisted(asset, digit, volAnalysis) {
+        if (!this.config.digitBlacklist[asset]) return false;
 
-        if (recentWinRate < 0.90) {
-            // Increase thresholds if win rate dropping
-            minScore = 70;
-            minZScore = 2.6;
-        } else if (recentWinRate > 0.97) {
-            // Can slightly relax if performing well
-            minScore = 60;
-            minZScore = 2.0;
+        const baseBlacklist = this.config.digitBlacklist[asset];
+        const regimeMultiplier = this.config.blacklistAggression[this.currentRegime] || 1.0;
+
+        // In strong bias regime, we are stricter
+        if (this.currentRegime === 'strong_bias' && volAnalysis.concentration > 0.065) {
+            return baseBlacklist.includes(digit);
         }
 
-        return { minScore, minZScore };
+        // In chaotic regime, blacklist more aggressively
+        if (this.currentRegime === 'chaotic') {
+            return baseBlacklist.includes(digit) || [0, 5, 9].includes(digit);
+        }
+
+        return baseBlacklist.includes(digit);
+    }
+
+    // ========================================================================
+    // REGIME DETECTION ENGINE
+    // ========================================================================
+    detectRegime(history) {
+        if (history.length < 800) return 'neutral';
+
+        const vol = this.calculateVolatilityAnalysis(history);
+        if (!vol) return 'neutral';
+
+        const last300 = history.slice(-300);
+        const zAnalysis = this.calculateZScoreAnalysis(history);
+        const topZ = zAnalysis[0] ? zAnalysis[0].avgZScore : 0;
+
+        let score = 0;
+
+        // Strong Bias Regime
+        if (vol.concentration > 0.058 && vol.concTrend > 0.008 && topZ > 2.4) {
+            score += 35;
+        }
+
+        // Mean Reverting Regime
+        if (vol.isMeanReverting && vol.concentration > 0.035 && vol.concTrend < 0.005) {
+            score += 20;
+        }
+
+        // Chaotic Regime (avoid)
+        if (vol.concentration < 0.022 || vol.hurst > 0.68 || Math.abs(vol.concTrend) > 0.025) {
+            score -= 30;
+        }
+
+        let detectedRegime = 'neutral';
+
+        if (score >= 30) detectedRegime = 'strong_bias';
+        else if (score >= 12) detectedRegime = 'mean_reverting';
+        else if (score <= -18) detectedRegime = 'chaotic';
+
+        // Smooth regime changes
+        this.regimeHistory.push(detectedRegime);
+        if (this.regimeHistory.length > 8) this.regimeHistory.shift();
+
+        // Take majority vote from last 8 detections
+        const counts = {};
+        this.regimeHistory.forEach(r => counts[r] = (counts[r] || 0) + 1);
+        const finalRegime = Object.keys(counts).reduce((a, b) =>
+            counts[a] > counts[b] ? a : b
+        );
+
+        if (finalRegime !== this.currentRegime) {
+            console.log(`🔄 Regime changed: ${this.currentRegime} → ${finalRegime}`);
+            this.currentRegime = finalRegime;
+            this.lastRegimeChange = Date.now();
+        }
+
+        return this.currentRegime;
     }
 
     // ========================================================================
@@ -443,6 +570,10 @@ class RomanianGhostUltimate {
 
         const history = this.histories[asset];
 
+        // === REGIME DETECTION ===
+        this.currentRegime = this.detectRegime(history);
+
+        // === BLACKLIST CHECK (after signal is calculated) ===
         // Step 1: Calculate Z-Score analysis
         const zAnalysis = this.calculateZScoreAnalysis(history);
 
@@ -451,6 +582,13 @@ class RomanianGhostUltimate {
 
         // Step 3: Calculate signal score
         const signal = this.calculateSignalScore(zAnalysis, volAnalysis, history);
+
+        if (!signal || !signal.isValid) return;
+
+        if (this.isBlacklisted(asset, signal.digit, volAnalysis)) {
+            // console.log(`🚫 Blacklisted digit ${signal.digit} on ${asset} in ${this.currentRegime} regime`);
+            return;
+        }
 
         // Step 4: Get adaptive thresholds
         const thresholds = this.getAdaptiveThresholds();
@@ -466,9 +604,13 @@ class RomanianGhostUltimate {
         // Step 5: Check if signal is valid
         if (!signal || !signal.isValid) return;
 
-        if (signal.totalScore < thresholds.minScore) return;
-        if (signal.avgZScore < thresholds.minZScore) return;
-        if (volAnalysis.concentration < thresholds.minConcentration) return;
+        const assetConfig = this.config.assetSpecific[asset] || {};
+        const effectiveZThreshold = assetConfig.minAvgZScore || this.config.minAvgZScore;
+
+        if (signal.totalScore < this.minSignalScore) return;
+        if (signal.avgZScore < effectiveZThreshold) return;
+        if (volAnalysis.concentration < this.config.minConcentration) return;
+        if (volAnalysis.concentration > this.config.maxConcentration) return;
         if (!volAnalysis.isUltraLow || !volAnalysis.isMeanReverting) return;
 
         // Step 6: Check if different from last trade
