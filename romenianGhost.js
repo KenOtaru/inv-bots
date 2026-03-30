@@ -581,12 +581,12 @@ class RomanianGhostUltimate {
         }
 
         // LOG EVERY 30 SECONDS
-        const now = Date.now();
-        if (now - this.lastTickLogTime2[asset] >= 30000 && signal) {
-            console.log(`[${asset}] Score=${signal.totalScore.toFixed(1)} | AvgZ=${signal.avgZScore.toFixed(2)} | Digit=${signal.digit} | Conc=${volAnalysis.concentration.toFixed(4)} | Ultra=${volAnalysis.isUltraLow} | Hurst=${volAnalysis.hurst.toFixed(4)} | Recent=${signal.inRecent} | Cooldown=${this.ticksSinceLastTrade[asset]}`);
-            console.log(`Analysis: ${JSON.stringify(volAnalysis, null, 2)}`);
-            this.lastTickLogTime2[asset] = now;
-        }
+        // const now = Date.now();
+        // if (now - this.lastTickLogTime2[asset] >= 30000 && signal) {
+        //     console.log(`[${asset}] Score=${signal.totalScore.toFixed(1)} | AvgZ=${signal.avgZScore.toFixed(2)} | Digit=${signal.digit} | Conc=${volAnalysis.concentration.toFixed(4)} | Ultra=${volAnalysis.isUltraLow} | Hurst=${volAnalysis.hurst.toFixed(4)} | Recent=${signal.inRecent} | Cooldown=${this.ticksSinceLastTrade[asset]}`);
+        //     console.log(`Analysis: ${JSON.stringify(volAnalysis, null, 2)}`);
+        //     this.lastTickLogTime2[asset] = now;
+        // }
 
         const thresholds = this.getAdaptiveThresholds();
         const assetConfig = this.config.assetSpecific[asset] || {};
