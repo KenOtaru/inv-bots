@@ -2696,10 +2696,10 @@ class DerivBot {
             //     return;
             // }
 
-            // Daily reconnection at 1:00 AM GMT+1 (to catch TOKYO session start)
+            // Daily reconnection at SYDNEY_START AM GMT+1 (to catch TOKYO session start)
             if (
                 !state.session.isActive &&
-                currentHours === 1 &&
+                currentHours === CONFIG.TOKYO_START &&
                 currentMinutes >= 0
             ) {
                 LOGGER.info(
@@ -2727,7 +2727,7 @@ class DerivBot {
                     allAssetsRecovered &&
                     anyAssetTradedWin &&
                     currentHours >= CONFIG.SYDNEY_END &&
-                    currentMinutes >= 30
+                    currentMinutes >= 0
                 ) {
                     LOGGER.info(
                         `It's past ${CONFIG.SYDNEY_END}:30 GMT+1, all assets recovered, disconnecting.`

@@ -2522,25 +2522,25 @@ class DerivBot {
 
         if (isRecoveryMode) {
             // RECOVERY MODE: After a loss, continue in the SAME direction
-            // // This is a martingale continuation strategy - not a new breakout signal
-            // if (assetState.lastTradeDirection === 'CALLE') {
-            //     direction = 'PUTE';
-            //     signalReason = `Recovery (${symbol} Prev LOSS on RISE → ALTERNATE FALL)`;
-            // } else {
-            //     direction = 'CALLE';
-            //     signalReason = `Recovery (${symbol} Prev LOSS on FALL → ALTERNATE RISE)`;
-            // }
-
-            const candleType = CandleAnalyzer.getCandleDirection(lastClosedCandle);
-
-            if (candleType === 'BULLISH') {
-                direction = 'CALLE';
-                signalReason = `Recovery (${symbol} Prev LOSS on FALL → ALTERNATE RISE)`;
-            } else {
+            // This is a martingale continuation strategy - not a new breakout signal
+            if (assetState.lastTradeDirection === 'CALLE') {
                 direction = 'PUTE';
                 signalReason = `Recovery (${symbol} Prev LOSS on RISE → ALTERNATE FALL)`;
+            } else {
+                direction = 'CALLE';
+                signalReason = `Recovery (${symbol} Prev LOSS on FALL → ALTERNATE RISE)`;
             }
-            LOGGER.trade(`🔄 [${symbol}] RECOVERY MODE: ${signalReason} (Martingale Level: ${assetState.martingaleLevel})`);
+
+            // const candleType = CandleAnalyzer.getCandleDirection(lastClosedCandle);
+
+            // if (candleType === 'BULLISH') {
+            //     direction = 'CALLE';
+            //     signalReason = `Recovery (${symbol} Prev LOSS on FALL → ALTERNATE RISE)`;
+            // } else {
+            //     direction = 'PUTE';
+            //     signalReason = `Recovery (${symbol} Prev LOSS on RISE → ALTERNATE FALL)`;
+            // }
+            // LOGGER.trade(`🔄 [${symbol}] RECOVERY MODE: ${signalReason} (Martingale Level: ${assetState.martingaleLevel})`);
 
         } else {
             // ── NORMAL MODE: Candle-pattern signal
@@ -2725,10 +2725,10 @@ class DerivBot {
             //     return;
             // }
 
-            // Daily reconnection at 11:00 PM GMT+1 (to catch TOKYO session start)
+            // Daily reconnection at SYDNEY_START AM GMT+1 (to catch TOKYO session start)
             if (
                 !state.session.isActive &&
-                currentHours === 1 &&
+                currentHours === CONFIG.SYDNEY_START &&
                 currentMinutes >= 0
             ) {
                 LOGGER.info(
