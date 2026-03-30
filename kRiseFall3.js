@@ -6,8 +6,8 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'KriseFallM_1-state.json');
-const HISTORY_FILE = path.join(__dirname, 'KriseFallM_1-history.json');
+const STATE_FILE = path.join(__dirname, 'KriseFallM_2-state.json');
+const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2-history.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
@@ -632,7 +632,7 @@ class TelegramService {
         const today = TradeHistoryManager.getTodayStats();
 
         const message = `
-                ${emoji} <b>${type} TRADE ALERT 2</b>
+                ${emoji} <b>${type} TRADE ALERT 3</b>
                 Asset: ${symbol}
                 Direction: ${direction}
                 Stake: $${stake.toFixed(2)}
@@ -713,7 +713,7 @@ class TelegramService {
                 : '0.0%';
 
             const message = [
-                `📊 <b>SESSION SUMMARY 2</b>`,
+                `📊 <b>SESSION SUMMARY 3</b>`,
                 ``,
                 `📅 <b>Today (${TradeHistoryManager.getDateKey()}):</b>`,
                 `Duration: ${stats.duration}`,
@@ -783,7 +783,7 @@ class TelegramService {
             const pnlEmoji = (dayStats.netPL || 0) >= 0 ? '🟢' : '🔴';
 
             const message = [
-                `🌙 <b>END OF DAY REPORT - ${dateKey}</b>`,
+                `🌙 <b>END OF DAY REPORT 3 - ${dateKey}</b>`,
                 ``,
                 `${pnlEmoji} <b>Day Results:</b>`,
                 `├ Trades: ${dayStats.tradesCount}`,
@@ -835,7 +835,7 @@ class TelegramService {
             console.log(`  SYDNEY_START: ${CONFIG.SYDNEY_START}, SYDNEY_END: ${CONFIG.SYDNEY_END}`);
 
             const message = [
-                `🤖 <b>DERIV RISE/FALL BOT STARTED 2</b>`,
+                `🤖 <b>DERIV RISE/FALL BOT STARTED 3</b>`,
                 `Strategy: Candle-pattern detection - lookback ${CONFIG.CANDLE_PATTERN_LOOKBACK || 7}`,
                 `Mode: <b>Independent Per-Asset Management</b>`,
                 `Capital: $${state.capital.toFixed(2)}`,
@@ -916,7 +916,7 @@ class TelegramService {
             });
 
             const message = [
-                `⏰ <b>Rise/Fall Bot Hourly Summary 2</b>`,
+                `⏰ <b>Rise/Fall Bot Hourly Summary 3</b>`,
                 ``,
                 `📊 <b>Last Hour</b>`,
                 `├ Trades: ${statsSnapshot.trades}`,
@@ -943,7 +943,7 @@ class TelegramService {
 
             try {
                 await this.sendMessage(message);
-                LOGGER.info('📱 Telegram: Hourly Summary sent');
+                LOGGER.info('📱 Telegram: Hourly Summary sent 3');
                 LOGGER.info(
                     `   📊 Hour Stats: ${statsSnapshot.trades} trades, ${statsSnapshot.wins}W/${statsSnapshot.losses}L, ${pnlStr}`
                 );
@@ -1078,7 +1078,7 @@ class CandleAnalyzer {
 // ============================================
 const CONFIG = {
     // API Settings
-    API_TOKEN: '0P94g4WdSrSrzir',
+    API_TOKEN: 'rgNedekYXvCaPeP',
     APP_ID: '1089',
     WS_URL: 'wss://ws.derivws.com/websockets/v3',
 
@@ -1096,7 +1096,7 @@ const CONFIG = {
     MAX_CANDLES_STORED: 300,
     CANDLES_TO_LOAD: 300,
 
-    CANDLE_PATTERN_LOOKBACK: 9, // Number of previous candles to analyze for pattern detection (user configurable)
+    CANDLE_PATTERN_LOOKBACK: 6, // Number of previous candles to analyze for pattern detection (user configurable)
 
     // Default Trade Duration Settings (used if asset has no specific config)
     DURATION: 60,
@@ -1109,7 +1109,7 @@ const CONFIG = {
     MARTINGALE_MULTIPLIER2: 1.8,
     MARTINGALE_MULTIPLIER3: 2.1,
     // MARTINGALE_MULTIPLIER4: 2.1,
-    // MARTINGALE_MULTIPLIER5: 2.2,
+    // MARTINGALE_MULTIPLIER5: 2.1,
     // MARTINGALE_MULTIPLIER6: 3.0,
     MAX_MARTINGALE_STEPS: 9,
     System: 1,
@@ -2524,11 +2524,11 @@ class DerivBot {
             // RECOVERY MODE: After a loss, continue in the SAME direction
             // // This is a martingale continuation strategy - not a new breakout signal
             // if (assetState.lastTradeDirection === 'CALLE') {
-            //     direction = 'CALLE';
-            //     signalReason = `Recovery (${symbol} Prev LOSS on RISE → Continue RISE)`;
-            // } else {
             //     direction = 'PUTE';
-            //     signalReason = `Recovery (${symbol} Prev LOSS on FALL → Continue FALL)`;
+            //     signalReason = `Recovery (${symbol} Prev LOSS on RISE → ALTERNATE FALL)`;
+            // } else {
+            //     direction = 'CALLE';
+            //     signalReason = `Recovery (${symbol} Prev LOSS on FALL → ALTERNATE RISE)`;
             // }
 
             const candleType = CandleAnalyzer.getCandleDirection(lastClosedCandle);
@@ -2540,7 +2540,6 @@ class DerivBot {
                 direction = 'PUTE';
                 signalReason = `Recovery (${symbol} Prev LOSS on RISE → ALTERNATE FALL)`;
             }
-
             LOGGER.trade(`🔄 [${symbol}] RECOVERY MODE: ${signalReason} (Martingale Level: ${assetState.martingaleLevel})`);
 
         } else {
@@ -2554,21 +2553,40 @@ class DerivBot {
             }
 
             const recent = closed.slice(-lookback);
-            const allNotBullish = recent.every(c => !CandleAnalyzer.isBullish(c));
-            const allNotBearish = recent.every(c => !CandleAnalyzer.isBearish(c));
 
-            if (allNotBullish && !allNotBearish) {
-                direction = 'PUTE';
-                signalReason = `Candle pattern: last ${lookback} candles NOT bearish (sell)`;
-                LOGGER.trade(`⚡ [${symbol}] PATTERN SIGNAL (SELL): ${signalReason}`);
-            } else if (allNotBearish && !allNotBullish) {
-                direction = 'CALLE';
-                signalReason = `Candle pattern: last ${lookback} candles NOT bullish (buy)`;
-                LOGGER.trade(`⚡ [${symbol}] PATTERN SIGNAL (BUY): ${signalReason}`);
+            // Check for strictly alternating pattern (Bullish↔Bearish or Bearish↔Bullish)
+            // Each consecutive candle must flip direction — Doji candles break the sequence
+            let isAlternating = recent.length >= lookback;
+            for (let i = 1; i < recent.length; i++) {
+                const prevBullish = CandleAnalyzer.isBullish(recent[i - 1]);
+                const prevBearish = CandleAnalyzer.isBearish(recent[i - 1]);
+                const currBullish = CandleAnalyzer.isBullish(recent[i]);
+                const currBearish = CandleAnalyzer.isBearish(recent[i]);
+                // Must alternate: (prev bullish & curr bearish) OR (prev bearish & curr bullish)
+                if (!((prevBullish && currBearish) || (prevBearish && currBullish))) {
+                    isAlternating = false;
+                    break;
+                }
+            }
+
+            const lastCandle = recent[recent.length - 1];
+            const lastIsBullish = CandleAnalyzer.isBullish(lastCandle);
+            const lastIsBearish = CandleAnalyzer.isBearish(lastCandle);
+
+            if (isAlternating && (lastIsBullish || lastIsBearish)) {
+                if (lastIsBullish) {
+                    direction = 'CALLE';
+                    signalReason = `Alternating pattern: last ${lookback} candles alternate, last is BULLISH (buy)`;
+                    LOGGER.trade(`⚡ [${symbol}] PATTERN SIGNAL (BUY): ${signalReason}`);
+                } else {
+                    direction = 'PUTE';
+                    signalReason = `Alternating pattern: last ${lookback} candles alternate, last is BEARISH (sell)`;
+                    LOGGER.trade(`⚡ [${symbol}] PATTERN SIGNAL (SELL): ${signalReason}`);
+                }
             } else {
                 const bulls = recent.filter(c => CandleAnalyzer.isBullish(c)).length;
                 const bears = recent.filter(c => CandleAnalyzer.isBearish(c)).length;
-                LOGGER.info(`${symbol} ⏸️ Candle pattern not met — last ${lookback}: bulls=${bulls} bears=${bears}`);
+                LOGGER.info(`${symbol} ⏸️ No alternating pattern — last ${lookback}: bulls=${bulls} bears=${bears}`);
             }
 
             if (direction) {
@@ -2707,7 +2725,7 @@ class DerivBot {
             //     return;
             // }
 
-            // Daily reconnection at 1:00 AM GMT+1 (to catch TOKYO session start)
+            // Daily reconnection at 11:00 PM GMT+1 (to catch TOKYO session start)
             if (
                 !state.session.isActive &&
                 currentHours === 1 &&
@@ -2737,8 +2755,7 @@ class DerivBot {
                 if (
                     allAssetsRecovered &&
                     anyAssetTradedWin &&
-                    currentHours >= CONFIG.SYDNEY_END &&
-                    currentMinutes >= 30
+                    currentHours >= CONFIG.SYDNEY_END
                 ) {
                     LOGGER.info(
                         `It's past ${CONFIG.SYDNEY_END}:30 GMT+1, all assets recovered, disconnecting.`

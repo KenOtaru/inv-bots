@@ -6,8 +6,8 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'KriseFallM200000002-state.json');
-const HISTORY_FILE = path.join(__dirname, 'KriseFallM200000002-history.json');
+const STATE_FILE = path.join(__dirname, 'KriseFallM_1-state.json');
+const HISTORY_FILE = path.join(__dirname, 'KriseFallM_1-history.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
@@ -1099,7 +1099,7 @@ const CONFIG = {
     CANDLE_PATTERN_LOOKBACK: 9, // Number of previous candles to analyze for pattern detection (user configurable)
 
     // Default Trade Duration Settings (used if asset has no specific config)
-    DURATION: 58,
+    DURATION: 60,
     DURATION_UNIT: 's',
 
     // Trade Settings — NOW PER ASSET
@@ -1108,8 +1108,8 @@ const CONFIG = {
     MARTINGALE_MULTIPLIER: 1.48,
     MARTINGALE_MULTIPLIER2: 1.8,
     MARTINGALE_MULTIPLIER3: 2.1,
-    MARTINGALE_MULTIPLIER4: 2.1,
-    MARTINGALE_MULTIPLIER5: 2.2,
+    // MARTINGALE_MULTIPLIER4: 2.1,
+    // MARTINGALE_MULTIPLIER5: 2.2,
     // MARTINGALE_MULTIPLIER6: 3.0,
     MAX_MARTINGALE_STEPS: 9,
     System: 1,
@@ -1120,17 +1120,17 @@ const CONFIG = {
     // true  = only trade during defined session windows below (recovery allowed anytime)
     // false = trade 24/7 (ignore session windows entirely)
     // ============================================
-    USE_TRADING_SESSIONS: false,
+    USE_TRADING_SESSIONS: true,
     // ============================================
     // TRADING SESSION WINDOWS (GMT+1 hours)
     // ============================================
-    TOKYO_START: 1,
-    TOKYO_END: 2,
+    TOKYO_START: 3,
+    TOKYO_END: 8,
     LONDON_START: 8,
-    LONDON_END: 9,
-    NEWYORK_START: 14,
-    NEWYORK_END: 15,
-    SYDNEY_START: 22,
+    LONDON_END: 12,
+    NEWYORK_START: 15,
+    NEWYORK_END: 19,
+    SYDNEY_START: 19,
     SYDNEY_END: 23,
 
     // Debug
@@ -1662,28 +1662,29 @@ class SessionManager {
                         CONFIG.MARTINGALE_MULTIPLIER2 *
                         100
                     ) / 100;
-            } else if (assetState.martingaleLevel >= 3 && assetState.martingaleLevel <= 4) {
+            } else if (assetState.martingaleLevel >= 3) {
                 assetState.currentStake =
                     Math.ceil(
                         assetState.currentStake *
                         CONFIG.MARTINGALE_MULTIPLIER3 *
                         100
                     ) / 100;
-            } else if (assetState.martingaleLevel >= 5 && assetState.martingaleLevel <= 6) {
-                assetState.currentStake =
-                    Math.ceil(
-                        assetState.currentStake *
-                        CONFIG.MARTINGALE_MULTIPLIER4 *
-                        100
-                    ) / 100;
-            } else if (assetState.martingaleLevel >= 7) {
-                assetState.currentStake =
-                    Math.ceil(
-                        assetState.currentStake *
-                        CONFIG.MARTINGALE_MULTIPLIER5 *
-                        100
-                    ) / 100;
             }
+            // else if (assetState.martingaleLevel >= 5 && assetState.martingaleLevel <= 6) {
+            //     assetState.currentStake =
+            //         Math.ceil(
+            //             assetState.currentStake *
+            //             CONFIG.MARTINGALE_MULTIPLIER4 *
+            //             100
+            //         ) / 100;
+            // } else if (assetState.martingaleLevel >= 7) {
+            //     assetState.currentStake =
+            //         Math.ceil(
+            //             assetState.currentStake *
+            //             CONFIG.MARTINGALE_MULTIPLIER5 *
+            //             100
+            //         ) / 100;
+            // }
             // else if (assetState.martingaleLevel === 6) {
             //     assetState.currentStake =
             //         Math.ceil(
