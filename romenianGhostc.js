@@ -640,7 +640,7 @@ class RomanianGhostUltimate {
         });
 
         this.sendTelegram(`
-            🎯 <b>GHOST 9.2 TRADE</b>
+            🎯 <b>GHOST 9.2 TRADE C</b>
 
             📊 Asset: ${asset}
             🔢 Digit: ${digit}
@@ -728,7 +728,7 @@ class RomanianGhostUltimate {
 
         // Result Alert
         this.sendTelegram(`
-            ${won ? '✅ WIN' : '❌ LOSS'}
+            ${won ? '✅ WIN C' : '❌ LOSS C'}
 
             📊 Asset: ${asset}
             🔢 Exit: ${exitDigit}
@@ -745,21 +745,21 @@ class RomanianGhostUltimate {
         // Stop conditions
         if (this.consecutiveLosses >= this.config.maxConsecutiveLosses) {
             console.log('🛑 Max consecutive losses reached');
-            this.sendTelegram(`🛑 <b>MAX LOSSES REACHED!</b>\nFinal P&L: $${this.netProfit.toFixed(2)}`);
+            this.sendTelegram(`🛑 <b>C MAX LOSSES REACHED!</b>\nFinal P&L: $${this.netProfit.toFixed(2)}`);
             this.disconnect();
             return;
         }
 
         if (this.netProfit >= this.config.takeProfit) {
             console.log('🎉 Take profit reached!');
-            this.sendTelegram(`🎉 <b>TAKE PROFIT!</b>\nFinal P&L: $${this.netProfit.toFixed(2)}`);
+            this.sendTelegram(`🎉 <b>CTAKE PROFIT!</b>\nFinal P&L: $${this.netProfit.toFixed(2)}`);
             this.disconnect();
             return;
         }
 
         if (this.netProfit <= this.config.stopLoss) {
             console.log('🛑 Stop loss reached');
-            this.sendTelegram(`🛑 <b>STOP LOSS!</b>\nFinal P&L: $${this.netProfit.toFixed(2)}`);
+            this.sendTelegram(`🛑 <b>C STOP LOSS!</b>\nFinal P&L: $${this.netProfit.toFixed(2)}`);
             this.disconnect();
             return;
         }
@@ -969,7 +969,7 @@ class RomanianGhostUltimate {
             if (this.hourly.trades === 0) return;
             const winRate = ((this.hourly.wins / this.hourly.trades) * 100).toFixed(1);
             this.sendTelegram(`
-                ⏰ <b>HOURLY — GHOST 9.2</b>
+                ⏰ <b>HOURLY — GHOST 9.2 C</b>
 
                 📊 Trades: ${this.hourly.trades}
                 ✅/❌ W/L: ${this.hourly.wins}/${this.hourly.losses}
