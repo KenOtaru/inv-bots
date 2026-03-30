@@ -586,7 +586,7 @@ class RomanianGhostUltimate {
         if (!signal || !signal.isValid) return;
 
         if (this.isBlacklisted(asset, signal.digit, volAnalysis)) {
-            // console.log(`🚫 Blacklisted digit ${signal.digit} on ${asset} in ${this.currentRegime} regime`);
+            console.log(`🚫 Blacklisted digit ${signal.digit} on ${asset} in ${this.currentRegime} regime`);
             return;
         }
 
