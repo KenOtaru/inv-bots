@@ -2522,13 +2522,23 @@ class DerivBot {
 
         if (isRecoveryMode) {
             // RECOVERY MODE: After a loss, continue in the SAME direction
-            // This is a martingale continuation strategy - not a new breakout signal
-            if (assetState.lastTradeDirection === 'CALLE') {
-                direction = 'CALLE';
-                signalReason = `Recovery (${symbol} Prev LOSS on RISE → Continue RISE)`;
-            } else {
+            // // This is a martingale continuation strategy - not a new breakout signal
+            // if (assetState.lastTradeDirection === 'CALLE') {
+            //     direction = 'CALLE';
+            //     signalReason = `Recovery (${symbol} Prev LOSS on RISE → Continue RISE)`;
+            // } else {
+            //     direction = 'PUTE';
+            //     signalReason = `Recovery (${symbol} Prev LOSS on FALL → Continue FALL)`;
+            // }
+
+            const candleType = CandleAnalyzer.getCandleDirection(lastClosedCandle);
+
+            if (candleType === 'BULLISH') {
                 direction = 'PUTE';
-                signalReason = `Recovery (${symbol} Prev LOSS on FALL → Continue FALL)`;
+                signalReason = `Recovery (${symbol} Prev LOSS on FALL → Continuing FALL)`;
+            } else {
+                direction = 'CALLE';
+                signalReason = `Recovery (${symbol} Prev LOSS on RISE → Continuing RISE)`;
             }
             LOGGER.trade(`🔄 [${symbol}] RECOVERY MODE: ${signalReason} (Martingale Level: ${assetState.martingaleLevel})`);
 
