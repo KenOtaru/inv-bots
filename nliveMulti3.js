@@ -787,12 +787,53 @@ class ReliableAccumulatorBot {
         // Analyze trade opportunity
         const decision = this.analyzeTradeOpportunity(asset, currentTicks, stayedInArray);
 
+        const recentDigits = this.tickHistories[asset].slice(-60);
+        const regimeAnalysis = this.analyzer.detectVolatilityRegime(recentDigits);
+
+        const survivalProb = this.analyzer.getWeightedSurvivalProbability(
+            asset,
+            currentTicks,
+            this.config.targetHoldTicks
+        );
+
+        const momentum = this.analyzer.calculateMomentum(stayedInArray);
+
         console.log(`\n🔍 Analyzing ${asset} @ ${currentTicks} ticks  (${decision.currentTicks} | target ${decision.targetTicks})`);
-        console.log(`  Survival Prob: ${(decision.survivalProb * 100).toFixed(1)}% | Regime: ${decision.regimeAnalysis.regime} (Score: ${(decision.regimeAnalysis.score * 100).toFixed(1)}%) | Momentum: ${(decision.momentum * 100).toFixed(1)}% `);
-        console.log(`   Decision: ${decision.shouldTrade ? 'TRADE' : 'SKIP'} | Reason: ${decision.reason || 'meets_criteria'} (${decision.overallScore ? `| Score: ${(decision.overallScore * 100).toFixed(1)}%` : '0.00'})`);
+        console.log(`  Survival Prob: ${(decision.survivalProb * 100).toFixed(1)}% | Momentum: ${(decision.momentum * 100).toFixed(1)}% `);
+        console.log(`   Regime: ${decision.regimeAnalysis.regime} (score: ${(decision.regimeAnalysis.score * 100).toFixed(1)}%) | changeRate: ${(decision.regimeAnalysis.changeRate * 100).toFixed(1)}% | maxStreak: ${decision.regimeAnalysis.maxStreak}`);
+        // console.log(`   Decision: ${decision.shouldTrade ? 'TRADE' : 'SKIP'} | Reason: ${decision.decision?.reason || 'meets_criteria'} (${decision.overallScore ? `Score: ${(decision.overallScore * 100).toFixed(1)}%` : '0.00'})`);
         console.log(`   Entry Window: ${currentTicks >= this.config.minEntryTicks && currentTicks <= this.config.maxEntryTicks ? '✅' : '❌'} | Historical Survival: ${this.analyzer.getWeightedSurvivalProbability(asset, currentTicks, this.config.targetHoldTicks).toFixed(2)} | Historical Survival (default): ${this.analyzer.getDefaultSurvivalProb(currentTicks, this.config.targetHoldTicks).toFixed(2)} | Historical Runs: ${this.analyzer.runHistory[asset] ? this.analyzer.runHistory[asset].length : 0} | Current Streak: ${stayedInArray.slice(-5).join('')}`);
 
-        if (decision.shouldTrade) {
+        
+
+        // 1. Entry window check (CRITICAL)
+        // if (currentTicks < this.config.minEntryTicks || currentTicks > this.config.maxEntryTicks) {
+        //     return { 
+        //         shouldTrade: false, 
+        //         reason: `outside_entry_window_${currentTicks}` 
+        //     };
+        // }
+
+
+        // if (regimeAnalysis.score < this.config.minRegimeScore) {
+        //     return { 
+        //         shouldTrade: false, 
+        //         reason: `poor_regime_${regimeAnalysis.regime}`,
+        //         regimeScore: regimeAnalysis.score
+        //     };
+        // }
+
+        // if (survivalProb < this.config.minSurvivalProb) {
+        //     return { 
+        //         shouldTrade: false, 
+        //         reason: 'low_survival_probability',
+        //         survivalProb 
+        //     };
+        // }
+
+        console.log(`   Decision: ${decision.shouldTrade ? 'TRADE' : 'SKIP'} | Reason: ${decision.decision?.reason || 'meets_criteria'} (${decision.overallScore ? `Score: ${(decision.overallScore * 100).toFixed(1)}%` : '0.00'})`);
+        
+        if (decision.shouldTrade && survivalProb >= this.config.minSurvivalProb && regimeAnalysis.score >= this.config.minRegimeScore && (currentTicks < this.config.minEntryTicks || currentTicks > this.config.maxEntryTicks)) {
             console.log(`\n🎯 TRADE SIGNAL: ${asset} @ ${currentTicks} ticks`);
             
             this.executeTrade(asset, decision);
@@ -804,12 +845,12 @@ class ReliableAccumulatorBot {
      */
     analyzeTradeOpportunity(asset, currentTicks, stayedInArray) {
         // 1. Entry window check (CRITICAL)
-        if (currentTicks < this.config.minEntryTicks || currentTicks > this.config.maxEntryTicks) {
-            return { 
-                shouldTrade: false, 
-                reason: `outside_entry_window_${currentTicks}` 
-            };
-        }
+        // if (currentTicks < this.config.minEntryTicks || currentTicks > this.config.maxEntryTicks) {
+        //     return { 
+        //         shouldTrade: false, 
+        //         reason: `outside_entry_window_${currentTicks}` 
+        //     };
+        // }
 
         // 2. Risk management check
         const riskCheck = this.riskManager.canTrade(
@@ -829,13 +870,13 @@ class ReliableAccumulatorBot {
         const recentDigits = this.tickHistories[asset].slice(-60);
         const regimeAnalysis = this.analyzer.detectVolatilityRegime(recentDigits);
         
-        if (regimeAnalysis.score < this.config.minRegimeScore) {
-            return { 
-                shouldTrade: false, 
-                reason: `poor_regime_${regimeAnalysis.regime}`,
-                regimeScore: regimeAnalysis.score
-            };
-        }
+        // if (regimeAnalysis.score < this.config.minRegimeScore) {
+        //     return { 
+        //         shouldTrade: false, 
+        //         reason: `poor_regime_${regimeAnalysis.regime}`,
+        //         regimeScore: regimeAnalysis.score
+        //     };
+        // }
 
         // 4. Survival probability calculation
         const survivalProb = this.analyzer.getWeightedSurvivalProbability(
@@ -844,13 +885,13 @@ class ReliableAccumulatorBot {
             this.config.targetHoldTicks
         );
 
-        if (survivalProb < this.config.minSurvivalProb) {
-            return { 
-                shouldTrade: false, 
-                reason: 'low_survival_probability',
-                survivalProb 
-            };
-        }
+        // if (survivalProb < this.config.minSurvivalProb) {
+        //     return { 
+        //         shouldTrade: false, 
+        //         reason: 'low_survival_probability',
+        //         survivalProb 
+        //     };
+        // }
 
         // 5. Momentum check
         const momentum = this.analyzer.calculateMomentum(stayedInArray);
