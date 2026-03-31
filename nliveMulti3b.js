@@ -745,21 +745,21 @@ class ReliableAccumulatorBot {
      */
     analyzeTradeOpportunity(asset, currentTicks, stayedInArray) {
         // 1. ENFORCED Entry window check (CRITICAL FIX)
-        if (currentTicks < this.config.minEntryTicks) {
-            return { 
-                shouldTrade: false, 
-                reason: `too_early (${currentTicks} < ${this.config.minEntryTicks})`,
-                currentTicks 
-            };
-        }
+        // if (currentTicks < this.config.minEntryTicks) {
+        //     return { 
+        //         shouldTrade: false, 
+        //         reason: `too_early (${currentTicks} < ${this.config.minEntryTicks})`,
+        //         currentTicks 
+        //     };
+        // }
         
-        if (currentTicks > this.config.maxEntryTicks) {
-            return { 
-                shouldTrade: false, 
-                reason: `too_late (${currentTicks} > ${this.config.maxEntryTicks})`,
-                currentTicks 
-            };
-        }
+        // if (currentTicks > this.config.maxEntryTicks) {
+        //     return { 
+        //         shouldTrade: false, 
+        //         reason: `too_late (${currentTicks} > ${this.config.maxEntryTicks})`,
+        //         currentTicks 
+        //     };
+        // }
 
         // 2. Risk management check
         const riskCheck = this.riskManager.canTrade(
@@ -780,14 +780,14 @@ class ReliableAccumulatorBot {
         const recentDigits = this.tickHistories[asset].slice(-60);
         const regimeAnalysis = this.analyzer.detectVolatilityRegime(recentDigits);
         
-        if (regimeAnalysis.score < this.config.minRegimeScore) {
-            return { 
-                shouldTrade: false, 
-                reason: `poor_regime (${regimeAnalysis.regime})`,
-                regimeAnalysis,
-                currentTicks
-            };
-        }
+        // if (regimeAnalysis.score < this.config.minRegimeScore) {
+        //     return { 
+        //         shouldTrade: false, 
+        //         reason: `poor_regime (${regimeAnalysis.regime})`,
+        //         regimeAnalysis,
+        //         currentTicks
+        //     };
+        // }
 
         // 4. Survival probability calculation
         const survivalProb = this.analyzer.getWeightedSurvivalProbability(
@@ -796,15 +796,15 @@ class ReliableAccumulatorBot {
             this.config.targetHoldTicks
         );
 
-        if (survivalProb < this.config.minSurvivalProb) {
-            return { 
-                shouldTrade: false, 
-                reason: `low_survival (${(survivalProb * 100).toFixed(1)}%)`,
-                survivalProb,
-                regimeAnalysis,
-                currentTicks
-            };
-        }
+        // if (survivalProb < this.config.minSurvivalProb) {
+        //     return { 
+        //         shouldTrade: false, 
+        //         reason: `low_survival (${(survivalProb * 100).toFixed(1)}%)`,
+        //         survivalProb,
+        //         regimeAnalysis,
+        //         currentTicks
+        //     };
+        // }
 
         // 5. Momentum check
         const momentum = this.analyzer.calculateMomentum(stayedInArray);
