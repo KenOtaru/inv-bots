@@ -1377,7 +1377,7 @@ class EnhancedAccumulatorBot {
         const confidence = Math.min(1.0, (currentStayed - 8) / 28);
 
         const shouldTrade = finalScore >= 0.20 && //0.60
-            survivalProb >= 0.84 &&  //0.60
+            survivalProb >= 0.83 &&  //0.60
             // regimeScore >= 0.45 &&
             confidence >= 0.10; //0.70
 
