@@ -1868,9 +1868,6 @@ class EnhancedAccumulatorBot {
             this.learningSystem.lossPatterns[asset].shift();
         }
 
-        // Update Bayesian model
-        this.statisticalEngine.updateBayesian(asset, won);
-
         // Train neural network
         if (this.config.enableNeuralNetwork && this.neuralEngine.initialized) {
             const features = this.neuralEngine.prepareFeatures(
