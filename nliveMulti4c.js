@@ -1926,6 +1926,13 @@ class EnhancedAccumulatorBot {
         const asset = message.echo_req.symbol;
         if (!asset) return;
 
+        const proposal = message.proposal;
+        if (!proposal) return;
+
+        const assetState = this.assetStates[asset];
+        assetState.currentProposalId = proposal.id;
+        this.pendingProposals.set(proposal.id, asset);
+
         const stayedInArray = message.proposal.contract_details.ticks_stayed_in;
         const currentStayed = stayedInArray[99] + 1;
 
@@ -1935,9 +1942,9 @@ class EnhancedAccumulatorBot {
         if (!this.tradeInProgress) {
             const decision = this.makeTradeDecision(asset, stayedInArray);
 
-            console.log(`[${asset}] Stayed: ${currentStayed} | Score: ${(decision.score*100).toFixed(1)}% | Survival: ${(decision.survival*100).toFixed(1)}% | Regime: ${(decision.regimeScore*100).toFixed(1)}%`);
+            console.log(`[${asset}] Stayed: ${currentStayed} | Score: ${(decision.score*100).toFixed(1)}% | Survival: ${(decision.survival*100).toFixed(1)}% | Regime: ${(decision.regimeScore*100).toFixed(1)}% | Confidence: ${(decision.confidence*100).toFixed(1)}%`);
 
-            if (decision.shouldTrade) {
+            if (decision.shouldTrade && decision.confidence >= 1.0) {
                 console.log(`✅ STRONG SIGNAL - Entering ${asset} at ${currentStayed} ticks`);
                 this.placeTrade(asset, decision);
             }
@@ -2074,10 +2081,10 @@ class EnhancedAccumulatorBot {
     placeTrade(asset, decision) {
         if (this.tradeInProgress) return;
         const assetState = this.assetStates[asset];
-        // if (!assetState || !assetState.currentProposalId) {
-        //     console.log(`Cannot place trade. Missing proposal for asset ${asset}.`);
-        //     return;
-        // }
+        if (!assetState || !assetState.currentProposalId) {
+            console.log(`Cannot place trade. Missing proposal for asset ${asset}.`);
+            return;
+        }
 
         // FIX: Pass the required arguments from assetState
         const stayedInArray = assetState.stayedInArray;
@@ -2085,29 +2092,6 @@ class EnhancedAccumulatorBot {
             ? stayedInArray[99] + 1
             : null;
 
-        // if (currentDigitCount !== null && stayedInArray) {
-        //     if (this.detectDangerousPattern(asset, currentDigitCount, stayedInArray)) {
-        //         console.log(`[${asset}] ⚠️ Trade blocked due to dangerous pattern`);
-        //         return;
-        //     }
-        // }
-
-        // if (this.detectDangerousPattern2(asset)) {
-        //     console.log(`[${asset}] ⚠️ Trade blocked due to dangerous pattern`);
-        //     return;
-        // }
-
-        // if (decision.confidence < 0.55) {
-        //     console.log(`[${asset}] ⚠️ Trade blocked due to low confidence`);
-        //     return;
-        // }
-
-        // if (this.consecutiveLosses > 0) {
-        // if (decision.survivalProb < 0.95) {
-        //     console.log(`[${asset}] ⚠️ Trade blocked due to low survival probability`);
-        //     return;
-        // }
-        // }
 
         const request = {
             buy: assetState.currentProposalId,
