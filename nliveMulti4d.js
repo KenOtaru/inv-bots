@@ -1376,10 +1376,10 @@ class EnhancedAccumulatorBot {
 
         const confidence = Math.min(1.0, (currentStayed - 8) / 28);
 
-        const shouldTrade = finalScore >= 0.78 && 
-                        survivalProb >= 0.82 && 
-                        regimeScore >= 0.45 &&
-                        confidence >= 0.35;
+        const shouldTrade = finalScore >= 0.60 && 
+                        survivalProb >= 0.60 && 
+                        // regimeScore >= 0.45 &&
+                        confidence >= 0.70;
 
         // === DEBUG LOGGING ===
         console.log(`[${asset}] Stayed:${currentStayed} | ` +
