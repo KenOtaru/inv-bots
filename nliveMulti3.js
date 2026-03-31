@@ -19,7 +19,7 @@
 require('dotenv').config();
 const WebSocket = require('ws');
 const TelegramBot = require('node-telegram-bot-api');
-const fs   = require('fs');
+const fs = require('fs');
 const path = require('path');
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -27,64 +27,64 @@ const path = require('path');
 // ─────────────────────────────────────────────────────────────────────────────
 const CONFIG = {
     // Deriv API
-    token:  process.env.DERIV_TOKEN || 'rgNedekYXvCaPeP',
-    appId:  process.env.DERIV_APP_ID || 1089,
-    wsUrl:  'wss://ws.binaryws.com/websockets/v3',
+    token: 'rgNedekYXvCaPeP', //process.env.DERIV_TOKEN || 
+    appId: 1089, //process.env.DERIV_APP_ID || 
+    wsUrl: 'wss://ws.binaryws.com/websockets/v3',
 
     // Assets to trade (ordered by preference — lowest volatility first)
     assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
 
     // Staking  (FLAT — no Martingale)
-    initialStake:       1.00,   // USD per trade
-    maxStake:          10.00,   // never exceed this
+    initialStake: 1.00,   // USD per trade
+    maxStake: 10.00,   // never exceed this
 
     // Growth rates
-    growthRateDefault:  0.01,   // 1% — widest barriers, safest
-    growthRateBoost:    0.02,   // 2% — only on strong squeeze + RSI centred
+    growthRateDefault: 0.01,   // 1% — widest barriers, safest
+    growthRateBoost: 0.02,   // 2% — only on strong squeeze + RSI centred
 
     // Entry window (ENFORCED): only enter when active accumulator is this young
-    minEntryTick:  0,
-    maxEntryTick:  8,
+    minEntryTick: 0,
+    maxEntryTick: 8,
 
     // Take-profit (contract level): sell when profit ≥ X% of stake
-    takeProfitPct:      0.40,   // 40% of stake
+    takeProfitPct: 0.40,   // 40% of stake
     // Hard hold limit: never hold longer than this after take-profit window opens
-    maxHoldTicks:       20,
+    maxHoldTicks: 20,
 
     // Bollinger Bands parameters
-    bbPeriod:           20,
-    bbMultiplier:       2.0,
+    bbPeriod: 20,
+    bbMultiplier: 2.0,
     // BB width percentile threshold — enter only when market is calm
-    bbSqueezePctile:    40,     // below 40th percentile = squeeze (good to enter)
+    bbSqueezePctile: 40,     // below 40th percentile = squeeze (good to enter)
 
     // RSI parameters
-    rsiPeriod:          14,
-    rsiLow:             35,     // don't enter if RSI < 35 (trending down hard)
-    rsiHigh:            65,     // don't enter if RSI > 65 (trending up hard)
+    rsiPeriod: 14,
+    rsiLow: 35,     // don't enter if RSI < 35 (trending down hard)
+    rsiHigh: 65,     // don't enter if RSI > 65 (trending up hard)
 
     // Price stability: max average absolute change over last 10 ticks (as % of price)
-    maxPriceChangePct:  0.002,  // 0.2%
+    maxPriceChangePct: 0.002,  // 0.2%
 
     // Min history required before analysis
-    requiredHistory:    60,
+    requiredHistory: 60,
 
     // Risk management
     maxConsecutiveLosses: 3,
     consecutiveLossCooldownMs: 1800000, // 30 min pause after 3 consec losses
-    assetCooldownMs:    2700000, // 45 min asset cooldown on loss
-    maxDailyLoss:       50,     // stop bot for the day
-    takeProfitSession:  200,    // stop bot after reaching this profit
+    assetCooldownMs: 2700000, // 45 min asset cooldown on loss
+    maxDailyLoss: 50,     // stop bot for the day
+    takeProfitSession: 200,    // stop bot after reaching this profit
 
     // Proposal throttle: min ms between proposal requests per asset
     proposalThrottleMs: 8000,
 
     // Telegram
-    telegramToken:   process.env.TELEGRAM_TOKEN  || '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
-    telegramChatId:  process.env.TELEGRAM_CHAT_ID || '752497117',
+    telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ', //process.env.TELEGRAM_TOKEN || 
+    telegramChatId: '752497117', //process.env.TELEGRAM_CHAT_ID || 
 
     // State persistence
-    stateFile:       path.join(__dirname, 'accumulator-bot-state.json'),
-    stateSaveMs:     5000,
+    stateFile: path.join(__dirname, 'accumulator-bot-state.json'),
+    stateSaveMs: 5000,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -94,14 +94,14 @@ class StatePersistence {
     static save(bot) {
         try {
             const data = {
-                savedAt:          Date.now(),
-                totalTrades:      bot.totalTrades,
-                totalWins:        bot.totalWins,
-                totalLosses:      bot.totalLosses,
-                totalPnl:         bot.totalPnl,
-                dailyPnl:         bot.dailyPnl,
+                savedAt: Date.now(),
+                totalTrades: bot.totalTrades,
+                totalWins: bot.totalWins,
+                totalLosses: bot.totalLosses,
+                totalPnl: bot.totalPnl,
+                dailyPnl: bot.dailyPnl,
                 consecutiveLosses: bot.consecutiveLosses,
-                assetMetrics:     bot.assetMetrics,
+                assetMetrics: bot.assetMetrics,
             };
             fs.writeFileSync(CONFIG.stateFile, JSON.stringify(data, null, 2));
         } catch (e) {
@@ -112,7 +112,7 @@ class StatePersistence {
     static load() {
         try {
             if (!fs.existsSync(CONFIG.stateFile)) return null;
-            const raw  = fs.readFileSync(CONFIG.stateFile, 'utf8');
+            const raw = fs.readFileSync(CONFIG.stateFile, 'utf8');
             const data = JSON.parse(raw);
             const ageMin = (Date.now() - data.savedAt) / 60000;
             if (ageMin > 90) {
@@ -145,16 +145,16 @@ class VolatilityAnalyzer {
     computeBB(prices, period = CONFIG.bbPeriod, mult = CONFIG.bbMultiplier) {
         if (prices.length < period) return null;
 
-        const slice  = prices.slice(-period);
-        const mean   = slice.reduce((s, v) => s + v, 0) / period;
+        const slice = prices.slice(-period);
+        const mean = slice.reduce((s, v) => s + v, 0) / period;
         const variance = slice.reduce((s, v) => s + (v - mean) ** 2, 0) / period;
-        const sigma  = Math.sqrt(variance);
+        const sigma = Math.sqrt(variance);
 
         return {
-            upper:  mean + mult * sigma,
+            upper: mean + mult * sigma,
             middle: mean,
-            lower:  mean - mult * sigma,
-            width:  (2 * mult * sigma) / mean, // normalised width
+            lower: mean - mult * sigma,
+            width: (2 * mult * sigma) / mean, // normalised width
             sigma,
             mean,
         };
@@ -174,16 +174,16 @@ class VolatilityAnalyzer {
 
         // First average
         recent.forEach(c => {
-            if (c > 0) gains  += c;
-            else       losses -= c;
+            if (c > 0) gains += c;
+            else losses -= c;
         });
 
-        let avgGain = gains  / period;
+        let avgGain = gains / period;
         let avgLoss = losses / period;
 
         if (avgLoss === 0) return 100;
 
-        const rs  = avgGain / avgLoss;
+        const rs = avgGain / avgLoss;
         return 100 - 100 / (1 + rs);
     }
 
@@ -214,7 +214,7 @@ class VolatilityAnalyzer {
         if (history.length < 20) return 50; // not enough data, assume neutral
 
         const sorted = [...history].sort((a, b) => a - b);
-        const rank   = sorted.filter(w => w <= currentWidth).length;
+        const rank = sorted.filter(w => w <= currentWidth).length;
         return (rank / sorted.length) * 100;
     }
 
@@ -242,9 +242,9 @@ class VolatilityAnalyzer {
             };
         }
 
-        const bb         = this.computeBB(prices);
-        const rsi        = this.computeRSI(prices);
-        const momentum   = this.computeMomentum(prices);
+        const bb = this.computeBB(prices);
+        const rsi = this.computeRSI(prices);
+        const momentum = this.computeMomentum(prices);
 
         if (!bb || rsi === null || momentum === null) {
             return {
@@ -259,21 +259,21 @@ class VolatilityAnalyzer {
         // ── Scoring ──────────────────────────────────────────────────────────
         // 1. Bollinger Band Squeeze Score (lower percentile = better, max at 0)
         let bbScore = 1 - (bbWidthPctile / 100); // 0–1
-        bbScore     = Math.pow(bbScore, 0.7);     // smooth the curve
+        bbScore = Math.pow(bbScore, 0.7);     // smooth the curve
 
         // 2. RSI Score — peak at 50, drops toward 0 and 100
         const rsiCentre = 50;
-        const rsiDist   = Math.abs(rsi - rsiCentre);
-        const rsiScore  = Math.max(0, 1 - rsiDist / 40); // 1 at RSI=50, 0 at RSI=10 or 90
+        const rsiDist = Math.abs(rsi - rsiCentre);
+        const rsiScore = Math.max(0, 1 - rsiDist / 40); // 1 at RSI=50, 0 at RSI=10 or 90
 
         // 3. Momentum Score (lower momentum = better for accumulators)
         const momentumThreshold = CONFIG.maxPriceChangePct;
-        const momentumScore     = Math.max(0, 1 - momentum / (momentumThreshold * 3));
+        const momentumScore = Math.max(0, 1 - momentum / (momentumThreshold * 3));
 
         // ── Weighted composite ───────────────────────────────────────────────
         const score = (
-            bbScore      * 0.55 +
-            rsiScore     * 0.30 +
+            bbScore * 0.55 +
+            rsiScore * 0.30 +
             momentumScore * 0.15
         );
 
@@ -302,18 +302,18 @@ class VolatilityAnalyzer {
 
         // ── Growth rate selection ─────────────────────────────────────────────
         const strongSqueeze = bbWidthPctile < 20;
-        const rsiCentred    = rsi >= 44 && rsi <= 56;
-        const growthRate    = (strongSqueeze && rsiCentred && shouldEnter)
+        const rsiCentred = rsi >= 44 && rsi <= 56;
+        const growthRate = (strongSqueeze && rsiCentred && shouldEnter)
             ? CONFIG.growthRateBoost
             : CONFIG.growthRateDefault;
 
         // ── Regime label ─────────────────────────────────────────────────────
         let regime = 'neutral';
         if (bbWidthPctile < 20 && rsi >= 44 && rsi <= 56) regime = 'ideal_squeeze';
-        else if (bbWidthPctile < 40)                      regime = 'squeeze';
-        else if (bbWidthPctile >= 70)                     regime = 'expanding';
-        else if (rsi < CONFIG.rsiLow)                     regime = 'oversold';
-        else if (rsi > CONFIG.rsiHigh)                    regime = 'overbought';
+        else if (bbWidthPctile < 40) regime = 'squeeze';
+        else if (bbWidthPctile >= 70) regime = 'expanding';
+        else if (rsi < CONFIG.rsiLow) regime = 'oversold';
+        else if (rsi > CONFIG.rsiHigh) regime = 'overbought';
 
         return {
             score, shouldEnter, reason, growthRate,
@@ -327,7 +327,7 @@ class VolatilityAnalyzer {
 // ─────────────────────────────────────────────────────────────────────────────
 class RiskManager {
     constructor() {
-        this.assetCooldowns  = {}; // { asset: untilTimestamp }
+        this.assetCooldowns = {}; // { asset: untilTimestamp }
         this.globalPausedUntil = 0;
     }
 
@@ -382,39 +382,39 @@ class RiskManager {
 class ReliableAccumulatorBot {
     constructor() {
         // WebSocket
-        this.ws              = null;
-        this.connected       = false;
-        this.wsReady         = false;
+        this.ws = null;
+        this.connected = false;
+        this.wsReady = false;
         this.reconnectAttempts = 0;
-        this.maxReconnects   = 50;
-        this.shutdownFlag    = false;
+        this.maxReconnects = 50;
+        this.shutdownFlag = false;
 
         // Price history  (raw float prices — used for BB/RSI)
-        this.tickPrices      = {};  // { asset: [price, price, ...] }
+        this.tickPrices = {};  // { asset: [price, price, ...] }
         this.tickSubscriptionIds = {};
 
         // Per-asset state
-        this.assetStates     = {};  // { asset: { proposalId, lastProposalAt, lastTicks } }
+        this.assetStates = {};  // { asset: { proposalId, lastProposalAt, lastTicks } }
 
         // Proposal throttle
-        this.lastProposalAt  = {};  // { asset: timestamp }
+        this.lastProposalAt = {};  // { asset: timestamp }
 
         // Active trade tracking
-        this.tradeInProgress           = false;
-        this.activeTrade               = null;
-        this.contractSubscriptionId    = null;
+        this.tradeInProgress = false;
+        this.activeTrade = null;
+        this.contractSubscriptionId = null;
 
         // Session stats
-        this.totalTrades     = 0;
-        this.totalWins       = 0;
-        this.totalLosses     = 0;
-        this.totalPnl        = 0;
-        this.dailyPnl        = 0;
+        this.totalTrades = 0;
+        this.totalWins = 0;
+        this.totalLosses = 0;
+        this.totalPnl = 0;
+        this.dailyPnl = 0;
         this.consecutiveLosses = 0;
-        this.assetMetrics    = {};
+        this.assetMetrics = {};
 
         // Components
-        this.analyzer    = new VolatilityAnalyzer();
+        this.analyzer = new VolatilityAnalyzer();
         this.riskManager = new RiskManager();
 
         // Telegram
@@ -424,8 +424,8 @@ class ReliableAccumulatorBot {
 
         // Init per-asset structures
         CONFIG.assets.forEach(asset => {
-            this.tickPrices[asset]   = [];
-            this.assetStates[asset]  = { proposalId: null, lastTicks: 0, lastProposalAt: 0 };
+            this.tickPrices[asset] = [];
+            this.assetStates[asset] = { proposalId: null, lastTicks: 0, lastProposalAt: 0 };
             this.assetMetrics[asset] = { trades: 0, wins: 0, losses: 0, pnl: 0 };
         });
 
@@ -437,13 +437,13 @@ class ReliableAccumulatorBot {
     _loadState() {
         const s = StatePersistence.load();
         if (!s) return;
-        this.totalTrades      = s.totalTrades      || 0;
-        this.totalWins        = s.totalWins        || 0;
-        this.totalLosses      = s.totalLosses      || 0;
-        this.totalPnl         = s.totalPnl         || 0;
-        this.dailyPnl         = s.dailyPnl         || 0;
+        this.totalTrades = s.totalTrades || 0;
+        this.totalWins = s.totalWins || 0;
+        this.totalLosses = s.totalLosses || 0;
+        this.totalPnl = s.totalPnl || 0;
+        this.dailyPnl = s.dailyPnl || 0;
         this.consecutiveLosses = s.consecutiveLosses || 0;
-        if (s.assetMetrics)   this.assetMetrics    = s.assetMetrics;
+        if (s.assetMetrics) this.assetMetrics = s.assetMetrics;
         console.log(`✅ Restored: ${this.totalTrades} trades, P&L $${this.totalPnl.toFixed(2)}`);
     }
 
@@ -456,10 +456,10 @@ class ReliableAccumulatorBot {
         console.log(`🔌 Connecting to ${url}...`);
         this.ws = new WebSocket(url);
 
-        this.ws.on('open',    ()      => this._onOpen());
-        this.ws.on('message', (data)  => this._onMessage(data));
-        this.ws.on('error',   (err)   => console.error('WS error:', err.message));
-        this.ws.on('close',   ()      => this._onClose());
+        this.ws.on('open', () => this._onOpen());
+        this.ws.on('message', (data) => this._onMessage(data));
+        this.ws.on('error', (err) => console.error('WS error:', err.message));
+        this.ws.on('close', () => this._onClose());
     }
 
     _onOpen() {
@@ -472,7 +472,7 @@ class ReliableAccumulatorBot {
     _onClose() {
         console.log('⚡ WebSocket closed');
         this.connected = false;
-        this.wsReady   = false;
+        this.wsReady = false;
 
         if (this.shutdownFlag) return;
 
@@ -490,11 +490,11 @@ class ReliableAccumulatorBot {
     _cleanup() {
         if (this.ws) {
             this.ws.removeAllListeners();
-            try { this.ws.close(); } catch (_) {}
+            try { this.ws.close(); } catch (_) { }
             this.ws = null;
         }
         this.connected = false;
-        this.wsReady   = false;
+        this.wsReady = false;
     }
 
     _send(req) {
@@ -517,13 +517,13 @@ class ReliableAccumulatorBot {
         try { msg = JSON.parse(raw); } catch { return; }
 
         switch (msg.msg_type) {
-            case 'authorize':                this._handleAuth(msg);         break;
-            case 'history':                  this._handleHistory(msg);      break;
-            case 'tick':                     this._handleTick(msg);         break;
-            case 'proposal':                 this._handleProposal(msg);     break;
-            case 'buy':                      this._handleBuy(msg);          break;
-            case 'proposal_open_contract':   this._handleContractUpdate(msg); break;
-            case 'sell':                     this._handleSell(msg);         break;
+            case 'authorize': this._handleAuth(msg); break;
+            case 'history': this._handleHistory(msg); break;
+            case 'tick': this._handleTick(msg); break;
+            case 'proposal': this._handleProposal(msg); break;
+            case 'buy': this._handleBuy(msg); break;
+            case 'proposal_open_contract': this._handleContractUpdate(msg); break;
+            case 'sell': this._handleSell(msg); break;
             default:
                 if (msg.error) console.error(`API Error [${msg.msg_type}]: ${msg.error.message}`);
         }
@@ -552,7 +552,7 @@ class ReliableAccumulatorBot {
                 ticks_history: asset,
                 adjust_start_time: 1,
                 count: 200,
-                end:   'latest',
+                end: 'latest',
                 start: 1,
                 style: 'ticks',
             });
@@ -564,8 +564,8 @@ class ReliableAccumulatorBot {
 
     _handleHistory(msg) {
         if (msg.error) return;
-        const asset   = msg.echo_req.ticks_history;
-        const prices  = (msg.history.prices || []).map(Number);
+        const asset = msg.echo_req.ticks_history;
+        const prices = (msg.history.prices || []).map(Number);
         this.tickPrices[asset] = prices;
         console.log(`📊 ${asset}: Loaded ${prices.length} price ticks`);
     }
@@ -578,7 +578,7 @@ class ReliableAccumulatorBot {
         }
 
         const { symbol, quote } = msg.tick;
-        const price  = Number(quote);
+        const price = Number(quote);
         const prices = this.tickPrices[symbol];
 
         if (!prices) return;
@@ -593,12 +593,12 @@ class ReliableAccumulatorBot {
 
     // ── Proposal Request (throttled + gated) ──────────────────────────────────
     _maybeRequestProposal(asset) {
-        if (this.tradeInProgress)   return;
-        if (!this.wsReady)          return;
-        if (this.shutdownFlag)      return;
+        if (this.tradeInProgress) return;
+        if (!this.wsReady) return;
+        if (this.shutdownFlag) return;
 
-        const now       = Date.now();
-        const lastAt    = this.assetStates[asset].lastProposalAt || 0;
+        const now = Date.now();
+        const lastAt = this.assetStates[asset].lastProposalAt || 0;
         const throttled = (now - lastAt) < CONFIG.proposalThrottleMs;
         if (throttled) return;
 
@@ -619,13 +619,13 @@ class ReliableAccumulatorBot {
         const takeProfitAmount = parseFloat((CONFIG.initialStake * CONFIG.takeProfitPct).toFixed(2));
 
         this._send({
-            proposal:       1,
-            amount:         CONFIG.initialStake.toFixed(2),
-            basis:          'stake',
-            contract_type:  'ACCU',
-            currency:       'USD',
-            symbol:         asset,
-            growth_rate:    signal.growthRate,
+            proposal: 1,
+            amount: CONFIG.initialStake.toFixed(2),
+            basis: 'stake',
+            contract_type: 'ACCU',
+            currency: 'USD',
+            symbol: asset,
+            growth_rate: signal.growthRate,
             limit_order: {
                 take_profit: takeProfitAmount.toFixed(2),
             },
@@ -643,12 +643,12 @@ class ReliableAccumulatorBot {
 
         if (!msg.proposal) return;
 
-        const asset    = msg.echo_req.symbol;
+        const asset = msg.echo_req.symbol;
         const proposal = msg.proposal;
 
         if (!proposal.contract_details || !proposal.contract_details.ticks_stayed_in) return;
 
-        const stayedIn    = proposal.contract_details.ticks_stayed_in;
+        const stayedIn = proposal.contract_details.ticks_stayed_in;
         this.assetStates[asset].proposalId = proposal.id;
 
         // Current tick count of the running accumulator
@@ -693,9 +693,9 @@ class ReliableAccumulatorBot {
             return;
         }
 
-        const stake           = CONFIG.initialStake;  // FLAT STAKING
-        const takeProfitAmt   = parseFloat((stake * CONFIG.takeProfitPct).toFixed(2));
-        const growthLabel     = `${(signal.growthRate * 100).toFixed(0)}%`;
+        const stake = CONFIG.initialStake;  // FLAT STAKING
+        const takeProfitAmt = parseFloat((stake * CONFIG.takeProfitPct).toFixed(2));
+        const growthLabel = `${(signal.growthRate * 100).toFixed(0)}%`;
 
         console.log('\n' + '═'.repeat(56));
         console.log(`  🚀 OPENING TRADE`);
@@ -736,7 +736,7 @@ class ReliableAccumulatorBot {
         if (msg.error) {
             console.error('❌ Buy error:', msg.error.message);
             this.tradeInProgress = false;
-            this.activeTrade     = null;
+            this.activeTrade = null;
             return;
         }
 
@@ -774,8 +774,8 @@ class ReliableAccumulatorBot {
             return;
         }
 
-        const profit    = parseFloat(contract.profit || 0);
-        const bid       = parseFloat(contract.bid_price || 0);
+        const profit = parseFloat(contract.profit || 0);
+        const bid = parseFloat(contract.bid_price || 0);
         const tickCount = contract.tick_count || 0;
 
         // Progress log every 2 ticks
@@ -794,8 +794,8 @@ class ReliableAccumulatorBot {
     }
 
     _shouldSell(contract, tickCount, profit) {
-        const tp     = this.activeTrade?.takeProfitAmt  || (CONFIG.initialStake * CONFIG.takeProfitPct);
-        const stake  = this.activeTrade?.stake          || CONFIG.initialStake;
+        const tp = this.activeTrade?.takeProfitAmt || (CONFIG.initialStake * CONFIG.takeProfitPct);
+        const stake = this.activeTrade?.stake || CONFIG.initialStake;
 
         // 1. Take profit fully reached (redundant with limit_order, but safe)
         if (profit >= tp)
@@ -839,15 +839,15 @@ class ReliableAccumulatorBot {
             this.contractSubscriptionId = null;
         }
 
-        const asset     = contract.underlying || this.activeTrade.asset;
-        const won       = contract.status === 'won';
-        const profit    = parseFloat(contract.profit);
+        const asset = contract.underlying || this.activeTrade.asset;
+        const won = contract.status === 'won';
+        const profit = parseFloat(contract.profit);
         const tickCount = contract.tick_count || 0;
 
         // ── Update Stats ──────────────────────────────────────────────────────
         this.totalTrades++;
-        this.totalPnl  += profit;
-        this.dailyPnl  += profit;
+        this.totalPnl += profit;
+        this.dailyPnl += profit;
 
         if (this.assetMetrics[asset]) {
             this.assetMetrics[asset].trades++;
@@ -906,7 +906,7 @@ class ReliableAccumulatorBot {
 
         // ── Reset for next trade ──────────────────────────────────────────────
         this.tradeInProgress = false;
-        this.activeTrade     = null;
+        this.activeTrade = null;
 
         StatePersistence.save(this);
     }
@@ -966,7 +966,7 @@ class ReliableAccumulatorBot {
             StatePersistence.save(this);
             process.exit(0);
         };
-        process.on('SIGINT',  exit);
+        process.on('SIGINT', exit);
         process.on('SIGTERM', exit);
         process.on('uncaughtException', (err) => {
             console.error('💥 Uncaught exception:', err);
