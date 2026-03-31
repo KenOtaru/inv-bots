@@ -787,9 +787,12 @@ class ReliableAccumulatorBot {
         // Analyze trade opportunity
         const decision = this.analyzeTradeOpportunity(asset, currentTicks, stayedInArray);
 
+        console.log(`\n🔍 Analyzing ${asset} @ ${currentTicks} ticks  (${decision.currentTicks} | target ${decision.targetTicks})`);
+        console.log(`   Decision: ${decision.shouldTrade ? 'TRADE' : 'SKIP'} | Reason: ${decision.reason || 'meets_criteria'}`);
+        console.log(`   Entry Window: ${currentTicks >= this.config.minEntryTicks && currentTicks <= this.config.maxEntryTicks ? '✅' : '❌'} | Historical Survival: ${this.analyzer.getWeightedSurvivalProbability(asset, currentTicks, this.config.targetHoldTicks).toFixed(2)} | Historical Survival (default): ${this.analyzer.getDefaultSurvivalProb(currentTicks, this.config.targetHoldTicks).toFixed(2)} | Historical Runs: ${this.analyzer.runHistory[asset] ? this.analyzer.runHistory[asset].length : 0} | Current Streak: ${stayedInArray.slice(-5).join('')}`);
+
         if (decision.shouldTrade) {
             console.log(`\n🎯 TRADE SIGNAL: ${asset} @ ${currentTicks} ticks`);
-            console.log(`   Score: ${(decision.overallScore * 100).toFixed(1)}% | Survival: ${(decision.survivalProb * 100).toFixed(1)}% | Regime: ${decision.regimeAnalysis.regime}`);
             
             this.executeTrade(asset, decision);
         }
