@@ -238,7 +238,6 @@ class StatisticalEngine {
 // ============================================================================
 // TIER 2: PATTERN RECOGNITION ENGINE
 // ============================================================================
-
 class PatternEngine {
     constructor() {
         this.ngramModels = {};
@@ -1774,6 +1773,9 @@ class EnhancedAccumulatorBot {
             // this.learningSystem.adaptiveFilters[asset] = 8;
             // this.learningSystem.predictionAccuracy[asset] = { correct: 0, total: 0 };
             // this.riskManager.consecutiveSameDigitLosses[asset] = {};
+
+            // Initialize statistical engine
+            // this.statisticalEngine.initBayesianPrior(asset);
         });
     }
 

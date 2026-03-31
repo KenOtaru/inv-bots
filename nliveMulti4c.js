@@ -21,7 +21,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'nliveMulti4c-state001.json');
+const STATE_FILE = path.join(__dirname, 'nliveMulti4c-state01.json');
 const STATE_SAVE_INTERVAL = 5000; // Save every 5 seconds
 
 class StatePersistence {
@@ -48,8 +48,6 @@ class StatePersistence {
                     sys2WinCount: bot.sys2WinCount,
                     isWinTrade: bot.isWinTrade,
                 },
-                neuralEngine: bot.neuralEngine.exportWeights(),
-                ensembleDecisionMaker: bot.ensembleDecisionMaker.exportState(),
                 learningSystem: bot.learningSystem,
                 extendedStayedIn: bot.extendedStayedIn,
                 previousStayedIn: bot.previousStayedIn,
@@ -240,7 +238,6 @@ class StatisticalEngine {
 // ============================================================================
 // TIER 2: PATTERN RECOGNITION ENGINE
 // ============================================================================
-
 class PatternEngine {
     constructor() {
         this.ngramModels = {};
@@ -490,581 +487,6 @@ class PatternEngine {
     }
 }
 
-// ============================================================================
-// TIER 3: NEURAL NETWORK PREDICTOR
-// ============================================================================
-
-class NeuralEngine {
-    constructor(inputSize = 60, hiddenSizes = [32, 16], outputSize = 1) {
-        this.inputSize = inputSize;
-        this.hiddenSizes = hiddenSizes;
-        this.outputSize = outputSize;
-        this.learningRate = 0.01;
-        this.momentum = 0.9;
-        this.weights = {};
-        this.biases = {};
-        this.velocities = {};
-        this.trainingHistory = [];
-        this.initialized = false;
-
-        this.initializeNetwork();
-    }
-
-    initializeNetwork() {
-        const layers = [this.inputSize, ...this.hiddenSizes, this.outputSize];
-
-        for (let i = 0; i < layers.length - 1; i++) {
-            const fanIn = layers[i];
-            const fanOut = layers[i + 1];
-
-            // Xavier initialization
-            const scale = Math.sqrt(2.0 / (fanIn + fanOut));
-
-            this.weights[i] = [];
-            this.velocities[`w${i}`] = [];
-
-            for (let j = 0; j < fanOut; j++) {
-                this.weights[i][j] = [];
-                this.velocities[`w${i}`][j] = [];
-
-                for (let k = 0; k < fanIn; k++) {
-                    this.weights[i][j][k] = (Math.random() * 2 - 1) * scale;
-                    this.velocities[`w${i}`][j][k] = 0;
-                }
-            }
-
-            this.biases[i] = new Array(fanOut).fill(0).map(() => (Math.random() * 2 - 1) * 0.1);
-            this.velocities[`b${i}`] = new Array(fanOut).fill(0);
-        }
-
-        this.initialized = true;
-    }
-
-    // Activation functions
-    relu(x) {
-        return Math.max(0, x);
-    }
-
-    reluDerivative(x) {
-        return x > 0 ? 1 : 0;
-    }
-
-    sigmoid(x) {
-        return 1 / (1 + Math.exp(-Math.max(-500, Math.min(500, x))));
-    }
-
-    sigmoidDerivative(x) {
-        const s = this.sigmoid(x);
-        return s * (1 - s);
-    }
-
-    /**
-     * Forward pass through the network
-     */
-    forward(input) {
-        if (input.length !== this.inputSize) {
-            console.error(`Input size mismatch: expected ${this.inputSize}, got ${input.length}`);
-            return { output: 0.5, activations: [] };
-        }
-
-        const activations = [input];
-        let current = input;
-
-        const numLayers = Object.keys(this.weights).length;
-
-        for (let i = 0; i < numLayers; i++) {
-            const nextLayer = [];
-
-            for (let j = 0; j < this.weights[i].length; j++) {
-                let sum = this.biases[i][j];
-
-                for (let k = 0; k < current.length; k++) {
-                    sum += current[k] * this.weights[i][j][k];
-                }
-
-                // Use ReLU for hidden layers, sigmoid for output
-                if (i < numLayers - 1) {
-                    nextLayer.push(this.relu(sum));
-                } else {
-                    nextLayer.push(this.sigmoid(sum));
-                }
-            }
-
-            current = nextLayer;
-            activations.push(current);
-        }
-
-        return {
-            output: current[0],
-            activations
-        };
-    }
-
-    /**
-     * Backward pass with gradient descent
-     */
-    backward(input, target, activations) {
-        const numLayers = Object.keys(this.weights).length;
-        const gradients = {};
-
-        // Output layer error
-        const output = activations[activations.length - 1][0];
-        let delta = [(output - target) * this.sigmoidDerivative(output)];
-
-        // Backpropagate
-        for (let i = numLayers - 1; i >= 0; i--) {
-            gradients[`w${i}`] = [];
-            gradients[`b${i}`] = [...delta];
-
-            const prevActivation = activations[i];
-
-            for (let j = 0; j < this.weights[i].length; j++) {
-                gradients[`w${i}`][j] = [];
-
-                for (let k = 0; k < this.weights[i][j].length; k++) {
-                    gradients[`w${i}`][j][k] = delta[j] * prevActivation[k];
-                }
-            }
-
-            if (i > 0) {
-                const newDelta = [];
-
-                for (let k = 0; k < this.weights[i][0].length; k++) {
-                    let sum = 0;
-
-                    for (let j = 0; j < this.weights[i].length; j++) {
-                        sum += delta[j] * this.weights[i][j][k];
-                    }
-
-                    newDelta.push(sum * this.reluDerivative(prevActivation[k]));
-                }
-
-                delta = newDelta;
-            }
-        }
-
-        return gradients;
-    }
-
-    /**
-     * Update weights using gradients with momentum
-     */
-    updateWeights(gradients) {
-        const numLayers = Object.keys(this.weights).length;
-
-        for (let i = 0; i < numLayers; i++) {
-            for (let j = 0; j < this.weights[i].length; j++) {
-                for (let k = 0; k < this.weights[i][j].length; k++) {
-                    const grad = gradients[`w${i}`][j][k];
-
-                    // Momentum update
-                    this.velocities[`w${i}`][j][k] =
-                        this.momentum * this.velocities[`w${i}`][j][k] - this.learningRate * grad;
-
-                    this.weights[i][j][k] += this.velocities[`w${i}`][j][k];
-                }
-
-                // Bias update
-                const biasGrad = gradients[`b${i}`][j];
-                this.velocities[`b${i}`][j] =
-                    this.momentum * this.velocities[`b${i}`][j] - this.learningRate * biasGrad;
-
-                this.biases[i][j] += this.velocities[`b${i}`][j];
-            }
-        }
-    }
-
-    /**
-     * Train on a single sample (online learning)
-     */
-    trainOnSample(input, target) {
-        const { output, activations } = this.forward(input);
-        const gradients = this.backward(input, target, activations);
-        this.updateWeights(gradients);
-
-        const loss = 0.5 * (output - target) ** 2;
-        this.trainingHistory.push({ loss, prediction: output, target });
-
-        // Keep only recent history
-        if (this.trainingHistory.length > 1000) {
-            this.trainingHistory.shift();
-        }
-
-        return { loss, prediction: output };
-    }
-
-    /**
-     * Predict survival probability
-     */
-    predict(input) {
-        const { output } = this.forward(input);
-        return output;
-    }
-
-    /**
-     * Get prediction with uncertainty (dropout-like)
-     */
-    predictWithUncertainty(input, numSamples = 10) {
-        const predictions = [];
-
-        for (let i = 0; i < numSamples; i++) {
-            // Add small noise for Monte Carlo estimation
-            const noisyInput = input.map(x => x + (Math.random() - 0.5) * 0.1);
-            predictions.push(this.predict(noisyInput));
-        }
-
-        const mean = predictions.reduce((a, b) => a + b, 0) / numSamples;
-        const variance = predictions.reduce((a, b) => a + (b - mean) ** 2, 0) / numSamples;
-
-        return {
-            prediction: mean,
-            uncertainty: Math.sqrt(variance),
-            confidence: 1 - Math.min(1, Math.sqrt(variance) * 2)
-        };
-    }
-
-    /**
-     * Prepare input features from market data
-     */
-    prepareFeatures(tickHistory, runLengths, currentRunLength, volatility) {
-        const features = [];
-
-        // Last 30 digits (normalized)
-        const recentDigits = tickHistory.slice(-30);
-        while (recentDigits.length < 30) recentDigits.unshift(5);
-        recentDigits.forEach(d => features.push(d / 9));
-
-        // Digit frequency distribution (10 features)
-        const digitFreq = new Array(10).fill(0);
-        tickHistory.slice(-100).forEach(d => digitFreq[d]++);
-        const total = Math.max(1, tickHistory.slice(-100).length);
-        digitFreq.forEach(f => features.push(f / total));
-
-        // Run length statistics (10 features)
-        const recentRuns = runLengths.slice(-20);
-        while (recentRuns.length < 20) recentRuns.unshift(5);
-
-        // Mean, std, min, max of recent runs
-        const runMean = recentRuns.reduce((a, b) => a + b, 0) / recentRuns.length;
-        const runStd = Math.sqrt(recentRuns.reduce((a, b) => a + (b - runMean) ** 2, 0) / recentRuns.length);
-        const runMin = Math.min(...recentRuns);
-        const runMax = Math.max(...recentRuns);
-
-        features.push(runMean / 50);
-        features.push(runStd / 20);
-        features.push(runMin / 50);
-        features.push(runMax / 50);
-
-        // Current run length (normalized)
-        features.push(currentRunLength / 50);
-
-        // Volatility
-        features.push(volatility);
-
-        // Trend features
-        const shortMean = recentRuns.slice(-5).reduce((a, b) => a + b, 0) / 5;
-        const longMean = recentRuns.slice(-15).reduce((a, b) => a + b, 0) / 15;
-        features.push((shortMean - longMean) / 20 + 0.5);
-
-        // Momentum
-        const momentum = recentRuns.length >= 2 ?
-            (recentRuns[recentRuns.length - 1] - recentRuns[recentRuns.length - 2]) / 20 + 0.5 : 0.5;
-        features.push(momentum);
-
-        // Pad to input size
-        while (features.length < this.inputSize) {
-            features.push(0.5);
-        }
-
-        return features.slice(0, this.inputSize);
-    }
-
-    /**
-     * Get training performance metrics
-     */
-    getPerformanceMetrics() {
-        if (this.trainingHistory.length < 10) {
-            return { accuracy: 0, recentLoss: 1, trend: 'insufficient_data' };
-        }
-
-        const recent = this.trainingHistory.slice(-100);
-        const avgLoss = recent.reduce((a, b) => a + b.loss, 0) / recent.length;
-
-        // Binary accuracy (threshold at 0.5)
-        const correct = recent.filter(h =>
-            (h.prediction >= 0.5 && h.target >= 0.5) ||
-            (h.prediction < 0.5 && h.target < 0.5)
-        ).length;
-
-        const accuracy = correct / recent.length;
-
-        // Trend
-        const firstHalf = recent.slice(0, 50).reduce((a, b) => a + b.loss, 0) / 50;
-        const secondHalf = recent.slice(-50).reduce((a, b) => a + b.loss, 0) / 50;
-        const trend = secondHalf < firstHalf * 0.9 ? 'improving' :
-            secondHalf > firstHalf * 1.1 ? 'degrading' : 'stable';
-
-        return { accuracy, recentLoss: avgLoss, trend };
-    }
-
-    /**
-     * Export weights for persistence
-     */
-    exportWeights() {
-        return {
-            weights: this.weights,
-            biases: this.biases,
-            velocities: this.velocities,
-            trainingHistory: this.trainingHistory.slice(-500)
-        };
-    }
-
-    /**
-     * Import weights from saved state
-     */
-    importWeights(state) {
-        if (state.weights) this.weights = state.weights;
-        if (state.biases) this.biases = state.biases;
-        if (state.velocities) this.velocities = state.velocities;
-        if (state.trainingHistory) this.trainingHistory = state.trainingHistory;
-        this.initialized = true;
-    }
-}
-
-// ============================================================================
-// TIER 4: ENSEMBLE DECISION MAKER
-// ============================================================================
-
-class EnsembleDecisionMaker {
-    constructor() {
-        this.modelWeights = {
-            kaplanMeier: 0.25,
-            bayesian: 0.20,
-            markov: 0.15,
-            neural: 0.25,
-            pattern: 0.15
-        };
-
-        this.modelPerformance = {
-            kaplanMeier: { correct: 0, total: 0 },
-            bayesian: { correct: 0, total: 0 },
-            markov: { correct: 0, total: 0 },
-            neural: { correct: 0, total: 0 },
-            pattern: { correct: 0, total: 0 }
-        };
-
-        this.recentDecisions = [];
-        this.thresholdHistory = [];
-        this.adaptiveThreshold = 0.7; // Default threshold;
-    }
-
-    /**
-     * Combine predictions from all models
-     */
-    combinePredicitions(predictions) {
-        let weightedSum = 0;
-        let totalWeight = 0;
-        const details = {};
-
-        Object.entries(predictions).forEach(([model, pred]) => {
-            if (pred !== null && pred !== undefined && !isNaN(pred.value)) {
-                const weight = this.modelWeights[model] || 0.1;
-                const confidence = pred.confidence || 1;
-                const adjustedWeight = weight * confidence;
-
-                weightedSum += pred.value * adjustedWeight;
-                totalWeight += adjustedWeight;
-
-                details[model] = {
-                    value: pred.value,
-                    weight: adjustedWeight,
-                    contribution: pred.value * adjustedWeight
-                };
-            }
-        });
-
-        const ensembleScore = totalWeight > 0 ? weightedSum / totalWeight : 0.5;
-
-        // Calculate agreement (how much models agree)
-        const values = Object.values(predictions)
-            .filter(p => p !== null && p !== undefined)
-            .map(p => p.value);
-
-        const agreement = values.length > 4 ?
-            1 - (Math.max(...values) - Math.min(...values)) : 0;
-
-        console.log('Agreement:', ' (', values.length, ')', 'Score:', agreement.toFixed(2));
-
-        const ensembleAgreement = values.length;
-        const agreementScore = agreement.toFixed(2);
-
-        // console.log('Adaptive Threshold:', this.adaptiveThreshold);
-
-        return {
-            score: ensembleScore,
-            agreement,
-            details,
-            shouldTrade: ensembleScore >= this.adaptiveThreshold && agreement > 0.5,
-            ensembleAgreement,
-            agreementScore,
-        };
-    }
-
-    /**
-     * Record outcome and update model weights
-     */
-    recordOutcome(predictions, actualOutcome) {
-        Object.entries(predictions).forEach(([model, pred]) => {
-            if (pred !== null && pred !== undefined) {
-                const predicted = pred.value >= 0.5;
-                const actual = actualOutcome;
-
-                this.modelPerformance[model].total++;
-                if (predicted === actual) {
-                    this.modelPerformance[model].correct++;
-                }
-            }
-        });
-
-        // Update weights based on performance
-        this.updateModelWeights();
-
-        // Record decision for threshold optimization
-        this.recentDecisions.push({
-            predictions,
-            outcome: actualOutcome,
-            timestamp: Date.now()
-        });
-
-        if (this.recentDecisions.length > 500) {
-            this.recentDecisions.shift();
-        }
-    }
-
-    /**
-     * Update model weights based on recent performance
-     */
-    updateModelWeights() {
-        const minSamples = 20;
-        let totalAccuracy = 0;
-        const accuracies = {};
-
-        Object.entries(this.modelPerformance).forEach(([model, perf]) => {
-            if (perf.total >= minSamples) {
-                const accuracy = perf.correct / perf.total;
-                accuracies[model] = accuracy;
-                totalAccuracy += accuracy;
-            }
-        });
-
-        // Normalize weights by accuracy
-        if (totalAccuracy > 0 && Object.keys(accuracies).length > 0) {
-            Object.entries(accuracies).forEach(([model, accuracy]) => {
-                // Exponential weighting favors better models
-                this.modelWeights[model] = Math.pow(accuracy, 2) / totalAccuracy;
-            });
-
-            // Normalize to sum to 1
-            const sum = Object.values(this.modelWeights).reduce((a, b) => a + b, 0);
-            Object.keys(this.modelWeights).forEach(model => {
-                this.modelWeights[model] /= sum;
-            });
-        }
-    }
-
-    /**
-     * Optimize trading threshold based on historical performance
-     */
-    optimizeThreshold() {
-        if (this.recentDecisions.length < 5) return;
-
-        const thresholds = [0.6, 0.65, 0.7, 0.75, 0.8]; //[0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8];
-        let bestThreshold = 0.7;
-        let bestScore = -Infinity;
-
-        thresholds.forEach(threshold => {
-            let wins = 0;
-            let losses = 0;
-            let trades = 0;
-
-            this.recentDecisions.forEach(decision => {
-                const ensemble = this.combinePredicitions(decision.predictions);
-                if (ensemble.score > threshold && ensemble.agreement > 0.5) {
-                    trades++;
-                    if (decision.outcome) {
-                        wins++;
-                    } else {
-                        losses++;
-                    }
-                }
-            });
-
-            // Score = win rate * sqrt(trade frequency)
-            if (trades > 10) {
-                const winRate = wins / trades;
-                const frequency = trades / this.recentDecisions.length;
-                const score = winRate * Math.sqrt(frequency);
-
-                if (score > bestScore) {
-                    bestScore = score;
-                    bestThreshold = threshold;
-                }
-            }
-        });
-
-        // Smooth transition to new threshold
-        this.adaptiveThreshold = 0.8 * this.adaptiveThreshold + 0.2 * bestThreshold;
-
-        this.thresholdHistory.push({
-            threshold: this.adaptiveThreshold,
-            timestamp: Date.now()
-        });
-    }
-
-    /**
-     * Get current model performance summary
-     */
-    getPerformanceSummary() {
-        const summary = {};
-
-        Object.entries(this.modelPerformance).forEach(([model, perf]) => {
-            summary[model] = {
-                accuracy: perf.total > 0 ? (perf.correct / perf.total * 100).toFixed(1) + '%' : 'N/A',
-                samples: perf.total,
-                weight: (this.modelWeights[model] * 100).toFixed(1) + '%'
-            };
-        });
-
-        return {
-            models: summary,
-            adaptiveThreshold: this.adaptiveThreshold.toFixed(3),
-            totalDecisions: this.recentDecisions.length
-        };
-    }
-
-    /**
-     * Export state for persistence
-     */
-    exportState() {
-        return {
-            modelWeights: this.modelWeights,
-            modelPerformance: this.modelPerformance,
-            adaptiveThreshold: this.adaptiveThreshold,
-            recentDecisions: this.recentDecisions.slice(-200)
-        };
-    }
-
-    /**
-     * Import state from saved data
-     */
-    importState(state) {
-        if (state.modelWeights) this.modelWeights = state.modelWeights;
-        if (state.modelPerformance) this.modelPerformance = state.modelPerformance;
-        if (state.adaptiveThreshold) this.adaptiveThreshold = state.adaptiveThreshold;
-        if (state.recentDecisions) this.recentDecisions = state.recentDecisions;
-    }
-}
-
 
 // ============================================================================
 // MAIN ENHANCED TRADING BOT
@@ -1153,14 +575,6 @@ class EnhancedAccumulatorBot {
         // Tier 2: Pattern Engine
         this.patternEngine = new PatternEngine();
 
-        // Tier 3: Neural Engine
-        this.neuralEngine = new NeuralEngine(60, [32, 16], 1);
-
-        // Tier 4: Ensemble Decision Maker
-        this.ensembleDecisionMaker = new EnsembleDecisionMaker();
-
-        // Tier 5: Persistence Manager
-        // this.persistenceManager = new PersistenceManager();
 
         // Learning mode counter
         this.observationCount = 0;
@@ -1313,18 +727,6 @@ class EnhancedAccumulatorBot {
             }
             if (state.learningMode !== undefined) {
                 this.learningMode = state.learningMode;
-            }
-
-            // Restore neural network weights
-            if (state.neuralEngine) {
-                this.neuralEngine.importWeights(state.neuralEngine);
-                console.log('  ✓ Neural network weights restored');
-            }
-
-            // Restore ensemble decision maker
-            if (state.ensembleDecisionMaker) {
-                this.ensembleDecisionMaker.importState(state.ensembleDecisionMaker);
-                console.log('  ✓ Ensemble decision maker restored');
             }
 
             // Restore learning system
@@ -1868,41 +1270,6 @@ class EnhancedAccumulatorBot {
             this.learningSystem.lossPatterns[asset].shift();
         }
 
-        // Train neural network
-        if (this.config.enableNeuralNetwork && this.neuralEngine.initialized) {
-            const features = this.neuralEngine.prepareFeatures(
-                this.tickHistories[asset],
-                this.extendedStayedIn[asset],
-                digitCount,
-                volatility
-            );
-
-            const target = won ? 1 : 0;
-            const { loss, prediction } = this.neuralEngine.trainOnSample(features, target);
-
-            // Track prediction accuracy
-            if (!this.learningSystem.predictionAccuracy[asset]) {
-                this.learningSystem.predictionAccuracy[asset] = { correct: 0, total: 0 };
-            }
-            this.learningSystem.predictionAccuracy[asset].total++;
-            if ((prediction >= 0.5) === won) {
-                this.learningSystem.predictionAccuracy[asset].correct++;
-            }
-
-            if (this.totalTrades % 10 === 0) {
-                const metrics = this.neuralEngine.getPerformanceMetrics();
-                console.log(`🧠 Neural Network: Accuracy=${(metrics.accuracy * 100).toFixed(1)}%, Trend=${metrics.trend}`);
-            }
-        }
-
-        // Update ensemble decision maker
-        this.ensembleDecisionMaker.recordOutcome(this.lastEnsemblePredictions || {}, won);
-
-        // Optimize threshold periodically
-        if (this.totalTrades % 20 === 0) {
-            this.ensembleDecisionMaker.optimizeThreshold();
-        }
-
         // Persist performance log
         // this.persistenceManager.appendPerformanceLog({
         //     asset,
@@ -2350,11 +1717,6 @@ class EnhancedAccumulatorBot {
         // Tier 2: Pattern Engine
         this.patternEngine = new PatternEngine();
 
-        // Tier 3: Neural Engine
-        this.neuralEngine = new NeuralEngine(60, [32, 16], 1);
-
-        // Tier 4: Ensemble Decision Maker
-        this.ensembleDecisionMaker = new EnsembleDecisionMaker();
 
         // Tier 5: Persistence Manager
         // this.persistenceManager = new PersistenceManager();
@@ -2544,15 +1906,6 @@ class EnhancedAccumulatorBot {
         const volatility = this.learningSystem.volatilityScores[asset] || 0;
         console.log(`Recent Win Rate: ${(assetWinRate * 100).toFixed(1)}% | Volatility: ${(volatility * 100).toFixed(1)}%`);
 
-        // Neural network metrics
-        if (this.config.enableNeuralNetwork) {
-            const neuralMetrics = this.neuralEngine.getPerformanceMetrics();
-            console.log(`Neural Net Accuracy: ${(neuralMetrics.accuracy * 100).toFixed(1)}% | Trend: ${neuralMetrics.trend}`);
-        }
-
-        // Ensemble performance
-        const ensemblePerf = this.ensembleDecisionMaker.getPerformanceSummary();
-        console.log(`Adaptive Threshold: ${ensemblePerf.adaptiveThreshold}`);
         console.log('───────────────────────────────────────────────────────────');
         console.log(`Suspended Assets: ${Array.from(this.suspendedAssets).join(', ') || 'None'}`);
         console.log(`Wait Time: ${this.waitTime} minutes (${this.waitSeconds} ms)`);
@@ -2581,11 +1934,6 @@ class EnhancedAccumulatorBot {
         const pnlEmoji = stats.pnl >= 0 ? '🟢' : '🔴';
         const pnlStr = (stats.pnl >= 0 ? '+' : '') + '$' + Math.abs(stats.pnl).toFixed(2);
 
-        // Neural network metrics
-        const neuralMetrics = this.config.enableNeuralNetwork && this.neuralEngine.initialized ? this.neuralEngine.getPerformanceMetrics() : { accuracy: 0 };
-        // Ensemble performance
-        const ensemblePerf = this.ensembleDecisionMaker.getPerformanceSummary();
-
         const message = `
             ⏰ <b>Enhanced Accumulator Session Summary</b>
 
@@ -2601,10 +1949,6 @@ class EnhancedAccumulatorBot {
             ├ x2-x5 Losses: ${this.consecutiveLosses2}/${this.consecutiveLosses3}/${this.consecutiveLosses4}/${this.consecutiveLosses5}
             ├ Total P&L: ${(this.totalProfitLoss >= 0 ? '+' : '')}$${Math.abs(this.totalProfitLoss).toFixed(2)}
             └ Current Stake: $${this.currentStake.toFixed(2)}
-            
-            🧠 <b>AI System State</b>
-            ├ Neural Accuracy: ${(neuralMetrics.accuracy * 100).toFixed(1)}%
-            └ Adaptive Threshold: ${ensemblePerf.adaptiveThreshold}
 
             ⏰ ${new Date().toLocaleString()}
         `.trim();
@@ -2701,7 +2045,4 @@ module.exports = {
     EnhancedAccumulatorBot,
     StatisticalEngine,
     PatternEngine,
-    NeuralEngine,
-    EnsembleDecisionMaker,
-    // PersistenceManager 
 };
