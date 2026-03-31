@@ -1219,8 +1219,8 @@ const bot = new ReliableAccumulatorBot(token, {
     minOverallScore: 0.72,
     
     // Telegram (optional)
-    telegramToken: process.env.TELEGRAM_TOKEN,
-    telegramChatId: process.env.TELEGRAM_CHAT_ID,
+    telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ', //process.env.TELEGRAM_TOKEN || 
+    telegramChatId: '752497117', //process.env.TELEGRAM_CHAT_ID || 
 });
 
 bot.start();
