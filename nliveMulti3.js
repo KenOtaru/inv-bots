@@ -20,7 +20,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'accumulator-bot-state.json');
+const STATE_FILE = path.join(__dirname, 'accumulator1-bot-state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -451,6 +451,7 @@ class ReliableAccumulatorBot {
         this.currentTradeEntryTicks = null;
         this.currentTradeEntryTime = null;
         this.endOfDay = false;
+        this.exitSignal = 0;
 
         // Asset data
         this.tickHistories = {};
@@ -991,9 +992,14 @@ class ReliableAccumulatorBot {
             recentDigits
         );
 
-        if (exitSignal.shouldExit) {
+        if (exitSignal.shouldExit && this.exitSignal > 0) {
+            this.exitSignal++; 
             console.log(`⚠️ EXIT SIGNAL: ${exitSignal.reasons.map(r => r.type).join(', ')}`);
             // Note: Actual exit happens in handleContractUpdate when we can sell
+            this.sendRequest({
+                sell: contract.contract_id,
+                price: contract.bid_price
+            });
         }
     }
 
@@ -1012,7 +1018,7 @@ class ReliableAccumulatorBot {
             );
 
             // Manual exit on strong signal
-            if (exitSignal.shouldExit && exitSignal.strength > 0.85) {
+            if (exitSignal.shouldExit) { // && exitSignal.strength > 0.85
                 console.log(`🛑 Manual exit triggered: ${exitSignal.reasons.map(r => r.type).join(', ')}`);
                 this.sendRequest({
                     sell: contract.contract_id,
@@ -1110,6 +1116,8 @@ class ReliableAccumulatorBot {
             `Total P&L: ${this.totalProfitLoss >= 0 ? '+' : ''}$${this.totalProfitLoss.toFixed(2)}\n` +
             `Consecutive Losses: ${this.consecutiveLosses}`
         );
+
+        this.exitSignal = 0;
 
         // Check stop conditions
         if (this.consecutiveLosses >= this.config.maxConsecutiveLosses) {
