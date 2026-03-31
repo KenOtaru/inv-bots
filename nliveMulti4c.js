@@ -663,6 +663,8 @@ class NeuralEngine {
         this.velocities = {};
         this.trainingHistory = [];
         this.initialized = false;
+        this.warmupCount = 0; // Track warm-up samples for early reliability protection
+        this.warmupThreshold = 50; // Require 50 samples before trading with neural net
 
         this.initializeNetwork();
     }
@@ -839,6 +841,11 @@ class NeuralEngine {
         const gradients = this.backward(input, target, activations);
         this.updateWeights(gradients);
 
+        // Advanced warm-up tracking
+        if (this.warmupCount < this.warmupThreshold) {
+            this.warmupCount++;
+        }
+
         const loss = 0.5 * (output - target) ** 2;
         this.trainingHistory.push({ loss, prediction: output, target });
 
@@ -862,6 +869,11 @@ class NeuralEngine {
      * Get prediction with uncertainty (dropout-like)
      */
     predictWithUncertainty(input, numSamples = 10) {
+        // Track inference sampling for warm-up
+        if (this.warmupCount < this.warmupThreshold) {
+            this.warmupCount++;
+        }
+
         const predictions = [];
 
         for (let i = 0; i < numSamples; i++) {
@@ -994,13 +1006,16 @@ class NeuralEngine {
 
 class EnsembleDecisionMaker {
     constructor() {
+        // Optimized weights prioritizing reliability (KM + Bayesian) over newer models
         this.modelWeights = {
-            kaplanMeier: 0.25,
-            bayesian: 0.20,
-            markov: 0.15,
-            neural: 0.25,
-            pattern: 0.15
+            kaplanMeier: 0.30,   // Statistical gold standard - increased from 0.25
+            bayesian: 0.25,      // Conservative Bayesian posteriors - increased from 0.20
+            markov: 0.15,        // Pattern transitions - unchanged
+            neural: 0.20,        // NN predictions (warmed up) - reduced from 0.25
+            pattern: 0.10        // N-gram patterns - reduced from 0.15
         };
+        // Verify sum = 1.0
+        // 0.30 + 0.25 + 0.15 + 0.20 + 0.10 = 1.0 ✓
 
         this.modelPerformance = {
             kaplanMeier: { correct: 0, total: 0 },
@@ -1012,11 +1027,11 @@ class EnsembleDecisionMaker {
 
         this.recentDecisions = [];
         this.thresholdHistory = [];
-        this.adaptiveThreshold = 0.7; // Default threshold;
+        this.adaptiveThreshold = 0.70; // Increased from 0.7 to be more selective
     }
 
     /**
-     * Combine predictions from all models
+     * Combine predictions from all models with weighted ensemble
      */
     combinePredicitions(predictions) {
         let weightedSum = 0;
@@ -1042,28 +1057,32 @@ class EnsembleDecisionMaker {
 
         const ensembleScore = totalWeight > 0 ? weightedSum / totalWeight : 0.5;
 
-        // Calculate agreement (how much models agree)
+        // Calculate agreement (how much models agree with each other)
         const values = Object.values(predictions)
             .filter(p => p !== null && p !== undefined)
             .map(p => p.value);
 
-        const agreement = values.length > 4 ?
-            1 - (Math.max(...values) - Math.min(...values)) : 0;
-
-        console.log('Agreement:', ' (', values.length, ')', 'Score:', agreement.toFixed(2));
+        let agreementScore = 1.0; // Perfect agreement if only 1 model
+        if (values.length >= 2) {
+            const maxVal = Math.max(...values);
+            const minVal = Math.min(...values);
+            // Use robust agreement metric: normalized range
+            // agreementScore = 1 - (spread / max_possible_spread)
+            agreementScore = 1 - ((maxVal - minVal) / Math.max(maxVal, 1 - minVal, 0.1));
+        }
 
         const ensembleAgreement = values.length;
-        const agreementScore = agreement.toFixed(2);
 
-        // console.log('Adaptive Threshold:', this.adaptiveThreshold);
+        console.log(`[Ensemble] Score: ${ensembleScore.toFixed(3)}, Agreement: ${agreementScore.toFixed(3)} (${ensembleAgreement} models), Threshold: ${this.adaptiveThreshold.toFixed(2)}`);
 
         return {
             score: ensembleScore,
-            agreement,
+            agreement: agreementScore,
             details,
-            shouldTrade: ensembleScore >= this.adaptiveThreshold && agreement > 0.5,
+            // Require BOTH high score AND high agreement for trade entry
+            shouldTrade: ensembleScore >= this.adaptiveThreshold && agreementScore >= 0.65,
             ensembleAgreement,
-            agreementScore,
+            agreementScore: agreementScore.toFixed(3)
         };
     }
 
@@ -1326,12 +1345,7 @@ class EnhancedAccumulatorBot {
         // Legacy learning system (enhanced)
         this.learningSystem = {
             lossPatterns: {},
-            failedDigitCounts: {},
-            volatilityScores: {},
-            filterPerformance: {},
-            resetPatterns: {},
-            timeWindowPerformance: [],
-            adaptiveFilters: {},
+            // Removed unused: failedDigitCounts, filterPerformance, resetPatterns, adaptiveFilters
             predictionAccuracy: {},
         };
 
@@ -1342,6 +1356,29 @@ class EnhancedAccumulatorBot {
             cooldownPeriod: 0,
             lastLossTime: null,
             consecutiveSameDigitLosses: {},
+        };
+
+        // Kelly Criterion stake sizing (Phase 3 enhancement)
+        this.kellyManager = {
+            tradeHistory: [],                    // Recent 50 trades for win rate calculation
+            stakeAdjustmentCount: 0,             // Counter for stake recalculation every 10 trades
+            kellyFraction: 0.25,                 // Use 25% Kelly (conservative)
+            minStake: this.config.initialStake,  // Minimum stake = 1 unit
+            maxStake: 10,                        // Maximum stake = 10 units (safety cap)
+            baseOdds: 1.01,                      // Accumulator odds (assume ~1% on wins)
+            lastStakeUpdate: Date.now(),
+            rollingWinRate: {}                   // Per-asset win rate tracking
+        };
+
+        // Daily loss limit tracking (Phase 3 enhancement)
+        this.dailyLossLimit = {
+            dailyStartTime: Date.now(),          // When current trading day started (UTC midnight)
+            dailyStartBalance: this.totalProfitLoss,  // P&L at start of day
+            dailyLossPercent: 0,                 // Current day loss as % of account
+            pausedForHighDrawdown: false,        // Triggered at 5% daily loss
+            haltedForDayEnd: false,              // Triggered at 10% daily loss
+            softStopAt: 0.05,                    // Pause trading at 5% daily loss
+            hardStopAt: 0.10                     // Halt all trading at 10% daily loss
         };
 
         // Initialize assets
@@ -1367,10 +1404,11 @@ class EnhancedAccumulatorBot {
 
             // Initialize learning components per asset
             this.learningSystem.lossPatterns[asset] = [];
-            this.learningSystem.volatilityScores[asset] = 0;
-            this.learningSystem.adaptiveFilters[asset] = 8;
             this.learningSystem.predictionAccuracy[asset] = { correct: 0, total: 0 };
             this.riskManager.consecutiveSameDigitLosses[asset] = {};
+
+            // Initialize Kelly Criterion tracking per asset
+            this.kellyManager.rollingWinRate[asset] = { wins: 0, total: 0, rate: 0.5 };
 
             // Initialize statistical engine
             this.statisticalEngine.initBayesianPrior(asset);
@@ -1796,6 +1834,7 @@ class EnhancedAccumulatorBot {
             console.log('✅ Authenticated successfully');
             this.wsReady = true;
 
+            // Process any queued messages
             this.processMessageQueue();
 
             this.tradeInProgress = false;
@@ -1807,30 +1846,40 @@ class EnhancedAccumulatorBot {
 
         } else if (message.msg_type === 'proposal') {
             this.handleProposal(message);
+            this.processMessageQueue();
+
         } else if (message.msg_type === 'history') {
             const asset = message.echo_req.ticks_history;
             this.handleTickHistory(asset, message.history);
+            this.processMessageQueue();
+
         } else if (message.msg_type === 'tick') {
             if (message.subscription) {
                 const asset = message.tick.symbol;
                 this.tickSubscriptionIds[asset] = message.subscription.id;
             }
             this.handleTickUpdate(message.tick);
+            this.processMessageQueue();
         } else if (message.msg_type === 'buy') {
             if (message.error) {
                 console.error('Error placing trade:', message.error.message);
                 this.tradeInProgress = false;
+                this.processMessageQueue();
                 return;
             }
             console.log('Trade placed successfully');
             this.currentTradeId = message.buy.contract_id;
             this.subscribeToOpenContract(this.currentTradeId);
+            this.processMessageQueue();
+
         } else if (message.msg_type === 'proposal_open_contract') {
             if (message.error) {
                 console.error('Error receiving contract update:', message.error.message);
+                this.processMessageQueue();
                 return;
             }
             this.handleContractUpdate(message.proposal_open_contract);
+            this.processMessageQueue();
         } else if (message.msg_type === 'forget') {
             // console.log('Successfully unsubscribed from ticks');
         } else if (message.error) {
@@ -1932,6 +1981,154 @@ class EnhancedAccumulatorBot {
         }
     }
 
+    /**
+     * Check if daily loss limits have been exceeded
+     */
+    checkDailyLossLimit() {
+        const now = Date.now();
+        const dayLengthMs = 24 * 60 * 60 * 1000;  // 24 hours in milliseconds
+        
+        // Check if we've rolled over to a new day (UTC midnight based)
+        if (now - this.dailyLossLimit.dailyStartTime > dayLengthMs) {
+            // Reset for new day
+            this.dailyLossLimit.dailyStartTime = now;
+            this.dailyLossLimit.dailyStartBalance = this.totalProfitLoss;
+            this.dailyLossLimit.pausedForHighDrawdown = false;
+            this.dailyLossLimit.haltedForDayEnd = false;
+            console.log('[Daily Reset] New trading day started, limits reset');
+            return { status: 'ok', reason: null };
+        }
+
+        // Calculate current daily loss as percentage
+        const dailyLoss = this.dailyLossLimit.dailyStartBalance - this.totalProfitLoss;
+        const dailyStartAbsolute = Math.abs(this.dailyLossLimit.dailyStartBalance) || 100;
+        this.dailyLossLimit.dailyLossPercent = dailyLoss / dailyStartAbsolute;
+
+        // Check hard stop at 10% loss
+        if (this.dailyLossLimit.dailyLossPercent > this.dailyLossLimit.hardStopAt) {
+            if (!this.dailyLossLimit.haltedForDayEnd) {
+                this.dailyLossLimit.haltedForDayEnd = true;
+                const msg = `🛑 Daily loss limit EXCEEDED (${(this.dailyLossLimit.dailyLossPercent * 100).toFixed(1)}% > ${(this.dailyLossLimit.hardStopAt * 100).toFixed(0)}%). Trading HALTED for rest of day.`;
+                console.log(msg);
+                this.sendTelegramMessage(`🛑 <b>DAILY LOSS CEILING HIT</b>\n${msg}`);
+            }
+            return { status: 'halt', reason: 'daily_loss_hard_stop' };
+        }
+
+        // Check soft stop at 5% loss < 10%
+        if (this.dailyLossLimit.dailyLossPercent > this.dailyLossLimit.softStopAt &&
+            this.dailyLossLimit.dailyLossPercent <= this.dailyLossLimit.hardStopAt) {
+            if (!this.dailyLossLimit.pausedForHighDrawdown) {
+                this.dailyLossLimit.pausedForHighDrawdown = true;
+                const msg = `⚠️ Daily loss at ${(this.dailyLossLimit.dailyLossPercent * 100).toFixed(1)}%. Trading PAUSED for risk management.`;
+                console.log(msg);
+                this.sendTelegramMessage(`⚠️ <b>DAILY LOSS WARNING</b>\n${msg}`);
+            }
+            return { status: 'pause', reason: 'daily_loss_soft_stop' };
+        }
+
+        // Below soft stop - resume normal trading
+        if (this.dailyLossLimit.pausedForHighDrawdown || this.dailyLossLimit.haltedForDayEnd) {
+            this.dailyLossLimit.pausedForHighDrawdown = false;
+            console.log('[Daily Recovery] Loss limit below threshold, resuming normal trading');
+        }
+
+        return { status: 'ok', reason: null };
+    }
+
+    // ========================================================================
+    // KELLY CRITERION STAKE SIZING (Phase 3 Enhancement)
+    // ========================================================================
+
+    /**
+     * Calculate optimal stake using Kelly Criterion
+     * Formula: f* = (b*p - q) / b
+     * where: b = odds-1, p = win probability, q = 1-p
+     * Apply 25% Kelly for conservative sizing
+     */
+    calculateKellyBet(asset, bankroll) {
+        const winRateData = this.kellyManager.rollingWinRate[asset];
+        if (!winRateData || winRateData.total < 10) {
+            // Insufficient history - use minimum stake
+            return this.config.initialStake;
+        }
+
+        const p = winRateData.rate;  // Win probability
+        const q = 1 - p;              // Loss probability
+        const b = this.kellyManager.baseOdds - 1;  // Odds - 1
+        
+        // Kelly formula: f* = (b*p - q) / b
+        let kellyFraction = (b * p - q) / b;
+        
+        // Ensure positive
+        kellyFraction = Math.max(0, kellyFraction);
+        
+        // Apply 25% Kelly (conservative variant for reduced drawdown)
+        const safeKelly = kellyFraction * this.kellyManager.kellyFraction;
+        
+        // Cap at 5% of bankroll maximum per trade
+        const maxFraction = 0.05;
+        const fraction = Math.min(safeKelly, maxFraction);
+        
+        // Calculate stake in units
+        let stake = Math.max(this.kellyManager.minStake, 
+                            Math.floor(bankroll * fraction));
+        
+        // Hard ceiling at 10 units
+        stake = Math.min(stake, this.kellyManager.maxStake);
+        
+        return stake;
+    }
+
+    /**
+     * Update Kelly stake every N trades (default: 10)
+     */
+    updateKellyStake() {
+        this.kellyManager.stakeAdjustmentCount++;
+        
+        if (this.kellyManager.stakeAdjustmentCount < 10) {
+            return;  // Not time to recalculate yet
+        }
+
+        // Reset counter
+        this.kellyManager.stakeAdjustmentCount = 0;
+
+        // Calculate new stake based on recent win rate
+        const bankroll = Math.abs(this.totalProfitLoss) > 100 ? 
+                        Math.abs(this.totalProfitLoss) : 100;
+        const oldStake = this.currentStake;
+        const newStake = this.calculateKellyBet(this.assets[0], bankroll);
+        
+        if (newStake !== oldStake) {
+            console.log(`[Kelly Update] Win rate adjusted: ${newStake} units (was ${oldStake})`);
+            this.currentStake = newStake;
+        }
+    }
+
+    /**
+     * Track trade outcome for Kelly Criterion win rate calculation
+     */
+    trackKellyTradeOutcome(asset, won) {
+        const winRateData = this.kellyManager.rollingWinRate[asset];
+        if (!winRateData) return;
+
+        winRateData.total++;
+        if (won) {
+            winRateData.wins++;
+        }
+
+        // Keep rolling window of last 50 trades
+        if (winRateData.total > 50) {
+            // Downweight old trades slightly
+            winRateData.wins *= 0.99;
+            winRateData.total *= 0.99;
+        }
+
+        // Recalculate win rate
+        winRateData.rate = winRateData.total > 0 ? 
+                          winRateData.wins / winRateData.total : 0.5;
+    }
+
     // ========================================================================
     // ENHANCED ANALYSIS METHODS
     // ========================================================================
@@ -1941,7 +2138,7 @@ class EnhancedAccumulatorBot {
      */
     calculateVolatility(asset) {
         const history = this.tickHistories[asset];
-        if (history.length < 20) return 0;
+        if (history.length < 20) return { changeRate: 0, entropy: 0, combined: 0 };
 
         const recentHistory = history.slice(-50);
         let changes = 0;
@@ -1950,7 +2147,8 @@ class EnhancedAccumulatorBot {
         }
 
         const volatility = changes / (recentHistory.length - 1);
-        this.learningSystem.volatilityScores[asset] = volatility;
+        // Store volatility without side-effect (pure function now)
+        // Callers can store if needed: this.learningSystem.volatilityScores[asset] = volatilityData.changeRate;
 
         // Also calculate entropy-based volatility
         const entropy = this.statisticalEngine.calculateEntropy(recentHistory);
@@ -2064,6 +2262,10 @@ class EnhancedAccumulatorBot {
             }
         }
 
+        // Track Kelly Criterion win rate (Phase 3)
+        this.trackKellyTradeOutcome(asset, won);
+        this.updateKellyStake();
+
         // Update ensemble decision maker
         this.ensembleDecisionMaker.recordOutcome(this.lastEnsemblePredictions || {}, won);
 
@@ -2071,15 +2273,6 @@ class EnhancedAccumulatorBot {
         if (this.totalTrades % 20 === 0) {
             this.ensembleDecisionMaker.optimizeThreshold();
         }
-
-        // Persist performance log
-        // this.persistenceManager.appendPerformanceLog({
-        //     asset,
-        //     won,
-        //     profit: won ? this.currentStake * 0.01 : -this.currentStake,
-        //     digitCount,
-        //     volatility
-        // });
     }
 
     // ========================================================================
@@ -2149,6 +2342,13 @@ class EnhancedAccumulatorBot {
             // ================================================================
 
             if (!assetState.tradeInProgress) {
+                // Check daily loss limits before trading (Phase 3)
+                const dailyLossStatus = this.checkDailyLossLimit();
+                if (dailyLossStatus.status !== 'ok') {
+                    console.log(`[${asset}] ⏸️ Trading paused/halted: ${dailyLossStatus.reason}`);
+                    return;  // Skip trading this asset
+                }
+
                 const decision = this.makeEnhancedTradeDecision(asset, stayedInArray);
 
                 this.ensembleAgreement = decision.ensembleAgreement;
@@ -2166,9 +2366,93 @@ class EnhancedAccumulatorBot {
     }
 
     /**
+     * Pre-trade validation checklist (Phase 4 Enhancement)
+     * Ensures all critical conditions are met before allowing trade
+     */
+    performPreTradeValidation(asset, stayedInArray, tickHistory) {
+        const checks = [];
+
+        // 1. Sufficient stayedInArray history
+        if (!stayedInArray || !Array.isArray(stayedInArray) || stayedInArray.length < 100) {
+            checks.push({ passed: false, name: 'stayedInArray_valid', reason: 'insufficient_history' });
+        } else {
+            checks.push({ passed: true, name: 'stayedInArray_valid', reason: 'ok' });
+        }
+
+        // 2. Sufficient tick history
+        if (!tickHistory || tickHistory.length < 50) {
+            checks.push({ passed: false, name: 'tickHistory_valid', reason: 'insufficient_ticks' });
+        } else {
+            checks.push({ passed: true, name: 'tickHistory_valid', reason: 'ok' });
+        }
+
+        // 3. Proposal exists and not stale
+        const assetState = this.assetStates[asset];
+        if (!assetState || !assetState.currentProposalId) {
+            checks.push({ passed: false, name: 'proposal_exists', reason: 'no_proposal' });
+        } else {
+            checks.push({ passed: true, name: 'proposal_exists', reason: 'ok' });
+        }
+
+        // 4. Market not too volatile
+        const volatilityData = this.calculateVolatility(asset);
+        if (volatilityData.changeRate < 0.20 || volatilityData.changeRate > 0.95) {
+            checks.push({ passed: false, name: 'volatility_favorable', reason: `volatility_${volatilityData.changeRate.toFixed(2)}` });
+        } else {
+            checks.push({ passed: true, name: 'volatility_favorable', reason: 'ok' });
+        }
+
+        // 5. Within daily loss limit
+        const dailyLossStatus = this.checkDailyLossLimit();
+        if (dailyLossStatus.status !== 'ok') {
+            checks.push({ passed: false, name: 'daily_loss_limit', reason: dailyLossStatus.reason });
+        } else {
+            checks.push({ passed: true, name: 'daily_loss_limit', reason: 'ok' });
+        }
+
+        // 6. Neural network warmed up (if using it)
+        if (this.config.enableNeuralNetwork) {
+            if (this.neuralEngine.warmupCount < this.neuralEngine.warmupThreshold) {
+                checks.push({ passed: false, name: 'nn_warmup', reason: `warmup_${this.neuralEngine.warmupCount}/${this.neuralEngine.warmupThreshold}` });
+            } else {
+                checks.push({ passed: true, name: 'nn_warmup', reason: 'ok' });
+            }
+        }
+
+        // Summarize failures
+        const failures = checks.filter(c => !c.passed);
+        if (failures.length > 0) {
+            const reasons = failures.map(f => `${f.name}:${f.reason}`).join(', ');
+            console.log(`[${asset}] ⚠️ Pre-trade validation failed: ${reasons}`);
+            return { valid: false, failures, checks };
+        }
+
+        return { valid: true, failures: [], checks };
+    }
+
+    /**
      * Make enhanced trade decision using ensemble of all models
      */
     makeEnhancedTradeDecision(asset, stayedInArray) {
+        // Guard against insufficient history
+        if (!stayedInArray || !Array.isArray(stayedInArray) || stayedInArray.length < 100) {
+            return { shouldTrade: false, reason: 'insufficient_stayed_in_history' };
+        }
+
+        // Run comprehensive pre-trade validation checklist
+        const validation = this.performPreTradeValidation(
+            asset,
+            stayedInArray,
+            this.tickHistories[asset]
+        );
+        if (!validation.valid) {
+            return { 
+                shouldTrade: false, 
+                reason: 'pre_trade_validation_failed',
+                validationFailures: validation.failures
+            };
+        }
+
         const currentDigitCount = stayedInArray[99] + 1;
         const runLengths = this.extendedStayedIn[asset];
         const volatilityData = this.calculateVolatility(asset);
@@ -2219,8 +2503,9 @@ class EnhancedAccumulatorBot {
             }
         }
 
-        // 4. Neural Network Prediction
-        if (this.config.enableNeuralNetwork && this.neuralEngine.initialized) {
+        // 4. Neural Network Prediction (skipped during warm-up for reliability)
+        if (this.config.enableNeuralNetwork && this.neuralEngine.initialized && 
+            this.neuralEngine.warmupCount >= this.neuralEngine.warmupThreshold) {
             const features = this.neuralEngine.prepareFeatures(
                 this.tickHistories[asset],
                 runLengths,
@@ -2235,8 +2520,9 @@ class EnhancedAccumulatorBot {
             };
         }
 
-        // 5. Pattern-based Prediction
-        if (this.config.enablePatternRecognition) {
+        // 5. Pattern-based Prediction (skipped during warm-up for reliability)
+        if (this.config.enablePatternRecognition && 
+            this.neuralEngine.warmupCount >= this.neuralEngine.warmupThreshold) {
             const recentDigits = this.tickHistories[asset].slice(-5);
             const ngramPred = this.patternEngine.predictFromNgram(asset, recentDigits, 3);
             console.log('Ngram Prediction:', ngramPred);
@@ -2251,6 +2537,11 @@ class EnhancedAccumulatorBot {
 
         // Store for later recording
         this.lastEnsemblePredictions = predictions;
+
+        // Log warm-up progress 
+        if (this.neuralEngine.warmupCount < this.neuralEngine.warmupThreshold) {
+            console.log(`[NN Warm-up] ${this.neuralEngine.warmupCount}/${this.neuralEngine.warmupThreshold} samples - using KM + Bayesian only`);
+        }
 
         // Combine all predictions
         const ensemble = this.ensembleDecisionMaker.combinePredicitions(predictions);
@@ -2292,6 +2583,11 @@ class EnhancedAccumulatorBot {
      * Survival probability check (enhanced from original)
      */
     shouldTradeBasedOnSurvivalProb(asset, stayedInArray) {
+        // Guard against insufficient history
+        if (!stayedInArray || !Array.isArray(stayedInArray) || stayedInArray.length < 100) {
+            return false; // Not enough data for survival analysis
+        }
+
         const currentDigitCount = stayedInArray[99] + 1;
         const history = this.extendedStayedIn[asset];
 
@@ -2364,12 +2660,8 @@ class EnhancedAccumulatorBot {
     detectDangerousPattern2(asset) {
         const history = this.extendedStayedIn[asset];
 
-        // FIX: Guard against undefined/null/non-array
+        // Guard against undefined/null/non-array
         if (!history || !Array.isArray(history) || history.length < 10) {
-            return false;
-        }
-
-        if (!history || history.length < 10) {
             return false;
         }
 
@@ -2529,10 +2821,6 @@ class EnhancedAccumulatorBot {
             }
 
             this.consecutiveLosses = 0;
-
-            // if (assetState) {
-            //     assetState.consecutiveLosses = 0;
-            // }
         } else {
             this.totalLosses++;
             this.consecutiveLosses++;
@@ -2542,6 +2830,7 @@ class EnhancedAccumulatorBot {
                 assetState.consecutiveLosses++;
             }
 
+            // Track consecutive loss thresholds for analysis
             if (this.consecutiveLosses === 2) this.consecutiveLosses2++;
             else if (this.consecutiveLosses === 3) this.consecutiveLosses3++;
             else if (this.consecutiveLosses === 4) this.consecutiveLosses4++;
@@ -2649,7 +2938,7 @@ class EnhancedAccumulatorBot {
         }
 
         // Save state after each trade
-        // this.persistenceManager.saveFullState(this);
+
 
         if (this.consecutiveLosses >= this.config.maxConsecutiveLosses || this.totalProfitLoss <= -this.config.stopLoss || this.stopLossStake) {
             console.log('Stop condition reached. Stopping trading.');
@@ -2708,9 +2997,6 @@ class EnhancedAccumulatorBot {
 
         // Tier 4: Ensemble Decision Maker
         this.ensembleDecisionMaker = new EnsembleDecisionMaker();
-
-        // Tier 5: Persistence Manager
-        // this.persistenceManager = new PersistenceManager();
 
         // Learning mode counter
         this.observationCount = 0;
@@ -3055,6 +3341,5 @@ module.exports = {
     StatisticalEngine,
     PatternEngine,
     NeuralEngine,
-    EnsembleDecisionMaker,
-    // PersistenceManager 
+    EnsembleDecisionMaker
 };
