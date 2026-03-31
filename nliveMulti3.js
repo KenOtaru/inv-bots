@@ -39,7 +39,7 @@ const CONFIG = {
     maxStake: 21.00,   // never exceed this
 
     // Growth rates
-    growthRateDefault: 0.05,   // 1% — widest barriers, safest
+    growthRateDefault: 0.02,   // 1% — widest barriers, safest
     growthRateBoost: 0.05,   // 2% — only on strong squeeze + RSI centred
 
     // Entry window (ENFORCED): only enter when active accumulator is this young
@@ -308,9 +308,9 @@ class VolatilityAnalyzer {
             : CONFIG.growthRateDefault;
 
         //Trade only High GrowthRate
-        if (!strongSqueeze || rsiCentred || shouldEnter) {
-            shouldEnter = false;
-        }
+        // if (!strongSqueeze || rsiCentred || shouldEnter) {
+        //     shouldEnter = false;
+        // }
 
         // ── Regime label ─────────────────────────────────────────────────────
         let regime = 'neutral';
