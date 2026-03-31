@@ -1195,7 +1195,7 @@ class ReliableAccumulatorBot {
 // RUN BOT
 // ============================================================================
 
-const token = 'rgNedekYXvCaPeP';
+const token = 'Dz2V2KvRf4Uukt3';
 
 const bot = new ReliableAccumulatorBot(token, {
     initialStake: 1,

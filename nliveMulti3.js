@@ -27,7 +27,7 @@ const path = require('path');
 // ─────────────────────────────────────────────────────────────────────────────
 const CONFIG = {
     // Deriv API
-    token: 'rgNedekYXvCaPeP', //process.env.DERIV_TOKEN || 
+    token: 'hsj0tA0XJoIzJG5', //process.env.DERIV_TOKEN || 
     appId: 1089, //process.env.DERIV_APP_ID || 
     wsUrl: 'wss://ws.binaryws.com/websockets/v3',
 
