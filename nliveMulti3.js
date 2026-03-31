@@ -788,7 +788,8 @@ class ReliableAccumulatorBot {
         const decision = this.analyzeTradeOpportunity(asset, currentTicks, stayedInArray);
 
         console.log(`\n🔍 Analyzing ${asset} @ ${currentTicks} ticks  (${decision.currentTicks} | target ${decision.targetTicks})`);
-        console.log(`   Decision: ${decision.shouldTrade ? 'TRADE' : 'SKIP'} | Reason: ${decision.reason || 'meets_criteria'}`);
+        console.log(`  Survival Prob: ${(decision.survivalProb * 100).toFixed(1)}% | Regime: ${decision.regimeAnalysis.regime} (Score: ${(decision.regimeAnalysis.score * 100).toFixed(1)}%) | Momentum: ${(decision.momentum * 100).toFixed(1)}% `);
+        console.log(`   Decision: ${decision.shouldTrade ? 'TRADE' : 'SKIP'} | Reason: ${decision.reason || 'meets_criteria'} (${decision.overallScore ? `| Score: ${(decision.overallScore * 100).toFixed(1)}%` : '0.00'})`);
         console.log(`   Entry Window: ${currentTicks >= this.config.minEntryTicks && currentTicks <= this.config.maxEntryTicks ? '✅' : '❌'} | Historical Survival: ${this.analyzer.getWeightedSurvivalProbability(asset, currentTicks, this.config.targetHoldTicks).toFixed(2)} | Historical Survival (default): ${this.analyzer.getDefaultSurvivalProb(currentTicks, this.config.targetHoldTicks).toFixed(2)} | Historical Runs: ${this.analyzer.runHistory[asset] ? this.analyzer.runHistory[asset].length : 0} | Current Streak: ${stayedInArray.slice(-5).join('')}`);
 
         if (decision.shouldTrade) {
