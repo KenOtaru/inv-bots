@@ -1748,7 +1748,7 @@ class AccumulatorBotV3 {
 // ============================================================================
 // RUN
 // ============================================================================
-const token = process.env.DERIV_TOKEN || 'YOUR_TOKEN_HERE';
+const token = 'Dz2V2KvRf4Uukt3'; //|| process.env.DERIV_TOKEN;
 
 const bot = new AccumulatorBotV3(token, {
     // Stake management
@@ -1779,8 +1779,8 @@ const bot = new AccumulatorBotV3(token, {
     minAgreement: 0.6,
 
     // Telegram (use environment variables)
-    telegramToken: process.env.TELEGRAM_TOKEN,
-    telegramChatId: process.env.TELEGRAM_CHAT_ID,
+    telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ', //process.env.TELEGRAM_TOKEN,
+    telegramChatId: '752497117', //process.env.TELEGRAM_CHAT_ID,
 
     // Assets
     assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],

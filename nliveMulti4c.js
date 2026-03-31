@@ -165,7 +165,6 @@ class StatePersistence {
 // ============================================================================
 // TIER 1: STATISTICAL LEARNING ENGINE
 // ============================================================================
-
 class StatisticalEngine {
     constructor() {
         this.survivalData = {};
@@ -397,7 +396,6 @@ class StatisticalEngine {
 // ============================================================================
 // TIER 2: PATTERN RECOGNITION ENGINE
 // ============================================================================
-
 class PatternEngine {
     constructor() {
         this.ngramModels = {};
@@ -650,7 +648,6 @@ class PatternEngine {
 // ============================================================================
 // TIER 3: NEURAL NETWORK PREDICTOR
 // ============================================================================
-
 class NeuralEngine {
     constructor(inputSize = 60, hiddenSizes = [32, 16], outputSize = 1) {
         this.inputSize = inputSize;
@@ -1003,7 +1000,6 @@ class NeuralEngine {
 // ============================================================================
 // TIER 4: ENSEMBLE DECISION MAKER
 // ============================================================================
-
 class EnsembleDecisionMaker {
     constructor() {
         // Optimized weights prioritizing reliability (KM + Bayesian) over newer models
@@ -1364,8 +1360,8 @@ class EnhancedAccumulatorBot {
             stakeAdjustmentCount: 0,             // Counter for stake recalculation every 10 trades
             kellyFraction: 0.25,                 // Use 25% Kelly (conservative)
             minStake: this.config.initialStake,  // Minimum stake = 1 unit
-            maxStake: 10,                        // Maximum stake = 10 units (safety cap)
-            baseOdds: 1.01,                      // Accumulator odds (assume ~1% on wins)
+            maxStake: 55,                        // Maximum stake = 10 units (safety cap)
+            baseOdds: 5,                      // Accumulator odds (assume ~1% on wins)
             lastStakeUpdate: Date.now(),
             rollingWinRate: {}                   // Per-asset win rate tracking
         };
@@ -1375,10 +1371,10 @@ class EnhancedAccumulatorBot {
             dailyStartTime: Date.now(),          // When current trading day started (UTC midnight)
             dailyStartBalance: this.totalProfitLoss,  // P&L at start of day
             dailyLossPercent: 0,                 // Current day loss as % of account
-            pausedForHighDrawdown: false,        // Triggered at 5% daily loss
-            haltedForDayEnd: false,              // Triggered at 10% daily loss
-            softStopAt: 0.05,                    // Pause trading at 5% daily loss
-            hardStopAt: 0.10                     // Halt all trading at 10% daily loss
+            pausedForHighDrawdown: false,        // Triggered at 15% daily loss
+            haltedForDayEnd: false,              // Triggered at 20% daily loss
+            softStopAt: 0.15,                    // Pause trading at 15% daily loss
+            hardStopAt: 0.20                     // Halt all trading at 10% daily loss
         };
 
         // Initialize assets
