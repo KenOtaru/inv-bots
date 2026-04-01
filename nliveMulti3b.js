@@ -989,14 +989,14 @@ class ReliableAccumulatorBot {
         console.log('═'.repeat(56));
 
         this.notify(
-            `${won ? '✅' : '❌'} <b>${won ? 'WIN' : 'LOSS'} (Bot 3b)</b>\n\n`,
-            `Asset: <b>${asset}</b>  |  Ticks: ${tickCount}\n`,
-            `${profit >= 0 ? '🟢' : '🔴'} P&amp;L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}\n\n`,
+            `${won ? '✅' : '❌'} <b>${won ? 'WIN' : 'LOSS'} (Bot 3b)</b>\n\n` +
+            `Asset: <b>${asset}</b>  |  Ticks: ${tickCount}\n` +
+            `${profit >= 0 ? '🟢' : '🔴'} P&amp;L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}\n` +
             `📊 Session: ${this.totalTrades} trades | ` +
-            `${this.totalWins}W/${this.totalLosses}L | `,
-            `x2-x5: ${this.consecutiveLosses2} | ${this.consecutiveLosses3} | ${this.consecutiveLosses4} | ${this.consecutiveLosses5}`,
-            `Stake: $${this.currentStake.toFixed(2)} | `,
-            `WR: ${winRate}%\n`,
+            `${this.totalWins}W/${this.totalLosses}L \n` +
+            `x2-x5: ${this.consecutiveLosses2} | ${this.consecutiveLosses3} | ${this.consecutiveLosses4} | ${this.consecutiveLosses5}\n` +
+            `Stake: $${this.currentStake.toFixed(2)} \n` +
+            `WR: ${winRate}%\n` +
             `Total P&amp;L: $${this.totalPnl.toFixed(2)}`
         );
 
