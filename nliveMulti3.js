@@ -619,10 +619,42 @@ class ReliableAccumulatorBot {
         }
     }
 
+    // _handleHistory(msg) {
+    //     if (msg.error) return;
+    //     const asset = msg.echo_req.ticks_history;
+    //     const prices = (msg.history.prices || []).map(price => this._getLastDigit(price, asset));
+    //     this.tickPrices[asset] = prices;
+    //     console.log(`📊 ${asset}: Loaded ${prices.length} price ticks`);
+    // }
+
+    // ── Live Tick ─────────────────────────────────────────────────────────────
+    // _handleTick(msg) {
+    //     if (msg.subscription) {
+    //         const asset = msg.tick.symbol;
+    //         this.tickSubscriptionIds[asset] = msg.subscription.id;
+    //     }
+
+    //     const { symbol, quote } = msg.tick;
+    //     const price = this._getLastDigit(quote, symbol);
+    //     const prices = this.tickPrices[symbol];
+
+    //     if (!prices) return;
+    //     prices.push(price);
+    //     this.tickPrices[symbol] = prices;
+
+    //     console.log(`📊 ${symbol}: ${prices.slice(-10)} | ${price} (${prices.length})`);
+
+    //     // Keep rolling window of 300 prices
+    //     while (prices.length > 300) prices.shift();
+
+    //     // Attempt to request a proposal for this asset
+    //     this._maybeRequestProposal(symbol);
+    // }
+
     _handleHistory(msg) {
         if (msg.error) return;
         const asset = msg.echo_req.ticks_history;
-        const prices = (msg.history.prices || []).map(price => this._getLastDigit(price, asset));
+        const prices = (msg.history.prices || []).map(Number);
         this.tickPrices[asset] = prices;
         console.log(`📊 ${asset}: Loaded ${prices.length} price ticks`);
     }
@@ -635,13 +667,14 @@ class ReliableAccumulatorBot {
         }
 
         const { symbol, quote } = msg.tick;
-        const price = this._getLastDigit(quote, symbol);
+        const price = Number(quote);
         const prices = this.tickPrices[symbol];
 
         if (!prices) return;
         prices.push(price);
 
-        console.log(`📊 ${symbol}: ${prices.slice(-10)} | ${price} (${prices.length})`);
+        const asset = msg.tick.symbol;
+        this.tickPrices[asset] = prices;
 
         // Keep rolling window of 300 prices
         while (prices.length > 300) prices.shift();
