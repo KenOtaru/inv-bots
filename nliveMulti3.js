@@ -36,7 +36,7 @@ const CONFIG = {
 
     // Staking  (FLAT — no Martingale)
     initialStake: 1.00,   // USD per trade
-    maxStake: 21.00,   // never exceed this
+    multiplier: 6.00,   // never exceed this
 
     // Growth rates
     growthRateDefault: 0.02,   // 1% — widest barriers, safest
@@ -102,6 +102,11 @@ class StatePersistence {
                 dailyPnl: bot.dailyPnl,
                 consecutiveLosses: bot.consecutiveLosses,
                 assetMetrics: bot.assetMetrics,
+                currentStake: bot.currentStake,
+                consecutiveLosses2: bot.consecutiveLosses2,
+                consecutiveLosses3: bot.consecutiveLosses3,
+                consecutiveLosses4: bot.consecutiveLosses4,
+                consecutiveLosses5: bot.consecutiveLosses5,
             };
             fs.writeFileSync(CONFIG.stateFile, JSON.stringify(data, null, 2));
         } catch (e) {
@@ -395,6 +400,7 @@ class ReliableAccumulatorBot {
         this.shutdownFlag = false;
         this.endOfDay = false;
         this.isWinTrade = false;
+        this.currentStake = CONFIG.initialStake;
 
         // Price history  (raw float prices — used for BB/RSI)
         this.tickPrices = {};  // { asset: [price, price, ...] }
@@ -419,6 +425,10 @@ class ReliableAccumulatorBot {
         this.dailyPnl = 0;
         this.consecutiveLosses = 0;
         this.assetMetrics = {};
+        this.consecutiveLosses2 = 0;
+        this.consecutiveLosses3 = 0;
+        this.consecutiveLosses4 = 0;
+        this.consecutiveLosses5 = 0;
 
         // Components
         this.analyzer = new VolatilityAnalyzer();
@@ -438,6 +448,8 @@ class ReliableAccumulatorBot {
 
         // Restore previous state
         this._loadState();
+
+        this._startTelegramTimer();
     }
 
     // ── State ─────────────────────────────────────────────────────────────────
@@ -450,6 +462,11 @@ class ReliableAccumulatorBot {
         this.totalPnl = s.totalPnl || 0;
         this.dailyPnl = s.dailyPnl || 0;
         this.consecutiveLosses = s.consecutiveLosses || 0;
+        this.currentStake = s.currentStake || CONFIG.initialStake;
+        this.consecutiveLosses2 = s.consecutiveLosses2 || 0;
+        this.consecutiveLosses3 = s.consecutiveLosses3 || 0;
+        this.consecutiveLosses4 = s.consecutiveLosses4 || 0;
+        this.consecutiveLosses5 = s.consecutiveLosses5 || 0;
         if (s.assetMetrics) this.assetMetrics = s.assetMetrics;
         console.log(`✅ Restored: ${this.totalTrades} trades, P&L $${this.totalPnl.toFixed(2)}`);
     }
@@ -569,6 +586,26 @@ class ReliableAccumulatorBot {
         });
     }
 
+    _startTelegramTimer() {
+        const now = new Date();
+        const nextHour = new Date(now);
+        nextHour.setHours(nextHour.getHours() + 1);
+        nextHour.setMinutes(0);
+        nextHour.setSeconds(0);
+        nextHour.setMilliseconds(0);
+
+        const timeUntilNextHour = nextHour.getTime() - now.getTime();
+
+        setTimeout(() => {
+            this.sendHourlySummary();
+            setInterval(() => {
+                this.sendHourlySummary();
+            }, 60 * 60 * 1000);
+        }, timeUntilNextHour);
+
+        console.log(`📱 Hourly summaries scheduled. First in ${Math.ceil(timeUntilNextHour / 60000)} minutes.`);
+    }
+
     _handleHistory(msg) {
         if (msg.error) return;
         const asset = msg.echo_req.ticks_history;
@@ -590,6 +627,8 @@ class ReliableAccumulatorBot {
 
         if (!prices) return;
         prices.push(price);
+
+        console.log(`📊 ${symbol}: ${prices.slice(0, 10)} | ${price} (${prices.length})`);
 
         // Keep rolling window of 300 prices
         while (prices.length > 300) prices.shift();
@@ -624,11 +663,11 @@ class ReliableAccumulatorBot {
         // All checks passed — request proposal
         this.assetStates[asset].lastProposalAt = now;
 
-        const takeProfitAmount = parseFloat((CONFIG.initialStake * CONFIG.takeProfitPct).toFixed(2));
+        const takeProfitAmount = parseFloat((this.currentStake * CONFIG.takeProfitPct).toFixed(2));
 
         this._send({
             proposal: 1,
-            amount: CONFIG.initialStake.toFixed(2),
+            amount: this.currentStake.toFixed(2),
             basis: 'stake',
             contract_type: 'ACCU',
             currency: 'USD',
@@ -866,10 +905,19 @@ class ReliableAccumulatorBot {
             this.totalWins++;
             this.consecutiveLosses = 0;
             this.isWinTrade = true;
+            this.currentStake = CONFIG.initialStake;
             if (this.assetMetrics[asset]) this.assetMetrics[asset].wins++;
         } else {
             this.totalLosses++;
             this.consecutiveLosses++;
+
+            if (this.consecutiveLosses === 2) this.consecutiveLosses2++;
+            else if (this.consecutiveLosses === 3) this.consecutiveLosses3++;
+            else if (this.consecutiveLosses === 4) this.consecutiveLosses4++;
+            else if (this.consecutiveLosses === 5) this.consecutiveLosses5++;
+
+            this.currentStake = Math.ceil(this.currentStake * CONFIG.multiplier * 100) / 100;
+
             if (this.assetMetrics[asset]) this.assetMetrics[asset].losses++;
 
             // Asset-level cooldown
@@ -960,6 +1008,11 @@ class ReliableAccumulatorBot {
             `📊 <b>Session Summary (Bot 3)</b>\n\n` +
             `Trades: ${this.totalTrades}\n` +
             `W/L: ${this.totalWins}/${this.totalLosses}\n` +
+            `Consecutive Losses: ${this.consecutiveLosses}\n` +
+            `x2Losses: ${this.consecutiveLosses2}\n` +
+            `x3Losses: ${this.consecutiveLosses3}\n` +
+            `x4Losses: ${this.consecutiveLosses4}\n` +
+            `x5Losses: ${this.consecutiveLosses5}\n` +
             `Win Rate: ${winRate}%\n` +
             `${pnlEmoji} Total P&amp;L: ${pnlStr}\n` +
             `Daily P&amp;L: ${this.dailyPnl >= 0 ? '+' : ''}$${this.dailyPnl.toFixed(2)}\n\n` +
@@ -999,7 +1052,7 @@ class ReliableAccumulatorBot {
             }
 
             if (this.isWinTrade && !this.endOfDay) {
-                if (currentHours >= 23 && currentMinutes >= 30) {
+                if (currentHours >= 23 && currentMinutes >= 0) {
                     console.log("It's past 11:30 PM GMT+1 after a win trade, disconnecting the bot.");
                     this.sendHourlySummary();
                     this.disconnect();
