@@ -786,7 +786,7 @@ class ReliableAccumulatorBot {
             return;
         }
 
-        const stake = CONFIG.initialStake;  // FLAT STAKING
+        const stake = this.currentStake;  // FLAT STAKING
         const takeProfitAmt = parseFloat((stake * CONFIG.takeProfitPct).toFixed(2));
         const growthLabel = `${(signal.growthRate * 100).toFixed(0)}%`;
 
@@ -993,6 +993,8 @@ class ReliableAccumulatorBot {
             `${profit >= 0 ? '🟢' : '🔴'} P&amp;L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}\n\n` +
             `📊 Session: ${this.totalTrades} trades | ` +
             `${this.totalWins}W/${this.totalLosses}L | ` +
+            `x2-x5: ${this.consecutiveLosses2} | ${this.consecutiveLosses3} | ${this.consecutiveLosses4} | ${this.consecutiveLosses5}` +
+            `Stake: $${this.currentStake.toFixed(2)} | ` +
             `WR: ${winRate}%\n` +
             `Total P&amp;L: $${this.totalPnl.toFixed(2)}`
         );
@@ -1139,7 +1141,7 @@ class ReliableAccumulatorBot {
         console.log('  DERIV RELIABLE ACCUMULATOR BOT  v4.0');
         console.log(bar);
         console.log(`  Assets:        ${CONFIG.assets.join(', ')}`);
-        console.log(`  Stake:         $${CONFIG.initialStake.toFixed(2)} (FLAT)`);
+        console.log(`  Stake:         $${CONFIG.initialStake.toFixed(2)}`);
         console.log(`  Growth Rate:   ${(CONFIG.growthRateDefault * 100).toFixed(0)}% → ${(CONFIG.growthRateBoost * 100).toFixed(0)}% adaptive`);
         console.log(`  Entry Window:  ticks ${CONFIG.minEntryTick}–${CONFIG.maxEntryTick}`);
         console.log(`  Take-Profit:   ${(CONFIG.takeProfitPct * 100).toFixed(0)}% of stake (limit order)`);
