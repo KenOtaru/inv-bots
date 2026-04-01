@@ -27,7 +27,7 @@ const path = require('path');
 // ─────────────────────────────────────────────────────────────────────────────
 const CONFIG = {
     // Deriv API
-    token: 'hsj0tA0XJoIzJG5', //process.env.DERIV_TOKEN || 
+    token: '0P94g4WdSrSrzir', //process.env.DERIV_TOKEN || 
     appId: 1089, //process.env.DERIV_APP_ID || 
     wsUrl: 'wss://ws.binaryws.com/websockets/v3',
 
@@ -606,10 +606,23 @@ class ReliableAccumulatorBot {
         console.log(`📱 Hourly summaries scheduled. First in ${Math.ceil(timeUntilNextHour / 60000)} minutes.`);
     }
 
+    _getLastDigit(quote, asset) {
+        const quoteString = quote.toString();
+        const [, fractionalPart = ''] = quoteString.split('.');
+
+        if (['RDBULL', 'RDBEAR', 'R_75', 'R_50'].includes(asset)) {
+            return fractionalPart.length >= 4 ? parseInt(fractionalPart[3]) : 0;
+        } else if (['R_10', 'R_25', '1HZ15V', '1HZ30V', '1HZ90V',].includes(asset)) {
+            return fractionalPart.length >= 3 ? parseInt(fractionalPart[2]) : 0;
+        } else {
+            return fractionalPart.length >= 2 ? parseInt(fractionalPart[1]) : 0;
+        }
+    }
+
     _handleHistory(msg) {
         if (msg.error) return;
         const asset = msg.echo_req.ticks_history;
-        const prices = (msg.history.prices || []).map(Number);
+        const prices = (msg.history.prices || []).map(price => this._getLastDigit(price, asset));
         this.tickPrices[asset] = prices;
         console.log(`📊 ${asset}: Loaded ${prices.length} price ticks`);
     }
@@ -622,13 +635,13 @@ class ReliableAccumulatorBot {
         }
 
         const { symbol, quote } = msg.tick;
-        const price = Number(quote);
+        const price = this._getLastDigit(quote, symbol);
         const prices = this.tickPrices[symbol];
 
         if (!prices) return;
         prices.push(price);
 
-        console.log(`📊 ${symbol}: ${prices.slice(0, 10)} | ${price} (${prices.length})`);
+        console.log(`📊 ${symbol}: ${prices.slice(-10)} | ${price} (${prices.length})`);
 
         // Keep rolling window of 300 prices
         while (prices.length > 300) prices.shift();
