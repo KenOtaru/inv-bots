@@ -992,9 +992,9 @@ class ReliableAccumulatorBot {
             `${won ? '✅' : '❌'} <b>${won ? 'WIN' : 'LOSS'} (Bot 3b)</b>\n\n` +
             `Asset: <b>${asset}</b>  |  Ticks: ${tickCount}\n` +
             `${profit >= 0 ? '🟢' : '🔴'} P&amp;L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}\n` +
-            `📊 Session: ${this.totalTrades} trades | ` +
-            `${this.totalWins}W/${this.totalLosses}L \n` +
-            `x2-x5: ${this.consecutiveLosses2} | ${this.consecutiveLosses3} | ${this.consecutiveLosses4} | ${this.consecutiveLosses5}\n` +
+            `📊 Session:\n` +
+            `trades: ${this.totalTrades} | ${this.totalWins}W/${this.totalLosses}L \n` +
+            `Losses x2-x5: ${this.consecutiveLosses2} | ${this.consecutiveLosses3} | ${this.consecutiveLosses4} | ${this.consecutiveLosses5}\n` +
             `Stake: $${this.currentStake.toFixed(2)} \n` +
             `WR: ${winRate}%\n` +
             `Total P&amp;L: $${this.totalPnl.toFixed(2)}`
