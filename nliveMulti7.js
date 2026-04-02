@@ -874,6 +874,7 @@ class AccumulatorBotV4 {
         if (this.assetStates[bestAsset].lastTicks < 5) {
             console.log('Barrier hasn\'t just reset: ', this.assetStates[bestAsset].lastTicks)
             console.log('Current run: ', this.assetStates[bestAsset].currentRun, ' | ', this.assetStates[bestAsset].lastTicks);
+            console.log('Rankings: ', rankings);
             return; // Run too young
         }
 
