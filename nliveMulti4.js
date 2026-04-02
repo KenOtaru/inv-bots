@@ -210,7 +210,7 @@ class AccumulatorAnalyzer {
      */
     recommendGrowthRate(regimeScore) {
         if (regimeScore >= 0.80) return 0.03;   // calm: can use 3%
-        if (regimeScore >= 0.60) return 0.02;   // moderate: use 2%
+        // if (regimeScore >= 0.60) return 0.02;   // moderate: use 2%
         return 0.01;                             // elevated/volatile: safest 1%
     }
 }
@@ -697,7 +697,7 @@ class AccumulatorBot {
         this.tradeStake = decision.stake;
 
         this._tg(
-            `🚀 <b>TRADE OPENED</b>\n\n` +
+            `🚀 <b>TRADE OPENED 4</b>\n\n` +
             `Asset: <b>${asset}</b>\n` +
             `Entry: ${decision.currentTicks} ticks | Target: +${4}\n` +
             `Stake: $${decision.stake.toFixed(2)} @ ${(decision.growthRate * 100).toFixed(0)}% growth\n` +
@@ -802,7 +802,7 @@ class AccumulatorBot {
             : '0.0';
 
         this._tg(
-            `${won ? '✅' : '❌'} <b>${won ? 'WIN' : 'LOSS'}</b> — ${asset}\n\n` +
+            `${won ? '✅' : '❌'} <b>Bot 4 ${won ? 'WIN' : 'LOSS'}</b> — ${asset}\n\n` +
             `P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}\n` +
             `Ticks: ${this.tradeEntryTicks} → ${exitTicks} (held ${ticksHeld})\n\n` +
             `📊 Session:\n` +

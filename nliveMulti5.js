@@ -545,7 +545,7 @@ class AccumulatorBotV4 {
             takeProfitMultiplier: config.takeProfitMultiplier || 0.10,  // 10% of stake
 
             // Analysis thresholds
-            minOverallScore: config.minOverallScore || 0.65,
+            minOverallScore: config.minOverallScore || 0.85,
             minTimeBetweenTrades: config.minTimeBetweenTrades || 10000, // 10s between trades per asset
 
             // History requirements
@@ -1002,7 +1002,7 @@ class AccumulatorBotV4 {
 
         // Telegram notification
         this.sendTelegramMessage(
-            `🚀 <b>TRADE OPENED</b>\n\n` +
+            `🚀 <b>TRADE OPENED 5</b>\n\n` +
             `Asset: ${asset}\n` +
             `Stake: $${trade.stake.toFixed(2)}\n` +
             `Growth Rate: ${(trade.growthRate * 100).toFixed(0)}%\n` +
@@ -1194,7 +1194,7 @@ class AccumulatorBotV4 {
 
         // Telegram
         this.sendTelegramMessage(
-            `${won ? '✅' : '❌'} <b>${won ? 'WIN' : 'LOSS'}</b>\n\n` +
+            `${won ? '✅' : '❌'} <b>Bot 5 ${won ? 'WIN' : 'LOSS'}</b>\n\n` +
             `Asset: ${asset}\n` +
             `P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(3)}\n` +
             `Ticks: ${tickCount} | Growth: ${(trade.growthRate * 100).toFixed(0)}%\n\n` +
