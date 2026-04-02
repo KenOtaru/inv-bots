@@ -880,7 +880,7 @@ class TelegramNotifier {
         if (!lane.tradeDetails) return;
         const t = lane.tradeDetails;
         this.send(
-            `🚀 <b>TRADE OPENED</b> (v4)\n\n` +
+            `🚀 <b>TRADE OPENED 6</b> (v4)\n\n` +
             `Asset: ${t.asset}\n` +
             `Growth: ${(t.growthRate * 100).toFixed(0)}% (${t.tier})\n` +
             `Target: ${t.targetTicks} ticks\n` +
@@ -898,7 +898,7 @@ class TelegramNotifier {
         const winRate = rm.totalTrades > 0 ? (rm.totalWins / rm.totalTrades * 100).toFixed(1) : '0.0';
 
         this.send(
-            `${emoji} <b>${won ? 'WIN' : 'LOSS'}</b> (v4)\n\n` +
+            `${emoji} <b> Bot 6 ${won ? 'WIN' : 'LOSS'}</b> (v4)\n\n` +
             `Asset: ${asset}\n` +
             `P&L: ${pnl}  |  Ticks: ${tickCount}\n\n` +
             `📊 Session:\n` +
@@ -913,7 +913,7 @@ class TelegramNotifier {
         const rm = riskManager;
         const wr = rm.totalTrades > 0 ? (rm.totalWins / rm.totalTrades * 100).toFixed(1) : '0.0';
         this.send(
-            `📊 <b>Hourly Report</b> (v4)\n\n` +
+            `📊 <b>Hourly Report 6</b> (v4)\n\n` +
             `Trades: ${rm.totalTrades}  |  Win Rate: ${wr}%\n` +
             `Session P&L: ${rm.sessionProfitLoss >= 0 ? '+' : ''}$${rm.sessionProfitLoss.toFixed(2)}\n` +
             `Bankroll: $${rm.bankroll.toFixed(2)}`
@@ -924,7 +924,7 @@ class TelegramNotifier {
         const rm = riskManager;
         const wr = rm.totalTrades > 0 ? (rm.totalWins / rm.totalTrades * 100).toFixed(1) : '0.0';
         this.send(
-            `🛑 <b>BOT SHUTDOWN</b> (v4)\n\n` +
+            `🛑 <b>BOT SHUTDOWN< 6/b> (v4)\n\n` +
             `Reason: ${reason}\n\n` +
             `Final Stats:\n` +
             `Trades: ${rm.totalTrades}  |  Win Rate: ${wr}%\n` +

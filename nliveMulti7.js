@@ -969,7 +969,7 @@ class AccumulatorBotV4 {
 
         // Telegram notification
         this.sendTelegramMessage(
-            `🚀 <b>TRADE OPENED (v4.0)</b>\n\n` +
+            `🚀 <b>TRADE OPENED 7 (v4.0)</b>\n\n` +
             `Asset: ${this.activeTrade.asset}\n` +
             `Contract: ${contractId}\n` +
             `Stake: $${this.activeTrade.stake.toFixed(2)}\n` +
@@ -1135,7 +1135,7 @@ class AccumulatorBotV4 {
         const pnlEmoji = profit >= 0 ? '🟢' : '🔴';
 
         this.sendTelegramMessage(
-            `${emoji} <b>${won ? 'WIN' : 'LOSS'}</b>\n\n` +
+            `${emoji} <b>Bot 7 ${won ? 'WIN' : 'LOSS'}</b>\n\n` +
             `Asset: ${asset}\n` +
             `${pnlEmoji} P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}\n` +
             `Ticks: ${ticksHeld}\n` +
@@ -1250,7 +1250,7 @@ class AccumulatorBotV4 {
         };
 
         this.sendTelegramMessage(
-            `🛑 <b>BOT SHUTDOWN (v4.0)</b>\n\n` +
+            `🛑 <b>BOT SHUTDOWN 7 (v4.0)</b>\n\n` +
             `Reason: ${reason}\n\n` +
             `📊 Final Stats:\n` +
             `Trades: ${finalStats.trades}\n` +
