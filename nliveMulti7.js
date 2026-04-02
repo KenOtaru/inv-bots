@@ -920,9 +920,6 @@ class AccumulatorBotV4 {
         // Daily reset check
         this.checkDailyReset();
 
-        if (this.tradeInProgress) {
-            this.ticksHeld++;
-        }
         // Don't process if trading
         if (this.tradeInProgress) return;
 
@@ -1260,6 +1257,9 @@ class AccumulatorBotV4 {
         // const ticksHeld = contract.tick_count || 0;
         const currentProfit = parseFloat(contract.profit || 0);
         const bidPrice = parseFloat(contract.bid_price || 0);
+        if (this.tradeInProgress) {
+            this.ticksHeld++;
+        }
 
         // Contract already closed
         if (contract.is_sold) {
