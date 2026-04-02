@@ -1272,7 +1272,7 @@ class AccumulatorBotV4 {
 // INSTANTIATE & RUN
 // ============================================================================
 
-const token = 'Dz2V2KvRf4Uukt3';
+const token = '0P94g4WdSrSrzir';
 
 const bot = new AccumulatorBotV4(token, {
     // API

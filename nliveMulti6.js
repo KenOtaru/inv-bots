@@ -1404,7 +1404,7 @@ class AccumulatorBotV4 {
 // ════════════════════════════════════════════════════════════════════════════
 
 (function main() {
-    const token = process.env.DERIV_API_TOKEN;
+    const token = 'Dz2V2KvRf4Uukt3';
 
     if (!token) {
         console.error('═══════════════════════════════════════════════════════════');

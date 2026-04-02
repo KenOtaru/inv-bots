@@ -1323,7 +1323,7 @@ class AccumulatorBotV4 {
 // RUN BOT
 // ============================================================================
 
-const token = process.env.DERIV_TOKEN || 'YOUR_TOKEN_HERE';
+const token = 'hsj0tA0XJoIzJG5';
 
 const bot = new AccumulatorBotV4(token, {
     // Money management

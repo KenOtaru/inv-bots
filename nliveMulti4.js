@@ -894,7 +894,7 @@ class AccumulatorBot {
 // ============================================================
 
 // ⚠️  Replace with your real API token (read from env for safety)
-const API_TOKEN = process.env.DERIV_TOKEN || 'YOUR_API_TOKEN_HERE';
+const API_TOKEN = 'rgNedekYXvCaPeP';
 
 const bot = new AccumulatorBot(API_TOKEN, {
     // Assets to monitor
@@ -919,8 +919,8 @@ const bot = new AccumulatorBot(API_TOKEN, {
     minOverallScore: 0.68,
 
     // Telegram (or set TELEGRAM_TOKEN / TELEGRAM_CHAT_ID in .env)
-    telegramToken: process.env.TELEGRAM_TOKEN || '',
-    telegramChatId: process.env.TELEGRAM_CHAT_ID || '',
+    telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
+    telegramChatId: '752497117',
 });
 
 bot.start();
