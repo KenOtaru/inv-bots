@@ -587,7 +587,7 @@ class AccumulatorBot {
 
         // ── Evaluate ──────────────────────────────────────────────────
         const decision = this._evaluate(asset, currentTicks, msg.proposal);
-        if (!decision.trade) {
+        if (!decision.trade || decision.regime !== 'calm') {
             return;
         }
 
