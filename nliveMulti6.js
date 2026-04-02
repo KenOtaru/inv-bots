@@ -68,12 +68,12 @@ const CONFIG = {
         bollingerPeriod: 20,
         bollingerStdDev: 2,
         maxMacdHistogram: 0.0002,
-        minConfidence: 0.50,
+        minConfidence: 0.60,
     },
 
     // --- Staking (Kelly Criterion) ---
     staking: {
-        bankroll: 500,
+        bankroll: 100,
         maxStakePercent: 0.03,
         reducedStakePercent: 0.015,
         minStake: 1,
@@ -94,8 +94,8 @@ const CONFIG = {
 
     // --- Session ---
     session: {
-        takeProfitTotal: 50,
-        maxTrades: 200,
+        takeProfitTotal: 50000,
+        maxTrades: 200000000,
     },
 
     // --- History ---
