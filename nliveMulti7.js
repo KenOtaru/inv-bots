@@ -1222,7 +1222,7 @@ class AccumulatorBotV4 {
             this.contractSubscriptionId = contract.id;
         }
 
-        const ticksHeld = contract.tick_count || 0;
+        const ticksHeld = contract.tick_count.toFixed(0) || 0;
         const currentProfit = parseFloat(contract.profit || 0);
         const bidPrice = parseFloat(contract.bid_price || 0);
 
@@ -1510,7 +1510,7 @@ const bot = new AccumulatorBotV4(token, {
     // Staking
     initialStake: 1,
     growthRate: 0.02,           // 2% (safer than 5%)
-    targetTicks: 15,            // ~34% profit per winning trade
+    targetTicks: 150,            // ~34% profit per winning trade
 
     // Risk Management
     maxDailyLoss: 200,
@@ -1532,7 +1532,7 @@ const bot = new AccumulatorBotV4(token, {
 
     // In-Trade Safety
     emergencyExitZScore: 1.0,   // Exit if vol spikes +1 std above mean
-    maxHoldTicks: 30,           // Never hold >30 ticks (2× target)
+    maxHoldTicks: 300,           // Never hold >30 ticks (2× target)
 
     // Cooldown
     minTimeBetweenTrades: 30000,    // 30 seconds between trades
