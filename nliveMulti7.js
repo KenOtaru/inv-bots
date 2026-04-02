@@ -550,7 +550,9 @@ class AccumulatorBotV4 {
         this.assets.forEach(asset => {
             this.assetStates[asset] = {
                 currentProposalId: null,
+                proposalTimestamp: null,        // NEW: Track when proposal was received
                 lastTicks: 0,
+                pendingBuy: null,               // NEW: Store pending buy request
             };
             this.tickCounters[asset] = 0;
             this.assetMetrics[asset] = {
@@ -856,6 +858,7 @@ class AccumulatorBotV4 {
         }
 
         const bestAsset = rankings[0].asset;
+
         const signal = this.volEngine.getEntrySignal(bestAsset);
 
         // Log analysis at reasonable frequency (every 50 ticks across all assets)
@@ -866,20 +869,18 @@ class AccumulatorBotV4 {
 
         // Check entry criteria
         if (!signal.isEligible) {
-            console.log('Signal not Eligible: ', signal.isEligible)
+            // console.log('Signal not Eligible: ', signal.isEligible)
             return; // Conditions not met, wait for better setup
         }
 
         // Verify ticks_stayed_in >= 5 (barrier hasn't just reset)
-        if (this.assetStates[bestAsset].lastTicks < 5) {
-            console.log('Barrier hasn\'t just reset: ', this.assetStates[bestAsset].lastTicks)
-            console.log(bestAsset, 'Current run: ', this.assetStates[bestAsset].lastTicks);
-            console.log('Rankings: ', rankings);
-            return; // Run too young
-        }
+        // if (this.assetStates[bestAsset].lastTicks < 5) {
+        console.log(bestAsset, 'Barrier hasn\'t just reset: ', this.assetStates[bestAsset].lastTicks)
+        //     return; // Run too young
+        // }
 
         // Final confidence check
-        if (signal.confidence < 0.55) {
+        if (signal.confidence < 0.80) {
             console.log('Confidence too low: ', signal.confidence)
             return; // Low confidence
         }
@@ -897,14 +898,59 @@ class AccumulatorBotV4 {
             this.config.targetTicks
         );
 
-        // Request proposal
-        this.requestProposal(bestAsset, this.currentStake, takeProfit);
+        // CRITICAL FIX: Check if we have a valid proposal ID before buying
+        const proposalId = this.assetStates[bestAsset].currentProposalId;
+
+        if (!proposalId) {
+            console.log(`   ⚠️ No proposal ID yet for ${bestAsset}, requesting...`);
+            this.requestProposal(bestAsset, this.currentStake, takeProfit);
+            // Store that we've requested, will buy on next cycle when proposal arrives
+            this.assetStates[bestAsset].pendingBuy = {
+                stake: this.currentStake,
+                takeProfit: takeProfit,
+                requestedAt: Date.now()
+            };
+            return;
+        }
+
+        // Check if proposal is stale (older than 2 seconds)
+        const proposalAge = Date.now() - (this.assetStates[bestAsset].proposalTimestamp || 0);
+        if (proposalAge > 2000) {
+            console.log(`   ⚠️ Proposal stale (${proposalAge}ms), requesting fresh...`);
+            this.requestProposal(bestAsset, this.currentStake, takeProfit);
+            this.assetStates[bestAsset].currentProposalId = null;
+            return;
+        }
+
+        // ALL CONDITIONS MET - EXECUTE BUY
+        console.log(`   💰 Buying with proposal ID: ${proposalId}`);
+        console.log(`      Stake: $${this.currentStake.toFixed(2)} | Target TP: $${takeProfit.toFixed(2)}`);
+
+        this.executeBuy(bestAsset, proposalId, this.currentStake, takeProfit);
     }
 
     /**
-     * Request accumulator proposal with take profit limit
+     * Execute the buy order for a proposal
      */
+    executeBuy(asset, proposalId, stake, takeProfit) {
+        this.sendRequest({
+            buy: proposalId,
+            price: stake.toFixed(2)
+        });
+
+        // Clear proposal and pending buy
+        this.assetStates[asset].currentProposalId = null;
+        this.assetStates[asset].pendingBuy = null;
+
+        console.log(`📤 Buy request sent for ${asset}`);
+    }
+
+    /**
+    * Request accumulator proposal with take profit limit
+    */
     requestProposal(asset, stake, takeProfit) {
+        console.log(`📋 Requesting proposal for ${asset}`);
+
         this.sendRequest({
             proposal: 1,
             amount: stake.toFixed(2),
@@ -919,6 +965,9 @@ class AccumulatorBotV4 {
         });
     }
 
+    /**
+    * Handle proposal response - store ID and timestamp
+    */
     handleProposal(message) {
         if (message.error || !message.proposal) {
             if (message.error) {
@@ -934,14 +983,16 @@ class AccumulatorBotV4 {
             return;
         }
 
-        // Store proposal ID for potential buy
+        // Store proposal ID with timestamp
         this.assetStates[asset].currentProposalId = proposal.id;
+        this.assetStates[asset].proposalTimestamp = Date.now(); // CRITICAL: Track freshness
 
-        // Track current run length
+        // Track current run length (ticks_stayed_in)
         const stayedInArray = proposal.contract_details.ticks_stayed_in;
         const currentRun = stayedInArray[stayedInArray.length - 1] + 1;
         this.assetStates[asset].lastTicks = currentRun;
-        console.log('Current run: ', currentRun, ' | ', this.assetStates[asset].lastTicks);
+
+        console.log(`📥 Proposal received for ${asset} | ID: ${proposal.id} | Run: ${currentRun} ticks`);
     }
 
     handleBuyResponse(message) {
