@@ -866,16 +866,19 @@ class AccumulatorBotV4 {
 
         // Check entry criteria
         if (!signal.isEligible) {
+            console.log('Signal not Eligible: ', signal.isEligible)
             return; // Conditions not met, wait for better setup
         }
 
         // Verify ticks_stayed_in >= 5 (barrier hasn't just reset)
         if (this.assetStates[bestAsset].lastTicks < 5) {
+            console.log('Barrier hasn\'t just reset: ', this.assetStates[bestAsset].lastTicks)
             return; // Run too young
         }
 
         // Final confidence check
         if (signal.confidence < 0.55) {
+            console.log('Confidence too low: ', signal.confidence)
             return; // Low confidence
         }
 
