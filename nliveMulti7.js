@@ -388,6 +388,34 @@ class AdaptiveRiskManager {
     /**
      * Calculate stake using anti-martingale (reduce after losses)
      */
+    // calculateStake() {
+    //     let multiplier = 1.0;
+
+    //     // Anti-martingale: reduce after losses
+    //     if (this.consecutiveLosses === 1) {
+    //         multiplier = this.stakeAfterLoss1;
+    //     } else if (this.consecutiveLosses === 2) {
+    //         multiplier = this.stakeAfterLoss2;
+    //     } else if (this.consecutiveLosses >= 3) {
+    //         multiplier = this.stakeAfterLoss2;
+    //     }
+
+    //     // Bonus: slight increase after wins
+    //     if (this.consecutiveWins >= 2) {
+    //         multiplier *= 1.05;
+    //     }
+
+    //     // Daily loss protection
+    //     if (this.dailyProfitLoss < -this.maxDailyLoss * 0.5) {
+    //         multiplier = Math.min(multiplier, 0.5);
+    //     }
+
+    //     let stake = this.baseStake * multiplier;
+    //     stake = Math.max(this.minStake, Math.min(this.maxStake, stake));
+
+    //     return parseFloat(stake.toFixed(2));
+    // }
+
     calculateStake() {
         let multiplier = 1.0;
 
@@ -411,7 +439,10 @@ class AdaptiveRiskManager {
         }
 
         let stake = this.baseStake * multiplier;
-        stake = Math.max(this.minStake, Math.min(this.maxStake, stake));
+
+        // CRITICAL FIX: Deriv minimum stake is $1.00 for accumulators
+        const DERIV_MIN_STAKE = 1.00;
+        stake = Math.max(DERIV_MIN_STAKE, Math.min(this.maxStake, stake));
 
         return parseFloat(stake.toFixed(2));
     }
@@ -1127,6 +1158,7 @@ class AccumulatorBotV4 {
                 buyTime: Date.now(),
                 proposalId: proposal.id,
                 askPrice,
+                entryTickCount: null,
             };
 
             // CRITICAL: Buy using ask_price, not stake amount
@@ -1222,19 +1254,33 @@ class AccumulatorBotV4 {
             this.contractSubscriptionId = contract.id;
         }
 
-        const ticksHeld = contract.tick_count.toFixed(0) || 0;
+        // Get current total run tick count
+        const currentRunTicks = contract.tick_count || 0;
+
+        // FIXED: Calculate ticks held since OUR entry
+        // On first update, store the entry tick count
+        if (this.activeTrade.entryTickCount === undefined || this.activeTrade.entryTickCount === null) {
+            // First contract update — this is our entry point
+            this.activeTrade.entryTickCount = currentRunTicks;
+            console.log(`📍 Entry tick count recorded: ${currentRunTicks}`);
+        }
+
+        // Calculate how many ticks WE have held
+        const ticksHeld = currentRunTicks - this.activeTrade.entryTickCount;
+
         const currentProfit = parseFloat(contract.profit || 0);
         const bidPrice = parseFloat(contract.bid_price || 0);
 
         // Contract already closed
         if (contract.is_sold) {
-            this.handleTradeResult(contract);
+            // Pass ticksHeld to result handler
+            this.handleTradeResult(contract, ticksHeld);
             return;
         }
 
-        // Check emergency exit conditions (CRITICAL)
+        // Check if we can sell
         if (!contract.is_valid_to_sell) {
-            return; // Can't sell yet
+            return;
         }
 
         // 1. VOLATILITY GUARD: Emergency exit if volatility spikes during trade
@@ -1279,10 +1325,10 @@ class AccumulatorBotV4 {
             return;
         }
 
-        // Log progress occasionally
+        // Log progress every 5 ticks held (not total run ticks)
         if (ticksHeld > 0 && ticksHeld % 5 === 0) {
-            const progPercent = (ticksHeld / this.config.targetTicks * 100).toFixed(0);
-            console.log(`📊 Trade progress: ${ticksHeld}/${this.config.targetTicks} ticks (${progPercent}%) | Profit: $${currentProfit.toFixed(2)}`);
+            const progPercent = Math.min(100, (ticksHeld / this.config.targetTicks * 100)).toFixed(0);
+            console.log(`📊 Trade progress: ${ticksHeld}/${this.config.targetTicks} ticks (${progPercent}%) | Profit: $${currentProfit.toFixed(2)} | Run: ${currentRunTicks}`);
         }
     }
 
@@ -1308,7 +1354,7 @@ class AccumulatorBotV4 {
     /**
      * Handle trade completion (win or loss)
      */
-    handleTradeResult(contract) {
+    handleTradeResult(contract, ticksHeld = null) {
         if (!this.activeTrade) {
             console.warn('⚠️ Trade result received but no active trade');
             this.tradeInProgress = false;
@@ -1317,7 +1363,13 @@ class AccumulatorBotV4 {
 
         const won = contract.status === 'won';
         const profit = parseFloat(contract.profit || 0);
-        const ticksHeld = contract.tick_count || 0;
+
+        // Use passed ticksHeld or calculate if not provided
+        if (ticksHeld === null) {
+            const currentRunTicks = contract.tick_count || 0;
+            const entryTicks = this.activeTrade.entryTickCount || 0;
+            ticksHeld = currentRunTicks - entryTicks;
+        }
 
         // Unsubscribe from contract
         if (this.contractSubscriptionId) {
@@ -1327,7 +1379,7 @@ class AccumulatorBotV4 {
 
         // Log result
         console.log(`\n${'═'.repeat(60)}`);
-        console.log(`${won ? '✅ WIN' : '❌ LOSS'} | ${this.activeTrade.asset} | Ticks: ${ticksHeld}`);
+        console.log(`${won ? '✅ WIN' : '❌ LOSS'} | ${this.activeTrade.asset} | Ticks Held: ${ticksHeld}`);
         console.log(`P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}`);
         console.log(`${'═'.repeat(60)}\n`);
 
@@ -1366,7 +1418,7 @@ class AccumulatorBotV4 {
             `${emoji} <b>Bot 7 ${won ? 'WIN' : 'LOSS'}</b>\n\n` +
             `Asset: ${asset}\n` +
             `${pnlEmoji} P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}\n` +
-            `Ticks: ${ticksHeld}\n` +
+            `Ticks Held: ${ticksHeld}\n` +
             `Streak: ${won ? `✓${this.riskManager.consecutiveWins}` : `✗${this.riskManager.consecutiveLosses}`}\n\n` +
             `📊 Session:\n` +
             `Trades: ${this.totalTrades} | W/L: ${this.totalWins}/${this.totalLosses}\n` +
@@ -1532,7 +1584,7 @@ const bot = new AccumulatorBotV4(token, {
 
     // In-Trade Safety
     emergencyExitZScore: 1.0,   // Exit if vol spikes +1 std above mean
-    maxHoldTicks: 300,           // Never hold >30 ticks (2× target)
+    maxHoldTicks: 30,           // Never hold >30 ticks (2× target)
 
     // Cooldown
     minTimeBetweenTrades: 30000,    // 30 seconds between trades
