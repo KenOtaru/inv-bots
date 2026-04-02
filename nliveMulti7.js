@@ -566,6 +566,7 @@ class AccumulatorBotV4 {
         this.tradeInProgress = false;
         this.endOfDay = false;
         this.lastDayReset = new Date().toDateString();
+        this.ticksHeld = 0;
 
         // Active trade tracking
         this.activeTrade = null;
@@ -919,6 +920,9 @@ class AccumulatorBotV4 {
         // Daily reset check
         this.checkDailyReset();
 
+        if (this.tradeInProgress) {
+            this.ticksHeld++;
+        }
         // Don't process if trading
         if (this.tradeInProgress) return;
 
@@ -1158,7 +1162,6 @@ class AccumulatorBotV4 {
                 buyTime: Date.now(),
                 proposalId: proposal.id,
                 askPrice,
-                entryTickCount: null,
             };
 
             // CRITICAL: Buy using ask_price, not stake amount
@@ -1254,33 +1257,19 @@ class AccumulatorBotV4 {
             this.contractSubscriptionId = contract.id;
         }
 
-        // Get current total run tick count
-        const currentRunTicks = contract.tick_count || 0;
-
-        // FIXED: Calculate ticks held since OUR entry
-        // On first update, store the entry tick count
-        if (this.activeTrade.entryTickCount === undefined || this.activeTrade.entryTickCount === null) {
-            // First contract update — this is our entry point
-            this.activeTrade.entryTickCount = currentRunTicks;
-            console.log(`📍 Entry tick count recorded: ${currentRunTicks}`);
-        }
-
-        // Calculate how many ticks WE have held
-        const ticksHeld = currentRunTicks - this.activeTrade.entryTickCount;
-
+        const ticksHeld = contract.tick_count || 0;
         const currentProfit = parseFloat(contract.profit || 0);
         const bidPrice = parseFloat(contract.bid_price || 0);
 
         // Contract already closed
         if (contract.is_sold) {
-            // Pass ticksHeld to result handler
-            this.handleTradeResult(contract, ticksHeld);
+            this.handleTradeResult(contract);
             return;
         }
 
-        // Check if we can sell
+        // Check emergency exit conditions (CRITICAL)
         if (!contract.is_valid_to_sell) {
-            return;
+            return; // Can't sell yet
         }
 
         // 1. VOLATILITY GUARD: Emergency exit if volatility spikes during trade
@@ -1312,23 +1301,23 @@ class AccumulatorBotV4 {
         }
 
         // 3. TARGET TICKS REACHED: Sell at target
-        if (ticksHeld >= this.config.targetTicks) {
+        if (this.ticksHeld >= this.config.targetTicks) {
             console.log(`🎯 TARGET TICKS REACHED (${ticksHeld}/${this.config.targetTicks}) — Selling!`);
             this.sellContract(contract.contract_id, bidPrice);
             return;
         }
 
         // 4. MAXIMUM HOLD: Force sell at 2× target
-        if (ticksHeld >= this.config.maxHoldTicks) {
-            console.log(`⏰ MAXIMUM HOLD (${ticksHeld} ticks) — Force selling!`);
+        if (this.ticksHeld >= this.config.maxHoldTicks) {
+            console.log(`⏰ MAXIMUM HOLD (${this.ticksHeld} ticks) — Force selling!`);
             this.sellContract(contract.contract_id, bidPrice);
             return;
         }
 
-        // Log progress every 5 ticks held (not total run ticks)
-        if (ticksHeld > 0 && ticksHeld % 5 === 0) {
-            const progPercent = Math.min(100, (ticksHeld / this.config.targetTicks * 100)).toFixed(0);
-            console.log(`📊 Trade progress: ${ticksHeld}/${this.config.targetTicks} ticks (${progPercent}%) | Profit: $${currentProfit.toFixed(2)} | Run: ${currentRunTicks}`);
+        // Log progress occasionally
+        if (this.ticksHeld > 0 && this.ticksHeld % 5 === 0) {
+            const progPercent = (this.ticksHeld / this.config.targetTicks * 100).toFixed(0);
+            console.log(`📊 Trade progress: ${this.ticksHeld}/${this.config.targetTicks} ticks (${progPercent}%) | Profit: $${currentProfit.toFixed(2)}`);
         }
     }
 
@@ -1354,7 +1343,7 @@ class AccumulatorBotV4 {
     /**
      * Handle trade completion (win or loss)
      */
-    handleTradeResult(contract, ticksHeld = null) {
+    handleTradeResult(contract) {
         if (!this.activeTrade) {
             console.warn('⚠️ Trade result received but no active trade');
             this.tradeInProgress = false;
@@ -1363,13 +1352,7 @@ class AccumulatorBotV4 {
 
         const won = contract.status === 'won';
         const profit = parseFloat(contract.profit || 0);
-
-        // Use passed ticksHeld or calculate if not provided
-        if (ticksHeld === null) {
-            const currentRunTicks = contract.tick_count || 0;
-            const entryTicks = this.activeTrade.entryTickCount || 0;
-            ticksHeld = currentRunTicks - entryTicks;
-        }
+        // const ticksHeld = contract.tick_count || 0;
 
         // Unsubscribe from contract
         if (this.contractSubscriptionId) {
@@ -1379,7 +1362,7 @@ class AccumulatorBotV4 {
 
         // Log result
         console.log(`\n${'═'.repeat(60)}`);
-        console.log(`${won ? '✅ WIN' : '❌ LOSS'} | ${this.activeTrade.asset} | Ticks Held: ${ticksHeld}`);
+        console.log(`${won ? '✅ WIN' : '❌ LOSS'} | ${this.activeTrade.asset} | Ticks: ${this.ticksHeld}`);
         console.log(`P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}`);
         console.log(`${'═'.repeat(60)}\n`);
 
@@ -1418,7 +1401,7 @@ class AccumulatorBotV4 {
             `${emoji} <b>Bot 7 ${won ? 'WIN' : 'LOSS'}</b>\n\n` +
             `Asset: ${asset}\n` +
             `${pnlEmoji} P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}\n` +
-            `Ticks Held: ${ticksHeld}\n` +
+            `Ticks: ${this.ticksHeld}\n` +
             `Streak: ${won ? `✓${this.riskManager.consecutiveWins}` : `✗${this.riskManager.consecutiveLosses}`}\n\n` +
             `📊 Session:\n` +
             `Trades: ${this.totalTrades} | W/L: ${this.totalWins}/${this.totalLosses}\n` +
@@ -1449,6 +1432,7 @@ class AccumulatorBotV4 {
             this.assetStates[a].currentProposalId = null;
             this.assetStates[a].proposalTimestamp = null;
         });
+        this.ticksHeld = 0;
         this.forgetAllProposalSubscriptions();
 
         StatePersistence.saveState(this);
