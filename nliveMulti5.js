@@ -1339,7 +1339,7 @@ const bot = new AccumulatorBotV4(token, {
     takeProfitMultiplier: 0.10, // 10% of stake as TP (limit order backup)
 
     // Analysis
-    minOverallScore: 0.65,     // Composite threshold
+    minOverallScore: 0.85,     // Composite threshold
     analysisInterval: 3,       // Check every 3rd tick
     minTimeBetweenTrades: 10000,
 
@@ -1347,8 +1347,8 @@ const bot = new AccumulatorBotV4(token, {
     assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
 
     // Telegram (use env vars or fill in)
-    telegramToken: process.env.TELEGRAM_TOKEN,
-    telegramChatId: process.env.TELEGRAM_CHAT_ID,
+    telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
+    telegramChatId: '752497117',
 });
 
 bot.start();
