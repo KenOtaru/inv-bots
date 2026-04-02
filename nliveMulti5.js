@@ -1339,7 +1339,7 @@ const bot = new AccumulatorBotV4(token, {
     takeProfitMultiplier: 0.10, // 10% of stake as TP (limit order backup)
 
     // Analysis
-    minOverallScore: 0.95,     // Composite threshold
+    minOverallScore: 1,     // Composite threshold
     analysisInterval: 3,       // Check every 3rd tick
     minTimeBetweenTrades: 10000,
 
