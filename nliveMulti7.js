@@ -871,10 +871,11 @@ class AccumulatorBotV4 {
         }
 
         // Verify ticks_stayed_in >= 5 (barrier hasn't just reset)
-        // if (this.assetStates[bestAsset].lastTicks < 5) {
-        //     console.log('Barrier hasn\'t just reset: ', this.assetStates[bestAsset].lastTicks)
-        //     return; // Run too young
-        // }
+        if (this.assetStates[bestAsset].lastTicks < 5) {
+            console.log('Barrier hasn\'t just reset: ', this.assetStates[bestAsset].lastTicks)
+            console.log('Current run: ', this.assetStates[bestAsset].currentRun, ' | ', this.assetStates[bestAsset].lastTicks);
+            return; // Run too young
+        }
 
         // Final confidence check
         if (signal.confidence < 0.55) {
