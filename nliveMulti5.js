@@ -529,7 +529,7 @@ class AccumulatorBotV4 {
 
         this.config = {
             // Money management
-            initialBalance: 100, //Investment Capital
+            initialBalance: config.initialBalance || 100, //Investment Capital
             riskPerTrade: config.riskPerTrade || 0.03,  // 3% per trade
             maxConsecutiveLosses: config.maxConsecutiveLosses || 6,
             maxDailyLoss: config.maxDailyLoss || 100,
@@ -1327,7 +1327,7 @@ const token = 'hsj0tA0XJoIzJG5';
 
 const bot = new AccumulatorBotV4(token, {
     // Money management
-    initialBalance: 500,
+    initialBalance: 100,
     riskPerTrade: 0.03,        // 3% of balance per trade
     maxConsecutiveLosses: 6,
     maxDailyLoss: 100,
@@ -1339,7 +1339,7 @@ const bot = new AccumulatorBotV4(token, {
     takeProfitMultiplier: 0.10, // 10% of stake as TP (limit order backup)
 
     // Analysis
-    minOverallScore: 0.85,     // Composite threshold
+    minOverallScore: 0.95,     // Composite threshold
     analysisInterval: 3,       // Check every 3rd tick
     minTimeBetweenTrades: 10000,
 
