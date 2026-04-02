@@ -745,8 +745,8 @@ class AccumulatorBot {
 
             const shouldExit =
                 profit >= targetProfit * 0.75 ||           // Near profit target
-                regime.score < 0.35 ||                     // Market turned hostile
-                ticksHeld >= 10;                           // Max hold time reached
+                regime.score < 0.35 //||                     // Market turned hostile
+            // ticksHeld >= 10;                           // Max hold time reached
 
             if (shouldExit && poc.bid_price) {
                 const reason = profit >= targetProfit * 0.75 ? 'profit_target'
