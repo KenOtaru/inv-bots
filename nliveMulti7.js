@@ -1257,7 +1257,7 @@ class AccumulatorBotV4 {
             this.contractSubscriptionId = contract.id;
         }
 
-        const ticksHeld = contract.tick_count || 0;
+        // const ticksHeld = contract.tick_count || 0;
         const currentProfit = parseFloat(contract.profit || 0);
         const bidPrice = parseFloat(contract.bid_price || 0);
 
@@ -1301,8 +1301,9 @@ class AccumulatorBotV4 {
         }
 
         // 3. TARGET TICKS REACHED: Sell at target
+        console.log(`🎯 TICKS HELD (${this.ticksHeld}/${this.config.targetTicks}) — Selling!`);
         if (this.ticksHeld >= this.config.targetTicks) {
-            console.log(`🎯 TARGET TICKS REACHED (${ticksHeld}/${this.config.targetTicks}) — Selling!`);
+            console.log(`🎯 TARGET TICKS REACHED (${this.ticksHeld}/${this.config.targetTicks}) — Selling!`);
             this.sellContract(contract.contract_id, bidPrice);
             return;
         }
