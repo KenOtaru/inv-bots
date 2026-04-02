@@ -871,10 +871,10 @@ class AccumulatorBotV4 {
         }
 
         // Verify ticks_stayed_in >= 5 (barrier hasn't just reset)
-        if (this.assetStates[bestAsset].lastTicks < 5) {
-            console.log('Barrier hasn\'t just reset: ', this.assetStates[bestAsset].lastTicks)
-            return; // Run too young
-        }
+        // if (this.assetStates[bestAsset].lastTicks < 5) {
+        //     console.log('Barrier hasn\'t just reset: ', this.assetStates[bestAsset].lastTicks)
+        //     return; // Run too young
+        // }
 
         // Final confidence check
         if (signal.confidence < 0.55) {
@@ -939,6 +939,7 @@ class AccumulatorBotV4 {
         const stayedInArray = proposal.contract_details.ticks_stayed_in;
         const currentRun = stayedInArray[stayedInArray.length - 1] + 1;
         this.assetStates[asset].lastTicks = currentRun;
+        console.log('Current run: ', currentRun, ' | ', this.assetStates[asset].lastTicks);
     }
 
     handleBuyResponse(message) {
