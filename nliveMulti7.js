@@ -550,9 +550,13 @@ class AccumulatorBotV4 {
         this.assets.forEach(asset => {
             this.assetStates[asset] = {
                 currentProposalId: null,
-                proposalTimestamp: null,        // NEW: Track when proposal was received
+                proposalTimestamp: null,
                 lastTicks: 0,
-                pendingBuy: null,               // NEW: Store pending buy request
+                pendingEntry: false,
+                pendingStake: null,
+                pendingTakeProfit: null,
+                pendingRequestTime: null,
+                proposalSubscriptionId: null,
             };
             this.tickCounters[asset] = 0;
             this.assetMetrics[asset] = {
@@ -816,6 +820,58 @@ class AccumulatorBotV4 {
         console.log(`📊 ${asset}: Loaded ${history.prices.length} price ticks`);
     }
 
+    /**
+    * NEW: Request a proposal purely to update ticks_stayed_in
+    * Uses a small fixed amount, not the actual trade stake
+    */
+    requestTicksUpdate(asset) {
+        this.sendRequest({
+            proposal: 1,
+            amount: '1.00',
+            basis: 'stake',
+            contract_type: 'ACCU',
+            currency: 'USD',
+            symbol: asset,
+            growth_rate: this.config.growthRate,
+            req_id: 1000, // Mark as tick-update request
+        });
+    }
+
+    /**
+    * NEW: Request a TRADE proposal with proper stake and take profit
+    * This is only called when we actually want to buy
+    */
+    requestTradeProposal(asset, stake, takeProfit) {
+        // Cancel any existing proposal subscription for this asset
+        if (this.assetStates[asset].proposalSubscriptionId) {
+            this.sendRequest({ forget: this.assetStates[asset].proposalSubscriptionId });
+            this.assetStates[asset].proposalSubscriptionId = null;
+        }
+
+        console.log(`📋 Requesting TRADE proposal for ${asset} | Stake: $${stake.toFixed(2)} | TP: $${takeProfit.toFixed(2)}`);
+
+        this.sendRequest({
+            proposal: 1,
+            amount: stake.toFixed(2),
+            basis: 'stake',
+            contract_type: 'ACCU',
+            currency: 'USD',
+            symbol: asset,
+            growth_rate: this.config.growthRate,
+            limit_order: {
+                take_profit: takeProfit.toFixed(2)
+            },
+            subscribe: 1,  // Subscribe to get live-updated proposal IDs
+            req_id: 2000,  // Mark as trade request
+        });
+
+        // Mark that we want to buy this asset
+        this.assetStates[asset].pendingEntry = true;
+        this.assetStates[asset].pendingStake = stake;
+        this.assetStates[asset].pendingTakeProfit = takeProfit;
+        this.assetStates[asset].pendingRequestTime = Date.now();
+    }
+
     handleTickUpdate(tick) {
         const asset = tick.symbol;
         const price = tick.quote;
@@ -831,6 +887,14 @@ class AccumulatorBotV4 {
 
         // Process proposals only every 5 ticks to reduce API load
         this.tickCounters[asset]++;
+
+        // CRITICAL FIX: Request proposals periodically for ALL assets
+        // so that lastTicks stays updated via handleProposal()
+        // Every 10 ticks per asset, request a lightweight proposal to get ticks_stayed_in
+        if (this.tickCounters[asset] % 10 === 1) {
+            this.requestTicksUpdate(asset);
+        }
+
         if (this.tickCounters[asset] % 5 !== 0) return;
 
         // Try to find entry opportunity
@@ -842,13 +906,22 @@ class AccumulatorBotV4 {
     // ========================================================================
 
     /**
-     * Main entry analysis: find best asset by volatility and execute trade
-     */
+    * FIXED: Main entry analysis
+    * No longer tries to buy directly — instead requests a trade proposal
+    * and handleProposal() executes the buy when it arrives
+    */
     analyzeAndTrade() {
+        // Prevent double-entry
+        if (this.tradeInProgress) return;
+
+        // Check if any asset already has a pending entry
+        const hasPending = this.assets.some(a => this.assetStates[a].pendingEntry);
+        if (hasPending) return; // Already waiting for a trade proposal
+
         // Check risk manager
         const riskCheck = this.riskManager.canTrade();
         if (!riskCheck.allowed) {
-            return; // Silently wait for cooldown/pause to expire
+            return;
         }
 
         // Rank assets by volatility z-score
@@ -857,121 +930,102 @@ class AccumulatorBotV4 {
             return; // Not enough data yet
         }
 
-        const bestAsset = rankings[0].asset;
-
-        const signal = this.volEngine.getEntrySignal(bestAsset);
-
-        // Log analysis at reasonable frequency (every 50 ticks across all assets)
+        // Log rankings periodically
         const totalTicks = Object.values(this.tickCounters).reduce((a, b) => a + b, 0);
         if (totalTicks % 50 === 0) {
             this.logAssetRankings(rankings);
         }
 
-        // Check entry criteria
-        if (!signal.isEligible) {
-            // console.log('Signal not Eligible: ', signal.isEligible)
-            return; // Conditions not met, wait for better setup
+        // Find best eligible asset
+        let bestAsset = null;
+        let bestSignal = null;
+
+        for (const ranked of rankings) {
+            const asset = ranked.asset;
+            const signal = this.volEngine.getEntrySignal(asset);
+
+            if (!signal.isEligible) continue;
+            if (signal.confidence < 0.55) continue;
+
+            // Check ticks_stayed_in >= 5 (barrier hasn't just reset)
+            const currentRun = this.assetStates[asset].lastTicks;
+            if (currentRun < 5) {
+                console.log(`   ⏳ ${asset} run too young: ${currentRun} ticks`);
+                continue;
+            }
+
+            bestAsset = asset;
+            bestSignal = signal;
+            break; // Take the best ranked eligible asset
         }
 
-        // Verify ticks_stayed_in >= 5 (barrier hasn't just reset)
-        // if (this.assetStates[bestAsset].lastTicks < 5) {
-        console.log(bestAsset, 'Barrier hasn\'t just reset: ', this.assetStates[bestAsset].lastTicks)
-        //     return; // Run too young
-        // }
-
-        // Final confidence check
-        if (signal.confidence < 0.80) {
-            console.log('Confidence too low: ', signal.confidence)
-            return; // Low confidence
+        if (!bestAsset) {
+            return; // No eligible asset found
         }
 
         console.log(`\n✅ ENTRY CONDITIONS MET for ${bestAsset}`);
-        console.log(`   Z-Score: ${signal.zScore.toFixed(2)} | Declining: ${signal.isDeclining} | Confidence: ${(signal.confidence * 100).toFixed(0)}%`);
+        console.log(`   Z-Score: ${bestSignal.zScore.toFixed(2)} | Declining: ${bestSignal.isDeclining} | Confidence: ${(bestSignal.confidence * 100).toFixed(0)}%`);
+        console.log(`   Run Length: ${this.assetStates[bestAsset].lastTicks} ticks`);
 
-        // Calculate stake
-        this.currentStake = this.riskManager.calculateStake();
-
-        // Calculate take profit
+        // Calculate stake and take profit
+        const stake = this.riskManager.calculateStake();
         const takeProfit = TakeProfitCalculator.calculate(
-            this.currentStake,
+            stake,
             this.config.growthRate,
             this.config.targetTicks
         );
 
-        // CRITICAL FIX: Check if we have a valid proposal ID before buying
-        const proposalId = this.assetStates[bestAsset].currentProposalId;
-
-        if (!proposalId) {
-            console.log(`   ⚠️ No proposal ID yet for ${bestAsset}, requesting...`);
-            this.requestProposal(bestAsset, this.currentStake, takeProfit);
-            // Store that we've requested, will buy on next cycle when proposal arrives
-            this.assetStates[bestAsset].pendingBuy = {
-                stake: this.currentStake,
-                takeProfit: takeProfit,
-                requestedAt: Date.now()
-            };
-            return;
-        }
-
-        // Check if proposal is stale (older than 2 seconds)
-        const proposalAge = Date.now() - (this.assetStates[bestAsset].proposalTimestamp || 0);
-        if (proposalAge > 2000) {
-            console.log(`   ⚠️ Proposal stale (${proposalAge}ms), requesting fresh...`);
-            this.requestProposal(bestAsset, this.currentStake, takeProfit);
-            this.assetStates[bestAsset].currentProposalId = null;
-            return;
-        }
-
-        // ALL CONDITIONS MET - EXECUTE BUY
-        console.log(`   💰 Buying with proposal ID: ${proposalId}`);
-        console.log(`      Stake: $${this.currentStake.toFixed(2)} | Target TP: $${takeProfit.toFixed(2)}`);
-
-        this.executeBuy(bestAsset, proposalId, this.currentStake, takeProfit);
+        // Request a TRADE proposal (handleProposal will execute the buy)
+        this.requestTradeProposal(bestAsset, stake, takeProfit);
     }
 
     /**
      * Execute the buy order for a proposal
      */
     executeBuy(asset, proposalId, stake, takeProfit) {
+        // Set trade in progress BEFORE sending request to prevent double-entry
+        this.tradeInProgress = true;
+
+        // Clean up pending state
+        this.assetStates[asset].pendingEntry = false;
+
+        // Forget the proposal subscription (we're buying, don't need updates)
+        this.forgetProposalSubscription(asset);
+
+        // Store active trade info
+        this.activeTrade = {
+            asset,
+            contractId: null,
+            stake,
+            takeProfit,
+            buyTime: Date.now(),
+            proposalId,
+        };
+
+        // Send buy request
         this.sendRequest({
             buy: proposalId,
             price: stake.toFixed(2)
         });
 
-        // Clear proposal and pending buy
-        this.assetStates[asset].currentProposalId = null;
-        this.assetStates[asset].pendingBuy = null;
-
-        console.log(`📤 Buy request sent for ${asset}`);
+        console.log(`📤 Buy request sent for ${asset} | Proposal: ${proposalId}`);
     }
 
     /**
-    * Request accumulator proposal with take profit limit
-    */
-    requestProposal(asset, stake, takeProfit) {
-        console.log(`📋 Requesting proposal for ${asset}`);
-
-        this.sendRequest({
-            proposal: 1,
-            amount: stake.toFixed(2),
-            basis: 'stake',
-            contract_type: 'ACCU',
-            currency: 'USD',
-            symbol: asset,
-            growth_rate: this.config.growthRate,
-            limit_order: {
-                take_profit: takeProfit.toFixed(2)
-            }
-        });
-    }
-
-    /**
-    * Handle proposal response - store ID and timestamp
+    * FIXED: Handle proposal response
+    * - Separates tick-update proposals from trade proposals
+    * - Immediately buys when a trade proposal arrives and conditions still valid
     */
     handleProposal(message) {
         if (message.error || !message.proposal) {
             if (message.error) {
-                console.log(`Proposal error for ${message.echo_req?.symbol}: ${message.error.message}`);
+                const asset = message.echo_req?.symbol;
+                console.log(`Proposal error for ${asset}: ${message.error.message}`);
+
+                // If this was a trade proposal that failed, reset pending state
+                if (message.echo_req?.req_id === 2000 && asset) {
+                    this.assetStates[asset].pendingEntry = false;
+                }
             }
             return;
         }
@@ -983,39 +1037,95 @@ class AccumulatorBotV4 {
             return;
         }
 
-        // Store proposal ID with timestamp
-        this.assetStates[asset].currentProposalId = proposal.id;
-        this.assetStates[asset].proposalTimestamp = Date.now(); // CRITICAL: Track freshness
+        // Track subscription ID for cleanup
+        if (message.subscription && message.subscription.id) {
+            this.assetStates[asset].proposalSubscriptionId = message.subscription.id;
+        }
 
-        // Track current run length (ticks_stayed_in)
+        // Always update ticks_stayed_in regardless of proposal type
         const stayedInArray = proposal.contract_details.ticks_stayed_in;
-        const currentRun = stayedInArray[stayedInArray.length - 1] + 1;
+        const currentRun = stayedInArray.length > 0
+            ? stayedInArray[stayedInArray.length - 1] + 1
+            : 0;
         this.assetStates[asset].lastTicks = currentRun;
 
-        console.log(`📥 Proposal received for ${asset} | ID: ${proposal.id} | Run: ${currentRun} ticks`);
+        // Store fresh proposal ID and timestamp
+        this.assetStates[asset].currentProposalId = proposal.id;
+        this.assetStates[asset].proposalTimestamp = Date.now();
+
+        const reqId = message.echo_req?.req_id;
+
+        // If this is a TRADE proposal and we have a pending entry, BUY NOW
+        if (reqId === 2000 && this.assetStates[asset].pendingEntry && !this.tradeInProgress) {
+            const timeSinceRequest = Date.now() - (this.assetStates[asset].pendingRequestTime || 0);
+
+            // Only buy if request is fresh (< 10 seconds old)
+            if (timeSinceRequest > 10000) {
+                console.log(`⚠️ Trade proposal for ${asset} arrived too late (${timeSinceRequest}ms), skipping`);
+                this.assetStates[asset].pendingEntry = false;
+                this.forgetProposalSubscription(asset);
+                return;
+            }
+
+            // Re-validate entry conditions quickly
+            const signal = this.volEngine.getEntrySignal(asset);
+            if (!signal.isEligible || signal.confidence < 0.55) {
+                console.log(`⚠️ Conditions changed for ${asset}, cancelling entry`);
+                this.assetStates[asset].pendingEntry = false;
+                this.forgetProposalSubscription(asset);
+                return;
+            }
+
+            // EXECUTE BUY
+            console.log(`\n🚀 EXECUTING BUY for ${asset}`);
+            console.log(`   Proposal ID: ${proposal.id}`);
+            console.log(`   Stake: $${this.assetStates[asset].pendingStake.toFixed(2)}`);
+            console.log(`   Take Profit: $${this.assetStates[asset].pendingTakeProfit.toFixed(2)}`);
+            console.log(`   Current Run: ${currentRun} ticks`);
+
+            this.executeBuy(asset, proposal.id, this.assetStates[asset].pendingStake, this.assetStates[asset].pendingTakeProfit);
+        }
+    }
+
+    /**
+    * NEW: Cleanup proposal subscriptions
+    */
+    forgetProposalSubscription(asset) {
+        if (this.assetStates[asset].proposalSubscriptionId) {
+            this.sendRequest({ forget: this.assetStates[asset].proposalSubscriptionId });
+            this.assetStates[asset].proposalSubscriptionId = null;
+        }
     }
 
     handleBuyResponse(message) {
         if (message.error) {
             console.error('❌ Error placing trade:', message.error.message);
+
+            // CRITICAL: Reset trade state on buy failure
             this.tradeInProgress = false;
+
+            // Clean up pending state for all assets
+            this.assets.forEach(asset => {
+                this.assetStates[asset].pendingEntry = false;
+            });
+
+            this.activeTrade = null;
             return;
         }
 
         const contractId = message.buy.contract_id;
-        console.log(`✅ Trade placed! Contract: ${contractId}`);
+        const buyPrice = parseFloat(message.buy.buy_price);
 
-        this.tradeInProgress = true;
+        console.log(`\n${'═'.repeat(60)}`);
+        console.log(`✅ TRADE PLACED SUCCESSFULLY`);
+        console.log(`   Contract: ${contractId}`);
+        console.log(`   Buy Price: $${buyPrice.toFixed(2)}`);
+        console.log(`${'═'.repeat(60)}\n`);
 
-        // Store active trade
-        this.activeTrade = {
-            contractId,
-            asset: message.echo_req.symbol,
-            stake: parseFloat(message.echo_req.amount),
-            buyPrice: message.buy.buy_price,
-            buyTime: Date.now(),
-            profitTarget: message.buy.payout - parseFloat(message.echo_req.amount),
-        };
+        if (this.activeTrade) {
+            this.activeTrade.contractId = contractId;
+            this.activeTrade.buyPrice = buyPrice;
+        }
 
         // Subscribe to contract updates
         this.sendRequest({
@@ -1027,12 +1137,13 @@ class AccumulatorBotV4 {
         // Telegram notification
         this.sendTelegramMessage(
             `🚀 <b>TRADE OPENED 7 (v4.0)</b>\n\n` +
-            `Asset: ${this.activeTrade.asset}\n` +
+            `Asset: ${this.activeTrade?.asset}\n` +
             `Contract: ${contractId}\n` +
-            `Stake: $${this.activeTrade.stake.toFixed(2)}\n` +
-            `Buy Price: $${this.activeTrade.buyPrice.toFixed(2)}\n` +
+            `Stake: $${this.activeTrade?.stake?.toFixed(2)}\n` +
+            `Buy Price: $${buyPrice.toFixed(2)}\n` +
             `Target Ticks: ${this.config.targetTicks}\n` +
-            `Growth Rate: ${(this.config.growthRate * 100).toFixed(1)}%`
+            `Growth Rate: ${(this.config.growthRate * 100).toFixed(1)}%\n` +
+            `Take Profit: $${this.activeTrade?.takeProfit?.toFixed(2)}`
         );
     }
 
@@ -1138,6 +1249,8 @@ class AccumulatorBotV4 {
     handleTradeResult(contract) {
         if (!this.activeTrade) {
             console.warn('⚠️ Trade result received but no active trade');
+            // Reset state anyway to prevent stuck bot
+            this.tradeInProgress = false;
             return;
         }
 
@@ -1160,29 +1273,30 @@ class AccumulatorBotV4 {
         // Update stats
         this.totalTrades++;
         this.totalProfitLoss += profit;
-        this.riskManager.dailyProfitLoss += profit;
         this.hourlyStats.trades++;
         this.hourlyStats.pnl += profit;
 
         // Update asset metrics
         const asset = this.activeTrade.asset;
-        this.assetMetrics[asset].trades++;
-        this.assetMetrics[asset].profitLoss += profit;
+        if (this.assetMetrics[asset]) {
+            this.assetMetrics[asset].trades++;
+            this.assetMetrics[asset].profitLoss += profit;
+        }
 
         if (won) {
             this.totalWins++;
             this.hourlyStats.wins++;
-            this.assetMetrics[asset].wins++;
+            if (this.assetMetrics[asset]) this.assetMetrics[asset].wins++;
         } else {
             this.totalLosses++;
             this.hourlyStats.losses++;
-            this.assetMetrics[asset].losses++;
+            if (this.assetMetrics[asset]) this.assetMetrics[asset].losses++;
         }
 
         // Record result in risk manager
         this.riskManager.recordResult(won, profit);
 
-        // Calculate win rate
+        // Win rate
         const winRate = this.totalTrades > 0
             ? (this.totalWins / this.totalTrades * 100).toFixed(1)
             : 0;
@@ -1223,9 +1337,13 @@ class AccumulatorBotV4 {
             return;
         }
 
-        // Reset trade state
+        // CRITICAL: Reset ALL trade state
         this.tradeInProgress = false;
         this.activeTrade = null;
+        this.assets.forEach(a => {
+            this.assetStates[a].pendingEntry = false;
+            this.assetStates[a].currentProposalId = null;
+        });
 
         // Save state
         StatePersistence.saveState(this);
