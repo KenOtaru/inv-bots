@@ -1549,9 +1549,9 @@ const bot = new AccumulatorBotV4(token, {
     telegramChatId: '752497117',
 
     // Staking
-    initialStake: 5,
+    initialStake: 1,
     growthRate: 0.05,           // 2% (safer than 5%)
-    targetTicks: 5,            // ~34% profit per winning trade
+    targetTicks: 2,            // ~34% profit per winning trade
 
     // Risk Management
     maxDailyLoss: 200,

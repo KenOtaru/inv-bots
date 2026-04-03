@@ -308,15 +308,13 @@ class AccumulatorAnalyzer {
             else if (bwPercentile <= 0.55) scores.bandWidth = 0.65;  // Average — okay
             else if (bwPercentile <= 0.70) scores.bandWidth = 0.40;  // Wide — poor
             else scores.bandWidth = 0.15;                             // Very wide — avoid
-        }
-        else {
+        } else {
             // Fallback: use raw width
-            // if (bb.width < 0.003) scores.bandWidth = 1.0;
-            // else if (bb.width < 0.006) scores.bandWidth = 0.80;
-            // else if (bb.width < 0.010) scores.bandWidth = 0.55;
-            // else if (bb.width < 0.015) scores.bandWidth = 0.30;
-            // else scores.bandWidth = 0.10;
-            return;
+            if (bb.width < 0.003) scores.bandWidth = 1.0;
+            else if (bb.width < 0.006) scores.bandWidth = 0.80;
+            else if (bb.width < 0.010) scores.bandWidth = 0.55;
+            else if (bb.width < 0.015) scores.bandWidth = 0.30;
+            else scores.bandWidth = 0.10;
         }
 
         // 2. MACD HISTOGRAM — Flat/near-zero histogram = no momentum = GOOD
@@ -880,6 +878,8 @@ class AccumulatorBotV4 {
         // 4. Decision
         if (!analysis.shouldTrade) return;
 
+        if (analysis.maxTickMove > 0.001) return;
+
         // 5. Calculate stake
         this.currentStake = this.riskManager.calculateStake(
             this.accountBalance,
@@ -895,6 +895,12 @@ class AccumulatorBotV4 {
         console.log(`   BB Width: ${analysis.bb.width.toFixed(6)} | %B: ${(analysis.bb.percentB * 100).toFixed(1)}%`);
         console.log(`   MACD Hist: ${analysis.macd.histogram.toFixed(6)} | Converging: ${analysis.macd.isConverging}`);
         console.log(`   Growth Rate: ${(growthRate * 100).toFixed(0)}% | Stake: $${this.currentStake.toFixed(2)}`);
+        console.log(`   Max Tick Move: ${(analysis.maxTickMove * 100).toFixed(2)}%`);
+        console.log(`   Overall Score: ${(analysis.overallScore * 100).toFixed(1)}% (score: ${analysis.scores.toFixed(2)})`);
+        console.log(`   Tick Stability: ${(analysis.tickStability * 100).toFixed(1)}%`);
+        console.log(`   BB Width: ${analysis.bb.width.toFixed(6)} | %B: ${(analysis.bb.percentB * 100).toFixed(1)}%`);
+        console.log(`   MACD Hist: ${analysis.macd.histogram.toFixed(6)} | Converging: ${analysis.macd.isConverging}`);
+        console.log(`   Reason: ${analysis.reason}`);
         console.log(`   Take Profit: $${takeProfitAmount.toFixed(2)}`);
 
         // Store pending analysis
