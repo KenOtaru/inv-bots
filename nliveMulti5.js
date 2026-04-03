@@ -386,7 +386,7 @@ class AccumulatorAnalyzer {
         // DETERMINE OPTIMAL GROWTH RATE
         // ═══════════════════════════════════════════
         let recommendedGrowthRate;
-        if (overallScore >= 0.85) recommendedGrowthRate = 0.03;    // High confidence → 3%
+        if (overallScore >= 0.85) recommendedGrowthRate = 0.02;    // High confidence → 3%
         else if (overallScore >= 0.75) recommendedGrowthRate = 0.02; // Good → 2%
         else if (overallScore >= 0.65) recommendedGrowthRate = 0.01; // Moderate → safest 1%
         else recommendedGrowthRate = 0.01;                          // Default safest
@@ -471,11 +471,11 @@ class RiskManager {
         let stake = accountBalance * this.riskPerTrade;
 
         // Reduce stake after consecutive losses (defensive)
-        if (consecutiveLosses >= 3) {
-            stake *= 0.5; // Half stake after 3 losses
-        } else if (consecutiveLosses >= 2) {
-            stake *= 0.75;
-        }
+        // if (consecutiveLosses >= 3) {
+        //     stake *= 0.5; // Half stake after 3 losses
+        // } else if (consecutiveLosses >= 2) {
+        //     stake *= 0.75;
+        // }
 
         // Enforce Deriv min/max
         stake = Math.max(1, Math.min(100, stake));
@@ -1210,7 +1210,7 @@ class AccumulatorBotV4 {
             this.consecutiveLosses = 0;
             this.isWinTrade = true;
             this.config.riskPerTrade = 0.01;
-            this.riskManager = new RiskManager(this.config.riskPerTrade);
+            this.riskManager = new RiskManager(this.config);
             this.hourlyStats.wins++;
             if (this.assetMetrics[asset]) this.assetMetrics[asset].wins++;
         } else {
@@ -1219,7 +1219,7 @@ class AccumulatorBotV4 {
             this.hourlyStats.losses++;
             if (this.assetMetrics[asset]) this.assetMetrics[asset].losses++;
             this.config.riskPerTrade = 1.00;
-            this.riskManager = new RiskManager(this.config.riskPerTrade);
+            this.riskManager = new RiskManager(this.config);
 
             // Cooldown on loss
             this.riskManager.cooldownAsset(asset, 10);
