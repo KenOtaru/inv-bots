@@ -1550,8 +1550,8 @@ const bot = new AccumulatorBotV4(token, {
 
     // Staking
     initialStake: 1,
-    growthRate: 0.05,           // 2% (safer than 5%)
-    targetTicks: 2,            // ~34% profit per winning trade
+    growthRate: 0.02,           // 2% (safer than 5%)
+    targetTicks: 20,            // ~34% profit per winning trade
 
     // Risk Management
     maxDailyLoss: 200,
@@ -1563,9 +1563,9 @@ const bot = new AccumulatorBotV4(token, {
     stakeAfterLoss2: 0.50,      // 50% after 2+ losses
 
     // Volatility-Based Entry (core of ALVAS)
-    maxVolatilityZScore: -0.5,  // Only enter when vol is below average
-    minVolDeclineTicks: 20,     // Volatility must be declining
-    spikeThreshold: 2.0,        // Reject if recent price spike
+    maxVolatilityZScore: -0.2,  // Only enter when vol is below average
+    minVolDeclineTicks: 10,     // Volatility must be declining
+    spikeThreshold: 1.0,        // Reject if recent price spike
 
     // Volatility Engine
     volWindow: 30,              // 30-tick rolling volatility window

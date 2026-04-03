@@ -880,6 +880,16 @@ class AccumulatorBotV4 {
 
         if (analysis.maxTickMove > 0.001) return;
 
+        if (analysis.tickStability < 0.3) return;
+
+        if (analysis.bb.percentB < 0.3 || analysis.bb.percentB > 0.7) return;
+
+        if (analysis.macd.histogram > 0) return;
+
+        if (analysis.macd.isConverging) return;
+
+        if (analysis.overallScore < 0.8) return;
+
         // 5. Calculate stake
         this.currentStake = this.riskManager.calculateStake(
             this.accountBalance,
@@ -896,10 +906,8 @@ class AccumulatorBotV4 {
         console.log(`   MACD Hist: ${analysis.macd.histogram.toFixed(6)} | Converging: ${analysis.macd.isConverging}`);
         console.log(`   Growth Rate: ${(growthRate * 100).toFixed(0)}% | Stake: $${this.currentStake.toFixed(2)}`);
         console.log(`   Max Tick Move: ${(analysis.maxTickMove * 100).toFixed(2)}%`);
-        console.log(`   Overall Score: ${(analysis.overallScore * 100).toFixed(1)}% (score: ${analysis.scores.toFixed(2)})`);
+        console.log(`   Overall Score: ${(analysis.overallScore * 100).toFixed(1)}%`);
         console.log(`   Tick Stability: ${(analysis.tickStability * 100).toFixed(1)}%`);
-        console.log(`   BB Width: ${analysis.bb.width.toFixed(6)} | %B: ${(analysis.bb.percentB * 100).toFixed(1)}%`);
-        console.log(`   MACD Hist: ${analysis.macd.histogram.toFixed(6)} | Converging: ${analysis.macd.isConverging}`);
         console.log(`   Reason: ${analysis.reason}`);
         console.log(`   Take Profit: $${takeProfitAmount.toFixed(2)}`);
 
