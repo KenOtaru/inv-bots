@@ -1571,6 +1571,8 @@ class EnhancedAccumulatorBot {
             this.totalLosses++;
             this.consecutiveLosses++;
             this.isWinTrade = false;
+            this.sys2WinCount = 0;
+            this.sys2 = true;
 
             if (assetState) {
                 assetState.consecutiveLosses++;
@@ -1586,8 +1588,6 @@ class EnhancedAccumulatorBot {
             } else {
                 this.currentStake = Math.ceil(this.currentStake * this.config.multiplier2 * 100) / 100;
             }
-
-            this.sys2 = true
         }
 
         this.totalProfitLoss += profit;
