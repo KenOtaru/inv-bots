@@ -1127,7 +1127,7 @@ class AccumulatorBotV4 {
             // Re-validate conditions
             const signal = this.volEngine.getEntrySignal(asset);
 
-            console.log('Confidence', signal.confidence, '%')
+            console.log('Confidence', signal.confidence.toFixed(2), '%')
 
             if (!signal.isEligible || signal.confidence < 0.8) {
                 console.log(`⚠️ Conditions changed for ${asset}, cancelling entry`);
