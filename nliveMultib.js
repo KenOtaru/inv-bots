@@ -21,7 +21,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'nliveMulti_b00001-state003.json');
+const STATE_FILE = path.join(__dirname, 'nliveMulti_bot2_01-state.json');
 const STATE_SAVE_INTERVAL = 5000; // Save every 5 seconds
 
 class StatePersistence {
@@ -925,7 +925,7 @@ class EnhancedAccumulatorBot {
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
             console.error('❌ Max reconnection attempts reached');
             this.sendTelegramMessage(
-                `❌ <b>Max Reconnection Attempts Reached</b>\n` +
+                `❌ <b>Max Reconnection Attempts Reached 2</b>\n` +
                 `Please restart the bot manually.\n` +
                 `Final P&L: $${this.totalProfitLoss.toFixed(2)}`
             );
@@ -944,7 +944,7 @@ class EnhancedAccumulatorBot {
         console.log(`🔄 Reconnecting in ${(delay / 1000).toFixed(1)}s... (Attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
 
         this.sendTelegramMessage(
-            `⚠️ <b>CONNECTION LOST - RECONNECTING</b>\n` +
+            `⚠️ <b>CONNECTION LOST - RECONNECTING 2</b>\n` +
             `📊 Attempt: ${this.reconnectAttempts}/${this.maxReconnectAttempts}\n` +
             `⏱️ Retrying in ${(delay / 1000).toFixed(1)}s`
         );
@@ -1053,7 +1053,7 @@ class EnhancedAccumulatorBot {
         if (message.msg_type === 'authorize') {
             if (message.error) {
                 console.error('Authentication failed:', message.error.message);
-                this.sendTelegramMessage(`❌ <b>Authentication Failed:</b> ${message.error.message}`);
+                this.sendTelegramMessage(`❌ <b>Authentication Failed 2:</b> ${message.error.message}`);
                 this.disconnect();
                 return;
             }
@@ -1500,7 +1500,7 @@ class EnhancedAccumulatorBot {
         console.log(`🚀 Placing trade for Asset: [${asset}] | Stake: ${this.currentStake.toFixed(2)}`);
 
         const telegramMsg = `
-            🚀 <b>Placing trade for Asset ${asset}</b>
+            🚀 <b>Bot 2 Placing trade for Asset ${asset}</b>
             <b>SIGNAL: ${(decision.score * 100).toFixed(1)}%</b>
 
             <b>DECISION:</b> ${decision.shouldTrade ? '✅ STRONG SIGNAL - Entering Trade' : '❌ Signal below threshold, not trading'}
@@ -1551,33 +1551,18 @@ class EnhancedAccumulatorBot {
         if (won) {
             this.totalWins++;
             this.isWinTrade = true;
-            this.consecutiveLosses = 0;
 
-            // if (this.sys === 2) {
-            //     if (this.sysCount === 5) {
-            //         this.sys = 1;
-            //         this.sysCount = 0;
-            //     }
-            // } else if (this.sys === 3) {
-            //     if (this.sysCount === 2) {
-            //         this.sys = 1;
-            //         this.sysCount = 0;
-            //     }
-            // }
-
-            if (this.sys2) {
-                this.currentStake = this.config.initialStake;
-                // this.sys2WinCount++;
-                // if (this.sys2WinCount === 10) {
-                //     this.currentStake = this.config.initialStake;
-                //     this.sys2WinCount = 0;
-                //     this.sys2 = false;
-                // }
+            if (this.consecutiveLosses > 0) {
+                this.sys2WinCount++;
+                if (this.sys2WinCount === 10) {
+                    this.currentStake = this.config.initialStake;
+                    this.sys2WinCount = 0;
+                    this.consecutiveLosses = 0;
+                    this.sys2 = false;
+                }
             } else {
                 this.currentStake = this.config.initialStake;
             }
-
-            this.consecutiveLosses = 0;
 
             // if (assetState) {
             //     assetState.consecutiveLosses = 0;
@@ -1586,6 +1571,8 @@ class EnhancedAccumulatorBot {
             this.totalLosses++;
             this.consecutiveLosses++;
             this.isWinTrade = false;
+            this.sys2WinCount = 0;
+            this.sys2 = true;
 
             if (assetState) {
                 assetState.consecutiveLosses++;
@@ -1596,25 +1583,11 @@ class EnhancedAccumulatorBot {
             else if (this.consecutiveLosses === 4) this.consecutiveLosses4++;
             else if (this.consecutiveLosses === 5) this.consecutiveLosses5++;
 
-            if (this.consecutiveLosses === 2) {
-                if (this.sys2) {
-                    this.consecutiveLosses = 4
-                };
-                this.sys2 = true
-                // this.currentStake = this.config.initialStake2;
+            if (this.consecutiveLosses < 4) {
+                this.currentStake = Math.ceil(this.currentStake * this.config.multiplier * 100) / 100;
             } else {
-                if (this.sys2) {
-                    this.currentStake = Math.ceil(this.currentStake * this.config.multiplier2 * 100) / 100;
-                    this.sys2WinCount++;
-                    if (this.sys2WinCount === 10) {
-                        this.sys2WinCount = 0;
-                        this.sys2 = false;
-                    }
-                } else {
-                    this.currentStake = Math.ceil(this.currentStake * this.config.multiplier * 100) / 100;
-                }
+                this.currentStake = Math.ceil(this.currentStake * this.config.multiplier2 * 100) / 100;
             }
-            // this.suspendAsset(asset);
         }
 
         this.totalProfitLoss += profit;
@@ -1640,7 +1613,7 @@ class EnhancedAccumulatorBot {
         const winRate = this.totalTrades > 0 ? ((this.totalWins / this.totalTrades) * 100).toFixed(1) : 0;
 
         const telegramMsg = `
-            ${resultEmoji} (Enhanced Accumulator Bot)
+            ${resultEmoji} (Enhanced Accumulator Bot 2)
             
             📊 <b>${asset}</b>
             ${pnlColor} <b>P&L:</b> ${pnlStr}
@@ -1669,20 +1642,6 @@ class EnhancedAccumulatorBot {
             baseWaitTime = this.config.minWaitTime;
             // Loss handled by trade result telegram message.
             this.suspendAsset(asset);
-
-            // if (this.consecutiveLosses >= 2) {
-            //     if (this.sys === 1) {
-            //         this.sys = 2;
-            //     } else if (this.sys === 2) {
-            //         this.sys = 3;
-            //     }
-            //     this.sysCount = 0;
-            // }
-
-            // if (this.sys === 2 && this.consecutiveLosses === 1 && this.currentStake === this.config.multiplier2) {
-            //     this.sys = 3;
-            //     this.sysCount = 0;
-            // }
         } else {
             if (this.suspendedAssets.size > 1) {
                 const firstSuspendedAsset = Array.from(this.suspendedAssets)[0];
@@ -1899,6 +1858,7 @@ class EnhancedAccumulatorBot {
             //     return; // Prevent any reconnection logic during the weekend
             // }
 
+            //New Day trade Resumption
             if (this.endOfDay && currentHours === 2 && currentMinutes >= 0) {
                 console.log("It's 2:00 AM GMT+1, reconnecting the bot.");
                 this.resetForNewDay();
@@ -1907,7 +1867,7 @@ class EnhancedAccumulatorBot {
             }
 
             //New York Session Pause trading
-            if (this.isWinTrade && !this.endOfDay) {
+            if (this.isWinTrade && !this.sys2 && !this.endOfDay) {
                 if (currentHours >= 13 && currentMinutes >= 0 && currentHours < 15) {
                     console.log("It's past 1:00 PM GMT+1 after a win trade, disconnecting the bot.");
                     this.endOfDay = true;
@@ -1919,27 +1879,19 @@ class EnhancedAccumulatorBot {
             //New York Session Trade Resumption
             if (this.endOfDay && currentHours === 15 && currentMinutes >= 0) {
                 console.log("It's 3:00 PM GMT+1, reconnecting the bot.");
-                this.resetForNewDay();
+                // this.resetForNewDay();
                 this.endOfDay = false;
                 this.connect();
             }
 
-            //Sydny Session trade Pause
-            if (this.isWinTrade && !this.endOfDay) {
+            //End of Day trade Pause
+            if (this.isWinTrade && !this.sys2 && !this.endOfDay) {
                 if (currentHours >= 23 && currentMinutes >= 0) {
                     console.log("It's past 11:00 PM GMT+1 after a win trade, disconnecting the bot.");
                     this.endOfDay = true;
                     this.sendHourlySummary();
                     this.disconnect();
                 }
-            }
-
-            //Tokoy Session Trade Resumption
-            if (this.endOfDay && currentHours === 2 && currentMinutes >= 0) {
-                console.log("It's 2:00 AM GMT+1, reconnecting the bot.");
-                this.resetForNewDay();
-                this.endOfDay = false;
-                this.connect();
             }
         }, 20000);
     }
@@ -2006,7 +1958,7 @@ class EnhancedAccumulatorBot {
         const pnlStr = (stats.pnl >= 0 ? '+' : '') + '$' + Math.abs(stats.pnl).toFixed(2);
 
         const message = `
-            ⏰ <b>Enhanced Accumulator Session Summary</b>
+            ⏰ <b>Enhanced Accumulator Session Summary 2</b>
 
             📊 <b>Session Stats</b>
             ├ Trades: ${stats.trades}
@@ -2054,7 +2006,7 @@ class EnhancedAccumulatorBot {
     }
 
     sendErrorEmail(errorMessage) {
-        this.sendTelegramMessage(`❌ <b>ERROR REPORT</b>\n\n${errorMessage}`);
+        this.sendTelegramMessage(`❌ <b>ERROR REPORT 2</b>\n\n${errorMessage}`);
     }
 
     // ========================================================================
@@ -2096,8 +2048,9 @@ const token = 'DMylfkyce6VyZt7'; //|| process.env.DERIV_TOKEN;
 const bot = new EnhancedAccumulatorBot(token, {
     initialStake: 1,
     initialStake2: 10,
-    multiplier: 21,
-    multiplier2: 100,
+    multiplier: 3,
+    multiplier2: 3.5,
+    maxConsecutiveLosses: 5,
     stopLoss: 242,
     takeProfit: 50000,
     growthRate: 0.05,
@@ -2106,7 +2059,6 @@ const bot = new EnhancedAccumulatorBot(token, {
     enablePatternRecognition: true,
     learningModeThreshold: 100,
     survivalThreshold: 0.9,
-    maxConsecutiveLosses: 4,
     minWaitTime: 2000,
     maxWaitTime: 2000,
 });
