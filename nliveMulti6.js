@@ -105,7 +105,7 @@ const CONFIG = {
     analysisIntervalMs: 1500,
 
     // --- State persistence ---
-    stateFile: path.join(__dirname, 'accumulator-bot-v4-state_01.json'),
+    stateFile: path.join(__dirname, 'accumulator-bot-v4-state_001.json'),
     stateSaveIntervalMs: 5000,
 
     // --- Reconnection ---
@@ -1252,7 +1252,13 @@ class AccumulatorBotV4 {
         // Get volatility-based signal
         const signal = this.volatilityEngine.getSignal(asset);
 
-        if (signal.signal !== 'GO') {
+        console.log(`  ⏳ [${asset}] ${signal.signal}`);
+        console.log(`  ⏳ [${asset}] ${signal.confidence}`);
+        console.log(`  ⏳ [${asset}] ${signal.tier}`);
+        console.log(`  ⏳ [${asset}] ${signal.reason}`);
+        console.log(`  ⏳ [${asset}] ${signal.details}`);
+
+        if (signal.signal !== 'GO' || signal.confidence < 80) {
             // Sparse logging for NO_TRADE
             if (Math.random() < 0.01) {
                 console.log(`  ⏳ [${asset}] ${signal.reason}`);
