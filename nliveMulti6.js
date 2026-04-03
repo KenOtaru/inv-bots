@@ -1252,13 +1252,13 @@ class AccumulatorBotV4 {
         // Get volatility-based signal
         const signal = this.volatilityEngine.getSignal(asset);
 
-        console.log(`Signal:  ⏳ [${asset}] ${signal.signal}`);
-        console.log(`Confidence:  ⏳ [${asset}] ${signal.confidence}`);
-        console.log(`Tier:  ⏳ [${asset}] ${signal.tier}`);
-        console.log(`Reason:  ⏳ [${asset}] ${signal.reason}`);
-        console.log(`Details:  ⏳ [${asset}] ${signal.details}`);
+        console.log(`Signal:  ⏳ [${asset}] ${signal.signal || 'NO_TRADE'}`);
+        console.log(`Confidence:  ⏳ [${asset}] ${signal.confidence || 'undefined'}`);
+        // console.log(`Tier:  ⏳ [${asset}] ${signal.tier || 'undefined'}`);
+        // console.log(`Reason:  ⏳ [${asset}] ${signal.reason || 'undefined'}`);
+        // console.log(`Details:  ⏳ [${asset}] ${JSON.stringify(signal.details)}`);
 
-        if (signal.signal !== 'GO' || signal.confidence < 55) {
+        if (signal.signal !== 'GO') {
             // Sparse logging for NO_TRADE
             if (Math.random() < 0.01) {
                 console.log(`  ⏳ [${asset}] ${signal.reason}`);
