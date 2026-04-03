@@ -22,7 +22,7 @@ const path = require('path');
 // STATE PERSISTENCE
 // ============================================================================
 
-const STATE_FILE = path.join(__dirname, 'accumulator-bot-v4-state.json');
+const STATE_FILE = path.join(__dirname, 'accumulator-bot-v4-state01.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -567,6 +567,7 @@ class AccumulatorBotV4 {
         this.endOfDay = false;
         this.lastDayReset = new Date().toDateString();
         this.ticksHeld = 0;
+        this.targetTicks = 0;
 
         // Active trade tracking
         this.activeTrade = null;
@@ -1301,9 +1302,11 @@ class AccumulatorBotV4 {
         }
 
         // 3. TARGET TICKS REACHED: Sell at target
-        console.log(`🎯 TICKS HELD (${this.ticksHeld}/${this.config.targetTicks}) — Selling!`);
-        if (this.ticksHeld >= this.config.targetTicks) {
-            console.log(`🎯 TARGET TICKS REACHED (${this.ticksHeld}/${this.config.targetTicks}) — Selling!`);
+        const targetTicks = TakeProfitCalculator.getOptimalTargetTicks(this.config.growthRate, this.assetStates[this.activeTrade.asset].estimatedSurvivalPerTick);
+        this.targetTicks = targetTicks.targetTicks;
+        console.log(`🎯 TICKS HELD (${this.ticksHeld}/${this.targetTicks}) — Selling!`);
+        if (this.ticksHeld >= this.targetTicks) {
+            console.log(`🎯 TARGET TICKS REACHED (${this.ticksHeld}/${this.targetTicks}) — Selling!`);
             this.sellContract(contract.contract_id, bidPrice);
             return;
         }
@@ -1403,6 +1406,7 @@ class AccumulatorBotV4 {
             `Asset: ${asset}\n` +
             `${pnlEmoji} P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}\n` +
             `Ticks: ${this.ticksHeld}\n` +
+            `Target: ${this.targetTicks}\n` +
             `Streak: ${won ? `✓${this.riskManager.consecutiveWins}` : `✗${this.riskManager.consecutiveLosses}`}\n\n` +
             `📊 Session:\n` +
             `Trades: ${this.totalTrades} | W/L: ${this.totalWins}/${this.totalLosses}\n` +
@@ -1434,6 +1438,7 @@ class AccumulatorBotV4 {
             this.assetStates[a].proposalTimestamp = null;
         });
         this.ticksHeld = 0;
+        this.targetTicks = 0;
         this.forgetAllProposalSubscriptions();
 
         StatePersistence.saveState(this);
@@ -1546,8 +1551,8 @@ const bot = new AccumulatorBotV4(token, {
 
     // Staking
     initialStake: 1,
-    growthRate: 0.02,           // 2% (safer than 5%)
-    targetTicks: 15,            // ~34% profit per winning trade
+    growthRate: 0.03,           // 2% (safer than 5%)
+    targetTicks: 5,            // ~34% profit per winning trade
 
     // Risk Management
     maxDailyLoss: 200,
