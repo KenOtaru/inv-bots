@@ -1552,7 +1552,7 @@ const bot = new AccumulatorBotV4(token, {
     // Staking
     initialStake: 1,
     growthRate: 0.03,           // 2% (safer than 5%)
-    targetTicks: 5,            // ~34% profit per winning trade
+    targetTicks: 15,            // ~34% profit per winning trade
 
     // Risk Management
     maxDailyLoss: 200,
