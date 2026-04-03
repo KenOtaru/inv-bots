@@ -308,13 +308,15 @@ class AccumulatorAnalyzer {
             else if (bwPercentile <= 0.55) scores.bandWidth = 0.65;  // Average — okay
             else if (bwPercentile <= 0.70) scores.bandWidth = 0.40;  // Wide — poor
             else scores.bandWidth = 0.15;                             // Very wide — avoid
-        } else {
+        }
+        else {
             // Fallback: use raw width
-            if (bb.width < 0.003) scores.bandWidth = 1.0;
-            else if (bb.width < 0.006) scores.bandWidth = 0.80;
-            else if (bb.width < 0.010) scores.bandWidth = 0.55;
-            else if (bb.width < 0.015) scores.bandWidth = 0.30;
-            else scores.bandWidth = 0.10;
+            // if (bb.width < 0.003) scores.bandWidth = 1.0;
+            // else if (bb.width < 0.006) scores.bandWidth = 0.80;
+            // else if (bb.width < 0.010) scores.bandWidth = 0.55;
+            // else if (bb.width < 0.015) scores.bandWidth = 0.30;
+            // else scores.bandWidth = 0.10;
+            return;
         }
 
         // 2. MACD HISTOGRAM — Flat/near-zero histogram = no momentum = GOOD
@@ -1340,7 +1342,7 @@ const bot = new AccumulatorBotV4(token, {
 
     // Analysis
     minOverallScore: 1,     // Composite threshold
-    analysisInterval: 3,       // Check every 3rd tick
+    analysisInterval: 1,       // Check every 3rd tick
     minTimeBetweenTrades: 10000,
 
     // Assets (lower volatility indices preferred)
