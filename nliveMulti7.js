@@ -1405,8 +1405,7 @@ class AccumulatorBotV4 {
             `${emoji} <b>Bot 7 ${won ? 'WIN' : 'LOSS'}</b>\n\n` +
             `Asset: ${asset}\n` +
             `${pnlEmoji} P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}\n` +
-            `Ticks: ${this.ticksHeld}\n` +
-            `Target: ${this.targetTicks}\n` +
+            `Ticks Held: ${this.ticksHeld}\n` +
             `Streak: ${won ? `✓${this.riskManager.consecutiveWins}` : `✗${this.riskManager.consecutiveLosses}`}\n\n` +
             `📊 Session:\n` +
             `Trades: ${this.totalTrades} | W/L: ${this.totalWins}/${this.totalLosses}\n` +
@@ -1552,7 +1551,7 @@ const bot = new AccumulatorBotV4(token, {
     // Staking
     initialStake: 1,
     growthRate: 0.03,           // 2% (safer than 5%)
-    targetTicks: 15,            // ~34% profit per winning trade
+    targetTicks: 25,            // ~34% profit per winning trade
 
     // Risk Management
     maxDailyLoss: 200,
