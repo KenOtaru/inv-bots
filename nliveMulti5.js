@@ -910,7 +910,7 @@ class AccumulatorBotV4 {
 
         if (analysis.macd.isConverging) return;
 
-        if (analysis.overallScore < 0.8) return;
+        if (analysis.overallScore < 0.85) return;
 
         // 5. Calculate stake
         this.currentStake = this.riskManager.calculateStake(
