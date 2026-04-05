@@ -29,7 +29,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'accumulator-bot5_000002-v4-state.json');
+const STATE_FILE = path.join(__dirname, 'accumulator-bot5_000004-v4-state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -899,22 +899,32 @@ class AccumulatorBotV4 {
         }
 
         // 4. Decision
-        if (!analysis.shouldTrade) return;
+        // if (!analysis.shouldTrade) return;
 
-        if (analysis.maxTickMove > 0.001) return;
+        // if (analysis.maxTickMove > 0.001) return;
 
-        if (analysis.tickStability < 0.3) return;
+        // if (analysis.tickStability < 0.3) return;
 
-        if (analysis.bb.percentB < 0.3 || analysis.bb.percentB > 0.7) return;
+        // if (analysis.bb.percentB < 0.3 || analysis.bb.percentB > 0.7) return;
 
-        if (analysis.macd.histogram > 0) return;
+        // if (analysis.macd.histogram > 0) return;
 
-        if (analysis.macd.isConverging) return;
+        // if (analysis.macd.isConverging) return;
 
-        if (analysis.overallScore < 0.95) return;
+        // if (analysis.overallScore < 0.95) return;
+
+        const shouldTrade = analysis.overallScore >= 0.96 &&
+            analysis.scores.bb >= 1 &&
+            analysis.scores.macd >= 1 &&
+            analysis.scores.position >= 1 &&
+            analysis.scores.stability >= 1
+
+
+        if (!shouldTrade) return;
 
         if (this.tradeInProgress) return;
 
+        this.tradeInProgress = true;
         // 5. Calculate stake
         this.currentStake = this.riskManager.calculateStake(
             this.accountBalance,
@@ -925,15 +935,12 @@ class AccumulatorBotV4 {
         const growthRate = analysis.recommendedGrowthRate || this.config.defaultGrowthRate;
         const takeProfitAmount = this.currentStake * this.config.takeProfitMultiplier;
 
-        this.tradeInProgress = true;
-
         console.log(`\n🎯 ENTRY SIGNAL: ${asset}`);
         console.log(`   Score: ${(analysis.overallScore * 100).toFixed(1)}%`);
         console.log(`   BB Width: ${analysis.bb.width.toFixed(6)} | %B: ${(analysis.bb.percentB * 100).toFixed(1)}%`);
         console.log(`   MACD Hist: ${analysis.macd.histogram.toFixed(6)} | Converging: ${analysis.macd.isConverging}`);
         console.log(`   Growth Rate: ${(growthRate * 100).toFixed(0)}% | Stake: $${this.currentStake.toFixed(2)}`);
         console.log(`   Max Tick Move: ${(analysis.maxTickMove * 100).toFixed(2)}%`);
-        console.log(`   Overall Score: ${(analysis.overallScore * 100).toFixed(1)}%`);
         console.log(`   Tick Stability: ${(analysis.tickStability * 100).toFixed(1)}%`);
         console.log(`   Reason: ${analysis.reason}`);
         console.log(`   Take Profit: $${takeProfitAmount.toFixed(2)}`);
