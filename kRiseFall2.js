@@ -6,8 +6,8 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'KriseFallM_2_002-state.json');
-const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2_002-history.json');
+const STATE_FILE = path.join(__dirname, 'KriseFallM_2_0001-state.json');
+const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2_0001-history.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
@@ -783,7 +783,7 @@ class TelegramService {
             const pnlEmoji = (dayStats.netPL || 0) >= 0 ? '🟢' : '🔴';
 
             const message = [
-                `🌙 <b>END OF DAY REPORT - ${dateKey}</b>`,
+                `🌙 <b>END OF DAY REPORT 2 - ${dateKey}</b>`,
                 ``,
                 `${pnlEmoji} <b>Day Results:</b>`,
                 `├ Trades: ${dayStats.tradesCount}`,
@@ -2261,7 +2261,7 @@ class ConnectionManager {
             );
 
             TelegramService.sendMessage(
-                `⚠️ <b>CONNECTION LOST - RECONNECTING</b>\n📊 Attempt: ${this.reconnectAttempts}/${this.maxReconnectAttempts}\n⏱️ Retrying in ${(delay / 1000).toFixed(1)}s\n💾 State preserved: ${state.session.tradesCount} trades, $${state.session.netPL.toFixed(2)} P&L`
+                `⚠️ <b>CONNECTION LOST 2 - RECONNECTING</b>\n📊 Attempt: ${this.reconnectAttempts}/${this.maxReconnectAttempts}\n⏱️ Retrying in ${(delay / 1000).toFixed(1)}s\n💾 State preserved: ${state.session.tradesCount} trades, $${state.session.netPL.toFixed(2)} P&L`
             );
 
             setTimeout(() => {
@@ -2271,7 +2271,7 @@ class ConnectionManager {
         } else {
             LOGGER.error('Max reconnection attempts reached.');
             TelegramService.sendMessage(
-                `🛑 <b>BOT STOPPED</b>\nMax reconnection attempts reached.\nFinal P&L: $${state.session.netPL.toFixed(2)}`
+                `🛑 <b>BOT STOPPED 2</b>\nMax reconnection attempts reached.\nFinal P&L: $${state.session.netPL.toFixed(2)}`
             );
             process.exit(1);
         }
@@ -2523,24 +2523,24 @@ class DerivBot {
 
         if (isRecoveryMode) {
             // RECOVERY MODE: After a loss, continue in the SAME direction
-            // // // This is a martingale continuation strategy - not a new breakout signal
-            // if (assetState.lastTradeDirection === 'CALLE') {
-            //     direction = 'PUTE';
-            //     signalReason = `Recovery (${symbol} Prev LOSS on RISE → ALTERNATE FALL)`;
-            // } else {
-            //     direction = 'CALLE';
-            //     signalReason = `Recovery (${symbol} Prev LOSS on FALL → ALTERNATE RISE)`;
-            // }
-
-            const candleType = CandleAnalyzer.getCandleDirection(lastClosedCandle);
-
-            if (candleType === 'BULLISH') {
-                direction = 'PUTE';
-                signalReason = `Recovery (${symbol} Prev LOSS on FALL → Continue FALL)`;
-            } else {
+            // // This is a martingale continuation strategy - not a new breakout signal
+            if (assetState.lastTradeDirection === 'CALLE') {
                 direction = 'CALLE';
                 signalReason = `Recovery (${symbol} Prev LOSS on RISE → Continue RISE)`;
+            } else {
+                direction = 'PUTE';
+                signalReason = `Recovery (${symbol} Prev LOSS on FALL → Continue FALL)`;
             }
+
+            // const candleType = CandleAnalyzer.getCandleDirection(lastClosedCandle);
+
+            // if (candleType === 'BULLISH') {
+            //     direction = 'PUTE';
+            //     signalReason = `Recovery (${symbol} Prev LOSS on FALL → Continue FALL)`;
+            // } else {
+            //     direction = 'CALLE';
+            //     signalReason = `Recovery (${symbol} Prev LOSS on RISE → Continue RISE)`;
+            // }
 
             LOGGER.trade(`🔄 [${symbol}] RECOVERY MODE: ${signalReason} (Martingale Level: ${assetState.martingaleLevel})`);
 
