@@ -917,7 +917,8 @@ class AccumulatorBotV4 {
             analysis.scores.bandWidth >= 1 &&
             analysis.scores.macdFlat >= 1 &&
             analysis.scores.pricePosition >= 1 &&
-            analysis.scores.tickStability >= 1
+            analysis.scores.tickStability >= 1 &&
+            analysis.reason === 'conditions_favorable'
 
 
         if (!shouldTrade) return;
