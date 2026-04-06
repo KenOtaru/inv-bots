@@ -1166,9 +1166,9 @@ class AccumulatorBotV4 {
         }
 
         // 3. GOOD PROFIT EARLY — secure it (70% of target after 3+ ticks)
-        if (ticksHeld >= 3 && currentProfit >= takeProfitAmount * 0.7) {
-            return { sell: true, reason: `early_profit_lock ($${currentProfit.toFixed(3)})` };
-        }
+        // if (ticksHeld >= 3 && currentProfit >= takeProfitAmount * 0.7) {
+        //     return { sell: true, reason: `early_profit_lock ($${currentProfit.toFixed(3)})` };
+        // }
 
         // 4. EXTENDED HOLD — any profit after 2x target ticks
         if (ticksHeld >= targetTicks * 2 && currentProfit > 0) {
