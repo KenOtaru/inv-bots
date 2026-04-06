@@ -575,6 +575,7 @@ class AccumulatorBotV4 {
         this.losttrades = 0;
         this.tradeInProgress = false;
         this.ticksHeld = 0;
+        this.Sys = 1;
 
         // Active trades — ONE PER ASSET (Deriv rule)
         this.activeTrades = {}; // { asset: { contractId, ... } }
@@ -906,19 +907,21 @@ class AccumulatorBotV4 {
         }
 
         // 4. Decision
-        // if (!analysis.shouldTrade) return;
+        if (this.Sys === 1) {
+            if (!analysis.shouldTrade) return;
 
-        // if (analysis.maxTickMove > 0.001) return;
+            if (analysis.maxTickMove > 0.001) return;
 
-        // if (analysis.tickStability < 0.3) return;
+            if (analysis.tickStability < 0.3) return;
 
-        // if (analysis.bb.percentB < 0.3 || analysis.bb.percentB > 0.7) return;
+            if (analysis.bb.percentB < 0.3 || analysis.bb.percentB > 0.7) return;
 
-        // if (analysis.macd.histogram > 0) return;
+            if (analysis.macd.histogram > 0) return;
 
-        // if (analysis.macd.isConverging) return;
+            if (analysis.macd.isConverging) return;
 
-        // if (analysis.overallScore < 0.95) return;
+            if (analysis.overallScore < 0.85) return;
+        }
 
         const shouldTrade =
             analysis.overallScore < 0.5 &&
@@ -926,11 +929,9 @@ class AccumulatorBotV4 {
             analysis.scores.macdFlat < 1 &&
             analysis.scores.pricePosition < 1 &&
             analysis.scores.tickStability < 1
-        // &&
-        // analysis.reason === 'conditions_favorable'
 
 
-        if (!shouldTrade) return;
+        if (this.Sys === 2 && !shouldTrade) return;
 
         if (this.tradeInProgress) return;
 
@@ -1264,6 +1265,12 @@ class AccumulatorBotV4 {
             // } else {
             //     this.assets = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'];
             // }
+
+            if (this.Sys === 1) {
+                this.Sys = 2;
+            } else {
+                this.Sys = 1;
+            }
 
             // Cooldown on loss
             this.riskManager.cooldownAsset(asset, 10);
