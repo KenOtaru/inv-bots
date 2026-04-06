@@ -1246,9 +1246,9 @@ class AccumulatorBotV4 {
             this.riskManager = new RiskManager(this.config);
             this.losttrades++;
 
-            if (this.assets.includes('R_10')) {
+            if (asset === 'R_10' || asset === 'R_25' || asset === 'R_50' || asset === 'R_75' || asset === 'R_100') {
                 this.assets = ['1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V'];
-            } else if (this.assets.includes('1HZ10V')) {
+            } else {
                 this.assets = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'];
             }
 
@@ -1525,7 +1525,7 @@ const bot = new AccumulatorBotV4(token, {
     minTimeBetweenTrades: 10000,
 
     // Assets (lower volatility indices preferred)
-    assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
+    assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V'],
 
     // Telegram (use env vars or fill in)
     telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
