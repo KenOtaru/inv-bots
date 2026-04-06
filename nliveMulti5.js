@@ -1139,9 +1139,9 @@ class AccumulatorBotV4 {
         const takeProfitAmount = trade.takeProfitAmount;
 
         // 1. TARGET TICKS REACHED — primary exit
-        // if (ticksHeld >= targetTicks && currentProfit > 0) {
-        //     return { sell: true, reason: `target_ticks (${ticksHeld}/${targetTicks}) with profit $${currentProfit.toFixed(3)}` };
-        // }
+        if (ticksHeld >= targetTicks && currentProfit > 0) {
+            return { sell: true, reason: `target_ticks (${ticksHeld}/${targetTicks}) with profit $${currentProfit.toFixed(3)}` };
+        }
 
         // 2. PROFIT TARGET HIT (backup for limit order)
         if (currentProfit >= takeProfitAmount) {
