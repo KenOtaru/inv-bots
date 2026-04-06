@@ -29,10 +29,10 @@ const CONFIG = {
     // Deriv API
     token: '0P94g4WdSrSrzir', //process.env.DERIV_TOKEN || 
     appId: 1089, //process.env.DERIV_APP_ID || 
-    wsUrl: 'wss://ws.binaryws.com/websockets/v3',
+    wsUrl: 'wss://ws.derivws.com/websockets/v3',
 
     // Assets to trade (ordered by preference — lowest volatility first)
-    assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
+    assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V'],
 
     // Staking  (FLAT — no Martingale)
     initialStake: 1.00,   // USD per trade
@@ -702,7 +702,6 @@ class ReliableAccumulatorBot {
         // Volatility pre-check — run analysis before requesting proposal
         const signal = this.analyzer.analyze(asset, this.tickPrices[asset]);
         if (!signal.shouldEnter) return; // don't even request proposal if signal is bad
-        if (signal.growthRate < 0.05) return; // Only trade Very Good signal
 
         // All checks passed — request proposal
         this.assetStates[asset].lastProposalAt = now;
@@ -770,6 +769,8 @@ class ReliableAccumulatorBot {
             this._log(asset, currentTick, `🚫 Risk block: ${risk.reason}`);
             return;
         }
+
+        if (signal.growthRate < CONFIG.growthRateBoost) return; // Only trade Very Good signal
 
         //Execute Trade
         if (signal.shouldEnter) {
