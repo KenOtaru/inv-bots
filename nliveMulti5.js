@@ -388,8 +388,8 @@ class AccumulatorAnalyzer {
         let recommendedGrowthRate;
         if (overallScore >= 0.85) recommendedGrowthRate = 0.02;    // High confidence → 3%
         else if (overallScore >= 0.75) recommendedGrowthRate = 0.02; // Good → 2%
-        else if (overallScore >= 0.65) recommendedGrowthRate = 0.01; // Moderate → safest 1%
-        else recommendedGrowthRate = 0.01;                          // Default safest
+        else if (overallScore >= 0.65) recommendedGrowthRate = 0.02; // Moderate → safest 1%
+        else recommendedGrowthRate = 0.02;                          // Default safest
 
         // ═══════════════════════════════════════════
         // HARD REJECTION FILTERS
