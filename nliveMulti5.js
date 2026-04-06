@@ -913,12 +913,14 @@ class AccumulatorBotV4 {
 
         // if (analysis.overallScore < 0.95) return;
 
-        const shouldTrade = (analysis.overallScore === 0.78 || analysis.overallScore === 0.88) &&
-            analysis.scores.bandWidth >= 1 &&
-            analysis.scores.macdFlat >= 1 &&
-            analysis.scores.pricePosition >= 1 &&
-            analysis.scores.tickStability >= 1 &&
-            analysis.reason === 'conditions_favorable'
+        const shouldTrade =
+            analysis.overallScore < 0.5 &&
+            analysis.scores.bandWidth < 1 &&
+            analysis.scores.macdFlat < 1 &&
+            analysis.scores.pricePosition < 1 &&
+            analysis.scores.tickStability < 1
+        // &&
+        // analysis.reason === 'conditions_favorable'
 
 
         if (!shouldTrade) return;
