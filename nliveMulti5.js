@@ -29,7 +29,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'accumulator-bot5_000004-v4-state.json');
+const STATE_FILE = path.join(__dirname, 'accumulator-bot5_000005-v4-state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -913,7 +913,7 @@ class AccumulatorBotV4 {
 
         // if (analysis.overallScore < 0.95) return;
 
-        const shouldTrade = analysis.overallScore >= 0.96 &&
+        const shouldTrade = analysis.overallScore === 0.85 &&
             analysis.scores.bandWidth >= 1 &&
             analysis.scores.macdFlat >= 1 &&
             analysis.scores.pricePosition >= 1 &&
@@ -1351,22 +1351,22 @@ class AccumulatorBotV4 {
             }
 
             //London Session Pause trading
-            if (this.isWinTrade && !this.endOfDay && currentHours < 10) {
-                if (currentHours >= 6 && currentMinutes >= 0) {
-                    console.log("It's past 6:00 AM GMT+1 after a win trade, disconnecting the bot.");
-                    this.endOfDay = true;
-                    this.sendHourlySummary();
-                    this.disconnect();
-                }
-            }
+            // if (this.isWinTrade && !this.endOfDay && currentHours < 10) {
+            //     if (currentHours >= 6 && currentMinutes >= 0) {
+            //         console.log("It's past 6:00 AM GMT+1 after a win trade, disconnecting the bot.");
+            //         this.endOfDay = true;
+            //         this.sendHourlySummary();
+            //         this.disconnect();
+            //     }
+            // }
 
             //London Session Trade Resumption
-            if (this.endOfDay && currentHours === 10 && currentMinutes >= 0) {
-                console.log("It's 10:00 AM GMT+1, reconnecting the bot.");
-                // this.resetForNewDay();
-                this.endOfDay = false;
-                this.connect();
-            }
+            // if (this.endOfDay && currentHours === 10 && currentMinutes >= 0) {
+            //     console.log("It's 10:00 AM GMT+1, reconnecting the bot.");
+            //     // this.resetForNewDay();
+            //     this.endOfDay = false;
+            //     this.connect();
+            // }
 
             //New York Session Pause trading
             if (this.isWinTrade && !this.endOfDay && currentHours < 15) {
