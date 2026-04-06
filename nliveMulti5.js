@@ -52,6 +52,7 @@ class StatePersistence {
                     consecutiveLosses3: bot.consecutiveLosses3,
                     consecutiveLosses4: bot.consecutiveLosses4,
                     consecutiveLosses5: bot.consecutiveLosses5,
+                    tradeSystem: bot.tradeSystem,
                 },
                 assetMetrics: bot.assetMetrics,
                 hourlyStats: bot.hourlyStats,
@@ -540,6 +541,7 @@ class AccumulatorBotV4 {
             maxConsecutiveLosses: config.maxConsecutiveLosses || 6,
             maxDailyLoss: config.maxDailyLoss || 100,
             dailyTakeProfit: config.dailyTakeProfit || 200,
+            tradeSystem: config.tradeSystem || 1,
 
             // Accumulator settings
             defaultGrowthRate: config.defaultGrowthRate || 0.01,  // 1% — safest, widest range
@@ -579,7 +581,7 @@ class AccumulatorBotV4 {
         this.losttrades = 0;
         this.tradeInProgress = false;
         this.ticksHeld = 0;
-        this.Sys = 1;
+        this.Sys = config.tradeSystem;
 
         // Active trades — ONE PER ASSET (Deriv rule)
         this.activeTrades = {}; // { asset: { contractId, ... } }
@@ -1550,6 +1552,7 @@ const bot = new AccumulatorBotV4(token, {
     maxConsecutiveLosses: 3,
     maxDailyLoss: 100,
     dailyTakeProfit: 1000,
+    tradeSystem: 1,
 
     // Accumulator strategy
     defaultGrowthRate: 0.02,   // 1% — widest barrier, highest survival
