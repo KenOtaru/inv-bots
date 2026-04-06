@@ -565,6 +565,10 @@ class AccumulatorBotV4 {
         this.currentStake = this.config.initialStake;
         this.accountBalance = this.config.initialBalance;
         this.consecutiveLosses = 0;
+        this.consecutiveLosses2 = 0;
+        this.consecutiveLosses3 = 0;
+        this.consecutiveLosses4 = 0;
+        this.consecutiveLosses5 = 0;
         this.totalTrades = 0;
         this.totalWins = 0;
         this.totalLosses = 0;
@@ -1068,6 +1072,7 @@ class AccumulatorBotV4 {
             `Stake: $${trade.stake.toFixed(2)}\n` +
             `Growth Rate: ${(trade.growthRate * 100).toFixed(0)}%\n` +
             `Score: ${(trade.analysis.overallScore * 100).toFixed(1)}%\n` +
+            `Trade System: ${this.Sys}\n` +
             `Take Profit: $${trade.takeProfitAmount.toFixed(2)}`
         );
     }
@@ -1151,9 +1156,9 @@ class AccumulatorBotV4 {
         const takeProfitAmount = trade.takeProfitAmount;
 
         // 1. TARGET TICKS REACHED — primary exit
-        if (ticksHeld >= targetTicks && currentProfit > 0) {
-            return { sell: true, reason: `target_ticks (${ticksHeld}/${targetTicks}) with profit $${currentProfit.toFixed(3)}` };
-        }
+        // if (ticksHeld >= targetTicks && currentProfit > 0) {
+        //     return { sell: true, reason: `target_ticks (${ticksHeld}/${targetTicks}) with profit $${currentProfit.toFixed(3)}` };
+        // }
 
         // 2. PROFIT TARGET HIT (backup for limit order)
         if (currentProfit >= takeProfitAmount) {
@@ -1246,31 +1251,33 @@ class AccumulatorBotV4 {
             this.hourlyStats.wins++;
             if (this.assetMetrics[asset]) this.assetMetrics[asset].wins++;
 
-            // this.assets = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V']
         } else {
             this.totalLosses++;
             this.consecutiveLosses++;
             this.hourlyStats.losses++;
             if (this.assetMetrics[asset]) this.assetMetrics[asset].losses++;
+
+            if (this.consecutiveLosses === 2) this.consecutiveLosses2++;
+            else if (this.consecutiveLosses === 3) this.consecutiveLosses3++;
+            else if (this.consecutiveLosses === 4) this.consecutiveLosses4++;
+            else if (this.consecutiveLosses === 5) this.consecutiveLosses5++;
+
             if (this.accountBalance > (this.config.initialBalance * 2)) {
                 this.config.riskPerTrade = 0.50; // Trade 50% of balance after loss trade
+                if (this.consecutiveLosses > 1) {
+                    this.config.riskPerTrade = 0.50; // Trade 50% of balance after loss trade
+                } else {
+                    this.config.riskPerTrade = 0.05; // Trade 5% of balance after loss trade
+                }
             } else {
-                this.config.riskPerTrade = 1.00; // Trade 100% of balance after loss trade
+                if (this.consecutiveLosses > 1) {
+                    this.config.riskPerTrade = 1.00; // Trade 100% of balance after loss trade
+                } else {
+                    this.config.riskPerTrade = 0.10; // Trade 10% of balance after loss trade
+                }
             }
             this.riskManager = new RiskManager(this.config);
             this.losttrades++;
-
-            // if (asset === 'R_10' || asset === 'R_25' || asset === 'R_50' || asset === 'R_75' || asset === 'R_100') {
-            //     this.assets = ['1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V'];
-            // } else {
-            //     this.assets = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'];
-            // }
-
-            if (this.Sys === 1) {
-                this.Sys = 2;
-            } else {
-                this.Sys = 1;
-            }
 
             // Cooldown on loss
             this.riskManager.cooldownAsset(asset, 10);
@@ -1298,12 +1305,22 @@ class AccumulatorBotV4 {
             `Asset: ${asset}\n` +
             `P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(3)}\n` +
             `Ticks: ${tickCount} | Growth: ${(trade.growthRate * 100).toFixed(0)}%\n\n` +
+            `Trade System: ${this.Sys}\n` +
             `📊 Session:\n` +
             `Trades: ${this.totalTrades} (${this.totalWins}W/${this.totalLosses}L)\n` +
+            `Losses x2-x5: ${this.consecutiveLosses2} | ${this.consecutiveLosses3} | ${this.consecutiveLosses4} | ${this.consecutiveLosses5}\n` +
             `Win Rate: ${winRate}%\n` +
             `Balance: $${this.accountBalance.toFixed(2)}\n` +
             `Total P&L: ${this.totalProfitLoss >= 0 ? '+' : ''}$${this.totalProfitLoss.toFixed(2)}`
         );
+
+        if (!won) {
+            if (this.Sys === 1) {
+                this.Sys = 2;
+            } else {
+                this.Sys = 1;
+            }
+        }
 
         // Clean up active trade
         delete this.activeTrades[asset];
@@ -1348,6 +1365,7 @@ class AccumulatorBotV4 {
             `📊 <b>Session Summary (Bot 5)</b>\n\n` +
             `Trades: ${this.totalTrades}\n` +
             `W/L: ${this.totalWins}/${this.totalLosses}\n` +
+            `Losses x2-x5: ${this.consecutiveLosses2} | ${this.consecutiveLosses3} | ${this.consecutiveLosses4} | ${this.consecutiveLosses5}\n` +
             `Win Rate: ${winRate}%\n` +
             `${pnlEmoji} Total P&amp;L: ${pnlStr}\n` +
             `Daily P&amp;L: ${this.dailyProfitLoss >= 0 ? '+' : ''}$${this.dailyProfitLoss.toFixed(2)}\n\n` +
@@ -1506,6 +1524,7 @@ class AccumulatorBotV4 {
             `Reason: ${reason}\n\n` +
             `Final Stats:\n` +
             `Trades: ${this.totalTrades} (${this.totalWins}W/${this.totalLosses}L)\n` +
+            `Losses x2-x5: ${this.consecutiveLosses2} | ${this.consecutiveLosses3} | ${this.consecutiveLosses4} | ${this.consecutiveLosses5}\n` +
             `Win Rate: ${(this.totalWins / Math.max(1, this.totalTrades) * 100).toFixed(1)}%\n` +
             `Balance: $${this.accountBalance.toFixed(2)}\n` +
             `Total P&L: ${this.totalProfitLoss >= 0 ? '+' : ''}$${this.totalProfitLoss.toFixed(2)}`
