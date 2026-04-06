@@ -1239,15 +1239,13 @@ class AccumulatorBotV4 {
             this.totalWins++;
             this.consecutiveLosses = 0;
             this.isWinTrade = true;
+
             if (this.accountBalance > (this.config.initialBalance * 2)) {
                 this.config.riskPerTrade = 0.005; // Trade 0.5% of balance after win trade when Balance is > 2x initial Investment
             } else {
                 this.config.riskPerTrade = 0.01; // Trade 1% of balance after win trade
             }
-            if (this.losttrades > 0 && trade.stake >= (this.accountBalance * 0.25)) {
-                this.riskManager = new RiskManager(this.config);
-                this.losttrades = 0;
-            }
+
             this.hourlyStats.wins++;
             if (this.assetMetrics[asset]) this.assetMetrics[asset].wins++;
 
@@ -1263,7 +1261,6 @@ class AccumulatorBotV4 {
             else if (this.consecutiveLosses === 5) this.consecutiveLosses5++;
 
             if (this.accountBalance > (this.config.initialBalance * 2)) {
-                this.config.riskPerTrade = 0.50; // Trade 50% of balance after loss trade
                 if (this.consecutiveLosses > 1) {
                     this.config.riskPerTrade = 0.50; // Trade 50% of balance after loss trade
                 } else {
