@@ -36,16 +36,16 @@ const CONFIG = {
 
     // Staking  (FLAT — no Martingale)
     initialStake: 1.00,   // USD per trade
-    multiplier: 3.00,   // never exceed this
+    multiplier: 6.00,   // never exceed this
     multiplier2: 6.00,   // never exceed this
 
     // Growth rates
     growthRateDefault: 0.02,   // 1% — widest barriers, safest
-    growthRateBoost: 0.05,   // 2% — only on strong squeeze + RSI centred
+    growthRateBoost: 0.02,   // 2% — only on strong squeeze + RSI centred
 
     // Entry window (ENFORCED): only enter when active accumulator is this young
     minEntryTick: 0,
-    maxEntryTick: 3,
+    maxEntryTick: 5,
 
     // Take-profit (contract level): sell when profit ≥ X% of stake
     takeProfitPct: 0.20,   // 40% of stake
@@ -56,28 +56,28 @@ const CONFIG = {
     bbPeriod: 20,
     bbMultiplier: 2.0,
     // BB width percentile threshold — enter only when market is calm
-    bbSqueezePctile: 40,     // below 40th percentile = squeeze (good to enter)
+    bbSqueezePctile: 30,     // below 30th percentile = squeeze (good to enter)
 
     // RSI parameters
     rsiPeriod: 14,
-    rsiLow: 35,     // don't enter if RSI < 35 (trending down hard)
-    rsiHigh: 65,     // don't enter if RSI > 65 (trending up hard)
+    rsiLow: 40,     // don't enter if RSI < 35 (trending down hard)
+    rsiHigh: 60,     // don't enter if RSI > 65 (trending up hard)
 
     // Price stability: max average absolute change over last 10 ticks (as % of price)
-    maxPriceChangePct: 0.002,  // 0.2%
+    maxPriceChangePct: 0.001,  // 0.1%
 
     // Min history required before analysis
     requiredHistory: 60,
 
     // Risk management
-    maxConsecutiveLosses: 4,
+    maxConsecutiveLosses: 3,
     consecutiveLossCooldownMs: 1800000, // 30 min pause after 3 consec losses
-    assetCooldownMs: 2700000, // 45 min asset cooldown on loss
+    assetCooldownMs: 300000, // 5 min asset cooldown on loss
     maxDailyLoss: 500,     // stop bot for the day
     takeProfitSession: 20000,    // stop bot after reaching this profit
 
     // Proposal throttle: min ms between proposal requests per asset
-    proposalThrottleMs: 8000,
+    proposalThrottleMs: 10000,
 
     // Telegram
     telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ', //process.env.TELEGRAM_TOKEN || 
@@ -312,11 +312,6 @@ class VolatilityAnalyzer {
         const growthRate = (strongSqueeze && rsiCentred && shouldEnter)
             ? CONFIG.growthRateBoost
             : CONFIG.growthRateDefault;
-
-        //Trade only High GrowthRate
-        // if (!strongSqueeze || rsiCentred || shouldEnter) {
-        //     shouldEnter = false;
-        // }
 
         // ── Regime label ─────────────────────────────────────────────────────
         let regime = 'neutral';
