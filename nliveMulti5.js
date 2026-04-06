@@ -29,7 +29,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'accumulator-bot5_000006-v4-state.json');
+const STATE_FILE = path.join(__dirname, 'accumulator-bot5_000008-v4-state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -574,6 +574,7 @@ class AccumulatorBotV4 {
         this.isWinTrade = false;
         this.losttrades = 0;
         this.tradeInProgress = false;
+        this.ticksHeld = 0;
 
         // Active trades — ONE PER ASSET (Deriv rule)
         this.activeTrades = {}; // { asset: { contractId, ... } }
@@ -1094,8 +1095,12 @@ class AccumulatorBotV4 {
             this.contractSubscriptions[asset] = message.subscription.id;
         }
 
+        if (this.tradeInProgress) {
+            this.ticksHeld++;
+        }
+
         const currentProfit = parseFloat(contract.profit || 0);
-        const tickCount = contract.tick_count || 0;
+        const tickCount = this.ticksHeld || 0;
         const bidPrice = parseFloat(contract.bid_price || 0);
 
         trade.ticksHeld = tickCount;
@@ -1197,7 +1202,7 @@ class AccumulatorBotV4 {
 
         const won = contract.status === 'won';
         const profit = parseFloat(contract.profit);
-        const tickCount = contract.tick_count || 0;
+        const tickCount = trade.ticksHeld || 0;
 
         // Unsubscribe from contract
         if (this.contractSubscriptions[asset]) {
@@ -1254,17 +1259,18 @@ class AccumulatorBotV4 {
             this.riskManager = new RiskManager(this.config);
             this.losttrades++;
 
-            if (asset === 'R_10' || asset === 'R_25' || asset === 'R_50' || asset === 'R_75' || asset === 'R_100') {
-                this.assets = ['1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V'];
-            } else {
-                this.assets = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'];
-            }
+            // if (asset === 'R_10' || asset === 'R_25' || asset === 'R_50' || asset === 'R_75' || asset === 'R_100') {
+            //     this.assets = ['1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V'];
+            // } else {
+            //     this.assets = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'];
+            // }
 
             // Cooldown on loss
             this.riskManager.cooldownAsset(asset, 10);
         }
 
         this.tradeInProgress = false;
+        this.ticksHeld = 0;
 
         // Record for learning
         this.analyzer.recordTradeResult(asset, {
@@ -1533,7 +1539,7 @@ const bot = new AccumulatorBotV4(token, {
     minTimeBetweenTrades: 10000,
 
     // Assets (lower volatility indices preferred)
-    assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V'],
+    assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'], //, '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V'
 
     // Telegram (use env vars or fill in)
     telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
