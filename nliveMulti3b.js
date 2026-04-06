@@ -746,6 +746,11 @@ class ReliableAccumulatorBot {
         const currentTick = (stayedIn[stayedIn.length - 1] || 0) + 1;
         this.assetStates[asset].lastTicks = currentTick;
 
+        // ── VOLATILITY SIGNAL ─────────────────────────────────────────────────
+        const signal = this.analyzer.analyze(asset, this.tickPrices[asset]);
+
+        this._logAnalysis(asset, currentTick, signal, proposal);
+
         // Don't trade if already trading
         if (this.tradeInProgress) return;
 
@@ -766,11 +771,7 @@ class ReliableAccumulatorBot {
             return;
         }
 
-        // ── VOLATILITY SIGNAL ─────────────────────────────────────────────────
-        const signal = this.analyzer.analyze(asset, this.tickPrices[asset]);
-
-        this._logAnalysis(asset, currentTick, signal, proposal);
-
+        //Execute Trade
         if (signal.shouldEnter) {
             this._executeTrade(asset, proposal, signal, currentTick);
         }
