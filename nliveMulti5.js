@@ -1244,6 +1244,12 @@ class AccumulatorBotV4 {
             this.riskManager = new RiskManager(this.config);
             this.losttrades++;
 
+            if (this.assets.includes('R_10')) {
+                this.assets = ['1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V'];
+            } else if (this.assets.includes('1HZ10V')) {
+                this.assets = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'];
+            }
+
             // Cooldown on loss
             this.riskManager.cooldownAsset(asset, 10);
         }
