@@ -1556,7 +1556,7 @@ const bot = new AccumulatorBotV4(token, {
 
     // Accumulator strategy
     defaultGrowthRate: 0.02,   // 1% — widest barrier, highest survival
-    targetProfitTicks: 6,      // Quick profit after 5 ticks
+    targetProfitTicks: 8,      // Quick profit after 5 ticks
     takeProfitMultiplier: 0.10, // 10% of stake as TP (limit order backup)
 
     // Analysis
