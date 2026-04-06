@@ -44,8 +44,8 @@ const CONFIG = {
     growthRateBoost: 0.02,   // 2% — only on strong squeeze + RSI centred
 
     // Entry window (ENFORCED): only enter when active accumulator is this young
-    minEntryTick: 0,
-    maxEntryTick: 5,
+    minEntryTick: 1,
+    maxEntryTick: 15,
 
     // Take-profit (contract level): sell when profit ≥ X% of stake
     takeProfitPct: 0.20,   // 40% of stake
