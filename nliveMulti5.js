@@ -913,7 +913,7 @@ class AccumulatorBotV4 {
 
         // if (analysis.overallScore < 0.95) return;
 
-        const shouldTrade = analysis.overallScore === 0.85 &&
+        const shouldTrade = (analysis.overallScore === 0.78 || analysis.overallScore === 0.88) &&
             analysis.scores.bandWidth >= 1 &&
             analysis.scores.macdFlat >= 1 &&
             analysis.scores.pricePosition >= 1 &&
@@ -1137,9 +1137,9 @@ class AccumulatorBotV4 {
         const takeProfitAmount = trade.takeProfitAmount;
 
         // 1. TARGET TICKS REACHED — primary exit
-        if (ticksHeld >= targetTicks && currentProfit > 0) {
-            return { sell: true, reason: `target_ticks (${ticksHeld}/${targetTicks}) with profit $${currentProfit.toFixed(3)}` };
-        }
+        // if (ticksHeld >= targetTicks && currentProfit > 0) {
+        //     return { sell: true, reason: `target_ticks (${ticksHeld}/${targetTicks}) with profit $${currentProfit.toFixed(3)}` };
+        // }
 
         // 2. PROFIT TARGET HIT (backup for limit order)
         if (currentProfit >= takeProfitAmount) {
