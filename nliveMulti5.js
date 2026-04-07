@@ -930,7 +930,7 @@ class AccumulatorBotV4 {
         }
 
         const shouldTrade =
-            analysis.overallScore < 0.4 &&
+            analysis.overallScore < 0.46 &&
             analysis.scores.bandWidth < 1 &&
             analysis.scores.macdFlat < 1 &&
             analysis.scores.pricePosition < 1 &&
