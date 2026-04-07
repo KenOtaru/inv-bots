@@ -29,7 +29,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'accumulator-bot5_000010-v4-state.json');
+const STATE_FILE = path.join(__dirname, 'accumulator-bot5_000015-v4-state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -930,11 +930,11 @@ class AccumulatorBotV4 {
         }
 
         const shouldTrade =
-            analysis.overallScore < 0.5 &&
+            analysis.overallScore < 0.4 &&
             analysis.scores.bandWidth < 1 &&
             analysis.scores.macdFlat < 1 &&
             analysis.scores.pricePosition < 1 &&
-            analysis.scores.tickStability < 1
+            analysis.scores.tickStability >= 1
 
 
         if (this.Sys === 2 && !shouldTrade) return;
@@ -1158,9 +1158,9 @@ class AccumulatorBotV4 {
         const takeProfitAmount = trade.takeProfitAmount;
 
         // 1. TARGET TICKS REACHED — primary exit
-        if (ticksHeld >= targetTicks && currentProfit > 0) {
-            return { sell: true, reason: `target_ticks (${ticksHeld}/${targetTicks}) with profit $${currentProfit.toFixed(3)}` };
-        }
+        // if (ticksHeld >= targetTicks && currentProfit > 0) {
+        //     return { sell: true, reason: `target_ticks (${ticksHeld}/${targetTicks}) with profit $${currentProfit.toFixed(3)}` };
+        // }
 
         // 2. PROFIT TARGET HIT (backup for limit order)
         if (currentProfit >= takeProfitAmount) {
@@ -1168,19 +1168,19 @@ class AccumulatorBotV4 {
         }
 
         // 3. GOOD PROFIT EARLY — secure it (70% of target after 3+ ticks)
-        if (ticksHeld >= 3 && currentProfit >= takeProfitAmount * 0.7) {
-            return { sell: true, reason: `early_profit_lock ($${currentProfit.toFixed(3)})` };
-        }
+        // if (ticksHeld >= 3 && currentProfit >= takeProfitAmount * 0.7) {
+        //     return { sell: true, reason: `early_profit_lock ($${currentProfit.toFixed(3)})` };
+        // }
 
         // 4. EXTENDED HOLD — any profit after 2x target ticks
-        if (ticksHeld >= targetTicks * 2 && currentProfit > 0) {
-            return { sell: true, reason: 'extended_hold_exit' };
-        }
+        // if (ticksHeld >= targetTicks * 2 && currentProfit > 0) {
+        //     return { sell: true, reason: 'extended_hold_exit' };
+        // }
 
         // 5. MAX HOLD TIME — exit regardless after 3x target (safety)
-        if (ticksHeld >= targetTicks * 3) {
-            return { sell: true, reason: 'max_hold_safety_exit' };
-        }
+        // if (ticksHeld >= targetTicks * 3) {
+        //     return { sell: true, reason: 'max_hold_safety_exit' };
+        // }
 
         return { sell: false, reason: null };
     }
@@ -1315,13 +1315,13 @@ class AccumulatorBotV4 {
             `Total P&L: ${this.totalProfitLoss >= 0 ? '+' : ''}$${this.totalProfitLoss.toFixed(2)}`
         );
 
-        if (!won) {
-            if (this.Sys === 1) {
-                this.Sys = 2;
-            } else {
-                this.Sys = 1;
-            }
-        }
+        // if (!won) {
+        //     if (this.Sys === 1) {
+        //         this.Sys = 2;
+        //     } else {
+        //         this.Sys = 1;
+        //     }
+        // }
 
         // Clean up active trade
         delete this.activeTrades[asset];
@@ -1553,8 +1553,8 @@ const bot = new AccumulatorBotV4(token, {
     riskPerTrade: 0.01,        // 3% of balance per trade
     maxConsecutiveLosses: 3,
     maxDailyLoss: 100,
-    dailyTakeProfit: 1000,
-    tradeSystem: 1,
+    dailyTakeProfit: 5,
+    tradeSystem: 2,
 
     // Accumulator strategy
     defaultGrowthRate: 0.02,   // 1% — widest barrier, highest survival
