@@ -37,7 +37,7 @@ const CONFIG = {
     // Staking  (FLAT — no Martingale)
     initialStake: 1.00,   // USD per trade
     multiplier: 6.00,   // never exceed this
-    multiplier2: 7.00,   // never exceed this
+    multiplier2: 8.00,   // never exceed this
 
     // Growth rates
     growthRateDefault: 0.01,   // 1% — widest barriers, safest
@@ -45,7 +45,7 @@ const CONFIG = {
 
     // Entry window (ENFORCED): only enter when active accumulator is this young
     minEntryTick: 0,
-    maxEntryTick: 15,
+    maxEntryTick: 20,
 
     // Take-profit (contract level): sell when profit ≥ X% of stake
     takeProfitPct: 0.20,   // 40% of stake
@@ -56,12 +56,12 @@ const CONFIG = {
     bbPeriod: 20,
     bbMultiplier: 2.0,
     // BB width percentile threshold — enter only when market is calm
-    bbSqueezePctile: 40,     // below 40th percentile = squeeze (good to enter)
+    bbSqueezePctile: 30,     // below 40th percentile = squeeze (good to enter)
 
     // RSI parameters
     rsiPeriod: 14,
-    rsiLow: 35,     // don't enter if RSI < 35 (trending down hard)
-    rsiHigh: 65,     // don't enter if RSI > 65 (trending up hard)
+    rsiLow: 40,     // don't enter if RSI < 35 (trending down hard)
+    rsiHigh: 60,     // don't enter if RSI > 65 (trending up hard)
 
     // Price stability: max average absolute change over last 10 ticks (as % of price)
     maxPriceChangePct: 0.002,  // 0.2%
@@ -72,9 +72,9 @@ const CONFIG = {
     // Risk management
     maxConsecutiveLosses: 3,
     consecutiveLossCooldownMs: 1800000, // 30 min pause after 3 consec losses
-    assetCooldownMs: 2700000, // 45 min asset cooldown on loss
+    assetCooldownMs: 1800000, // 30 min asset cooldown on loss
     maxDailyLoss: 500,     // stop bot for the day
-    takeProfitSession: 20000,    // stop bot after reaching this profit
+    takeProfitSession: 50000,    // stop bot after reaching this profit
 
     // Proposal throttle: min ms between proposal requests per asset
     proposalThrottleMs: 10000,
@@ -84,7 +84,7 @@ const CONFIG = {
     telegramChatId: '752497117', //process.env.TELEGRAM_CHAT_ID || 
 
     // State persistence
-    stateFile: path.join(__dirname, 'accumulator-botB000005-state.json'),
+    stateFile: path.join(__dirname, 'accumulator-botB000009-state.json'),
     stateSaveMs: 5000,
 };
 
@@ -953,6 +953,9 @@ class ReliableAccumulatorBot {
             this.isWinTrade = true;
             this.currentStake = CONFIG.initialStake;
             if (this.assetMetrics[asset]) this.assetMetrics[asset].wins++;
+
+            // Asset-level cooldown
+            this.riskManager.setAssetCooldown(asset);
         } else {
             this.totalLosses++;
             this.consecutiveLosses++;
@@ -970,8 +973,8 @@ class ReliableAccumulatorBot {
 
             if (this.assetMetrics[asset]) this.assetMetrics[asset].losses++;
 
-            // Asset-level cooldown
-            this.riskManager.setAssetCooldown(asset);
+            // // Asset-level cooldown
+            // this.riskManager.setAssetCooldown(asset);
 
             // Global pause if consecutive loss limit hit
             if (this.consecutiveLosses >= CONFIG.maxConsecutiveLosses) {
@@ -1109,22 +1112,22 @@ class ReliableAccumulatorBot {
             }
 
             //London Session Pause trading
-            if (this.isWinTrade && !this.endOfDay && currentHours < 10) {
-                if (currentHours >= 6 && currentMinutes >= 0) {
-                    console.log("It's past 6:00 AM GMT+1 after a win trade, disconnecting the bot.");
-                    this.endOfDay = true;
-                    this.sendHourlySummary();
-                    this.disconnect();
-                }
-            }
+            // if (this.isWinTrade && !this.endOfDay && currentHours < 10) {
+            //     if (currentHours >= 6 && currentMinutes >= 0) {
+            //         console.log("It's past 6:00 AM GMT+1 after a win trade, disconnecting the bot.");
+            //         this.endOfDay = true;
+            //         this.sendHourlySummary();
+            //         this.disconnect();
+            //     }
+            // }
 
-            //London Session Trade Resumption
-            if (this.endOfDay && currentHours === 10 && currentMinutes >= 0) {
-                console.log("It's 10:00 AM GMT+1, reconnecting the bot.");
-                // this.resetForNewDay();
-                this.endOfDay = false;
-                this.connect();
-            }
+            // //London Session Trade Resumption
+            // if (this.endOfDay && currentHours === 10 && currentMinutes >= 0) {
+            //     console.log("It's 10:00 AM GMT+1, reconnecting the bot.");
+            //     // this.resetForNewDay();
+            //     this.endOfDay = false;
+            //     this.connect();
+            // }
 
             //New York Session Pause trading
             if (this.isWinTrade && !this.endOfDay && currentHours < 15) {
@@ -1137,8 +1140,8 @@ class ReliableAccumulatorBot {
             }
 
             //New York Session Trade Resumption
-            if (this.endOfDay && currentHours === 17 && currentMinutes >= 0) {
-                console.log("It's 5:00 PM GMT+1, reconnecting the bot.");
+            if (this.endOfDay && currentHours === 13 && currentMinutes >= 0) {
+                console.log("It's 3:00 PM GMT+1, reconnecting the bot.");
                 // this.resetForNewDay();
                 this.endOfDay = false;
                 this.connect();

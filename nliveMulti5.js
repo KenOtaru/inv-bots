@@ -29,7 +29,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'accumulator-bot5_000015-v4-state.json');
+const STATE_FILE = path.join(__dirname, 'accumulator-bot5_000017-v4-state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -1253,6 +1253,9 @@ class AccumulatorBotV4 {
             this.hourlyStats.wins++;
             if (this.assetMetrics[asset]) this.assetMetrics[asset].wins++;
 
+            // Cooldown on loss
+            this.riskManager.cooldownAsset(asset, 30);
+
         } else {
             this.totalLosses++;
             this.consecutiveLosses++;
@@ -1266,22 +1269,22 @@ class AccumulatorBotV4 {
 
             if (this.accountBalance > (this.config.initialBalance * 2)) {
                 if (this.consecutiveLosses > 1) {
-                    this.config.riskPerTrade = 0.50; // Trade 50% of balance after loss trade
+                    this.config.riskPerTrade = 0.30; // Trade 50% of balance after loss trade
                 } else {
                     this.config.riskPerTrade = 0.05; // Trade 5% of balance after loss trade
                 }
             } else {
                 if (this.consecutiveLosses > 1) {
-                    this.config.riskPerTrade = 1.00; // Trade 100% of balance after loss trade
+                    this.config.riskPerTrade = 0.50; // Trade 100% of balance after loss trade
                 } else {
-                    this.config.riskPerTrade = 0.10; // Trade 10% of balance after loss trade
+                    this.config.riskPerTrade = 0.07; // Trade 10% of balance after loss trade
                 }
             }
             this.riskManager = new RiskManager(this.config);
             this.losttrades++;
 
-            // Cooldown on loss
-            this.riskManager.cooldownAsset(asset, 10);
+            // // Cooldown on loss
+            // this.riskManager.cooldownAsset(asset, 10);
         }
 
         this.tradeInProgress = false;
@@ -1427,8 +1430,8 @@ class AccumulatorBotV4 {
             }
 
             //New York Session Trade Resumption
-            if (this.endOfDay && currentHours === 17 && currentMinutes >= 0) {
-                console.log("It's 5:00 PM GMT+1, reconnecting the bot.");
+            if (this.endOfDay && currentHours === 13 && currentMinutes >= 0) {
+                console.log("It's 3:00 PM GMT+1, reconnecting the bot.");
                 // this.resetForNewDay();
                 this.endOfDay = false;
                 this.connect();
@@ -1553,13 +1556,13 @@ const bot = new AccumulatorBotV4(token, {
     riskPerTrade: 0.01,        // 3% of balance per trade
     maxConsecutiveLosses: 3,
     maxDailyLoss: 100,
-    dailyTakeProfit: 5,
+    dailyTakeProfit: 500000,
     tradeSystem: 2,
 
     // Accumulator strategy
     defaultGrowthRate: 0.02,   // 1% — widest barrier, highest survival
     targetProfitTicks: 5,      // Quick profit after 5 ticks
-    takeProfitMultiplier: 0.10, // 10% of stake as TP (limit order backup)
+    takeProfitMultiplier: 0.20, // 20% of stake as TP (limit order backup)
 
     // Analysis
     minOverallScore: 1,     // Composite threshold
