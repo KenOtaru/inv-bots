@@ -1074,6 +1074,7 @@ class AccumulatorBotV4 {
             if (asset && this.activeTrades[asset]?.status === 'requesting_proposal') {
                 console.log(`❌ Proposal rejected for ${asset}: ${message.error.message}`);
                 delete this.activeTrades[asset];
+                this.tradeInProgress = false;
             }
             return;
         }
