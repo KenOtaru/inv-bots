@@ -29,7 +29,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'accumulator_bot5_01-v4-state.json');
+const STATE_FILE = path.join(__dirname, 'accumulator_bot5_05-v4-state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -317,11 +317,11 @@ class AccumulatorAnalyzer {
             else scores.bandWidth = 0.15;                             // Very wide — avoid
         } else {
             // Fallback: use raw width
-            if (bb.width < 0.003) scores.bandWidth = 1.0;
-            else if (bb.width < 0.006) scores.bandWidth = 0.80;
-            else if (bb.width < 0.010) scores.bandWidth = 0.55;
-            else if (bb.width < 0.015) scores.bandWidth = 0.30;
-            else scores.bandWidth = 0.10;
+            if (bb.width < 0.003) scores.bandWidth = 0.0;
+            else if (bb.width < 0.006) scores.bandWidth = 0.00;
+            else if (bb.width < 0.010) scores.bandWidth = 0.00;
+            else if (bb.width < 0.015) scores.bandWidth = 0.00;
+            else scores.bandWidth = 0.00;
         }
 
         // 2. MACD HISTOGRAM — Flat/near-zero histogram = no momentum = GOOD
@@ -543,6 +543,10 @@ class AccumulatorBotV4 {
             dailyTakeProfit: config.dailyTakeProfit || 200,
             tradeSystem: config.tradeSystem || 1,
 
+            // Entry window (ENFORCED): only enter when active accumulator is this young
+            minEntryTick: config.minEntryTick || 0,
+            maxEntryTick: config.maxEntryTick || 20,
+
             // Accumulator settings
             defaultGrowthRate: config.defaultGrowthRate || 0.01,  // 1% — safest, widest range
 
@@ -583,6 +587,12 @@ class AccumulatorBotV4 {
         this.ticksHeld = 0;
         this.Sys = config.tradeSystem;
 
+        // Trade Watchdog — detects and recovers stuck accumulator contracts
+        this.tradeWatchdogTimer = null;
+        this.tradeWatchdogPollTimer = null;
+        this.tradeWatchdogMs = 120000; // 2 minutes — Accumulator contracts should settle well before this
+        this.tradeStartTime = null;
+
         // Active trades — ONE PER ASSET (Deriv rule)
         this.activeTrades = {}; // { asset: { contractId, ... } }
         this.contractSubscriptions = {}; // { asset: subscriptionId }
@@ -592,6 +602,9 @@ class AccumulatorBotV4 {
         this.tickCounts = {};  // Count ticks per asset for analysis throttling
         this.tickSubscriptionIds = {};
         this.lastTradeTime = {}; // Per-asset trade timing
+        // Per-asset state
+        this.assetStates = {};  // { asset: { proposalId, lastProposalAt, lastTicks } }
+        this.currentTick = null;
 
         // Asset metrics
         this.assetMetrics = {};
@@ -969,30 +982,34 @@ class AccumulatorBotV4 {
 
         // 4. Decision
         if (this.Sys === 1) {
-            if (!analysis.shouldTrade) return;
+            if (this.consecutiveLosses < 1) {
+                if (!analysis.shouldTrade) return;
 
-            if (analysis.maxTickMove > 0.001) return;
+                if (analysis.maxTickMove > 0.001) return;
 
-            if (analysis.tickStability < 0.3) return;
+                if (analysis.tickStability < 0.3) return;
 
-            if (analysis.bb.percentB < 0.3 || analysis.bb.percentB > 0.7) return;
+                if (analysis.bb.percentB < 0.3 || analysis.bb.percentB > 0.7) return;
 
-            if (analysis.macd.histogram > 0) return;
+                if (analysis.macd.histogram > 0) return;
 
-            if (analysis.macd.isConverging) return;
+                if (analysis.macd.isConverging) return;
 
-            if (analysis.overallScore < 0.85) return;
+                if (analysis.overallScore < 0.85) return;
+            }
+        } else {
+            if (this.consecutiveLosses < 1) {
+                const shouldTrade =
+                    analysis.overallScore < 0.46 &&
+                    analysis.scores.bandWidth < 1 &&
+                    analysis.scores.macdFlat < 1 &&
+                    analysis.scores.pricePosition < 1 &&
+                    analysis.scores.tickStability >= 1
+
+
+                if (this.Sys === 2 && !shouldTrade) return;
+            }
         }
-
-        const shouldTrade =
-            analysis.overallScore < 0.46 &&
-            analysis.scores.bandWidth < 1 &&
-            analysis.scores.macdFlat < 1 &&
-            analysis.scores.pricePosition < 1 &&
-            analysis.scores.tickStability >= 1
-
-
-        if (this.Sys === 2 && !shouldTrade) return;
 
         if (this.tradeInProgress) return;
 
@@ -1064,6 +1081,15 @@ class AccumulatorBotV4 {
         const asset = message.echo_req.symbol;
         const proposal = message.proposal;
 
+        if (!proposal.contract_details || !proposal.contract_details.ticks_stayed_in) return;
+
+        const stayedIn = proposal.contract_details.ticks_stayed_in;
+        // this.assetStates[asset].proposalId = proposal.id;
+
+        // Current tick count of the running accumulator
+        const currentTick = (stayedIn[stayedIn.length - 1] || 0) + 1;
+        this.currentTick = currentTick;
+
         // Only buy if we initiated this proposal
         if (!this.activeTrades[asset] || this.activeTrades[asset].status !== 'requesting_proposal') {
             // Stale proposal — ignore or forget
@@ -1073,10 +1099,20 @@ class AccumulatorBotV4 {
             return;
         }
 
+        if (currentTick > this.config.maxEntryTick) {
+            console.log(`❌ Proposal rejected for ${asset}: Too late (tick ${currentTick} > ${this.config.maxEntryTick})`);
+            if (proposal.id) {
+                this.sendRequest({ forget: proposal.id });
+            }
+            delete this.activeTrades[asset];
+            return;
+        }
+
         const trade = this.activeTrades[asset];
 
         console.log(`\n🚀 BUYING ACCUMULATOR: ${asset}`);
         console.log(`   Proposal ID: ${proposal.id}`);
+        console.log(`   Current Tick: ${currentTick}`);
         console.log(`   Stake: $${trade.stake.toFixed(2)} | Growth: ${(trade.growthRate * 100).toFixed(0)}%`);
 
         this.sendRequest({
@@ -1095,11 +1131,13 @@ class AccumulatorBotV4 {
         if (message.error) {
             console.error(`❌ Buy error: ${message.error.message}`);
             if (asset) delete this.activeTrades[asset];
+            this._clearWatchdogTimers();
             return;
         }
 
         if (!asset) {
             console.warn('Buy response but no pending trade found');
+            this._clearWatchdogTimers();
             return;
         }
 
@@ -1122,10 +1160,16 @@ class AccumulatorBotV4 {
             subscribe: 1
         });
 
+        // Record trade start time and start watchdog
+        this.tradeStartTime = Date.now();
+        this._startTradeWatchdog(contractId);
+        console.log(`⏱️  Trade watchdog started (${(this.tradeWatchdogMs / 1000).toFixed(0)}s timeout)`);
+
         // Telegram notification
         this.sendTelegramMessage(
             `🚀 <b>TRADE OPENED 5</b>\n\n` +
             `Asset: ${asset}\n` +
+            `Entry tick: ${this.currentTick}\n` +
             `Stake: $${trade.stake.toFixed(2)}\n` +
             `Growth Rate: ${(trade.growthRate * 100).toFixed(0)}%\n` +
             `Score: ${(trade.analysis.overallScore * 100).toFixed(1)}%\n` +
@@ -1256,12 +1300,183 @@ class AccumulatorBotV4 {
         console.log(`✅ Sold for: $${message.sell?.sold_for || 'N/A'}`);
     }
 
+    // ══════════════════════════════════════════════════════════════════════════
+    // TRADE WATCHDOG — DETECT AND RECOVER STUCK ACCUMULATOR CONTRACTS
+    // ══════════════════════════════════════════════════════════════════════════
+    // Accumulator contracts can sometimes get stuck (not settling after barrier
+    // breach or not responding to sell orders). This watchdog monitors active
+    // trades and forces recovery if they remain open beyond a reasonable time.
+
+    _startTradeWatchdog(contractId) {
+        this._clearWatchdogTimers();
+
+        const timeoutMs = this.tradeWatchdogMs;
+
+        this.tradeWatchdogTimer = setTimeout(() => {
+            // Check if there's still an active trade
+            const hasActiveTrade = Object.keys(this.activeTrades).some(
+                asset => this.activeTrades[asset]?.contractId
+            );
+            if (!hasActiveTrade) {
+                this._clearWatchdogTimers();
+                return;
+            }
+
+            console.warn(
+                `⏰ WATCHDOG FIRED — Contract ${contractId || 'unknown'} has been open for ` +
+                `${(timeoutMs / 1000).toFixed(0)}s with no settlement`
+            );
+
+            // Poll the contract to check its current status
+            if (contractId && this.connected && this.wsReady) {
+                console.log(`🔍 Polling contract ${contractId} for current status…`);
+                this.sendRequest({
+                    proposal_open_contract: 1,
+                    contract_id: contractId,
+                    subscribe: 1,
+                });
+
+                // Set a poll timeout — if we don't get a response, force recovery
+                this.tradeWatchdogPollTimer = setTimeout(() => {
+                    const stillActive = Object.keys(this.activeTrades).some(
+                        asset => this.activeTrades[asset]?.contractId
+                    );
+                    if (!stillActive) {
+                        this._clearWatchdogTimers();
+                        return;
+                    }
+                    console.error(
+                        `🚨 WATCHDOG: Poll timed out — contract ${contractId} still unresolved, ` +
+                        `force-releasing lock`
+                    );
+                    this._recoverStuckTrade('watchdog-force');
+                }, 15000); // 15 seconds for poll response
+
+            } else {
+                // WebSocket not connected — can't query, force recovery
+                this._recoverStuckTrade('watchdog-offline');
+            }
+        }, timeoutMs);
+    }
+
+    _clearWatchdogTimers() {
+        if (this.tradeWatchdogTimer) {
+            clearTimeout(this.tradeWatchdogTimer);
+            this.tradeWatchdogTimer = null;
+        }
+        if (this.tradeWatchdogPollTimer) {
+            clearTimeout(this.tradeWatchdogPollTimer);
+            this.tradeWatchdogPollTimer = null;
+        }
+    }
+
+    /**
+     * Recover from a stuck trade — release the lock so the bot can trade again.
+     * For Accumulator contracts, this handles scenarios where:
+     *  - Contract never settles after barrier breach
+     *  - Sell order never executes
+     *  - proposal_open_contract stream stops responding
+     */
+    _recoverStuckTrade(reason) {
+        this._clearWatchdogTimers();
+
+        // Find the stuck trade
+        const stuckAsset = Object.keys(this.activeTrades).find(
+            asset => this.activeTrades[asset]?.contractId
+        );
+        if (!stuckAsset) {
+            console.warn('⚠️  No active trade found for stuck trade recovery');
+            this.tradeInProgress = false;
+            this.ticksHeld = 0;
+            return;
+        }
+
+        const trade = this.activeTrades[stuckAsset];
+        const contractId = trade.contractId || 'unknown';
+        const stake = trade.stake || 0;
+        const entryTime = this.tradeStartTime || Date.now();
+        const openSeconds = Math.round((Date.now() - entryTime) / 1000);
+
+        console.error(
+            `\n🚨 STUCK TRADE RECOVERY [${reason}]` +
+            `\n   Contract: ${contractId}` +
+            `\n   Asset: ${stuckAsset}` +
+            `\n   Stake: $${stake.toFixed(2)}` +
+            `\n   Open for: ${openSeconds}s`
+        );
+
+        // Attempt to sell the contract if it's still valid (last-resort salvage)
+        if (contractId && contractId !== 'unknown' && this.connected && this.wsReady) {
+            console.log(`🔄 Attempting emergency sell of contract ${contractId}…`);
+            this.sendRequest({
+                sell: contractId,
+                price: '0', // Sell at any available price
+            });
+        }
+
+        // Forget contract subscription if it exists
+        if (this.contractSubscriptions[stuckAsset]) {
+            this.sendRequest({ forget: this.contractSubscriptions[stuckAsset] });
+            delete this.contractSubscriptions[stuckAsset];
+        }
+
+        // Clear trade state so bot is not stuck
+        this.tradeInProgress = false;
+        this.ticksHeld = 0;
+        this.tradeStartTime = null;
+        delete this.activeTrades[stuckAsset];
+
+        // Record as a loss (conservative — stake is likely lost)
+        // this.totalLosses++;
+        // this.consecutiveLosses++;
+        // this.consecutiveLosses2++;
+        // this.losttrades++;
+
+        if (this.assetMetrics[stuckAsset]) {
+            this.assetMetrics[stuckAsset].losses++;
+            this.assetMetrics[stuckAsset].profitLoss -= stake;
+        }
+
+        this.totalProfitLoss -= stake;
+        this.dailyProfitLoss -= stake;
+        // this.hourlyStats.losses++;
+        this.hourlyStats.pnl -= stake;
+        this.accountBalance -= stake;
+
+        this.consecutiveLosses = 0;
+
+        // Focus on the loss asset
+        // this.suspendOtherAssets(stuckAsset);
+
+        console.log(
+            `\n   Trade lock released — bot can now trade again` +
+            `\n   Stake $${stake.toFixed(2)} recorded as loss`
+        );
+
+        this._sendTelegram(
+            `🚨 <b>STUCK TRADE RECOVERED [${reason}]</b>\n\n` +
+            `Contract: ${contractId}\n` +
+            `Asset: ${stuckAsset}\n` +
+            `Stake: $${stake.toFixed(2)}\n` +
+            `Open for: ${openSeconds}s\n` +
+            `Action: Emergency sell attempted, trade lock released`
+        );
+
+        StatePersistence.saveState(this);
+    }
+
     // ========================================================================
     // TRADE RESULT HANDLING
     // ========================================================================
     handleTradeResult(asset, contract) {
         const trade = this.activeTrades[asset];
-        if (!trade) return;
+        if (!trade) {
+            this._clearWatchdogTimers();
+            return;
+        }
+
+        // Clear watchdog — trade is settling normally
+        this._clearWatchdogTimers();
 
         const won = contract.status === 'won';
         const profit = parseFloat(contract.profit);
@@ -1351,6 +1566,7 @@ class AccumulatorBotV4 {
 
         this.tradeInProgress = false;
         this.ticksHeld = 0;
+        this.currentTick = null;
 
         // Record for learning
         this.analyzer.recordTradeResult(asset, {
@@ -1517,6 +1733,7 @@ class AccumulatorBotV4 {
         this.consecutiveLosses = 0;
         this.reconnectAttempts = 0;
         this.riskManager = new RiskManager(this.config);
+        this._clearWatchdogTimers();
         // Clear asset suspension
         this.suspendedAssets.clear();
         this.focusAsset = null;
@@ -1623,6 +1840,8 @@ const bot = new AccumulatorBotV4(token, {
     maxDailyLoss: 100,
     dailyTakeProfit: 500000,
     tradeSystem: 2,
+    minEntryTick: 0,
+    maxEntryTick: 15,
 
     // Accumulator strategy
     defaultGrowthRate: 0.02,   // 1% — widest barrier, highest survival
