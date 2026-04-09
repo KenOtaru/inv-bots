@@ -45,7 +45,7 @@ const CONFIG = {
 
     // Entry window (ENFORCED): only enter when active accumulator is this young
     minEntryTick: 0,
-    maxEntryTick: 20,
+    maxEntryTick: 10,
 
     // Take-profit (contract level): sell when profit ≥ X% of stake
     takeProfitPct: 0.20,   // 40% of stake
@@ -85,7 +85,7 @@ const CONFIG = {
     telegramChatId: '752497117', //process.env.TELEGRAM_CHAT_ID || 
 
     // State persistence
-    stateFile: path.join(__dirname, 'accumulator_botB02_state.json'),
+    stateFile: path.join(__dirname, 'accumulator_botB05_state.json'),
     stateSaveMs: 5000,
 };
 
