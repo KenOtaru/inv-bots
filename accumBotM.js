@@ -301,18 +301,6 @@ class EnhancedDerivTradingBot {
             console.log(`Waiting ${Math.round(this.waitTime / 1000)} seconds before next trade...`);
 
             setTimeout(() => {
-                // if(this.filterNum === 11) {
-                //     this.filterNum = 10
-                // } 
-                // else if (this.filterNum === 10) {
-                //     this.filterNum = 9
-                // }
-                // else if (this.filterNum === 9) {
-                //     this.filterNum = 8
-                // }
-                // else if (this.filterNum === 8) {
-                //     this.filterNum = 7
-                // }
 
                 this.usedAssets = new Set();
 
