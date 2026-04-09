@@ -314,16 +314,16 @@ class VolatilityAnalyzer {
         }
 
         // ── Growth rate selection ─────────────────────────────────────────────
-        const strongSqueeze = bbWidthPctile < 20;
-        const rsiCentred = rsi >= 44 && rsi <= 56;
+        const strongSqueeze = bbWidthPctile < CONFIG.bbSqueezePctile;
+        const rsiCentred = rsi >= CONFIG.rsiLow && rsi <= CONFIG.rsiHigh;
         const growthRate = (strongSqueeze && rsiCentred && shouldEnter)
             ? CONFIG.growthRateBoost
             : CONFIG.growthRateDefault;
 
         // ── Regime label ─────────────────────────────────────────────────────
         let regime = 'neutral';
-        if (bbWidthPctile < 20 && rsi >= 44 && rsi <= 56) regime = 'ideal_squeeze';
-        else if (bbWidthPctile < 40) regime = 'squeeze';
+        if (bbWidthPctile < CONFIG.bbSqueezePctile && rsi >= CONFIG.rsiLow && rsi <= CONFIG.rsiHigh) regime = 'ideal_squeeze';
+        else if (bbWidthPctile < CONFIG.bbSqueezePctile) regime = 'squeeze';
         else if (bbWidthPctile >= 70) regime = 'expanding';
         else if (rsi < CONFIG.rsiLow) regime = 'oversold';
         else if (rsi > CONFIG.rsiHigh) regime = 'overbought';
