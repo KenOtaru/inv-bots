@@ -1097,7 +1097,7 @@ class AccumulatorBotV4 {
             return;
         }
 
-        if (currentTick > this.config.maxEntryTick) {
+        if (currentTick > this.config.maxEntryTick && this.consecutiveLosses < 1) {
             console.log(`❌ Proposal rejected for ${asset}: Too late (tick ${currentTick} > ${this.config.maxEntryTick})`);
             if (proposal.id) {
                 this.sendRequest({ forget: proposal.id });
