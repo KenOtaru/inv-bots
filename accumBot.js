@@ -24,6 +24,7 @@ class EnhancedDerivTradingBot {
             // Accumulator specific settings
             growthRate: 0.05, // 1%, 2%, 3%, 4% or 5% growth rate
             accuTakeProfit: 0.01, // Take profit amount
+            takeProfitMultiplier: 0.20, // 20% of stake as TP (limit order backup) 
             minTradeDelay: 120000,
             maxTradeDelay: 880000,
         };
@@ -212,6 +213,8 @@ class EnhancedDerivTradingBot {
     requestProposal() {
         if (this.tradeInProgress) return;
 
+        const takeProfitAmount = this.currentStake * this.config.takeProfitMultiplier;
+
         const proposal = {
             proposal: 1,
             amount: this.currentStake.toFixed(2),
@@ -221,7 +224,7 @@ class EnhancedDerivTradingBot {
             symbol: this.currentAsset,
             growth_rate: this.config.growthRate,
             limit_order: {
-                take_profit: this.kLoss
+                take_profit: takeProfitAmount.toFixed(2)
             }
 
         };
@@ -936,12 +939,13 @@ class EnhancedDerivTradingBot {
 const bot = new EnhancedDerivTradingBot('DMylfkyce6VyZt7', {
     // 'DMylfkyce6VyZt7', '0P94g4WdSrSrzir'
     initialStake: 1,
-    multiplier: 21,
+    multiplier: 6,
     maxConsecutiveLosses: 3,
     stopLoss: 105,
     takeProfit: 5000,
-    growthRate: 0.05, // 5% growth rate
+    growthRate: 0.02, // 5% growth rate
     accuTakeProfit: 0.5, // Take profit amount 
+    takeProfitMultiplier: 0.20, // 20% of stake as TP (limit order backup) 
     minWaitTime: 300000, //5 Minutes
     maxWaitTime: 2600000, //1 Hour      
 });
