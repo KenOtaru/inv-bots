@@ -1104,6 +1104,7 @@ class AccumulatorBotV4 {
                 this.sendRequest({ forget: proposal.id });
             }
             // delete this.activeTrades[asset];
+            this.tradeInProgress = false;
             return;
         }
 
