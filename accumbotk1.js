@@ -78,7 +78,7 @@ class EnhancedDerivTradingBot {
         this.tradedDigitArray2 = [];
         this.filteredArray = [];
         this.tradeNum = Math.floor(Math.random() * (40 - 21 + 1)) + 21;
-        this.filterNum = 11
+        this.filterNum = 6
 
 
 
@@ -848,7 +848,7 @@ const bot = new EnhancedDerivTradingBot('0P94g4WdSrSrzir', {
     multiplier: 6,
     maxConsecutiveLosses: 3,
     stopLoss: 100,
-    takeProfit: 0.1,
+    takeProfit: 100,
     growthRate: 0.02, // 5% growth rate
     accuTakeProfit: 0.01, // Take profit amount 
     takeProfitMultiplier: 0.20, // 20% of stake as TP (limit order backup)      
