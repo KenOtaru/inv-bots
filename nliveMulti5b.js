@@ -1084,7 +1084,6 @@ class AccumulatorBotV4 {
         if (!proposal.contract_details || !proposal.contract_details.ticks_stayed_in) return;
 
         const stayedIn = proposal.contract_details.ticks_stayed_in;
-        // this.assetStates[asset].proposalId = proposal.id;
 
         // Current tick count of the running accumulator
         const currentTick = (stayedIn[stayedIn.length - 1] || 0) + 1;
@@ -1104,7 +1103,7 @@ class AccumulatorBotV4 {
             if (proposal.id) {
                 this.sendRequest({ forget: proposal.id });
             }
-            delete this.activeTrades[asset];
+            // delete this.activeTrades[asset];
             return;
         }
 

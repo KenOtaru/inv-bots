@@ -29,7 +29,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'accumulator_bot5_01-v4-state.json');
+const STATE_FILE = path.join(__dirname, 'accumulator_bot5_001-v4-state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -542,6 +542,9 @@ class AccumulatorBotV4 {
             maxDailyLoss: config.maxDailyLoss || 100,
             dailyTakeProfit: config.dailyTakeProfit || 200,
             tradeSystem: config.tradeSystem || 1,
+            // Entry window (ENFORCED): only enter when active accumulator is this young
+            minEntryTick: config.minEntryTick || 0,
+            maxEntryTick: config.maxEntryTick || 20,
 
             // Accumulator settings
             defaultGrowthRate: config.defaultGrowthRate || 0.01,  // 1% — safest, widest range
@@ -595,6 +598,8 @@ class AccumulatorBotV4 {
 
         // Asset metrics
         this.assetMetrics = {};
+
+        this.currentTick = null;
 
         // Components
         this.analyzer = new AccumulatorAnalyzer();
@@ -968,31 +973,36 @@ class AccumulatorBotV4 {
         }
 
         // 4. Decision
+        // 4. Decision
         if (this.Sys === 1) {
-            if (!analysis.shouldTrade) return;
+            if (this.consecutiveLosses < 1) {
+                if (!analysis.shouldTrade) return;
 
-            if (analysis.maxTickMove > 0.001) return;
+                if (analysis.maxTickMove > 0.001) return;
 
-            if (analysis.tickStability < 0.3) return;
+                if (analysis.tickStability < 0.3) return;
 
-            if (analysis.bb.percentB < 0.3 || analysis.bb.percentB > 0.7) return;
+                if (analysis.bb.percentB < 0.3 || analysis.bb.percentB > 0.7) return;
 
-            if (analysis.macd.histogram > 0) return;
+                if (analysis.macd.histogram > 0) return;
 
-            if (analysis.macd.isConverging) return;
+                if (analysis.macd.isConverging) return;
 
-            if (analysis.overallScore < 0.85) return;
+                if (analysis.overallScore < 0.85) return;
+            }
+        } else {
+            if (this.consecutiveLosses < 1) {
+                const shouldTrade =
+                    analysis.overallScore < 0.46 &&
+                    analysis.scores.bandWidth < 1 &&
+                    analysis.scores.macdFlat < 1 &&
+                    analysis.scores.pricePosition < 1 &&
+                    analysis.scores.tickStability >= 1
+
+
+                if (this.Sys === 2 && !shouldTrade) return;
+            }
         }
-
-        const shouldTrade =
-            analysis.overallScore < 0.46 &&
-            analysis.scores.bandWidth < 1 &&
-            analysis.scores.macdFlat < 1 &&
-            analysis.scores.pricePosition < 1 &&
-            analysis.scores.tickStability >= 1
-
-
-        if (this.Sys === 2 && !shouldTrade) return;
 
         if (this.tradeInProgress) return;
 
@@ -1064,12 +1074,30 @@ class AccumulatorBotV4 {
         const asset = message.echo_req.symbol;
         const proposal = message.proposal;
 
+        if (!proposal.contract_details || !proposal.contract_details.ticks_stayed_in) return;
+
+        const stayedIn = proposal.contract_details.ticks_stayed_in;
+
+        // Current tick count of the running accumulator
+        const currentTick = (stayedIn[stayedIn.length - 1] || 0) + 1;
+        this.currentTick = currentTick;
+
         // Only buy if we initiated this proposal
         if (!this.activeTrades[asset] || this.activeTrades[asset].status !== 'requesting_proposal') {
             // Stale proposal — ignore or forget
             if (proposal.id) {
                 this.sendRequest({ forget: proposal.id });
             }
+            return;
+        }
+
+        //Reject Trade if tick is too Late
+        if (currentTick > this.config.maxEntryTick) {
+            console.log(`❌ Proposal rejected for ${asset}: Too late (tick ${currentTick} > ${this.config.maxEntryTick})`);
+            if (proposal.id) {
+                this.sendRequest({ forget: proposal.id });
+            }
+            // delete this.activeTrades[asset];
             return;
         }
 
@@ -1126,6 +1154,7 @@ class AccumulatorBotV4 {
         this.sendTelegramMessage(
             `🚀 <b>TRADE OPENED 5</b>\n\n` +
             `Asset: ${asset}\n` +
+            `Entry tick: ${this.currentTick}\n` +
             `Stake: $${trade.stake.toFixed(2)}\n` +
             `Growth Rate: ${(trade.growthRate * 100).toFixed(0)}%\n` +
             `Score: ${(trade.analysis.overallScore * 100).toFixed(1)}%\n` +
@@ -1351,6 +1380,7 @@ class AccumulatorBotV4 {
 
         this.tradeInProgress = false;
         this.ticksHeld = 0;
+        this.currentTick = null;
 
         // Record for learning
         this.analyzer.recordTradeResult(asset, {
@@ -1623,6 +1653,8 @@ const bot = new AccumulatorBotV4(token, {
     maxDailyLoss: 100,
     dailyTakeProfit: 500000,
     tradeSystem: 2,
+    minEntryTick: 0,
+    maxEntryTick: 15,
 
     // Accumulator strategy
     defaultGrowthRate: 0.02,   // 1% — widest barrier, highest survival
