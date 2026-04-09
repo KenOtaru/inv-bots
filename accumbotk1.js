@@ -21,7 +21,8 @@ class EnhancedDerivTradingBot {
             takeProfit: config.takeProfit,
             // Accumulator specific settings
             growthRate: config.growthRate, // 1%, 2%, 3%, 4% or 5% growth rate
-            accuTakeProfit: config.accuTakeProfit // Take profit amount
+            accuTakeProfit: config.accuTakeProfit, // Take profit amount
+            takeProfitMultiplier: config.takeProfitMultiplier || 0.20, // 20% of stake as TP (limit order backup)      
         };
 
         this.currentProposalId = null;
@@ -453,9 +454,11 @@ class EnhancedDerivTradingBot {
             return;
         }
 
+        const takeProfitAmount = this.currentStake * this.config.takeProfitMultiplier;
+
         const request = {
             buy: this.currentProposalId,
-            price: this.currentStake.toFixed(2)
+            price: takeProfitAmount.toFixed(2)
         };
 
         console.log('Placing trade:', JSON.stringify(request, null, 2));
@@ -839,14 +842,15 @@ class EnhancedDerivTradingBot {
 }
 
 // Updated configuration
-const bot = new EnhancedDerivTradingBot('8NFMt6LKFTfTCPE', {
+const bot = new EnhancedDerivTradingBot('0P94g4WdSrSrzir', {
     // 'DMylfkyce6VyZt7', '0P94g4WdSrSrzir', '8NFMt6LKFTfTCPE'
-    initialStake: 5,
-    multiplier: 4,
-    maxConsecutiveLosses: 1,
-    stopLoss: 10000,
+    initialStake: 1,
+    multiplier: 6,
+    maxConsecutiveLosses: 3,
+    stopLoss: 100,
     takeProfit: 0.1,
-    growthRate: 0.05, // 5% growth rate
-    accuTakeProfit: 0.01 // Take profit amount       
+    growthRate: 0.02, // 5% growth rate
+    accuTakeProfit: 0.01, // Take profit amount 
+    takeProfitMultiplier: 0.20, // 20% of stake as TP (limit order backup)      
 });
 bot.start();
