@@ -997,7 +997,7 @@ class AccumulatorBotV4 {
                     analysis.scores.bandWidth < 1 &&
                     analysis.scores.macdFlat < 1 &&
                     analysis.scores.pricePosition < 1 &&
-                    analysis.scores.tickStability >= 1
+                    analysis.scores.tickStability < 1
 
 
                 if (this.Sys === 2 && !shouldTrade) return;
@@ -1097,7 +1097,8 @@ class AccumulatorBotV4 {
             if (proposal.id) {
                 this.sendRequest({ forget: proposal.id });
             }
-            // delete this.activeTrades[asset];
+            delete this.activeTrades[asset];
+            this.tradeInProgress = false;
             return;
         }
 
