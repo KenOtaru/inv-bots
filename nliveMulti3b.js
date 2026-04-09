@@ -40,7 +40,7 @@ const CONFIG = {
     multiplier2: 8.00,   // never exceed this
 
     //Trade System
-    tradeSystem: 1, // 1 = Very High Overall Score, 2 = Very Low Overall Score
+    tradeSystem: 2, // 1 = Very High Overall Score, 2 = Very Low Overall Score
 
     // Growth rates
     growthRateDefault: 0.01,   // 1% — widest barriers, safest
