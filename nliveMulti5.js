@@ -1668,27 +1668,12 @@ class AccumulatorBotV4 {
                 if (this.consecutiveLosses >= 1) {
                     shouldProceed = analysis.shouldTrade;
                 } else {
-                    if (!analysis.shouldTrade) continue;
-                    if (analysis.maxTickMove > 0.001) continue;
-                    if (analysis.tickStability < 0.3) continue;
-                    if (analysis.bb.percentB < 0.3 || analysis.bb.percentB > 0.7) continue;
-                    if (analysis.macd.histogram > 0) continue;
-                    if (analysis.macd.isConverging) continue;
-                    if (analysis.overallScore < 0.85) continue;
                     shouldProceed = true;
                 }
             } else if (this.Sys === 2) {
                 if (this.consecutiveLosses >= 1) {
                     shouldProceed = analysis.shouldTrade;
                 } else {
-                    const shouldTrade =
-                        analysis.overallScore < 0.46
-                        &&
-                        analysis.scores.bandWidth > 0
-                    // analysis.scores.macdFlat < 1 &&
-                    // analysis.scores.pricePosition < 1 &&
-                    // analysis.scores.tickStability < 1;
-                    if (!shouldTrade) continue;
                     shouldProceed = true;
                 }
             }
