@@ -1103,7 +1103,7 @@ class EnhancedDerivTradingBot {
 
         // Send Trade result notification
         this.sendTelegramMessage(
-            `${won ? '✅' : '❌'}  — accumBotM</b>\n\n` +
+            `${won ? '✅' : '❌'} <b>accumBotM</b>\n\n` +
             `Asset: <b>${asset}</b>\n` +
             `P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(3)}\n` +
             `Consecutive Losses: ${this.consecutiveLosses}\n` +
