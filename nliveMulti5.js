@@ -543,6 +543,10 @@ class AccumulatorBotV4 {
             dailyTakeProfit: config.dailyTakeProfit || 200,
             tradeSystem: config.tradeSystem || 1,
 
+            // Entry window (ENFORCED): only enter when active accumulator is this young
+            minEntryTick: config.minEntryTick || 0,
+            maxEntryTick: config.maxEntryTick || 20,
+
             // Accumulator settings
             defaultGrowthRate: config.defaultGrowthRate || 0.01,  // 1% — safest, widest range
 
@@ -991,7 +995,6 @@ class AccumulatorBotV4 {
                 if (analysis.macd.isConverging) return;
 
                 if (analysis.overallScore < 0.85) return;
-                if (this.assetStates[asset].lastTicks > 15) return;
             }
         } else {
             if (this.consecutiveLosses < 1) {
@@ -1003,7 +1006,7 @@ class AccumulatorBotV4 {
                     analysis.scores.tickStability >= 1
 
 
-                if (this.Sys === 2 && !shouldTrade && this.assetStates[asset].lastTicks < 15) return;
+                if (this.Sys === 2 && !shouldTrade) return;
             }
         }
 
@@ -1021,7 +1024,6 @@ class AccumulatorBotV4 {
         const takeProfitAmount = this.currentStake * this.config.takeProfitMultiplier;
 
         console.log(`\n🎯 ENTRY SIGNAL: ${asset}`);
-        console.log(`   Entry Tick: ${this.assetStates[asset].lastTicks}`);
         console.log(`   Score: ${(analysis.overallScore * 100).toFixed(1)}%`);
         console.log(`   BB Width: ${analysis.bb.width.toFixed(6)} | %B: ${(analysis.bb.percentB * 100).toFixed(1)}%`);
         console.log(`   MACD Hist: ${analysis.macd.histogram.toFixed(6)} | Converging: ${analysis.macd.isConverging}`);
@@ -1093,6 +1095,15 @@ class AccumulatorBotV4 {
             if (proposal.id) {
                 this.sendRequest({ forget: proposal.id });
             }
+            return;
+        }
+
+        if (currentTick > this.config.maxEntryTick) {
+            console.log(`❌ Proposal rejected for ${asset}: Too late (tick ${currentTick} > ${this.config.maxEntryTick})`);
+            if (proposal.id) {
+                this.sendRequest({ forget: proposal.id });
+            }
+            delete this.activeTrades[asset];
             return;
         }
 
@@ -1829,6 +1840,8 @@ const bot = new AccumulatorBotV4(token, {
     maxDailyLoss: 100,
     dailyTakeProfit: 500000,
     tradeSystem: 2,
+    minEntryTick: 0,
+    maxEntryTick: 15,
 
     // Accumulator strategy
     defaultGrowthRate: 0.02,   // 1% — widest barrier, highest survival
