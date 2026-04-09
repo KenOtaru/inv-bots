@@ -29,7 +29,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'accumulator_bot5b_02-v4-state.json');
+const STATE_FILE = path.join(__dirname, 'accumulator_bot5b_05-v4-state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -1178,7 +1178,7 @@ class AccumulatorBotV4 {
 
         // Telegram notification
         this.sendTelegramMessage(
-            `🚀 <b>TRADE OPENED 5</b>\n\n` +
+            `🚀 <b>TRADE OPENED 5b</b>\n\n` +
             `Asset: ${asset}\n` +
             `Entry tick: ${this.currentTick}\n` +
             `Stake: $${trade.stake.toFixed(2)}\n` +
