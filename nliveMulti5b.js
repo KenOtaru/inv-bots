@@ -988,13 +988,13 @@ class AccumulatorBotV4 {
 
                 if (analysis.scores.macdFlat < 1) return;
 
-                if (analysis.scores.pricePosition < 1) return;
-
                 if (analysis.scores.macdConverging < 1) return;
 
-                if (analysis.scores.tickStability < 1) return;
+                if (analysis.scores.pricePosition < 0.8) return;
 
-                if (analysis.scores.volTrend < 1) return;
+                if (analysis.scores.tickStability < 0.8) return;
+
+                if (analysis.scores.volTrend < 0.06) return;
 
             }
         } else {
