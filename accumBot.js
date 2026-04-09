@@ -723,8 +723,8 @@ class EnhancedDerivTradingBot {
             const currentMinutes = now.getMinutes();
 
             // Check for afternoon resume condition (7:00 AM)
-            if (this.endOfDay && currentHours === 7 && currentMinutes >= 0) {
-                console.log("It's 7:00 AM, reconnecting the bot.");
+            if (this.endOfDay && currentHours === 2 && currentMinutes >= 0) {
+                console.log("It's 2:00 AM, reconnecting the bot.");
                 this.LossDigitsList = [];
                 this.tradeInProgress = false;
                 this.usedAssets = new Set();
@@ -739,7 +739,7 @@ class EnhancedDerivTradingBot {
 
             // Check for evening stop condition (after 5:00 PM)
             if (this.isWinTrade && !this.endOfDay) {
-                if (currentHours >= 16 && currentMinutes >= 0) {
+                if (currentHours >= 23 && currentMinutes >= 0) {
                     console.log("It's past 5:00 PM after a win trade, disconnecting the bot.");
                     this.sendDisconnectResumptionEmailSummary();
                     this.Pause = true;
