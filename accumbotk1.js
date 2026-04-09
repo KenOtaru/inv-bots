@@ -8,11 +8,9 @@ class EnhancedDerivTradingBot {
         this.token = token;
         this.ws = null;
         this.connected = false;
-        this.assets = [
-            // '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V', // 1 Tick per second
-            'R_10', 'R_25', 'R_50', 'R_75', 'R_100',// 1 Tick every 2 seconds
-            // 'R_75'
-        ];
+        // this.assets = ['1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V',]
+        // this.assets = ['1HZ75V',]
+        this.assets = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'];  // Available assets
 
 
         this.config = {
@@ -22,10 +20,8 @@ class EnhancedDerivTradingBot {
             maxConsecutiveLosses: config.maxConsecutiveLosses,
             takeProfit: config.takeProfit,
             // Accumulator specific settings
-            growthRate: 0.05, // 1%, 2%, 3%, 4% or 5% growth rate
-            accuTakeProfit: 0.01, // Take profit amount
-            minTradeDelay: 120000,
-            maxTradeDelay: 880000,
+            growthRate: config.growthRate, // 1%, 2%, 3%, 4% or 5% growth rate
+            accuTakeProfit: config.accuTakeProfit // Take profit amount
         };
 
         this.currentProposalId = null;
@@ -79,10 +75,9 @@ class EnhancedDerivTradingBot {
         this.Sys1 = 0;
         this.tradedDigitArray = [];
         this.tradedDigitArray2 = [];
-        this.totalArray = [];
         this.filteredArray = [];
         this.tradeNum = Math.floor(Math.random() * (40 - 21 + 1)) + 21;
-        this.filterNum = 2;
+        this.filterNum = 11
 
 
 
@@ -294,24 +289,61 @@ class EnhancedDerivTradingBot {
     }
 
     tradeNextAsset() {
-        if (this.usedAssets.size > 5) {
-            this.usedAssets = new Set();
+
+        if (this.usedAssets.size === this.assets.length) {
+            console.log('All assets have been traded. Disconnecting and waiting...');
+
+            this.waitTime = Math.floor(Math.random() * (31000 - 20000 + 1)) + 60000;
+
+            console.log(`Waiting ${Math.round(this.waitTime / 1000)} seconds before next trade...`);
+
+            setTimeout(() => {
+                // if(this.filterNum === 11) {
+                //     this.filterNum = 10
+                // } 
+                // else if (this.filterNum === 10) {
+                //     this.filterNum = 9
+                // }
+                // else if (this.filterNum === 9) {
+                //     this.filterNum = 8
+                // }
+                // else if (this.filterNum === 8) {
+                //     this.filterNum = 7
+                // }
+
+                this.usedAssets = new Set();
+
+                if (this.RestartTrading) {
+                    let availableAssets = this.assets.filter(asset => !this.usedAssets.has(asset));
+                    this.currentAsset = availableAssets[Math.floor(Math.random() * availableAssets.length)];
+                    this.usedAssets.add(this.currentAsset);
+                }
+                console.log(`Selected asset: ${this.currentAsset}`);
+
+                this.unsubscribeFromTicks(() => {
+                    this.subscribeToTickHistory(this.currentAsset);
+                    this.subscribeToTicks(this.currentAsset);
+                });
+
+                this.RestartTrading = false;
+            }, this.waitTime);
+
+        } else {
+
+            if (this.RestartTrading) {
+                let availableAssets = this.assets.filter(asset => !this.usedAssets.has(asset));
+                this.currentAsset = availableAssets[Math.floor(Math.random() * availableAssets.length)];
+                this.usedAssets.add(this.currentAsset);
+            }
+            console.log(`Selected asset: ${this.currentAsset}`);
+
+            this.unsubscribeFromTicks(() => {
+                this.subscribeToTickHistory(this.currentAsset);
+                this.subscribeToTicks(this.currentAsset);
+            });
+
+            this.RestartTrading = false;
         }
-
-        if (this.RestartTrading) {
-            let availableAssets = this.assets.filter(asset => !this.usedAssets.has(asset));
-            this.currentAsset = availableAssets[Math.floor(Math.random() * availableAssets.length)];
-            this.usedAssets.add(this.currentAsset);
-        }
-        console.log(`Selected asset: ${this.currentAsset}`);
-
-        this.unsubscribeFromTicks(() => {
-            this.subscribeToTickHistory(this.currentAsset);
-            this.subscribeToTicks(this.currentAsset);
-        });
-
-        this.RestartTrading = false;
-
     }
 
     handleTickHistory(history) {
@@ -352,165 +384,50 @@ class EnhancedDerivTradingBot {
 
         if (response.proposal) {
             const stayedInArray = response.proposal.contract_details.ticks_stayed_in;
-            this.stayedInArray25 = stayedInArray.slice(-16);
-
             // console.log('Received proposal:', stayedInArray);
-            console.log('16 proposal:', this.stayedInArray25);
-
             const currentDigitCount = stayedInArray[99] + 1;
-            const currentDigitCount2 = this.stayedInArray25[15] + 1;
-
-            // console.log(`Current StayedIn Digit Count: ${stayedInArray[99]} (${currentDigitCount})`);
-            console.log(`16 Current StayedIn Digit Count: ${this.stayedInArray25[15]} (${currentDigitCount2})`);
+            console.log(`filter Number: ${this.filterNum}`);
+            console.log(`Current StayedIn Digit Count: ${stayedInArray[99]} (${currentDigitCount})`);
             this.currentProposalId = response.proposal.id;
-
-            this.totalArray = stayedInArray;
 
 
             // Create frequency map of digits
             const digitFrequency = {};
-            this.stayedInArray25.forEach(digit => {
+            stayedInArray.forEach(digit => {
                 digitFrequency[digit] = (digitFrequency[digit] || 0) + 1;
             });
 
-
-            // 10, Decrease for more Less conservative Entry, don't go lower than 7 (Setup for the number of times Market Restarted for a new StayIN sequence)
-
-            // Create array 1
+            // Create array 1: digits that have appeared just once
             const appearedOnceArray = Object.keys(digitFrequency)
-                .filter(digit => digitFrequency[digit] === this.filterNum)
-                .map(Number);
-
-            // Create array 2
-            const appearedOnceArray1 = Object.keys(digitFrequency)
-                .filter(digit => digitFrequency[digit] === 3)
-                .map(Number);
-
-            // Create array 3
-            const appearedOnceArray2 = Object.keys(digitFrequency)
-                .filter(digit => digitFrequency[digit] === 4)
-                .map(Number);
-
-            // Create array 4
-            const appearedOnceArray3 = Object.keys(digitFrequency)
-                .filter(digit => digitFrequency[digit] === 5)
-                .map(Number);
-
-            // Create array 5
-            const appearedOnceArray4 = Object.keys(digitFrequency)
-                .filter(digit => digitFrequency[digit] === 6)
-                .map(Number);
-
-            // Create array 6
-            const appearedOnceArray5 = Object.keys(digitFrequency)
-                .filter(digit => digitFrequency[digit] === 7)
-                .map(Number);
-
-            // Create array 7
-            const appearedOnceArray6 = Object.keys(digitFrequency)
-                .filter(digit => digitFrequency[digit] === 8)
-                .map(Number);
-
-            // Create array 8
-            const appearedOnceArray7 = Object.keys(digitFrequency)
-                .filter(digit => digitFrequency[digit] === 9)
-                .map(Number);
-
-            // Create array 9
-            const appearedOnceArray8 = Object.keys(digitFrequency)
-                .filter(digit => digitFrequency[digit] === 10)
-                .map(Number);
-
-            // Create array 10
-            const appearedOnceArray9 = Object.keys(digitFrequency)
-                .filter(digit => digitFrequency[digit] === 11)
-                .map(Number);
-
-            // Create array 11
-            const appearedOnceArray10 = Object.keys(digitFrequency)
-                .filter(digit => digitFrequency[digit] === 12)
+                .filter(digit => digitFrequency[digit] === this.filterNum) // 10, Decrease for more Less conservative Entry, don't go lower than 7 (Setup for the number of times Market Restarted for a new StayIN sequence)
                 .map(Number);
 
 
-            // console.log(`
-            //     StayedIn Analysis: 
-            //     2 Array: ${appearedOnceArray} (${appearedOnceArray.length})
-            //     3 Array: ${appearedOnceArray1} (${appearedOnceArray1.length})
-            //     4 Array: ${appearedOnceArray2} (${appearedOnceArray2.length})
-            //     5 Array: ${appearedOnceArray3} (${appearedOnceArray3.length})
-            //     6 Array: ${appearedOnceArray4} (${appearedOnceArray4.length})
-            //     7 Array: ${appearedOnceArray5} (${appearedOnceArray5.length})
-            //     8 Array: ${appearedOnceArray6} (${appearedOnceArray6.length})
-            //     9 Array: ${appearedOnceArray7} (${appearedOnceArray7.length})
-            //     10 Array: ${appearedOnceArray8} (${appearedOnceArray8.length})
-            //     11 Array: ${appearedOnceArray9} (${appearedOnceArray9.length})
-            //     12 Array: ${appearedOnceArray10} (${appearedOnceArray10.length})
-            // `); 
+            console.log('Digits that appeared once:', appearedOnceArray);
 
-            console.log(`filter Number: ${this.filterNum}`);
+            // Condition 1: Current digit count is in appearedOnceArray
+            const condition1 = appearedOnceArray.includes(currentDigitCount) && !this.tradedDigitArray.includes(stayedInArray[99]) && stayedInArray[99] > 15;
 
-            console.log(`
-                StayedIn Analysis: 
-                2 Array: ${appearedOnceArray} (${appearedOnceArray.length})
-                3 Array: ${appearedOnceArray1} (${appearedOnceArray1.length})
-                4 Array: ${appearedOnceArray2} (${appearedOnceArray2.length})
-                5 Array: ${appearedOnceArray3} (${appearedOnceArray3.length})
-                6 Array: ${appearedOnceArray4} (${appearedOnceArray4.length})
-                `)
+            console.log('Condition 1 (matched with appeared once):', condition1);
 
 
             if (!this.tradeInProgress) {
 
-                // if(appearedOnceArray.length < 1 || appearedOnceArray1.length > 0 || appearedOnceArray2.length > 0 || appearedOnceArray3.length > 0 || appearedOnceArray4.length > 0 || appearedOnceArray5.length > 0) {
+                if (appearedOnceArray.includes(currentDigitCount)
+                    // && !this.tradedDigitArray.includes(currentDigitCount) 
+                    && stayedInArray[99] >= 0
+                ) {
+                    this.tradedDigitArray.push(currentDigitCount)
+                    this.filteredArray = appearedOnceArray;
+                    console.log('Traded Digit Array:', this.tradedDigitArray);
+                    this.placeTrade();
+                }
+
+                // if(appearedOnceArray.length < 1) {
                 //     this.RestartTrading = true;
                 //     this.disconnect();
                 // }
 
-                // if (appearedOnceArray.includes(currentDigitCount) 
-                //     && !this.tradedDigitArray.includes(currentDigitCount) 
-                //     && this.stayedInArray25[99] >= 0
-                //     ) 
-                //     {
-                //    this.tradedDigitArray.push(currentDigitCount)
-                //    this.filteredArray = appearedOnceArray;
-                //    console.log('Traded Digit Array:', this.tradedDigitArray);
-                //    this.placeTrade();
-                // }
-                console.log('kTraded Digit Array:', this.tradedDigitArray[this.tradedDigitArray.length - 1])
-
-                // if (this.consecutiveLosses < 1) {
-                // if (
-                // (appearedOnceArray1.includes(currentDigitCount) || appearedOnceArray2.includes(currentDigitCount) || appearedOnceArray3.includes(currentDigitCount))
-                // (appearedOnceArray.includes(currentDigitCount2))
-                // && this.stayedInArray25[0] !== currentDigitCount2
-                // && this.stayedInArray25[1] !== currentDigitCount2
-                // && 
-                // this.stayedInArray25[15] >= 0
-                // ) 
-                // {
-                this.tradedDigitArray.push(currentDigitCount2)
-                this.filteredArray = appearedOnceArray;
-                console.log('Traded Digit Array:', this.tradedDigitArray);
-                console.log('kTraded Digit Array:', this.tradedDigitArray[this.tradedDigitArray.length - 1])
-                this.placeTrade();
-                // }
-                // }
-                // else{
-                //     if (
-                //         // (appearedOnceArray1.includes(currentDigitCount) || appearedOnceArray2.includes(currentDigitCount) || appearedOnceArray3.includes(currentDigitCount))
-                //         (appearedOnceArray.includes(currentDigitCount2))
-                //         && this.tradedDigitArray[this.tradedDigitArray.length - 1] !== currentDigitCount2
-                //         && this.stayedInArray25[0] !== currentDigitCount2
-                //         && this.stayedInArray25[1] !== currentDigitCount2
-                //         && this.stayedInArray25[15] >= 0
-                //         ) 
-                //         {
-                //        this.tradedDigitArray.push(currentDigitCount2)
-                //        this.filteredArray = appearedOnceArray;
-                //        console.log('Traded Digit Array:', this.tradedDigitArray);
-                //        this.placeTrade();
-                //     }
-                // }
             }
         }
     }
@@ -541,7 +458,7 @@ class EnhancedDerivTradingBot {
             price: this.currentStake.toFixed(2)
         };
 
-        console.log('🚀 Placing trade:', JSON.stringify(request, null, 2));
+        console.log('Placing trade:', JSON.stringify(request, null, 2));
         this.sendRequest(request);
         this.tradeInProgress = true;
     }
@@ -567,7 +484,7 @@ class EnhancedDerivTradingBot {
         const profit = parseFloat(contract.profit);
 
         // Existing trade result handling
-        console.log(`Trade outcome: ${won ? '✅ Won' : '❌ Lost'}`);
+        console.log(`Trade outcome: ${won ? 'Won' : 'Lost'}`);
 
         this.totalTrades++;
 
@@ -575,21 +492,19 @@ class EnhancedDerivTradingBot {
             this.totalWins++;
             this.isWinTrade = true;
 
-            // if (this.consecutiveLosses >= 1) {
-            //     this.kCountNum++;
-            //     if(this.kCountNum === 1) {
-            this.currentStake = this.config.initialStake;
-            this.consecutiveLosses = 0;
-            this.kCountNum = 0;
-            //     }
-            // }
+            if (this.consecutiveLosses >= 1) {
+                this.kCountNum++;
+                if (this.kCountNum === 6) {
+                    this.currentStake = this.config.initialStake;
+                    this.consecutiveLosses = 0;
+                    this.kCountNum = 0;
+                }
+            }
 
             // this.currentStake = this.config.initialStake;
             this.kLoss = 0.01;
 
-            // this.RestartTrading = true;
-
-            // this.filterNum = 2;
+            this.RestartTrading = true;
 
         } else {
             this.kCountNum = 0;
@@ -597,8 +512,6 @@ class EnhancedDerivTradingBot {
             this.totalLosses++;
             this.consecutiveLosses++;
             // this.kLoss += profit.toFixed(2);
-
-            // this.filterNum++;
 
 
             if (this.consecutiveLosses === 1) {
@@ -624,9 +537,15 @@ class EnhancedDerivTradingBot {
 
         }
 
+        // Keep array length under 5 by removing from the start if needed
+        if (this.tradedDigitArray.length > 1) {
+            this.tradedDigitArray.shift();
+        }
 
         this.RestartTrading = true;
 
+
+        this.Sys1 = 0;
 
         this.totalProfitLoss += profit;
 
@@ -634,18 +553,11 @@ class EnhancedDerivTradingBot {
             this.sendLossEmail();
         }
 
-        // Keep array length under 5 by removing from the start if needed
-        if (this.tradedDigitArray.length > 1) {
-            this.tradedDigitArray.shift();
-        }
-
         this.tradeNum = Math.floor(Math.random() * (40 - 21 + 1)) + 21;
 
         this.Pause = true;
 
-        if (!this.endOfDay) {
-            this.logTradingSummary();
-        }
+        this.logTradingSummary();
 
         //Take profit condition
         if (this.totalProfitLoss >= this.config.takeProfit) {
@@ -680,8 +592,7 @@ class EnhancedDerivTradingBot {
             // } else {
             //     this.waitTime = Math.floor(Math.random() * (21000 - 20000 + 1)) + 1000;
             // }
-            // this.waitTime = Math.floor(Math.random() * (21000 - 20000 + 1)) + 2000;
-            this.waitTime = Math.floor(Math.random() * (this.config.maxTradeDelay - this.config.minTradeDelay + 1)) + this.config.minTradeDelay;
+            this.waitTime = Math.floor(Math.random() * (31000 - 20000 + 1)) + 2000;
 
             console.log(`Waiting ${Math.round(this.waitTime / 1000)} seconds before next trade...`);
             setTimeout(() => {
@@ -719,9 +630,9 @@ class EnhancedDerivTradingBot {
             const currentHours = now.getHours();
             const currentMinutes = now.getMinutes();
 
-            // Check for afternoon resume condition (7:00 AM)
-            if (this.endOfDay && currentHours === 7 && currentMinutes >= 0) {
-                console.log("It's 7:00 AM, reconnecting the bot.");
+            // Check for afternoon resume condition (11:00 AM)
+            if (this.endOfDay && currentHours === 12 && currentMinutes >= 0) {
+                console.log("It's 1:00 PM, reconnecting the bot.");
                 this.LossDigitsList = [];
                 this.tradeInProgress = false;
                 this.usedAssets = new Set();
@@ -776,7 +687,7 @@ class EnhancedDerivTradingBot {
             if (!this.endOfDay) {
                 this.sendEmailSummary();
             }
-        }, 21600000); // 6 Hours
+        }, 1800000); // 30 minutes
     }
 
     async sendEmailSummary() {
@@ -802,7 +713,7 @@ class EnhancedDerivTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: 'k5%Accumulator Trading Bot - Summary',
+            subject: 'L5%Accumulator Trading Bot - Summary',
             text: summaryText
         };
 
@@ -838,8 +749,6 @@ class EnhancedDerivTradingBot {
         Traded Array: ${this.tradedDigitArray}
         Filtered Number: ${this.filterNum}
 
-        Current Asset Array: ${this.totalArray}
-
 
         Current Stake: $${this.currentStake.toFixed(2)}
         `;
@@ -847,7 +756,7 @@ class EnhancedDerivTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: 'k5%Accumulator Trading Bot - Summary',
+            subject: 'L5%Accumulator Trading Bot - Summary',
             text: summaryText
         };
 
@@ -865,7 +774,7 @@ class EnhancedDerivTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: 'k5%Accumulator Trading Bot - Error Report',
+            subject: 'L5%Accumulator Trading Bot - Error Report',
             text: `An error occurred in the trading bot: ${errorMessage}`
         };
 
@@ -903,10 +812,7 @@ class EnhancedDerivTradingBot {
         Filtered Array: ${this.filteredArray}
         Traded Array: ${this.tradedDigitArray2} 
         Filtered Number: ${this.filterNum}
-
-        Current Asset Array: ${this.totalArray}
         
-
         Total Profit/Loss Amount: ${this.totalProfitLoss.toFixed(2)}
         Win Rate: ${((this.totalWins / this.totalTrades) * 100).toFixed(2)}%
         `;
@@ -914,7 +820,7 @@ class EnhancedDerivTradingBot {
         const mailOptions = {
             from: this.emailConfig.auth.user,
             to: this.emailRecipient,
-            subject: 'k5%Accumulator Trading Bot - Summary',
+            subject: 'L5%Accumulator Trading Bot - Summary',
             text: summaryText
         };
 
@@ -928,21 +834,19 @@ class EnhancedDerivTradingBot {
 
     start() {
         this.connect();
-        this.checkTimeForDisconnectReconnect(); // Automatically handles disconnect/reconnect at specified times
+        // this.checkTimeForDisconnectReconnect(); // Automatically handles disconnect/reconnect at specified times
     }
 }
 
 // Updated configuration
-const bot = new EnhancedDerivTradingBot('DMylfkyce6VyZt7', {
-    // 'DMylfkyce6VyZt7', '0P94g4WdSrSrzir'
-    initialStake: 1,
-    multiplier: 21,
-    maxConsecutiveLosses: 3,
-    stopLoss: 105,
-    takeProfit: 5000,
+const bot = new EnhancedDerivTradingBot('8NFMt6LKFTfTCPE', {
+    // 'DMylfkyce6VyZt7', '0P94g4WdSrSrzir', '8NFMt6LKFTfTCPE'
+    initialStake: 5,
+    multiplier: 4,
+    maxConsecutiveLosses: 1,
+    stopLoss: 10000,
+    takeProfit: 0.1,
     growthRate: 0.05, // 5% growth rate
-    accuTakeProfit: 0.5, // Take profit amount 
-    minWaitTime: 300000, //5 Minutes
-    maxWaitTime: 2600000, //1 Hour      
+    accuTakeProfit: 0.01 // Take profit amount       
 });
 bot.start();
