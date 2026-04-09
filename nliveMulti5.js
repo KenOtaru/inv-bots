@@ -317,11 +317,7 @@ class AccumulatorAnalyzer {
             else scores.bandWidth = 0.15;                             // Very wide — avoid
         } else {
             // Fallback: use raw width
-            if (bb.width < 0.003) scores.bandWidth = 0.0;
-            else if (bb.width < 0.006) scores.bandWidth = 0.00;
-            else if (bb.width < 0.010) scores.bandWidth = 0.00;
-            else if (bb.width < 0.015) scores.bandWidth = 0.00;
-            else scores.bandWidth = 0.00;
+            scores.bandWidth = 0.0;
         }
 
         // 2. MACD HISTOGRAM — Flat/near-zero histogram = no momentum = GOOD
@@ -1001,8 +997,9 @@ class AccumulatorBotV4 {
             if (this.consecutiveLosses < 1) {
                 const shouldTrade =
                     analysis.overallScore < 0.46
+                    &&
+                    analysis.scores.bandWidth > 0
                 // &&
-                // analysis.scores.bandWidth < 1 &&
                 // analysis.scores.macdFlat < 1 &&
                 // analysis.scores.pricePosition < 1 &&
                 // analysis.scores.tickStability >= 1
@@ -1686,8 +1683,8 @@ class AccumulatorBotV4 {
                 } else {
                     const shouldTrade =
                         analysis.overallScore < 0.46
-                    // &&
-                    // analysis.scores.bandWidth < 1 &&
+                        &&
+                        analysis.scores.bandWidth > 0
                     // analysis.scores.macdFlat < 1 &&
                     // analysis.scores.pricePosition < 1 &&
                     // analysis.scores.tickStability < 1;
