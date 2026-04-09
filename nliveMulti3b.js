@@ -39,6 +39,9 @@ const CONFIG = {
     multiplier: 6.00,   // never exceed this
     multiplier2: 8.00,   // never exceed this
 
+    //Trade System
+    tradeSystem: 1, // 1 = Very High Overall Score, 2 = Very Low Overall Score
+
     // Growth rates
     growthRateDefault: 0.01,   // 1% — widest barriers, safest
     growthRateBoost: 0.02,   // 2% — only on strong squeeze + RSI centred
@@ -63,8 +66,8 @@ const CONFIG = {
     rsiLow: 40,     // don't enter if RSI < 35 (trending down hard)
     rsiHigh: 60,     // don't enter if RSI > 65 (trending up hard)
 
-    // Price stability: max average absolute change over last 10 ticks (as % of price)
-    maxPriceChangePct: 0.002,  // 0.2%
+    // Price stability: max average absolute change over last 10 ticks (as % of price) Lower Means more stable
+    maxPriceChangePct: 0.001,  // 0.1%
 
     // Min history required before analysis
     requiredHistory: 60,
@@ -300,9 +303,12 @@ class VolatilityAnalyzer {
         } else if (momentum > CONFIG.maxPriceChangePct) {
             shouldEnter = false;
             reason = `momentum_high (${(momentum * 100).toFixed(3)}%>${(CONFIG.maxPriceChangePct * 100).toFixed(3)}%)`;
-        } else if (score < 0.42) {
+        } else if (CONFIG.tradeSystem === 1 && score < 0.80) {
             shouldEnter = false;
-            reason = `composite_score_low (${(score * 100).toFixed(1)}%<42%)`;
+            reason = `composite_score_low (${(score * 100).toFixed(1)}%<80%)`;
+        } else if (CONFIG.tradeSystem === 2 && score > 0.45) {
+            shouldEnter = false;
+            reason = `composite_score_High (${(score * 100).toFixed(1)}%>45%)`;
         } else {
             reason = 'conditions_met';
         }
