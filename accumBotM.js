@@ -1102,9 +1102,6 @@ class EnhancedDerivTradingBot {
         delete this.activeTrades[asset];
 
         // Send Trade result notification
-        this.sendResultNotification(asset, contract, won);
-
-
         this.sendTelegramMessage(
             `${won ? '✅' : '❌'}  — accumBotM</b>\n\n` +
             `Asset: <b>${asset}</b>\n` +
@@ -1113,7 +1110,7 @@ class EnhancedDerivTradingBot {
             `Trades: ${this.totalTrades} (${this.totalWins}W/${this.totalLosses}L)\n` +
             `Losses x2-x5: ${this.consecutiveLosses2} | ${this.consecutiveLosses3} | ${this.consecutiveLosses4} | ${this.consecutiveLosses5}\n` +
             `Win Rate: ${this.totalTrades > 0 ? ((this.totalWins / this.totalTrades) * 100).toFixed(2) : '0.00'}%\n` +
-            `Stake: $${this.currentStake.toFixed(2)}\n\n` +
+            `Stake: $${this.currentStake.toFixed(2)}\n` +
             `Total P&L: ${this.totalProfitLoss >= 0 ? '+' : ''}$${this.totalProfitLoss.toFixed(2)}`
         );
 

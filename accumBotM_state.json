@@ -1,0 +1,61 @@
+{
+  "savedAt": 1775771509619,
+  "trading": {
+    "currentStake": 36,
+    "consecutiveLosses": 2,
+    "totalTrades": 3,
+    "totalWins": 1,
+    "totalLosses": 2,
+    "totalProfitLoss": 0.8799999999999999,
+    "dailyProfitLoss": 0.8799999999999999,
+    "consecutiveLosses2": 1,
+    "consecutiveLosses3": 0,
+    "consecutiveLosses4": 0,
+    "consecutiveLosses5": 0,
+    "consecutiveLosses6": 0,
+    "kCountNum": 1,
+    "tradedDigitArray": [
+      24
+    ],
+    "tradedDigitArray2": [],
+    "Sys1": 0
+  },
+  "assetMetrics": {
+    "R_10": {
+      "trades": 1,
+      "wins": 0,
+      "losses": 1,
+      "profitLoss": -1
+    },
+    "R_25": {
+      "trades": 0,
+      "wins": 0,
+      "losses": 0,
+      "profitLoss": 0
+    },
+    "R_50": {
+      "trades": 1,
+      "wins": 0,
+      "losses": 1,
+      "profitLoss": -6
+    },
+    "R_75": {
+      "trades": 0,
+      "wins": 0,
+      "losses": 0,
+      "profitLoss": 0
+    },
+    "R_100": {
+      "trades": 1,
+      "wins": 1,
+      "losses": 0,
+      "profitLoss": 7.88
+    }
+  },
+  "hourlyStats": {
+    "trades": 3,
+    "wins": 1,
+    "losses": 2,
+    "pnl": 0.8799999999999999
+  }
+}
