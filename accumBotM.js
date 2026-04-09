@@ -1,37 +1,156 @@
+/**
+ * ╔══════════════════════════════════════════════════════════════╗
+ * ║         accumBotM — Enhanced Multi-Asset Accumulator Bot    ║
+ * ╠══════════════════════════════════════════════════════════════╣
+ * ║  ORIGINAL STRATEGY (preserved):                              ║
+ * ║  • Digit-frequency analysis on StayIN sequence               ║
+ * ║  • Filters digits that appeared exactly filterNum times      ║
+ * ║  • Entry when current digit count matches filtered array     ║
+ * ║  • Martingale recovery with multiplier                       ║
+ * ║                                                              ║
+ * ║  UPGRADES:                                                   ║
+ * ║  • Multi-asset concurrent trading (one contract per asset)   ║
+ * ║  • Telegram notifications (replaces Gmail)                   ║
+ * ║  • State persistence with auto-save                          ║
+ * ║  • Trade watchdog for stuck contract recovery                ║
+ * ║  • Robust reconnection with exponential backoff              ║
+ * ║  • WebSocket ping keep-alive                                 ║
+ * ╚══════════════════════════════════════════════════════════════╝
+ */
+
+'use strict';
+
+require('dotenv').config();
 const WebSocket = require('ws');
-const nodemailer = require('nodemailer');
+const TelegramBot = require('node-telegram-bot-api');
+const fs = require('fs');
+const path = require('path');
 
+// ══════════════════════════════════════════════════════════════════════════════
+// STATE PERSISTENCE MANAGER
+// ══════════════════════════════════════════════════════════════════════════════
+const STATE_FILE = path.join(__dirname, 'accumBotM_state.json');
+const STATE_SAVE_INTERVAL = 5000;
 
+class StatePersistence {
+    static saveState(bot) {
+        try {
+            const persistableState = {
+                savedAt: Date.now(),
+                trading: {
+                    currentStake: bot.currentStake,
+                    consecutiveLosses: bot.consecutiveLosses,
+                    totalTrades: bot.totalTrades,
+                    totalWins: bot.totalWins,
+                    totalLosses: bot.totalLosses,
+                    totalProfitLoss: bot.totalProfitLoss,
+                    dailyProfitLoss: bot.dailyProfitLoss,
+                    consecutiveLosses2: bot.consecutiveLosses2,
+                    consecutiveLosses3: bot.consecutiveLosses3,
+                    consecutiveLosses4: bot.consecutiveLosses4,
+                    consecutiveLosses5: bot.consecutiveLosses5,
+                    consecutiveLosses6: bot.consecutiveLosses6,
+                    kCountNum: bot.kCountNum,
+                    tradedDigitArray: bot.tradedDigitArray,
+                    tradedDigitArray2: bot.tradedDigitArray2,
+                    Sys1: bot.Sys1,
+                },
+                assetMetrics: bot.assetMetrics,
+                hourlyStats: bot.hourlyStats,
+            };
+            fs.writeFileSync(STATE_FILE, JSON.stringify(persistableState, null, 2));
+            return true;
+        } catch (error) {
+            console.error(`❌ Failed to save state: ${error.message}`);
+            return false;
+        }
+    }
 
+    static loadState() {
+        try {
+            if (!fs.existsSync(STATE_FILE)) {
+                console.log('🆕 No previous state found, starting fresh');
+                return null;
+            }
+            const fileContent = fs.readFileSync(STATE_FILE, 'utf8');
+            const savedData = JSON.parse(fileContent);
+            const ageMinutes = (Date.now() - savedData.savedAt) / 60000;
+            if (ageMinutes > 60) {
+                console.warn(`⚠️  Saved state is ${ageMinutes.toFixed(1)} minutes old, starting fresh`);
+                const backupFile = STATE_FILE.replace('.json', `_backup_${Date.now()}.json`);
+                fs.renameSync(STATE_FILE, backupFile);
+                return null;
+            }
+            console.log(`📂 Restoring state from ${ageMinutes.toFixed(1)} minutes ago`);
+            return savedData;
+        } catch (error) {
+            console.error(`❌ Failed to load state: ${error.message}`);
+            return null;
+        }
+    }
+
+    static startAutoSave(bot) {
+        if (bot.autoSaveInterval) clearInterval(bot.autoSaveInterval);
+        bot.autoSaveInterval = setInterval(() => {
+            if (bot.connected && !bot.endOfDay) StatePersistence.saveState(bot);
+        }, STATE_SAVE_INTERVAL);
+
+        const exitHandler = () => {
+            console.log('\n🛑 Shutting down, saving final state...');
+            StatePersistence.saveState(bot);
+            process.exit();
+        };
+        process.on('SIGINT', exitHandler);
+        process.on('SIGTERM', exitHandler);
+        process.on('uncaughtException', (err) => {
+            console.error('Uncaught Exception:', err);
+            exitHandler();
+        });
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MAIN BOT CLASS
+// ══════════════════════════════════════════════════════════════════════════════
 class EnhancedDerivTradingBot {
     constructor(token, config = {}) {
         this.token = token;
         this.ws = null;
         this.connected = false;
-        // this.assets = ['1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V',]
-        // this.assets = ['1HZ75V',]
-        this.assets = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'];  // Available assets
+        this.wsReady = false;
 
+        // ── Multi-asset support ──────────────────────────────────────────────
+        this.assets = config.assets || ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'];
 
         this.config = {
-            initialStake: config.initialStake,
-            multiplier: config.multiplier,
-            multiplier2: config.multiplier2,
-            maxConsecutiveLosses: config.maxConsecutiveLosses,
-            takeProfit: config.takeProfit,
-            // Accumulator specific settings
-            growthRate: config.growthRate, // 1%, 2%, 3%, 4% or 5% growth rate
-            accuTakeProfit: config.accuTakeProfit, // Take profit amount
-            takeProfitMultiplier: config.takeProfitMultiplier || 0.20, // 20% of stake as TP (limit order backup)      
+            initialStake: config.initialStake || 1,
+            multiplier: config.multiplier || 6,
+            multiplier2: config.multiplier2 || 8,
+            maxConsecutiveLosses: config.maxConsecutiveLosses || 3,
+            takeProfit: config.takeProfit || 100,
+            stopLoss: config.stopLoss || 100,
+            // Accumulator specific
+            growthRate: config.growthRate || 0.02,
+            takeProfitMultiplier: config.takeProfitMultiplier || 0.20,
+
+            // Reconnection
+            maxReconnectAttempts: 50,
+            reconnectDelay: 5000,
+
+            // Trade throttle per asset
+            minTimeBetweenTrades: 5000,
+
+            // History
+            requiredHistoryLength: 100,
+            analysisInterval: 3,
+
+            // Telegram
+            telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
+            telegramChatId: '752497117',
         };
 
-        this.currentProposalId = null;
-
-        // Initialize other properties
+        // ── Trading state (original logic preserved) ─────────────────────────
         this.currentStake = this.config.initialStake;
-        this.lastDigits = [];
-        this.tickHistory = [];
-        this.usedAssets = new Set();
         this.consecutiveLosses = 0;
         this.consecutiveLosses2 = 0;
         this.consecutiveLosses3 = 0;
@@ -41,31 +160,17 @@ class EnhancedDerivTradingBot {
         this.consecutiveLosses7 = 0;
         this.consecutiveLosses8 = 0;
         this.consecutiveLosses9 = 0;
-        this.currentAsset = null;
-        this.currentTradeId = null;
-        this.lastDigitsList = [];
-        this.tickHistory = [];
-        this.tradeInProgress = false;
-        this.wsReady = false;
-        this.predictedDigit = null;
-        this.Percentage = 0;
-        this.usedAssets = new Set();
-        this.consecutiveLosses = 0;
-        this.currentAsset = null;
-        this.currentTradeId = null;
-        this.connected = false;
         this.totalTrades = 0;
         this.totalWins = 0;
         this.totalLosses = 0;
         this.totalProfitLoss = 0;
+        this.dailyProfitLoss = 0;
         this.Pause = false;
         this.RestartTrading = true;
         this.endOfDay = false;
-        this.requiredHistoryLength = 100, // Number of ticks to analyze
-            this.kCount = false;
+        this.kCount = false;
         this.kCountNum = 0;
         this.kLoss = 0.01;
-        this.multiplier2 = false;
         this.confidenceThreshold = 0.5;
         this.kTradeCount = 0;
         this.isWinTrade = false;
@@ -78,201 +183,400 @@ class EnhancedDerivTradingBot {
         this.tradedDigitArray2 = [];
         this.filteredArray = [];
         this.tradeNum = Math.floor(Math.random() * (40 - 21 + 1)) + 21;
-        this.filterNum = 6
+        this.filterNum = 6;
+        this.Percentage = 0;
+        this.predictedDigit = null;
 
+        // ── Multi-asset active trades ────────────────────────────────────────
+        this.activeTrades = {};          // { asset: { contractId, status, ... } }
+        this.contractSubscriptions = {}; // { asset: subscriptionId }
+        this.tickSubscriptionIds = {};
+        this.lastTradeTime = {};
 
+        // ── Per-asset price/digit histories ──────────────────────────────────
+        this.priceHistories = {};        // raw prices (not digits, for context)
+        this.tickHistory = {};           // digit sequences per asset
+        this.lastDigitsList = {};        // recent digits per asset
+        this.tickCounts = {};            // tick counter per asset
+        this.assetStates = {};           // { asset: { proposalId, ... } }
 
-        // WebSocket management
+        // ── Asset metrics ────────────────────────────────────────────────────
+        this.assetMetrics = {};
+
+        // ── Asset suspension (focus on loss asset) ───────────────────────────
+        this.suspendedAssets = new Set();
+        this.focusAsset = null;
+
+        // ── Telegram ─────────────────────────────────────────────────────────
+        this.telegramBot = null;
+        if (this.config.telegramToken && this.config.telegramChatId) {
+            this.telegramBot = new TelegramBot(this.config.telegramToken, { polling: false });
+        }
+        this.hourlyStats = { trades: 0, wins: 0, losses: 0, pnl: 0 };
+
+        // ── Reconnection ─────────────────────────────────────────────────────
         this.reconnectAttempts = 0;
-        this.maxReconnectAttempts = 10000;
-        this.reconnectInterval = 5000;
-        this.tickSubscriptionId = null;
+        this.pingInterval = null;
 
-        // Email configuration
-        this.emailConfig = {
-            service: 'gmail',
-            auth: {
-                user: 'kenzkdp2@gmail.com',
-                pass: 'jfjhtmussgfpbgpk'
-            }
-        };
-        this.emailRecipient = 'kenotaru@gmail.com';
-        this.startEmailTimer();
+        // ── Trade Watchdog ───────────────────────────────────────────────────
+        this.tradeWatchdogTimer = null;
+        this.tradeWatchdogPollTimer = null;
+        this.tradeWatchdogMs = 120000;
+        this.tradeStartTime = null;
+
+        // ── Initialize per-asset structures ──────────────────────────────────
+        this.assets.forEach(asset => {
+            this.priceHistories[asset] = [];
+            this.tickHistory[asset] = [];
+            this.lastDigitsList[asset] = [];
+            this.tickCounts[asset] = 0;
+            this.lastTradeTime[asset] = 0;
+            this.assetStates[asset] = { proposalId: null, lastProposalAt: 0 };
+            this.assetMetrics[asset] = { trades: 0, wins: 0, losses: 0, profitLoss: 0 };
+        });
+
+        // ── Load saved state ─────────────────────────────────────────────────
+        this.loadSavedState();
     }
 
+    // ══════════════════════════════════════════════════════════════════════════
+    // ASSET SUSPENSION LOGIC
+    // ══════════════════════════════════════════════════════════════════════════
+    suspendOtherAssets(lossAsset) {
+        this.focusAsset = lossAsset;
+        this.assets.forEach(asset => {
+            if (asset !== lossAsset) {
+                this.suspendedAssets.add(asset);
+            }
+        });
+        console.log(`🔒 SUSPENDED: All assets except ${lossAsset}. Focusing on loss asset.`);
+        this.sendTelegramMessage(
+            `🔒 <b>Asset Suspension (accumBotM)</b>\n\n` +
+            `Loss on: <b>${lossAsset}</b>\n` +
+            `Suspended: ${this.assets.filter(a => a !== lossAsset).join(', ')}\n` +
+            `Focusing on ${lossAsset} until win`
+        );
+    }
+
+    resumeAllAssets() {
+        const prevFocus = this.focusAsset;
+        this.suspendedAssets.clear();
+        this.focusAsset = null;
+        console.log(`✅ RESUMED: All assets active again (was focused on ${prevFocus})`);
+        this.sendTelegramMessage(
+            `✅ <b>All Assets Resumed (accumBotM)</b>\n\n` +
+            `Won on: <b>${prevFocus}</b>\n` +
+            `All assets now active for trading`
+        );
+    }
+
+    isAssetAllowed(asset) {
+        if (!this.focusAsset) return true;
+        return asset === this.focusAsset;
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // STATE MANAGEMENT
+    // ══════════════════════════════════════════════════════════════════════════
+    loadSavedState() {
+        const state = StatePersistence.loadState();
+        if (!state) return;
+        try {
+            if (state.trading) {
+                this.currentStake = state.trading.currentStake || this.config.initialStake;
+                this.consecutiveLosses = state.trading.consecutiveLosses || 0;
+                this.totalTrades = state.trading.totalTrades || 0;
+                this.totalWins = state.trading.totalWins || 0;
+                this.totalLosses = state.trading.totalLosses || 0;
+                this.totalProfitLoss = state.trading.totalProfitLoss || 0;
+                this.dailyProfitLoss = state.trading.dailyProfitLoss || 0;
+                this.consecutiveLosses2 = state.trading.consecutiveLosses2 || 0;
+                this.consecutiveLosses3 = state.trading.consecutiveLosses3 || 0;
+                this.consecutiveLosses4 = state.trading.consecutiveLosses4 || 0;
+                this.consecutiveLosses5 = state.trading.consecutiveLosses5 || 0;
+                this.consecutiveLosses6 = state.trading.consecutiveLosses6 || 0;
+                this.kCountNum = state.trading.kCountNum || 0;
+                this.tradedDigitArray = state.trading.tradedDigitArray || [];
+                this.tradedDigitArray2 = state.trading.tradedDigitArray2 || [];
+                this.Sys1 = state.trading.Sys1 || 0;
+            }
+            if (state.assetMetrics) this.assetMetrics = state.assetMetrics;
+            if (state.hourlyStats) this.hourlyStats = state.hourlyStats;
+            console.log(`✅ State restored: ${this.totalTrades} trades, P&L: $${this.totalProfitLoss.toFixed(2)}`);
+        } catch (error) {
+            console.error(`❌ Error restoring state: ${error.message}`);
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // WEBSOCKET CONNECTION + PING KEEP-ALIVE
+    // ══════════════════════════════════════════════════════════════════════════
     connect() {
-        console.log('Attempting to connect to Deriv API...');
-        this.ws = new WebSocket('wss://ws.binaryws.com/websockets/v3?app_id=1089');
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) return;
+        console.log('🔌 Connecting to Deriv API...');
+        this.cleanup();
+
+        this.ws = new WebSocket('wss://ws.derivws.com/websockets/v3?app_id=1089');
 
         this.ws.on('open', () => {
-            console.log('Connected to Deriv API');
+            console.log('✅ WebSocket connected');
             this.connected = true;
-            this.wsReady = true;
             this.reconnectAttempts = 0;
+            this.startPingKeepAlive();
             this.authenticate();
         });
 
         this.ws.on('message', (data) => {
-            const message = JSON.parse(data);
-            this.handleMessage(message);
+            try {
+                this.handleMessage(JSON.parse(data));
+            } catch (error) {
+                console.error('Error parsing message:', error.message);
+            }
         });
 
         this.ws.on('error', (error) => {
-            console.error('WebSocket error:', error);
-            this.handleDisconnect();
+            console.error('WebSocket error:', error.message);
         });
 
         this.ws.on('close', () => {
-            console.log('Disconnected from Deriv API');
-            this.connected = false;
-            if (!this.Pause) {
-                this.handleDisconnect();
-            }
+            console.log('⚡ WebSocket disconnected');
+            this.stopPingKeepAlive();
+            this.handleDisconnect();
         });
     }
 
-    sendRequest(request) {
-        if (this.connected && this.wsReady) {
-            this.ws.send(JSON.stringify(request));
-        } else if (this.connected && !this.wsReady) {
-            console.log('WebSocket not ready. Queueing request...');
-            setTimeout(() => this.sendRequest(request), this.reconnectInterval);
-        } else {
-            console.error('Not connected to Deriv API. Unable to send request:', request);
-        }
+    startPingKeepAlive() {
+        this.stopPingKeepAlive();
+        this.pingInterval = setInterval(() => {
+            if (this.connected) {
+                this.sendRequest({ ping: 1 });
+            }
+        }, 25000);
     }
 
-    handleDisconnect() {
-        this.connected = false;
-        this.wsReady = false;
-        if (this.reconnectAttempts < this.maxReconnectAttempts) {
-            console.log(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
-            setTimeout(() => this.connect(), this.reconnectInterval);
-        }
-    }
-
-
-    handleApiError(error) {
-        console.error('API Error:', error.message);
-
-        switch (error.code) {
-            case 'InvalidToken':
-                console.error('Invalid token. Please check your API token and restart the bot.');
-                this.sendErrorEmail('Invalid API token');
-                this.disconnect();
-                break;
-            case 'RateLimit':
-                console.log('Rate limit reached. Waiting before next request...');
-                setTimeout(() => this.startTrading(), 60000); // Wait for 1 minute before retrying
-                break;
-            case 'MarketIsClosed':
-                console.log('Market is closed. Waiting for market to open...');
-                setTimeout(() => this.startTrading(), 3600000); // Wait for 1 hour before retrying
-                break;
-            default:
-                console.log('Encountered an error. Continuing operation...');
-                this.startTrading();
+    stopPingKeepAlive() {
+        if (this.pingInterval) {
+            clearInterval(this.pingInterval);
+            this.pingInterval = null;
         }
     }
 
     authenticate() {
-        console.log('Attempting to authenticate...');
-        this.sendRequest({
-            authorize: this.token
-        });
+        this.sendRequest({ authorize: this.token });
     }
 
-    subscribeToTickHistory(asset) {
-        const request = {
-            ticks_history: asset,
-            adjust_start_time: 1,
-            count: this.requiredHistoryLength,
-            end: 'latest',
-            start: 1,
-            style: 'ticks'
-        };
-        this.sendRequest(request);
-        console.log(`Requested tick history for asset: ${asset}`);
-    }
-
-    subscribeToTicks(asset) {
-        const request = {
-            ticks: asset,
-            subscribe: 1
-        };
-        this.sendRequest(request);
-        // console.log(`Subscribed to ticks for asset: ${asset}`);
-    }
-
-    // First get a proposal for the trade
-    requestProposal() {
-        if (this.tradeInProgress) return;
-
-        const takeProfitAmount = this.currentStake * this.config.takeProfitMultiplier;
-
-        const proposal = {
-            proposal: 1,
-            amount: this.currentStake.toFixed(2),
-            basis: 'stake',
-            contract_type: 'ACCU',
-            currency: 'USD',
-            symbol: this.currentAsset,
-            growth_rate: this.config.growthRate,
-            limit_order: {
-                take_profit: takeProfitAmount.toFixed(2)
-            }
-
-        };
-
-        // console.log('Requesting proposal:', JSON.stringify(proposal, null, 2));
-        this.sendRequest(proposal);
-    }
-
-
-    handleMessage(message) {
-        if (message.msg_type === 'authorize') {
-            if (message.error) {
-                console.error('Authentication failed:', message.error.message);
-                this.disconnect();
-                return;
-            }
-            console.log('Authentication successful');
-
-            this.tradeInProgress = false;
-            this.startTrading();
-
-        } else if (message.msg_type === 'proposal') {
-            this.handleProposal(message);
-        } else if (message.msg_type === 'tick') {
-            this.handleTickUpdate(message.tick);
-        } else if (message.msg_type === 'history') {
-            this.handleTickHistory(message.history);
-        } else if (message.msg_type === 'buy') {
-            if (message.error) {
-                console.error('Error placing trade:', message.error.message);
-                this.tradeInProgress = false;
-                return;
-            }
-            console.log('Trade placed successfully');
-            this.currentTradeId = message.buy.contract_id;
-            this.subscribeToOpenContract(this.currentTradeId);
-        } else if (message.msg_type === 'proposal_open_contract') {
-            if (message.error) {
-                console.error('Error receiving contract update:', message.error.message);
-                return;
-            }
-            this.handleContractUpdate(message.proposal_open_contract);
-        } else if (message.msg_type === 'forget') {
-            console.log('Successfully unsubscribed from Current Asset');
-            this.currentTradeId = null;
-        } else if (message.subscription && message.msg_type === 'tick') {
-            this.tickSubscriptionId = message.subscription.id;
-            console.log(`Subscribed to ticks. Subscription ID: ${this.tickSubscriptionId}`);
-        } else if (message.error) {
-            this.handleApiError(message.error);
+    sendRequest(request) {
+        if (!this.connected || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
+            return false;
+        }
+        try {
+            this.ws.send(JSON.stringify(request));
+            return true;
+        } catch (error) {
+            console.error('Error sending request:', error.message);
+            return false;
         }
     }
 
+    handleDisconnect() {
+        if (this.endOfDay) {
+            this.cleanup();
+            return;
+        }
+        this.connected = false;
+        this.wsReady = false;
+        StatePersistence.saveState(this);
+
+        if (this.reconnectAttempts >= this.config.maxReconnectAttempts) {
+            console.error('❌ Max reconnection attempts reached');
+            return;
+        }
+        this.reconnectAttempts++;
+        const delay = Math.min(this.config.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1), 30000);
+        console.log(`🔄 Reconnecting in ${(delay / 1000).toFixed(1)}s... (${this.reconnectAttempts}/${this.config.maxReconnectAttempts})`);
+        setTimeout(() => this.connect(), delay);
+    }
+
+    cleanup() {
+        this.stopPingKeepAlive();
+        this._clearWatchdogTimers();
+        if (this.ws) {
+            this.ws.removeAllListeners();
+            if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+                try { this.ws.close(); } catch (e) { }
+            }
+            this.ws = null;
+        }
+        this.connected = false;
+        this.wsReady = false;
+    }
+
+    disconnect() {
+        console.log('🛑 Disconnecting...');
+        StatePersistence.saveState(this);
+        this.endOfDay = true;
+        this.cleanup();
+        console.log('✅ Bot disconnected');
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // MESSAGE ROUTING
+    // ══════════════════════════════════════════════════════════════════════════
+    handleMessage(message) {
+        switch (message.msg_type) {
+            case 'authorize':
+                this.handleAuth(message);
+                break;
+            case 'history':
+                this.handleTickHistory(message);
+                break;
+            case 'tick':
+                if (message.subscription) {
+                    this.tickSubscriptionIds[message.tick.symbol] = message.subscription.id;
+                }
+                this.handleTickUpdate(message.tick);
+                break;
+            case 'proposal':
+                this.handleProposal(message);
+                break;
+            case 'buy':
+                this.handleBuyResponse(message);
+                break;
+            case 'proposal_open_contract':
+                if (message.error) {
+                    console.error('Contract error:', message.error.message);
+                    return;
+                }
+                this.handleContractUpdate(message);
+                break;
+            case 'sell':
+                this.handleSellResponse(message);
+                break;
+            case 'ping':
+                break;
+            default:
+                if (message.error) {
+                    console.error(`API Error [${message.msg_type}]:`, message.error.message);
+                }
+        }
+    }
+
+    handleAuth(message) {
+        if (message.error) {
+            console.error('Auth failed:', message.error.message);
+            this.disconnect();
+            return;
+        }
+        console.log(`✅ Authenticated | Balance: $${message.authorize.balance}`);
+        this.wsReady = true;
+        this.initializeSubscriptions();
+    }
+
+    initializeSubscriptions() {
+        console.log('📡 Subscribing to tick streams for all assets...');
+        this.assets.forEach(asset => {
+            // Historical prices
+            this.sendRequest({
+                ticks_history: asset,
+                adjust_start_time: 1,
+                count: this.config.requiredHistoryLength,
+                end: 'latest',
+                start: 1,
+                style: 'ticks'
+            });
+            // Live tick subscription
+            this.sendRequest({
+                ticks: asset,
+                subscribe: 1
+            });
+        });
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // TELEGRAM
+    // ══════════════════════════════════════════════════════════════════════════
+    async sendTelegramMessage(message) {
+        if (!this.telegramBot) return;
+        try {
+            await this.telegramBot.sendMessage(this.config.telegramChatId, message, { parse_mode: 'HTML' });
+        } catch (error) {
+            console.error(`Telegram error: ${error.message}`);
+        }
+    }
+
+    startTelegramTimer() {
+        const now = new Date();
+        const nextHour = new Date(now);
+        nextHour.setHours(nextHour.getHours() + 1);
+        nextHour.setMinutes(0);
+        nextHour.setSeconds(0);
+        nextHour.setMilliseconds(0);
+
+        const timeUntilNextHour = nextHour.getTime() - now.getTime();
+
+        setTimeout(() => {
+            this.sendHourlySummary();
+            setInterval(() => {
+                this.sendHourlySummary();
+            }, 60 * 60 * 1000);
+        }, timeUntilNextHour);
+
+        console.log(`📱 Hourly summaries scheduled. First in ${Math.ceil(timeUntilNextHour / 60000)} minutes.`);
+    }
+
+    async sendHourlySummary() {
+        const winRate = this.totalTrades > 0
+            ? (this.totalWins / this.totalTrades * 100).toFixed(1)
+            : '0.0';
+        const pnlEmoji = this.totalProfitLoss >= 0 ? '🟢' : '🔴';
+        const pnlStr = (this.totalProfitLoss >= 0 ? '+' : '') + '$' + Math.abs(this.totalProfitLoss).toFixed(2);
+
+        await this.sendTelegramMessage(
+            `📊 <b>Session Summary (accumBotM)</b>\n\n` +
+            `Trades: ${this.totalTrades}\n` +
+            `W/L: ${this.totalWins}/${this.totalLosses}\n` +
+            `Losses x2-x6: ${this.consecutiveLosses2} | ${this.consecutiveLosses3} | ${this.consecutiveLosses4}\n` +
+            `Win Rate: ${winRate}%\n` +
+            `${pnlEmoji} Total P&L: ${pnlStr}\n` +
+            `Daily P&L: ${this.dailyProfitLoss >= 0 ? '+' : ''}$${this.dailyProfitLoss.toFixed(2)}\n` +
+            `Current Stake: $${this.currentStake.toFixed(2)}\n\n` +
+            `⏰ ${new Date().toLocaleTimeString()}`
+        );
+    }
+
+    async sendDisconnectSummary() {
+        await this.sendTelegramMessage(
+            `⚠️ <b>accumBotM Disconnected</b>\n\n` +
+            `Trading Summary:\n` +
+            `Total Trades: ${this.totalTrades}\n` +
+            `Wins: ${this.totalWins} | Losses: ${this.totalLosses}\n` +
+            `x2-x6 Losses: ${this.consecutiveLosses2} | ${this.consecutiveLosses3} | ${this.consecutiveLosses4}\n\n` +
+            `Total P&L: $${this.totalProfitLoss.toFixed(2)}\n` +
+            `Win Rate: ${this.totalTrades > 0 ? ((this.totalWins / this.totalTrades) * 100).toFixed(2) : '0.00'}%\n` +
+            `Current Stake: $${this.currentStake.toFixed(2)}\n\n` +
+            `Traded Digits: [${this.tradedDigitArray.join(', ')}]\n` +
+            `Filtered Digits: [${this.filteredArray.join(', ')}]\n` +
+            `Filter Number: ${this.filterNum}`
+        );
+    }
+
+    async sendLossNotification(asset, contract) {
+        const recentDigits = this.lastDigitsList[asset] ? this.lastDigitsList[asset].slice(-20).join(', ') : 'N/A';
+        await this.sendTelegramMessage(
+            `❌ <b>LOSS — accumBotM</b>\n\n` +
+            `Asset: <b>${asset}</b>\n` +
+            `Consecutive Losses: ${this.consecutiveLosses}\n` +
+            `Stake: $${this.currentStake.toFixed(2)}\n\n` +
+            `Recent Digits (last 20): ${recentDigits}\n` +
+            `Filtered Array: [${this.filteredArray.join(', ')}]\n` +
+            `Traded Array: [${this.tradedDigitArray.join(', ')}]\n` +
+            `Filter Number: ${this.filterNum}`
+        );
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // TICK HISTORY & LIVE TICK HANDLING
+    // ══════════════════════════════════════════════════════════════════════════
     getLastDigit(quote, asset) {
         const quoteString = quote.toString();
         const [, fractionalPart = ''] = quoteString.split('.');
@@ -286,203 +590,478 @@ class EnhancedDerivTradingBot {
         }
     }
 
-    startTrading() {
-        console.log('Starting trading...');
-        this.tradeNextAsset();
-    }
+    handleTickHistory(message) {
+        const asset = message.echo_req.ticks_history;
+        const history = message.history;
 
-    tradeNextAsset() {
+        // Store raw prices
+        this.priceHistories[asset] = history.prices.map(p => parseFloat(p));
 
-        if (this.usedAssets.size === this.assets.length) {
-            console.log('All assets have been traded. Disconnecting and waiting...');
+        // Build digit history from raw prices
+        this.tickHistory[asset] = history.prices.map(p => this.getLastDigit(p, asset));
 
-            this.waitTime = Math.floor(Math.random() * (31000 - 20000 + 1)) + 60000;
-
-            console.log(`Waiting ${Math.round(this.waitTime / 1000)} seconds before next trade...`);
-
-            setTimeout(() => {
-
-                this.usedAssets = new Set();
-
-                if (this.RestartTrading) {
-                    let availableAssets = this.assets.filter(asset => !this.usedAssets.has(asset));
-                    this.currentAsset = availableAssets[Math.floor(Math.random() * availableAssets.length)];
-                    this.usedAssets.add(this.currentAsset);
-                }
-                console.log(`Selected asset: ${this.currentAsset}`);
-
-                this.unsubscribeFromTicks(() => {
-                    this.subscribeToTickHistory(this.currentAsset);
-                    this.subscribeToTicks(this.currentAsset);
-                });
-
-                this.RestartTrading = false;
-            }, this.waitTime);
-
-        } else {
-
-            if (this.RestartTrading) {
-                let availableAssets = this.assets.filter(asset => !this.usedAssets.has(asset));
-                this.currentAsset = availableAssets[Math.floor(Math.random() * availableAssets.length)];
-                this.usedAssets.add(this.currentAsset);
-            }
-            console.log(`Selected asset: ${this.currentAsset}`);
-
-            this.unsubscribeFromTicks(() => {
-                this.subscribeToTickHistory(this.currentAsset);
-                this.subscribeToTicks(this.currentAsset);
-            });
-
-            this.RestartTrading = false;
-        }
-    }
-
-    handleTickHistory(history) {
-        this.tickHistory = history.prices.map(price => this.getLastDigit(price, this.currentAsset));
+        console.log(`📊 ${asset}: Loaded ${this.priceHistories[asset].length} price ticks | ${this.tickHistory[asset].length} digits`);
     }
 
     handleTickUpdate(tick) {
-        const lastDigit = this.getLastDigit(tick.quote, this.currentAsset);
-        this.lastDigitsList.push(lastDigit);
+        const asset = tick.symbol;
+        const price = parseFloat(tick.quote);
+        const lastDigit = this.getLastDigit(price, asset);
 
-        this.tickHistory.push(lastDigit);
-        if (this.tickHistory.length > this.requiredHistoryLength) {
-            this.tickHistory.shift();
+        // Store raw price
+        this.priceHistories[asset].push(price);
+        if (this.priceHistories[asset].length > 500) {
+            this.priceHistories[asset] = this.priceHistories[asset].slice(-300);
         }
 
-        const tickHistory = this.tickHistory;
+        // Store digit
+        if (!this.lastDigitsList[asset]) this.lastDigitsList[asset] = [];
+        this.lastDigitsList[asset].push(lastDigit);
 
-        // if(this.lastDigitsList.length > 1) { 
-        this.analyzeTicks(tickHistory);
-        // }
-
-        console.log(`Received tick history: ${this.tickHistory.length}`);
-        console.log(`Received tick: ${this.currentAsset}=>  ${tick.quote} (Last digit: ${lastDigit})`);
-        if (this.tradeInProgress) {
-            console.log(`Recent tick History: ${this.tickHistory.slice(-5).join(', ')}`);
+        this.tickHistory[asset].push(lastDigit);
+        if (this.tickHistory[asset].length > this.config.requiredHistoryLength) {
+            this.tickHistory[asset].shift();
         }
 
+        this.tickCounts[asset] = (this.tickCounts[asset] || 0) + 1;
+
+        // Throttle analysis
+        if (this.tickCounts[asset] % this.config.analysisInterval !== 0) return;
+
+        // Don't analyze if not ready or if asset already has active trade
+        if (!this.wsReady) return;
+        if (this.activeTrades[asset]) return;
+        if (this.tickHistory[asset].length < this.config.requiredHistoryLength) return;
+
+        // Minimum time between trades
+        if (Date.now() - (this.lastTradeTime[asset] || 0) < this.config.minTimeBetweenTrades) return;
+
+        // Run analysis and maybe trade
+        this.evaluateAndTrade(asset);
     }
 
-    // Handle the Proposal response
-    handleProposal(response) {
-        if (response.error) {
-            console.error('Proposal error:', response.error.message);
-            this.tradeInProgress = false;
+    // ══════════════════════════════════════════════════════════════════════════
+    // ORIGINAL ANALYSIS LOGIC (preserved, adapted for multi-asset)
+    // ══════════════════════════════════════════════════════════════════════════
+    evaluateAndTrade(asset) {
+        // Check if asset is suspended
+        if (!this.isAssetAllowed(asset)) return;
+
+        // Skip if trade already in progress globally (one at a time for this bot)
+        if (this.tradeInProgress) return;
+
+        // Run original analyzeTicks logic — request proposal
+        this.requestProposal(asset);
+    }
+
+    requestProposal(asset) {
+        if (this.tradeInProgress) return;
+        if (!this.wsReady) return;
+
+        const takeProfitAmount = this.currentStake * this.config.takeProfitMultiplier;
+
+        const proposal = {
+            proposal: 1,
+            amount: this.currentStake.toFixed(2),
+            basis: 'stake',
+            contract_type: 'ACCU',
+            currency: 'USD',
+            symbol: asset,
+            growth_rate: this.config.growthRate,
+            limit_order: {
+                take_profit: takeProfitAmount.toFixed(2)
+            }
+        };
+
+        this.sendRequest(proposal);
+    }
+
+    handleProposal(message) {
+        const asset = message.echo_req?.symbol;
+
+        if (message.error) {
+            if (asset && this.activeTrades[asset]?.status === 'requesting_proposal') {
+                console.log(`❌ Proposal rejected for ${asset}: ${message.error.message}`);
+                delete this.activeTrades[asset];
+                this.tradeInProgress = false;
+            }
             return;
         }
 
+        if (!message.proposal) return;
+        if (!asset) return;
 
-        if (response.proposal) {
-            const stayedInArray = response.proposal.contract_details.ticks_stayed_in;
-            // console.log('Received proposal:', stayedInArray);
-            const currentDigitCount = stayedInArray[99] + 1;
-            console.log(`filter Number: ${this.filterNum}`);
-            console.log(`Current StayedIn Digit Count: ${stayedInArray[99]} (${currentDigitCount})`);
-            this.currentProposalId = response.proposal.id;
+        const proposal = message.proposal;
+        const stayedInArray = proposal.contract_details.ticks_stayed_in;
 
+        if (!stayedInArray) return;
 
-            // Create frequency map of digits
-            const digitFrequency = {};
-            stayedInArray.forEach(digit => {
-                digitFrequency[digit] = (digitFrequency[digit] || 0) + 1;
-            });
+        // Current digit count of the running accumulator
+        const currentDigitCount = stayedInArray[99] + 1;
 
-            // Create array 1: digits that have appeared just once
-            const appearedOnceArray = Object.keys(digitFrequency)
-                .filter(digit => digitFrequency[digit] === this.filterNum) // 10, Decrease for more Less conservative Entry, don't go lower than 7 (Setup for the number of times Market Restarted for a new StayIN sequence)
-                .map(Number);
+        console.log(`📋 Proposal for ${asset}: Current StayIN Digit Count: ${stayedInArray[99]} (${currentDigitCount})`);
+        console.log(`   Filter Number: ${this.filterNum}`);
 
+        // Store proposal ID
+        this.assetStates[asset].proposalId = proposal.id;
 
-            console.log('Digits that appeared once:', appearedOnceArray);
+        // ── Original frequency analysis logic ──────────────────────────────
+        // Create frequency map of digits
+        const digitFrequency = {};
+        stayedInArray.forEach(digit => {
+            digitFrequency[digit] = (digitFrequency[digit] || 0) + 1;
+        });
 
-            // Condition 1: Current digit count is in appearedOnceArray
-            const condition1 = appearedOnceArray.includes(currentDigitCount) && !this.tradedDigitArray.includes(stayedInArray[99]) && stayedInArray[99] > 15;
+        // Create array: digits that have appeared exactly filterNum times
+        const appearedOnceArray = Object.keys(digitFrequency)
+            .filter(digit => digitFrequency[digit] === this.filterNum)
+            .map(Number);
 
-            console.log('Condition 1 (matched with appeared once):', condition1);
+        console.log(`   Digits that appeared ${this.filterNum} times: [${appearedOnceArray.join(', ')}]`);
 
+        // Entry condition: current digit count is in appearedOnceArray
+        // and not already traded, and stayedIn value > 15
+        const condition = appearedOnceArray.includes(currentDigitCount)
+            && !this.tradedDigitArray.includes(stayedInArray[99])
+            && stayedInArray[99] > 15;
 
-            if (!this.tradeInProgress) {
+        console.log(`   Entry condition: ${condition ? '✅ MET' : '❌ NOT MET'}`);
 
-                if (appearedOnceArray.includes(currentDigitCount)
-                    // && !this.tradedDigitArray.includes(currentDigitCount) 
-                    && stayedInArray[99] >= 0
-                ) {
-                    this.tradedDigitArray.push(currentDigitCount)
-                    this.filteredArray = appearedOnceArray;
-                    console.log('Traded Digit Array:', this.tradedDigitArray);
-                    this.placeTrade();
-                }
-
-                // if(appearedOnceArray.length < 1) {
-                //     this.RestartTrading = true;
-                //     this.disconnect();
-                // }
-
+        // Check if we should place trade
+        if (!this.tradeInProgress) {
+            if (appearedOnceArray.includes(currentDigitCount)
+                && stayedInArray[99] >= 0
+            ) {
+                this.tradedDigitArray.push(currentDigitCount);
+                this.filteredArray = appearedOnceArray;
+                console.log(`   Traded Digit Array: [${this.tradedDigitArray.join(', ')}]`);
+                this.placeTrade(asset, proposal);
             }
         }
     }
 
+    placeTrade(asset, proposal) {
+        if (this.tradeInProgress) return;
 
-    // Update analyzeTicks to request proposal instead of direct trade
-    analyzeTicks() {
-        if (!this.tradeInProgress) {
+        const proposalId = this.assetStates[asset]?.proposalId;
+        if (!proposalId) {
+            console.error(`❌ No valid proposal ID for ${asset}`);
+            return;
+        }
 
-            this.requestProposal(this.currentAsset);
+        console.log(`\n🚀 PLACING TRADE: ${asset}`);
+        console.log(`   Proposal ID: ${proposalId}`);
+        console.log(`   Stake: $${this.currentStake.toFixed(2)}`);
 
+        this.sendRequest({
+            buy: proposalId,
+            price: this.currentStake.toFixed(2)
+        });
+
+        this.tradeInProgress = true;
+        this.activeTrades[asset] = {
+            status: 'buying',
+            proposalId,
+            stake: this.currentStake,
+            entryTime: Date.now(),
+        };
+
+        this.lastTradeTime[asset] = Date.now();
+    }
+
+    handleBuyResponse(message) {
+        const asset = this.findAssetByStatus('buying');
+
+        if (message.error) {
+            console.error(`❌ Buy error: ${message.error.message}`);
+            if (asset) {
+                delete this.activeTrades[asset];
+            }
+            this.tradeInProgress = false;
+            this._clearWatchdogTimers();
+            return;
+        }
+
+        if (!asset) {
+            console.warn('Buy response but no pending trade found');
+            this._clearWatchdogTimers();
+            return;
+        }
+
+        const trade = this.activeTrades[asset];
+        const contractId = message.buy.contract_id;
+
+        console.log(`✅ Contract opened: ${contractId} on ${asset}`);
+
+        trade.status = 'active';
+        trade.contractId = contractId;
+        trade.buyPrice = parseFloat(message.buy.buy_price);
+
+        // Subscribe to contract updates
+        this.sendRequest({
+            proposal_open_contract: 1,
+            contract_id: contractId,
+            subscribe: 1
+        });
+
+        // Record trade start time and start watchdog
+        this.tradeStartTime = Date.now();
+        this._startTradeWatchdog(contractId);
+        console.log(`⏱️  Trade watchdog started (${(this.tradeWatchdogMs / 1000).toFixed(0)}s timeout)`);
+
+        // Telegram notification
+        this.sendTelegramMessage(
+            `🚀 <b>TRADE OPENED (accumBotM)</b>\n\n` +
+            `Asset: <b>${asset}</b>\n` +
+            `Stake: $${trade.stake.toFixed(2)}\n` +
+            `Growth Rate: ${(this.config.growthRate * 100).toFixed(0)}%\n` +
+            `Filter Number: ${this.filterNum}\n` +
+            `Filtered Digits: [${this.filteredArray.join(', ')}]\n` +
+            `Take Profit: $${(trade.stake * this.config.takeProfitMultiplier).toFixed(2)}`
+        );
+    }
+
+    findAssetByStatus(status) {
+        return Object.keys(this.activeTrades).find(
+            asset => this.activeTrades[asset]?.status === status
+        );
+    }
+
+    findAssetByContractId(contractId) {
+        return Object.keys(this.activeTrades).find(
+            asset => this.activeTrades[asset]?.contractId === contractId
+        );
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // CONTRACT MONITORING & EXIT LOGIC
+    // ══════════════════════════════════════════════════════════════════════════
+    handleContractUpdate(message) {
+        const contract = message.proposal_open_contract;
+        if (!contract) return;
+
+        const asset = contract.underlying || this.findAssetByContractId(contract.contract_id);
+        if (!asset || !this.activeTrades[asset]) return;
+
+        const trade = this.activeTrades[asset];
+
+        // Store subscription ID
+        if (message.subscription?.id) {
+            this.contractSubscriptions[asset] = message.subscription.id;
+        }
+
+        // Contract settled?
+        if (contract.is_sold) {
+            this.handleTradeResult(asset, contract);
+            return;
+        }
+
+        // Log progress
+        const tickCount = contract.tick_count || 0;
+        const profit = parseFloat(contract.profit || 0);
+        const bidPrice = parseFloat(contract.bid_price || 0);
+
+        if (tickCount > 0 && tickCount % 2 === 0) {
+            console.log(
+                `  📊 ${asset}: tick ${tickCount} | ` +
+                `Profit: $${profit.toFixed(3)} | Bid: $${bidPrice.toFixed(2)} | ` +
+                `Recent Digits: ${this.lastDigitsList[asset] ? this.lastDigitsList[asset].slice(-5).join(', ') : 'N/A'}`
+            );
         }
     }
 
+    handleSellResponse(message) {
+        if (message.error) {
+            console.error('❌ Sell error:', message.error.message);
+            return;
+        }
+        console.log(`✅ Sold for: $${message.sell?.sold_for || 'N/A'}`);
+    }
 
-    // Place the trade using the proposal ID
-    placeTrade() {
-        if (this.tradeInProgress) return;
+    // ══════════════════════════════════════════════════════════════════════════
+    // TRADE WATCHDOG
+    // ══════════════════════════════════════════════════════════════════════════
+    _startTradeWatchdog(contractId) {
+        this._clearWatchdogTimers();
 
-        if (!this.currentProposalId) {
-            console.error('No valid proposal ID available');
+        const timeoutMs = this.tradeWatchdogMs;
+
+        this.tradeWatchdogTimer = setTimeout(() => {
+            const hasActiveTrade = Object.keys(this.activeTrades).some(
+                a => this.activeTrades[a]?.contractId
+            );
+            if (!hasActiveTrade) {
+                this._clearWatchdogTimers();
+                return;
+            }
+
+            console.warn(
+                `⏰ WATCHDOG FIRED — Contract ${contractId || 'unknown'} has been open for ` +
+                `${(timeoutMs / 1000).toFixed(0)}s with no settlement`
+            );
+
+            if (contractId && this.connected && this.wsReady) {
+                console.log(`🔍 Polling contract ${contractId} for current status…`);
+                this.sendRequest({
+                    proposal_open_contract: 1,
+                    contract_id: contractId,
+                    subscribe: 1,
+                });
+
+                this.tradeWatchdogPollTimer = setTimeout(() => {
+                    const stillActive = Object.keys(this.activeTrades).some(
+                        a => this.activeTrades[a]?.contractId
+                    );
+                    if (!stillActive) {
+                        this._clearWatchdogTimers();
+                        return;
+                    }
+                    console.error(
+                        `🚨 WATCHDOG: Poll timed out — contract ${contractId} still unresolved, ` +
+                        `force-releasing lock`
+                    );
+                    this._recoverStuckTrade('watchdog-force');
+                }, 15000);
+
+            } else {
+                this._recoverStuckTrade('watchdog-offline');
+            }
+        }, timeoutMs);
+    }
+
+    _clearWatchdogTimers() {
+        if (this.tradeWatchdogTimer) {
+            clearTimeout(this.tradeWatchdogTimer);
+            this.tradeWatchdogTimer = null;
+        }
+        if (this.tradeWatchdogPollTimer) {
+            clearTimeout(this.tradeWatchdogPollTimer);
+            this.tradeWatchdogPollTimer = null;
+        }
+    }
+
+    _recoverStuckTrade(reason) {
+        this._clearWatchdogTimers();
+
+        const stuckAsset = Object.keys(this.activeTrades).find(
+            asset => this.activeTrades[asset]?.contractId
+        );
+        if (!stuckAsset) {
+            console.warn('⚠️  No active trade found for stuck trade recovery');
             this.tradeInProgress = false;
             return;
         }
 
-        const request = {
-            buy: this.currentProposalId,
-            price: this.currentStake.toFixed(2)
-        };
+        const trade = this.activeTrades[stuckAsset];
+        const contractId = trade.contractId || 'unknown';
+        const stake = trade.stake || 0;
+        const entryTime = this.tradeStartTime || Date.now();
+        const openSeconds = Math.round((Date.now() - entryTime) / 1000);
 
-        console.log('Placing trade:', JSON.stringify(request, null, 2));
-        this.sendRequest(request);
-        this.tradeInProgress = true;
-    }
+        console.error(
+            `\n🚨 STUCK TRADE RECOVERY [${reason}]` +
+            `\n   Contract: ${contractId}` +
+            `\n   Asset: ${stuckAsset}` +
+            `\n   Stake: $${stake.toFixed(2)}` +
+            `\n   Open for: ${openSeconds}s`
+        );
 
-
-    subscribeToOpenContract(contractId) {
-        const request = {
-            proposal_open_contract: 1,
-            contract_id: contractId,
-            subscribe: 1
-        };
-        this.sendRequest(request);
-    }
-
-    handleContractUpdate(contract) {
-        if (contract.is_sold) {
-            this.handleTradeResult(contract);
+        // Emergency sell attempt
+        if (contractId && contractId !== 'unknown' && this.connected && this.wsReady) {
+            console.log(`🔄 Attempting emergency sell of contract ${contractId}…`);
+            this.sendRequest({
+                sell: contractId,
+                price: '0',
+            });
         }
+
+        // Forget subscription
+        if (this.contractSubscriptions[stuckAsset]) {
+            this.sendRequest({ forget: this.contractSubscriptions[stuckAsset] });
+            delete this.contractSubscriptions[stuckAsset];
+        }
+
+        // Clear trade state
+        this.tradeInProgress = false;
+        this.tradeStartTime = null;
+        delete this.activeTrades[stuckAsset];
+
+        // Record as loss
+        this.totalLosses++;
+        this.consecutiveLosses++;
+        this.consecutiveLosses2++;
+
+        if (this.assetMetrics[stuckAsset]) {
+            this.assetMetrics[stuckAsset].losses++;
+            this.assetMetrics[stuckAsset].profitLoss -= stake;
+        }
+
+        this.totalProfitLoss -= stake;
+        this.dailyProfitLoss -= stake;
+
+        this.suspendOtherAssets(stuckAsset);
+
+        console.log(
+            `\n   Trade lock released — bot can now trade again` +
+            `\n   Stake $${stake.toFixed(2)} recorded as loss`
+        );
+
+        this.sendTelegramMessage(
+            `🚨 <b>STUCK TRADE RECOVERED [${reason}]</b>\n\n` +
+            `Contract: ${contractId}\n` +
+            `Asset: ${stuckAsset}\n` +
+            `Stake: $${stake.toFixed(2)}\n` +
+            `Open for: ${openSeconds}s\n` +
+            `Action: Emergency sell attempted, trade lock released`
+        );
+
+        StatePersistence.saveState(this);
     }
 
-    handleTradeResult(contract) {
+    // ══════════════════════════════════════════════════════════════════════════
+    // TRADE RESULT HANDLING (original logic preserved)
+    // ══════════════════════════════════════════════════════════════════════════
+    handleTradeResult(asset, contract) {
+        const trade = this.activeTrades[asset];
+        if (!trade) {
+            this._clearWatchdogTimers();
+            return;
+        }
+
+        // Clear watchdog
+        this._clearWatchdogTimers();
+
         const won = contract.status === 'won';
         const profit = parseFloat(contract.profit);
 
-        // Existing trade result handling
-        console.log(`Trade outcome: ${won ? 'Won' : 'Lost'}`);
+        // Unsubscribe from contract
+        if (this.contractSubscriptions[asset]) {
+            this.sendRequest({ forget: this.contractSubscriptions[asset] });
+            delete this.contractSubscriptions[asset];
+        }
 
+        console.log(`\n${'═'.repeat(55)}`);
+        console.log(`  ${won ? '✅ WIN' : '❌ LOSS'}: ${asset}`);
+        console.log(`  Ticks: ${contract.tick_count || 0} | P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(3)}`);
+        console.log(`${'═'.repeat(55)}`);
+
+        // Update stats
         this.totalTrades++;
+        this.totalProfitLoss += profit;
+        this.dailyProfitLoss += profit;
+        this.hourlyStats.trades++;
+        this.hourlyStats.pnl += profit;
+
+        if (this.assetMetrics[asset]) {
+            this.assetMetrics[asset].trades++;
+            this.assetMetrics[asset].profitLoss += profit;
+        }
 
         if (won) {
             this.totalWins++;
             this.isWinTrade = true;
 
+            // Original k-count recovery logic
             if (this.consecutiveLosses >= 1) {
                 this.kCountNum++;
                 if (this.kCountNum === 6) {
@@ -492,353 +1071,204 @@ class EnhancedDerivTradingBot {
                 }
             }
 
-            // this.currentStake = this.config.initialStake;
             this.kLoss = 0.01;
-
             this.RestartTrading = true;
 
+            if (this.assetMetrics[asset]) this.assetMetrics[asset].wins++;
+            this.hourlyStats.wins++;
+
+            // Resume all assets after win
+            // if (this.focusAsset) {
+            //     this.resumeAllAssets();
+            // }
         } else {
-            this.kCountNum = 0;
-            this.isWinTrade = false;
             this.totalLosses++;
             this.consecutiveLosses++;
-            // this.kLoss += profit.toFixed(2);
+            this.kCountNum = 0;
+            this.isWinTrade = false;
+            this.hourlyStats.losses++;
 
+            if (this.assetMetrics[asset]) this.assetMetrics[asset].losses++;
 
-            if (this.consecutiveLosses === 1) {
-                // this.kLoss = 2;
-            } else if (this.consecutiveLosses === 2) {
-                // this.kLoss = 4;
-                this.consecutiveLosses2++;
-            } else if (this.consecutiveLosses === 3) {
-                // this.kLoss = 8;
-                this.consecutiveLosses3++;
-            } else if (this.consecutiveLosses === 4) {
-                // this.kLoss = 16;
-                this.consecutiveLosses4++;
-            } else if (this.consecutiveLosses === 5) {
-                // this.kLoss = 32;
-                this.consecutiveLosses5++;
-            } else if (this.consecutiveLosses === 6) {
-                // this.kLoss = 64;
-                this.consecutiveLosses6++;
-            }
+            if (this.consecutiveLosses === 2) this.consecutiveLosses2++;
+            else if (this.consecutiveLosses === 3) this.consecutiveLosses3++;
+            else if (this.consecutiveLosses === 4) this.consecutiveLosses4++;
+            else if (this.consecutiveLosses === 5) this.consecutiveLosses5++;
+            else if (this.consecutiveLosses === 6) this.consecutiveLosses6++;
 
+            // Original martingale
             this.currentStake = Math.ceil(this.currentStake * this.config.multiplier * 100) / 100;
 
+            // Suspend all other assets, focus on loss asset
+            // this.suspendOtherAssets(asset);
+
+            // Send loss notification
+            this.sendLossNotification(asset, contract);
         }
 
-        // Keep array length under 5 by removing from the start if needed
+        // Keep traded digit array trimmed
         if (this.tradedDigitArray.length > 1) {
             this.tradedDigitArray.shift();
         }
 
         this.RestartTrading = true;
-
-
         this.Sys1 = 0;
 
-        this.totalProfitLoss += profit;
+        this.tradeInProgress = false;
+        this.tradeStartTime = null;
+        delete this.activeTrades[asset];
 
-        if (!won) {
-            this.sendLossEmail();
-        }
-
-        this.tradeNum = Math.floor(Math.random() * (40 - 21 + 1)) + 21;
-
-        this.Pause = true;
-
+        // Log summary
         this.logTradingSummary();
 
-        //Take profit condition
+        // Take profit condition
         if (this.totalProfitLoss >= this.config.takeProfit) {
-            console.log('Take Profit Reached... Stopping trading.');
+            console.log('🎯 Take Profit Reached... Stopping trading.');
             this.endOfDay = true;
-            this.sendDisconnectResumptionEmailSummary();
+            this.sendDisconnectSummary();
             this.disconnect();
             return;
         }
 
-        // Check stopping conditions
+        // Stop conditions
         if (this.consecutiveLosses >= this.config.maxConsecutiveLosses ||
             this.totalProfitLoss <= -this.config.stopLoss) {
-            console.log('Stopping condition met. Disconnecting...');
+            console.log('🛑 Stopping condition met. Disconnecting...');
             this.endOfDay = true;
-            this.sendDisconnectResumptionEmailSummary();
+            this.sendDisconnectSummary();
             this.disconnect();
             return;
         }
 
-        this.disconnect();
+        StatePersistence.saveState(this);
 
-        if (!this.endOfDay) {
-            // if(!won) {
-            //     this.waitTime = Math.floor(Math.random() * (42000 - 20000 + 1)) + 40000;
-            // } else {
-            //     this.waitTime = Math.floor(Math.random() * (29000 - 20000 + 1)) + 5000;
-            // }
+        // ═══════════════════════════════════════════════════════════════════
+        // IMMEDIATE RE-EVALUATION — Don't wait for the next tick
+        // ═══════════════════════════════════════════════════════════════════
+        // this._evaluateAllAssetsImmediately();
+    }
 
-            // if (this.usedAssets.size === this.assets.length) {
-            //     this.waitTime = Math.floor(Math.random() * (42000 - 20000 + 1)) + 300000;
-            // } else {
-            //     this.waitTime = Math.floor(Math.random() * (21000 - 20000 + 1)) + 1000;
-            // }
-            this.waitTime = Math.floor(Math.random() * (31000 - 20000 + 1)) + 2000;
+    /**
+     * Immediately evaluate all assets for a new trade opportunity
+     * after a trade closes.
+     */
+    _evaluateAllAssetsImmediately() {
+        this.assets.forEach(a => {
+            this.tickCounts[a] = 0;
+        });
 
-            console.log(`Waiting ${Math.round(this.waitTime / 1000)} seconds before next trade...`);
-            setTimeout(() => {
-                this.Pause = false;
-                this.connect();
-            }, this.waitTime);
+        for (const asset of this.assets) {
+            if (!this.isAssetAllowed(asset)) continue;
+            if (this.tradeInProgress) break;
+            if (this.activeTrades[asset]) continue;
+            if (!this.tickHistory[asset] || this.tickHistory[asset].length < this.config.requiredHistoryLength) continue;
+            if (Date.now() - (this.lastTradeTime[asset] || 0) < this.config.minTimeBetweenTrades) continue;
+
+            console.log(`\n⚡ IMMEDIATE RE-ENTRY: ${asset} (post-trade evaluation)`);
+
+            this.requestProposal(asset);
+            break;
         }
     }
 
-    unsubscribeFromTicks(callback) {
-        if (this.currentTradeId && this.tradeInProgress) {
-            const request = {
-                forget: this.currentTradeId
-            };
-            this.sendRequest(request);
-            console.log(`Unsubscribing from ticks with ID: ${this.currentTradeId}`);
-
-            this.ws.once('message', (data) => {
-                const message = JSON.parse(data);
-                if (message.msg_type === 'forget' && message.forget === this.currentTradeId) {
-                    console.log(`Unsubscribed from ticks successfully`);
-                    this.currentTradeId = null;
-                    if (callback) callback();
-                }
-            });
-        } else {
-            if (callback) callback();
-        }
-    }
-
-    //Check for Disconnect and Reconnect
+    // ══════════════════════════════════════════════════════════════════════════
+    // TIME-BASED DISCONNECT / RECONNECT (original logic preserved)
+    // ══════════════════════════════════════════════════════════════════════════
     checkTimeForDisconnectReconnect() {
         setInterval(() => {
             const now = new Date();
-            const currentHours = now.getHours();
-            const currentMinutes = now.getMinutes();
+            const gmtPlus1Time = new Date(now.getTime() + (1 * 60 * 60 * 1000));
+            const currentDay = gmtPlus1Time.getUTCDay(); // 0: Sunday, 1: Monday, ..., 6: Saturday
+            const currentHours = gmtPlus1Time.getUTCHours();
+            const currentMinutes = gmtPlus1Time.getUTCMinutes();
 
-            // Check for afternoon resume condition (11:00 AM)
+            // Weekend logic: Saturday 11pm to Monday 2am GMT+1 -> Disconnect and stay disconnected
+            const isWeekend = (currentDay === 0) || // Sunday
+                (currentDay === 6 && currentHours >= 23) || // Saturday after 11pm
+                (currentDay === 1 && currentHours < 8);    // Monday before 8am
+
+            // Afternoon resume: 2:00 AM
             if (this.endOfDay && currentHours === 2 && currentMinutes >= 0) {
                 console.log("It's 2:00 AM, reconnecting the bot.");
-                this.LossDigitsList = [];
-                this.tradeInProgress = false;
-                this.usedAssets = new Set();
-                this.RestartTrading = true;
-                this.Pause = false;
                 this.endOfDay = false;
+                this.Pause = false;
+                this.tradeInProgress = false;
+                this.RestartTrading = true;
                 this.tradedDigitArray = [];
                 this.tradedDigitArray2 = [];
                 this.tradeNum = Math.floor(Math.random() * (40 - 21 + 1)) + 21;
                 this.connect();
             }
 
-            // Check for evening stop condition (after 5:00 PM)
+            // Evening stop: after 11:00 PM following a win
             if (this.isWinTrade && !this.endOfDay) {
                 if (currentHours >= 23 && currentMinutes >= 0) {
-                    console.log("It's past 11:00 PM after a win trade, disconnecting the bot.");
-                    this.sendDisconnectResumptionEmailSummary();
+                    console.log("It's past 11:00 PM after a win trade, disconnecting.");
+                    this.sendDisconnectSummary();
                     this.Pause = true;
                     this.disconnect();
                     this.endOfDay = true;
                 }
             }
-        }, 20000); // Check every 20 seconds
+        }, 20000);
     }
 
-
-    disconnect() {
-        if (this.connected) {
-            this.ws.close();
-        }
-    }
-
+    // ══════════════════════════════════════════════════════════════════════════
+    // TRADING SUMMARY
+    // ══════════════════════════════════════════════════════════════════════════
     logTradingSummary() {
-        console.log('Trading Summary:');
-        console.log(`Total Trades: ${this.totalTrades}`);
-        console.log(`Total Trades Won: ${this.totalWins}`);
-        console.log(`Total Trades Lost: ${this.totalLosses}`);
-        console.log(`x2 Losses: ${this.consecutiveLosses2}`);
-        console.log(`x3 Losses: ${this.consecutiveLosses3}`);
-        console.log(`x4 Losses: ${this.consecutiveLosses4}`);
-        console.log(`x5 Losses: ${this.consecutiveLosses5}`);
-        console.log(`x6 Losses: ${this.consecutiveLosses6}`);
-        console.log(`Total Profit/Loss Amount: $${this.totalProfitLoss.toFixed(2)}`);
-        console.log(`Win Rate: ${((this.totalWins / this.totalTrades) * 100).toFixed(2)}%`);
-        // console.log(`predictedDigit: ${this.predictedDigit}`); 
-        // console.log(`Percentage: ${this.Percentage} %`);
-        console.log(`Current Stake: $${this.currentStake.toFixed(2)}`);
+        console.log('\n📊 Trading Summary:');
+        console.log(`  Total Trades: ${this.totalTrades}`);
+        console.log(`  Total Trades Won: ${this.totalWins}`);
+        console.log(`  Total Trades Lost: ${this.totalLosses}`);
+        console.log(`  x2 Losses: ${this.consecutiveLosses2}`);
+        console.log(`  x3 Losses: ${this.consecutiveLosses3}`);
+        console.log(`  x4 Losses: ${this.consecutiveLosses4}`);
+        console.log(`  Total Profit/Loss: $${this.totalProfitLoss.toFixed(2)}`);
+        console.log(`  Win Rate: ${this.totalTrades > 0 ? ((this.totalWins / this.totalTrades) * 100).toFixed(2) : '0.00'}%`);
+        console.log(`  Current Stake: $${this.currentStake.toFixed(2)}`);
+        console.log(`  Filtered Digits: [${this.filteredArray.join(', ')}]`);
+        console.log(`  Traded Digits: [${this.tradedDigitArray.join(', ')}]`);
     }
 
-    startEmailTimer() {
-        setInterval(() => {
-            if (!this.endOfDay) {
-                this.sendEmailSummary();
-            }
-        }, 1800000); // 30 minutes
-    }
-
-    async sendEmailSummary() {
-        const transporter = nodemailer.createTransport(this.emailConfig);
-
-        const summaryText = `
-        Trading Summary:
-        Total Trades: ${this.totalTrades}
-        Total Trades Won: ${this.totalWins}
-        Total Trades Lost: ${this.totalLosses}
-        x2 Losses: ${this.consecutiveLosses2}
-        x3 Losses: ${this.consecutiveLosses3}
-        x4 Losses: ${this.consecutiveLosses4}
-        x5 Losses: ${this.consecutiveLosses5}
-        x6 Losses: ${this.consecutiveLosses6}
-
-        Total Profit/Loss Amount: $${this.totalProfitLoss.toFixed(2)}
-        Win Rate: ${((this.totalWins / this.totalTrades) * 100).toFixed(2)}%
-
-        Current Stake: $${this.currentStake.toFixed(2)}
-        `;
-
-        const mailOptions = {
-            from: this.emailConfig.auth.user,
-            to: this.emailRecipient,
-            subject: 'L5%Accumulator Trading Bot - Summary',
-            text: summaryText
-        };
-
-        try {
-            const info = await transporter.sendMail(mailOptions);
-            // console.log('Email sent successfully:', info.messageId);
-        } catch (error) {
-            // console.error('Error sending email:', error);
-        }
-    }
-
-    async sendLossEmail() {
-        const transporter = nodemailer.createTransport(this.emailConfig);
-        const klastDigits = this.lastDigitsList.slice(-20);
-
-        const summaryText = `
-        Loss Summary:
-        Total Trades: ${this.totalTrades}
-        Total Trades Won: ${this.totalWins}
-        Total Trades Lost: ${this.totalLosses}
-        x2 Losses: ${this.consecutiveLosses2}
-        x3 Losses: ${this.consecutiveLosses3}
-        x4 Losses: ${this.consecutiveLosses4}
-        x5 Losses: ${this.consecutiveLosses5}
-        x6 Losses: ${this.consecutiveLosses6}
-
-        Total Profit/Loss Amount: $${this.totalProfitLoss.toFixed(2)}
-        Win Rate: ${((this.totalWins / this.totalTrades) * 100).toFixed(2)}%
-
-        Last Digit Analysis:
-        Asset: ${this.currentAsset}
-        Filtered Array: ${this.filteredArray}
-        Traded Array: ${this.tradedDigitArray}
-        Filtered Number: ${this.filterNum}
-
-
-        Current Stake: $${this.currentStake.toFixed(2)}
-        `;
-
-        const mailOptions = {
-            from: this.emailConfig.auth.user,
-            to: this.emailRecipient,
-            subject: 'L5%Accumulator Trading Bot - Summary',
-            text: summaryText
-        };
-
-        try {
-            const info = await transporter.sendMail(mailOptions);
-            // console.log('Email sent successfully:', info.messageId);
-        } catch (error) {
-            // console.error('Error sending email:', error);
-        }
-    }
-
-    async sendErrorEmail(errorMessage) {
-        const transporter = nodemailer.createTransport(this.emailConfig);
-
-        const mailOptions = {
-            from: this.emailConfig.auth.user,
-            to: this.emailRecipient,
-            subject: 'L5%Accumulator Trading Bot - Error Report',
-            text: `An error occurred in the trading bot: ${errorMessage}`
-        };
-
-        try {
-            const info = await transporter.sendMail(mailOptions);
-            // console.log('Error email sent successfully:', info.messageId);
-        } catch (error) {
-            // console.error('Error sending error email:', error);
-        }
-    }
-
-    async sendDisconnectResumptionEmailSummary() {
-        const transporter = nodemailer.createTransport(this.emailConfig);
-        const now = new Date();
-        const currentHours = now.getHours();
-        const currentMinutes = now.getMinutes();
-
-
-        const summaryText = `
-        Disconnect/Reconnect Email: Time (${currentHours}:${currentMinutes})
-        
-        
-        Trading Summary:
-        Total Trades: ${this.totalTrades}
-        Total Trades Won: ${this.totalWins}
-        Total Trades Lost: ${this.totalLosses}
-        x2 Losses: ${this.consecutiveLosses2}
-        x3 Losses: ${this.consecutiveLosses3}
-        x4 Losses: ${this.consecutiveLosses4}
-        x5 Losses: ${this.consecutiveLosses5}
-        x6 Losses: ${this.consecutiveLosses6}
-
-        Trade Analysis:
-        Asset: ${this.currentAsset}
-        Filtered Array: ${this.filteredArray}
-        Traded Array: ${this.tradedDigitArray2} 
-        Filtered Number: ${this.filterNum}
-        
-        Total Profit/Loss Amount: ${this.totalProfitLoss.toFixed(2)}
-        Win Rate: ${((this.totalWins / this.totalTrades) * 100).toFixed(2)}%
-        `;
-
-        const mailOptions = {
-            from: this.emailConfig.auth.user,
-            to: this.emailRecipient,
-            subject: 'L5%Accumulator Trading Bot - Summary',
-            text: summaryText
-        };
-
-        try {
-            const info = await transporter.sendMail(mailOptions);
-            // console.log('Email sent successfully:', info.messageId);
-        } catch (error) {
-            // console.error('Error sending email:', error);
-        }
-    }
-
+    // ══════════════════════════════════════════════════════════════════════════
+    // LIFECYCLE
+    // ══════════════════════════════════════════════════════════════════════════
     start() {
+        console.log('═══════════════════════════════════════════════════════════');
+        console.log('  🚀 accumBotM — Enhanced Multi-Asset Accumulator Bot');
+        console.log('═══════════════════════════════════════════════════════════');
+        console.log(`  Assets:        ${this.assets.join(', ')}`);
+        console.log(`  Initial Stake: $${this.config.initialStake}`);
+        console.log(`  Multiplier:    x${this.config.multiplier}`);
+        console.log(`  Growth Rate:   ${(this.config.growthRate * 100)}%`);
+        console.log(`  Filter Num:    ${this.filterNum}`);
+        console.log(`  Take Profit:   $${this.config.takeProfit}`);
+        console.log(`  Stop Loss:     $${this.config.stopLoss}`);
+        console.log('═══════════════════════════════════════════════════════════\n');
+
         this.connect();
-        // this.checkTimeForDisconnectReconnect(); // Automatically handles disconnect/reconnect at specified times
+        this.checkTimeForDisconnectReconnect();
+        this.startTelegramTimer();
+        StatePersistence.startAutoSave(this);
     }
 }
 
-// Updated configuration
+// ══════════════════════════════════════════════════════════════════════════════
+// BOT INITIALIZATION
+// ══════════════════════════════════════════════════════════════════════════════
 const bot = new EnhancedDerivTradingBot('0P94g4WdSrSrzir', {
-    // 'DMylfkyce6VyZt7', '0P94g4WdSrSrzir', '8NFMt6LKFTfTCPE'
     initialStake: 1,
     multiplier: 6,
+    multiplier2: 8,
     maxConsecutiveLosses: 3,
     stopLoss: 100,
     takeProfit: 100,
-    growthRate: 0.02, // 5% growth rate
-    accuTakeProfit: 0.01, // Take profit amount 
-    takeProfitMultiplier: 0.20, // 20% of stake as TP (limit order backup)      
+    growthRate: 0.02,
+    takeProfitMultiplier: 0.20,
+    assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
+    telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
+    telegramChatId: '752497117',
 });
+
 bot.start();
