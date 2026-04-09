@@ -208,6 +208,8 @@ class EnhancedDerivTradingBot {
     requestProposal() {
         if (this.tradeInProgress) return;
 
+        const takeProfitAmount = this.currentStake * this.config.takeProfitMultiplier;
+
         const proposal = {
             proposal: 1,
             amount: this.currentStake.toFixed(2),
@@ -217,7 +219,7 @@ class EnhancedDerivTradingBot {
             symbol: this.currentAsset,
             growth_rate: this.config.growthRate,
             limit_order: {
-                take_profit: this.kLoss
+                take_profit: takeProfitAmount.toFixed(2)
             }
 
         };
@@ -454,11 +456,9 @@ class EnhancedDerivTradingBot {
             return;
         }
 
-        const takeProfitAmount = this.currentStake * this.config.takeProfitMultiplier;
-
         const request = {
             buy: this.currentProposalId,
-            price: takeProfitAmount.toFixed(2)
+            price: this.currentStake.toFixed(2)
         };
 
         console.log('Placing trade:', JSON.stringify(request, null, 2));

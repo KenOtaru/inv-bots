@@ -283,6 +283,8 @@ class EnhancedDigitDifferTradingBot {
 
     requestProposal(asset) {
 
+        const takeProfitAmount = this.currentStake * this.config.takeProfitMultiplier;
+
         const proposal = {
             proposal: 1,
             amount: this.currentStake.toFixed(2),
@@ -292,7 +294,7 @@ class EnhancedDigitDifferTradingBot {
             symbol: asset,
             growth_rate: this.config.growthRate,
             limit_order: {
-                take_profit: this.kLoss
+                take_profit: takeProfitAmount.toFixed(2)
             }
         };
 
@@ -632,16 +634,16 @@ class EnhancedDigitDifferTradingBot {
         const lastDigit = last10[last10.length - 1]; // The digit we're betting continues
 
         // for (let times = 3; times >= 2; times--) {
-        if (appeared[2].length > 0) {
+        if (appeared[1].length > 0) {
             // if (appeared[2].includes(currentCount) && appeared[2].length > 1 !== lastDigit + 1) {
-            if (appeared[2].includes(currentCount) && appeared[2].length > 1 && last10[9] >= 2 && last10[0] !== lastDigit + 1 && last10[1] !== lastDigit + 1) {
+            if (appeared[1].includes(currentCount) && appeared[1].length > 1 && last10[8] >= 1 && last10[0] !== lastDigit + 1 && last10[1] !== lastDigit + 1) {
                 console.log(`TRADE SIGNAL! Betting digit ${lastDigit + 1} appears 2 times (currently 2x)`);
                 console.log(`TRADE SIGNAL! Betting digit ${last10[0]} ${last10[1]}`);
 
                 assetState.tradedDigitArray.push(currentCount);
-                assetState.filteredArray = appeared[2];
-                assetState.lastFilterUsed = 2;
-                assetState.tradeFrequency = 2;
+                assetState.filteredArray = appeared[1];
+                assetState.lastFilterUsed = 1;
+                assetState.tradeFrequency = 1;
 
                 this.placeTrade(asset);
             }
@@ -680,16 +682,14 @@ class EnhancedDigitDifferTradingBot {
             return;
         }
 
-        const takeProfitAmount = this.currentStake * this.config.takeProfitMultiplier;
-
         const buyRequest = {
             buy: state.currentProposalId,
-            price: takeProfitAmount.toFixed(2)
+            price: this.currentStake.toFixed(2)
         };
 
         console.log(`EXECUTING ACCU TRADE
         Asset: ${asset}
-        Stake: $${takeProfitAmount.toFixed(2)}
+        Stake: $${this.currentStake.toFixed(2)}
         Target Count: ${state.tradedDigitArray.slice(-1)[0]}
         Frequency Filter: ${state.tradeFrequency}x
         `);
