@@ -1955,7 +1955,7 @@ const bot = new AccumulatorBotV4(token, {
     dailyTakeProfit: 500000,
     tradeSystem: 2,
     minEntryTick: 0,
-    maxEntryTick: 15,
+    maxEntryTick: 10,
 
     // Accumulator strategy
     defaultGrowthRate: 0.02,   // 1% — widest barrier, highest survival
