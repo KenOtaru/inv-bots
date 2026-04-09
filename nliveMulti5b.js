@@ -1007,7 +1007,7 @@ class AccumulatorBotV4 {
                     analysis.scores.tickStability >= 1
 
 
-                if (this.Sys === 2 && !shouldTrade) return;
+                if (!shouldTrade) return;
             }
         }
 
