@@ -558,7 +558,7 @@ class AccumulatorBotV4 {
 
             // Analysis thresholds
             minOverallScore: config.minOverallScore || 0.85,
-            minTimeBetweenTrades: config.minTimeBetweenTrades || 10000, // 10s between trades per asset
+            minTimeBetweenTrades: config.minTimeBetweenTrades || 5000, // 5s between trades per asset (reduced from 10s for faster re-entry)
 
             // History requirements
             requiredHistoryLength: config.requiredHistoryLength || 100,
@@ -1622,6 +1622,118 @@ class AccumulatorBotV4 {
         }
 
         StatePersistence.saveState(this);
+
+        // ═══════════════════════════════════════════════════════════════════
+        // IMMEDIATE RE-EVALUATION — Don't wait for the next tick to enter
+        // the next trade. After a trade closes (especially after a loss),
+        // the market regime may have shifted — we need to catch the new
+        // trend immediately for effective recovery trading.
+        // ═══════════════════════════════════════════════════════════════════
+        this._evaluateAllAssetsImmediately();
+    }
+
+    /**
+     * Immediately evaluate all assets for a new trade opportunity.
+     * Called right after a trade closes to avoid waiting for the next tick.
+     * This is critical for recovery trades that need to enter quickly
+     * after a trend reset.
+     */
+    _evaluateAllAssetsImmediately() {
+        // Reset tick counts so the very next tick triggers analysis
+        this.assets.forEach(a => {
+            this.tickCounts[a] = 0;
+        });
+
+        // For each asset, run immediate analysis and trade if signal is strong
+        for (const asset of this.assets) {
+            // Skip if asset has an active trade
+            if (this.activeTrades[asset]) continue;
+
+            // Skip if not allowed
+            if (!this.isAssetAllowed(asset)) continue;
+
+            // Risk check
+            const riskCheck = this.riskManager.canTrade(asset, this.dailyProfitLoss, this.consecutiveLosses);
+            if (!riskCheck.allowed) continue;
+
+            // Need enough history
+            if (!this.priceHistories[asset] || this.priceHistories[asset].length < this.config.requiredHistoryLength) continue;
+
+            // Run analysis
+            const prices = this.priceHistories[asset];
+            const analysis = this.analyzer.analyzeEntry(prices);
+
+            // Apply same entry criteria as evaluateAndTrade
+            let shouldProceed = false;
+            if (this.Sys === 1) {
+                if (this.consecutiveLosses >= 1) {
+                    shouldProceed = analysis.shouldTrade;
+                } else {
+                    if (!analysis.shouldTrade) continue;
+                    if (analysis.maxTickMove > 0.001) continue;
+                    if (analysis.tickStability < 0.3) continue;
+                    if (analysis.bb.percentB < 0.3 || analysis.bb.percentB > 0.7) continue;
+                    if (analysis.macd.histogram > 0) continue;
+                    if (analysis.macd.isConverging) continue;
+                    if (analysis.overallScore < 0.85) continue;
+                    shouldProceed = true;
+                }
+            } else if (this.Sys === 2) {
+                if (this.consecutiveLosses >= 1) {
+                    shouldProceed = analysis.shouldTrade;
+                } else {
+                    const shouldTrade =
+                        analysis.overallScore < 0.46 &&
+                        analysis.scores.bandWidth < 1 &&
+                        analysis.scores.macdFlat < 1 &&
+                        analysis.scores.pricePosition < 1 &&
+                        analysis.scores.tickStability >= 1;
+                    if (!shouldTrade) continue;
+                    shouldProceed = true;
+                }
+            }
+
+            if (!shouldProceed) continue;
+
+            // Double-check no trade in progress
+            if (this.tradeInProgress) break;
+            if (this.activeTrades[asset]) continue;
+
+            console.log(`\n⚡ IMMEDIATE RE-ENTRY: ${asset} (post-trade evaluation)`);
+
+            this.tradeInProgress = true;
+            this.currentStake = this.riskManager.calculateStake(this.accountBalance, this.consecutiveLosses);
+
+            const growthRate = analysis.recommendedGrowthRate || this.config.defaultGrowthRate;
+            const takeProfitAmount = this.currentStake * this.config.takeProfitMultiplier;
+
+            console.log(`   Score: ${(analysis.overallScore * 100).toFixed(1)}% | Growth: ${(growthRate * 100).toFixed(0)}% | Stake: $${this.currentStake.toFixed(2)}`);
+
+            this.activeTrades[asset] = {
+                status: 'requesting_proposal',
+                analysis,
+                growthRate,
+                stake: this.currentStake,
+                takeProfitAmount,
+                entryTime: Date.now(),
+            };
+
+            this.sendRequest({
+                proposal: 1,
+                amount: this.currentStake.toFixed(2),
+                basis: 'stake',
+                contract_type: 'ACCU',
+                currency: 'USD',
+                symbol: asset,
+                growth_rate: growthRate,
+                limit_order: {
+                    take_profit: takeProfitAmount.toFixed(2)
+                }
+            });
+
+            // Only enter one trade per re-evaluation
+            break;
+        }
     }
 
     // ========================================================================
@@ -1851,7 +1963,7 @@ const bot = new AccumulatorBotV4(token, {
     // Analysis
     minOverallScore: 1,     // Composite threshold
     analysisInterval: 1,       // Check every 3rd tick
-    minTimeBetweenTrades: 10000,
+    minTimeBetweenTrades: 5000, // Reduced from 10s for faster re-entry
 
     // Assets (lower volatility indices preferred)
     assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'], //, '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V'

@@ -77,7 +77,8 @@ const CONFIG = {
     takeProfitSession: 50000,    // stop bot after reaching this profit
 
     // Proposal throttle: min ms between proposal requests per asset
-    proposalThrottleMs: 10000,
+    // Reduced from 10s to 5s to allow faster re-entry after trade closes
+    proposalThrottleMs: 5000,
 
     // Telegram
     telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ', //process.env.TELEGRAM_TOKEN || 
@@ -1250,6 +1251,74 @@ class ReliableAccumulatorBot {
         this.activeTrade = null;
 
         StatePersistence.save(this);
+
+        // ═══════════════════════════════════════════════════════════════════
+        // IMMEDIATE RE-EVALUATION — Don't wait for the next tick to enter
+        // the next trade. After a trade closes (especially after a loss),
+        // the market regime may have shifted — we need to catch the new
+        // trend immediately for effective recovery trading.
+        // ═══════════════════════════════════════════════════════════════════
+        this._evaluateAllAssetsImmediately();
+    }
+
+    /**
+     * Immediately evaluate all assets for a new trade opportunity.
+     * Called right after a trade closes to avoid waiting for the next tick.
+     * This is critical for recovery trades that need to enter quickly
+     * after a trend reset.
+     */
+    _evaluateAllAssetsImmediately() {
+        for (const asset of CONFIG.assets) {
+            // Skip if asset is suspended
+            if (!this.isAssetAllowed(asset)) continue;
+
+            // Skip if already trading
+            if (this.tradeInProgress) break;
+
+            // Risk check
+            const risk = this.riskManager.canTrade(asset, this.dailyPnl, this.consecutiveLosses);
+            if (!risk.allowed) continue;
+
+            // Need enough history
+            if (!this.tickPrices[asset] || this.tickPrices[asset].length < CONFIG.requiredHistory) continue;
+
+            // Throttle check
+            const now = Date.now();
+            const lastAt = this.assetStates[asset].lastProposalAt || 0;
+            if ((now - lastAt) < CONFIG.proposalThrottleMs) continue;
+
+            // Run analysis
+            const signal = this.analyzer.analyze(asset, this.tickPrices[asset]);
+            if (!signal.shouldEnter) continue;
+
+            // After consecutive losses, skip weaker signals
+            if (this.consecutiveLosses < 1) {
+                if (signal.growthRate < CONFIG.growthRateBoost) continue;
+            }
+
+            console.log(`\n⚡ IMMEDIATE RE-ENTRY: ${asset} (post-trade evaluation)`);
+
+            // All checks passed — execute trade immediately
+            this.assetStates[asset].lastProposalAt = now;
+
+            const takeProfitAmount = parseFloat((this.currentStake * CONFIG.takeProfitPct).toFixed(2));
+
+            this._send({
+                proposal: 1,
+                amount: this.currentStake.toFixed(2),
+                basis: 'stake',
+                contract_type: 'ACCU',
+                currency: 'USD',
+                symbol: asset,
+                growth_rate: signal.growthRate,
+                limit_order: {
+                    take_profit: takeProfitAmount.toFixed(2),
+                },
+            });
+
+            // Only enter one trade per re-evaluation
+            break;
+        }
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
