@@ -988,11 +988,11 @@ class AccumulatorBotV4 {
 
                 if (analysis.scores.macdFlat < 1) return;
 
-                if (analysis.scores.macdConverging < 1) return;
-
                 if (analysis.scores.pricePosition < 0.8) return;
 
                 if (analysis.scores.tickStability < 0.8) return;
+
+                if (analysis.scores.macdConverging < 0.8) return;
 
                 if (analysis.scores.volTrend < 0.06) return;
 
@@ -1073,6 +1073,7 @@ class AccumulatorBotV4 {
             `BW:${(s.bandWidth * 100 || 0).toFixed(0)} MACD:${(s.macdFlat * 100 || 0).toFixed(0)} ` +
             `Pos:${(s.pricePosition * 100 || 0).toFixed(0)} Stab:${(s.tickStability * 100 || 0).toFixed(0)} ` +
             `Conv:${(s.macdConverging * 100 || 0).toFixed(0)} Vol:${(s.volTrend * 100 || 0).toFixed(0)} ` +
+            `Ticks: ${this.currentTick} | ` +
             `| ${analysis.shouldTrade ? '✅' : '❌'} ${analysis.reason}`
         );
     }
