@@ -450,6 +450,7 @@ class AccumulatorAnalyzer {
             tickStability: scores.tickStability,
             atr,
             maxTickMove,
+            volTrend: scores.volTrend
         };
     }
 }

@@ -29,7 +29,7 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'accumulator_bot5_05-v4-state.json');
+const STATE_FILE = path.join(__dirname, 'accumulator_bot5b_01-v4-state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -317,11 +317,7 @@ class AccumulatorAnalyzer {
             else scores.bandWidth = 0.15;                             // Very wide — avoid
         } else {
             // Fallback: use raw width
-            if (bb.width < 0.003) scores.bandWidth = 0.0;
-            else if (bb.width < 0.006) scores.bandWidth = 0.00;
-            else if (bb.width < 0.010) scores.bandWidth = 0.00;
-            else if (bb.width < 0.015) scores.bandWidth = 0.00;
-            else scores.bandWidth = 0.00;
+            scores.bandWidth = 0.0;
         }
 
         // 2. MACD HISTOGRAM — Flat/near-zero histogram = no momentum = GOOD
@@ -454,6 +450,7 @@ class AccumulatorAnalyzer {
             tickStability: scores.tickStability,
             atr,
             maxTickMove,
+            volTrend: scores.volTrend
         };
     }
 }
@@ -558,7 +555,7 @@ class AccumulatorBotV4 {
 
             // Analysis thresholds
             minOverallScore: config.minOverallScore || 0.85,
-            minTimeBetweenTrades: config.minTimeBetweenTrades || 10000, // 10s between trades per asset
+            minTimeBetweenTrades: config.minTimeBetweenTrades || 5000, // 5s between trades per asset (reduced from 10s for faster re-entry)
 
             // History requirements
             requiredHistoryLength: config.requiredHistoryLength || 100,
@@ -663,7 +660,7 @@ class AccumulatorBotV4 {
         });
         console.log(`🔒 SUSPENDED: All assets except ${lossAsset}. Focusing on loss asset.`);
         this.sendTelegramMessage(
-            `🔒 <b>Asset Suspension (Bot 5)</b>\n\n` +
+            `🔒 <b>Asset Suspension (Bot 5b)</b>\n\n` +
             `Loss on: <b>${lossAsset}</b>\n` +
             `Suspended: ${this.assets.filter(a => a !== lossAsset).join(', ')}\n` +
             `Focusing on ${lossAsset} until win`
@@ -679,7 +676,7 @@ class AccumulatorBotV4 {
         this.focusAsset = null;
         console.log(`✅ RESUMED: All assets active again (was focused on ${prevFocus})`);
         this.sendTelegramMessage(
-            `✅ <b>All Assets Resumed (Bot 5)</b>\n\n` +
+            `✅ <b>All Assets Resumed (Bot 5b)</b>\n\n` +
             `Won on: <b>${prevFocus}</b>\n` +
             `All assets now active for trading`
         );
@@ -985,26 +982,31 @@ class AccumulatorBotV4 {
             if (this.consecutiveLosses < 1) {
                 if (!analysis.shouldTrade) return;
 
-                if (analysis.maxTickMove > 0.001) return;
-
-                if (analysis.tickStability < 0.3) return;
-
-                if (analysis.bb.percentB < 0.3 || analysis.bb.percentB > 0.7) return;
-
-                if (analysis.macd.histogram > 0) return;
-
-                if (analysis.macd.isConverging) return;
-
                 if (analysis.overallScore < 0.85) return;
+
+                if (analysis.scores.bandWidth < 1) return;
+
+                if (analysis.scores.macdFlat < 1) return;
+
+                if (analysis.scores.pricePosition < 1) return;
+
+                if (analysis.scores.macdConverging < 1) return;
+
+                if (analysis.scores.tickStability < 1) return;
+
+                if (analysis.scores.volTrend < 1) return;
+
             }
         } else {
             if (this.consecutiveLosses < 1) {
                 const shouldTrade =
-                    analysis.overallScore < 0.46 &&
-                    analysis.scores.bandWidth < 1 &&
-                    analysis.scores.macdFlat < 1 &&
-                    analysis.scores.pricePosition < 1 &&
-                    analysis.scores.tickStability >= 1
+                    analysis.overallScore < 0.46
+                    &&
+                    analysis.scores.bandWidth > 0
+                // &&
+                // analysis.scores.macdFlat < 1 &&
+                // analysis.scores.pricePosition < 1 &&
+                // analysis.scores.tickStability >= 1
 
 
                 if (!shouldTrade) return;
@@ -1073,9 +1075,9 @@ class AccumulatorBotV4 {
             const asset = message.echo_req?.symbol;
             if (asset && this.activeTrades[asset]?.status === 'requesting_proposal') {
                 console.log(`❌ Proposal rejected for ${asset}: ${message.error.message}`);
-                delete this.activeTrades[asset];
-                this.tradeInProgress = false;
             }
+            delete this.activeTrades[asset];
+            this.tradeInProgress = false;
             return;
         }
 
@@ -1099,15 +1101,15 @@ class AccumulatorBotV4 {
             return;
         }
 
-        if (currentTick > this.config.maxEntryTick) {
-            console.log(`❌ Proposal rejected for ${asset}: Too late (tick ${currentTick} > ${this.config.maxEntryTick})`);
-            if (proposal.id) {
-                this.sendRequest({ forget: proposal.id });
-            }
-            // delete this.activeTrades[asset];
-            this.tradeInProgress = false;
-            return;
-        }
+        // if (currentTick > this.config.maxEntryTick && this.consecutiveLosses < 1) {
+        //     console.log(`❌ Proposal rejected for ${asset}: Too late (tick ${currentTick} > ${this.config.maxEntryTick})`);
+        //     if (proposal.id) {
+        //         this.sendRequest({ forget: proposal.id });
+        //     }
+        //     delete this.activeTrades[asset];
+        //     this.tradeInProgress = false;
+        //     return;
+        // }
 
         const trade = this.activeTrades[asset];
 
@@ -1584,7 +1586,7 @@ class AccumulatorBotV4 {
 
         // Telegram
         this.sendTelegramMessage(
-            `${won ? '✅' : '❌'} <b>Bot 5 ${won ? 'WIN' : 'LOSS'}</b>\n\n` +
+            `${won ? '✅' : '❌'} <b>Bot 5b ${won ? 'WIN' : 'LOSS'}</b>\n\n` +
             `Asset: ${asset}\n` +
             `P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(3)}\n` +
             `Ticks: ${tickCount} | Growth: ${(trade.growthRate * 100).toFixed(0)}%\n\n` +
@@ -1596,14 +1598,6 @@ class AccumulatorBotV4 {
             `Balance: $${this.accountBalance.toFixed(2)}\n` +
             `Total P&L: ${this.totalProfitLoss >= 0 ? '+' : ''}$${this.totalProfitLoss.toFixed(2)}`
         );
-
-        // if (!won) {
-        //     if (this.Sys === 1) {
-        //         this.Sys = 2;
-        //     } else {
-        //         this.Sys = 1;
-        //     }
-        // }
 
         // Clean up active trade
         delete this.activeTrades[asset];
@@ -1623,6 +1617,106 @@ class AccumulatorBotV4 {
         }
 
         StatePersistence.saveState(this);
+
+        if (!won) {
+            // ═══════════════════════════════════════════════════════════════════
+            // IMMEDIATE RE-EVALUATION — Don't wait for the next tick to enter
+            // the next trade. After a trade closes (especially after a loss),
+            // the market regime may have shifted — we need to catch the new
+            // trend immediately for effective recovery trading.
+            // ═══════════════════════════════════════════════════════════════════
+            this._evaluateAllAssetsImmediately();
+        }
+    }
+
+    /**
+     * Immediately evaluate all assets for a new trade opportunity.
+     * Called right after a trade closes to avoid waiting for the next tick.
+     * This is critical for recovery trades that need to enter quickly
+     * after a trend reset.
+     */
+    _evaluateAllAssetsImmediately() {
+        // Reset tick counts so the very next tick triggers analysis
+        this.assets.forEach(a => {
+            this.tickCounts[a] = 0;
+        });
+
+        // For each asset, run immediate analysis and trade if signal is strong
+        for (const asset of this.assets) {
+            // Skip if asset has an active trade
+            if (this.activeTrades[asset]) continue;
+
+            // Skip if not allowed
+            if (!this.isAssetAllowed(asset)) continue;
+
+            // Risk check
+            const riskCheck = this.riskManager.canTrade(asset, this.dailyProfitLoss, this.consecutiveLosses);
+            if (!riskCheck.allowed) continue;
+
+            // Need enough history
+            if (!this.priceHistories[asset] || this.priceHistories[asset].length < this.config.requiredHistoryLength) continue;
+
+            // Run analysis
+            const prices = this.priceHistories[asset];
+            const analysis = this.analyzer.analyzeEntry(prices);
+
+            // Apply same entry criteria as evaluateAndTrade
+            // let shouldProceed = false;
+            // if (this.Sys === 1) {
+            //     if (this.consecutiveLosses >= 1) {
+            //         shouldProceed = analysis.shouldTrade;
+            //     } else {
+            //         shouldProceed = true;
+            //     }
+            // } else if (this.Sys === 2) {
+            //     if (this.consecutiveLosses >= 1) {
+            //         shouldProceed = analysis.shouldTrade;
+            //     } else {
+            //         shouldProceed = true;
+            //     }
+            // }
+
+            // if (!shouldProceed) continue;
+
+            // Double-check no trade in progress
+            if (this.tradeInProgress) break;
+            if (this.activeTrades[asset]) continue;
+
+            console.log(`\n⚡ IMMEDIATE RE-ENTRY: ${asset} (post-trade evaluation)`);
+
+            this.tradeInProgress = true;
+            this.currentStake = this.riskManager.calculateStake(this.accountBalance, this.consecutiveLosses);
+
+            const growthRate = analysis.recommendedGrowthRate || this.config.defaultGrowthRate;
+            const takeProfitAmount = this.currentStake * this.config.takeProfitMultiplier;
+
+            console.log(`   Score: ${(analysis.overallScore * 100).toFixed(1)}% | Growth: ${(growthRate * 100).toFixed(0)}% | Stake: $${this.currentStake.toFixed(2)}`);
+
+            this.activeTrades[asset] = {
+                status: 'requesting_proposal',
+                analysis,
+                growthRate,
+                stake: this.currentStake,
+                takeProfitAmount,
+                entryTime: Date.now(),
+            };
+
+            this.sendRequest({
+                proposal: 1,
+                amount: this.currentStake.toFixed(2),
+                basis: 'stake',
+                contract_type: 'ACCU',
+                currency: 'USD',
+                symbol: asset,
+                growth_rate: growthRate,
+                limit_order: {
+                    take_profit: takeProfitAmount.toFixed(2)
+                }
+            });
+
+            // Only enter one trade per re-evaluation
+            break;
+        }
     }
 
     // ========================================================================
@@ -1645,7 +1739,7 @@ class AccumulatorBotV4 {
         const pnlStr = (this.totalProfitLoss >= 0 ? '+' : '') + '$' + Math.abs(this.totalProfitLoss).toFixed(2);
 
         await this.sendTelegramMessage(
-            `📊 <b>Session Summary (Bot 5)</b>\n\n` +
+            `📊 <b>Session Summary (Bot 5b)</b>\n\n` +
             `Trades: ${this.totalTrades}\n` +
             `W/L: ${this.totalWins}/${this.totalLosses}\n` +
             `Losses x2-x5: ${this.consecutiveLosses2} | ${this.consecutiveLosses3} | ${this.consecutiveLosses4} | ${this.consecutiveLosses5}\n` +
@@ -1831,7 +1925,7 @@ class AccumulatorBotV4 {
 // RUN BOT
 // ============================================================================
 
-const token = 'Dz2V2KvRf4Uukt3';
+const token = 'DMylfkyce6VyZt7';
 
 const bot = new AccumulatorBotV4(token, {
     // Money management
@@ -1840,9 +1934,9 @@ const bot = new AccumulatorBotV4(token, {
     maxConsecutiveLosses: 3,
     maxDailyLoss: 100,
     dailyTakeProfit: 500000,
-    tradeSystem: 2,
+    tradeSystem: 1,
     minEntryTick: 0,
-    maxEntryTick: 15,
+    maxEntryTick: 5,
 
     // Accumulator strategy
     defaultGrowthRate: 0.02,   // 1% — widest barrier, highest survival
@@ -1852,7 +1946,7 @@ const bot = new AccumulatorBotV4(token, {
     // Analysis
     minOverallScore: 1,     // Composite threshold
     analysisInterval: 1,       // Check every 3rd tick
-    minTimeBetweenTrades: 10000,
+    minTimeBetweenTrades: 5000, // Reduced from 10s for faster re-entry
 
     // Assets (lower volatility indices preferred)
     assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'], //, '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V'
