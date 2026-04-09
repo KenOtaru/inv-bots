@@ -183,7 +183,7 @@ class EnhancedDerivTradingBot {
         this.tradedDigitArray2 = [];
         this.filteredArray = [];
         this.tradeNum = Math.floor(Math.random() * (40 - 21 + 1)) + 21;
-        this.filterNum = 6;
+        this.filterNum = 3;//6
         this.Percentage = 0;
         this.predictedDigit = null;
 
@@ -556,20 +556,6 @@ class EnhancedDerivTradingBot {
             `Current Stake: $${this.currentStake.toFixed(2)}\n\n` +
             `Traded Digits: [${this.tradedDigitArray.join(', ')}]\n` +
             `Filtered Digits: [${this.filteredArray.join(', ')}]\n` +
-            `Filter Number: ${this.filterNum}`
-        );
-    }
-
-    async sendLossNotification(asset, contract) {
-        const recentDigits = this.lastDigitsList[asset] ? this.lastDigitsList[asset].slice(-20).join(', ') : 'N/A';
-        await this.sendTelegramMessage(
-            `❌ <b>LOSS — accumBotM</b>\n\n` +
-            `Asset: <b>${asset}</b>\n` +
-            `Consecutive Losses: ${this.consecutiveLosses}\n` +
-            `Stake: $${this.currentStake.toFixed(2)}\n\n` +
-            `Recent Digits (last 20): ${recentDigits}\n` +
-            `Filtered Array: [${this.filteredArray.join(', ')}]\n` +
-            `Traded Array: [${this.tradedDigitArray.join(', ')}]\n` +
             `Filter Number: ${this.filterNum}`
         );
     }
@@ -1101,9 +1087,6 @@ class EnhancedDerivTradingBot {
 
             // Suspend all other assets, focus on loss asset
             // this.suspendOtherAssets(asset);
-
-            // Send loss notification
-            this.sendLossNotification(asset, contract);
         }
 
         // Keep traded digit array trimmed
@@ -1117,6 +1100,22 @@ class EnhancedDerivTradingBot {
         this.tradeInProgress = false;
         this.tradeStartTime = null;
         delete this.activeTrades[asset];
+
+        // Send Trade result notification
+        this.sendResultNotification(asset, contract, won);
+
+
+        this.sendTelegramMessage(
+            `${won ? '✅' : '❌'}  — accumBotM</b>\n\n` +
+            `Asset: <b>${asset}</b>\n` +
+            `P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(3)}\n` +
+            `Consecutive Losses: ${this.consecutiveLosses}\n` +
+            `Trades: ${this.totalTrades} (${this.totalWins}W/${this.totalLosses}L)\n` +
+            `Losses x2-x5: ${this.consecutiveLosses2} | ${this.consecutiveLosses3} | ${this.consecutiveLosses4} | ${this.consecutiveLosses5}\n` +
+            `Win Rate: ${this.totalTrades > 0 ? ((this.totalWins / this.totalTrades) * 100).toFixed(2) : '0.00'}%\n` +
+            `Stake: $${this.currentStake.toFixed(2)}\n\n` +
+            `Total P&L: ${this.totalProfitLoss >= 0 ? '+' : ''}$${this.totalProfitLoss.toFixed(2)}`
+        );
 
         // Log summary
         this.logTradingSummary();
