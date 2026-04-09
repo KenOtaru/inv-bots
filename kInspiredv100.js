@@ -10,8 +10,8 @@ class EnhancedDigitDifferTradingBot {
         this.wsReady = false;
 
         this.assets = config.assets || [
-            // 'R_10', 'R_25', 'R_50', 'R_75', 'R_100'
-            'R_100',
+            'R_10', 'R_25', 'R_50', 'R_75', 'R_100'
+            // 'R_100',
         ];
 
         this.config = {
@@ -20,8 +20,9 @@ class EnhancedDigitDifferTradingBot {
             maxConsecutiveLosses: config.maxConsecutiveLosses || 5,
             stopLoss: config.stopLoss || 50,
             takeProfit: config.takeProfit || 1,
-            growthRate: 0.05,
-            accuTakeProfit: 0.01,
+            growthRate: config.growthRate,
+            accuTakeProfit: config.accuTakeProfit,
+            takeProfitMultiplier: config.takeProfitMultiplier || 0.20,  // 20% of stake
             requiredHistoryLength: config.requiredHistoryLength || 200,
             winProbabilityThreshold: config.winProbabilityThreshold || 100,
             maxReconnectAttempts: config.maxReconnectAttempts || 10000,
@@ -679,14 +680,16 @@ class EnhancedDigitDifferTradingBot {
             return;
         }
 
+        const takeProfitAmount = this.currentStake * this.config.takeProfitMultiplier;
+
         const buyRequest = {
             buy: state.currentProposalId,
-            price: this.currentStake.toFixed(2)
+            price: takeProfitAmount.toFixed(2)
         };
 
         console.log(`EXECUTING ACCU TRADE
         Asset: ${asset}
-        Stake: $${this.currentStake.toFixed(2)}
+        Stake: $${takeProfitAmount.toFixed(2)}
         Target Count: ${state.tradedDigitArray.slice(-1)[0]}
         Frequency Filter: ${state.tradeFrequency}x
         `);
@@ -1196,12 +1199,13 @@ class EnhancedDigitDifferTradingBot {
 const bot = new EnhancedDigitDifferTradingBot('hsj0tA0XJoIzJG5', {
     // 'DMylfkyce6VyZt7', '0P94g4WdSrSrzir', rgNedekYXvCaPeP, hsj0tA0XJoIzJG5, Dz2V2KvRf4Uukt3
     initialStake: 1,
-    multiplier: 21,
-    maxConsecutiveLosses: 2,
-    stopLoss: 400,
-    takeProfit: 1,
-    growthRate: 0.05,
-    accuTakeProfit: 0.5,
+    multiplier: 7,
+    maxConsecutiveLosses: 3,
+    stopLoss: 100,
+    takeProfit: 100,
+    growthRate: 0.02, // 1%, 2%, 3%, 4% or 5% growth rate
+    accuTakeProfit: 0.5, // Take profit amount
+    takeProfitMultiplier: 0.20, // 20% of stake as TP (limit order backup)
     requiredHistoryLength: 1000,
     winProbabilityThreshold: 100,
     minWaitTime: 2000, // 2 seconds for testing
