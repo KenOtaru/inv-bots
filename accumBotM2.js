@@ -29,7 +29,7 @@ const path = require('path');
 // ══════════════════════════════════════════════════════════════════════════════
 // STATE PERSISTENCE MANAGER
 // ══════════════════════════════════════════════════════════════════════════════
-const STATE_FILE = path.join(__dirname, 'accumBotM2_07_state.json');
+const STATE_FILE = path.join(__dirname, 'accumBotM2_11_state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -182,7 +182,7 @@ class EnhancedDerivTradingBot {
         this.tradedDigitArray2 = [];
         this.filteredArray = [];
         this.tradeNum = Math.floor(Math.random() * (40 - 21 + 1)) + 21;
-        this.filterNum = 6;//6
+        this.filterNum = 4;//6
         this.Percentage = 0;
         this.predictedDigit = null;
         this.entryTick = null;
@@ -683,7 +683,7 @@ class EnhancedDerivTradingBot {
         if (!stayedInArray) return;
 
         // Current digit count of the running accumulator
-        const currentDigitCount = stayedInArray[99] + 10;
+        const currentDigitCount = stayedInArray[99] + 1;
 
         console.log(`📋 Proposal for ${asset}: Current StayIN Digit Count: ${stayedInArray[99]} (${currentDigitCount})`);
         console.log(`   Filter Number: ${this.filterNum}`);
@@ -709,7 +709,7 @@ class EnhancedDerivTradingBot {
         // and not already traded, and stayedIn value >= 0
         const condition = appearedOnceArray.includes(currentDigitCount)
             && !this.tradedDigitArray.includes(stayedInArray[99])
-            && stayedInArray[99] >= 0;
+            && stayedInArray[99] > 20;
 
         console.log(`   Entry condition: ${condition ? '✅ MET' : '❌ NOT MET'}`);
 
@@ -1048,20 +1048,23 @@ class EnhancedDerivTradingBot {
             this.isWinTrade = true;
             this.currentStake = this.config.initialStake;
             this.consecutiveLosses = 0;
+            this.filterNum = 4;
 
             if (this.assetMetrics[asset]) this.assetMetrics[asset].wins++;
             this.hourlyStats.wins++;
 
             // Resume all assets after win
-            // if (this.focusAsset) {
-            //     this.resumeAllAssets();
-            // }
+            if (this.focusAsset) {
+                this.resumeAllAssets();
+            }
         } else {
             this.totalLosses++;
             this.consecutiveLosses++;
             this.kCountNum = 0;
             this.isWinTrade = false;
             this.hourlyStats.losses++;
+
+            this.filterNum++;
 
             if (this.assetMetrics[asset]) this.assetMetrics[asset].losses++;
 
@@ -1075,7 +1078,7 @@ class EnhancedDerivTradingBot {
             this.currentStake = Math.ceil(this.currentStake * this.config.multiplier * 100) / 100;
 
             // Suspend all other assets, focus on loss asset
-            // this.suspendOtherAssets(asset);
+            this.suspendOtherAssets(asset);
         }
 
         // Keep traded digit array trimmed
@@ -1241,14 +1244,14 @@ class EnhancedDerivTradingBot {
 // BOT INITIALIZATION
 // ══════════════════════════════════════════════════════════════════════════════
 const bot = new EnhancedDerivTradingBot('DMylfkyce6VyZt7', {
-    initialStake: 1,
-    multiplier: 6,
+    initialStake: 2,
+    multiplier: 50,
     multiplier2: 8,
-    maxConsecutiveLosses: 3,
-    stopLoss: 100,
+    maxConsecutiveLosses: 2,
+    stopLoss: 250,
     takeProfit: 10000,
     growthRate: 0.02,
-    takeProfitMultiplier: 0.20,
+    takeProfitMultiplier: 0.02,
     assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
     telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
     telegramChatId: '752497117',
