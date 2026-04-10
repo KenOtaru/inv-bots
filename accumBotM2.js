@@ -1126,7 +1126,7 @@ class EnhancedDerivTradingBot {
         // and not already traded, and stayedIn value >= 0
         const condition = appearedOnceArray.includes(currentDigitCount)
             && !this.tradedDigitArray.includes(stayedInArray[99])
-            && stayedInArray[99] > 0;
+            && stayedInArray[99] > 20;
 
         console.log(`   Entry condition: ${condition ? '✅ MET' : '❌ NOT MET'}`);
 
