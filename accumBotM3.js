@@ -533,6 +533,7 @@ class EnhancedDerivTradingBot {
         this.Percentage = 0;
         this.predictedDigit = null;
         this.entryTick = null;
+        this.currentTick = 0;
         // Components
         this.analyzer = new AccumulatorAnalyzer();
 
@@ -1023,6 +1024,12 @@ class EnhancedDerivTradingBot {
         console.log(`   Growth Rate: ${(growthRate * 100).toFixed(0)}% | Stake: $${this.currentStake.toFixed(2)}`);
         console.log(`   Max Tick Move: ${(analysis.maxTickMove * 100).toFixed(2)}%`);
         console.log(`   Tick Stability: ${(analysis.tickStability * 100).toFixed(1)}%`);
+
+        console.log(`   BB Width: ${(analysis.scores.bandWidth * 100).toFixed(1)}%`);
+        console.log(`   MACD Flat: ${(analysis.scores.macdFlat * 100).toFixed(1)}%`);
+        console.log(`   Price Position: ${(analysis.scores.pricePosition * 100).toFixed(1)}%`);
+        console.log(`   MACD Converging: ${(analysis.scores.macdConverging * 100).toFixed(1)}%`);
+        console.log(`   Vol Trend: ${(analysis.scores.volTrend * 100).toFixed(1)}%`);
         console.log(`   Reason: ${analysis.reason}`);
         console.log(`   Take Profit: $${takeProfitAmount.toFixed(2)}`);
 
@@ -1036,6 +1043,8 @@ class EnhancedDerivTradingBot {
             `📈 ${asset} | Score: ${(analysis.overallScore * 100 || 0).toFixed(0)}% | ` +
             `BW:${(s.bandWidth * 100 || 0).toFixed(0)} MACD:${(s.macdFlat * 100 || 0).toFixed(0)} ` +
             `Pos:${(s.pricePosition * 100 || 0).toFixed(0)} Stab:${(s.tickStability * 100 || 0).toFixed(0)} ` +
+            `Conv:${(s.macdConverging * 100 || 0).toFixed(0)} Vol:${(s.volTrend * 100 || 0).toFixed(0)} ` +
+            `Ticks: ${this.currentTick} | ` +
             `| ${analysis.shouldTrade ? '✅' : '❌'} ${analysis.reason}`
         );
     }
@@ -1084,6 +1093,8 @@ class EnhancedDerivTradingBot {
 
         // Current digit count of the running accumulator
         const currentDigitCount = stayedInArray[99] + 1;
+
+        this.currentTick = currentDigitCount;
 
         console.log(`📋 Proposal for ${asset}: Current StayIN Digit Count: ${stayedInArray[99]} (${currentDigitCount})`);
         console.log(`   Filter Number: ${this.filterNum}`);
@@ -1487,6 +1498,7 @@ class EnhancedDerivTradingBot {
         }
 
         this.Sys1 = 0;
+        this.currentTick = null;
 
         this.tradeInProgress = false;
         this.tradeStartTime = null;
