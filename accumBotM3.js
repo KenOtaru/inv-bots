@@ -479,6 +479,7 @@ class EnhancedDerivTradingBot {
             // Accumulator specific
             growthRate: config.growthRate || 0.02,
             takeProfitMultiplier: config.takeProfitMultiplier || 0.20,
+            filterNum: config.filterNum || 5,
 
             // Reconnection
             maxReconnectAttempts: 50,
@@ -529,7 +530,7 @@ class EnhancedDerivTradingBot {
         this.tradedDigitArray2 = [];
         this.filteredArray = [];
         this.tradeNum = Math.floor(Math.random() * (40 - 21 + 1)) + 21;
-        this.filterNum = 5;//6
+        this.filterNum = this.config.filterNum;
         this.Percentage = 0;
         this.predictedDigit = null;
         this.entryTick = null;
@@ -1003,7 +1004,7 @@ class EnhancedDerivTradingBot {
 
                 if (analysis.scores.macdFlat < 1) return;
 
-                if (analysis.scores.pricePosition < 0.8) return;
+                if (analysis.scores.pricePosition < 1) return;
 
                 if (analysis.scores.tickStability < 0.8) return;
 
@@ -1464,7 +1465,7 @@ class EnhancedDerivTradingBot {
             this.isWinTrade = true;
             this.currentStake = this.config.initialStake;
             this.consecutiveLosses = 0;
-            this.filterNum = 5;
+            this.filterNum = this.config.filterNum;
 
             if (this.assetMetrics[asset]) this.assetMetrics[asset].wins++;
             this.hourlyStats.wins++;
@@ -1669,6 +1670,7 @@ const bot = new EnhancedDerivTradingBot('Dz2V2KvRf4Uukt3', {
     takeProfit: 10000,
     growthRate: 0.05,
     takeProfitMultiplier: 0.05,
+    filterNum: 4,
     assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
     telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
     telegramChatId: '752497117',
