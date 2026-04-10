@@ -1009,7 +1009,7 @@ class EnhancedDerivTradingBot {
 
                 if (analysis.scores.macdConverging < 0.8) return;
 
-                if (analysis.scores.volTrend < 0.06) return;
+                if (analysis.scores.volTrend < 0.6) return;
 
             }
         }
