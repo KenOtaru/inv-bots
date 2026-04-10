@@ -529,7 +529,7 @@ class EnhancedDerivTradingBot {
         this.tradedDigitArray2 = [];
         this.filteredArray = [];
         this.tradeNum = Math.floor(Math.random() * (40 - 21 + 1)) + 21;
-        this.filterNum = 4;//6
+        this.filterNum = 5;//6
         this.Percentage = 0;
         this.predictedDigit = null;
         this.entryTick = null;
@@ -1464,7 +1464,7 @@ class EnhancedDerivTradingBot {
             this.isWinTrade = true;
             this.currentStake = this.config.initialStake;
             this.consecutiveLosses = 0;
-            this.filterNum = 4;
+            this.filterNum = 5;
 
             if (this.assetMetrics[asset]) this.assetMetrics[asset].wins++;
             this.hourlyStats.wins++;
