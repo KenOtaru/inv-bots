@@ -182,7 +182,7 @@ class EnhancedDerivTradingBot {
         this.tradedDigitArray2 = [];
         this.filteredArray = [];
         this.tradeNum = Math.floor(Math.random() * (40 - 21 + 1)) + 21;
-        this.filterNum = 2;//6
+        this.filterNum = 6;//6
         this.Percentage = 0;
         this.predictedDigit = null;
         this.entryTick = null;
@@ -251,7 +251,7 @@ class EnhancedDerivTradingBot {
         });
         console.log(`🔒 SUSPENDED: All assets except ${lossAsset}. Focusing on loss asset.`);
         this.sendTelegramMessage(
-            `🔒 <b>Asset Suspension (accumBotM)</b>\n\n` +
+            `🔒 <b>Asset Suspension (accumBotM2)</b>\n\n` +
             `Loss on: <b>${lossAsset}</b>\n` +
             `Suspended: ${this.assets.filter(a => a !== lossAsset).join(', ')}\n` +
             `Focusing on ${lossAsset} until win`
@@ -264,7 +264,7 @@ class EnhancedDerivTradingBot {
         this.focusAsset = null;
         console.log(`✅ RESUMED: All assets active again (was focused on ${prevFocus})`);
         this.sendTelegramMessage(
-            `✅ <b>All Assets Resumed (accumBotM)</b>\n\n` +
+            `✅ <b>All Assets Resumed (accumBotM2)</b>\n\n` +
             `Won on: <b>${prevFocus}</b>\n` +
             `All assets now active for trading`
         );
@@ -532,7 +532,7 @@ class EnhancedDerivTradingBot {
         const pnlStr = (this.totalProfitLoss >= 0 ? '+' : '') + '$' + Math.abs(this.totalProfitLoss).toFixed(2);
 
         await this.sendTelegramMessage(
-            `📊 <b>Session Summary (accumBotM)</b>\n\n` +
+            `📊 <b>Session Summary (accumBotM2)</b>\n\n` +
             `Trades: ${this.totalTrades}\n` +
             `W/L: ${this.totalWins}/${this.totalLosses}\n` +
             `Losses x2-x6: ${this.consecutiveLosses2} | ${this.consecutiveLosses3} | ${this.consecutiveLosses4}\n` +
@@ -546,7 +546,7 @@ class EnhancedDerivTradingBot {
 
     async sendDisconnectSummary() {
         await this.sendTelegramMessage(
-            `⚠️ <b>accumBotM Disconnected</b>\n\n` +
+            `⚠️ <b>accumBotM2 Disconnected</b>\n\n` +
             `Trading Summary:\n` +
             `Total Trades: ${this.totalTrades}\n` +
             `Wins: ${this.totalWins} | Losses: ${this.totalLosses}\n` +
@@ -796,7 +796,7 @@ class EnhancedDerivTradingBot {
 
         // Telegram notification
         this.sendTelegramMessage(
-            `🚀 <b>TRADE OPENED (accumBotM)</b>\n\n` +
+            `🚀 <b>TRADE OPENED (accumBotM2)</b>\n\n` +
             `Asset: <b>${asset}</b>\n` +
             `Entry Tick: <b>${this.entryTick}</b>\n` +
             `Stake: $${trade.stake.toFixed(2)}\n` +
@@ -1090,7 +1090,7 @@ class EnhancedDerivTradingBot {
 
         // Send Trade result notification
         this.sendTelegramMessage(
-            `${won ? '✅' : '❌'} <b>accumBotM</b>\n\n` +
+            `${won ? '✅' : '❌'} <b>accumBotM2</b>\n\n` +
             `Asset: <b>${asset}</b>\n` +
             `P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(3)}\n` +
             `Consecutive Losses: ${this.consecutiveLosses}\n` +
@@ -1239,7 +1239,7 @@ class EnhancedDerivTradingBot {
 // ══════════════════════════════════════════════════════════════════════════════
 // BOT INITIALIZATION
 // ══════════════════════════════════════════════════════════════════════════════
-const bot = new EnhancedDerivTradingBot('0P94g4WdSrSrzir', {
+const bot = new EnhancedDerivTradingBot('DMylfkyce6VyZt7', {
     initialStake: 1,
     multiplier: 6,
     multiplier2: 8,
