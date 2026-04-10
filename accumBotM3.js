@@ -994,19 +994,24 @@ class EnhancedDerivTradingBot {
 
         // 3. Decision
         if (this.consecutiveLosses < 1) {
-            if (!analysis.shouldTrade) return;
+            if (this.consecutiveLosses < 1) {
+                if (!analysis.shouldTrade) return;
 
-            if (analysis.maxTickMove > 0.001) return;
+                if (analysis.overallScore < 0.65) return;
 
-            if (analysis.tickStability < 0.3) return;
+                if (analysis.scores.bandWidth < 1) return;
 
-            if (analysis.bb.percentB < 0.3 || analysis.bb.percentB > 0.7) return;
+                if (analysis.scores.macdFlat < 1) return;
 
-            if (analysis.macd.histogram > 0) return;
+                if (analysis.scores.pricePosition < 0.8) return;
 
-            if (analysis.macd.isConverging) return;
+                if (analysis.scores.tickStability < 0.8) return;
 
-            if (analysis.overallScore < 0.85) return;
+                if (analysis.scores.macdConverging < 0.8) return;
+
+                if (analysis.scores.volTrend < 0.06) return;
+
+            }
         }
 
         if (this.tradeInProgress) return;
