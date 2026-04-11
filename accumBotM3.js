@@ -1099,7 +1099,7 @@ class EnhancedDerivTradingBot {
 
         // if (analysis.scores.pricePosition < 0.5) return;
 
-        if (!analysis.scores.tickStability || analysis.scores.tickStability === 'undefined' || analysis.scores.tickStability === 'NaN' || analysis.scores.tickStability < 0.5) return;
+        if (!analysis.tickStability || analysis.tickStability === 'undefined' || analysis.tickStability === 'NaN' || analysis.tickStability < 0.5) return;
 
         // if (analysis.scores.macdConverging < 1) return;
 
