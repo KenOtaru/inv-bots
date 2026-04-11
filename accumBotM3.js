@@ -311,7 +311,7 @@ class AccumulatorAnalyzer {
         // 1. BOLLINGER BAND WIDTH — Contracted bands = low volatility = GOOD
         //    We want band width to be in the lower 50th percentile
         if (bwPercentile !== null) {
-            if (bwPercentile <= 0.25) scores.bandWidth = 1.0;        // Very tight — excellent
+            if (bwPercentile <= 0.20) scores.bandWidth = 1.0;        // Very tight — excellent
             else if (bwPercentile <= 0.40) scores.bandWidth = 0.85;  // Tight — good
             else if (bwPercentile <= 0.55) scores.bandWidth = 0.65;  // Average — okay
             else if (bwPercentile <= 0.70) scores.bandWidth = 0.40;  // Wide — poor
@@ -331,11 +331,11 @@ class AccumulatorAnalyzer {
         else scores.macdFlat = 0.10;                                  // Strong momentum — avoid
 
         // 3. MACD CONVERGENCE — Histogram getting smaller = momentum fading = GOOD
-        if (macd.isConverging) scores.macdConverging = 0.80;
+        if (macd.isConverging) scores.macdConverging = 1.0;
         else scores.macdConverging = 0.35;
 
         // 4. %B POSITION — Price near middle band (0.3-0.7) = less likely to breach barrier
-        if (bb.percentB >= 0.30 && bb.percentB <= 0.70) scores.pricePosition = 1.0;   // Sweet spot
+        if (bb.percentB >= 0.40 && bb.percentB <= 0.60) scores.pricePosition = 1.0;   // Sweet spot
         else if (bb.percentB >= 0.20 && bb.percentB <= 0.80) scores.pricePosition = 0.70;
         else if (bb.percentB >= 0.10 && bb.percentB <= 0.90) scores.pricePosition = 0.40;
         else scores.pricePosition = 0.10;  // Price at band edge — high breakout risk
@@ -985,72 +985,72 @@ class EnhancedDerivTradingBot {
         if (!this.isAssetAllowed(asset)) return;
 
         // 1. Technical analysis
-        const prices = this.priceHistories[asset];
-        const analysis = this.analyzer.analyzeEntry(prices);
+        // const prices = this.priceHistories[asset];
+        // const analysis = this.analyzer.analyzeEntry(prices);
 
         // 2. Log analysis periodically (every 30th check to avoid spam)
         // if (this.tickCounts[asset] % (this.config.analysisInterval * 10) === 0) {
-        this.logAnalysis(asset, analysis);
+        // this.logAnalysis(asset, analysis);
         // }
 
         // 3. Decision
-        if (this.consecutiveLosses < 1) {
-            if (this.consecutiveLosses < 1) {
-                // if (!analysis.shouldTrade) return;
+        // if (this.consecutiveLosses < 1) {
+        //     if (this.consecutiveLosses < 1) {
+        // if (!analysis.shouldTrade) return;
 
-                // if (analysis.overallScore < 0.65) return;
+        // if (analysis.overallScore < 0.65) return;
 
-                // if (analysis.scores.bandWidth < 1) return;
+        // if (analysis.scores.bandWidth < 1) return;
 
-                // if (analysis.scores.macdFlat < 1) return;
+        // if (analysis.scores.macdFlat < 1) return;
 
-                // if (analysis.scores.pricePosition < 1) return;
+        // if (analysis.scores.pricePosition < 1) return;
 
-                // if (!analysis.scores.tickStability || analysis.scores.tickStability < 1) return;
+        // if (!analysis.scores.tickStability || analysis.scores.tickStability < 1) return;
 
-                if (analysis.scores.macdConverging < 1) return;
+        // if (analysis.scores.macdConverging < 1) return;
 
-                // if (analysis.scores.volTrend < 1) return;
+        // if (analysis.scores.volTrend < 1) return;
 
-            }
-        }
+        //     }
+        // }
 
-        if (this.tradeInProgress) return;
+        // if (this.tradeInProgress) return;
 
         // this.tradeInProgress = true;
 
         // 6. Request proposal with appropriate growth rate
-        const growthRate = this.config.growthRate;
-        const takeProfitAmount = this.currentStake * this.config.takeProfitMultiplier;
+        // const growthRate = this.config.growthRate;
+        // const takeProfitAmount = this.currentStake * this.config.takeProfitMultiplier;
 
-        this.overallScore = (analysis.overallScore * 100).toFixed(1);
-        this.bbWidth = analysis.bb.width.toFixed(6);
-        this.percentB = (analysis.bb.percentB * 100).toFixed(1);
-        this.macdHist = analysis.macd.histogram.toFixed(6);
-        this.macdConverging = analysis.macd.isConverging;
-        this.maxTickMove = (analysis.maxTickMove * 100).toFixed(2);
-        this.tickStability = (analysis.tickStability * 100).toFixed(1);
-        this.bbWidth = (analysis.scores.bandWidth * 100).toFixed(1);
-        this.macdFlat = (analysis.scores.macdFlat * 100).toFixed(1);
-        this.pricePosition = (analysis.scores.pricePosition * 100).toFixed(1);
-        this.macdConverging = (analysis.scores.macdConverging * 100).toFixed(1);
-        this.volTrend = (analysis.scores.volTrend * 100).toFixed(1);
+        // this.overallScore = (analysis.overallScore * 100).toFixed(1);
+        // this.bbWidth = analysis.bb.width.toFixed(6);
+        // this.percentB = (analysis.bb.percentB * 100).toFixed(1);
+        // this.macdHist = analysis.macd.histogram.toFixed(6);
+        // this.macdConverging = analysis.macd.isConverging;
+        // this.maxTickMove = (analysis.maxTickMove * 100).toFixed(2);
+        // this.tickStability = (analysis.tickStability * 100).toFixed(1);
+        // this.bbWidth = (analysis.scores.bandWidth * 100).toFixed(1);
+        // this.macdFlat = (analysis.scores.macdFlat * 100).toFixed(1);
+        // this.pricePosition = (analysis.scores.pricePosition * 100).toFixed(1);
+        // this.macdConverging = (analysis.scores.macdConverging * 100).toFixed(1);
+        // this.volTrend = (analysis.scores.volTrend * 100).toFixed(1);
 
-        console.log(`\n🎯 ENTRY SIGNAL: ${asset}`);
-        console.log(`   Score: ${(analysis.overallScore * 100).toFixed(1)}%`);
-        console.log(`   BB Width: ${analysis.bb.width.toFixed(6)} | %B: ${(analysis.bb.percentB * 100).toFixed(1)}%`);
-        console.log(`   MACD Hist: ${analysis.macd.histogram.toFixed(6)} | Converging: ${analysis.macd.isConverging}`);
-        console.log(`   Growth Rate: ${(growthRate * 100).toFixed(0)}% | Stake: $${this.currentStake.toFixed(2)}`);
-        console.log(`   Max Tick Move: ${(analysis.maxTickMove * 100).toFixed(2)}%`);
-        console.log(`   Tick Stability: ${(analysis.tickStability * 100).toFixed(1)}%`);
+        // console.log(`\n🎯 ENTRY SIGNAL: ${asset}`);
+        // console.log(`   Score: ${(analysis.overallScore * 100).toFixed(1)}%`);
+        // console.log(`   BB Width: ${analysis.bb.width.toFixed(6)} | %B: ${(analysis.bb.percentB * 100).toFixed(1)}%`);
+        // console.log(`   MACD Hist: ${analysis.macd.histogram.toFixed(6)} | Converging: ${analysis.macd.isConverging}`);
+        // console.log(`   Growth Rate: ${(growthRate * 100).toFixed(0)}% | Stake: $${this.currentStake.toFixed(2)}`);
+        // console.log(`   Max Tick Move: ${(analysis.maxTickMove * 100).toFixed(2)}%`);
+        // console.log(`   Tick Stability: ${(analysis.tickStability * 100).toFixed(1)}%`);
 
-        console.log(`   BB Width: ${(analysis.scores.bandWidth * 100).toFixed(1)}%`);
-        console.log(`   MACD Flat: ${(analysis.scores.macdFlat * 100).toFixed(1)}%`);
-        console.log(`   Price Position: ${(analysis.scores.pricePosition * 100).toFixed(1)}%`);
-        console.log(`   MACD Converging: ${(analysis.scores.macdConverging * 100).toFixed(1)}%`);
-        console.log(`   Vol Trend: ${(analysis.scores.volTrend * 100).toFixed(1)}%`);
-        console.log(`   Reason: ${analysis.reason}`);
-        console.log(`   Take Profit: $${takeProfitAmount.toFixed(2)}`);
+        // console.log(`   BB Width: ${(analysis.scores.bandWidth * 100).toFixed(1)}%`);
+        // console.log(`   MACD Flat: ${(analysis.scores.macdFlat * 100).toFixed(1)}%`);
+        // console.log(`   Price Position: ${(analysis.scores.pricePosition * 100).toFixed(1)}%`);
+        // console.log(`   MACD Converging: ${(analysis.scores.macdConverging * 100).toFixed(1)}%`);
+        // console.log(`   Vol Trend: ${(analysis.scores.volTrend * 100).toFixed(1)}%`);
+        // console.log(`   Reason: ${analysis.reason}`);
+        // console.log(`   Take Profit: $${takeProfitAmount.toFixed(2)}`);
 
         // Run original analyzeTicks logic — request proposal
         this.requestProposal(asset);
@@ -1105,6 +1105,8 @@ class EnhancedDerivTradingBot {
         if (!message.proposal) return;
         if (!asset) return;
 
+        if (this.tradeInProgress) return;
+
         const proposal = message.proposal;
         const stayedInArray = proposal.contract_details.ticks_stayed_in;
 
@@ -1143,15 +1145,77 @@ class EnhancedDerivTradingBot {
 
         console.log(`   Entry condition: ${condition ? '✅ MET' : '❌ NOT MET'}`);
 
+        // if (!this.isAssetAllowed(asset)) return;
+
+        // 1. Technical analysis
+        const prices = this.priceHistories[asset];
+        const analysis = this.analyzer.analyzeEntry(prices);
+
+        // 2. Log analysis periodically (every 30th check to avoid spam)
+        // if (this.tickCounts[asset] % (this.config.analysisInterval * 10) === 0) {
+        this.logAnalysis(asset, analysis);
+        // }
+
+        // 3. Decision
+        // if (!analysis.shouldTrade) return;
+
+        // if (analysis.overallScore < 0.65) return;
+
+        // if (analysis.scores.bandWidth < 1) return;
+
+        // if (analysis.scores.macdFlat < 1) return;
+
+        // if (analysis.scores.pricePosition < 1) return;
+
+        // if (!analysis.scores.tickStability || analysis.scores.tickStability < 1) return;
+
+        if (analysis.scores.macdConverging < 1) return;
+
+        // if (analysis.scores.volTrend < 1) return;
+
         // Check if we should place trade
-        if (!this.tradeInProgress) {
-            if (condition) {
-                this.tradedDigitArray.push(stayedInArray[99]);
-                this.filteredArray = appearedOnceArray;
-                this.entryTick = stayedInArray[99];
-                console.log(`   Traded Digit Array: [${this.tradedDigitArray.join(', ')}]`);
-                this.placeTrade(asset);
-            }
+        if (condition) {
+            this.tradedDigitArray.push(stayedInArray[99]);
+            this.filteredArray = appearedOnceArray;
+            this.entryTick = stayedInArray[99];
+            console.log(`   Traded Digit Array: [${this.tradedDigitArray.join(', ')}]`);
+
+            // 6. Request proposal with appropriate growth rate
+            const growthRate = this.config.growthRate;
+            const takeProfitAmount = this.currentStake * this.config.takeProfitMultiplier;
+
+            this.overallScore = (analysis.overallScore * 100).toFixed(1);
+            this.bbWidth = analysis.bb.width.toFixed(6);
+            this.percentB = (analysis.bb.percentB * 100).toFixed(1);
+            this.macdHist = analysis.macd.histogram.toFixed(6);
+            this.macdConverging = analysis.macd.isConverging;
+            this.maxTickMove = (analysis.maxTickMove * 100).toFixed(2);
+            this.tickStability = (analysis.tickStability * 100).toFixed(1);
+            this.bbWidth = (analysis.scores.bandWidth * 100).toFixed(1);
+            this.macdFlat = (analysis.scores.macdFlat * 100).toFixed(1);
+            this.pricePosition = (analysis.scores.pricePosition * 100).toFixed(1);
+            this.macdConverging = (analysis.scores.macdConverging * 100).toFixed(1);
+            this.volTrend = (analysis.scores.volTrend * 100).toFixed(1);
+
+            console.log(`\n🎯 ENTRY SIGNAL: ${asset}`);
+            console.log(`   Score: ${(analysis.overallScore * 100).toFixed(1)}%`);
+            console.log(`   BB Width: ${analysis.bb.width.toFixed(6)} | %B: ${(analysis.bb.percentB * 100).toFixed(1)}%`);
+            console.log(`   MACD Hist: ${analysis.macd.histogram.toFixed(6)} | Converging: ${analysis.macd.isConverging}`);
+            console.log(`   Growth Rate: ${(growthRate * 100).toFixed(0)}% | Stake: $${this.currentStake.toFixed(2)}`);
+            console.log(`   Max Tick Move: ${(analysis.maxTickMove * 100).toFixed(2)}%`);
+            console.log(`   Tick Stability: ${(analysis.tickStability * 100).toFixed(1)}%`);
+
+            console.log(`   BB Width: ${(analysis.scores.bandWidth * 100).toFixed(1)}%`);
+            console.log(`   MACD Flat: ${(analysis.scores.macdFlat * 100).toFixed(1)}%`);
+            console.log(`   Price Position: ${(analysis.scores.pricePosition * 100).toFixed(1)}%`);
+            console.log(`   MACD Converging: ${(analysis.scores.macdConverging * 100).toFixed(1)}%`);
+            console.log(`   Vol Trend: ${(analysis.scores.volTrend * 100).toFixed(1)}%`);
+            console.log(`   Reason: ${analysis.reason}`);
+            console.log(`   Take Profit: $${takeProfitAmount.toFixed(2)}`);
+
+            // Run original analyzeTicks logic — request proposal
+            // this.requestProposal(asset);
+            this.placeTrade(asset);
         }
     }
 
@@ -1223,6 +1287,8 @@ class EnhancedDerivTradingBot {
         this.tradeStartTime = Date.now();
         this._startTradeWatchdog(contractId);
         console.log(`⏱️  Trade watchdog started (${(this.tradeWatchdogMs / 1000).toFixed(0)}s timeout)`);
+
+        this.tradeInProgress = true;
 
         // Telegram notification
         this.sendTelegramMessage(
