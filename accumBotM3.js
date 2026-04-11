@@ -1093,11 +1093,11 @@ class EnhancedDerivTradingBot {
 
         // if (analysis.overallScore < 0.65) return;
 
-        if (analysis.scores.bandWidth < 0.5) return;
+        // if (analysis.scores.bandWidth < 0.5) return;
 
         if (analysis.scores.macdFlat < 1) return;
 
-        if (analysis.scores.pricePosition < 0.5) return;
+        // if (analysis.scores.pricePosition < 0.5) return;
 
         if (!analysis.scores.tickStability || analysis.scores.tickStability < 0.5) return;
 
