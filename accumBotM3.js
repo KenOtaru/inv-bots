@@ -490,7 +490,7 @@ class EnhancedDerivTradingBot {
 
             // History
             requiredHistoryLength: 100,
-            analysisInterval: 3,
+            analysisInterval: 1,
 
             // Telegram
             telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
@@ -963,7 +963,7 @@ class EnhancedDerivTradingBot {
         this.tickCounts[asset] = (this.tickCounts[asset] || 0) + 1;
 
         // Throttle analysis
-        if (this.tickCounts[asset] % this.config.analysisInterval !== 0) return;
+        // if (this.tickCounts[asset] % this.config.analysisInterval !== 0) return;
 
         // Don't analyze if not ready or if asset already has active trade
         if (!this.wsReady) return;
@@ -1145,8 +1145,7 @@ class EnhancedDerivTradingBot {
             console.log(`   Reason: ${analysis.reason}`);
             console.log(`   Take Profit: $${takeProfitAmount.toFixed(2)}`);
 
-            // Run original analyzeTicks logic — request proposal
-            // this.requestProposal(asset);
+            // Place trade
             this.placeTrade(asset);
         }
     }
@@ -1176,6 +1175,26 @@ class EnhancedDerivTradingBot {
             stake: this.currentStake,
             entryTime: Date.now(),
         };
+
+        // Telegram notification
+        this.sendTelegramMessage(
+            `🚀 <b>TRADE OPENED (accumBotM3)</b>\n\n` +
+            `Asset: <b>${asset}</b>\n` +
+            `Entry Tick: <b>${this.entryTick}</b>\n` +
+            `Stake: $${trade.stake.toFixed(2)}\n` +
+            `Growth Rate: ${(this.config.growthRate * 100).toFixed(0)}%\n` +
+            `Filter Number: ${this.filterNum}\n` +
+            `Filtered Digits: [${this.filteredArray.join(', ')}]\n` +
+            `Overall Score: ${this.overallScore}%\n` +
+            `BB Width: ${this.bbWidth}%\n` +
+            `MACD Flat: ${this.macdFlat}%\n` +
+            `MACD Converging: ${this.macdConverging}%\n` +
+            `Price Position: ${this.pricePosition}%\n` +
+            `Tick Stability: ${this.tickStability}%\n` +
+            `Max Tick Move: ${this.maxTickMove}%\n` +
+            `Vol Trend: ${this.volTrend}%\n` +
+            `Take Profit: $${(trade.stake * this.config.takeProfitMultiplier).toFixed(2)}`
+        );
 
         this.lastTradeTime[asset] = Date.now();
     }
@@ -1219,28 +1238,6 @@ class EnhancedDerivTradingBot {
         this.tradeStartTime = Date.now();
         this._startTradeWatchdog(contractId);
         console.log(`⏱️  Trade watchdog started (${(this.tradeWatchdogMs / 1000).toFixed(0)}s timeout)`);
-
-        this.tradeInProgress = true;
-
-        // Telegram notification
-        this.sendTelegramMessage(
-            `🚀 <b>TRADE OPENED (accumBotM3)</b>\n\n` +
-            `Asset: <b>${asset}</b>\n` +
-            `Entry Tick: <b>${this.entryTick}</b>\n` +
-            `Stake: $${trade.stake.toFixed(2)}\n` +
-            `Growth Rate: ${(this.config.growthRate * 100).toFixed(0)}%\n` +
-            `Filter Number: ${this.filterNum}\n` +
-            `Filtered Digits: [${this.filteredArray.join(', ')}]\n` +
-            `Overall Score: ${this.overallScore}%\n` +
-            `BB Width: ${this.bbWidth}%\n` +
-            `MACD Flat: ${this.macdFlat}%\n` +
-            `MACD Converging: ${this.macdConverging}%\n` +
-            `Price Position: ${this.pricePosition}%\n` +
-            `Tick Stability: ${this.tickStability}%\n` +
-            `Max Tick Move: ${this.maxTickMove}%\n` +
-            `Vol Trend: ${this.volTrend}%\n` +
-            `Take Profit: $${(trade.stake * this.config.takeProfitMultiplier).toFixed(2)}`
-        );
     }
 
     findAssetByStatus(status) {
@@ -1681,10 +1678,10 @@ class EnhancedDerivTradingBot {
 // BOT INITIALIZATION
 // ══════════════════════════════════════════════════════════════════════════════
 const bot = new EnhancedDerivTradingBot('Dz2V2KvRf4Uukt3', {
-    initialStake: 1,
-    multiplier: 21,
+    initialStake: 5,
+    multiplier: 1,
     multiplier2: 8,
-    maxConsecutiveLosses: 2,
+    maxConsecutiveLosses: 6,
     stopLoss: 450,
     takeProfit: 10000,
     growthRate: 0.05,
