@@ -1176,6 +1176,8 @@ class EnhancedDerivTradingBot {
             entryTime: Date.now(),
         };
 
+        const trade = this.activeTrades[asset];
+
         // Telegram notification
         this.sendTelegramMessage(
             `🚀 <b>TRADE OPENED (accumBotM3)</b>\n\n` +
@@ -1686,7 +1688,7 @@ const bot = new EnhancedDerivTradingBot('Dz2V2KvRf4Uukt3', {
     takeProfit: 10000,
     growthRate: 0.05,
     takeProfitMultiplier: 0.05,
-    filterNum: 3,
+    filterNum: 5,
     assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
     telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
     telegramChatId: '752497117',
