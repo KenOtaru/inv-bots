@@ -1091,7 +1091,7 @@ class EnhancedDerivTradingBot {
         // 3. Decision
         // if (!analysis.shouldTrade) return;
 
-        if (analysis.overallScore < 0.65) return;
+        // if (analysis.overallScore < 0.65) return;
 
         if (analysis.scores.bandWidth < 0.5) return;
 
