@@ -1091,19 +1091,19 @@ class EnhancedDerivTradingBot {
         // 3. Decision
         // if (!analysis.shouldTrade) return;
 
-        // if (analysis.overallScore < 0.65) return;
+        if (analysis.overallScore < 0.65) return;
 
-        // if (analysis.scores.bandWidth < 1) return;
+        if (analysis.scores.bandWidth < 0.8) return;
 
-        // if (analysis.scores.macdFlat < 1) return;
+        if (analysis.scores.macdFlat < 1) return;
 
-        // if (analysis.scores.pricePosition < 1) return;
+        if (analysis.scores.pricePosition < 0.8) return;
 
-        // if (!analysis.scores.tickStability || analysis.scores.tickStability < 1) return;
+        if (!analysis.scores.tickStability || analysis.scores.tickStability < 0.5) return;
 
-        if (analysis.scores.macdConverging < 1) return;
+        // if (analysis.scores.macdConverging < 1) return;
 
-        // if (analysis.scores.volTrend < 1) return;
+        if (analysis.scores.volTrend < 0.5) return;
 
         // Check if we should place trade
         if (condition) {
@@ -1681,10 +1681,10 @@ class EnhancedDerivTradingBot {
 // ══════════════════════════════════════════════════════════════════════════════
 const bot = new EnhancedDerivTradingBot('Dz2V2KvRf4Uukt3', {
     initialStake: 5,
-    multiplier: 1,
+    multiplier: 21,
     multiplier2: 8,
-    maxConsecutiveLosses: 6,
-    stopLoss: 450,
+    maxConsecutiveLosses: 2,
+    stopLoss: 110,
     takeProfit: 10000,
     growthRate: 0.05,
     takeProfitMultiplier: 0.05,
