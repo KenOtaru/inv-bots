@@ -988,18 +988,6 @@ class EnhancedDerivTradingBot {
         this.requestProposal(asset);
     }
 
-    logAnalysis(asset, analysis) {
-        const s = analysis.scores || {};
-        console.log(
-            `📈 ${asset} | Score: ${(analysis.overallScore * 100 || 0).toFixed(0)}% | ` +
-            `BW:${(s.bandWidth * 100 || 0).toFixed(0)} MACD:${(s.macdFlat * 100 || 0).toFixed(0)} ` +
-            `Pos:${(s.pricePosition * 100 || 0).toFixed(0)} Stab:${(s.tickStability * 100 || 0).toFixed(0)} ` +
-            `Conv:${(s.macdConverging * 100 || 0).toFixed(0)} Vol:${(s.volTrend * 100 || 0).toFixed(0)} ` +
-            `Ticks: ${this.currentTick} | ` +
-            `| ${analysis.shouldTrade ? '✅' : '❌'} ${analysis.reason}`
-        );
-    }
-
     requestProposal(asset) {
         if (this.tradeInProgress) return;
         if (!this.wsReady) return;
@@ -1148,6 +1136,18 @@ class EnhancedDerivTradingBot {
             // Place trade
             this.placeTrade(asset);
         }
+    }
+
+    logAnalysis(asset, analysis) {
+        const s = analysis.scores || {};
+        console.log(
+            `📈 ${asset} | Score: ${(analysis.overallScore * 100 || 0).toFixed(0)}% | ` +
+            `BW:${(s.bandWidth * 100 || 0).toFixed(0)} MACD:${(s.macdFlat * 100 || 0).toFixed(0)} ` +
+            `Pos:${(s.pricePosition * 100 || 0).toFixed(0)} Stab:${(s.tickStability * 100 || 0).toFixed(0)} ` +
+            `Conv:${(s.macdConverging * 100 || 0).toFixed(0)} Vol:${(s.volTrend * 100 || 0).toFixed(0)} ` +
+            `Ticks: ${this.currentTick} | ` +
+            `| ${analysis.shouldTrade ? '✅' : '❌'} ${analysis.reason}`
+        );
     }
 
     placeTrade(asset) {
