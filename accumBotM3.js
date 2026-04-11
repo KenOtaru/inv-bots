@@ -989,9 +989,9 @@ class EnhancedDerivTradingBot {
         const analysis = this.analyzer.analyzeEntry(prices);
 
         // 2. Log analysis periodically (every 30th check to avoid spam)
-        if (this.tickCounts[asset] % (this.config.analysisInterval * 10) === 0) {
-            this.logAnalysis(asset, analysis);
-        }
+        // if (this.tickCounts[asset] % (this.config.analysisInterval * 10) === 0) {
+        this.logAnalysis(asset, analysis);
+        // }
 
         // 3. Decision
         if (this.consecutiveLosses < 1) {
