@@ -1093,11 +1093,11 @@ class EnhancedDerivTradingBot {
 
         if (analysis.overallScore < 0.65) return;
 
-        if (analysis.scores.bandWidth < 0.8) return;
+        if (analysis.scores.bandWidth < 0.5) return;
 
         if (analysis.scores.macdFlat < 1) return;
 
-        if (analysis.scores.pricePosition < 0.8) return;
+        if (analysis.scores.pricePosition < 0.5) return;
 
         if (!analysis.scores.tickStability || analysis.scores.tickStability < 0.5) return;
 
@@ -1688,7 +1688,7 @@ const bot = new EnhancedDerivTradingBot('Dz2V2KvRf4Uukt3', {
     takeProfit: 10000,
     growthRate: 0.05,
     takeProfitMultiplier: 0.05,
-    filterNum: 3,
+    filterNum: 5,
     assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
     telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
     telegramChatId: '752497117',
