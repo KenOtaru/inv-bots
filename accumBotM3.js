@@ -1073,7 +1073,7 @@ class EnhancedDerivTradingBot {
         // and not already traded, and stayedIn value >= 0
         const condition = appearedOnceArray.includes(currentDigitCount)
             && !this.tradedDigitArray.includes(stayedInArray[99])
-            && stayedInArray[99] > 0;
+            && stayedInArray[99] > 11;
 
         console.log(`   Entry condition: ${condition ? '✅ MET' : '❌ NOT MET'}`);
 
@@ -1688,7 +1688,7 @@ const bot = new EnhancedDerivTradingBot('Dz2V2KvRf4Uukt3', {
     takeProfit: 10000,
     growthRate: 0.05,
     takeProfitMultiplier: 0.05,
-    filterNum: 5,
+    filterNum: 3,
     assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
     telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
     telegramChatId: '752497117',
