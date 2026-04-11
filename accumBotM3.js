@@ -1091,7 +1091,7 @@ class EnhancedDerivTradingBot {
 
         if (analysis.scores.macdConverging < 1) return;
 
-        if (analysis.maxTickMove > 0.002) return;
+        if (analysis.maxTickMove > 0.02) return;
 
         if (analysis.scores.volTrend < 0.5) return;
 
