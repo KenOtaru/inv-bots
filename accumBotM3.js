@@ -1006,7 +1006,7 @@ class EnhancedDerivTradingBot {
 
                 // if (analysis.scores.pricePosition < 1) return;
 
-                if (analysis.scores.tickStability < 1) return;
+                if (!analysis.scores.tickStability || analysis.scores.tickStability < 1) return;
 
                 // if (analysis.scores.macdConverging < 1) return;
 
