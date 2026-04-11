@@ -996,21 +996,21 @@ class EnhancedDerivTradingBot {
         // 3. Decision
         if (this.consecutiveLosses < 1) {
             if (this.consecutiveLosses < 1) {
-                if (!analysis.shouldTrade) return;
+                // if (!analysis.shouldTrade) return;
 
-                if (analysis.overallScore < 0.65) return;
+                // if (analysis.overallScore < 0.65) return;
 
-                if (analysis.scores.bandWidth < 1) return;
+                // if (analysis.scores.bandWidth < 1) return;
 
-                if (analysis.scores.macdFlat < 1) return;
+                // if (analysis.scores.macdFlat < 1) return;
 
-                if (analysis.scores.pricePosition < 1) return;
+                // if (analysis.scores.pricePosition < 1) return;
 
-                if (analysis.scores.tickStability < 0.8) return;
+                if (analysis.scores.tickStability < 1) return;
 
-                if (analysis.scores.macdConverging < 0.8) return;
+                // if (analysis.scores.macdConverging < 1) return;
 
-                if (analysis.scores.volTrend < 0.6) return;
+                // if (analysis.scores.volTrend < 1) return;
 
             }
         }
@@ -1495,7 +1495,7 @@ class EnhancedDerivTradingBot {
             this.currentStake = Math.ceil(this.currentStake * this.config.multiplier * 100) / 100;
 
             // Suspend all other assets, focus on loss asset
-            this.suspendOtherAssets(asset);
+            // this.suspendOtherAssets(asset);
         }
 
         // Keep traded digit array trimmed
@@ -1665,12 +1665,12 @@ const bot = new EnhancedDerivTradingBot('Dz2V2KvRf4Uukt3', {
     initialStake: 1,
     multiplier: 21,
     multiplier2: 8,
-    maxConsecutiveLosses: 3,
+    maxConsecutiveLosses: 2,
     stopLoss: 450,
     takeProfit: 10000,
     growthRate: 0.05,
     takeProfitMultiplier: 0.05,
-    filterNum: 4,
+    filterNum: 3,
     assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
     telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
     telegramChatId: '752497117',
