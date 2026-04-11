@@ -1023,6 +1023,19 @@ class EnhancedDerivTradingBot {
         const growthRate = analysis.recommendedGrowthRate || this.config.defaultGrowthRate;
         const takeProfitAmount = this.currentStake * this.config.takeProfitMultiplier;
 
+        this.overallScore = (analysis.overallScore * 100).toFixed(1);
+        this.bbWidth = analysis.bb.width.toFixed(6);
+        this.percentB = (analysis.bb.percentB * 100).toFixed(1);
+        this.macdHist = analysis.macd.histogram.toFixed(6);
+        this.macdConverging = analysis.macd.isConverging;
+        this.maxTickMove = (analysis.maxTickMove * 100).toFixed(2);
+        this.tickStability = (analysis.tickStability * 100).toFixed(1);
+        this.bbWidth = (analysis.scores.bandWidth * 100).toFixed(1);
+        this.macdFlat = (analysis.scores.macdFlat * 100).toFixed(1);
+        this.pricePosition = (analysis.scores.pricePosition * 100).toFixed(1);
+        this.macdConverging = (analysis.scores.macdConverging * 100).toFixed(1);
+        this.volTrend = (analysis.scores.volTrend * 100).toFixed(1);
+
         console.log(`\n🎯 ENTRY SIGNAL: ${asset}`);
         console.log(`   Score: ${(analysis.overallScore * 100).toFixed(1)}%`);
         console.log(`   BB Width: ${analysis.bb.width.toFixed(6)} | %B: ${(analysis.bb.percentB * 100).toFixed(1)}%`);
@@ -1220,6 +1233,14 @@ class EnhancedDerivTradingBot {
             `Growth Rate: ${(this.config.growthRate * 100).toFixed(0)}%\n` +
             `Filter Number: ${this.filterNum}\n` +
             `Filtered Digits: [${this.filteredArray.join(', ')}]\n` +
+            `Overall Score: ${this.overallScore}%\n` +
+            `BB Width: ${this.bbWidth}%\n` +
+            `MACD Flat: ${this.macdFlat}%\n` +
+            `MACD Converging: ${this.macdConverging}%\n` +
+            `Price Position: ${this.pricePosition}%\n` +
+            `Tick Stability: ${this.tickStability}%\n` +
+            `Max Tick Move: ${this.maxTickMove}%\n` +
+            `Vol Trend: ${this.volTrend}%\n` +
             `Take Profit: $${(trade.stake * this.config.takeProfitMultiplier).toFixed(2)}`
         );
     }
