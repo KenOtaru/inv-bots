@@ -1006,9 +1006,9 @@ class EnhancedDerivTradingBot {
 
                 // if (analysis.scores.pricePosition < 1) return;
 
-                if (!analysis.scores.tickStability || analysis.scores.tickStability < 1) return;
+                // if (!analysis.scores.tickStability || analysis.scores.tickStability < 1) return;
 
-                // if (analysis.scores.macdConverging < 1) return;
+                if (analysis.scores.macdConverging < 1) return;
 
                 // if (analysis.scores.volTrend < 1) return;
 
@@ -1020,7 +1020,7 @@ class EnhancedDerivTradingBot {
         // this.tradeInProgress = true;
 
         // 6. Request proposal with appropriate growth rate
-        const growthRate = analysis.recommendedGrowthRate || this.config.defaultGrowthRate;
+        const growthRate = this.config.growthRate;
         const takeProfitAmount = this.currentStake * this.config.takeProfitMultiplier;
 
         this.overallScore = (analysis.overallScore * 100).toFixed(1);
