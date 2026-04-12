@@ -1363,10 +1363,10 @@ const CONFIG = {
     SESSION_STOP_LOSS: -5000,
 
     // Default Candle Settings (used if asset has no specific config)
-    GRANULARITY: 120,
-    TIMEFRAME_LABEL: '2m',
-    MAX_CANDLES_STORED: 5000, // 1440 for 24 hours of 1 minute candles
-    CANDLES_TO_LOAD: 5000, // 1440 for 24 hours of 1 minute candles
+    GRANULARITY: 60,
+    TIMEFRAME_LABEL: '1m',
+    MAX_CANDLES_STORED: 500, // 1440 for 24 hours of 1 minute candles
+    CANDLES_TO_LOAD: 500, // 1440 for 24 hours of 1 minute candles
 
     CANDLE_PATTERN_LOOKBACK: 4, // Number of previous candles to analyze for pattern detection (user configurable)
 
@@ -2818,6 +2818,8 @@ class DerivBot {
 
             direction = patternDecision.direction;
             signalReason = patternDecision.reason;
+
+            console.log('patternDecision', patternDecision.analysis.pattern);
 
             // Log pattern analysis details
             if (patternDecision.analysis && patternDecision.analysis.found) {
