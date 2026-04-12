@@ -6,8 +6,8 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'KriseFallM_2_00009-state.json');
-const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2_00009-history.json');
+const STATE_FILE = path.join(__dirname, 'KriseFallM_2b_00009-state.json');
+const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2b_00009-history.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
@@ -1071,6 +1071,188 @@ class CandleAnalyzer {
         if (this.isBullish(candle)) return 'BULLISH';
         if (this.isBearish(candle)) return 'BEARISH';
         return 'DOJI';
+    }
+}
+
+// ============================================
+// RECOVERY PATTERN ANALYZER
+// ============================================
+class RecoveryPatternAnalyzer {
+    /**
+     * Build a pattern string from an array of candles.
+     * e.g. ['BULL','BULL','BULL','BULL','BEAR']
+     */
+    static buildPatternString(candles) {
+        return candles.map(c => {
+            if (CandleAnalyzer.isBullish(c)) return 'BULL';
+            if (CandleAnalyzer.isBearish(c)) return 'BEAR';
+            return 'DOJI';
+        }).join('-');
+    }
+
+    /**
+     * Build the current recovery pattern for an asset.
+     *
+     * Pattern length = CANDLE_PATTERN_LOOKBACK + martingaleLevel
+     *   - Level 1 (first recovery):  lookback + 1 candles  (original run + 1 contrary)
+     *   - Level 2 (second recovery): lookback + 2 candles  (… + another loss candle)
+     *   - …and so on, growing with each consecutive loss
+     *
+     * This means after every loss the pattern is automatically updated
+     * with the new loss candle — exactly as requested.
+     */
+    static getRecoveryPattern(symbol) {
+        const assetState = state.assets[symbol];
+        if (!assetState || !assetState.closedCandles || assetState.closedCandles.length === 0) {
+            return null;
+        }
+
+        const lookback = getAssetConfig(symbol).CANDLE_PATTERN_LOOKBACK || CONFIG.CANDLE_PATTERN_LOOKBACK || 4;
+        const closedCandles = assetState.closedCandles;
+
+        // Pattern grows with each martingale step
+        const patternLength = Math.min(
+            lookback + assetState.martingaleLevel,
+            closedCandles.length
+        );
+
+        return closedCandles.slice(-patternLength);
+    }
+
+    /**
+     * Scan the full candle history for every occurrence of `patternCandles`,
+     * count what candle type (BULL / BEAR) followed each occurrence,
+     * and return the majority direction.
+     *
+     * If fewer than MIN_MATCHES are found the pattern is progressively
+     * shortened (dropping the oldest candle) until we get enough data
+     * or the pattern is too short.
+     *
+     * Returns { direction, confidence, matches, bullNext, bearNext, pattern }
+     *   – or null when no usable data exists.
+     */
+    static analyzePattern(symbol, patternCandles, depth = 0) {
+        const assetState = state.assets[symbol];
+        if (!assetState || !assetState.closedCandles || assetState.closedCandles.length === 0) {
+            return null;
+        }
+
+        const closedCandles = assetState.closedCandles;
+        const patternStr = this.buildPatternString(patternCandles);
+        const patternLength = patternCandles.length;
+
+        const MIN_MATCHES = 3;                          // minimum historical occurrences required
+        const searchLimit = closedCandles.length - patternLength; // exclude the current (live) pattern
+
+        let bullNext = 0;
+        let bearNext = 0;
+        let matches = 0;
+
+        for (let i = 0; i < searchLimit; i++) {
+            const slice = closedCandles.slice(i, i + patternLength);
+            const sliceStr = this.buildPatternString(slice);
+
+            if (sliceStr === patternStr) {
+                const nextCandle = closedCandles[i + patternLength];
+                if (nextCandle) {
+                    matches++;
+                    if (CandleAnalyzer.isBullish(nextCandle)) {
+                        bullNext++;
+                    } else if (CandleAnalyzer.isBearish(nextCandle)) {
+                        bearNext++;
+                    }
+                    // DOJI → neither count (neutral)
+                }
+            }
+        }
+
+        // ── Not enough matches → shorten pattern and retry ──
+        if (matches < MIN_MATCHES) {
+            if (patternLength > 2) {
+                const shorterPattern = patternCandles.slice(-(patternLength - 1));
+                LOGGER.info(
+                    `[RECOVERY] [${symbol}] Pattern "${patternStr}" → ${matches} matches (need ≥${MIN_MATCHES}), shortening to "${this.buildPatternString(shorterPattern)}"`
+                );
+                return this.analyzePattern(symbol, shorterPattern, depth + 1);
+            }
+
+            LOGGER.warn(
+                `[RECOVERY] [${symbol}] Insufficient matches (${matches}) even with shortest pattern`
+            );
+            return null;
+        }
+
+        // ── Determine majority direction ──
+        const total = bullNext + bearNext;
+        const direction = bullNext >= bearNext ? 'CALLE' : 'PUTE';
+        const confidence = total > 0
+            ? (direction === 'CALLE' ? bullNext / total : bearNext / total)
+            : 0.5;
+
+        LOGGER.info(
+            `[RECOVERY] [${symbol}] Pattern "${patternStr}" → ${matches} matches | BULL next: ${bullNext} | BEAR next: ${bearNext} → ${direction === 'CALLE' ? 'RISE' : 'FALL'} (${(confidence * 100).toFixed(1)}% confidence)`
+        );
+
+        return {
+            direction,
+            confidence,
+            matches,
+            bullNext,
+            bearNext,
+            pattern: patternStr
+        };
+    }
+
+    /**
+     * Public API — called from executeNextTrade when in recovery mode.
+     *
+     * Returns { direction, reason, confidence, matches } or null
+     */
+    static getRecoveryDirection(symbol) {
+        const assetState = state.assets[symbol];
+        if (!assetState) return null;
+
+        const patternCandles = this.getRecoveryPattern(symbol);
+        if (!patternCandles || patternCandles.length < 2) {
+            LOGGER.warn(
+                `[RECOVERY] [${symbol}] Not enough candles to form recovery pattern`
+            );
+            return null;
+        }
+
+        const patternStr = this.buildPatternString(patternCandles);
+        LOGGER.info(
+            `[RECOVERY] [${symbol}] Analysing recovery pattern (length ${patternCandles.length}): "${patternStr}" | Martingale level: ${assetState.martingaleLevel}`
+        );
+
+        const result = this.analyzePattern(symbol, patternCandles);
+
+        if (!result) {
+            // ── Fallback: trade in direction of the last closed candle ──
+            const lastCandle = assetState.closedCandles[assetState.closedCandles.length - 1];
+            const lastDir = CandleAnalyzer.getCandleDirection(lastCandle);
+            const fallbackDir = lastDir === 'BULLISH' ? 'CALLE' : 'PUTE';
+
+            LOGGER.info(
+                `[RECOVERY] [${symbol}] Fallback: last candle ${lastDir} → ${fallbackDir === 'CALLE' ? 'RISE' : 'FALL'}`
+            );
+
+            return {
+                direction: fallbackDir,
+                reason: `Recovery fallback (no pattern match, last candle: ${lastDir})`,
+                confidence: 0.5,
+                matches: 0
+            };
+        }
+
+        const directionLabel = result.direction === 'CALLE' ? 'RISE' : 'FALL';
+
+        return {
+            direction: result.direction,
+            reason: `Recovery pattern "${result.pattern}" → ${directionLabel} (${result.matches} matches, ${(result.confidence * 100).toFixed(1)}% confidence)`,
+            confidence: result.confidence,
+            matches: result.matches
+        };
     }
 }
 
@@ -2523,85 +2705,32 @@ class DerivBot {
         const isRecoveryMode = assetState.lastTradeWasWin === false;
 
         if (isRecoveryMode) {
-            // RECOVERY MODE: After a loss, continue in the SAME direction
-            // // This is a martingale continuation strategy - not a new breakout signal
-            if (assetState.martingaleLevel <= 2) {
-                if (assetState.lastTradeDirection === 'CALLE') {
-                    direction = 'CALLE';
-                    signalReason = `Recovery (${symbol} Prev LOSS on RISE → Continue RISE)`;
-                } else {
-                    direction = 'PUTE';
-                    signalReason = `Recovery (${symbol} Prev LOSS on FALL → Continue FALL)`;
-                }
-            } else if (assetState.martingaleLevel === 3) {
-                if (assetState.lastTradeDirection === 'CALLE') {
-                    direction = 'PUTE';
-                    signalReason = `Recovery (${symbol} Prev LOSS on RISE → Reverse to FALL)`;
-                } else {
-                    direction = 'CALLE';
-                    signalReason = `Recovery (${symbol} Prev LOSS on FALL → Reverse to RISE)`;
-                }
-            } else if (assetState.martingaleLevel === 4) {
-                if (assetState.lastTradeDirection === 'CALLE') {
-                    direction = 'CALLE';
-                    signalReason = `Recovery (${symbol} Prev LOSS on FALL → Reverse to RISE)`;
-                } else {
-                    direction = 'PUTE';
-                    signalReason = `Recovery (${symbol} Prev LOSS on RISE → Reverse to FALL)`;
-                }
-            } else if (assetState.martingaleLevel === 5) {
-                if (assetState.lastTradeDirection === 'CALLE') {
-                    direction = 'CALLE';
-                    signalReason = `Recovery (${symbol} Prev LOSS on FALL → Reverse to RISE)`;
-                } else {
-                    direction = 'PUTE';
-                    signalReason = `Recovery (${symbol} Prev LOSS on RISE → Reverse to FALL)`;
-                }
-            } else if (assetState.martingaleLevel === 6) {
-                if (assetState.lastTradeDirection === 'CALLE') {
-                    direction = 'PUTE';
-                    signalReason = `Recovery (${symbol} Prev LOSS on FALL → Continue FALL)`;
-                } else {
-                    direction = 'CALLE';
-                    signalReason = `Recovery (${symbol} Prev LOSS on RISE → Continue RISE)`;
-                }
-            } else if (assetState.martingaleLevel === 7) {
-                if (assetState.lastTradeDirection === 'CALLE') {
-                    direction = 'CALLE';
-                    signalReason = `Recovery (${symbol} Prev LOSS on FALL → Reverse to RISE)`;
-                } else {
-                    direction = 'PUTE';
-                    signalReason = `Recovery (${symbol} Prev LOSS on RISE → Reverse to FALL)`;
-                }
-            } else if (assetState.martingaleLevel === 8) {
-                if (assetState.lastTradeDirection === 'CALLE') {
-                    direction = 'PUTE';
-                    signalReason = `Recovery (${symbol} Prev LOSS on FALL → Continue FALL)`;
-                } else {
-                    direction = 'CALLE';
-                    signalReason = `Recovery (${symbol} Prev LOSS on RISE → Continue RISE)`;
-                }
+            // ──────────────────────────────────────────────────────
+            // RECOVERY MODE: Dynamic pattern-based direction
+            //
+            // 1. Build pattern from last (lookback + martingaleLevel) candles
+            // 2. Search full candle history for every occurrence of that pattern
+            // 3. Count what candle type (BULL/BEAR) followed each occurrence
+            // 4. Trade in the majority direction
+            // 5. If trade loses → pattern auto-grows (martingaleLevel++)
+            //    → next call analyses the updated, longer pattern
+            // ──────────────────────────────────────────────────────
+            const recoveryResult = RecoveryPatternAnalyzer.getRecoveryDirection(symbol);
+
+            if (recoveryResult) {
+                direction = recoveryResult.direction;
+                signalReason = recoveryResult.reason;
+                LOGGER.trade(
+                    `🔄 [${symbol}] RECOVERY MODE: ${signalReason} | Martingale Level: ${assetState.martingaleLevel} | Confidence: ${(recoveryResult.confidence * 100).toFixed(1)}% | Matches: ${recoveryResult.matches}`
+                );
             } else {
-                if (assetState.lastTradeDirection === 'CALLE') {
-                    direction = 'CALLE';
-                    signalReason = `Recovery (${symbol} Prev LOSS on FALL → Reverse to RISE)`;
-                } else {
-                    direction = 'PUTE';
-                    signalReason = `Recovery (${symbol} Prev LOSS on RISE → Reverse to FALL)`;
-                }
+                // Ultimate fallback — continue in the last trade direction
+                direction = assetState.lastTradeDirection || 'CALLE';
+                signalReason = `Recovery ultimate fallback (pattern analysis unavailable, continuing ${direction === 'CALLE' ? 'RISE' : 'FALL'})`;
+                LOGGER.trade(
+                    `🔄 [${symbol}] RECOVERY FALLBACK: ${signalReason} | Martingale Level: ${assetState.martingaleLevel}`
+                );
             }
-
-            // const candleType = CandleAnalyzer.getCandleDirection(lastClosedCandle);
-
-            // if (candleType === 'BULLISH') {
-            //     direction = 'PUTE';
-            //     signalReason = `Recovery (${symbol} Prev LOSS on FALL → Continue FALL)`;
-            // } else {
-            //     direction = 'CALLE';
-            //     signalReason = `Recovery (${symbol} Prev LOSS on RISE → Continue RISE)`;
-            // }
-
-            LOGGER.trade(`🔄 [${symbol}] RECOVERY MODE: ${signalReason} (Martingale Level: ${assetState.martingaleLevel})`);
 
         } else {
             // ── NORMAL MODE: Candle-pattern signal
