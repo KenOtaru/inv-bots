@@ -1371,7 +1371,7 @@ const CONFIG = {
     CANDLE_PATTERN_LOOKBACK: 4, // Number of previous candles to analyze for pattern detection (user configurable)
 
     // Default Trade Duration Settings (used if asset has no specific config)
-    DURATION: 118,
+    DURATION: 58,
     DURATION_UNIT: 's',
 
     // Trade Settings — NOW PER ASSET
