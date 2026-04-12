@@ -351,6 +351,12 @@ class StatePersistence {
                     martingaleLevel: asset.martingaleLevel,
                     currentStake: asset.currentStake,
                     canTrade: asset.canTrade,
+                    // Pattern recovery engine
+                    recoveryPattern: asset.recoveryPattern ? {
+                        pattern: asset.recoveryPattern.pattern,
+                        losses: asset.recoveryPattern.losses,
+                        history: asset.recoveryPattern.history.slice(-20) // Keep last 20 entries
+                    } : { pattern: '', losses: 0, history: [] },
                     // Per-asset stats (today's session)
                     tradesCount: asset.tradesCount,
                     winsCount: asset.winsCount,
@@ -456,6 +462,27 @@ class StatePersistence {
                         asset.martingaleLevel = saved.martingaleLevel || 0;
                         asset.currentStake = saved.currentStake || CONFIG.STAKE;
                         asset.canTrade = saved.canTrade || false;
+
+                        // Pattern recovery engine
+                        if (saved.recoveryPattern) {
+                            asset.recoveryPattern = {
+                                pattern: saved.recoveryPattern.pattern || '',
+                                losses: saved.recoveryPattern.losses || 0,
+                                history: saved.recoveryPattern.history || []
+                            };
+                            if (asset.recoveryPattern.pattern) {
+                                LOGGER.info(
+                                    `  🔄 [Pattern] Restored pattern for ${symbol}: "${asset.recoveryPattern.pattern}" (${asset.recoveryPattern.losses} losses)`
+                                );
+                            }
+                        } else {
+                            // Initialize default if not present
+                            asset.recoveryPattern = {
+                                pattern: '',
+                                losses: 0,
+                                history: []
+                            };
+                        }
 
                         // Per-asset stats
                         asset.tradesCount = saved.tradesCount || 0;
@@ -1068,9 +1095,253 @@ class CandleAnalyzer {
     }
 
     static getCandleDirection(candle) {
-        if (this.isBullish(candle)) return 'BULLISH';
-        if (this.isBearish(candle)) return 'BEARISH';
+        if (this.isBullish(candle)) return 'BULL';
+        if (this.isBearish(candle)) return 'BEAR';
         return 'DOJI';
+    }
+}
+
+// ============================================
+// CANDLE PATTERN RECOVERY ENGINE
+// ============================================
+class CandlePatternRecovery {
+    /**
+     * Encodes a sequence of candles into a pattern string
+     * @param {Array} candles - Array of candle objects
+     * @returns {string} Pattern string like "BULL-BULL-BEAR-BULL"
+     */
+    static encodePattern(candles) {
+        return candles.map(c => CandleAnalyzer.getCandleDirection(c)).join('-');
+    }
+
+    /**
+     * Gets the current recovery pattern from asset state
+     * @param {Object} assetState - The asset state object
+     * @returns {string|null} Pattern string or null if no pattern tracked
+     */
+    static getCurrentPattern(assetState) {
+        if (!assetState.recoveryPattern || !assetState.recoveryPattern.pattern) {
+            return null;
+        }
+        return assetState.recoveryPattern.pattern;
+    }
+
+    /**
+     * Updates the recovery pattern with the latest candle after a loss
+     * @param {Object} assetState - The asset state object
+     * @param {Object} lossCandle - The candle that caused the loss
+     */
+    static updatePattern(assetState, lossCandle) {
+        if (!assetState.recoveryPattern) {
+            assetState.recoveryPattern = {
+                pattern: '',
+                losses: 0,
+                history: []
+            };
+        }
+
+        const candleDir = CandleAnalyzer.getCandleDirection(lossCandle);
+
+        if (assetState.recoveryPattern.losses === 0) {
+            // First loss - initialize pattern
+            assetState.recoveryPattern.pattern = candleDir;
+        } else {
+            // Append loss candle to pattern
+            assetState.recoveryPattern.pattern += '-' + candleDir;
+        }
+
+        assetState.recoveryPattern.losses++;
+
+        // Store pattern history for analysis
+        assetState.recoveryPattern.history.push({
+            pattern: assetState.recoveryPattern.pattern,
+            candle: lossCandle,
+            timestamp: Date.now(),
+            martingaleLevel: assetState.martingaleLevel
+        });
+
+        LOGGER.info(`🔄 [Pattern Recovery] Updated pattern: ${assetState.recoveryPattern.pattern} (Loss #${assetState.recoveryPattern.losses})`);
+    }
+
+    /**
+     * Resets the recovery pattern after a win
+     * @param {Object} assetState - The asset state object
+     */
+    static resetPattern(assetState) {
+        if (assetState.recoveryPattern) {
+            const oldPattern = assetState.recoveryPattern.pattern;
+            assetState.recoveryPattern = {
+                pattern: '',
+                losses: 0,
+                history: []
+            };
+            LOGGER.info(`✅ [Pattern Recovery] Reset pattern after win. Previous pattern: ${oldPattern}`);
+        }
+    }
+
+    /**
+     * Searches candle history for occurrences of a pattern and analyzes what came after
+     * @param {Array} candleHistory - Array of historical closed candles
+     * @param {string} pattern - Pattern to search for (e.g., "BULL-BULL-BEAR")
+     * @param {number} maxSearch - Maximum number of candles to search back (default: 500)
+     * @returns {Object} Analysis result with CALLE/PUTE statistics
+     */
+    static analyzePatternInHistory(candleHistory, pattern, maxSearch = 500) {
+        const patternParts = pattern.split('-');
+        const patternLength = patternParts.length;
+
+        if (candleHistory.length < patternLength + 1) {
+            return {
+                found: false,
+                reason: 'Insufficient candle history',
+                pattern: pattern,
+                calleWins: 0,
+                puteWins: 0,
+                total: 0,
+                recommendation: null,
+                confidence: 0
+            };
+        }
+
+        // Search only in the most recent candles (up to maxSearch)
+        const searchSpace = candleHistory.slice(-maxSearch);
+        let matches = [];
+
+        // Find all occurrences of the pattern
+        for (let i = 0; i <= searchSpace.length - patternLength - 1; i++) {
+            const candidateCandles = searchSpace.slice(i, i + patternLength);
+            const candidatePattern = this.encodePattern(candidateCandles);
+
+            if (candidatePattern === pattern) {
+                // Found a match - analyze what happened next
+                const nextCandle = searchSpace[i + patternLength];
+                const nextDirection = CandleAnalyzer.getCandleDirection(nextCandle);
+
+                matches.push({
+                    index: i,
+                    nextCandle: nextCandle,
+                    nextDirection: nextDirection,
+                    timestamp: nextCandle.open_time || nextCandle.epoch
+                });
+            }
+        }
+
+        if (matches.length === 0) {
+            return {
+                found: false,
+                reason: `Pattern "${pattern}" not found in last ${maxSearch} candles`,
+                pattern: pattern,
+                calleWins: 0,
+                puteWins: 0,
+                total: 0,
+                recommendation: null,
+                confidence: 0
+            };
+        }
+
+        // Analyze outcomes
+        let calleWins = 0;
+        let puteWins = 0;
+
+        matches.forEach(match => {
+            if (match.nextDirection === 'BULL') {
+                calleWins++;
+            } else if (match.nextDirection === 'BEAR') {
+                puteWins++;
+            }
+            // DOJI candles are ignored in win/loss calculation
+        });
+
+        const total = calleWins + puteWins;
+        const callePercentage = total > 0 ? (calleWins / total * 100) : 50;
+        const putePercentage = total > 0 ? (puteWins / total * 100) : 50;
+
+        // Determine recommendation
+        let recommendation = null;
+        let confidence = 0;
+
+        if (total >= 2) {
+            if (callePercentage > 55) {
+                recommendation = 'CALLE';
+                confidence = callePercentage;
+            } else if (putePercentage > 55) {
+                recommendation = 'PUTE';
+                confidence = putePercentage;
+            } else {
+                // Not enough confidence - fall back to most recent outcome
+                recommendation = matches[matches.length - 1].nextDirection === 'BULL' ? 'CALLE' : 'PUTE';
+                confidence = 50;
+            }
+        } else if (total === 1) {
+            // Only one match - use it
+            recommendation = matches[0].nextDirection === 'BULL' ? 'CALLE' : 'PUTE';
+            confidence = 50;
+        } else {
+            // All matches were DOJIs - fall back to most recent
+            recommendation = matches[matches.length - 1].nextDirection === 'BULL' ? 'CALLE' : 'PUTE';
+            confidence = 50;
+        }
+
+        return {
+            found: true,
+            pattern: pattern,
+            matchesFound: matches.length,
+            calleWins: calleWins,
+            puteWins: puteWins,
+            callePercentage: callePercentage.toFixed(1),
+            putePercentage: putePercentage.toFixed(1),
+            total: total,
+            recommendation: recommendation,
+            confidence: confidence.toFixed(1),
+            recentMatches: matches.slice(-5).map(m => ({
+                index: m.index,
+                nextDirection: m.nextDirection
+            }))
+        };
+    }
+
+    /**
+     * Determines the best trade direction based on current recovery pattern
+     * @param {Object} assetState - The asset state object
+     * @param {number} lookbackOverride - Optional override for pattern lookback
+     * @returns {Object} Decision object with direction and reasoning
+     */
+    static determineTradeDirection(assetState, lookbackOverride = null) {
+        const currentPattern = this.getCurrentPattern(assetState);
+
+        if (!currentPattern) {
+            return {
+                direction: assetState.lastTradeDirection,
+                method: 'fallback_continue',
+                reason: 'No recovery pattern available, continuing last direction',
+                confidence: 0
+            };
+        }
+
+        const analysis = this.analyzePatternInHistory(
+            assetState.closedCandles,
+            currentPattern,
+            lookbackOverride || 500
+        );
+
+        if (!analysis.found || !analysis.recommendation) {
+            // Fall back to continuing the last trade direction
+            return {
+                direction: assetState.lastTradeDirection,
+                method: 'fallback_continue',
+                reason: analysis.reason || 'No clear recommendation, continuing last direction',
+                confidence: analysis.confidence,
+                analysis: analysis
+            };
+        }
+
+        return {
+            direction: analysis.recommendation,
+            method: 'pattern_matching',
+            reason: `Pattern "${currentPattern}" → ${analysis.recommendation} (${analysis.callePercentage}%/${analysis.putePercentage}%, ${analysis.matchesFound} matches)`,
+            confidence: analysis.confidence,
+            analysis: analysis
+        };
     }
 }
 
@@ -1603,6 +1874,9 @@ class SessionManager {
             assetState.lastTradeWasWin = true;
             assetState.currentStake = CONFIG.STAKE;
 
+            // Reset recovery pattern after win
+            CandlePatternRecovery.resetPattern(assetState);
+
             // Record in persistent history
             TradeHistoryManager.recordTrade(symbol, profit, assetState.martingaleLevel);
 
@@ -1779,6 +2053,12 @@ class ConnectionManager {
                     martingaleLevel: 0,
                     currentStake: CONFIG.STAKE,
                     canTrade: false,
+                    // === PATTERN RECOVERY ENGINE ===
+                    recoveryPattern: {
+                        pattern: '',
+                        losses: 0,
+                        history: []
+                    },
                     // === PER-ASSET POSITIONS ===
                     activePositions: [],
                     // === PER-ASSET STATS (today's session) ===
@@ -2371,7 +2651,7 @@ class DerivBot {
         );
         console.log('═'.repeat(80));
         console.log(
-            '📋 Strategy: Candle-pattern (per-asset) + Per-Asset Recovery System'
+            '📋 Strategy: Candle-pattern (per-asset) + Dynamic Pattern Recovery System'
         );
         console.log(
             `    📈 BUY  — if last ${CONFIG.CANDLE_PATTERN_LOOKBACK || 7} candles are NOT bullish (then BUY). Recovery continues until win.`
@@ -2380,7 +2660,10 @@ class DerivBot {
             `    📉 SELL — if last ${CONFIG.CANDLE_PATTERN_LOOKBACK || 7} candles are NOT bearish (then SELL). Recovery continues until win.`
         );
         console.log(
-            '    🔄 Recovery: Each asset has its own martingale chain'
+            '    🔄 Recovery: Dynamic pattern matching - analyzes historical candles'
+        );
+        console.log(
+            '    📊 Pattern Engine: Tracks loss patterns & finds optimal reversal points'
         );
         console.log(
             '    🕐 Signal detected on every candle close (pattern evaluated)'
@@ -2523,75 +2806,34 @@ class DerivBot {
         const isRecoveryMode = assetState.lastTradeWasWin === false;
 
         if (isRecoveryMode) {
-            // RECOVERY MODE: After a loss, continue in the SAME direction
-            // // This is a martingale continuation strategy - not a new breakout signal
-            if (assetState.martingaleLevel <= 2) {
-                if (assetState.lastTradeDirection === 'CALLE') {
-                    direction = 'CALLE';
-                    signalReason = `Recovery (${symbol} Prev LOSS on RISE → Continue RISE)`;
-                } else {
-                    direction = 'PUTE';
-                    signalReason = `Recovery (${symbol} Prev LOSS on FALL → Continue FALL)`;
-                }
-            } else if (assetState.martingaleLevel === 3) {
-                if (assetState.lastTradeDirection === 'CALLE') {
-                    direction = 'PUTE';
-                    signalReason = `Recovery (${symbol} Prev LOSS on RISE → Reverse to FALL)`;
-                } else {
-                    direction = 'CALLE';
-                    signalReason = `Recovery (${symbol} Prev LOSS on FALL → Reverse to RISE)`;
-                }
-            } else if (assetState.martingaleLevel === 4) {
-                if (assetState.lastTradeDirection === 'CALLE') {
-                    direction = 'CALLE';
-                    signalReason = `Recovery (${symbol} Prev LOSS on FALL → Reverse to RISE)`;
-                } else {
-                    direction = 'PUTE';
-                    signalReason = `Recovery (${symbol} Prev LOSS on RISE → Reverse to FALL)`;
-                }
-            } else if (assetState.martingaleLevel === 5) {
-                if (assetState.lastTradeDirection === 'CALLE') {
-                    direction = 'CALLE';
-                    signalReason = `Recovery (${symbol} Prev LOSS on FALL → Reverse to RISE)`;
-                } else {
-                    direction = 'PUTE';
-                    signalReason = `Recovery (${symbol} Prev LOSS on RISE → Reverse to FALL)`;
-                }
-            } else if (assetState.martingaleLevel === 6) {
-                if (assetState.lastTradeDirection === 'CALLE') {
-                    direction = 'PUTE';
-                    signalReason = `Recovery (${symbol} Prev LOSS on FALL → Continue FALL)`;
-                } else {
-                    direction = 'CALLE';
-                    signalReason = `Recovery (${symbol} Prev LOSS on RISE → Continue RISE)`;
-                }
-            } else if (assetState.martingaleLevel === 7) {
-                if (assetState.lastTradeDirection === 'CALLE') {
-                    direction = 'CALLE';
-                    signalReason = `Recovery (${symbol} Prev LOSS on FALL → Reverse to RISE)`;
-                } else {
-                    direction = 'PUTE';
-                    signalReason = `Recovery (${symbol} Prev LOSS on RISE → Reverse to FALL)`;
-                }
-            } else if (assetState.martingaleLevel === 8) {
-                if (assetState.lastTradeDirection === 'CALLE') {
-                    direction = 'PUTE';
-                    signalReason = `Recovery (${symbol} Prev LOSS on FALL → Continue FALL)`;
-                } else {
-                    direction = 'CALLE';
-                    signalReason = `Recovery (${symbol} Prev LOSS on RISE → Continue RISE)`;
-                }
+            // =============================================
+            // RECOVERY MODE: Dynamic Candle Pattern Matching
+            // =============================================
+            // Update pattern with the loss candle that just closed
+            const lossCandle = assetState.closedCandles[assetState.closedCandles.length - 1];
+            CandlePatternRecovery.updatePattern(assetState, lossCandle);
+
+            // Determine best trade direction based on pattern analysis
+            const patternDecision = CandlePatternRecovery.determineTradeDirection(assetState);
+
+            direction = patternDecision.direction;
+            signalReason = patternDecision.reason;
+
+            // Log pattern analysis details
+            if (patternDecision.analysis && patternDecision.analysis.found) {
+                const a = patternDecision.analysis;
+                LOGGER.trade(`🔄 [${symbol}] RECOVERY MODE (Pattern-Based):`);
+                LOGGER.info(`   Pattern: "${a.pattern}"`);
+                LOGGER.info(`   Matches Found: ${a.matchesFound}`);
+                LOGGER.info(`   CALLE: ${a.callePercentage}% | PUTE: ${a.putePercentage}%`);
+                LOGGER.info(`   Recommendation: ${a.recommendation} (Confidence: ${a.confidence}%)`);
+                LOGGER.info(`   Method: ${patternDecision.method}`);
             } else {
-                if (assetState.lastTradeDirection === 'CALLE') {
-                    direction = 'CALLE';
-                    signalReason = `Recovery (${symbol} Prev LOSS on FALL → Reverse to RISE)`;
-                } else {
-                    direction = 'PUTE';
-                    signalReason = `Recovery (${symbol} Prev LOSS on RISE → Reverse to FALL)`;
+                LOGGER.trade(`🔄 [${symbol}] RECOVERY MODE: ${signalReason} (Martingale Level: ${assetState.martingaleLevel})`);
+                if (patternDecision.analysis && patternDecision.analysis.reason) {
+                    LOGGER.info(`   ⚠️ ${patternDecision.analysis.reason}`);
                 }
             }
-
-            LOGGER.trade(`🔄 [${symbol}] RECOVERY MODE: ${signalReason} (Martingale Level: ${assetState.martingaleLevel})`);
 
         } else {
             // ── NORMAL MODE: Candle-pattern signal
@@ -2846,6 +3088,10 @@ class DerivBot {
                     netPL: a.netPL,
                     lastCandleDirection: lastCandleDirection,
                     patternLookback: CONFIG.CANDLE_PATTERN_LOOKBACK || 7,
+                    recoveryPattern: a.recoveryPattern ? {
+                        pattern: a.recoveryPattern.pattern,
+                        losses: a.recoveryPattern.losses
+                    } : null,
                     timeframe: ac.TIMEFRAME_LABEL,
                     duration: `${ac.DURATION}${ac.DURATION_UNIT}`
                 };
@@ -2962,7 +3208,10 @@ setInterval(() => {
                 const winLoss = a.lastWasWin === null
                     ? '-'
                     : a.lastWasWin ? 'W' : 'L';
-                assetLines += `\n   ${sym} (${a.timeframe}/${a.duration}): M${a.martingaleLevel} $${a.currentStake.toFixed(2)} | ${a.trades}t ${a.wins}W/${a.losses}L | P/L:$${a.netPL.toFixed(2)} | Last:${dir}(${winLoss}) | Pos:${a.activePositions} | LastCandle:${a.lastCandleDirection || '---'} Lookback:${a.patternLookback}`;
+                const pattern = a.recoveryPattern && a.recoveryPattern.pattern
+                    ? ` Pattern:${a.recoveryPattern.pattern}`
+                    : '';
+                assetLines += `\n   ${sym} (${a.timeframe}/${a.duration}): M${a.martingaleLevel} $${a.currentStake.toFixed(2)} | ${a.trades}t ${a.wins}W/${a.losses}L | P/L:$${a.netPL.toFixed(2)} | Last:${dir}(${winLoss})${pattern} | Pos:${a.activePositions} | LastCandle:${a.lastCandleDirection || '---'} Lookback:${a.patternLookback}`;
             }
         });
 
