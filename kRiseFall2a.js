@@ -1396,7 +1396,7 @@ const CONFIG = {
     // true  = only trade during defined session windows below (recovery allowed anytime)
     // false = trade 24/7 (ignore session windows entirely)
     // ============================================
-    USE_TRADING_SESSIONS: true,
+    USE_TRADING_SESSIONS: false,
     // ============================================
     // TRADING SESSION WINDOWS (GMT+1 hours)
     // ============================================
