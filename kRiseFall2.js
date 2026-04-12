@@ -1367,15 +1367,15 @@ const CONFIG = {
     SESSION_STOP_LOSS: -5000,
 
     // Default Candle Settings (used if asset has no specific config)
-    GRANULARITY: 120,
-    TIMEFRAME_LABEL: '2m',
+    GRANULARITY: 60,
+    TIMEFRAME_LABEL: '1m',
     MAX_CANDLES_STORED: 5000,
     CANDLES_TO_LOAD: 5000,
 
     CANDLE_PATTERN_LOOKBACK: 4, // Number of previous candles to analyze for pattern detection (user configurable)
 
     // Default Trade Duration Settings (used if asset has no specific config)
-    DURATION: 118,
+    DURATION: 58,
     DURATION_UNIT: 's',
 
     // Trade Settings — NOW PER ASSET
