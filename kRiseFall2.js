@@ -1094,8 +1094,8 @@ const CONFIG = {
     // Default Candle Settings (used if asset has no specific config)
     GRANULARITY: 120,
     TIMEFRAME_LABEL: '2m',
-    MAX_CANDLES_STORED: 5000,
-    CANDLES_TO_LOAD: 5000,
+    MAX_CANDLES_STORED: 5000, // 1440 for 24 hours of 1 minute candles
+    CANDLES_TO_LOAD: 5000, // 1440 for 24 hours of 1 minute candles
 
     CANDLE_PATTERN_LOOKBACK: 4, // Number of previous candles to analyze for pattern detection (user configurable)
 
@@ -2590,16 +2590,6 @@ class DerivBot {
                     signalReason = `Recovery (${symbol} Prev LOSS on RISE → Reverse to FALL)`;
                 }
             }
-
-            // const candleType = CandleAnalyzer.getCandleDirection(lastClosedCandle);
-
-            // if (candleType === 'BULLISH') {
-            //     direction = 'PUTE';
-            //     signalReason = `Recovery (${symbol} Prev LOSS on FALL → Continue FALL)`;
-            // } else {
-            //     direction = 'CALLE';
-            //     signalReason = `Recovery (${symbol} Prev LOSS on RISE → Continue RISE)`;
-            // }
 
             LOGGER.trade(`🔄 [${symbol}] RECOVERY MODE: ${signalReason} (Martingale Level: ${assetState.martingaleLevel})`);
 
