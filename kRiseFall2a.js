@@ -6,8 +6,8 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'KriseFallM_2a_03-state.json');
-const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2a_03-history.json');
+const STATE_FILE = path.join(__dirname, 'KriseFallM_2a_06-state.json');
+const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2a_06-history.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
@@ -1283,10 +1283,10 @@ class CandlePatternMatcher {
         let confidence;
 
         if (bullFollowCount > bearFollowCount) {
-            recommendedDirection = 'CALLE';
+            recommendedDirection = 'PUTE';
             confidence = (bullFollowCount / totalMatches) * 100;
         } else if (bearFollowCount > bullFollowCount) {
-            recommendedDirection = 'PUTE';
+            recommendedDirection = 'CALLE';
             confidence = (bearFollowCount / totalMatches) * 100;
         } else {
             // Exact tie — default to CALLE (conservative bull bias)
@@ -1326,7 +1326,7 @@ class CandlePatternMatcher {
      *             stats: Object, pattern: string }}
      */
     static getRecoveryDirection(assetState, closedCandles, symbol) {
-        const MIN_CONFIDENCE = 55; // % — below this we fall back
+        const MIN_CONFIDENCE = 50; // % — below this we fall back
 
         const pattern = assetState.recoveryPattern || '';
 
@@ -1433,15 +1433,15 @@ const CONFIG = {
     SESSION_STOP_LOSS: -5000,
 
     // Default Candle Settings (used if asset has no specific config)
-    GRANULARITY: 120,
-    TIMEFRAME_LABEL: '2m',
+    GRANULARITY: 60,
+    TIMEFRAME_LABEL: '1m',
     MAX_CANDLES_STORED: 500,
     CANDLES_TO_LOAD: 500,
 
     CANDLE_PATTERN_LOOKBACK: 4, // Number of previous candles to analyze for pattern detection (user configurable)
 
     // Default Trade Duration Settings (used if asset has no specific config)
-    DURATION: 118,
+    DURATION: 58,
     DURATION_UNIT: 's',
 
     // Trade Settings — NOW PER ASSET
@@ -1550,7 +1550,8 @@ function getAssetConfig(symbol) {
     };
 }
 
-let ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'];
+let ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'];
+// let ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'];
 // let ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V'];
 // let ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V', 'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'];
 
