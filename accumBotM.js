@@ -29,7 +29,7 @@ const path = require('path');
 // ══════════════════════════════════════════════════════════════════════════════
 // STATE PERSISTENCE MANAGER
 // ══════════════════════════════════════════════════════════════════════════════
-const STATE_FILE = path.join(__dirname, 'accumBotM_00000006_state.json');
+const STATE_FILE = path.join(__dirname, 'accumBotM_00000007_state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -1034,7 +1034,6 @@ class EnhancedDerivTradingBot {
 
         // Current digit count of the running accumulator
         const currentDigitCount = stayedInArray[99] + 1;
-        const currentDigitCount2 = stayedInArray[99] - 1;
 
         this.currentTick = stayedInArray[99];
 
@@ -1062,12 +1061,7 @@ class EnhancedDerivTradingBot {
         // and not already traded, and stayedIn value >= 0
         const condition = appearedOnceArray.includes(currentDigitCount)
             && !this.tradedDigitArray.includes(stayedInArray[99])
-            && stayedInArray[99] > 15;
-
-        const condition2 = appearedOnceArray.includes(currentDigitCount2)
-            && !this.tradedDigitArray.includes(stayedInArray[99])
-            && stayedInArray[99] > 15;
-
+            && stayedInArray[99] > 0;
 
         console.log(`   Entry condition: ${condition ? '✅ MET' : '❌ NOT MET'}`);
 
@@ -1100,22 +1094,22 @@ class EnhancedDerivTradingBot {
 
         // if (analysis.overallScore < 0.65) return;
 
-        // if (analysis.scores.bandWidth < 1) return;
+        if (analysis.scores.bandWidth < 1) return;
 
-        // if (analysis.scores.macdFlat < 0.5) return;
+        if (analysis.scores.macdFlat < 0.5) return;
 
-        // if (analysis.scores.pricePosition < 0.5) return;
+        if (analysis.scores.pricePosition < 0.5) return;
 
-        // if (!analysis.tickStability || analysis.tickStability === 'undefined' || analysis.tickStability === 'NaN' || analysis.tickStability < 1) return;
+        if (!analysis.tickStability || analysis.tickStability === 'undefined' || analysis.tickStability === 'NaN' || analysis.tickStability < 1) return;
 
-        // if (analysis.scores.macdConverging < 1) return;
+        if (analysis.scores.macdConverging < 1) return;
 
-        // if (this.maxTickMove < 0.03) return;
+        if (this.maxTickMove < 0.03) return;
 
-        // if (analysis.scores.volTrend < 0.5) return;
+        if (analysis.scores.volTrend < 0.5) return;
 
         // Check if we should place trade
-        if ((condition && this.overallScore >= 100) || (condition2 && this.overallScore >= 100)) {
+        if (condition) {
             this.tradedDigitArray.push(stayedInArray[99]);
             this.filteredArray = appearedOnceArray;
             this.entryTick = stayedInArray[99];
