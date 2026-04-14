@@ -1682,14 +1682,14 @@ class EnhancedDerivTradingBot {
 // BOT INITIALIZATION
 // ══════════════════════════════════════════════════════════════════════════════
 const bot = new EnhancedDerivTradingBot('DMylfkyce6VyZt7', {
-    initialStake: 5,
-    multiplier: 52,
+    initialStake: 3,
+    multiplier: 35,
     multiplier2: 8,
     maxConsecutiveLosses: 2,
-    stopLoss: 250,
+    stopLoss: 108,
     takeProfit: 10000,
-    growthRate: 0.02,
-    takeProfitMultiplier: 0.02,
+    growthRate: 0.03,
+    takeProfitMultiplier: 0.03,
     filterNum: 4,
     assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
     telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
