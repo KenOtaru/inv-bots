@@ -1690,7 +1690,7 @@ const bot = new EnhancedDerivTradingBot('DMylfkyce6VyZt7', {
     takeProfit: 10000,
     growthRate: 0.02,
     takeProfitMultiplier: 0.02,
-    filterNum: 3,
+    filterNum: 4,
     assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
     telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
     telegramChatId: '752497117',
