@@ -1222,16 +1222,13 @@ class MultiAssetGhostBot {
 
                 this.placeTrade(asset, signal);
             } else {
-                const now = Date.now();
-                if (now - (this.lastTickLogTime[asset] || 0) >= 30000) {
-                    console.log(
-                        `[${asset}] Waiting for saturation learning...` +
-                        ` Last10: ${last10}` +
-                        ` | WindowHot: ${signal.windowHotDigit} (${(signal.shortRepeat * 100).toFixed(1)}%)` +
-                        ` | SatHotDigit: ${satHotDigit != null ? satHotDigit : '?'} (${sat != null ? (sat * 100).toFixed(1) + '%' : '---'})` +
-                        ` | Conf: ${(signal.confidence * 100).toFixed(0)}%`
-                    );
-                }
+                console.log(
+                    `[${asset}] Waiting for saturation learning...` +
+                    ` Last10: ${last10}` +
+                    ` | WindowHot: ${signal.windowHotDigit} (${(signal.shortRepeat * 100).toFixed(1)}%)` +
+                    ` | SatHotDigit: ${satHotDigit != null ? satHotDigit : '?'} (${sat != null ? (sat * 100).toFixed(1) + '%' : '---'})` +
+                    ` | Conf: ${(signal.confidence * 100).toFixed(0)}%`
+                );
             }
         }
     }
