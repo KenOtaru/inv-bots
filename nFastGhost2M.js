@@ -1211,7 +1211,7 @@ class MultiAssetGhostBot {
             }
 
 
-            if (sat >= 0.16 && signal.confidence >= 0.5) { //this.startTrade
+            if (sat >= 0.16 && signal.confidence >= 0.4) { //this.startTrade
                 console.log(
                     `🎯 Trade Signal [${asset}]:` +
                     ` Last10: ${last10}` +
