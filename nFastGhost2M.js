@@ -1210,15 +1210,16 @@ class MultiAssetGhostBot {
                 this.startTrade = false;
             }
 
-            if (this.startTrade) {
+            const confidence = (signal.confidence * 100).toFixed(0);
+
+            if (confidence >= 50) { //this.startTrade
                 console.log(
                     `🎯 Trade Signal [${asset}]:` +
-                    ` SatHotDigit: ${satHotDigit != null ? satHotDigit : '?'}` +
-                    ` | WindowHot: ${signal.windowHotDigit}` +
+                    ` Last10: ${last10}` +
                     ` | TradeDigit: ${signal.digit}` +
-                    ` | Conf: ${(signal.confidence * 100).toFixed(0)}%` +
-                    ` | ShortR: ${(signal.shortRepeat * 100).toFixed(1)}%` +
-                    ` | PeakSat: ${sat != null ? (sat * 100).toFixed(1) + '%' : '---'}`
+                    ` | WindowHot: ${signal.windowHotDigit} (${(signal.shortRepeat * 100).toFixed(1)}%)` +
+                    ` | SatHotDigit: ${satHotDigit != null ? satHotDigit : '?'} (${sat != null ? (sat * 100).toFixed(1) + '%' : '---'})` +
+                    ` | Conf: ${(signal.confidence * 100).toFixed(0)}%`
                 );
 
                 this.placeTrade(asset, signal);
@@ -1226,13 +1227,10 @@ class MultiAssetGhostBot {
                 console.log(
                     `[${asset}] Waiting for saturation learning...` +
                     ` Last10: ${last10}` +
-                    ` | Sat: ${sat != null ? (sat * 100).toFixed(1) + '%' : 'not learned'}` +
-                    ` SatHotDigit: ${satHotDigit != null ? satHotDigit : '?'}` +
-                    ` | WindowHot: ${signal.windowHotDigit}` +
                     ` | TradeDigit: ${signal.digit}` +
-                    ` | Conf: ${(signal.confidence * 100).toFixed(0)}%` +
-                    ` | ShortR: ${(signal.shortRepeat * 100).toFixed(1)}%` +
-                    ` | PeakSat: ${sat != null ? (sat * 100).toFixed(1) + '%' : '---'}`
+                    ` | WindowHot: ${signal.windowHotDigit} (${(signal.shortRepeat * 100).toFixed(1)}%)` +
+                    ` | SatHotDigit: ${satHotDigit != null ? satHotDigit : '?'} (${sat != null ? (sat * 100).toFixed(1) + '%' : '---'})` +
+                    ` | Conf: ${(signal.confidence * 100).toFixed(0)}%`
                 );
             }
         }
