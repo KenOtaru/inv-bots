@@ -1120,7 +1120,7 @@ class MultiAssetGhostBot {
         const shortRepeat = snapshot ? (snapshot.shortRepeat * 100).toFixed(1) : '---';
 
         const now = Date.now();
-        if (!this.tradeInProgress) { // && now - (this.lastTickLogTime[asset] || 0) >= 30000
+        if (!this.tradeInProgress && now - (this.lastTickLogTime[asset] || 0) >= 30000) { // && now - (this.lastTickLogTime[asset] || 0) >= 30000
             console.log(
                 `[${asset}] ${tick.quote}: ${recent.join(',')}` +
                 ` | ShortR: ${shortRepeat}%` +
@@ -1222,13 +1222,16 @@ class MultiAssetGhostBot {
 
                 this.placeTrade(asset, signal);
             } else {
-                console.log(
-                    `[${asset}] Waiting for saturation learning...` +
-                    ` Last10: ${last10}` +
-                    ` | WindowHot: ${signal.windowHotDigit} (${(signal.shortRepeat * 100).toFixed(1)}%)` +
-                    ` | SatHotDigit: ${satHotDigit != null ? satHotDigit : '?'} (${sat != null ? (sat * 100).toFixed(1) + '%' : '---'})` +
-                    ` | Conf: ${(signal.confidence * 100).toFixed(0)}%`
-                );
+                const now = Date.now();
+                if (now - (this.lastTickLogTime[asset] || 0) >= 30000) {
+                    console.log(
+                        `[${asset}] Waiting for saturation learning...` +
+                        ` Last10: ${last10}` +
+                        ` | WindowHot: ${signal.windowHotDigit} (${(signal.shortRepeat * 100).toFixed(1)}%)` +
+                        ` | SatHotDigit: ${satHotDigit != null ? satHotDigit : '?'} (${sat != null ? (sat * 100).toFixed(1) + '%' : '---'})` +
+                        ` | Conf: ${(signal.confidence * 100).toFixed(0)}%`
+                    );
+                }
             }
         }
     }
