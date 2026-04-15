@@ -1285,14 +1285,13 @@ class MultiAssetGhostBot {
 
         return {
             asset,
-            digit: tradeDigit,
+            digit: lastDigit,
             digitFrequency: hotDigitInfo.frequency,
             digitCount: hotDigitInfo.count,
             confidence,
             cycleScore: cycleSignal.score,
             cycleDetails: cycleSignal.details,
             shortRepeat: cycleSignal.details ? cycleSignal.details.shortRepeat : 0,
-            lastDigit: lastDigit,
             hotDigit: tradeDigit,
             tradeSignal,
             saturationHotDigit,
