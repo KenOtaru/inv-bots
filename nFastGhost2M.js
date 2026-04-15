@@ -745,6 +745,7 @@ class MultiAssetGhostBot {
         this.sys2 = false;
         this.sys2WinCount = 0;
         this.sysCount = 0;
+        this.startTrade = false;
 
         // Contract tracking
         this.contractSubscription = null;
