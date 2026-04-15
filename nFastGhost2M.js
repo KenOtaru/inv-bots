@@ -1212,11 +1212,10 @@ class MultiAssetGhostBot {
 
             const confidence = (signal.confidence * 100).toFixed(0);
 
-            if (confidence >= 50) { //this.startTrade
+            if (confidence >= 35) { //this.startTrade
                 console.log(
                     `🎯 Trade Signal [${asset}]:` +
                     ` Last10: ${last10}` +
-                    ` | TradeDigit: ${signal.digit}` +
                     ` | WindowHot: ${signal.windowHotDigit} (${(signal.shortRepeat * 100).toFixed(1)}%)` +
                     ` | SatHotDigit: ${satHotDigit != null ? satHotDigit : '?'} (${sat != null ? (sat * 100).toFixed(1) + '%' : '---'})` +
                     ` | Conf: ${(signal.confidence * 100).toFixed(0)}%`
@@ -1227,7 +1226,6 @@ class MultiAssetGhostBot {
                 console.log(
                     `[${asset}] Waiting for saturation learning...` +
                     ` Last10: ${last10}` +
-                    ` | TradeDigit: ${signal.digit}` +
                     ` | WindowHot: ${signal.windowHotDigit} (${(signal.shortRepeat * 100).toFixed(1)}%)` +
                     ` | SatHotDigit: ${satHotDigit != null ? satHotDigit : '?'} (${sat != null ? (sat * 100).toFixed(1) + '%' : '---'})` +
                     ` | Conf: ${(signal.confidence * 100).toFixed(0)}%`
