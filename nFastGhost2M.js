@@ -68,7 +68,7 @@ const CONFIG = {
     api_token: '0P94g4WdSrSrzir',
 
     // Multi-Asset Configuration
-    assets: ['R_10', 'R_25', 'R_50', 'R_75', 'RDBULL', 'RDBEAR'],
+    assets: ['R_75'], //'R_10', 'R_25', 'R_50', 'R_75', 'RDBULL', 'RDBEAR'
 
     // Contract Configuration
     contract_type: 'DIGITDIFF',
@@ -653,28 +653,28 @@ class RepeatCycleAnalyzer {
             : 0;
         const meaningfulDecline = declineFraction >= 0.15;
         const notCollapsed = currentVal >= this.nonRepMaxRepeat;
-        const last3 = recent.slice(-3);
-        const declining = last3.length >= 3
-            && last3[0] > last3[1]
-            && last3[1] > last3[2]
+        const last2 = recent.slice(-2);
+        const declining = last2.length >= 2
+            && last2[0] > last2[1]
+        // && last3[1] > last3[2]
         // && last3[2] > last3[3]
         // && last3[3] > last3[4];
 
         const exhaustion = peakReachedSat && meaningfulDecline && notCollapsed && declining;
 
-        if (!exhaustion) {
-            return {
-                active: false,
-                score: 0,
-                details: {
-                    ...baseDetails,
-                    reason: 'no_exhaustion',
-                    peakInWindow: peakInWindow.toFixed(4),
-                    declineFraction: declineFraction.toFixed(3),
-                    declining,
-                },
-            };
-        }
+        // if (!exhaustion) {
+        //     return {
+        //         active: false,
+        //         score: 0,
+        //         details: {
+        //             ...baseDetails,
+        //             reason: 'no_exhaustion',
+        //             peakInWindow: peakInWindow.toFixed(4),
+        //             declineFraction: declineFraction.toFixed(3),
+        //             declining,
+        //         },
+        //     };
+        // }
 
         const peakExcess = Math.max(0, peakInWindow - sat);
         const normPeak = Math.min(1, peakExcess / 0.15);
@@ -1119,7 +1119,7 @@ class MultiAssetGhostBot {
         const shortRepeat = snapshot ? (snapshot.shortRepeat * 100).toFixed(1) : '---';
 
         const now = Date.now();
-        if (!this.tradeInProgress && now - (this.lastTickLogTime[asset] || 0) >= 30000) {
+        if (!this.tradeInProgress) { // && now - (this.lastTickLogTime[asset] || 0) >= 30000
             console.log(
                 `[${asset}] ${tick.quote}: ${recent.join(',')}` +
                 ` | ShortR: ${shortRepeat}%` +
@@ -1181,23 +1181,13 @@ class MultiAssetGhostBot {
         // Generate signal for this asset
         const signal = this.generateSignal(asset);
 
-        if (signal && signal.tradeSignal && signal.confidence > 0.5) {
+        if (signal) { // && signal.tradeSignal && signal.confidence > 0.5
             const sat = this.cycleAnalyzers[asset].learnedSaturation;
             const satHotDigit = this.cycleAnalyzers[asset].saturationHotDigit;
 
             const analyzer = this.analyzers[asset];
             const recentTicks = analyzer.getRecentTicks(10);
             const last10 = recentTicks.map(t => t.digit).join(',');
-
-            console.log(
-                `🎯 Trade Signal [${asset}]:` +
-                ` SatHotDigit: ${satHotDigit != null ? satHotDigit : '?'}` +
-                ` | WindowHot: ${signal.windowHotDigit}` +
-                ` | TradeDigit: ${signal.digit}` +
-                ` | Conf: ${(signal.confidence * 100).toFixed(0)}%` +
-                ` | ShortR: ${(signal.shortRepeat * 100).toFixed(1)}%` +
-                ` | PeakSat: ${sat != null ? (sat * 100).toFixed(1) + '%' : '---'}`
-            );
 
             // Only trade when saturation has been learned and is meaningful
             // if (sat && signal.shortRepeat > 0.1 && sat > signal.shortRepeat && satHotDigit != null && satHotDigit !== signal.windowHotDigit) {
@@ -1211,14 +1201,37 @@ class MultiAssetGhostBot {
             //     );
             // }
 
-            if (sat && sat > 0.14 && signal.shortRepeat > sat && satHotDigit != null && satHotDigit === signal.windowHotDigit) {
+            if (sat && sat >= 0.16 && signal.shortRepeat > sat && signal.shortRepeat >= 0.20) {
+                this.startTrade = true;
+            }
+
+            if (signal.shortRepeat <= 0.14) {
+                this.startTrade = false;
+            }
+
+            if (this.startTrade) {
+                console.log(
+                    `🎯 Trade Signal [${asset}]:` +
+                    ` SatHotDigit: ${satHotDigit != null ? satHotDigit : '?'}` +
+                    ` | WindowHot: ${signal.windowHotDigit}` +
+                    ` | TradeDigit: ${signal.digit}` +
+                    ` | Conf: ${(signal.confidence * 100).toFixed(0)}%` +
+                    ` | ShortR: ${(signal.shortRepeat * 100).toFixed(1)}%` +
+                    ` | PeakSat: ${sat != null ? (sat * 100).toFixed(1) + '%' : '---'}`
+                );
+
                 this.placeTrade(asset, signal);
             } else {
                 console.log(
                     `[${asset}] Waiting for saturation learning...` +
                     ` Last10: ${last10}` +
                     ` | Sat: ${sat != null ? (sat * 100).toFixed(1) + '%' : 'not learned'}` +
-                    ` | SatHot: ${satHotDigit != null ? satHotDigit : 'not identified'}`
+                    ` SatHotDigit: ${satHotDigit != null ? satHotDigit : '?'}` +
+                    ` | WindowHot: ${signal.windowHotDigit}` +
+                    ` | TradeDigit: ${signal.digit}` +
+                    ` | Conf: ${(signal.confidence * 100).toFixed(0)}%` +
+                    ` | ShortR: ${(signal.shortRepeat * 100).toFixed(1)}%` +
+                    ` | PeakSat: ${sat != null ? (sat * 100).toFixed(1) + '%' : '---'}`
                 );
             }
         }
@@ -1278,8 +1291,9 @@ class MultiAssetGhostBot {
             cycleScore: cycleSignal.score,
             cycleDetails: cycleSignal.details,
             shortRepeat: cycleSignal.details ? cycleSignal.details.shortRepeat : 0,
-            tradeSignal,
+            lastDigit: lastDigit,
             hotDigit: tradeDigit,
+            tradeSignal,
             saturationHotDigit,
             windowHotDigit: hotDigitInfo.digit,
         };
