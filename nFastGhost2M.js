@@ -1200,7 +1200,18 @@ class MultiAssetGhostBot {
             );
 
             // Only trade when saturation has been learned and is meaningful
-            if (sat && signal.shortRepeat > 0.1 && sat > signal.shortRepeat && satHotDigit != null && satHotDigit !== signal.windowHotDigit) {
+            // if (sat && signal.shortRepeat > 0.1 && sat > signal.shortRepeat && satHotDigit != null && satHotDigit !== signal.windowHotDigit) {
+            //     this.placeTrade(asset, signal);
+            // } else {
+            //     console.log(
+            //         `[${asset}] Waiting for saturation learning...` +
+            //         ` Last10: ${last10}` +
+            //         ` | Sat: ${sat != null ? (sat * 100).toFixed(1) + '%' : 'not learned'}` +
+            //         ` | SatHot: ${satHotDigit != null ? satHotDigit : 'not identified'}`
+            //     );
+            // }
+
+            if (sat && sat > 0.14 && signal.shortRepeat > sat && satHotDigit != null && satHotDigit === signal.windowHotDigit) {
                 this.placeTrade(asset, signal);
             } else {
                 console.log(
