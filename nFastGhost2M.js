@@ -1516,7 +1516,7 @@ class MultiAssetGhostBot {
             }
 
             // Suspend asset after loss
-            this.suspendAsset(asset);
+            // this.suspendAsset(asset);
         }
 
         this.totalProfitLoss += profit;
