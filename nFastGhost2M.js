@@ -53,7 +53,7 @@ try {
     // node-telegram-bot-api not installed
 }
 
-const STATE_FILE = path.join(__dirname, 'nFastGhostMMulti00007-state.json');
+const STATE_FILE = path.join(__dirname, 'nFastGhostMMulti00009-state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================================================
@@ -1221,7 +1221,7 @@ class MultiAssetGhostBot {
             // }
 
 
-            if (sat >= 0.16 && signal.shortRepeat >= 0.18 && signal.confidence >= 0.4 && declineFrac >= 0.1) { //this.startTrade
+            if (sat >= 0.16 && signal.shortRepeat >= 0.18 && signal.confidence >= 0.4 && declineFrac >= 0.1 && signal.digit === signal.windowHotDigit) { //this.startTrade
                 // if (asset === 'RDBEAR' || asset === 'RDBULL') {
                 //     if (sat < 0.18 || signal.shortRepeat < 0.28) {
                 //         return;
