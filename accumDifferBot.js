@@ -29,7 +29,7 @@ const path = require('path');
 const BOT_CONFIG = {
     token: 'hsj0tA0XJoIzJG5',        // Deriv API token
 
-    assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
+    assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'RDBULL', 'RDBEAR'],
 
     initialStake: 1,               // Starting stake in USD
     multiplier: 11.3,              // Martingale multiplier on loss
@@ -647,7 +647,7 @@ class DigitDifferBot {
         if (this.digitHistories[asset].length < this.cfg.requiredHistoryLength) return;
         // if (Date.now() - (this.lastTradeTime[asset] || 0) < this.cfg.minTimeBetweenTrades) return;
 
-        console.log('asset [', asset, '] Last10Ticks: ', this.digitHistories[asset].slice(-10));
+        console.log('asset [', asset, ']', price, this.digitHistories[asset].slice(-10));
 
         if (!this.tradeInProgress) {
             this._evaluateAsset(asset);
@@ -726,6 +726,7 @@ class DigitDifferBot {
         if (analysis.overallScore >= 0.9) {
             console.log(`\n🎯 ENTRY SIGNAL — ${asset}`);
             console.log(`   Predicted digit: ${predictedDigit} (betting it will NOT appear next tick)`);
+            console.log(`   Last 10 Digits: ${this.digitHistories[asset].slice(-10)}`);
             console.log(`   Hot digit appeared ${analysis.hotDigitCount}x in last ${this.cfg.digitWindow} ticks (${analysis.hotDigitPct}%)`);
             console.log(`   Frequency edge over 2nd: ${analysis.frequencyEdge}`);
             console.log(`   Score: ${(analysis.overallScore * 100).toFixed(1)}%`);
@@ -757,6 +758,7 @@ class DigitDifferBot {
                 Asset: <b>${asset}</b>
                 Betting digit <b>${predictedDigit}</b> will NOT appear
                 Digit Appeared ${analysis.hotDigitCount}x (${analysis.hotDigitPct}%)
+                Last 10 Digits: ${this.digitHistories[asset].slice(-10)}
                 Score: ${(analysis.overallScore * 100).toFixed(1)}%
                 Frequency edge over 2nd: ${analysis.frequencyEdge}
                 Stake: $${this.currentStake.toFixed(2)}
@@ -866,6 +868,7 @@ class DigitDifferBot {
             `${won ? '✅' : '❌'} <b>differBot</b>\n\n` +
             `Asset: <b>${asset}</b>\n` +
             `Digit bet: ${trade.predictedDigit} | ${won ? 'Did NOT appear ✅' : 'Appeared ❌'}\n` +
+            `Last 10 Digits: ${this.digitHistories[asset].slice(-10)}\n` +
             `P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(3)}\n` +
             `Consecutive losses: ${this.consecutiveLosses}\n` +
             `Trades: ${this.totalTrades} (${this.totalWins}W/${this.totalLosses}L)\n` +
