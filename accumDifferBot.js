@@ -665,6 +665,14 @@ class DigitDifferBot {
 
         if (!analysis.shouldTrade) return;
 
+        // Don't repeat the same predicted digit consecutively (avoid chasing streaks)
+        const recentLen = Math.min(this.recentPredictions.length, 2);
+        const recentPreds = this.recentPredictions.slice(-recentLen);
+        if (recentPreds.every(d => d === analysis.predictedDigit)) {
+            // console.log(`   ⚠️  Skipping — digit ${analysis.predictedDigit} predicted ${recentLen}x in a row`);
+            // return;
+        }
+
         // Request a Digit Differ proposal
         this._requestProposal(asset, analysis.predictedDigit);
     }
@@ -716,13 +724,6 @@ class DigitDifferBot {
         const payoutPct = this.currentStake > 0 ? ((payout - this.currentStake) / this.currentStake * 100).toFixed(1) : '?';
 
         if (analysis.overallScore >= 0.95 && analysis.frequencyEdge <= 2) {
-            // Don't repeat the same predicted digit consecutively (avoid chasing streaks)
-            const recentLen = Math.min(this.recentPredictions.length, 2);
-            const recentPreds = this.recentPredictions.slice(-recentLen);
-            if (recentPreds.every(d => d === analysis.predictedDigit)) {
-                console.log(`   ⚠️  Skipping — digit ${analysis.predictedDigit} predicted ${recentLen}x in a row`);
-                // return;
-            }
             console.log(`\n🎯 ENTRY SIGNAL — ${asset}`);
             console.log(`   Predicted digit: ${predictedDigit} (betting it will NOT appear next tick)`);
             console.log(`   Last 10 Digits: ${this.digitHistories[asset].slice(-10)}`);
