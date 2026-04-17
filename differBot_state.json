@@ -1,5 +1,5 @@
 {
-  "savedAt": 1776442057106,
+  "savedAt": 1776446275751,
   "trading": {
     "currentStake": 1,
     "consecutiveLosses": 0,
@@ -7,12 +7,23 @@
     "consecutiveLosses3": 0,
     "consecutiveLosses4": 0,
     "consecutiveLosses5": 0,
-    "totalTrades": 0,
-    "totalWins": 0,
+    "totalTrades": 31,
+    "totalWins": 31,
     "totalLosses": 0,
-    "totalProfitLoss": 0,
-    "dailyProfitLoss": 0,
-    "recentPredictions": []
+    "totalProfitLoss": 2.7899999999999996,
+    "dailyProfitLoss": 2.7899999999999996,
+    "recentPredictions": [
+      3,
+      3,
+      3,
+      3,
+      7,
+      7,
+      4,
+      9,
+      1,
+      1
+    ]
   },
   "assetMetrics": {
     "R_10": {
@@ -22,28 +33,28 @@
       "profitLoss": 0
     },
     "R_25": {
-      "trades": 0,
-      "wins": 0,
+      "trades": 4,
+      "wins": 4,
       "losses": 0,
-      "profitLoss": 0
+      "profitLoss": 0.36
     },
     "R_50": {
-      "trades": 0,
-      "wins": 0,
+      "trades": 9,
+      "wins": 9,
       "losses": 0,
-      "profitLoss": 0
+      "profitLoss": 0.8099999999999998
     },
     "R_75": {
-      "trades": 0,
-      "wins": 0,
+      "trades": 7,
+      "wins": 7,
       "losses": 0,
-      "profitLoss": 0
+      "profitLoss": 0.6299999999999999
     },
     "R_100": {
-      "trades": 0,
-      "wins": 0,
+      "trades": 11,
+      "wins": 11,
       "losses": 0,
-      "profitLoss": 0
+      "profitLoss": 0.9899999999999998
     },
     "RDBEAR": {
       "trades": 0,
