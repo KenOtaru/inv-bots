@@ -647,7 +647,7 @@ class DigitDifferBot {
         if (this.digitHistories[asset].length < this.cfg.requiredHistoryLength) return;
         // if (Date.now() - (this.lastTradeTime[asset] || 0) < this.cfg.minTimeBetweenTrades) return;
 
-        console.log('asset [', asset, ']', price, this.digitHistories[asset].slice(-10));
+        // console.log('asset [', asset, ']', price, this.digitHistories[asset].slice(-10));
 
         if (!this.tradeInProgress) {
             this._evaluateAsset(asset);
