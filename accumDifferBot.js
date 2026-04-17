@@ -33,7 +33,7 @@ const BOT_CONFIG = {
 
     initialStake: 1,               // Starting stake in USD
     multiplier: 11.3,              // Martingale multiplier on loss
-    maxConsecutiveLosses: 2,               // Stop-loss trigger
+    maxConsecutiveLosses: 3,               // Stop-loss trigger
     stopLoss: 108,             // Total P&L stop-loss (USD)
     takeProfit: 10000,           // Session take-profit (USD)
 
