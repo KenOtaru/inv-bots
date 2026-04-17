@@ -643,14 +643,15 @@ class DigitDifferBot {
         this.tickCounts[asset] = (this.tickCounts[asset] || 0) + 1;
 
         if (!this.wsReady) return;
-        if (this.tradeInProgress) return;
         if (this.activeTrades[asset]) return;
         if (this.digitHistories[asset].length < this.cfg.requiredHistoryLength) return;
-        if (Date.now() - (this.lastTradeTime[asset] || 0) < this.cfg.minTimeBetweenTrades) return;
+        // if (Date.now() - (this.lastTradeTime[asset] || 0) < this.cfg.minTimeBetweenTrades) return;
 
         console.log('asset [', asset, '] Last10Ticks: ', this.digitHistories[asset].slice(-10));
 
-        this._evaluateAsset(asset);
+        if (!this.tradeInProgress) {
+            this._evaluateAsset(asset);
+        }
     }
 
     // ── Analysis & proposal ───────────────────────────────────────────────────
