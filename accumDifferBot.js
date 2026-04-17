@@ -48,11 +48,11 @@ const BOT_CONFIG = {
     macdFast: 12,
     macdSlow: 26,
     macdSignal: 9,
-    minBandWidthScore: 0.15,           // Reject if BB expanding hard (0–1)
-    minMacdFlatScore: 0.35,           // Reject if strong momentum
-    minPricePositionScore: 0.40,           // Reject if price at band edge
-    minTickStabilityScore: 0.01,           // Reject if erratic recent ticks
-    minVolTrendScore: 0.40,           // Reject if volatility rising
+    minBandWidthScore: 0.85,           // Reject if BB expanding hard (0–1)
+    minMacdFlatScore: 0.85,           // Reject if strong momentum
+    minPricePositionScore: 0.90,           // Reject if price at band edge
+    minTickStabilityScore: 0.90,           // Reject if erratic recent ticks
+    minVolTrendScore: 0.65,           // Reject if volatility rising
     minMaxTickMove: 0.0001,         // Raw ratio (NOT percent). 0.0001 = 0.01% per-tick minimum
 
     minTimeBetweenTrades: 5000,           // ms cooldown per asset after a trade
