@@ -1002,11 +1002,11 @@ class DigitDifferBot {
             const min = gmt1.getUTCMinutes();
 
             const weekend = day === 0 || (day === 6 && hr >= 23) || (day === 1 && hr < 8);
-            if (weekend && !this.endOfDay) {
-                console.log('📅 Weekend — pausing');
-                this.endOfDay = true;
-                this._cleanupWs();
-            }
+            // if (weekend && !this.endOfDay) {
+            //     console.log('📅 Weekend — pausing');
+            //     this.endOfDay = true;
+            //     this._cleanupWs();
+            // }
 
             if (this.endOfDay && hr === 2 && min < 1) {
                 console.log('⏰ 2:00 AM — reconnecting');
