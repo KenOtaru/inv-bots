@@ -731,11 +731,11 @@ class DigitDifferBot {
             console.log(`   Frequency edge over 2nd: ${analysis.frequencyEdge}`);
             console.log(`   Score: ${(analysis.overallScore * 100).toFixed(1)}%`);
             console.log(`   Stake: $${this.currentStake.toFixed(2)} | Payout: $${payout.toFixed(2)} (+${payoutPct}%)`);
-            console.log(`   BB: ${analysis.bb.percentB} (${analysis.bb.stdDev})`);
-            console.log(`   BB Width: ${analysis.bb.width}`);
+            console.log(`   BB: ${analysis.bb.percentB.toFixed(2)} (${analysis.bb.stdDev.toFixed(2)})`);
+            console.log(`   BB Width: ${analysis.bb.width.toFixed(2)}`);
             console.log(`   MACD Converging: ${analysis.macd.isConverging}`);
-            console.log(`   ATR: ${analysis.atr}`);
-            console.log(`   Max Tick Move: ${analysis.maxTickMove}`);
+            console.log(`   ATR: ${analysis.atr.toFixed(2)}`);
+            console.log(`   Max Tick Move: ${analysis.maxTickMove.toFixed(2)}`);
 
             this._placeTrade(asset, predictedDigit, proposal, analysis);
         }
@@ -766,11 +766,11 @@ class DigitDifferBot {
             `Last 10 Digits: ${this.digitHistories[asset].slice(-10)}\n` +
             `Score: ${(analysis.overallScore * 100).toFixed(1)}%\n` +
             `Frequency edge over 2nd: ${analysis.frequencyEdge}\n` +
-            `BB: ${analysis.bb.percentB} (${analysis.bb.stdDev})\n` +
-            `BB Width: ${analysis.bb.width}\n` +
+            `BB: ${analysis.bb.percentB.toFixed(2)} (${analysis.bb.stdDev.toFixed(2)})\n` +
+            `BB Width: ${analysis.bb.width.toFixed(4)}\n` +
             `MACD Converging: ${analysis.macd.isConverging}\n` +
-            `ATR: ${analysis.atr}\n` +
-            `Max Tick Move: ${analysis.maxTickMove}\n` +
+            `ATR: ${analysis.atr.toFixed(2)}\n` +
+            `Max Tick Move: ${analysis.maxTickMove.toFixed(4)}\n` +
             `Stake: $${this.currentStake.toFixed(2)}\n` +
             `Consecutive losses: ${this.consecutiveLosses}`
         );
