@@ -329,6 +329,7 @@ class DigitDifferAnalyzer {
             hotDigitPct: hotEntry.percentage,
             frequencyEdge: edge,
             scores,
+            baseResult,
             ranking,
         };
     }
@@ -737,6 +738,19 @@ class DigitDifferBot {
             console.log(`   MACD Converging: ${analysis.macd.isConverging}`);
             console.log(`   ATR: ${analysis.atr.toFixed(2)}`);
             console.log(`   Max Tick Move: ${analysis.maxTickMove.toFixed(4)}`);
+            console.log(`   Scores BandWidth: ${analysis.scores.bandWidth}`);
+            console.log(`   Scores MacdFlat: ${analysis.scores.macdFlat}`);
+            console.log(`   Scores PricePosition: ${analysis.scores.pricePosition}`);
+            console.log(`   Scores TickStability: ${analysis.scores.tickStability}`);
+            console.log(`   Scores VolTrend: ${analysis.scores.volTrend}`);
+
+            // if (scores.bandWidth < this.cfg.minBandWidthScore) return { ...baseResult, shouldTrade: false, reason: 'bands_expanding', ranking };
+            // if (scores.macdFlat < this.cfg.minMacdFlatScore) return { ...baseResult, shouldTrade: false, reason: 'strong_momentum', ranking };
+            // if (scores.pricePosition < this.cfg.minPricePositionScore) return { ...baseResult, shouldTrade: false, reason: 'price_at_band_edge', ranking };
+            // if (scores.tickStability < this.cfg.minTickStabilityScore) return { ...baseResult, shouldTrade: false, reason: 'erratic_tick_movement', ranking };
+            // if (maxTickMove < this.cfg.minMaxTickMove) return { ...baseResult, shouldTrade: false, reason: 'tick_movement_too_flat', ranking };
+            // if (scores.volTrend < this.cfg.minVolTrendScore) return { ...baseResult, shouldTrade: false, reason: 'volatility_rising', ranking };
+
 
             this._placeTrade(asset, predictedDigit, proposal, analysis);
         }
@@ -1048,7 +1062,7 @@ class DigitDifferBot {
         console.log('═══════════════════════════════════════════════════════════\n');
 
         this.connect();
-        this._startTimeScheduler();
+        // this._startTimeScheduler();
         StatePersistence.startAutoSave(this);
     }
 }
