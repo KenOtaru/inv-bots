@@ -49,9 +49,9 @@ const BOT_CONFIG = {
     macdSlow: 26,
     macdSignal: 9,
     minBandWidthScore: 0.85,           // Reject if BB expanding hard (0–1)
-    minMacdFlatScore: 0.75,           // Reject if strong momentum
-    minPricePositionScore: 0.75,           // Reject if price at band edge
-    minTickStabilityScore: 0.75,           // Reject if erratic recent ticks
+    minMacdFlatScore: 0.99,           // Reject if strong momentum
+    minPricePositionScore: 0.99,           // Reject if price at band edge
+    minTickStabilityScore: 0.99,           // Reject if erratic recent ticks
     minVolTrendScore: 0.65,           // Reject if volatility rising
     minMaxTickMove: 0.0001,         // Raw ratio (NOT percent). 0.0001 = 0.01% per-tick minimum
 
@@ -731,6 +731,7 @@ class DigitDifferBot {
             && analysis.scores.pricePosition >= this.cfg.minPricePositionScore
             && analysis.scores.tickStability >= this.cfg.minTickStabilityScore
             && analysis.scores.volTrend >= this.cfg.minVolTrendScore
+            && analysis.maxTickMove >= this.cfg.maxTickMove
         ) {
             console.log(`\n🎯 ENTRY SIGNAL — ${asset}`);
             console.log(`   Predicted digit: ${predictedDigit} (betting it will NOT appear next tick)`);
