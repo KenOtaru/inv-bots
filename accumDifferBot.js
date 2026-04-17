@@ -54,6 +54,7 @@ const BOT_CONFIG = {
     minTickStabilityScore: 0.99,           // Reject if erratic recent ticks
     minVolTrendScore: 0.65,           // Reject if volatility rising
     minMaxTickMove: 0.0001,         // Raw ratio (NOT percent). 0.0001 = 0.01% per-tick minimum
+    maxTickMove: 0.0003,         // Raw ratio (NOT percent). 0.0003 = 0.03% per-tick minimum
 
     minTimeBetweenTrades: 5000,           // ms cooldown per asset after a trade
     requiredHistoryLength: 100,            // Ticks needed before analysis starts
@@ -731,7 +732,8 @@ class DigitDifferBot {
             && analysis.scores.pricePosition >= this.cfg.minPricePositionScore
             && analysis.scores.tickStability >= this.cfg.minTickStabilityScore
             && analysis.scores.volTrend >= this.cfg.minVolTrendScore
-            && analysis.maxTickMove >= this.cfg.maxTickMove
+            && analysis.maxTickMove <= this.cfg.maxTickMove
+            && analysis.maxTickMove >= this.cfg.minMaxTickMove
         ) {
             console.log(`\n🎯 ENTRY SIGNAL — ${asset}`);
             console.log(`   Predicted digit: ${predictedDigit} (betting it will NOT appear next tick)`);
