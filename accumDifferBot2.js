@@ -1266,7 +1266,7 @@ class DigitDifferBotV2 {
                 Can Trade: ${monteCarloResult.canTrade ? '✅' : '❌'}
                 Risk of Ruin: ${(monteCarloResult.riskOfRuin * 100).toFixed(2)}%
                 Confidence: ${(monteCarloResult.confidence * 100).toFixed(1)}%
-                Recommended Multiplier: ${monteCarloResult.recommendedStakeMultiplier.toFixed(2)}x
+                Multiplier: ${monteCarloResult.recommendedStakeMultiplier.toFixed(2)}x
                 💰 STAKE SIZING:
                 Current Stake: $${this.currentStake.toFixed(2)}
                 Recent Win Rate: ${(this.stakeSizer.getRecentWinRate(20) * 100).toFixed(1)}%
