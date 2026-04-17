@@ -753,8 +753,8 @@ class DigitDifferBot {
             `🎯 <b>DIFFER TRADE OPENED</b>
                 Asset: <b>${asset}</b>
                 Betting digit <b>${predictedDigit}</b> will NOT appear
+                Digit Appeared ${analysis.hotDigitCount}x (${analysis.hotDigitPct}%)
                 Score: ${(analysis.overallScore * 100).toFixed(1)}%
-                Hot digit appeared ${analysis.hotDigitCount}x in last ${this.cfg.digitWindow} ticks (${analysis.hotDigitPct}%)
                 Frequency edge over 2nd: ${analysis.frequencyEdge}
                 Stake: $${this.currentStake.toFixed(2)}
                 Consecutive losses: ${this.consecutiveLosses}
