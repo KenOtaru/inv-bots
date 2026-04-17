@@ -733,7 +733,7 @@ class DigitDifferBot {
         console.log(`   Score: ${(analysis.overallScore * 100).toFixed(1)}%`);
         console.log(`   Stake: $${this.currentStake.toFixed(2)} | Payout: $${payout.toFixed(2)} (+${payoutPct}%)`);
 
-        if (analysis.overallScore >= 0.8) {
+        if (analysis.overallScore >= 0.9) {
             this._placeTrade(asset, predictedDigit, proposal, analysis);
         }
     }
