@@ -786,6 +786,11 @@ class DigitDifferBot {
             `MACD Converging: ${analysis.macd.isConverging}\n` +
             `ATR: ${analysis.atr.toFixed(2)}\n` +
             `Max Tick Move: ${analysis.maxTickMove.toFixed(4)}\n` +
+            `Scores BandWidth: ${analysis.scores.bandWidth}\n` +
+            `Scores MacdFlat: ${analysis.scores.macdFlat}\n` +
+            `Scores PricePosition: ${analysis.scores.pricePosition}\n` +
+            `Scores TickStability: ${analysis.scores.tickStability}\n` +
+            `Scores VolTrend: ${analysis.scores.volTrend}\n` +
             `Stake: $${this.currentStake.toFixed(2)}\n` +
             `Consecutive losses: ${this.consecutiveLosses}`
         );
