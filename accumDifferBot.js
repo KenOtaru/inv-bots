@@ -32,7 +32,7 @@ const BOT_CONFIG = {
     assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
 
     initialStake: 1,               // Starting stake in USD
-    multiplier: 35,              // Martingale multiplier on loss
+    multiplier: 11.3,              // Martingale multiplier on loss
     maxConsecutiveLosses: 2,               // Stop-loss trigger
     stopLoss: 108,             // Total P&L stop-loss (USD)
     takeProfit: 10000,           // Session take-profit (USD)
@@ -40,7 +40,7 @@ const BOT_CONFIG = {
     // Digit Differ specific
     digitWindow: 50,              // Rolling ticks to analyse digit frequency
     minHotFrequency: 6,              // Minimum appearances to classify digit as "hot"
-    minFrequencyEdge: 1,              // Hot digit must lead 2nd-most by this many ticks
+    minFrequencyEdge: 2,              // Hot digit must lead 2nd-most by this many ticks
     predictedDigitCount: 1,              // How many digits to bet DIFFER on (1 = most reliable)
 
     // Technical filter thresholds (same as accumulator)
