@@ -747,11 +747,11 @@ class DigitDifferBot {
             console.log(`   MACD Converging: ${analysis.macd.isConverging}`);
             console.log(`   ATR: ${analysis.atr.toFixed(2)}`);
             console.log(`   Max Tick Move: ${analysis.maxTickMove.toFixed(4)}`);
-            console.log(`   BandWidth: ${analysis.scores.bandWidth}`);
-            console.log(`   MacdFlat: ${analysis.scores.macdFlat}`);
-            console.log(`   PricePosition: ${analysis.scores.pricePosition}`);
-            console.log(`   TickStability: ${analysis.scores.tickStability}`);
-            console.log(`   VolTrend: ${analysis.scores.volTrend}`);
+            console.log(`   BandWidth: ${(analysis.scores.bandWidth * 100).toFixed(1)}%`);
+            console.log(`   MacdFlat: ${(analysis.scores.macdFlat * 100).toFixed(1)}%`);
+            console.log(`   PricePosition: ${(analysis.scores.pricePosition * 100).toFixed(1)}%`);
+            console.log(`   TickStability: ${(analysis.scores.tickStability * 100).toFixed(1)}%`);
+            console.log(`   VolTrend: ${(analysis.scores.volTrend * 100).toFixed(1)}%`);
 
             this._placeTrade(asset, predictedDigit, proposal, analysis);
         }
@@ -787,11 +787,11 @@ class DigitDifferBot {
             `MACD Converging: ${analysis.macd.isConverging}\n` +
             `ATR: ${analysis.atr.toFixed(2)}\n` +
             `Max Tick Move: ${analysis.maxTickMove.toFixed(4)}\n` +
-            `BandWidth: ${analysis.scores.bandWidth}\n` +
-            `MacdFlat: ${analysis.scores.macdFlat}\n` +
-            `PricePosition: ${analysis.scores.pricePosition}\n` +
-            `TickStability: ${analysis.scores.tickStability}\n` +
-            `VolTrend: ${analysis.scores.volTrend}\n` +
+            `BandWidth: ${(analysis.scores.bandWidth * 100).toFixed(1)}%\n` +
+            `MacdFlat: ${(analysis.scores.macdFlat * 100).toFixed(1)}%\n` +
+            `PricePosition: ${(analysis.scores.pricePosition * 100).toFixed(1)}%\n` +
+            `TickStability: ${(analysis.scores.tickStability * 100).toFixed(1)}%\n` +
+            `VolTrend: ${(analysis.scores.volTrend * 100).toFixed(1)}%\n` +
             `Stake: $${this.currentStake.toFixed(2)}\n` +
             `Consecutive losses: ${this.consecutiveLosses}`
         );
