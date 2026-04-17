@@ -723,7 +723,7 @@ class DigitDifferBot {
         const payout = parseFloat(proposal.payout || 0);
         const payoutPct = this.currentStake > 0 ? ((payout - this.currentStake) / this.currentStake * 100).toFixed(1) : '?';
 
-        if (analysis.overallScore >= 0.9) {
+        if (analysis.overallScore >= 0.9 && analysis.bb.stdDev >= 0.3) {
             console.log(`\n🎯 ENTRY SIGNAL — ${asset}`);
             console.log(`   Predicted digit: ${predictedDigit} (betting it will NOT appear next tick)`);
             console.log(`   Last 10 Digits: ${this.digitHistories[asset].slice(-10)}`);
@@ -731,7 +731,6 @@ class DigitDifferBot {
             console.log(`   Frequency edge over 2nd: ${analysis.frequencyEdge}`);
             console.log(`   Score: ${(analysis.overallScore * 100).toFixed(1)}%`);
             console.log(`   Stake: $${this.currentStake.toFixed(2)} | Payout: $${payout.toFixed(2)} (+${payoutPct}%)`);
-            console.log(`   Reason: ${analysis.reason}`);
             console.log(`   BB: ${analysis.bb.percentB} (${analysis.bb.stdDev})`);
             console.log(`   MACD Converging: ${analysis.macd.isConverging}`);
             console.log(`   ATR: ${analysis.atr}`);
@@ -767,6 +766,11 @@ class DigitDifferBot {
             `Last 10 Digits: ${this.digitHistories[asset].slice(-10)}\n` +
             `Score: ${(analysis.overallScore * 100).toFixed(1)}%\n` +
             `Frequency edge over 2nd: ${analysis.frequencyEdge}\n` +
+            `BB: ${analysis.bb.percentB} (${analysis.bb.stdDev})\n` +
+            `MACD Converging: ${analysis.macd.isConverging}\n` +
+            `ATR: ${analysis.atr}\n` +
+            `Volatility: ${analysis.volatility}\n` +
+            `Max Tick Move: ${analysis.maxTickMove}\n` +
             `Stake: $${this.currentStake.toFixed(2)}\n` +
             `Consecutive losses: ${this.consecutiveLosses}`
         );
