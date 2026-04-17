@@ -1242,12 +1242,41 @@ class DigitDifferBotV2 {
         this.determineTradingMode(analysis, digitBias, monteCarloResult);
 
         // 7️⃣ Log decision
-        this.logTradeDecision(asset, analysis, digitBias, monteCarloResult, adaptiveThreshold);
+        // this.logTradeDecision(asset, analysis, digitBias, monteCarloResult, adaptiveThreshold);
 
         // 8️⃣ Request proposal
         if (this.tradingMode === 'digit_differ' && this.volatilityRegime === 'low' && analysis.overallScore >= 0.95 && analysis.scores.bandWidth >= 1 && analysis.scores.macdFlat >= 1) {
+            this.logTradeDecision(asset, analysis, digitBias, monteCarloResult, adaptiveThreshold);
+
+            this.sendTelegramMessage(`🚀 PLACING DIGITDIFF TRADE: ${asset}
+                Barrier (Digit to avoid): ${trade.predictedDigit}
+                Stake: $${trade.stake.toFixed(2)}
+                Bias Strength: ${trade.biasStrength.toFixed(2)}
+                Monte Carlo Confidence: ${(monteCarloResult.confidence * 100).toFixed(1)}%
+                Adaptive Threshold: ${adaptiveThreshold.toFixed(2)}
+                📊 MARKET REGIME:
+                Volatility: ${this.volatilityRegime}
+                Score: ${(analysis.overallScore * 100).toFixed(1)}%
+                BB Width: ${(analysis.scores.bandWidth * 100).toFixed(1)}%
+                MACD Flat: ${(analysis.scores.macdFlat * 100).toFixed(1)}%
+                ATR: ${(analysis.atr || 0).toFixed(8)}
+                💹 DIGIT CLUSTERING:
+                Most Frequent: ${digitBias.mostFrequent}
+                Frequency: ${digitBias.frequency}/50
+                Bias Strength: ${digitBias.biasStrength.toFixed(2)}
+                Adaptive Threshold: ${adaptiveThreshold.toFixed(2)}
+                Entropy: ${digitBias.normalizedEntropy.toFixed(3)}
+                🎲 MONTE CARLO:
+                Can Trade: ${monteCarloResult.canTrade ? '✅' : '❌'}
+                Risk of Ruin: ${(monteCarloResult.riskOfRuin * 100).toFixed(2)}%
+                Confidence: ${(monteCarloResult.confidence * 100).toFixed(1)}%
+                Recommended Multiplier: ${monteCarloResult.recommendedStakeMultiplier.toFixed(2)}x
+                💰 STAKE SIZING:
+                Current Stake: $${this.currentStake.toFixed(2)}
+                Recent Win Rate: ${(this.stakeSizer.getRecentWinRate(20) * 100).toFixed(1)}%
+                Mode: ${this.tradingMode}
+            `);
             this.requestDigitProposal(asset, digitBias);
-            this.placeDigitTrade(asset, analysis, digitBias, monteCarloResult, adaptiveThreshold);
         } else if (this.tradingMode === 'accumulator') {
             // Could implement accumulator mode here
             // this.requestDigitProposal(asset, digitBias);
@@ -1337,13 +1366,12 @@ class DigitDifferBotV2 {
         const proposalId = message.proposal.id;
         this.assetStates[asset].proposalId = proposalId;
 
-        // this.placeDigitTrade(asset);
+        this.placeDigitTrade(asset);
     }
 
-    placeDigitTrade(asset, digitBias, monteCarloResult, adaptiveThreshold) {
+    placeDigitTrade(asset) {
         const proposalId = this.assetStates[asset]?.proposalId;
         if (!proposalId) return;
-        if (this.tradeInProgress) return;
 
         const trade = this.activeTrades[asset];
 
@@ -1358,35 +1386,6 @@ class DigitDifferBotV2 {
 
         this.tradeInProgress = true;
         trade.status = 'buying';
-
-        this.sendTelegramMessage(`🚀 PLACING DIGITDIFF TRADE: ${asset}
-            Barrier (Digit to avoid): ${trade.predictedDigit}
-            Stake: $${trade.stake.toFixed(2)}
-            Bias Strength: ${trade.biasStrength.toFixed(2)}
-            Monte Carlo Confidence: ${(monteCarloResult.confidence * 100).toFixed(1)}%
-            Adaptive Threshold: ${adaptiveThreshold.toFixed(2)}
-            📊 MARKET REGIME:
-            Volatility: ${this.volatilityRegime}
-            Score: ${(analysis.overallScore * 100).toFixed(1)}%
-            BB Width: ${(analysis.scores.bandWidth * 100).toFixed(1)}%
-            MACD Flat: ${(analysis.scores.macdFlat * 100).toFixed(1)}%
-            ATR: ${(analysis.atr || 0).toFixed(8)}
-            💹 DIGIT CLUSTERING:
-            Most Frequent: ${digitBias.mostFrequent}
-            Frequency: ${digitBias.frequency}/50
-            Bias Strength: ${digitBias.biasStrength.toFixed(2)}
-            Adaptive Threshold: ${adaptiveThreshold.toFixed(2)}
-            Entropy: ${digitBias.normalizedEntropy.toFixed(3)}
-            🎲 MONTE CARLO:
-            Can Trade: ${monteCarloResult.canTrade ? '✅' : '❌'}
-            Risk of Ruin: ${(monteCarloResult.riskOfRuin * 100).toFixed(2)}%
-            Confidence: ${(monteCarloResult.confidence * 100).toFixed(1)}%
-            Recommended Multiplier: ${monteCarloResult.recommendedStakeMultiplier.toFixed(2)}x
-            💰 STAKE SIZING:
-            Current Stake: $${this.currentStake.toFixed(2)}
-            Recent Win Rate: ${(this.stakeSizer.getRecentWinRate(20) * 100).toFixed(1)}%
-            Mode: ${this.tradingMode}
-        `);
     }
 
     handleBuyResponse(message) {
