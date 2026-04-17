@@ -673,7 +673,7 @@ class DigitDifferBot {
         const recentPreds = this.recentPredictions.slice(-recentLen);
         if (recentPreds.every(d => d === analysis.predictedDigit)) {
             console.log(`   ⚠️  Skipping — digit ${analysis.predictedDigit} predicted ${recentLen}x in a row`);
-            return;
+            // return;
         }
 
         // Request a Digit Differ proposal
