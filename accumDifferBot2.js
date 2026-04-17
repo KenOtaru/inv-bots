@@ -1250,10 +1250,6 @@ class DigitDifferBotV2 {
 
             this.sendTelegramMessage(`🚀 PLACING DIGITDIFF TRADE: ${asset}
                 Barrier (Digit to avoid): ${digitBias.mostFrequent}
-                Stake: $${this.currentStake.toFixed(2)}
-                Bias Strength: ${digitBias.biasStrength.toFixed(2)}
-                Monte Carlo Confidence: ${(monteCarloResult.confidence * 100).toFixed(1)}%
-                Adaptive Threshold: ${adaptiveThreshold.toFixed(2)}
                 📊 MARKET REGIME:
                 Volatility: ${this.volatilityRegime}
                 Score: ${(analysis.overallScore * 100).toFixed(1)}%
