@@ -29,18 +29,18 @@ const path = require('path');
 const BOT_CONFIG = {
     token: 'hsj0tA0XJoIzJG5',        // Deriv API token
 
-    assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'RDBEAR', 'RDBULL'],
+    assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
 
     initialStake: 1,               // Starting stake in USD
-    multiplier: 11.3,              // Martingale multiplier on loss
-    maxConsecutiveLosses: 3,               // Stop-loss trigger
+    multiplier: 35,              // Martingale multiplier on loss
+    maxConsecutiveLosses: 2,               // Stop-loss trigger
     stopLoss: 108,             // Total P&L stop-loss (USD)
     takeProfit: 10000,           // Session take-profit (USD)
 
     // Digit Differ specific
     digitWindow: 50,              // Rolling ticks to analyse digit frequency
-    minHotFrequency: 5,              //7 Minimum appearances to classify digit as "hot"
-    minFrequencyEdge: 1,              //2 Hot digit must lead 2nd-most by this many ticks
+    minHotFrequency: 6,              // Minimum appearances to classify digit as "hot"
+    minFrequencyEdge: 1,              // Hot digit must lead 2nd-most by this many ticks
     predictedDigitCount: 1,              // How many digits to bet DIFFER on (1 = most reliable)
 
     // Technical filter thresholds (same as accumulator)
@@ -48,12 +48,12 @@ const BOT_CONFIG = {
     macdFast: 12,
     macdSlow: 26,
     macdSignal: 9,
-    minBandWidthScore: 0.30,           // Reject if BB expanding hard (0–1)
-    minMacdFlatScore: 0.50,           // Reject if strong momentum
-    minPricePositionScore: 0.50,           // Reject if price at band edge
+    minBandWidthScore: 0.15,           // Reject if BB expanding hard (0–1)
+    minMacdFlatScore: 0.35,           // Reject if strong momentum
+    minPricePositionScore: 0.40,           // Reject if price at band edge
     minTickStabilityScore: 0.01,           // Reject if erratic recent ticks
-    minVolTrendScore: 0.50,           // Reject if volatility rising
-    minMaxTickMove: 0.03,           // Min tick move % (filters flat/stuck quotes)
+    minVolTrendScore: 0.40,           // Reject if volatility rising
+    minMaxTickMove: 0.0001,         // Raw ratio (NOT percent). 0.0001 = 0.01% per-tick minimum
 
     minTimeBetweenTrades: 5000,           // ms cooldown per asset after a trade
     requiredHistoryLength: 100,            // Ticks needed before analysis starts
@@ -273,65 +273,68 @@ class DigitDifferAnalyzer {
      */
     analyzeEntry(digitHistory, priceHistory) {
         if (digitHistory.length < this.cfg.requiredHistoryLength) {
-            return { shouldTrade: false, reason: 'insufficient_digit_history' };
+            return { shouldTrade: false, reason: 'insufficient_digit_history', overallScore: 0, scores: {} };
         }
 
-        // ── 1. Frequency ranking ──────────────────────────────────────────────
+        // ── 1. Technical scores (computed first so they're always in the returned object) ──
+        const techResult = this._technicalScores(priceHistory);
+        const scores = techResult.ok ? techResult.scores : {};
+        const bb = techResult.ok ? techResult.bb : null;
+        const macd = techResult.ok ? techResult.macd : null;
+        const maxTickMove = techResult.ok ? techResult.maxTickMove : 0;
+        const atr = techResult.ok ? techResult.atr : null;
+
+        // Composite score is always computed so the log is always meaningful
+        const weights = { bandWidth: 0.25, macdFlat: 0.20, macdConverging: 0.10, pricePosition: 0.20, tickStability: 0.15, volTrend: 0.10 };
+        const overallScore = Object.entries(weights).reduce((s, [k, w]) => s + (scores[k] || 0) * w, 0);
+
+        // Base result object — always include scores so _logAnalysis always shows real values
+        const baseResult = { scores, overallScore, bb, macd, maxTickMove, atr };
+
+        if (!techResult.ok) {
+            return { ...baseResult, shouldTrade: false, reason: techResult.reason };
+        }
+
+        // ── 2. Frequency ranking ──────────────────────────────────────────────
         const ranking = this.buildFrequencyRanking(digitHistory);
-        const hotEntry = ranking[0];   // Most frequent digit in window
-        const secondEntry = ranking[1];   // Second most frequent
+        const hotEntry = ranking[0];
+        const secondEntry = ranking[1];
+        const edge = hotEntry.count - secondEntry.count;
 
         // Reject if hot digit doesn't dominate enough
         if (hotEntry.count < this.cfg.minHotFrequency) {
             return {
-                shouldTrade: false,
-                reason: `hot_digit_${hotEntry.digit}_count_${hotEntry.count}_below_threshold_${this.cfg.minHotFrequency}`,
-                ranking,
+                ...baseResult, shouldTrade: false, ranking,
+                reason: `hot_digit_${hotEntry.digit}_count_${hotEntry.count}_below_min_${this.cfg.minHotFrequency}`,
             };
         }
 
-        // Reject if edge over 2nd-most isn't wide enough (too many digits competing)
-        const edge = hotEntry.count - secondEntry.count;
+        // Reject if edge over 2nd-most is too narrow
         if (edge < this.cfg.minFrequencyEdge) {
             return {
-                shouldTrade: false,
+                ...baseResult, shouldTrade: false, ranking,
                 reason: `frequency_edge_${edge}_too_narrow`,
-                ranking,
             };
         }
 
-        // ── 2. Technical filter (preserved from accumulator) ──────────────────
-        const techResult = this._technicalScores(priceHistory);
-        if (!techResult.ok) return { ...techResult, shouldTrade: false, ranking };
-
-        const { scores, bb, macd, maxTickMove, atr } = techResult;
-
-        // Hard gates (same thresholds as accumulator)
-        if (scores.bandWidth < this.cfg.minBandWidthScore) return { shouldTrade: false, reason: 'bands_expanding', scores, ranking };
-        if (scores.macdFlat < this.cfg.minMacdFlatScore) return { shouldTrade: false, reason: 'strong_momentum', scores, ranking };
-        if (scores.pricePosition < this.cfg.minPricePositionScore) return { shouldTrade: false, reason: 'price_at_band_edge', scores, ranking };
-        if (scores.tickStability < this.cfg.minTickStabilityScore) return { shouldTrade: false, reason: 'erratic_tick_movement', scores, ranking };
-        if (maxTickMove < this.cfg.minMaxTickMove) return { shouldTrade: false, reason: 'tick_movement_too_flat', scores, ranking };
-        if (scores.volTrend < this.cfg.minVolTrendScore) return { shouldTrade: false, reason: 'volatility_rising', scores, ranking };
-
-        // Composite score
-        const weights = { bandWidth: 0.25, macdFlat: 0.20, macdConverging: 0.10, pricePosition: 0.20, tickStability: 0.15, volTrend: 0.10 };
-        const overallScore = Object.entries(weights).reduce((s, [k, w]) => s + (scores[k] || 0) * w, 0);
+        // ── 3. Technical hard gates ───────────────────────────────────────────
+        // NOTE: minMaxTickMove is a raw ratio (e.g. 0.0003), NOT a percentage
+        if (scores.bandWidth < this.cfg.minBandWidthScore) return { ...baseResult, shouldTrade: false, reason: 'bands_expanding', ranking };
+        if (scores.macdFlat < this.cfg.minMacdFlatScore) return { ...baseResult, shouldTrade: false, reason: 'strong_momentum', ranking };
+        if (scores.pricePosition < this.cfg.minPricePositionScore) return { ...baseResult, shouldTrade: false, reason: 'price_at_band_edge', ranking };
+        if (scores.tickStability < this.cfg.minTickStabilityScore) return { ...baseResult, shouldTrade: false, reason: 'erratic_tick_movement', ranking };
+        if (maxTickMove < this.cfg.minMaxTickMove) return { ...baseResult, shouldTrade: false, reason: 'tick_movement_too_flat', ranking };
+        if (scores.volTrend < this.cfg.minVolTrendScore) return { ...baseResult, shouldTrade: false, reason: 'volatility_rising', ranking };
 
         return {
+            ...baseResult,
             shouldTrade: true,
             reason: 'conditions_favorable',
-            predictedDigit: hotEntry.digit,      // Digit we bet DIFFER on
+            predictedDigit: hotEntry.digit,
             hotDigitCount: hotEntry.count,
             hotDigitPct: hotEntry.percentage,
             frequencyEdge: edge,
             ranking,
-            scores,
-            overallScore,
-            bb,
-            macd,
-            maxTickMove,
-            atr,
         };
     }
 
@@ -345,11 +348,14 @@ class DigitDifferAnalyzer {
         if (!macd) return { ok: false, reason: 'macd_calc_failed' };
 
         const atr = TechnicalIndicators.ATR(prices, 14);
-        const bwPct = TechnicalIndicators.bandWidthPercentile(prices);
         const curPrice = prices[prices.length - 1];
         const scores = {};
 
-        // Band width
+        // ── Band width ────────────────────────────────────────────────────────
+        // BUG FIX: bandWidthPercentile needs prices.length >= lookback + bbPeriod.
+        // With 100 ticks and default lookback=100, bbPeriod=20 → needs 120 ticks → always null.
+        // Use a shorter lookback (60) so it works with 100-tick history.
+        const bwPct = TechnicalIndicators.bandWidthPercentile(prices, this.cfg.bbPeriod, 60);
         if (bwPct !== null) {
             if (bwPct <= 0.20) scores.bandWidth = 1.0;
             else if (bwPct <= 0.40) scores.bandWidth = 0.85;
@@ -357,10 +363,17 @@ class DigitDifferAnalyzer {
             else if (bwPct <= 0.70) scores.bandWidth = 0.40;
             else scores.bandWidth = 0.15;
         } else {
-            scores.bandWidth = 0.0;
+            // Fallback: use raw BB width as proxy — tighter bands = higher score
+            // Typical normalized width for synthetics: 0.001–0.005
+            const w = bb.width;
+            if (w < 0.0010) scores.bandWidth = 1.0;
+            else if (w < 0.0020) scores.bandWidth = 0.85;
+            else if (w < 0.0035) scores.bandWidth = 0.65;
+            else if (w < 0.0055) scores.bandWidth = 0.40;
+            else scores.bandWidth = 0.15;
         }
 
-        // MACD flat
+        // ── MACD flat ─────────────────────────────────────────────────────────
         const normHist = Math.abs(macd.histogram) / curPrice;
         if (normHist < 0.00005) scores.macdFlat = 1.0;
         else if (normHist < 0.00015) scores.macdFlat = 0.85;
@@ -368,28 +381,29 @@ class DigitDifferAnalyzer {
         else if (normHist < 0.00060) scores.macdFlat = 0.35;
         else scores.macdFlat = 0.10;
 
-        // MACD converging
+        // ── MACD converging ───────────────────────────────────────────────────
         scores.macdConverging = macd.isConverging ? 1.0 : 0.35;
 
-        // %B position
+        // ── %B position ───────────────────────────────────────────────────────
         if (bb.percentB >= 0.40 && bb.percentB <= 0.60) scores.pricePosition = 1.0;
         else if (bb.percentB >= 0.20 && bb.percentB <= 0.80) scores.pricePosition = 0.70;
         else if (bb.percentB >= 0.10 && bb.percentB <= 0.90) scores.pricePosition = 0.40;
         else scores.pricePosition = 0.10;
 
-        // Tick stability (last 10 ticks)
+        // ── Tick stability (last 10 ticks) ────────────────────────────────────
         const recent = prices.slice(-10);
         let maxMove = 0;
         for (let i = 1; i < recent.length; i++)
             maxMove = Math.max(maxMove, Math.abs(recent[i] - recent[i - 1]) / recent[i - 1]);
 
+        // maxMove is a ratio, e.g. 0.0005 = 0.05%
         if (maxMove < 0.0003) scores.tickStability = 1.0;
         else if (maxMove < 0.0008) scores.tickStability = 0.80;
         else if (maxMove < 0.0015) scores.tickStability = 0.55;
         else if (maxMove < 0.0025) scores.tickStability = 0.30;
         else scores.tickStability = 0.05;
 
-        // Volatility trend (short ATR vs longer ATR)
+        // ── Volatility trend ──────────────────────────────────────────────────
         const atrShort = TechnicalIndicators.ATR(prices, 7);
         const atrLonger = TechnicalIndicators.ATR(prices.slice(0, -7), 14);
         if (atrShort && atrLonger && atrLonger > 0) {
@@ -942,10 +956,19 @@ class DigitDifferBot {
     // ── Logging ───────────────────────────────────────────────────────────────
     _logAnalysis(asset, analysis) {
         const s = analysis.scores || {};
+
+        // Show top-2 frequency even on rejection so we can tune thresholds
+        let freqStr = '';
+        if (analysis.ranking && analysis.ranking.length >= 2) {
+            const r = analysis.ranking;
+            freqStr = `top:[${r[0].digit}×${r[0].count} ${r[1].digit}×${r[1].count} ${r[2]?.digit}×${r[2]?.count}] edge:${r[0].count - r[1].count} | `;
+        }
+
         const digit = analysis.predictedDigit !== undefined ? `D${analysis.predictedDigit}` : '--';
-        const hot = analysis.hotDigitCount !== undefined ? `hot:${analysis.hotDigitCount}` : '';
+
         console.log(
-            `📊 ${asset} | ${digit} ${hot} | Score:${((analysis.overallScore || 0) * 100).toFixed(0)}% | ` +
+            `📊 ${asset} | ${digit} | Score:${((analysis.overallScore || 0) * 100).toFixed(0)}% | ` +
+            `${freqStr}` +
             `BW:${((s.bandWidth || 0) * 100).toFixed(0)} ` +
             `MACD:${((s.macdFlat || 0) * 100).toFixed(0)} ` +
             `Pos:${((s.pricePosition || 0) * 100).toFixed(0)} ` +
