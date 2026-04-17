@@ -720,14 +720,14 @@ class DigitDifferBot {
         const payout = parseFloat(proposal.payout || 0);
         const payoutPct = this.currentStake > 0 ? ((payout - this.currentStake) / this.currentStake * 100).toFixed(1) : '?';
 
-        console.log(`\n🎯 ENTRY SIGNAL — ${asset}`);
-        console.log(`   Predicted digit: ${predictedDigit} (betting it will NOT appear next tick)`);
-        console.log(`   Hot digit appeared ${analysis.hotDigitCount}x in last ${this.cfg.digitWindow} ticks (${analysis.hotDigitPct}%)`);
-        console.log(`   Frequency edge over 2nd: ${analysis.frequencyEdge}`);
-        console.log(`   Score: ${(analysis.overallScore * 100).toFixed(1)}%`);
-        console.log(`   Stake: $${this.currentStake.toFixed(2)} | Payout: $${payout.toFixed(2)} (+${payoutPct}%)`);
-
         if (analysis.overallScore >= 0.9) {
+            console.log(`\n🎯 ENTRY SIGNAL — ${asset}`);
+            console.log(`   Predicted digit: ${predictedDigit} (betting it will NOT appear next tick)`);
+            console.log(`   Hot digit appeared ${analysis.hotDigitCount}x in last ${this.cfg.digitWindow} ticks (${analysis.hotDigitPct}%)`);
+            console.log(`   Frequency edge over 2nd: ${analysis.frequencyEdge}`);
+            console.log(`   Score: ${(analysis.overallScore * 100).toFixed(1)}%`);
+            console.log(`   Stake: $${this.currentStake.toFixed(2)} | Payout: $${payout.toFixed(2)} (+${payoutPct}%)`);
+
             this._placeTrade(asset, predictedDigit, proposal, analysis);
         }
     }
