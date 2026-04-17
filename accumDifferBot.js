@@ -39,7 +39,7 @@ const BOT_CONFIG = {
 
     // Digit Differ specific
     digitWindow: 50,              // Rolling ticks to analyse digit frequency
-    minHotFrequency: 6,              // Minimum appearances to classify digit as "hot"
+    minHotFrequency: 8,              // Minimum appearances to classify digit as "hot"
     minFrequencyEdge: 2,              // Hot digit must lead 2nd-most by this many ticks
     predictedDigitCount: 1,              // How many digits to bet DIFFER on (1 = most reliable)
 
@@ -253,12 +253,6 @@ class DigitDifferAnalyzer {
      *
      * Returns:
      *   { shouldTrade, predictedDigit, reason, scores, ... }
-     *
-     * predictedDigit: the digit we expect WILL appear next
-     *   → we bet DIFFER on this digit (win if next digit ≠ predictedDigit)
-     *
-     * Wait — this seems backwards. Let me clarify the correct framing:
-     *
      * HOT-DIGIT INVERSION approach (default):
      *   The most frequent digit is statistically likely to be "overdue for a break".
      *   We bet DIFFER on it — predicting the next tick will NOT end in that digit.
@@ -756,14 +750,14 @@ class DigitDifferBot {
         };
 
         this._sendTelegram(
-            `🎯 <b>DIFFER TRADE OPENED</b>\n\n` +
-            `Asset: <b>${asset}</b>\n` +
-            `Betting digit <b>${predictedDigit}</b> will NOT appear\n` +
-            `Score: ${(analysis.overallScore * 100).toFixed(1)}%` +
-            `Hot digit appeared ${analysis.hotDigitCount}x in last ${this.cfg.digitWindow} ticks (${analysis.hotDigitPct}%)` +
-            `Frequency edge over 2nd: ${analysis.frequencyEdge}` +
-            `Stake: $${this.currentStake.toFixed(2)}\n` +
-            `Consecutive losses: ${this.consecutiveLosses}`
+            `🎯 <b>DIFFER TRADE OPENED</b>\n\n`
+                `Asset: <b>${asset}</b>\n`
+                `Betting digit <b>${predictedDigit}</b> will NOT appear\n`
+                `Score: ${(analysis.overallScore * 100).toFixed(1)}%`
+                `Hot digit appeared ${analysis.hotDigitCount}x in last ${this.cfg.digitWindow} ticks (${analysis.hotDigitPct}%)`
+                `Frequency edge over 2nd: ${analysis.frequencyEdge}`
+                `Stake: $${this.currentStake.toFixed(2)}\n`
+                `Consecutive losses: ${this.consecutiveLosses}`
         );
 
         this.lastTradeTime[asset] = Date.now();
