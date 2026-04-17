@@ -658,7 +658,7 @@ class DigitDifferBot {
             this.priceHistories[asset]
         );
 
-        this._logAnalysis(asset, analysis);
+        // this._logAnalysis(asset, analysis);
 
         if (!analysis.shouldTrade) return;
 
