@@ -767,9 +767,9 @@ class DigitDifferBot {
             `Score: ${(analysis.overallScore * 100).toFixed(1)}%\n` +
             `Frequency edge over 2nd: ${analysis.frequencyEdge}\n` +
             `BB: ${analysis.bb.percentB} (${analysis.bb.stdDev})\n` +
+            `BB Width: ${analysis.bb.width}\n` +
             `MACD Converging: ${analysis.macd.isConverging}\n` +
             `ATR: ${analysis.atr}\n` +
-            `BB Width: ${analysis.bb.width}\n` +
             `Max Tick Move: ${analysis.maxTickMove}\n` +
             `Stake: $${this.currentStake.toFixed(2)}\n` +
             `Consecutive losses: ${this.consecutiveLosses}`
