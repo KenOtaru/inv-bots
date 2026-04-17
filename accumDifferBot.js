@@ -723,7 +723,7 @@ class DigitDifferBot {
         const payout = parseFloat(proposal.payout || 0);
         const payoutPct = this.currentStake > 0 ? ((payout - this.currentStake) / this.currentStake * 100).toFixed(1) : '?';
 
-        if (analysis.overallScore >= 0.95 && analysis.frequencyEdge <= 2) {
+        if (analysis.overallScore >= 0.95) {
             console.log(`\n🎯 ENTRY SIGNAL — ${asset}`);
             console.log(`   Predicted digit: ${predictedDigit} (betting it will NOT appear next tick)`);
             console.log(`   Last 10 Digits: ${this.digitHistories[asset].slice(-10)}`);
