@@ -747,11 +747,11 @@ class DigitDifferBot {
             console.log(`   MACD Converging: ${analysis.macd.isConverging}`);
             console.log(`   ATR: ${analysis.atr.toFixed(2)}`);
             console.log(`   Max Tick Move: ${analysis.maxTickMove.toFixed(4)}`);
-            console.log(`   Scores BandWidth: ${analysis.scores.bandWidth}`);
-            console.log(`   Scores MacdFlat: ${analysis.scores.macdFlat}`);
-            console.log(`   Scores PricePosition: ${analysis.scores.pricePosition}`);
-            console.log(`   Scores TickStability: ${analysis.scores.tickStability}`);
-            console.log(`   Scores VolTrend: ${analysis.scores.volTrend}`);
+            console.log(`   BandWidth: ${analysis.scores.bandWidth}`);
+            console.log(`   MacdFlat: ${analysis.scores.macdFlat}`);
+            console.log(`   PricePosition: ${analysis.scores.pricePosition}`);
+            console.log(`   TickStability: ${analysis.scores.tickStability}`);
+            console.log(`   VolTrend: ${analysis.scores.volTrend}`);
 
             this._placeTrade(asset, predictedDigit, proposal, analysis);
         }
@@ -787,11 +787,11 @@ class DigitDifferBot {
             `MACD Converging: ${analysis.macd.isConverging}\n` +
             `ATR: ${analysis.atr.toFixed(2)}\n` +
             `Max Tick Move: ${analysis.maxTickMove.toFixed(4)}\n` +
-            `Scores BandWidth: ${analysis.scores.bandWidth}\n` +
-            `Scores MacdFlat: ${analysis.scores.macdFlat}\n` +
-            `Scores PricePosition: ${analysis.scores.pricePosition}\n` +
-            `Scores TickStability: ${analysis.scores.tickStability}\n` +
-            `Scores VolTrend: ${analysis.scores.volTrend}\n` +
+            `BandWidth: ${analysis.scores.bandWidth}\n` +
+            `MacdFlat: ${analysis.scores.macdFlat}\n` +
+            `PricePosition: ${analysis.scores.pricePosition}\n` +
+            `TickStability: ${analysis.scores.tickStability}\n` +
+            `VolTrend: ${analysis.scores.volTrend}\n` +
             `Stake: $${this.currentStake.toFixed(2)}\n` +
             `Consecutive losses: ${this.consecutiveLosses}`
         );
