@@ -27,13 +27,13 @@ const path = require('path');
 // CONFIG — edit these values before running
 // ─────────────────────────────────────────────────────────────────────────────
 const BOT_CONFIG = {
-    token: 'YOUR_DERIV_TOKEN_HERE',        // Deriv API token
+    token: 'hsj0tA0XJoIzJG5',        // Deriv API token
 
     assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
 
     initialStake: 1,               // Starting stake in USD
-    multiplier: 35,              // Martingale multiplier on loss
-    maxConsecutiveLosses: 2,               // Stop-loss trigger
+    multiplier: 11.3,              // Martingale multiplier on loss
+    maxConsecutiveLosses: 3,               // Stop-loss trigger
     stopLoss: 108,             // Total P&L stop-loss (USD)
     takeProfit: 10000,           // Session take-profit (USD)
 
