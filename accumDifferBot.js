@@ -29,7 +29,7 @@ const path = require('path');
 const BOT_CONFIG = {
     token: 'hsj0tA0XJoIzJG5',        // Deriv API token
 
-    assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
+    assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'RDBEAR', 'RDBULL'],
 
     initialStake: 1,               // Starting stake in USD
     multiplier: 11.3,              // Martingale multiplier on loss
@@ -39,8 +39,8 @@ const BOT_CONFIG = {
 
     // Digit Differ specific
     digitWindow: 50,              // Rolling ticks to analyse digit frequency
-    minHotFrequency: 7,              // Minimum appearances to classify digit as "hot"
-    minFrequencyEdge: 2,              // Hot digit must lead 2nd-most by this many ticks
+    minHotFrequency: 5,              //7 Minimum appearances to classify digit as "hot"
+    minFrequencyEdge: 1,              //2 Hot digit must lead 2nd-most by this many ticks
     predictedDigitCount: 1,              // How many digits to bet DIFFER on (1 = most reliable)
 
     // Technical filter thresholds (same as accumulator)

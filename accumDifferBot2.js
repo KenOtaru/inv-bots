@@ -1860,7 +1860,7 @@ const bot = new DigitDifferBotV2('DMylfkyce6VyZt7', {
     takeProfit: 500,
     biasThreshold: 1.9,
     minMarketScore: 0.90,
-    assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
+    assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'RDBEAR', 'RDBULL'],
     telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
     telegramChatId: '752497117',
 });
