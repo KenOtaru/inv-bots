@@ -754,16 +754,15 @@ class DigitDifferBot {
         };
 
         this._sendTelegram(
-            `🎯 <b>DIFFER TRADE OPENED</b>
-                Asset: <b>${asset}</b>
-                Betting digit <b>${predictedDigit}</b> will NOT appear
-                Digit Appeared ${analysis.hotDigitCount}x (${analysis.hotDigitPct}%)
-                Last 10 Digits: ${this.digitHistories[asset].slice(-10)}
-                Score: ${(analysis.overallScore * 100).toFixed(1)}%
-                Frequency edge over 2nd: ${analysis.frequencyEdge}
-                Stake: $${this.currentStake.toFixed(2)}
-                Consecutive losses: ${this.consecutiveLosses}
-            `
+            `🎯 <b>DIFFER TRADE OPENED</b>\n\n` +
+            `Asset: <b>${asset}</b>\n` +
+            `Betting digit <b>${predictedDigit}</b> will NOT appear\n` +
+            `Digit Appeared ${analysis.hotDigitCount}x (${analysis.hotDigitPct}%)\n` +
+            `Last 10 Digits: ${this.digitHistories[asset].slice(-10)}\n` +
+            `Score: ${(analysis.overallScore * 100).toFixed(1)}%\n` +
+            `Frequency edge over 2nd: ${analysis.frequencyEdge}\n` +
+            `Stake: $${this.currentStake.toFixed(2)}\n` +
+            `Consecutive losses: ${this.consecutiveLosses}`
         );
 
         this.lastTradeTime[asset] = Date.now();
