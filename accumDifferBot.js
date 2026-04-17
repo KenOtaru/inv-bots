@@ -733,10 +733,12 @@ class DigitDifferBot {
         console.log(`   Score: ${(analysis.overallScore * 100).toFixed(1)}%`);
         console.log(`   Stake: $${this.currentStake.toFixed(2)} | Payout: $${payout.toFixed(2)} (+${payoutPct}%)`);
 
-        this._placeTrade(asset, predictedDigit, proposal);
+        if (analysis.overallScore >= 0.8) {
+            this._placeTrade(asset, predictedDigit, proposal, analysis);
+        }
     }
 
-    _placeTrade(asset, predictedDigit, proposal) {
+    _placeTrade(asset, predictedDigit, proposal, analysis) {
         if (this.tradeInProgress) return;
 
         const proposalId = this.proposalIds[asset];
@@ -757,6 +759,9 @@ class DigitDifferBot {
             `🎯 <b>DIFFER TRADE OPENED</b>\n\n` +
             `Asset: <b>${asset}</b>\n` +
             `Betting digit <b>${predictedDigit}</b> will NOT appear\n` +
+            `Score: ${(analysis.overallScore * 100).toFixed(1)}%` +
+            `Hot digit appeared ${analysis.hotDigitCount}x in last ${this.cfg.digitWindow} ticks (${analysis.hotDigitPct}%)` +
+            `Frequency edge over 2nd: ${analysis.frequencyEdge}` +
             `Stake: $${this.currentStake.toFixed(2)}\n` +
             `Consecutive losses: ${this.consecutiveLosses}`
         );
