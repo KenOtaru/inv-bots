@@ -1,0 +1,61 @@
+{
+  "savedAt": 1776442057106,
+  "trading": {
+    "currentStake": 1,
+    "consecutiveLosses": 0,
+    "consecutiveLosses2": 0,
+    "consecutiveLosses3": 0,
+    "consecutiveLosses4": 0,
+    "consecutiveLosses5": 0,
+    "totalTrades": 0,
+    "totalWins": 0,
+    "totalLosses": 0,
+    "totalProfitLoss": 0,
+    "dailyProfitLoss": 0,
+    "recentPredictions": []
+  },
+  "assetMetrics": {
+    "R_10": {
+      "trades": 0,
+      "wins": 0,
+      "losses": 0,
+      "profitLoss": 0
+    },
+    "R_25": {
+      "trades": 0,
+      "wins": 0,
+      "losses": 0,
+      "profitLoss": 0
+    },
+    "R_50": {
+      "trades": 0,
+      "wins": 0,
+      "losses": 0,
+      "profitLoss": 0
+    },
+    "R_75": {
+      "trades": 0,
+      "wins": 0,
+      "losses": 0,
+      "profitLoss": 0
+    },
+    "R_100": {
+      "trades": 0,
+      "wins": 0,
+      "losses": 0,
+      "profitLoss": 0
+    },
+    "RDBEAR": {
+      "trades": 0,
+      "wins": 0,
+      "losses": 0,
+      "profitLoss": 0
+    },
+    "RDBULL": {
+      "trades": 0,
+      "wins": 0,
+      "losses": 0,
+      "profitLoss": 0
+    }
+  }
+}
