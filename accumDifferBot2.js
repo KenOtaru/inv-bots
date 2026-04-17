@@ -1246,7 +1246,7 @@ class DigitDifferBotV2 {
 
         // 8️⃣ Request proposal
         if (this.tradingMode === 'digit_differ' && this.volatilityRegime === 'low' && analysis.overallScore >= 0.95 && analysis.scores.bandWidth >= 1 && analysis.scores.macdFlat >= 1) {
-            // this.requestDigitProposal(asset, digitBias);
+            this.requestDigitProposal(asset, digitBias);
             this.placeDigitTrade(asset, analysis, digitBias, monteCarloResult, adaptiveThreshold);
         } else if (this.tradingMode === 'accumulator') {
             // Could implement accumulator mode here
@@ -1342,7 +1342,7 @@ class DigitDifferBotV2 {
 
     placeDigitTrade(asset, digitBias, monteCarloResult, adaptiveThreshold) {
         const proposalId = this.assetStates[asset]?.proposalId;
-        if (!proposalId) return;
+        if (this.tradeInProgress) return;
 
         const trade = this.activeTrades[asset];
 
@@ -1351,9 +1351,27 @@ class DigitDifferBotV2 {
         console.log(`   Stake: $${trade.stake.toFixed(2)}`);
 
         this.sendRequest({
-            buy: proposalId,
-            price: trade.stake.toFixed(2)
+            buy: 1,
+            price: this.currentStake.toFixed(2),
+            parameters: {
+                amount: this.currentStake.toFixed(2),
+                basis: 'stake',
+                contract_type: 'DIGITDIFF',
+                currency: 'USD',
+                symbol: asset,
+                barrier: digitBias.mostFrequent.toString(),
+                duration: 1,
+                duration_unit: 't'
+            }
         });
+
+        this.activeTrades[asset] = {
+            status: 'requesting_proposal',
+            predictedDigit: digitBias.mostFrequent,
+            stake: this.currentStake,
+            biasStrength: digitBias.biasStrength,
+            entryTime: Date.now()
+        };
 
         this.tradeInProgress = true;
         trade.status = 'buying';
