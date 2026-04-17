@@ -731,6 +731,12 @@ class DigitDifferBot {
             console.log(`   Frequency edge over 2nd: ${analysis.frequencyEdge}`);
             console.log(`   Score: ${(analysis.overallScore * 100).toFixed(1)}%`);
             console.log(`   Stake: $${this.currentStake.toFixed(2)} | Payout: $${payout.toFixed(2)} (+${payoutPct}%)`);
+            console.log(`   Reason: ${analysis.reason}`);
+            console.log(`   BB: ${analysis.bb.percentB} (${analysis.bb.stdDev})`);
+            console.log(`   MACD Converging: ${analysis.macd.isConverging}`);
+            console.log(`   ATR: ${analysis.atr}`);
+            console.log(`   Volatility: ${analysis.volatility}`);
+            console.log(`   Max Tick Move: ${analysis.maxTickMove}`);
 
             this._placeTrade(asset, predictedDigit, proposal, analysis);
         }
