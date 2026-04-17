@@ -1249,9 +1249,9 @@ class DigitDifferBotV2 {
             this.logTradeDecision(asset, analysis, digitBias, monteCarloResult, adaptiveThreshold);
 
             this.sendTelegramMessage(`🚀 PLACING DIGITDIFF TRADE: ${asset}
-                Barrier (Digit to avoid): ${trade.predictedDigit}
-                Stake: $${trade.stake.toFixed(2)}
-                Bias Strength: ${trade.biasStrength.toFixed(2)}
+                Barrier (Digit to avoid): ${digitBias.mostFrequent}
+                Stake: $${this.currentStake.toFixed(2)}
+                Bias Strength: ${digitBias.biasStrength.toFixed(2)}
                 Monte Carlo Confidence: ${(monteCarloResult.confidence * 100).toFixed(1)}%
                 Adaptive Threshold: ${adaptiveThreshold.toFixed(2)}
                 📊 MARKET REGIME:
