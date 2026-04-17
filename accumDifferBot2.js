@@ -1245,11 +1245,11 @@ class DigitDifferBotV2 {
         this.logTradeDecision(asset, analysis, digitBias, monteCarloResult, adaptiveThreshold);
 
         // 8️⃣ Request proposal
-        if (this.tradingMode === 'digit_differ') {
+        if (this.tradingMode === 'digit_differ' && this.volatilityRegime === 'low' && analysis.overallScore >= 0.95 && analysis.scores.bandWidth >= 1 && analysis.scores.macdFlat >= 1) {
             this.requestDigitProposal(asset, digitBias);
         } else if (this.tradingMode === 'accumulator') {
             // Could implement accumulator mode here
-            this.requestDigitProposal(asset, digitBias);
+            // this.requestDigitProposal(asset, digitBias);
         }
     }
 
@@ -1832,8 +1832,8 @@ const bot = new DigitDifferBotV2('DMylfkyce6VyZt7', {
     maxConsecutiveLosses: 5,
     stopLoss: 100,
     takeProfit: 500,
-    biasThreshold: 1.6,
-    minMarketScore: 0.70,
+    biasThreshold: 1.9,
+    minMarketScore: 0.90,
     assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
     telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
     telegramChatId: '752497117',
