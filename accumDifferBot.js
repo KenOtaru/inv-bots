@@ -680,7 +680,7 @@ class DigitDifferBot {
     _requestProposal(asset, predictedDigit) {
         if (this.tradeInProgress) return;
 
-        console.log(`\n📋 Requesting DIFFER proposal — ${asset} digit ${predictedDigit}`);
+        // console.log(`\n📋 Requesting DIFFER proposal — ${asset} digit ${predictedDigit}`);
 
         this._send({
             proposal: 1,
