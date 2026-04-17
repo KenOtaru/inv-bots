@@ -1342,6 +1342,7 @@ class DigitDifferBotV2 {
 
     placeDigitTrade(asset, digitBias, monteCarloResult, adaptiveThreshold) {
         const proposalId = this.assetStates[asset]?.proposalId;
+        if (!proposalId) return;
         if (this.tradeInProgress) return;
 
         const trade = this.activeTrades[asset];
@@ -1351,27 +1352,9 @@ class DigitDifferBotV2 {
         console.log(`   Stake: $${trade.stake.toFixed(2)}`);
 
         this.sendRequest({
-            buy: 1,
-            price: this.currentStake.toFixed(2),
-            parameters: {
-                amount: this.currentStake.toFixed(2),
-                basis: 'stake',
-                contract_type: 'DIGITDIFF',
-                currency: 'USD',
-                symbol: asset,
-                barrier: digitBias.mostFrequent.toString(),
-                duration: 1,
-                duration_unit: 't'
-            }
+            buy: proposalId,
+            price: trade.stake.toFixed(2)
         });
-
-        this.activeTrades[asset] = {
-            status: 'requesting_proposal',
-            predictedDigit: digitBias.mostFrequent,
-            stake: this.currentStake,
-            biasStrength: digitBias.biasStrength,
-            entryTime: Date.now()
-        };
 
         this.tradeInProgress = true;
         trade.status = 'buying';
