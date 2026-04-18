@@ -860,7 +860,7 @@ class DigitDifferBot {
             && analysis.maxTickMove <= this.cfg.maxTickMove
             && analysis.maxTickMove >= this.cfg.minMaxTickMove
             && predictedDigit === this.digitHistories[asset].slice(-1)[0]
-            // && mcResult.riskOfRuin < 0.05
+            && mcResult.riskOfRuin < 0.05
         ) {
             console.log(`\n🎯 ENTRY SIGNAL — ${asset}`);
             console.log(`   Predicted digit: ${predictedDigit} (betting it will NOT appear next tick)`);
@@ -883,11 +883,11 @@ class DigitDifferBot {
             console.log(`   MC Confidence: ${(mcResult.confidence * 100).toFixed(1)}%`);
             console.log(`   MC Win Probability: ${(mcResult.winProbability * 100).toFixed(1)}%`);
 
-            this._placeTrade(asset, predictedDigit, proposal, analysis);
+            this._placeTrade(asset, predictedDigit, proposal, analysis, mcResult);
         }
     }
 
-    _placeTrade(asset, predictedDigit, proposal, analysis) {
+    _placeTrade(asset, predictedDigit, proposal, analysis, mcResult) {
         if (this.tradeInProgress) return;
 
         const proposalId = this.proposalIds[asset];
