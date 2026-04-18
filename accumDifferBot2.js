@@ -1255,7 +1255,8 @@ class DigitDifferBotV2 {
             && analysis.scores.pricePosition >= 0.90
             && analysis.scores.tickStability >= 0.90
             && analysis.scores.volTrend >= 0.65
-            && digitBias.frequency >= 8
+            // && digitBias.frequency >= 8
+            && monteCarloResult.riskOfRuin < 0.05
         ) {
             this.logTradeDecision(asset, analysis, digitBias, monteCarloResult, adaptiveThreshold);
 
@@ -1280,7 +1281,9 @@ class DigitDifferBotV2 {
                 🎲 MONTE CARLO:
                 Can Trade: ${monteCarloResult.canTrade ? '✅' : '❌'}
                 Risk of Ruin: ${(monteCarloResult.riskOfRuin * 100).toFixed(2)}%
+                Win Probability: ${(monteCarloResult.winProbability * 100).toFixed(1)}%
                 Confidence: ${(monteCarloResult.confidence * 100).toFixed(1)}%
+                Reason: ${monteCarloResult.reason}
                 Multiplier: ${monteCarloResult.recommendedStakeMultiplier.toFixed(2)}x
                 💰 STAKE SIZING:
                 Current Stake: $${this.currentStake.toFixed(2)}
@@ -1333,6 +1336,8 @@ class DigitDifferBotV2 {
         console.log(`   Can Trade: ${monteCarloResult.canTrade ? '✅' : '❌'}`);
         console.log(`   Risk of Ruin: ${(monteCarloResult.riskOfRuin * 100).toFixed(2)}%`);
         console.log(`   Confidence: ${(monteCarloResult.confidence * 100).toFixed(1)}%`);
+        console.log(`   Win Probability: ${(monteCarloResult.winProbability * 100).toFixed(1)}%`);
+        console.log(`   Reason: ${monteCarloResult.reason}`);
         console.log(`   Recommended Multiplier: ${monteCarloResult.recommendedStakeMultiplier.toFixed(2)}x`);
         console.log(`\n💰 STAKE SIZING:`);
         console.log(`   Current Stake: $${this.currentStake.toFixed(2)}`);
