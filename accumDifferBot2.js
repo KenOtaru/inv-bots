@@ -1179,7 +1179,7 @@ class DigitDifferBotV2 {
 
         this.tickCounts[asset] = (this.tickCounts[asset] || 0) + 1;
 
-        console.log(`📊 [${asset}] ${price}: ${this.tickHistory[asset].slice(-10).join(', ')}`);
+        // console.log(`📊 [${asset}] ${price}: ${this.tickHistory[asset].slice(-10).join(', ')}`);
 
         if (!this.wsReady) return;
         if (this.activeTrades[asset]) return;
