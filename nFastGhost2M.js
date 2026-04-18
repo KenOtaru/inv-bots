@@ -1214,7 +1214,7 @@ class MultiAssetGhostBot {
             // }
 
 
-            const tradeNow = sat >= 0.16 && signal.shortRepeat >= 0.16 && signal.shortRepeat >= peakWindow && signal.digit === signal.windowHotDigit
+            const tradeNow = sat < 0.16 && signal.shortRepeat < 0.16
 
             if (//sat >= 0.16
                 // && signal.shortRepeat >= 0.18
