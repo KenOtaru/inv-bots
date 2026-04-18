@@ -39,7 +39,7 @@ const BOT_CONFIG = {
 
     // Digit Differ specific
     digitWindow: 50,              // Rolling ticks to analyse digit frequency
-    minHotFrequency: 8,              // Minimum appearances to classify digit as "hot"
+    minHotFrequency: 10,              // Minimum appearances to classify digit as "hot"
     minFrequencyEdge: 2,              // Hot digit must lead 2nd-most by this many ticks
     predictedDigitCount: 1,              // How many digits to bet DIFFER on (1 = most reliable)
 
