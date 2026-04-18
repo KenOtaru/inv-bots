@@ -360,14 +360,7 @@ class DigitDifferAnalyzer {
             else if (bwPct <= 0.70) scores.bandWidth = 0.40;
             else scores.bandWidth = 0.15;
         } else {
-            // Fallback: use raw BB width as proxy — tighter bands = higher score
-            // Typical normalized width for synthetics: 0.001–0.005
-            const w = bb.width;
-            if (w < 0.0010) scores.bandWidth = 0.0;
-            else if (w < 0.0020) scores.bandWidth = 0.00;
-            else if (w < 0.0035) scores.bandWidth = 0.00;
-            else if (w < 0.0055) scores.bandWidth = 0.00;
-            else scores.bandWidth = 0.00;
+            scores.bandWidth = 0.00;
         }
 
         // ── MACD flat ─────────────────────────────────────────────────────────

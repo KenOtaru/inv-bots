@@ -1179,6 +1179,8 @@ class DigitDifferBotV2 {
 
         this.tickCounts[asset] = (this.tickCounts[asset] || 0) + 1;
 
+        console.log(`📊 [${asset}] ${price}: ${this.tickHistory[asset].slice(-10).join(', ')}`);
+
         if (!this.wsReady) return;
         if (this.activeTrades[asset]) return;
         if (this.tickHistory[asset].length < this.config.requiredHistoryLength) return;
@@ -1245,16 +1247,28 @@ class DigitDifferBotV2 {
         // this.logTradeDecision(asset, analysis, digitBias, monteCarloResult, adaptiveThreshold);
 
         // 8️⃣ Request proposal
-        if (this.tradingMode === 'digit_differ' && this.volatilityRegime === 'low' && analysis.overallScore >= 0.95 && analysis.scores.bandWidth >= 0.99 && analysis.scores.macdFlat >= 0.99) { // && this.volatilityRegime === 'low' && analysis.overallScore >= 0.95 && analysis.scores.bandWidth >= 1 && analysis.scores.macdFlat >= 1
+        if (this.tradingMode === 'digit_differ'
+            && this.volatilityRegime === 'low'
+            && analysis.overallScore >= 0.95
+            && analysis.scores.bandWidth >= 0.85
+            && analysis.scores.macdFlat >= 0.90
+            && analysis.scores.pricePosition >= 0.90
+            && analysis.scores.tickStability >= 0.90
+            && analysis.scores.volTrend >= 0.65
+        ) {
             this.logTradeDecision(asset, analysis, digitBias, monteCarloResult, adaptiveThreshold);
 
             this.sendTelegramMessage(`🚀 PLACING DIGITDIFF TRADE: ${asset}
                 Barrier (Digit to avoid): ${digitBias.mostFrequent}
+                Digits: ${this.tickHistory[asset].slice(-10).join(', ')}
                 📊 MARKET REGIME:
                 Volatility: ${this.volatilityRegime}
                 Score: ${(analysis.overallScore * 100).toFixed(1)}%
                 BB Width: ${(analysis.scores.bandWidth * 100).toFixed(1)}%
                 MACD Flat: ${(analysis.scores.macdFlat * 100).toFixed(1)}%
+                Price Position: ${(analysis.scores.pricePosition * 100).toFixed(1)}%
+                Tick Stability: ${(analysis.scores.tickStability * 100).toFixed(1)}%
+                VolTrend: ${(analysis.scores.volTrend * 100).toFixed(1)}%
                 ATR: ${(analysis.atr || 0).toFixed(8)}
                 💹 DIGIT CLUSTERING:
                 Most Frequent: ${digitBias.mostFrequent}
@@ -1303,8 +1317,12 @@ class DigitDifferBotV2 {
         console.log(`   Score: ${(analysis.overallScore * 100).toFixed(1)}%`);
         console.log(`   BB Width: ${(analysis.scores.bandWidth * 100).toFixed(1)}%`);
         console.log(`   MACD Flat: ${(analysis.scores.macdFlat * 100).toFixed(1)}%`);
+        console.log(`   Price Position: ${(analysis.scores.pricePosition * 100).toFixed(1)}%`);
+        console.log(`   Tick Stability: ${(analysis.scores.tickStability * 100).toFixed(1)}%`);
+        console.log(`   VolTrend: ${(analysis.scores.volTrend * 100).toFixed(1)}%`);
         console.log(`   ATR: ${(analysis.atr || 0).toFixed(8)}`);
         console.log(`\n💹 DIGIT CLUSTERING:`);
+        console.log(`   Last 10 Digits: ${this.tickHistory[asset].slice(-10).join(', ')}`);
         console.log(`   Most Frequent: ${digitBias.mostFrequent}`);
         console.log(`   Frequency: ${digitBias.frequency}/50`);
         console.log(`   Bias Strength: ${digitBias.biasStrength.toFixed(2)}`);
@@ -1854,8 +1872,8 @@ class DigitDifferBotV2 {
 // ══════════════════════════════════════════════════════════════════════════════
 const bot = new DigitDifferBotV2('DMylfkyce6VyZt7', {
     initialStake: 1,
-    multiplier: 2.2,
-    maxConsecutiveLosses: 5,
+    multiplier: 11.3,
+    maxConsecutiveLosses: 3,
     stopLoss: 100,
     takeProfit: 500,
     biasThreshold: 1.9,
