@@ -24,127 +24,6 @@ const fs = require('fs');
 const path = require('path');
 
 
-// ══════════════════════════════════════════════════════════════════════════════
-// MONTE CARLO SIMULATOR — Risk Analysis & Position Sizing
-// ══════════════════════════════════════════════════════════════════════════════
-class MonteCarloSimulator {
-    /**
-     * Run Monte Carlo simulation of future trades
-     * Returns confidence metrics for position sizing
-     */
-    static runSimulation(recentTrades, numSimulations = 1000, numFutureTrades = 50) {
-        if (recentTrades.length < 10) {
-            return {
-                canTrade: true,
-                confidence: 0.5,
-                recommendedStakeMultiplier: 1.0,
-                riskOfRuin: 0.05,
-                maxDrawdown: 0.2,
-                expectedDrawdown: 0.1,
-                winProbability: 0.5
-            };
-        }
-
-        const winRate = recentTrades.filter(t => t.won).length / recentTrades.length;
-        const avgWin = this.getAverageWin(recentTrades);
-        const avgLoss = this.getAverageLoss(recentTrades);
-
-        if (avgWin <= 0) {
-            return {
-                canTrade: false,
-                reason: 'no_winning_trades',
-                confidence: 0,
-                recommendedStakeMultiplier: 0.5,
-                riskOfRuin: 1.0
-            };
-        }
-
-        const payoutRatio = avgWin / avgLoss;
-
-        // Run simulations
-        const results = [];
-        for (let sim = 0; sim < numSimulations; sim++) {
-            const simResults = this.runSingleSimulation(
-                winRate,
-                avgWin,
-                avgLoss,
-                numFutureTrades
-            );
-            results.push(simResults);
-        }
-
-        // Analyze results
-        const finalBalance = results.map(r => r.finalBalance);
-        const maxDrawdowns = results.map(r => r.maxDrawdown);
-        const minDrawdowns = results.map(r => r.minBalance);
-
-        finalBalance.sort((a, b) => a - b);
-        maxDrawdowns.sort((a, b) => a - b);
-
-        const avgFinalBalance = finalBalance.reduce((a, b) => a + b) / finalBalance.length;
-        const var95 = finalBalance[Math.floor(finalBalance.length * 0.05)];
-        const expectedDrawdown = maxDrawdowns[Math.floor(maxDrawdowns.length * 0.5)];
-        const worst95Drawdown = maxDrawdowns[Math.floor(maxDrawdowns.length * 0.95)];
-
-        const riskOfRuin = results.filter(r => r.finalBalance <= 0).length / numSimulations;
-
-        const confidence = Math.max(0, Math.min(1, (avgFinalBalance / 100) * 0.5 + (1 - riskOfRuin) * 0.5));
-
-        let recommendedMultiplier = 1.0;
-        if (riskOfRuin < 0.01 && confidence > 0.8) recommendedMultiplier = 1.3;
-        else if (riskOfRuin < 0.05 && confidence > 0.7) recommendedMultiplier = 1.15;
-        else if (riskOfRuin > 0.15) recommendedMultiplier = 0.7;
-
-        return {
-            canTrade: riskOfRuin < 0.2,
-            confidence,
-            recommendedStakeMultiplier: recommendedMultiplier,
-            riskOfRuin,
-            expectedDrawdown: expectedDrawdown / 100,
-            worst95Drawdown: worst95Drawdown / 100,
-            var95: var95 / 100,
-            winRate,
-            payoutRatio,
-            simulations: numSimulations
-        };
-    }
-
-    static runSingleSimulation(winRate, avgWin, avgLoss, numTrades) {
-        let balance = 100;
-        let minBalance = 100;
-
-        for (let i = 0; i < numTrades; i++) {
-            const won = Math.random() < winRate;
-            if (won) {
-                balance += avgWin;
-            } else {
-                balance -= avgLoss;
-            }
-            minBalance = Math.min(minBalance, balance);
-        }
-
-        const maxDrawdown = ((minBalance - 100) / 100) * 100;
-
-        return {
-            finalBalance: balance,
-            minBalance,
-            maxDrawdown
-        };
-    }
-
-    static getAverageWin(trades) {
-        const wins = trades.filter(t => t.won);
-        if (wins.length === 0) return 0;
-        return wins.reduce((sum, t) => sum + t.profit, 0) / wins.length;
-    }
-
-    static getAverageLoss(trades) {
-        const losses = trades.filter(t => !t.won);
-        if (losses.length === 0) return 0;
-        return losses.reduce((sum, t) => sum + Math.abs(t.profit), 0) / losses.length;
-    }
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // CONFIG — edit these values before running
 // ─────────────────────────────────────────────────────────────────────────────
@@ -533,6 +412,127 @@ class DigitDifferAnalyzer {
     }
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+// MONTE CARLO SIMULATOR — Risk Analysis & Position Sizing
+// ══════════════════════════════════════════════════════════════════════════════
+class MonteCarloSimulator {
+    /**
+     * Run Monte Carlo simulation of future trades
+     * Returns confidence metrics for position sizing
+     */
+    static runSimulation(recentTrades, numSimulations = 1000, numFutureTrades = 50) {
+        if (recentTrades.length < 10) {
+            return {
+                canTrade: true,
+                confidence: 0.5,
+                recommendedStakeMultiplier: 1.0,
+                riskOfRuin: 0.05,
+                maxDrawdown: 0.2,
+                expectedDrawdown: 0.1,
+                winProbability: 0.5
+            };
+        }
+
+        const winRate = recentTrades.filter(t => t.won).length / recentTrades.length;
+        const avgWin = this.getAverageWin(recentTrades);
+        const avgLoss = this.getAverageLoss(recentTrades);
+
+        if (avgWin <= 0) {
+            return {
+                canTrade: false,
+                reason: 'no_winning_trades',
+                confidence: 0,
+                recommendedStakeMultiplier: 0.5,
+                riskOfRuin: 1.0
+            };
+        }
+
+        const payoutRatio = avgWin / avgLoss;
+
+        // Run simulations
+        const results = [];
+        for (let sim = 0; sim < numSimulations; sim++) {
+            const simResults = this.runSingleSimulation(
+                winRate,
+                avgWin,
+                avgLoss,
+                numFutureTrades
+            );
+            results.push(simResults);
+        }
+
+        // Analyze results
+        const finalBalance = results.map(r => r.finalBalance);
+        const maxDrawdowns = results.map(r => r.maxDrawdown);
+        const minDrawdowns = results.map(r => r.minBalance);
+
+        finalBalance.sort((a, b) => a - b);
+        maxDrawdowns.sort((a, b) => a - b);
+
+        const avgFinalBalance = finalBalance.reduce((a, b) => a + b) / finalBalance.length;
+        const var95 = finalBalance[Math.floor(finalBalance.length * 0.05)];
+        const expectedDrawdown = maxDrawdowns[Math.floor(maxDrawdowns.length * 0.5)];
+        const worst95Drawdown = maxDrawdowns[Math.floor(maxDrawdowns.length * 0.95)];
+
+        const riskOfRuin = results.filter(r => r.finalBalance <= 0).length / numSimulations;
+
+        const confidence = Math.max(0, Math.min(1, (avgFinalBalance / 100) * 0.5 + (1 - riskOfRuin) * 0.5));
+
+        let recommendedMultiplier = 1.0;
+        if (riskOfRuin < 0.01 && confidence > 0.8) recommendedMultiplier = 1.3;
+        else if (riskOfRuin < 0.05 && confidence > 0.7) recommendedMultiplier = 1.15;
+        else if (riskOfRuin > 0.15) recommendedMultiplier = 0.7;
+
+        return {
+            canTrade: riskOfRuin < 0.2,
+            confidence,
+            recommendedStakeMultiplier: recommendedMultiplier,
+            riskOfRuin,
+            expectedDrawdown: expectedDrawdown / 100,
+            worst95Drawdown: worst95Drawdown / 100,
+            var95: var95 / 100,
+            winRate,
+            payoutRatio,
+            simulations: numSimulations
+        };
+    }
+
+    static runSingleSimulation(winRate, avgWin, avgLoss, numTrades) {
+        let balance = 100;
+        let minBalance = 100;
+
+        for (let i = 0; i < numTrades; i++) {
+            const won = Math.random() < winRate;
+            if (won) {
+                balance += avgWin;
+            } else {
+                balance -= avgLoss;
+            }
+            minBalance = Math.min(minBalance, balance);
+        }
+
+        const maxDrawdown = ((minBalance - 100) / 100) * 100;
+
+        return {
+            finalBalance: balance,
+            minBalance,
+            maxDrawdown
+        };
+    }
+
+    static getAverageWin(trades) {
+        const wins = trades.filter(t => t.won);
+        if (wins.length === 0) return 0;
+        return wins.reduce((sum, t) => sum + t.profit, 0) / wins.length;
+    }
+
+    static getAverageLoss(trades) {
+        const losses = trades.filter(t => !t.won);
+        if (losses.length === 0) return 0;
+        return losses.reduce((sum, t) => sum + Math.abs(t.profit), 0) / losses.length;
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN BOT
 // ─────────────────────────────────────────────────────────────────────────────
@@ -882,7 +882,6 @@ class DigitDifferBot {
             console.log(`   MC Risk of Ruin: ${(mcResult.riskOfRuin * 100).toFixed(2)}%`);
             console.log(`   MC Confidence: ${(mcResult.confidence * 100).toFixed(1)}%`);
             console.log(`   MC Win Probability: ${(mcResult.winProbability * 100).toFixed(1)}%`);
-            console.log(`   MC Reason: ${mcResult.reason}`);
 
             this._placeTrade(asset, predictedDigit, proposal, analysis);
         }
@@ -926,7 +925,6 @@ class DigitDifferBot {
             `MC Risk of Ruin: ${(mcResult.riskOfRuin * 100).toFixed(2)}%\n` +
             `MC Confidence: ${(mcResult.confidence * 100).toFixed(1)}%\n` +
             `MC Win Probability: ${(mcResult.winProbability * 100).toFixed(1)}%\n` +
-            `MC Reason: ${mcResult.reason}\n` +
             `Stake: $${this.currentStake.toFixed(2)}\n` +
             `Consecutive losses: ${this.consecutiveLosses}`
         );

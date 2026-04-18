@@ -1283,7 +1283,6 @@ class DigitDifferBotV2 {
                 Risk of Ruin: ${(monteCarloResult.riskOfRuin * 100).toFixed(2)}%
                 Win Probability: ${(monteCarloResult.winProbability * 100).toFixed(1)}%
                 Confidence: ${(monteCarloResult.confidence * 100).toFixed(1)}%
-                Reason: ${monteCarloResult.reason}
                 Multiplier: ${monteCarloResult.recommendedStakeMultiplier.toFixed(2)}x
                 💰 STAKE SIZING:
                 Current Stake: $${this.currentStake.toFixed(2)}
@@ -1337,7 +1336,6 @@ class DigitDifferBotV2 {
         console.log(`   Risk of Ruin: ${(monteCarloResult.riskOfRuin * 100).toFixed(2)}%`);
         console.log(`   Confidence: ${(monteCarloResult.confidence * 100).toFixed(1)}%`);
         console.log(`   Win Probability: ${(monteCarloResult.winProbability * 100).toFixed(1)}%`);
-        console.log(`   Reason: ${monteCarloResult.reason}`);
         console.log(`   Recommended Multiplier: ${monteCarloResult.recommendedStakeMultiplier.toFixed(2)}x`);
         console.log(`\n💰 STAKE SIZING:`);
         console.log(`   Current Stake: $${this.currentStake.toFixed(2)}`);
