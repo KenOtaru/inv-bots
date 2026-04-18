@@ -93,7 +93,7 @@ const CONFIG = {
 
     // Multiplier-based Stake Management
     stake: {
-        initial_stake: 2.2,
+        initial_stake: 0.63,
         initial_stake2: 10.3,
         multiplier: 11.3,
         multiplier2: 11.3,
@@ -1184,7 +1184,7 @@ class MultiAssetGhostBot {
         }
 
         // Rate limiting
-        if (Date.now() - this.lastTradeTime < this.minTradeCooldown) return;
+        // if (Date.now() - this.lastTradeTime < this.minTradeCooldown) return;
 
         // Generate signal for this asset
         const signal = this.generateSignal(asset);
@@ -1213,15 +1213,8 @@ class MultiAssetGhostBot {
             //     );
             // }
 
-            // if (sat && sat >= 0.16 && signal.shortRepeat > sat && signal.shortRepeat >= 0.20) {
-            //     this.startTrade = true;
-            // }
 
-            // if (signal.shortRepeat <= 0.14) {
-            //     this.startTrade = false;
-            // }
-
-            const tradeNow = ((sat >= 0.16 && sat <= 0.16 && signal.shortRepeat >= 0.16 && signal.shortRepeat <= 0.16 && peakWindow >= 0.16 && peakWindow <= 0.16) || (sat >= 0.18 && sat <= 0.18 && signal.shortRepeat >= 0.18 && signal.shortRepeat <= 0.18 && peakWindow >= 0.18 && peakWindow <= 0.18))
+            const tradeNow = sat >= 0.16 && signal.shortRepeat >= 0.16 && signal.shortRepeat >= peakWindow && signal.digit === signal.windowHotDigit
 
             if (//sat >= 0.16
                 // && signal.shortRepeat >= 0.18
@@ -1229,8 +1222,6 @@ class MultiAssetGhostBot {
                 // && declineFrac >= 0.1
                 // && signal.digit === signal.windowHotDigit
                 tradeNow
-                && signal.windowHotDigit !== signal.digit
-                && satHotDigit !== signal.digit
             ) { //this.startTrade
                 // if (asset === 'RDBEAR' || asset === 'RDBULL') {
                 //     if (sat < 0.18 || signal.shortRepeat < 0.28) {
@@ -1481,32 +1472,31 @@ class MultiAssetGhostBot {
             this.isWinTrade = true;
 
             // System progression reset
-            if (this.sys === 2) {
-                if (this.sysCount >= 5) {
-                    this.sys = 1;
-                    this.sysCount = 0;
-                }
-            } else if (this.sys === 3) {
-                if (this.sysCount >= 2) {
-                    this.sys = 1;
-                    this.sysCount = 0;
-                }
-            }
+            // if (this.sys === 2) {
+            //     if (this.sysCount >= 5) {
+            //         this.sys = 1;
+            //         this.sysCount = 0;
+            //     }
+            // } else if (this.sys === 3) {
+            //     if (this.sysCount >= 2) {
+            //         this.sys = 1;
+            //         this.sysCount = 0;
+            //     }
+            // }
 
-            if (this.sys2) {
-                this.currentStake = CONFIG.stake.initial_stake2;
-                this.sys2WinCount++;
-                if (this.sys2WinCount === 30) {
-                    this.currentStake = CONFIG.stake.initial_stake;
-                    this.sys2WinCount = 0;
-                    this.sys2 = false;
-                }
-            } else {
-                this.currentStake = CONFIG.stake.initial_stake;
-            }
+            // if (this.sys2) {
+            //     this.currentStake = CONFIG.stake.initial_stake2;
+            //     this.sys2WinCount++;
+            //     if (this.sys2WinCount === 30) {
+            //         this.currentStake = CONFIG.stake.initial_stake;
+            //         this.sys2WinCount = 0;
+            //         this.sys2 = false;
+            //     }
+            // } else {
+            //     this.currentStake = CONFIG.stake.initial_stake;
+            // }
 
-            // this.currentStake = CONFIG.stake.initial_stake;
-            this.suspendAsset(asset);
+            this.currentStake = CONFIG.stake.initial_stake;
         } else {
             this.totalLosses++;
             this.hourlyStats.losses++;
@@ -1521,15 +1511,15 @@ class MultiAssetGhostBot {
             // Apply multiplier
             // this.currentStake = Math.ceil(this.currentStake * CONFIG.stake.multiplier * 100) / 100;
 
-            if (this.consecutiveLosses === 2) {
-                if (this.sys2) {
-                    this.consecutiveLosses = 4
-                };
-                this.sys2 = true
-                this.currentStake = CONFIG.stake.initial_stake2;
-            } else {
-                this.currentStake = Math.ceil(this.currentStake * CONFIG.stake.multiplier * 100) / 100;
-            }
+            // if (this.consecutiveLosses === 2) {
+            //     if (this.sys2) {
+            //         this.consecutiveLosses = 4
+            //     };
+            //     this.sys2 = true
+            //     this.currentStake = CONFIG.stake.initial_stake2;
+            // } else {
+            this.currentStake = Math.ceil(this.currentStake * CONFIG.stake.multiplier * 100) / 100;
+            // }
 
             // Cap stake at maximum
             // if (this.currentStake > CONFIG.stake.max_stake) {
@@ -1538,17 +1528,17 @@ class MultiAssetGhostBot {
             // }
 
             // System progression
-            if (this.consecutiveLosses >= 2) {
-                if (this.sys === 1) {
-                    this.sys = 2;
-                } else if (this.sys === 2) {
-                    this.sys = 3;
-                }
-                this.sysCount = 0;
-            }
+            // if (this.consecutiveLosses >= 2) {
+            //     if (this.sys === 1) {
+            //         this.sys = 2;
+            //     } else if (this.sys === 2) {
+            //         this.sys = 3;
+            //     }
+            //     this.sysCount = 0;
+            // }
 
             // Suspend asset after loss
-            this.suspendAsset(asset);
+            // this.suspendAsset(asset);
         }
 
         this.totalProfitLoss += profit;
