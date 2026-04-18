@@ -769,7 +769,7 @@ class DigitDifferBot {
         };
 
         this._sendTelegram(
-            `🎯 <b>DIFFER TRADE OPENED</b>\n\n` +
+            `🎯 <b>BOTv1 Trade Opened</b>\n\n` +
             `Asset: <b>${asset}</b>\n` +
             `Betting digit <b>${predictedDigit}</b> will NOT appear\n` +
             `Digit Appeared ${analysis.hotDigitCount}x (${analysis.hotDigitPct}%)\n` +
@@ -889,7 +889,7 @@ class DigitDifferBot {
         delete this.activeTrades[asset];
 
         this._sendTelegram(
-            `${won ? '✅' : '❌'} <b>differBot</b>\n\n` +
+            `${won ? '✅' : '❌'} <b>BOTv1 Trade Result</b>\n\n` +
             `Asset: <b>${asset}</b>\n` +
             `Digit bet: ${trade.predictedDigit} | ${won ? 'Did NOT appear ✅' : 'Appeared ❌'}\n` +
             `Last 10 Digits: ${this.digitHistories[asset].slice(-10)}\n` +

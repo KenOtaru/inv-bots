@@ -1258,7 +1258,7 @@ class DigitDifferBotV2 {
         ) {
             this.logTradeDecision(asset, analysis, digitBias, monteCarloResult, adaptiveThreshold);
 
-            this.sendTelegramMessage(`🚀 PLACING DIGITDIFF TRADE: ${asset}
+            this.sendTelegramMessage(`🚀 BOTv2 Placing Trade: ${asset}
                 Barrier (Digit to avoid): ${digitBias.mostFrequent}
                 Digits: ${this.tickHistory[asset].slice(-10).join(', ')}
                 📊 MARKET REGIME:
@@ -1698,7 +1698,7 @@ class DigitDifferBotV2 {
         // Telegram notification
         const winRate = this.totalTrades > 0 ? (this.totalWins / this.totalTrades * 100).toFixed(1) : '0.0';
         this.sendTelegramMessage(
-            `${won ? '✅' : '❌'} <b>digitDifferBotV2</b>\n\n` +
+            `${won ? '✅' : '❌'} <b>BOTv2 Trade Result</b>\n\n` +
             `Asset: <b>${asset}</b>\n` +
             `Digit bet: ${trade.predictedDigit}\n` +
             `Last 10 Digits: ${this.tickHistory[asset].slice(-10)}\n` +
