@@ -727,6 +727,7 @@ class DigitDifferBot {
             && analysis.scores.volTrend >= this.cfg.minVolTrendScore
             && analysis.maxTickMove <= this.cfg.maxTickMove
             && analysis.maxTickMove >= this.cfg.minMaxTickMove
+            && predictedDigit === this.tickHistory[asset].slice(-1)[0]
         ) {
             console.log(`\n🎯 ENTRY SIGNAL — ${asset}`);
             console.log(`   Predicted digit: ${predictedDigit} (betting it will NOT appear next tick)`);
