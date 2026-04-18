@@ -1256,7 +1256,7 @@ class DigitDifferBotV2 {
             && analysis.scores.tickStability >= 0.90
             && analysis.scores.volTrend >= 0.65
             // && digitBias.frequency >= 8
-            && monteCarloResult.riskOfRuin < 0.05
+            // && monteCarloResult.riskOfRuin < 0.05
         ) {
             this.logTradeDecision(asset, analysis, digitBias, monteCarloResult, adaptiveThreshold);
 

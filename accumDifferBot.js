@@ -840,7 +840,7 @@ class DigitDifferBot {
         );
 
         // Run Monte Carlo risk analysis
-        const mcResult = this.monteCarlo.runSimulation(this.tradeHistory, 500, 50);
+        const mcResult = MonteCarloSimulator.runSimulation(this.tradeHistory, 500, 50);
 
         if (!analysis.shouldTrade) {
             console.log(`   ❌ Conditions changed — aborting entry`);
@@ -860,7 +860,7 @@ class DigitDifferBot {
             && analysis.maxTickMove <= this.cfg.maxTickMove
             && analysis.maxTickMove >= this.cfg.minMaxTickMove
             && predictedDigit === this.digitHistories[asset].slice(-1)[0]
-            && mcResult.riskOfRuin < 0.05
+            // && mcResult.riskOfRuin < 0.05
         ) {
             console.log(`\n🎯 ENTRY SIGNAL — ${asset}`);
             console.log(`   Predicted digit: ${predictedDigit} (betting it will NOT appear next tick)`);
