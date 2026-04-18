@@ -860,7 +860,7 @@ class DigitDifferBot {
             && analysis.maxTickMove <= this.cfg.maxTickMove
             && analysis.maxTickMove >= this.cfg.minMaxTickMove
             && predictedDigit === this.digitHistories[asset].slice(-1)[0]
-            && mcResult.riskOfRuin < 0.05
+            // && mcResult.riskOfRuin < 0.05
         ) {
             console.log(`\n🎯 ENTRY SIGNAL — ${asset}`);
             console.log(`   Predicted digit: ${predictedDigit} (betting it will NOT appear next tick)`);

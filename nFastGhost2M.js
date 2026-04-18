@@ -68,7 +68,7 @@ const CONFIG = {
     api_token: '0P94g4WdSrSrzir',
 
     // Multi-Asset Configuration
-    assets: ['R_10', 'R_25', 'R_50', 'R_75', 'RDBULL', 'RDBEAR'], //['R_10', 'R_25', 'R_50', 'R_75', 'RDBULL', 'RDBEAR']
+    assets: ['R_10', 'R_25', 'R_50', 'R_75'], //['R_10', 'R_25', 'R_50', 'R_75', 'RDBULL', 'RDBEAR']
 
     // Contract Configuration
     contract_type: 'DIGITDIFF',
@@ -1221,8 +1221,17 @@ class MultiAssetGhostBot {
             //     this.startTrade = false;
             // }
 
+            const tradeNow = ((sat >= 0.16 && sat <= 0.16 && signal.shortRepeat >= 0.16 && signal.shortRepeat <= 0.16 && peakWindow >= 0.16 && peakWindow <= 0.16) || (sat >= 0.18 && sat <= 0.18 && signal.shortRepeat >= 0.18 && signal.shortRepeat <= 0.18 && peakWindow >= 0.18 && peakWindow <= 0.18))
 
-            if (sat >= 0.16 && signal.shortRepeat >= 0.18 && signal.confidence >= 0.4 && declineFrac >= 0.1 && signal.digit === signal.windowHotDigit) { //this.startTrade
+            if (//sat >= 0.16
+                // && signal.shortRepeat >= 0.18
+                // && signal.confidence >= 0.4
+                // && declineFrac >= 0.1
+                // && signal.digit === signal.windowHotDigit
+                tradeNow
+                && signal.windowHotDigit !== signal.digit
+                && satHotDigit !== signal.digit
+            ) { //this.startTrade
                 // if (asset === 'RDBEAR' || asset === 'RDBULL') {
                 //     if (sat < 0.18 || signal.shortRepeat < 0.28) {
                 //         return;
@@ -1233,19 +1242,22 @@ class MultiAssetGhostBot {
                     `🎯 Trade Signal [${asset}]:` +
                     ` Last10: ${last10}` +
                     ` | WindowHot: ${signal.windowHotDigit} (${(signal.shortRepeat * 100).toFixed(1)}%)` +
-                    ` | Peak in Window: ${peakWindow}` +
+                    ` | Peak in Window: ${(peakWindow * 100).toFixed(1)}%` +
                     ` | SatHotDigit: ${satHotDigit != null ? satHotDigit : '?'} (${sat != null ? (sat * 100).toFixed(1) + '%' : '---'})` +
-                    ` | Decline Fraction: ${declineFrac}` +
+                    ` | Decline Fraction: ${(declineFrac * 100).toFixed(1)}%` +
                     ` | Conf: ${(signal.confidence * 100).toFixed(0)}%`
                 );
 
                 this.placeTrade(asset, signal);
             } else {
                 // console.log(
-                //     `[${asset}] Waiting for saturation learning...` +
+                //     `[${asset}] Waiting...` +
                 //     ` Last10: ${last10}` +
+                //     ` | Trade Now: ${tradeNow}` +
                 //     ` | WindowHot: ${signal.windowHotDigit} (${(signal.shortRepeat * 100).toFixed(1)}%)` +
+                //     ` | Peak in Window: ${(peakWindow * 100).toFixed(1)}%` +
                 //     ` | SatHotDigit: ${satHotDigit != null ? satHotDigit : '?'} (${sat != null ? (sat * 100).toFixed(1) + '%' : '---'})` +
+                //     ` | Decline Fraction: ${(declineFrac * 100).toFixed(1)}%` +
                 //     ` | Conf: ${(signal.confidence * 100).toFixed(0)}%`
                 // );
             }
@@ -1494,6 +1506,7 @@ class MultiAssetGhostBot {
             }
 
             // this.currentStake = CONFIG.stake.initial_stake;
+            this.suspendAsset(asset);
         } else {
             this.totalLosses++;
             this.hourlyStats.losses++;
@@ -1535,7 +1548,7 @@ class MultiAssetGhostBot {
             }
 
             // Suspend asset after loss
-            // this.suspendAsset(asset);
+            this.suspendAsset(asset);
         }
 
         this.totalProfitLoss += profit;
