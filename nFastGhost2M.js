@@ -68,7 +68,7 @@ const CONFIG = {
     api_token: '0P94g4WdSrSrzir',
 
     // Multi-Asset Configuration
-    assets: ['R_10', 'R_25', 'R_50', 'R_75'], //['R_10', 'R_25', 'R_50', 'R_75', 'RDBULL', 'RDBEAR']
+    assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'], //['R_10', 'R_25', 'R_50', 'R_75', 'RDBULL', 'RDBEAR']
 
     // Contract Configuration
     contract_type: 'DIGITDIFF',
@@ -93,7 +93,7 @@ const CONFIG = {
 
     // Multiplier-based Stake Management
     stake: {
-        initial_stake: 0.63,
+        initial_stake: 1.07,
         initial_stake2: 10.3,
         multiplier: 11.3,
         multiplier2: 11.3,
@@ -1214,7 +1214,7 @@ class MultiAssetGhostBot {
             // }
 
 
-            const tradeNow = sat < 0.16 && signal.shortRepeat < 0.16
+            const tradeNow = sat <= 0.14 && signal.shortRepeat <= 0.14 && peakWindow <= 0.14 && signal.digit !== signal.windowHotDigit && signal.digit !== satHotDigit
 
             if (//sat >= 0.16
                 // && signal.shortRepeat >= 0.18
@@ -1538,7 +1538,7 @@ class MultiAssetGhostBot {
             // }
 
             // Suspend asset after loss
-            // this.suspendAsset(asset);
+            this.suspendAsset(asset);
         }
 
         this.totalProfitLoss += profit;
