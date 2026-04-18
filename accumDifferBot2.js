@@ -1700,6 +1700,8 @@ class DigitDifferBotV2 {
         this.sendTelegramMessage(
             `${won ? '✅' : '❌'} <b>digitDifferBotV2</b>\n\n` +
             `Asset: <b>${asset}</b>\n` +
+            `Digit bet: ${trade.predictedDigit}\n` +
+            `Last 10 Digits: ${this.digitHistories[asset].slice(-10)}\n` +
             `P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(3)}\n` +
             `Consecutive Losses: ${this.consecutiveLosses}\n` +
             `Trades: ${this.totalTrades} (${this.totalWins}W/${this.totalLosses}L)\n` +
