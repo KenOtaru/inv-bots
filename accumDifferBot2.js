@@ -2077,7 +2077,7 @@ class DigitDifferBotV2 {
 // ══════════════════════════════════════════════════════════════════════════════
 const bot = new DigitDifferBotV2('DMylfkyce6VyZt7', {
     initialStake: 1,
-    multiplier: 11.3,
+    multiplier: 3.5,
     maxConsecutiveLosses: 3,
     stopLoss: 100,
     takeProfit: 500,
