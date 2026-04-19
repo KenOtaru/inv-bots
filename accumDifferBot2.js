@@ -1326,9 +1326,9 @@ class DigitDifferBotV2 {
             && this.volatilityRegime === 'low'
             // && analysis.overallScore >= 0.95
             && analysis.scores.bandWidth >= 0.85
-            && analysis.scores.macdFlat >= 0.90
-            && analysis.scores.pricePosition >= 0.90
-            && analysis.scores.tickStability >= 0.90
+            && analysis.scores.macdFlat >= 0.75
+            && analysis.scores.pricePosition >= 0.75
+            && analysis.scores.tickStability >= 0.75
             && analysis.scores.volTrend >= 0.65
             && digitBias.biasStrength >= adaptiveThreshold
             && this.currentDigit !== digitBias.mostFrequent
