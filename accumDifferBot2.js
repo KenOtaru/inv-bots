@@ -844,6 +844,9 @@ class DigitDifferBotV2 {
             stopLoss: config.stopLoss || 100,
             biasThreshold: config.biasThreshold || 1.6,
             minMarketScore: config.minMarketScore || 0.70,
+            // Accumulator specific
+            growthRate: config.growthRate || 0.02,
+            filterNum: config.filterNum || 5,
             maxReconnectAttempts: 50,
             reconnectDelay: 5000,
             minTimeBetweenTrades: 2000,
@@ -864,6 +867,11 @@ class DigitDifferBotV2 {
         this.endOfDay = false;
         this.tradeInProgress = false;
         this.tradeStartTime = null;
+        //Accummulator Filter
+        this.tradedDigitArray = [];
+        this.filteredArray = [];
+        this.filterNum = this.config.filterNum;
+        this.entryTick = null;
 
         // Adaptive thresholds
         this.biasThresholdAdaptive = this.config.biasThreshold;
@@ -1263,6 +1271,11 @@ class DigitDifferBotV2 {
             this.sendTelegramMessage(`🚀 BOTv2 Placing Trade: ${asset}
                 Barrier (Digit to avoid): ${digitBias.mostFrequent}
                 Digits: ${this.tickHistory[asset].slice(-10).join(', ')}
+                📊 ACCUMULATOR SYSTEM:
+                Filter Number: ${this.filterNum}
+                Entry Tick: ${this.entryTick}
+                Filtered Digits: ${this.filteredArray.join(', ')}
+                Growth Rate: ${(this.config.growthRate * 100).toFixed(0)}%
                 📊 MARKET REGIME:
                 Volatility: ${this.volatilityRegime}
                 Score: ${(analysis.overallScore * 100).toFixed(1)}%
@@ -1316,6 +1329,10 @@ class DigitDifferBotV2 {
         console.log(`🎯 TRADE EVALUATION: ${asset}`);
         console.log(`${'═'.repeat(70)}`);
         console.log(`📊 MARKET REGIME:`);
+        console.log(`   AccumFilter Number: ${this.filterNum}`);
+        console.log(`   AccumEntry Tick: ${this.entryTick}`);
+        console.log(`   AccumFiltered Digits: ${this.filteredArray.join(', ')}`);
+        console.log(`   AccumGrowth Rate: ${(this.config.growthRate * 100).toFixed(0)}%`);
         console.log(`   Volatility: ${this.volatilityRegime}`);
         console.log(`   Score: ${(analysis.overallScore * 100).toFixed(1)}%`);
         console.log(`   BB Width: ${(analysis.scores.bandWidth * 100).toFixed(1)}%`);
@@ -1384,7 +1401,53 @@ class DigitDifferBotV2 {
         const proposalId = message.proposal.id;
         this.assetStates[asset].proposalId = proposalId;
 
-        this.placeDigitTrade(asset);
+        const proposal = message.proposal;
+        const stayedInArray = proposal.contract_details.ticks_stayed_in;
+
+        if (!stayedInArray) return;
+
+        // Current digit count of the running accumulator
+        const currentDigitCount = stayedInArray[99] + 1;
+
+        this.currentTick = stayedInArray[99];
+
+        console.log(`📋 Proposal for ${asset}: Current StayIN Digit Count: ${stayedInArray[99]} (${currentDigitCount})`);
+        console.log(`   Filter Number: ${this.filterNum}`);
+
+        // Store proposal ID
+        this.assetStates[asset].proposalId = proposal.id;
+
+        // ── Original frequency analysis logic ──────────────────────────────
+        // Create frequency map of digits
+        const digitFrequency = {};
+        stayedInArray.forEach(digit => {
+            digitFrequency[digit] = (digitFrequency[digit] || 0) + 1;
+        });
+
+        // Create array: digits that have appeared exactly filterNum times
+        const appearedOnceArray = Object.keys(digitFrequency)
+            .filter(digit => digitFrequency[digit] === this.filterNum)
+            .map(Number);
+
+        console.log(`   Digits that appeared ${this.filterNum} times: [${appearedOnceArray.join(', ')}]`);
+
+        // Entry condition: current digit count is in appearedOnceArray
+        // and not already traded, and stayedIn value >= 0
+        const condition = appearedOnceArray.includes(currentDigitCount)
+            && !this.tradedDigitArray.includes(stayedInArray[99])
+            && stayedInArray[99] > 0;
+
+        console.log(`   Entry condition: ${condition ? '✅ MET' : '❌ NOT MET'}`);
+
+        // Check if we should place trade
+        if (condition) {
+            this.tradedDigitArray.push(stayedInArray[99]);
+            this.filteredArray = appearedOnceArray;
+            this.entryTick = stayedInArray[99];
+            console.log(`   Traded Digit Array: [${this.tradedDigitArray.join(', ')}]`);
+            // Place trade
+            this.placeDigitTrade(asset);
+        }
     }
 
     placeDigitTrade(asset) {
@@ -1884,6 +1947,8 @@ const bot = new DigitDifferBotV2('DMylfkyce6VyZt7', {
     takeProfit: 500,
     biasThreshold: 1.9,
     minMarketScore: 0.90,
+    growthRate: 0.03,
+    filterNum: 4,
     assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'RDBEAR', 'RDBULL'],
     telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
     telegramChatId: '752497117',
