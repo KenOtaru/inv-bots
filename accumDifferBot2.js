@@ -1512,8 +1512,9 @@ class DigitDifferBotV2 {
         this.logTradeDecision(asset, analysis, digitBias, monteCarloResult, adaptiveThreshold);
 
         // 8️⃣ Request proposal
-        if (this.tradingMode === 'digit_differ'
-            && this.volatilityRegime === 'low'
+        if (condition
+            // && this.tradingMode === 'digit_differ'
+            // && this.volatilityRegime === 'low'
             // && analysis.overallScore >= 0.95
             // && analysis.scores.bandWidth >= 0.85
             // && analysis.scores.macdFlat >= 0.90
@@ -1522,7 +1523,6 @@ class DigitDifferBotV2 {
             // && analysis.scores.volTrend >= 0.65
             // && digitBias.biasStrength >= 2.0
             // && digitBias.currentDigit !== digitBias.mostFrequent
-            && condition
             // && monteCarloResult.riskOfRuin < 0.05
         ) {
             this.logTradeDecision(asset, analysis, digitBias, monteCarloResult, adaptiveThreshold);
