@@ -1208,160 +1208,9 @@ class DigitDifferBotV2 {
         if (!prices || prices.length < 50) return;
         if (!digits || digits.length < 50) return;
 
-        // // 1️⃣ Market regime analysis
-        // const analysis = this.analyzer.analyzeEntry(prices);
-
-        // this.volatilityRegime = analysis.volatilityRegime || 'medium';
-
-        // if (!analysis.shouldTrade) return;
-        // if (analysis.overallScore < this.config.minMarketScore) return;
-
-        // // 2️⃣ Digit bias detection
-        const digitBias = this.biasDetector.detectDigitBias(digits, 50);
-
-        // // 3️⃣ Adaptive threshold
-        // const adaptiveThreshold = this.biasDetector.calculateAdaptiveThreshold(
-        //     asset,
-        //     this.biasThresholdAdaptive
-        // );
-
-        // if (digitBias.biasStrength < adaptiveThreshold) return;
-        // if (digitBias.currentDigit !== digitBias.mostFrequent) return;
-
-        // // 4️⃣ Monte Carlo risk check
-        // const monteCarloResult = MonteCarloSimulator.runSimulation(this.tradeHistory, 500, 50);
-
-        // if (!monteCarloResult.canTrade) {
-        //     console.log(`⚠️  Monte Carlo: Risk of ruin too high (${(monteCarloResult.riskOfRuin * 100).toFixed(1)}%)`);
-        //     return;
-        // }
-
-        // // 5️⃣ Dynamic stake sizing
-        // const recentWinRate = this.stakeSizer.getRecentWinRate(20);
-        // const atr = analysis.atr || 0;
-
-        // const dynamicStake = this.stakeSizer.calculateDynamicStake(
-        //     this.currentStake,
-        //     atr,
-        //     digitBias.biasStrength,
-        //     recentWinRate
-        // );
-
-        // this.currentStake = Math.max(this.config.initialStake, dynamicStake);
-
-        // // 6️⃣ Determine trading mode
-        // this.determineTradingMode(analysis, digitBias, monteCarloResult);
-
-        // // 7️⃣ Log decision
-        // // this.logTradeDecision(asset, analysis, digitBias, monteCarloResult, adaptiveThreshold);
-
-        // // 8️⃣ Request proposal
-        // if (this.tradingMode === 'digit_differ'
-        //     && this.volatilityRegime === 'low'
-        //     && analysis.overallScore >= 0.95
-        //     && analysis.scores.bandWidth >= 0.85
-        //     && analysis.scores.macdFlat >= 0.90
-        //     && analysis.scores.pricePosition >= 0.90
-        //     && analysis.scores.tickStability >= 0.90
-        //     && analysis.scores.volTrend >= 0.65
-        //     && digitBias.biasStrength >= 2.0
-        //     // && monteCarloResult.riskOfRuin < 0.05
-        // ) {
-        //     this.logTradeDecision(asset, analysis, digitBias, monteCarloResult, adaptiveThreshold);
-
-        //     this.sendTelegramMessage(`🚀 BOTv2 Placing Trade: ${asset}
-        //         Barrier (Digit to avoid): ${digitBias.mostFrequent}
-        //         Digits: ${this.tickHistory[asset].slice(-10).join(', ')}
-        //         📊 ACCUMULATOR SYSTEM:
-        //         Filter Number: ${this.filterNum}
-        //         Entry Tick: ${this.entryTick}
-        //         Filtered Digits: ${this.filteredArray.join(', ')}
-        //         Growth Rate: ${(this.config.growthRate * 100).toFixed(0)}%
-        //         📊 MARKET REGIME:
-        //         Volatility: ${this.volatilityRegime}
-        //         Score: ${(analysis.overallScore * 100).toFixed(1)}%
-        //         BB Width: ${(analysis.scores.bandWidth * 100).toFixed(1)}%
-        //         MACD Flat: ${(analysis.scores.macdFlat * 100).toFixed(1)}%
-        //         Price Position: ${(analysis.scores.pricePosition * 100).toFixed(1)}%
-        //         Tick Stability: ${(analysis.scores.tickStability * 100).toFixed(1)}%
-        //         VolTrend: ${(analysis.scores.volTrend * 100).toFixed(1)}%
-        //         ATR: ${(analysis.atr || 0).toFixed(8)}
-        //         💹 DIGIT CLUSTERING:
-        //         Most Frequent: ${digitBias.mostFrequent}
-        //         Frequency: ${digitBias.frequency}/50
-        //         Bias Strength: ${digitBias.biasStrength.toFixed(2)}
-        //         Adaptive Threshold: ${adaptiveThreshold.toFixed(2)}
-        //         Entropy: ${digitBias.normalizedEntropy.toFixed(3)}
-        //         🎲 MONTE CARLO:
-        //         Can Trade: ${monteCarloResult.canTrade ? '✅' : '❌'}
-        //         Risk of Ruin: ${(monteCarloResult.riskOfRuin * 100).toFixed(2)}%
-        //         Win Probability: ${(monteCarloResult.winProbability * 100).toFixed(1)}%
-        //         Confidence: ${(monteCarloResult.confidence * 100).toFixed(1)}%
-        //         Multiplier: ${monteCarloResult.recommendedStakeMultiplier.toFixed(2)}x
-        //         💰 STAKE SIZING:
-        //         Current Stake: $${this.currentStake.toFixed(2)}
-        //         Recent Win Rate: ${(this.stakeSizer.getRecentWinRate(20) * 100).toFixed(1)}%
-        //         Mode: ${this.tradingMode}
-        //     `);
-        //     this.requestDigitProposal(asset, digitBias);
-        // } else if (this.tradingMode === 'accumulator') {
-        // Could implement accumulator mode here
         if (!this.tradeInProgress) {
             this.requestAccumulatorProposal(asset);
         }
-        // }
-    }
-
-    /**
-     * Determine best trading mode based on conditions
-     */
-    determineTradingMode(analysis, digitBias, monteCarloResult) {
-        // Default: Digit Differ
-        this.tradingMode = 'digit_differ';
-
-        // Could add logic here for mode switching
-        // Example: Switch to accumulator in very low volatility
-        if (analysis.volatilityRegime === 'low' && digitBias.biasStrength > 2.0) {
-            // Keep Digit Differ (better for clustering)
-            this.tradingMode = 'digit_differ';
-        }
-    }
-
-    logTradeDecision(asset, analysis, digitBias, monteCarloResult, adaptiveThreshold) {
-        console.log(`\n${'═'.repeat(70)}`);
-        console.log(`🎯 TRADE EVALUATION: ${asset}`);
-        console.log(`${'═'.repeat(70)}`);
-        console.log(`📊 MARKET REGIME:`);
-        console.log(`   AccumFilter Number: ${this.filterNum}`);
-        console.log(`   AccumEntry Tick: ${this.entryTick}`);
-        console.log(`   AccumFiltered Digits: ${this.filteredArray.join(', ')}`);
-        console.log(`   AccumGrowth Rate: ${(this.config.growthRate * 100).toFixed(0)}%`);
-        console.log(`   Volatility: ${this.volatilityRegime}`);
-        console.log(`   Score: ${(analysis.overallScore * 100).toFixed(1)}%`);
-        console.log(`   BB Width: ${(analysis.scores.bandWidth * 100).toFixed(1)}%`);
-        console.log(`   MACD Flat: ${(analysis.scores.macdFlat * 100).toFixed(1)}%`);
-        console.log(`   Price Position: ${(analysis.scores.pricePosition * 100).toFixed(1)}%`);
-        console.log(`   Tick Stability: ${(analysis.scores.tickStability * 100).toFixed(1)}%`);
-        console.log(`   VolTrend: ${(analysis.scores.volTrend * 100).toFixed(1)}%`);
-        console.log(`   ATR: ${(analysis.atr || 0).toFixed(8)}`);
-        console.log(`\n💹 DIGIT CLUSTERING:`);
-        console.log(`   Last 10 Digits: ${this.tickHistory[asset].slice(-10).join(', ')}`);
-        console.log(`   Most Frequent: ${digitBias.mostFrequent}`);
-        console.log(`   Frequency: ${digitBias.frequency}/50`);
-        console.log(`   Bias Strength: ${digitBias.biasStrength.toFixed(2)}`);
-        console.log(`   Adaptive Threshold: ${adaptiveThreshold.toFixed(2)}`);
-        console.log(`   Entropy: ${digitBias.normalizedEntropy.toFixed(3)}`);
-        console.log(`\n🎲 MONTE CARLO:`);
-        console.log(`   Can Trade: ${monteCarloResult.canTrade ? '✅' : '❌'}`);
-        console.log(`   Risk of Ruin: ${(monteCarloResult.riskOfRuin * 100).toFixed(2)}%`);
-        console.log(`   Confidence: ${(monteCarloResult.confidence * 100).toFixed(1)}%`);
-        console.log(`   Win Probability: ${(monteCarloResult.winProbability * 100).toFixed(1)}%`);
-        console.log(`   Recommended Multiplier: ${monteCarloResult.recommendedStakeMultiplier.toFixed(2)}x`);
-        console.log(`\n💰 STAKE SIZING:`);
-        console.log(`   Current Stake: $${this.currentStake.toFixed(2)}`);
-        console.log(`   Recent Win Rate: ${(this.stakeSizer.getRecentWinRate(20) * 100).toFixed(1)}%`);
-        console.log(`   Mode: ${this.tradingMode}`);
-        console.log(`${'═'.repeat(70)}\n`);
     }
 
     requestAccumulatorProposal(asset) {
@@ -1480,24 +1329,20 @@ class DigitDifferBotV2 {
 
         this.currentStake = Math.max(this.config.initialStake, dynamicStake);
 
-        // 6️⃣ Determine trading mode
-        this.determineTradingMode(analysis, digitBias, monteCarloResult);
-
         // 7️⃣ Log decision
         // this.logTradeDecision(asset, analysis, digitBias, monteCarloResult, adaptiveThreshold);
 
         // 8️⃣ Request proposal
         if (condition
-            && this.tradingMode === 'digit_differ'
-            // && this.volatilityRegime === 'low'
+            && this.volatilityRegime === 'low'
             // && analysis.overallScore >= 0.95
-            // && analysis.scores.bandWidth >= 0.85
-            // && analysis.scores.macdFlat >= 0.90
-            // && analysis.scores.pricePosition >= 0.90
-            // && analysis.scores.tickStability >= 0.90
-            // && analysis.scores.volTrend >= 0.65
-            // && digitBias.biasStrength >= 2.0
-            // && digitBias.currentDigit !== digitBias.mostFrequent
+            && analysis.scores.bandWidth >= 0.85
+            && analysis.scores.macdFlat >= 0.90
+            && analysis.scores.pricePosition >= 0.90
+            && analysis.scores.tickStability >= 0.90
+            && analysis.scores.volTrend >= 0.65
+            && digitBias.biasStrength >= 2.0
+            && digitBias.currentDigit !== digitBias.mostFrequent
             // && monteCarloResult.riskOfRuin < 0.05
         ) {
             this.logTradeDecision(asset, analysis, digitBias, monteCarloResult, adaptiveThreshold);
@@ -1511,16 +1356,6 @@ class DigitDifferBotV2 {
             // Place trade
             this.placeDigitTrade(asset, digitBias, analysis, monteCarloResult, adaptiveThreshold);
         }
-
-        // Check if we should place trade
-        // if (condition) {
-        //     this.tradedDigitArray.push(stayedInArray[99]);
-        //     this.filteredArray = appearedOnceArray;
-        //     this.entryTick = stayedInArray[99];
-        //     console.log(`   Traded Digit Array: [${this.tradedDigitArray.join(', ')}]`);
-        //     // Place trade
-        //     this.placeDigitTrade(asset);
-        // }
     }
 
     placeDigitTrade(asset, digitBias, analysis, monteCarloResult, adaptiveThreshold) {
@@ -1687,6 +1522,43 @@ class DigitDifferBotV2 {
             return;
         }
         console.log(`✅ Sold for: $${message.sell?.sold_for || 'N/A'}`);
+    }
+
+    logTradeDecision(asset, analysis, digitBias, monteCarloResult, adaptiveThreshold) {
+        console.log(`\n${'═'.repeat(70)}`);
+        console.log(`🎯 TRADE EVALUATION: ${asset}`);
+        console.log(`${'═'.repeat(70)}`);
+        console.log(`📊 MARKET REGIME:`);
+        console.log(`   AccumFilter Number: ${this.filterNum}`);
+        console.log(`   AccumEntry Tick: ${this.entryTick}`);
+        console.log(`   AccumFiltered Digits: ${this.filteredArray.join(', ')}`);
+        console.log(`   AccumGrowth Rate: ${(this.config.growthRate * 100).toFixed(0)}%`);
+        console.log(`   Volatility: ${this.volatilityRegime}`);
+        console.log(`   Score: ${(analysis.overallScore * 100).toFixed(1)}%`);
+        console.log(`   BB Width: ${(analysis.scores.bandWidth * 100).toFixed(1)}%`);
+        console.log(`   MACD Flat: ${(analysis.scores.macdFlat * 100).toFixed(1)}%`);
+        console.log(`   Price Position: ${(analysis.scores.pricePosition * 100).toFixed(1)}%`);
+        console.log(`   Tick Stability: ${(analysis.scores.tickStability * 100).toFixed(1)}%`);
+        console.log(`   VolTrend: ${(analysis.scores.volTrend * 100).toFixed(1)}%`);
+        console.log(`   ATR: ${(analysis.atr || 0).toFixed(8)}`);
+        console.log(`\n💹 DIGIT CLUSTERING:`);
+        console.log(`   Last 10 Digits: ${this.tickHistory[asset].slice(-10).join(', ')}`);
+        console.log(`   Most Frequent: ${digitBias.mostFrequent}`);
+        console.log(`   Frequency: ${digitBias.frequency}/50`);
+        console.log(`   Bias Strength: ${digitBias.biasStrength.toFixed(2)}`);
+        console.log(`   Adaptive Threshold: ${adaptiveThreshold.toFixed(2)}`);
+        console.log(`   Entropy: ${digitBias.normalizedEntropy.toFixed(3)}`);
+        console.log(`\n🎲 MONTE CARLO:`);
+        console.log(`   Can Trade: ${monteCarloResult.canTrade ? '✅' : '❌'}`);
+        console.log(`   Risk of Ruin: ${(monteCarloResult.riskOfRuin * 100).toFixed(2)}%`);
+        console.log(`   Confidence: ${(monteCarloResult.confidence * 100).toFixed(1)}%`);
+        console.log(`   Win Probability: ${(monteCarloResult.winProbability * 100).toFixed(1)}%`);
+        console.log(`   Recommended Multiplier: ${monteCarloResult.recommendedStakeMultiplier.toFixed(2)}x`);
+        console.log(`\n💰 STAKE SIZING:`);
+        console.log(`   Current Stake: $${this.currentStake.toFixed(2)}`);
+        console.log(`   Recent Win Rate: ${(this.stakeSizer.getRecentWinRate(20) * 100).toFixed(1)}%`);
+        console.log(`   Mode: ${this.tradingMode}`);
+        console.log(`${'═'.repeat(70)}\n`);
     }
 
     // ══════════════════════════════════════════════════════════════════════════
