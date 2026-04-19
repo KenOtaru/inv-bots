@@ -1323,20 +1323,20 @@ class DigitDifferBotV2 {
 
         // 8️⃣ Request proposal
         if (condition
-            && this.volatilityRegime === 'low'
+            // && this.volatilityRegime === 'low'
             // && analysis.overallScore >= 0.95
-            && analysis.scores.bandWidth >= 0.85
-            && analysis.scores.macdFlat >= 0.75
-            && analysis.scores.pricePosition >= 0.75
-            && analysis.scores.tickStability >= 0.75
-            && analysis.scores.volTrend >= 0.65
+            // && analysis.scores.bandWidth >= 0.85
+            // && analysis.scores.macdFlat >= 0.75
+            // && analysis.scores.pricePosition >= 0.75
+            // && analysis.scores.tickStability >= 0.75
+            // && analysis.scores.volTrend >= 0.65
             && digitBias.biasStrength >= adaptiveThreshold
             // && this.currentDigit === digitBias.mostFrequent
             // && monteCarloResult.riskOfRuin < 0.05
         ) {
             this.logTradeDecision(asset, analysis, digitBias, monteCarloResult, adaptiveThreshold);
 
-            this.differRequest = true;
+            // this.differRequest = true;
 
             this.tradedDigitArray.push(stayedInArray[99]);
             this.filteredArray = appearedOnceArray;
