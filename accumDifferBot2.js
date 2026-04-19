@@ -1319,7 +1319,7 @@ class DigitDifferBotV2 {
         // 8️⃣ Request proposal
         if (condition
             // && this.volatilityRegime === 'low'
-            && analysis.overallScore >= 0.75
+            // && analysis.overallScore >= 0.75
             // && analysis.scores.bandWidth >= 0.85
             // && analysis.scores.macdFlat >= 0.75
             // && analysis.scores.pricePosition >= 0.75
