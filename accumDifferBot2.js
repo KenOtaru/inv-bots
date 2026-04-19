@@ -1307,7 +1307,7 @@ class DigitDifferBotV2 {
         // } else if (this.tradingMode === 'accumulator') {
         // Could implement accumulator mode here
         if (this.differRequest) {
-            this.requestDigitProposal(asset, digitBias);
+            // this.requestDigitProposal(asset, digitBias);
         } else {
             this.requestAccumulatorProposal(asset);
         }
@@ -1388,31 +1388,6 @@ class DigitDifferBotV2 {
         this.sendRequest(proposal);
     }
 
-    // requestDigitProposal(asset, digitBias) {
-    //     if (this.tradeInProgress) return;
-
-    //     const proposal = {
-    //         proposal: 1,
-    //         amount: this.currentStake.toFixed(2),
-    //         basis: 'stake',
-    //         contract_type: 'DIGITDIFF',
-    //         currency: 'USD',
-    //         symbol: asset,
-    //         barrier: digitBias.mostFrequent.toString(),
-    //         duration: 1,
-    //         duration_unit: 't'
-    //     };
-
-    //     this.sendRequest(proposal);
-
-    //     this.activeTrades[asset] = {
-    //         status: 'requesting_proposal',
-    //         predictedDigit: digitBias.mostFrequent,
-    //         stake: this.currentStake,
-    //         biasStrength: digitBias.biasStrength,
-    //         entryTime: Date.now()
-    //     };
-    // }
 
     handleProposal(message) {
         const asset = message.echo_req?.symbol;
@@ -1427,6 +1402,8 @@ class DigitDifferBotV2 {
         }
 
         if (!message.proposal) return;
+
+        if (this.tradeInProgress) return;
 
         const proposalId = message.proposal.id;
         this.assetStates[asset].proposalId = proposalId;
@@ -1583,9 +1560,10 @@ class DigitDifferBotV2 {
         // }
     }
 
-    placeDigitTrade(asset) {
+    placeDigitTrade(asset, digitBias) {
         const proposalId = this.assetStates[asset]?.proposalId;
         if (!proposalId) return;
+        if (this.tradeInProgress) return;
 
         const trade = this.activeTrades[asset];
 
