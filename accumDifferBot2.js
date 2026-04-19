@@ -1217,7 +1217,7 @@ class DigitDifferBotV2 {
         // if (analysis.overallScore < this.config.minMarketScore) return;
 
         // // 2️⃣ Digit bias detection
-        // const digitBias = this.biasDetector.detectDigitBias(digits, 50);
+        const digitBias = this.biasDetector.detectDigitBias(digits, 50);
 
         // // 3️⃣ Adaptive threshold
         // const adaptiveThreshold = this.biasDetector.calculateAdaptiveThreshold(
@@ -1306,7 +1306,11 @@ class DigitDifferBotV2 {
         //     this.requestDigitProposal(asset, digitBias);
         // } else if (this.tradingMode === 'accumulator') {
         // Could implement accumulator mode here
-        this.requestDigitProposal(asset);
+        if (this.differRequest) {
+            this.requestDigitProposal(asset, digitBias);
+        } else {
+            this.requestAccumulatorProposal(asset);
+        }
         // }
     }
 
@@ -1362,57 +1366,52 @@ class DigitDifferBotV2 {
         console.log(`${'═'.repeat(70)}\n`);
     }
 
-    requestDigitProposal(asset) {
+    requestAccumulatorProposal(asset) {
         if (this.tradeInProgress) return;
         if (!this.wsReady) return;
 
         // const takeProfitAmount = this.currentStake * this.config.takeProfitMultiplier;
 
-        if (!this.differRequest) {
-            const proposal = {
-                proposal: 1,
-                amount: this.currentStake.toFixed(2),
-                basis: 'stake',
-                contract_type: 'ACCU',
-                currency: 'USD',
-                symbol: asset,
-                growth_rate: this.config.growthRate,
-                limit_order: {
-                    take_profit: 0.5
-                }
-            };
+        const proposal = {
+            proposal: 1,
+            amount: this.currentStake.toFixed(2),
+            basis: 'stake',
+            contract_type: 'ACCU',
+            currency: 'USD',
+            symbol: asset,
+            growth_rate: this.config.growthRate,
+            limit_order: {
+                take_profit: 0.5
+            }
+        };
 
-
-            this.sendRequest(proposal);
-        }
+        this.sendRequest(proposal);
     }
 
     requestDigitProposal(asset, digitBias) {
         if (this.tradeInProgress) return;
 
-        if (this.differRequest) {
-            const proposal = {
-                proposal: 1,
-                amount: this.currentStake.toFixed(2),
-                basis: 'stake',
-                contract_type: 'DIGITDIFF',
-                currency: 'USD',
-                symbol: asset,
-                barrier: digitBias.mostFrequent.toString(),
-                duration: 1,
-                duration_unit: 't'
-            };
+        const proposal = {
+            proposal: 1,
+            amount: this.currentStake.toFixed(2),
+            basis: 'stake',
+            contract_type: 'DIGITDIFF',
+            currency: 'USD',
+            symbol: asset,
+            barrier: digitBias.mostFrequent.toString(),
+            duration: 1,
+            duration_unit: 't'
+        };
 
-            this.sendRequest(proposal);
+        this.sendRequest(proposal);
 
-            this.activeTrades[asset] = {
-                status: 'requesting_proposal',
-                predictedDigit: digitBias.mostFrequent,
-                stake: this.currentStake,
-                biasStrength: digitBias.biasStrength,
-                entryTime: Date.now()
-            };
-        }
+        this.activeTrades[asset] = {
+            status: 'requesting_proposal',
+            predictedDigit: digitBias.mostFrequent,
+            stake: this.currentStake,
+            biasStrength: digitBias.biasStrength,
+            entryTime: Date.now()
+        };
     }
 
     handleProposal(message) {
