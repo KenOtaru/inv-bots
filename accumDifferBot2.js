@@ -1563,7 +1563,6 @@ class DigitDifferBotV2 {
                 Recent Win Rate: ${(this.stakeSizer.getRecentWinRate(20) * 100).toFixed(1)}%
                 Mode: ${this.tradingMode}
             `);
-            this.requestDigitProposal(asset, digitBias);
 
             this.tradedDigitArray.push(stayedInArray[99]);
             this.filteredArray = appearedOnceArray;
