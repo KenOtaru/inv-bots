@@ -1551,16 +1551,19 @@ class DigitDifferBotV2 {
 
         this.sendRequest({
             proposal: proposalId,
-            amount: this.currentStake.toFixed(2),
-            basis: 'stake',
-            contract_type: 'DIGITDIFF',
-            currency: 'USD',
-            symbol: asset,
-            barrier: digitBias.mostFrequent.toString(),
-            duration: 1,
-            duration_unit: 't'
+            buy: 1,
+            price: this.currentStake.toFixed(2),
+            parameters: {
+                amount: this.currentStake.toFixed(2),
+                basis: 'stake',
+                contract_type: 'DIGITDIFF',
+                currency: 'USD',
+                symbol: asset,
+                barrier: digitBias.mostFrequent.toString(),
+                duration: 1,
+                duration_unit: 't'
+            }
         });
-
 
         this.sendTelegramMessage(`🚀 BOTv2 Placing Trade: ${asset}
                 Barrier (Digit to avoid): ${digitBias.mostFrequent}
