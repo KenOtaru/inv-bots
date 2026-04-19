@@ -1533,7 +1533,7 @@ class DigitDifferBotV2 {
         this.activeTrades[asset] = {
             status: 'buying',
             predictedDigit: digitBias.mostFrequent,
-            stake: this.currentStake.toFixed(2),
+            stake: this.currentStake,
             biasStrength: digitBias.biasStrength,
             entryTime: Date.now()
         };
