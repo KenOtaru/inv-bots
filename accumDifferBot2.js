@@ -1190,33 +1190,17 @@ class DigitDifferBotV2 {
 
         this.currentDigit = lastDigit;
 
-        console.log(`📊 [${asset}] ${price}: ${this.tickHistory[asset].slice(-10).join(', ')}`);
+        // console.log(`📊 [${asset}] ${price}: ${this.tickHistory[asset].slice(-10).join(', ')}`);
 
         if (!this.wsReady) return;
         if (this.activeTrades[asset]) return;
         if (this.tickHistory[asset].length < this.config.requiredHistoryLength) return;
         if (Date.now() - (this.lastTradeTime[asset] || 0) < this.config.minTimeBetweenTrades) return;
 
-        // this.evaluateAndTrade(asset);
         if (!this.tradeInProgress) {
             this.requestAccumulatorProposal(asset);
         }
     }
-
-    // ══════════════════════════════════════════════════════════════════════════
-    // TRADE EVALUATION
-    // ══════════════════════════════════════════════════════════════════════════
-    // evaluateAndTrade(asset) {
-    //     const prices = this.priceHistories[asset];
-    //     const digits = this.tickHistory[asset];
-
-    //     if (!prices || prices.length < 50) return;
-    //     if (!digits || digits.length < 50) return;
-
-    //     if (!this.tradeInProgress) {
-    //         this.requestAccumulatorProposal(asset);
-    //     }
-    // }
 
     requestAccumulatorProposal(asset) {
         if (this.tradeInProgress) return;
