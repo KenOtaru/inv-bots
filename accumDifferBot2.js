@@ -1347,14 +1347,14 @@ class DigitDifferBotV2 {
         } else {
             console.log(`Analysis Stats:
                 Condition: ${condition}
-                Overall Score: ${analysis.overallScore}
+                Overall Score: ${analysis.overallScore.toFixed(2)}
                 Volatility Regime: ${this.volatilityRegime}
-                Band Width: ${analysis.scores.bandWidth}
-                MACD Flat: ${analysis.scores.macdFlat}
-                Price Position: ${analysis.scores.pricePosition}
-                Tick Stability: ${analysis.scores.tickStability}
-                Vol Trend: ${analysis.scores.volTrend}
-                Digit Bias: ${digitBias.biasStrength}
+                Band Width: ${analysis.scores.bandWidth.toFixed(2)}
+                MACD Flat: ${analysis.scores.macdFlat.toFixed(2)}
+                Price Position: ${analysis.scores.pricePosition.toFixed(2)}
+                Tick Stability: ${analysis.scores.tickStability.toFixed(2)}
+                Vol Trend: ${analysis.scores.volTrend.toFixed(2)}
+                Digit Bias: ${digitBias.biasStrength.toFixed(2)} | ${adaptiveThreshold.toFixed(2)}
                 Current Digit: ${this.currentDigit} | Predicted Digit: ${digitBias.mostFrequent}
                 `);
         }
