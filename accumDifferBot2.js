@@ -1550,7 +1550,6 @@ class DigitDifferBotV2 {
         // });
 
         this.sendRequest({
-            proposal: proposalId,
             buy: 1,
             price: this.currentStake.toFixed(2),
             parameters: {
