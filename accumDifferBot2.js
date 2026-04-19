@@ -1306,9 +1306,7 @@ class DigitDifferBotV2 {
         //     this.requestDigitProposal(asset, digitBias);
         // } else if (this.tradingMode === 'accumulator') {
         // Could implement accumulator mode here
-        if (this.differRequest) {
-            // this.requestDigitProposal(asset, digitBias);
-        } else {
+        if (!this.tradeInProgress) {
             this.requestAccumulatorProposal(asset);
         }
         // }
@@ -1490,7 +1488,7 @@ class DigitDifferBotV2 {
 
         // 8️⃣ Request proposal
         if (condition
-            // && this.tradingMode === 'digit_differ'
+            && this.tradingMode === 'digit_differ'
             // && this.volatilityRegime === 'low'
             // && analysis.overallScore >= 0.95
             // && analysis.scores.bandWidth >= 0.85
