@@ -1188,30 +1188,35 @@ class DigitDifferBotV2 {
 
         this.tickCounts[asset] = (this.tickCounts[asset] || 0) + 1;
 
-        // console.log(`📊 [${asset}] ${price}: ${this.tickHistory[asset].slice(-10).join(', ')}`);
+        this.currentDigit = lastDigit;
+
+        console.log(`📊 [${asset}] ${price}: ${this.tickHistory[asset].slice(-10).join(', ')}`);
 
         if (!this.wsReady) return;
         if (this.activeTrades[asset]) return;
         if (this.tickHistory[asset].length < this.config.requiredHistoryLength) return;
         if (Date.now() - (this.lastTradeTime[asset] || 0) < this.config.minTimeBetweenTrades) return;
 
-        this.evaluateAndTrade(asset);
+        // this.evaluateAndTrade(asset);
+        if (!this.tradeInProgress) {
+            this.requestAccumulatorProposal(asset);
+        }
     }
 
     // ══════════════════════════════════════════════════════════════════════════
     // TRADE EVALUATION
     // ══════════════════════════════════════════════════════════════════════════
-    evaluateAndTrade(asset) {
-        const prices = this.priceHistories[asset];
-        const digits = this.tickHistory[asset];
+    // evaluateAndTrade(asset) {
+    //     const prices = this.priceHistories[asset];
+    //     const digits = this.tickHistory[asset];
 
-        if (!prices || prices.length < 50) return;
-        if (!digits || digits.length < 50) return;
+    //     if (!prices || prices.length < 50) return;
+    //     if (!digits || digits.length < 50) return;
 
-        if (!this.tradeInProgress) {
-            this.requestAccumulatorProposal(asset);
-        }
-    }
+    //     if (!this.tradeInProgress) {
+    //         this.requestAccumulatorProposal(asset);
+    //     }
+    // }
 
     requestAccumulatorProposal(asset) {
         if (this.tradeInProgress) return;
@@ -1342,7 +1347,7 @@ class DigitDifferBotV2 {
             && analysis.scores.tickStability >= 0.90
             && analysis.scores.volTrend >= 0.65
             && digitBias.biasStrength >= 2.0
-            && digitBias.currentDigit !== digitBias.mostFrequent
+            && this.currentDigit !== digitBias.mostFrequent
             // && monteCarloResult.riskOfRuin < 0.05
         ) {
             this.logTradeDecision(asset, analysis, digitBias, monteCarloResult, adaptiveThreshold);
@@ -1363,7 +1368,7 @@ class DigitDifferBotV2 {
                 Tick Stability: ${analysis.scores.tickStability}
                 Vol Trend: ${analysis.scores.volTrend}
                 Digit Bias: ${digitBias.biasStrength}
-                Current Digit: ${currentDigitCount} | Predicted Digit: ${digitBias.mostFrequent}
+                Current Digit: ${this.currentDigit} | Predicted Digit: ${digitBias.mostFrequent}
                 `);
         }
     }
