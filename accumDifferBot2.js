@@ -1355,6 +1355,16 @@ class DigitDifferBotV2 {
             console.log(`   Traded Digit Array: [${this.tradedDigitArray.join(', ')}]`);
             // Place trade
             this.placeDigitTrade(asset, digitBias, analysis, monteCarloResult, adaptiveThreshold);
+        } else {
+            console.log(`Analysis Stats:
+                Band Width: ${analysis.scores.bandWidth}
+                MACD Flat: ${analysis.scores.macdFlat}
+                Price Position: ${analysis.scores.pricePosition}
+                Tick Stability: ${analysis.scores.tickStability}
+                Vol Trend: ${analysis.scores.volTrend}
+                Digit Bias: ${digitBias.biasStrength}
+                Current Digit: ${currentDigitCount} | Predicted Digit: ${digitBias.mostFrequent}
+                `);
         }
     }
 
