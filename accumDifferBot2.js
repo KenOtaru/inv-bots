@@ -872,6 +872,7 @@ class DigitDifferBotV2 {
         this.filteredArray = [];
         this.filterNum = this.config.filterNum;
         this.entryTick = null;
+        this.differRequest = false;
 
         // Adaptive thresholds
         this.biasThresholdAdaptive = this.config.biasThreshold;
@@ -1216,7 +1217,7 @@ class DigitDifferBotV2 {
         // if (analysis.overallScore < this.config.minMarketScore) return;
 
         // // 2️⃣ Digit bias detection
-        const digitBias = this.biasDetector.detectDigitBias(digits, 50);
+        // const digitBias = this.biasDetector.detectDigitBias(digits, 50);
 
         // // 3️⃣ Adaptive threshold
         // const adaptiveThreshold = this.biasDetector.calculateAdaptiveThreshold(
@@ -1305,7 +1306,7 @@ class DigitDifferBotV2 {
         //     this.requestDigitProposal(asset, digitBias);
         // } else if (this.tradingMode === 'accumulator') {
         // Could implement accumulator mode here
-        this.requestDigitProposal(asset, digitBias);
+        this.requestDigitProposal(asset);
         // }
     }
 
@@ -1361,44 +1362,57 @@ class DigitDifferBotV2 {
         console.log(`${'═'.repeat(70)}\n`);
     }
 
+    requestDigitProposal(asset) {
+        if (this.tradeInProgress) return;
+        if (!this.wsReady) return;
+
+        // const takeProfitAmount = this.currentStake * this.config.takeProfitMultiplier;
+
+        if (!this.differRequest) {
+            const proposal = {
+                proposal: 1,
+                amount: this.currentStake.toFixed(2),
+                basis: 'stake',
+                contract_type: 'ACCU',
+                currency: 'USD',
+                symbol: asset,
+                growth_rate: this.config.growthRate,
+                limit_order: {
+                    take_profit: 0.5
+                }
+            };
+
+
+            this.sendRequest(proposal);
+        }
+    }
+
     requestDigitProposal(asset, digitBias) {
         if (this.tradeInProgress) return;
 
-        const proposal = {
-            proposal: 1,
-            amount: this.currentStake.toFixed(2),
-            basis: 'stake',
-            contract_type: 'DIGITDIFF',
-            currency: 'USD',
-            symbol: asset,
-            barrier: digitBias.mostFrequent.toString(),
-            duration: 1,
-            duration_unit: 't'
-        };
+        if (this.differRequest) {
+            const proposal = {
+                proposal: 1,
+                amount: this.currentStake.toFixed(2),
+                basis: 'stake',
+                contract_type: 'DIGITDIFF',
+                currency: 'USD',
+                symbol: asset,
+                barrier: digitBias.mostFrequent.toString(),
+                duration: 1,
+                duration_unit: 't'
+            };
 
-        const proposal2 = {
-            proposal: 1,
-            amount: this.currentStake.toFixed(2),
-            basis: 'stake',
-            contract_type: 'ACCU',
-            currency: 'USD',
-            symbol: asset,
-            growth_rate: this.config.growthRate,
-            limit_order: {
-                take_profit: 0.01
-            }
-        };
+            this.sendRequest(proposal);
 
-        this.sendRequest(proposal);
-        this.sendRequest(proposal2);
-
-        this.activeTrades[asset] = {
-            status: 'requesting_proposal',
-            predictedDigit: digitBias.mostFrequent,
-            stake: this.currentStake,
-            biasStrength: digitBias.biasStrength,
-            entryTime: Date.now()
-        };
+            this.activeTrades[asset] = {
+                status: 'requesting_proposal',
+                predictedDigit: digitBias.mostFrequent,
+                stake: this.currentStake,
+                biasStrength: digitBias.biasStrength,
+                entryTime: Date.now()
+            };
+        }
     }
 
     handleProposal(message) {
@@ -1513,6 +1527,8 @@ class DigitDifferBotV2 {
         ) {
             this.logTradeDecision(asset, analysis, digitBias, monteCarloResult, adaptiveThreshold);
 
+            this.differRequest = true;
+
             this.sendTelegramMessage(`🚀 BOTv2 Placing Trade: ${asset}
                 Barrier (Digit to avoid): ${digitBias.mostFrequent}
                 Digits: ${this.tickHistory[asset].slice(-10).join(', ')}
@@ -1547,7 +1563,7 @@ class DigitDifferBotV2 {
                 Recent Win Rate: ${(this.stakeSizer.getRecentWinRate(20) * 100).toFixed(1)}%
                 Mode: ${this.tradingMode}
             `);
-            // this.requestDigitProposal(asset, digitBias);
+            this.requestDigitProposal(asset, digitBias);
 
             this.tradedDigitArray.push(stayedInArray[99]);
             this.filteredArray = appearedOnceArray;
@@ -1879,6 +1895,7 @@ class DigitDifferBotV2 {
         this.tradeInProgress = false;
         this.tradeStartTime = null;
         delete this.activeTrades[asset];
+        this.differRequest = false;
 
         // Telegram notification
         const winRate = this.totalTrades > 0 ? (this.totalWins / this.totalTrades * 100).toFixed(1) : '0.0';
