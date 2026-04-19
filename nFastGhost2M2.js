@@ -53,7 +53,7 @@ try {
     // node-telegram-bot-api not installed
 }
 
-const STATE_FILE = path.join(__dirname, 'nFastGhostMMulti000001-state.json');
+const STATE_FILE = path.join(__dirname, 'nFastGhost2M2-state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================================================
@@ -65,10 +65,10 @@ const CONFIG = {
     endpoint: 'wss://ws.derivws.com/websockets/v3',
 
     // Account — use environment variables
-    api_token: '0P94g4WdSrSrzir',
+    api_token: 'Dz2V2KvRf4Uukt3',
 
     // Multi-Asset Configuration
-    assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'], //['R_10', 'R_25', 'R_50', 'R_75', 'RDBULL', 'RDBEAR']
+    assets: ['R_10', 'R_25', 'R_50', 'R_75'], //['R_10', 'R_25', 'R_50', 'R_75', 'RDBULL', 'RDBEAR']
 
     // Contract Configuration
     contract_type: 'DIGITDIFF',
@@ -1002,7 +1002,7 @@ class MultiAssetGhostBot {
         if (message.msg_type === 'authorize') {
             if (message.error) {
                 console.error('Authentication failed:', message.error.message);
-                this.sendTelegramMessage(`❌ <b>Authentication Failed:</b> ${message.error.message}`);
+                this.sendTelegramMessage(`❌ <b>Authentication Failed 2:</b> ${message.error.message}`);
                 return;
             }
             console.log('✅ Authenticated successfully');
@@ -1030,7 +1030,7 @@ class MultiAssetGhostBot {
         } else if (message.msg_type === 'buy') {
             if (message.error) {
                 console.error('Error placing trade:', message.error.message);
-                this.sendTelegramMessage(`❌ <b>Trade Error:</b> ${message.error.message}`);
+                this.sendTelegramMessage(`❌ <b>Trade Error 2:</b> ${message.error.message}`);
                 this.tradeInProgress = false;
                 return;
             }
@@ -1333,7 +1333,7 @@ class MultiAssetGhostBot {
         if (this.totalProfitLoss <= -CONFIG.risk.max_daily_loss) {
             Logger.warn(`🛑 Daily loss limit reached! Stopping.`);
             this.sendTelegramMessage(
-                `🛑 <b>Stop Loss Reached!</b>\nFinal P&L: $${this.totalProfitLoss.toFixed(2)}`
+                `🛑 <b>Stop Loss Reached 2!</b>\nFinal P&L: $${this.totalProfitLoss.toFixed(2)}`
             );
             this.disconnect();
             return;
@@ -1342,7 +1342,7 @@ class MultiAssetGhostBot {
         if (this.totalProfitLoss >= CONFIG.risk.take_profit) {
             Logger.info(`🎯 Take profit reached! Stopping.`);
             this.sendTelegramMessage(
-                `🎉 <b>Take Profit Reached!</b>\nFinal P&L: $${this.totalProfitLoss.toFixed(2)}`
+                `🎉 <b>Take Profit Reached 2!</b>\nFinal P&L: $${this.totalProfitLoss.toFixed(2)}`
             );
             this.disconnect();
             return;
@@ -1377,7 +1377,7 @@ class MultiAssetGhostBot {
         const declineFrac = d.declineFraction || '---';
 
         const message = `
-            🔔 <b>Trade Opened (nFastGhostHHF Multi-Asset)</b>
+            🔔 <b>Trade2 Opened (nFastGhostHHF2 Multi-Asset)</b>
 
             📊 <b>${asset}</b>
             🎯 <b>DIGITDIFF Barrier:</b> ${tradeDigit}
@@ -1564,7 +1564,7 @@ class MultiAssetGhostBot {
             : null;
 
         const telegramMsg = `
-            ${resultEmoji} <b>(nFastGhostHF Multi-Asset)</b>
+            ${resultEmoji} <b>(nFastGhostHF2 Multi-Asset)</b>
 
             📊 <b>${asset}</b>
             ${won ? '🟢' : '🔴'} <b>P&L:</b> ${pnlStr}
@@ -1596,7 +1596,7 @@ class MultiAssetGhostBot {
             this.totalProfitLoss <= -CONFIG.risk.max_daily_loss) {
             console.log('🛑 Stop loss reached');
             this.sendTelegramMessage(
-                `🛑 <b>Stop Loss Reached!</b>\n` +
+                `🛑 <b>Stop Loss Reached 2!</b>\n` +
                 `Final P&L: $${this.totalProfitLoss.toFixed(2)}\n` +
                 `Total Trades: ${this.totalTrades}\n` +
                 `Win Rate: ${winRate}%`
@@ -1606,9 +1606,9 @@ class MultiAssetGhostBot {
         }
 
         if (this.totalProfitLoss >= CONFIG.risk.take_profit) {
-            console.log('🎉 Take profit reached');
+            console.log('🎉 Take profit reached 2');
             this.sendTelegramMessage(
-                `🎉 <b>Take Profit Reached!</b>\n` +
+                `🎉 <b>Take Profit Reached 2!</b>\n` +
                 `Final P&L: $${this.totalProfitLoss.toFixed(2)}\n` +
                 `Total Trades: ${this.totalTrades}\n` +
                 `Win Rate: ${winRate}%`
@@ -1655,7 +1655,7 @@ class MultiAssetGhostBot {
         const pnlStr = (stats.pnl >= 0 ? '+' : '') + '$' + stats.pnl.toFixed(2);
 
         const message = `
-            ⏰ <b>nFastGhostHF Multi-Asset Hourly Summary</b>
+            ⏰ <b>nFastGhostHF Multi-Asset Hourly Summary 2</b>
 
             📊 <b>Last Hour</b>
             ├ Trades: ${stats.trades}
@@ -1733,7 +1733,7 @@ class MultiAssetGhostBot {
         if (this.reconnectAttempts >= this.maxReconnectAttempts) {
             console.error('❌ Max reconnection attempts reached');
             this.sendTelegramMessage(
-                `❌ <b>Max Reconnection Attempts Reached</b>\n` +
+                `❌ <b>Max Reconnection Attempts Reached 2</b>\n` +
                 `Please restart the bot manually.\n` +
                 `Final P&L: $${this.totalProfitLoss.toFixed(2)}`
             );
@@ -1759,7 +1759,7 @@ class MultiAssetGhostBot {
         );
 
         this.sendTelegramMessage(
-            `⚠️ <b>CONNECTION LOST - RECONNECTING</b>\n` +
+            `⚠️ <b>CONNECTION LOST - RECONNECTING 2</b>\n` +
             `📊 Attempt: ${this.reconnectAttempts}/${this.maxReconnectAttempts}\n` +
             `⏱️ Retrying in ${(delay / 1000).toFixed(1)}s\n` +
             `💾 State preserved: ${this.totalTrades} trades, $${this.totalProfitLoss.toFixed(2)} P&L`
