@@ -1602,7 +1602,8 @@ class DigitDifferBotV2 {
     }
 
     handleBuyResponse(message) {
-        const asset = this.findAssetByStatus('buying');
+        const trade = this.activeTrades[asset];
+        const asset = trade.asset;
 
         if (message.error) {
             console.error(`❌ Buy error: ${message.error.message}`);
@@ -1618,7 +1619,7 @@ class DigitDifferBotV2 {
             return;
         }
 
-        const trade = this.activeTrades[asset];
+
         const contractId = message.buy.contract_id;
 
         console.log(`✅ Contract opened: ${contractId} on ${asset}`);
