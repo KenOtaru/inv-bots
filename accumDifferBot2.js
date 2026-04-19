@@ -1203,11 +1203,6 @@ class DigitDifferBotV2 {
     }
 
     requestAccumulatorProposal(asset) {
-        if (this.tradeInProgress) return;
-        if (!this.wsReady) return;
-
-        // const takeProfitAmount = this.currentStake * this.config.takeProfitMultiplier;
-
         const proposal = {
             proposal: 1,
             amount: this.currentStake.toFixed(2),
