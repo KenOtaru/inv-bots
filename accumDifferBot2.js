@@ -1509,7 +1509,7 @@ class DigitDifferBotV2 {
         this.determineTradingMode(analysis, digitBias, monteCarloResult);
 
         // 7️⃣ Log decision
-        // this.logTradeDecision(asset, analysis, digitBias, monteCarloResult, adaptiveThreshold);
+        this.logTradeDecision(asset, analysis, digitBias, monteCarloResult, adaptiveThreshold);
 
         // 8️⃣ Request proposal
         if (this.tradingMode === 'digit_differ'
