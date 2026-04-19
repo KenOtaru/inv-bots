@@ -1565,6 +1565,7 @@ class DigitDifferBotV2 {
             }
         });
 
+
         this.sendTelegramMessage(`🚀 BOTv2 Placing Trade: ${asset}
                 Barrier (Digit to avoid): ${digitBias.mostFrequent}
                 Digits: ${this.tickHistory[asset].slice(-10).join(', ')}
@@ -1605,8 +1606,7 @@ class DigitDifferBotV2 {
     }
 
     handleBuyResponse(message) {
-        const trade = this.activeTrades[asset];
-        const asset = trade.asset;
+        const asset = this.findAssetByStatus('buying');
 
         if (message.error) {
             console.error(`❌ Buy error: ${message.error.message}`);
@@ -1622,7 +1622,7 @@ class DigitDifferBotV2 {
             return;
         }
 
-
+        const trade = this.activeTrades[asset];
         const contractId = message.buy.contract_id;
 
         console.log(`✅ Contract opened: ${contractId} on ${asset}`);
