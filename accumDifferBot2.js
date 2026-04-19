@@ -1346,7 +1346,6 @@ class DigitDifferBotV2 {
             this.placeDigitTrade(asset, digitBias, analysis, monteCarloResult, adaptiveThreshold);
         } else {
             console.log(`Analysis Stats:
-                Condition: ${condition}
                 Overall Score: ${analysis.overallScore.toFixed(2)}
                 Volatility Regime: ${this.volatilityRegime}
                 Band Width: ${analysis.scores.bandWidth.toFixed(2)}
