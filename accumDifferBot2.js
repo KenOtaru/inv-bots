@@ -1469,8 +1469,8 @@ class DigitDifferBotV2 {
 
         this.volatilityRegime = analysis.volatilityRegime || 'medium';
 
-        if (!analysis.shouldTrade) return;
-        if (analysis.overallScore < this.config.minMarketScore) return;
+        // if (!analysis.shouldTrade) return;
+        // if (analysis.overallScore < this.config.minMarketScore) return;
 
         // 2️⃣ Digit bias detection
         const digitBias = this.biasDetector.detectDigitBias(digits, 50);
@@ -1514,14 +1514,14 @@ class DigitDifferBotV2 {
         // 8️⃣ Request proposal
         if (this.tradingMode === 'digit_differ'
             && this.volatilityRegime === 'low'
-            && analysis.overallScore >= 0.95
-            && analysis.scores.bandWidth >= 0.85
-            && analysis.scores.macdFlat >= 0.90
-            && analysis.scores.pricePosition >= 0.90
-            && analysis.scores.tickStability >= 0.90
-            && analysis.scores.volTrend >= 0.65
-            && digitBias.biasStrength >= 2.0
-            && digitBias.currentDigit !== digitBias.mostFrequent
+            // && analysis.overallScore >= 0.95
+            // && analysis.scores.bandWidth >= 0.85
+            // && analysis.scores.macdFlat >= 0.90
+            // && analysis.scores.pricePosition >= 0.90
+            // && analysis.scores.tickStability >= 0.90
+            // && analysis.scores.volTrend >= 0.65
+            // && digitBias.biasStrength >= 2.0
+            // && digitBias.currentDigit !== digitBias.mostFrequent
             && condition
             // && monteCarloResult.riskOfRuin < 0.05
         ) {
