@@ -1389,17 +1389,20 @@ class DigitDifferBotV2 {
 
     handleProposal(message) {
         const asset = message.echo_req?.symbol;
-        if (!asset) return;
 
         if (message.error) {
-            delete this.activeTrades[asset];
+            if (asset && this.activeTrades[asset]?.status === 'requesting_proposal') {
+                console.log(`❌ Proposal rejected for ${asset}: ${message.error.message}`);
+                delete this.activeTrades[asset];
+                this.tradeInProgress = false;
+            }
             return;
         }
 
         if (!message.proposal) return;
+        if (!asset) return;
 
-        const proposalId = message.proposal.id;
-        this.assetStates[asset].proposalId = proposalId;
+        if (this.tradeInProgress) return;
 
         const proposal = message.proposal;
         const stayedInArray = proposal.contract_details.ticks_stayed_in;
@@ -1408,8 +1411,6 @@ class DigitDifferBotV2 {
 
         // Current digit count of the running accumulator
         const currentDigitCount = stayedInArray[99] + 1;
-
-        this.currentTick = stayedInArray[99];
 
         console.log(`📋 Proposal for ${asset}: Current StayIN Digit Count: ${stayedInArray[99]} (${currentDigitCount})`);
         console.log(`   Filter Number: ${this.filterNum}`);
@@ -1445,6 +1446,7 @@ class DigitDifferBotV2 {
             this.filteredArray = appearedOnceArray;
             this.entryTick = stayedInArray[99];
             console.log(`   Traded Digit Array: [${this.tradedDigitArray.join(', ')}]`);
+
             // Place trade
             this.placeDigitTrade(asset);
         }
