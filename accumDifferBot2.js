@@ -1197,9 +1197,9 @@ class DigitDifferBotV2 {
         if (this.tickHistory[asset].length < this.config.requiredHistoryLength) return;
         if (Date.now() - (this.lastTradeTime[asset] || 0) < this.config.minTimeBetweenTrades) return;
 
-        if (!this.tradeInProgress) {
-            this.requestAccumulatorProposal(asset);
-        }
+        // if (!this.tradeInProgress) {
+        this.requestAccumulatorProposal(asset);
+        // }
     }
 
     requestAccumulatorProposal(asset) {
@@ -1304,14 +1304,14 @@ class DigitDifferBotV2 {
         const recentWinRate = this.stakeSizer.getRecentWinRate(20);
         const atr = analysis.atr || 0;
 
-        const dynamicStake = this.stakeSizer.calculateDynamicStake(
-            this.currentStake,
-            atr,
-            digitBias.biasStrength,
-            recentWinRate
-        );
+        // const dynamicStake = this.stakeSizer.calculateDynamicStake(
+        //     this.currentStake,
+        //     atr,
+        //     digitBias.biasStrength,
+        //     recentWinRate
+        // );
 
-        this.currentStake = Math.max(this.config.initialStake, dynamicStake);
+        // this.currentStake = Math.max(this.config.initialStake, dynamicStake);
 
         // 7️⃣ Log decision
         // this.logTradeDecision(asset, analysis, digitBias, monteCarloResult, adaptiveThreshold);
@@ -1319,7 +1319,7 @@ class DigitDifferBotV2 {
         // 8️⃣ Request proposal
         if (condition
             // && this.volatilityRegime === 'low'
-            // && analysis.overallScore >= 0.95
+            && analysis.overallScore >= 0.75
             // && analysis.scores.bandWidth >= 0.85
             // && analysis.scores.macdFlat >= 0.75
             // && analysis.scores.pricePosition >= 0.75
@@ -1745,9 +1745,9 @@ class DigitDifferBotV2 {
             if (this.assetMetrics[asset]) this.assetMetrics[asset].losses++;
 
             // Martingale multiplier
-            if (this.consecutiveLosses <= this.config.maxConsecutiveLosses) {
-                this.currentStake = Math.ceil(this.currentStake * this.config.multiplier * 100) / 100;
-            }
+            // if (this.consecutiveLosses <= this.config.maxConsecutiveLosses) {
+            this.currentStake = Math.ceil(this.currentStake * this.config.multiplier * 100) / 100;
+            // }
 
             // Update adaptive threshold to be more strict
             this.biasThresholdAdaptive = Math.min(2.0, this.biasThresholdAdaptive + 0.1);
@@ -1942,8 +1942,8 @@ class DigitDifferBotV2 {
 // BOT INITIALIZATION
 // ══════════════════════════════════════════════════════════════════════════════
 const bot = new DigitDifferBotV2('DMylfkyce6VyZt7', {
-    initialStake: 1,
-    multiplier: 3.5,
+    initialStake: 1.07,
+    multiplier: 11.3,
     maxConsecutiveLosses: 3,
     stopLoss: 100,
     takeProfit: 500,
