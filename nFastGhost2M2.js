@@ -53,7 +53,7 @@ try {
     // node-telegram-bot-api not installed
 }
 
-const STATE_FILE = path.join(__dirname, 'nFastGhost2M2_01-state.json');
+const STATE_FILE = path.join(__dirname, 'nFastGhost2M2_02-state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================================================
@@ -1201,34 +1201,10 @@ class MultiAssetGhostBot {
             const peakWindow = d.peakInWindow || '---';
             const declineFrac = d.declineFraction || '---';
 
-            // Only trade when saturation has been learned and is meaningful
-            // if (sat && signal.shortRepeat > 0.1 && sat > signal.shortRepeat && satHotDigit != null && satHotDigit !== signal.windowHotDigit) {
-            //     this.placeTrade(asset, signal);
-            // } else {
-            //     console.log(
-            //         `[${asset}] Waiting for saturation learning...` +
-            //         ` Last10: ${last10}` +
-            //         ` | Sat: ${sat != null ? (sat * 100).toFixed(1) + '%' : 'not learned'}` +
-            //         ` | SatHot: ${satHotDigit != null ? satHotDigit : 'not identified'}`
-            //     );
-            // }
+            // const tradeNow = sat <= 0.14 && signal.shortRepeat <= 0.14 && signal.shortRepeat <= sat && peakWindow <= 0.14 && peakWindow <= sat && signal.shortRepeat <= peakWindow && signal.digit !== signal.windowHotDigit && signal.digit !== satHotDigit
+            const tradeNow = sat <= 0.14 && signal.shortRepeat <= 0.14 && peakWindow <= 0.14 && signal.digit !== signal.windowHotDigit && signal.digit !== satHotDigit
 
-
-            const tradeNow = sat <= 0.14 && signal.shortRepeat <= 0.14 && signal.shortRepeat <= sat && peakWindow <= 0.14 && peakWindow <= sat && signal.shortRepeat <= peakWindow && signal.digit !== signal.windowHotDigit && signal.digit !== satHotDigit
-
-            if (//sat >= 0.16
-                // && signal.shortRepeat >= 0.18
-                // && signal.confidence >= 0.4
-                // && declineFrac >= 0.1
-                // && signal.digit === signal.windowHotDigit
-                tradeNow
-            ) { //this.startTrade
-                // if (asset === 'RDBEAR' || asset === 'RDBULL') {
-                //     if (sat < 0.18 || signal.shortRepeat < 0.28) {
-                //         return;
-                //     }
-                // }
-
+            if (tradeNow) {
                 console.log(
                     `🎯 Trade Signal [${asset}]:` +
                     ` Last10: ${last10}` +
