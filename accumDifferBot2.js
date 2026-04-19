@@ -1330,7 +1330,7 @@ class DigitDifferBotV2 {
             && analysis.scores.pricePosition >= 0.90
             && analysis.scores.tickStability >= 0.90
             && analysis.scores.volTrend >= 0.65
-            && digitBias.biasStrength >= 2.0
+            && digitBias.biasStrength >= adaptiveThreshold
             && this.currentDigit !== digitBias.mostFrequent
             // && monteCarloResult.riskOfRuin < 0.05
         ) {
@@ -1346,6 +1346,9 @@ class DigitDifferBotV2 {
             this.placeDigitTrade(asset, digitBias, analysis, monteCarloResult, adaptiveThreshold);
         } else {
             console.log(`Analysis Stats:
+                Condition: ${condition}
+                Overall Score: ${analysis.overallScore}
+                Volatility Regime: ${this.volatilityRegime}
                 Band Width: ${analysis.scores.bandWidth}
                 MACD Flat: ${analysis.scores.macdFlat}
                 Price Position: ${analysis.scores.pricePosition}
