@@ -1481,8 +1481,8 @@ class DigitDifferBotV2 {
             this.biasThresholdAdaptive
         );
 
-        if (digitBias.biasStrength < adaptiveThreshold) return;
-        if (digitBias.currentDigit !== digitBias.mostFrequent) return;
+        // if (digitBias.biasStrength < adaptiveThreshold) return;
+        // if (digitBias.currentDigit !== digitBias.mostFrequent) return;
 
         // 4️⃣ Monte Carlo risk check
         const monteCarloResult = MonteCarloSimulator.runSimulation(this.tradeHistory, 500, 50);
@@ -1521,6 +1521,7 @@ class DigitDifferBotV2 {
             && analysis.scores.tickStability >= 0.90
             && analysis.scores.volTrend >= 0.65
             && digitBias.biasStrength >= 2.0
+            && digitBias.currentDigit !== digitBias.mostFrequent
             && condition
             // && monteCarloResult.riskOfRuin < 0.05
         ) {
