@@ -1389,20 +1389,17 @@ class DigitDifferBotV2 {
 
     handleProposal(message) {
         const asset = message.echo_req?.symbol;
+        if (!asset) return;
 
         if (message.error) {
-            if (asset && this.activeTrades[asset]?.status === 'requesting_proposal') {
-                console.log(`❌ Proposal rejected for ${asset}: ${message.error.message}`);
-                delete this.activeTrades[asset];
-                this.tradeInProgress = false;
-            }
+            delete this.activeTrades[asset];
             return;
         }
 
         if (!message.proposal) return;
-        if (!asset) return;
 
-        if (this.tradeInProgress) return;
+        const proposalId = message.proposal.id;
+        this.assetStates[asset].proposalId = proposalId;
 
         const proposal = message.proposal;
         const stayedInArray = proposal.contract_details.ticks_stayed_in;
@@ -1414,9 +1411,6 @@ class DigitDifferBotV2 {
 
         console.log(`📋 Proposal for ${asset}: Current StayIN Digit Count: ${stayedInArray[99]} (${currentDigitCount})`);
         console.log(`   Filter Number: ${this.filterNum}`);
-
-        // Store proposal ID
-        this.assetStates[asset].proposalId = proposal.id;
 
         // ── Original frequency analysis logic ──────────────────────────────
         // Create frequency map of digits
@@ -1446,7 +1440,6 @@ class DigitDifferBotV2 {
             this.filteredArray = appearedOnceArray;
             this.entryTick = stayedInArray[99];
             console.log(`   Traded Digit Array: [${this.tradedDigitArray.join(', ')}]`);
-
             // Place trade
             this.placeDigitTrade(asset);
         }
