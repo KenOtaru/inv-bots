@@ -1325,7 +1325,7 @@ class DigitDifferBotV2 {
             // && analysis.scores.pricePosition >= 0.75
             && analysis.scores.tickStability >= 0.95
             // && analysis.scores.volTrend >= 0.65
-            && digitBias.biasStrength >= adaptiveThreshold
+            // && digitBias.biasStrength >= adaptiveThreshold
             // && this.currentDigit === digitBias.mostFrequent
             // && monteCarloResult.riskOfRuin < 0.05
         ) {
