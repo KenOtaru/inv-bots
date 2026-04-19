@@ -1388,31 +1388,31 @@ class DigitDifferBotV2 {
         this.sendRequest(proposal);
     }
 
-    requestDigitProposal(asset, digitBias) {
-        if (this.tradeInProgress) return;
+    // requestDigitProposal(asset, digitBias) {
+    //     if (this.tradeInProgress) return;
 
-        const proposal = {
-            proposal: 1,
-            amount: this.currentStake.toFixed(2),
-            basis: 'stake',
-            contract_type: 'DIGITDIFF',
-            currency: 'USD',
-            symbol: asset,
-            barrier: digitBias.mostFrequent.toString(),
-            duration: 1,
-            duration_unit: 't'
-        };
+    //     const proposal = {
+    //         proposal: 1,
+    //         amount: this.currentStake.toFixed(2),
+    //         basis: 'stake',
+    //         contract_type: 'DIGITDIFF',
+    //         currency: 'USD',
+    //         symbol: asset,
+    //         barrier: digitBias.mostFrequent.toString(),
+    //         duration: 1,
+    //         duration_unit: 't'
+    //     };
 
-        this.sendRequest(proposal);
+    //     this.sendRequest(proposal);
 
-        this.activeTrades[asset] = {
-            status: 'requesting_proposal',
-            predictedDigit: digitBias.mostFrequent,
-            stake: this.currentStake,
-            biasStrength: digitBias.biasStrength,
-            entryTime: Date.now()
-        };
-    }
+    //     this.activeTrades[asset] = {
+    //         status: 'requesting_proposal',
+    //         predictedDigit: digitBias.mostFrequent,
+    //         stake: this.currentStake,
+    //         biasStrength: digitBias.biasStrength,
+    //         entryTime: Date.now()
+    //     };
+    // }
 
     handleProposal(message) {
         const asset = message.echo_req?.symbol;
@@ -1569,7 +1569,7 @@ class DigitDifferBotV2 {
             this.entryTick = stayedInArray[99];
             console.log(`   Traded Digit Array: [${this.tradedDigitArray.join(', ')}]`);
             // Place trade
-            this.placeDigitTrade(asset);
+            this.placeDigitTrade(asset, digitBias);
         }
 
         // Check if we should place trade
@@ -1593,10 +1593,30 @@ class DigitDifferBotV2 {
         console.log(`   Barrier (Digit to avoid): ${trade.predictedDigit}`);
         console.log(`   Stake: $${trade.stake.toFixed(2)}`);
 
+        // this.sendRequest({
+        //     buy: proposalId,
+        //     price: trade.stake.toFixed(2)
+        // });
+
         this.sendRequest({
-            buy: proposalId,
-            price: trade.stake.toFixed(2)
+            proposal: proposalId,
+            amount: this.currentStake.toFixed(2),
+            basis: 'stake',
+            contract_type: 'DIGITDIFF',
+            currency: 'USD',
+            symbol: asset,
+            barrier: digitBias.mostFrequent.toString(),
+            duration: 1,
+            duration_unit: 't'
         });
+
+        this.activeTrades[asset] = {
+            status: 'requesting_proposal',
+            predictedDigit: digitBias.mostFrequent,
+            stake: this.currentStake.toFixed(2),
+            biasStrength: digitBias.biasStrength,
+            entryTime: Date.now()
+        };
 
         this.tradeInProgress = true;
         trade.status = 'buying';
