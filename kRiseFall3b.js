@@ -1097,7 +1097,17 @@ const CONFIG = {
     MAX_CANDLES_STORED: 50,
     CANDLES_TO_LOAD: 50,
 
-    CANDLE_PATTERN_LOOKBACK: 2, // Number of previous candles to analyze for pattern detection (user configurable)
+    CANDLE_PATTERN_LOOKBACK: 3, // Number of previous candles to analyze for pattern detection (user configurable)
+    // TRADE SYSTEM
+    // 1 = Pattern Trading System
+    // 2 = Previous Closed Candle Trading System
+    TRADE_SYSTEM: 1,
+    ACTIVE_ASSET: null,
+    ALTERNATING_PATTERN_THRESHOLD: 60,   // % probability to trigger TRADE_SYSTEM 1
+    CANDLES_DEEP: 5000,                  // Deep history size
+    CANDLES_SHALLOW: 50,                 // Shallow (pattern trading) size
+    LOOKBACK_SHALLOW: 3,                 // Lookback for TRADE_SYSTEM 1
+    LOOKBACK_DEEP: 4,                    // Lookback for TRADE_SYSTEM 2
 
     // Default Trade Duration Settings (used if asset has no specific config)
     DURATION: 58,
@@ -1114,17 +1124,6 @@ const CONFIG = {
     // MARTINGALE_MULTIPLIER6: 3.0,
     MAX_MARTINGALE_STEPS: 9,
 
-    // TRADE SYSTEM
-    // 1 = Pattern Trading System
-    // 2 = Previous Closed Candle Trading System
-    TRADE_SYSTEM: 1,
-    ACTIVE_ASSET: null,
-    ALTERNATING_PATTERN_THRESHOLD: 60,   // % probability to trigger TRADE_SYSTEM 1
-    CANDLES_DEEP: 5000,                  // Deep history size
-    CANDLES_SHALLOW: 50,                 // Shallow (pattern trading) size
-    LOOKBACK_SHALLOW: 2,                 // Lookback for TRADE_SYSTEM 1
-    LOOKBACK_DEEP: 4,                    // Lookback for TRADE_SYSTEM 2
-
     tradeInProgress: false,
 
     // ============================================
@@ -1140,7 +1139,7 @@ const CONFIG = {
     TOKYO_END: 8,
     LONDON_START: 8,
     LONDON_END: 12,
-    NEWYORK_START: 15,
+    NEWYORK_START: 12,
     NEWYORK_END: 19,
     SYDNEY_START: 19,
     SYDNEY_END: 23,
