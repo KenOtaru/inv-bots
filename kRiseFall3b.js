@@ -1122,8 +1122,8 @@ const CONFIG = {
     ALTERNATING_PATTERN_THRESHOLD: 60,   // % probability to trigger TRADE_SYSTEM 1
     CANDLES_DEEP: 5000,                  // Deep history size
     CANDLES_SHALLOW: 50,                 // Shallow (pattern trading) size
-    LOOKBACK_SHALLOW: 6,                 // Lookback for TRADE_SYSTEM 1
-    LOOKBACK_DEEP: 5,                    // Lookback for TRADE_SYSTEM 2
+    LOOKBACK_SHALLOW: 2,                 // Lookback for TRADE_SYSTEM 1
+    LOOKBACK_DEEP: 4,                    // Lookback for TRADE_SYSTEM 2
 
     tradeInProgress: false,
 
@@ -1224,7 +1224,7 @@ let ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'stpRNG', 'stpRNG2
 // let ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V'];
 // let ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V', 'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'];
 
-CONFIG.TRADE_SYSTEM === 1 ? ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'] : ACTIVE_ASSETS = [CONFIG.ACTIVE_ASSET];
+// CONFIG.TRADE_SYSTEM === 1 ? ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'] : ACTIVE_ASSETS = [CONFIG.ACTIVE_ASSET];
 
 // ============================================
 // STATE MANAGEMENT
@@ -2946,7 +2946,7 @@ class DerivBot {
 
         if (CONFIG.TRADE_SYSTEM === 1) {
             // ── SYSTEM 1: Strict alternating pattern signal (shallow history) ──
-            const lookback = CONFIG.CANDLE_PATTERN_LOOKBACK || CONFIG.LOOKBACK_SHALLOW;
+            const lookback = CONFIG.LOOKBACK_SHALLOW;
             const closed = assetState.closedCandles || [];
 
             if (closed.length < lookback) {
