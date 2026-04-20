@@ -1097,7 +1097,7 @@ const CONFIG = {
     MAX_CANDLES_STORED: 50,
     CANDLES_TO_LOAD: 50,
 
-    CANDLE_PATTERN_LOOKBACK: 6, // Number of previous candles to analyze for pattern detection (user configurable)
+    CANDLE_PATTERN_LOOKBACK: 2, // Number of previous candles to analyze for pattern detection (user configurable)
 
     // Default Trade Duration Settings (used if asset has no specific config)
     DURATION: 58,
@@ -1224,7 +1224,7 @@ let ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'stpRNG', 'stpRNG2
 // let ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V'];
 // let ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V', 'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'];
 
-CONFIG.TRADE_SYSTEM === 1 ? ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'] : ACTIVE_ASSETS = [CONFIG.ACTIVE_ASSET];
+// CONFIG.TRADE_SYSTEM === 1 ? ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'] : ACTIVE_ASSETS = [CONFIG.ACTIVE_ASSET];
 
 // ============================================
 // STATE MANAGEMENT
@@ -2840,7 +2840,7 @@ class DerivBot {
             // }
 
             // ── SYSTEM 1: Strict alternating pattern signal (shallow history) ──
-            const lookback = CONFIG.LOOKBACK_SHALLOW || 7;
+            const lookback = CONFIG.LOOKBACK_SHALLOW;
             const closed = assetState.closedCandles || [];
 
             if (closed.length < lookback) {
