@@ -1224,7 +1224,7 @@ let ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'stpRNG', 'stpRNG2
 // let ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V'];
 // let ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V', 'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'];
 
-// CONFIG.TRADE_SYSTEM === 1 ? ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'] : ACTIVE_ASSETS = [CONFIG.ACTIVE_ASSET];
+CONFIG.TRADE_SYSTEM === 1 ? ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'] : ACTIVE_ASSETS = [CONFIG.ACTIVE_ASSET];
 
 // ============================================
 // STATE MANAGEMENT
@@ -1626,8 +1626,6 @@ class SessionManager {
             );
 
             // ── Post-trade system routing ──────────────────────────────────────
-            CONFIG.tradeInProgress = false;
-
             // WIN: trade cycle complete — switch to SYSTEM 2 deep monitoring
             // Keep the same asset locked; re-evaluate pattern on next candles
             bot._switchToSystem2(symbol);
@@ -1748,6 +1746,7 @@ class SessionManager {
             // LOSS: stay locked on same asset in SYSTEM 2 for martingale recovery
             bot._switchToSystem2(symbol);
         }
+        CONFIG.tradeInProgress = false;
     }
 }
 
@@ -2717,232 +2716,6 @@ class DerivBot {
             subscribe: 1
         });
     }
-
-    /**
-     * =========================================================
-    * TRADE EXECUTION — PER-ASSET Candle-pattern Logic
-     * =========================================================
-     */
-    // executeNextTrade(symbol, lastClosedCandle) {
-    //     const assetState = state.assets[symbol];
-    //     if (!assetState) return;
-    //     if (!assetState.canTrade) return;
-    //     if (!SessionManager.isSessionActive()) return;
-    //     if (CONFIG.tradeInProgress) return;
-
-    //     const assetConfig = getAssetConfig(symbol);
-
-    //     // Check per-asset position limit
-    //     if (
-    //         assetState.activePositions.length >=
-    //         CONFIG.MAX_OPEN_POSITIONS_PER_ASSET
-    //     ) {
-    //         LOGGER.debug(
-    //             `${symbol} ⏳ Max positions reached (${assetState.activePositions.length}/${CONFIG.MAX_OPEN_POSITIONS_PER_ASSET})`
-    //         );
-    //         return;
-    //     }
-
-    //     // =============================================
-    //     // TRADING SESSION TIME CHECK
-    //     // Only enforced for new signals, never for recovery
-    //     // Skipped entirely when USE_TRADING_SESSIONS is false
-    //     // =============================================
-    //     const isInMartingaleRecovery = assetState.martingaleLevel > 0;
-    //     let sessionCheck = { inSession: true, sessionName: '24/7', nextSession: null, minutesUntilNext: 0 };
-
-    //     if (CONFIG.USE_TRADING_SESSIONS) {
-    //         sessionCheck = TradingSessionManager.isWithinTradingSession();
-
-    //         if (!sessionCheck.inSession && !isInMartingaleRecovery) {
-    //             const now = Date.now();
-    //             if (now - state.lastSessionLogTime > 300000) {
-    //                 LOGGER.info(
-    //                     `🕐 OUTSIDE TRADING SESSION — ${TradingSessionManager.getSessionStatusString()} | Skipping new pattern signals`
-    //                 );
-    //                 state.lastSessionLogTime = now;
-    //             }
-    //             return;
-    //         }
-
-    //         if (!sessionCheck.inSession && isInMartingaleRecovery) {
-    //             LOGGER.info(
-    //                 `🔄 [${symbol}] Outside session but IN RECOVERY (Martingale Level: ${assetState.martingaleLevel}) — continuing recovery trade`
-    //             );
-    //         }
-    //     }
-
-    //     const stake = assetState.currentStake;
-
-    //     // Capital sufficiency check
-    //     if (state.capital < stake) {
-    //         LOGGER.error(
-    //             `[${symbol}] Insufficient capital for stake: $${state.capital.toFixed(2)} (Needed: $${stake.toFixed(2)})`
-    //         );
-    //         if (assetState.martingaleLevel > 0) {
-    //             LOGGER.info(
-    //                 `[${symbol}] Resetting Martingale level due to insufficient capital.`
-    //             );
-    //             assetState.martingaleLevel = 0;
-    //             assetState.currentStake = CONFIG.STAKE;
-    //         }
-    //         return;
-    //     }
-
-    //     // =============================================
-    //     // DETERMINE TRADE DIRECTION (per-asset logic)
-    //     // =============================================
-    //     let direction = null;
-    //     let signalReason = '';
-
-    //     const isRecoveryMode = assetState.lastTradeWasWin === false;
-
-    //     if (CONFIG.TRADE_SYSTEM === 1) {
-    //         // ── NORMAL MODE: Candle-pattern signal
-    //         const lookback = CONFIG.CANDLE_PATTERN_LOOKBACK || 7;
-    //         const closed = assetState.closedCandles || [];
-
-    //         if (closed.length < lookback) {
-    //             LOGGER.info(`${symbol} ⏳ Waiting for ${lookback} closed candles — have ${closed.length}`);
-    //             return;
-    //         }
-
-    //         const recent = closed.slice(-lookback);
-
-    //         // Check for strictly alternating pattern (Bullish↔Bearish or Bearish↔Bullish)
-    //         // Each consecutive candle must flip direction — Doji candles break the sequence
-    //         let isAlternating = recent.length >= lookback;
-    //         for (let i = 1; i < recent.length; i++) {
-    //             const prevBullish = CandleAnalyzer.isBullish(recent[i - 1]);
-    //             const prevBearish = CandleAnalyzer.isBearish(recent[i - 1]);
-    //             const currBullish = CandleAnalyzer.isBullish(recent[i]);
-    //             const currBearish = CandleAnalyzer.isBearish(recent[i]);
-    //             // Must alternate: (prev bullish & curr bearish) OR (prev bearish & curr bullish)
-    //             if (!((prevBullish && currBearish) || (prevBearish && currBullish))) {
-    //                 isAlternating = false;
-    //                 break;
-    //             }
-    //         }
-
-    //         const lastCandle = recent[recent.length - 1];
-    //         const lastIsBullish = CandleAnalyzer.isBullish(lastCandle);
-    //         const lastIsBearish = CandleAnalyzer.isBearish(lastCandle);
-
-    //         if (isAlternating && (lastIsBullish || lastIsBearish)) {
-    //             if (lastIsBullish) {
-    //                 direction = 'CALLE';
-    //                 signalReason = `Alternating pattern: last ${lookback} candles alternate, last is BULLISH (buy)`;
-    //                 LOGGER.trade(`⚡ [${symbol}] PATTERN SIGNAL (BUY): ${signalReason}`);
-    //             } else {
-    //                 direction = 'PUTE';
-    //                 signalReason = `Alternating pattern: last ${lookback} candles alternate, last is BEARISH (sell)`;
-    //                 LOGGER.trade(`⚡ [${symbol}] PATTERN SIGNAL (SELL): ${signalReason}`);
-    //             }
-    //         } else {
-    //             const bulls = recent.filter(c => CandleAnalyzer.isBullish(c)).length;
-    //             const bears = recent.filter(c => CandleAnalyzer.isBearish(c)).length;
-    //             LOGGER.info(`${symbol} ⏸️ No alternating pattern — last ${lookback}: bulls=${bulls} bears=${bears}`);
-    //         }
-
-    //         if (direction) {
-    //             LOGGER.trade(`⚡ [${symbol}] PATTERN SIGNAL: ${signalReason}`);
-    //         }
-    //     } else {
-    //         // SYSTEM 2 MODE: Always Trade the Previous Closed Candle Direction
-    //         const candleType = CandleAnalyzer.getCandleDirection(lastClosedCandle);
-
-    //         if (candleType === 'BULLISH') {
-    //             direction = 'CALLE';
-    //             signalReason = `Recovery (${symbol} Prev Candle Bullish → Trade RISE)`;
-    //         } else {
-    //             direction = 'PUTE';
-    //             signalReason = `Recovery (${symbol} Prev Candle Bearish → Trade FALL)`;
-    //         }
-
-    //         LOGGER.trade(`🔄 [${symbol}] RECOVERY MODE: ${signalReason} (Martingale Level: ${assetState.martingaleLevel})`);
-
-    //     }
-
-    //     StatePersistence.saveState();
-
-    //     if (!direction) {
-    //         return;
-    //     }
-
-    //     // =============================================
-    //     // EXECUTE TRADE FOR THIS ASSET
-    //     // =============================================
-    //     assetState.canTrade = false;
-    //     assetState.lastTradeDirection = direction;
-
-    //     const sessionLabel = CONFIG.USE_TRADING_SESSIONS
-    //         ? (sessionCheck.inSession
-    //             ? `[${sessionCheck.sessionName}]`
-    //             : `[RECOVERY - Outside Session]`)
-    //         : '[24/7]';
-
-    //     LOGGER.trade(
-    //         `🎯 ${sessionLabel} [${symbol}] Executing ${direction === 'CALLE' ? 'RISE' : 'FALL'} trade`
-    //     );
-    //     LOGGER.trade(
-    //         `   [${symbol}] Stake: $${stake.toFixed(2)} | Duration: ${assetConfig.DURATION} ${assetConfig.DURATION_UNIT} | Martingale Level: ${assetState.martingaleLevel}`
-    //     );
-    //     LOGGER.trade(`   [${symbol}] Reason: ${signalReason}`);
-    //     const lastDir = CandleAnalyzer.getCandleDirection(lastClosedCandle);
-    //     LOGGER.trade(
-    //         `   [${symbol}] Last candle: ${lastDir} | Close: ${lastClosedCandle.close.toFixed(5)}`
-    //     );
-    //     LOGGER.trade(
-    //         `   [${symbol}] Asset Stats: ${assetState.tradesCount} trades, ${assetState.winsCount}W/${assetState.lossesCount}L, P/L: $${assetState.netPL.toFixed(2)}`
-    //     );
-
-    //     const position = {
-    //         symbol: symbol,
-    //         direction,
-    //         stake,
-    //         duration: assetConfig.DURATION,
-    //         durationUnit: assetConfig.DURATION_UNIT,
-    //         entryTime: Date.now(),
-    //         contractId: null,
-    //         reqId: null,
-    //         currentProfit: 0,
-    //         buyPrice: 0
-    //     };
-
-    //     // Add position to THIS asset's positions
-    //     assetState.activePositions.push(position);
-
-    //     const tradeRequest = {
-    //         buy: 1,
-    //         subscribe: 1,
-    //         price: stake.toFixed(2),
-    //         parameters: {
-    //             contract_type: direction,
-    //             symbol: symbol,
-    //             currency: 'USD',
-    //             amount: stake.toFixed(2),
-    //             duration: assetConfig.DURATION,
-    //             duration_unit: assetConfig.DURATION_UNIT,
-    //             basis: 'stake'
-    //         }
-    //     };
-
-    //     const reqId = this.connection.send(tradeRequest);
-    //     position.reqId = reqId;
-
-    //     CONFIG.tradeInProgress = true;
-
-    //     //Active Asset
-    //     CONFIG.ACTIVE_ASSET = symbol;
-
-    //     // Mark this cross direction as traded (prevents re-trading on the same cross)
-    //     if (!isRecoveryMode) {
-    //         assetState.lastCrossSignalDirection = direction;
-    //         LOGGER.info(
-    //             `${symbol} ✅ pattern direction '${direction}' marked as traded — will not re-trade until next valid trigger`
-    //         );
-    //     }
-    // }
 
     /**
      * =========================================================
