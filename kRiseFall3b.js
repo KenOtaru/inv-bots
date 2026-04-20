@@ -1097,7 +1097,7 @@ const CONFIG = {
     MAX_CANDLES_STORED: 50,
     CANDLES_TO_LOAD: 50,
 
-    CANDLE_PATTERN_LOOKBACK: 9, // Number of previous candles to analyze for pattern detection (user configurable)
+    CANDLE_PATTERN_LOOKBACK: 2, // Number of previous candles to analyze for pattern detection (user configurable)
 
     // Default Trade Duration Settings (used if asset has no specific config)
     DURATION: 58,
@@ -1610,11 +1610,10 @@ class SessionManager {
 
             // Reset trade system
             CONFIG.TRADE_SYSTEM = 2;
-            CONFIG.tradeInProgress = false;
             // Update candle history for Trade System 2
             CONFIG.MAX_CANDLES_STORED = 5000;
             CONFIG.CANDLES_TO_LOAD = 5000;
-            CONFIG.CANDLE_PATTERN_LOOKBACK = 5;
+            CONFIG.CANDLE_PATTERN_LOOKBACK = 2;
 
             // Record in persistent history
             TradeHistoryManager.recordTrade(symbol, profit, assetState.martingaleLevel);
@@ -1721,6 +1720,8 @@ class SessionManager {
                 );
             }
         }
+
+        CONFIG.tradeInProgress = false;
     }
 }
 
@@ -2685,6 +2686,9 @@ class DerivBot {
         position.reqId = reqId;
 
         CONFIG.tradeInProgress = true;
+
+        //Active Asset
+        ACTIVE_ASSETS = [symbol];
 
         // Mark this cross direction as traded (prevents re-trading on the same cross)
         if (!isRecoveryMode) {
