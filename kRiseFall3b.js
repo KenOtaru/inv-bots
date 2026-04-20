@@ -1219,7 +1219,7 @@ let ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'stpRNG', 'stpRNG2
 // let ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V'];
 // let ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V', 'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'];
 
-CONFIG.TRADE_SYSTEM === 1 ? ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'] : ACTIVE_ASSETS = [CONFIG.ACTIVE_ASSET];
+CONFIG.TRADE_SYSTEM === 1 ? ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'] : ACTIVE_ASSETS = [CONFIG.ACTIVE_ASSET];
 
 // ============================================
 // STATE MANAGEMENT
