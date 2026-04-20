@@ -1097,7 +1097,7 @@ const CONFIG = {
     MAX_CANDLES_STORED: 50,
     CANDLES_TO_LOAD: 50,
 
-    CANDLE_PATTERN_LOOKBACK: 2, // Number of previous candles to analyze for pattern detection (user configurable)
+    CANDLE_PATTERN_LOOKBACK: 3, // Number of previous candles to analyze for pattern detection (user configurable)
 
     // Default Trade Duration Settings (used if asset has no specific config)
     DURATION: 58,
@@ -2305,6 +2305,166 @@ class ConnectionManager {
 }
 
 // ============================================
+// ALTERNATING PATTERN PROBABILITY ANALYZER
+// ============================================
+class AlternatingPatternAnalyzer {
+
+    /**
+     * Core engine: scans a candle array and returns the % probability
+     * that the asset is currently in / about to enter an Alternating Pattern trend.
+     *
+     * Algorithm:
+     *  1. Walk the full history and identify every contiguous alternating run of length >= minRunLen.
+     *  2. For each run, record how it ended (continued alternating on the next candle, or broke).
+     *  3. Given the CURRENT trailing run length, compute:
+     *       P = (times the pattern continued after a run of this length) /
+     *           (total times a run of this length was observed)
+     *  4. Apply a recency weight bonus if the current run is happening right now at the tail.
+     *
+     * @param {Array}  candles     - Full closed candle array (up to 5000)
+     * @param {number} minRunLen   - Minimum alternating run to start counting (default 3)
+     * @returns {{ probability: number, currentRunLength: number, reason: string }}
+     */
+    static analyze(candles, minRunLen = 3) {
+        if (!candles || candles.length < minRunLen + 1) {
+            return { probability: 0, currentRunLength: 0, reason: 'Insufficient candle data' };
+        }
+
+        // ── Step 1: Build direction array (1 = bullish, -1 = bearish, 0 = doji) ──
+        const dir = candles.map(c => {
+            if (c.close > c.open) return 1;
+            if (c.close < c.open) return -1;
+            return 0;
+        });
+
+        const n = dir.length;
+
+        // ── Step 2: Identify alternating runs ──
+        // runLen[i] = length of the alternating run ENDING at candle i (min 1)
+        const runLen = new Array(n).fill(1);
+        for (let i = 1; i < n; i++) {
+            if (dir[i] !== 0 && dir[i - 1] !== 0 && dir[i] !== dir[i - 1]) {
+                runLen[i] = runLen[i - 1] + 1;
+            }
+        }
+
+        // ── Step 3: Build frequency table ──
+        // For each run length L observed at position i (L >= minRunLen),
+        // did the NEXT candle (i+1) continue the alternating pattern?
+        const freqTotal = {};   // freqTotal[L]    = how many times run of L was seen mid-history
+        const freqContinue = {};   // freqContinue[L] = how many times it then continued
+
+        for (let i = minRunLen - 1; i < n - 1; i++) {
+            const L = runLen[i];
+            if (L < minRunLen) continue;
+
+            // Cap bucket at minRunLen+4 so small samples don't produce misleading %
+            const bucket = Math.min(L, minRunLen + 4);
+
+            freqTotal[bucket] = (freqTotal[bucket] || 0) + 1;
+
+            const nextAlternates =
+                dir[i + 1] !== 0 &&
+                dir[i] !== 0 &&
+                dir[i + 1] !== dir[i];
+
+            if (nextAlternates) {
+                freqContinue[bucket] = (freqContinue[bucket] || 0) + 1;
+            }
+        }
+
+        // ── Step 4: Current trailing run ──
+        const currentRun = runLen[n - 1];
+        const currentBucket = Math.min(currentRun, minRunLen + 4);
+
+        let probability = 0;
+        let reason = '';
+
+        if (currentRun < minRunLen) {
+            // Not yet in an alternating run — use base-rate of the pattern occurring at all
+            const totalObs = Object.values(freqTotal).reduce((a, b) => a + b, 0);
+            const totalContinue = Object.values(freqContinue).reduce((a, b) => a + b, 0);
+            const baseRate = totalObs > 0 ? (totalContinue / totalObs) * 100 : 0;
+
+            // Scale down: only a fraction of those become a run from here
+            probability = Math.min(baseRate * 0.4, 55);
+            reason = `No active alternating run (run=${currentRun}). Base-rate: ${baseRate.toFixed(1)}%`;
+
+        } else {
+            const total = freqTotal[currentBucket] || 0;
+            const cont = freqContinue[currentBucket] || 0;
+            const histProb = total > 0 ? (cont / total) * 100 : 50;
+
+            // Recency bonus: the run is happening RIGHT NOW at the tail
+            const recencyBonus = Math.min(currentRun * 2, 15);
+            probability = Math.min(histProb + recencyBonus, 99);
+
+            reason = `Active alternating run of ${currentRun} candles. ` +
+                `Historical continuation: ${cont}/${total} (${histProb.toFixed(1)}%) + recency +${recencyBonus}% = ${probability.toFixed(1)}%`;
+        }
+
+        return {
+            probability: parseFloat(probability.toFixed(2)),
+            currentRunLength: currentRun,
+            reason
+        };
+    }
+
+    /**
+     * Scan ALL active assets and return the one with the highest
+     * alternating-pattern probability (above threshold).
+     * Returns null if none meet the threshold.
+     *
+     * @param {number} threshold  - Minimum % to qualify (default CONFIG.ALTERNATING_PATTERN_THRESHOLD)
+     * @returns {{ symbol: string, probability: number, currentRunLength: number, reason: string } | null}
+     */
+    static findBestAsset(threshold = CONFIG.ALTERNATING_PATTERN_THRESHOLD) {
+        let best = null;
+
+        for (const symbol of ACTIVE_ASSETS) {
+            const assetState = state.assets[symbol];
+            if (!assetState || assetState.closedCandles.length < 10) continue;
+
+            const result = this.analyze(assetState.closedCandles);
+
+            LOGGER.debug(
+                `🔍 [${symbol}] Alt-Pattern probability: ${result.probability}% | Run: ${result.currentRunLength} | ${result.reason}`
+            );
+
+            if (result.probability >= threshold) {
+                if (!best || result.probability > best.probability) {
+                    best = { symbol, ...result };
+                }
+            }
+        }
+
+        return best;
+    }
+
+    /**
+     * Check if the ACTIVE (locked) asset still warrants TRADE_SYSTEM 2 continuation,
+     * OR if it has re-entered a strong alternating pattern (switch back to TRADE_SYSTEM 1).
+     *
+     * @param {string} symbol
+     * @returns {{ switchToSystem1: boolean, probability: number, reason: string }}
+     */
+    static checkActiveAsset(symbol) {
+        const assetState = state.assets[symbol];
+        if (!assetState) return { switchToSystem1: false, probability: 0, reason: 'Asset not found' };
+
+        const result = this.analyze(assetState.closedCandles);
+        const threshold = CONFIG.ALTERNATING_PATTERN_THRESHOLD;
+
+        return {
+            switchToSystem1: result.probability >= threshold,
+            probability: result.probability,
+            currentRunLength: result.currentRunLength,
+            reason: result.reason
+        };
+    }
+}
+
+// ============================================
 // MAIN BOT CLASS
 // ============================================
 class DerivBot {
@@ -2523,75 +2683,6 @@ class DerivBot {
         const isRecoveryMode = assetState.lastTradeWasWin === false;
 
         if (isRecoveryMode) {
-            // RECOVERY MODE: After a loss, continue in the SAME direction
-            // This is a martingale continuation strategy - not a new breakout signal
-            // if (assetState.martingaleLevel <= 2) {
-            // if (assetState.lastTradeDirection === 'CALLE') {
-            //     direction = 'PUTE';
-            //     signalReason = `Recovery (${symbol} Prev LOSS on FALL → Continue FALL)`;
-            // } else {
-            //     direction = 'CALLE';
-            //     signalReason = `Recovery (${symbol} Prev LOSS on RISE → Continue RISE)`;
-            // }
-            // }
-            // else if (assetState.martingaleLevel === 3) {
-            //     if (assetState.lastTradeDirection === 'CALLE') {
-            //         direction = 'PUTE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on RISE → Reverse to FALL)`;
-            //     } else {
-            //         direction = 'CALLE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on FALL → Reverse to RISE)`;
-            //     }
-            // } else if (assetState.martingaleLevel === 4) {
-            //     if (assetState.lastTradeDirection === 'CALLE') {
-            //         direction = 'CALLE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on FALL → Reverse to RISE)`;
-            //     } else {
-            //         direction = 'PUTE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on RISE → Reverse to FALL)`;
-            //     }
-            // } else if (assetState.martingaleLevel === 5) {
-            //     if (assetState.lastTradeDirection === 'CALLE') {
-            //         direction = 'PUTE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on FALL → Continue FALL)`;
-            //     } else {
-            //         direction = 'CALLE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on RISE → Continue RISE)`;
-            //     }
-            // } else if (assetState.martingaleLevel === 6) {
-            //     if (assetState.lastTradeDirection === 'CALLE') {
-            //         direction = 'CALLE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on FALL → Reverse to RISE)`;
-            //     } else {
-            //         direction = 'PUTE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on RISE → Reverse to FALL)`;
-            //     }
-            // } else if (assetState.martingaleLevel === 7) {
-            //     if (assetState.lastTradeDirection === 'CALLE') {
-            //         direction = 'CALLE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on FALL → Reverse to RISE)`;
-            //     } else {
-            //         direction = 'PUTE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on RISE → Reverse to FALL)`;
-            //     }
-            // } else if (assetState.martingaleLevel === 8) {
-            //     if (assetState.lastTradeDirection === 'CALLE') {
-            //         direction = 'PUTE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on FALL → Continue FALL)`;
-            //     } else {
-            //         direction = 'CALLE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on RISE → Continue RISE)`;
-            //     }
-            // } else {
-            //     if (assetState.lastTradeDirection === 'CALLE') {
-            //         direction = 'CALLE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on FALL → Reverse to RISE)`;
-            //     } else {
-            //         direction = 'PUTE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on RISE → Reverse to FALL)`;
-            //     }
-            // }
-
             const candleType = CandleAnalyzer.getCandleDirection(lastClosedCandle);
 
             if (candleType === 'BULLISH') {
