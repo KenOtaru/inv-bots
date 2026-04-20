@@ -1113,8 +1113,13 @@ const CONFIG = {
     // MARTINGALE_MULTIPLIER5: 2.2,
     // MARTINGALE_MULTIPLIER6: 3.0,
     MAX_MARTINGALE_STEPS: 9,
-    System: 1,
-    iDirection: 'RISE',
+
+    // TRADE SYSTEM
+    // 1 = Pattern and Recovery Trading System
+    // 2 = Previous Closed Candle Trading System
+    TRADE_SYSTEM: 1,
+
+    tradeInProgress: false,
 
     // ============================================
     // TRADING SESSION TOGGLE
@@ -1602,6 +1607,14 @@ class SessionManager {
             assetState.martingaleLevel = 0;
             assetState.lastTradeWasWin = true;
             assetState.currentStake = CONFIG.STAKE;
+
+            // Reset trade system
+            CONFIG.TRADE_SYSTEM = 2;
+            CONFIG.tradeInProgress = false;
+            // Update candle history for Trade System 2
+            CONFIG.MAX_CANDLES_STORED = 5000;
+            CONFIG.CANDLES_TO_LOAD = 5000;
+            CONFIG.CANDLE_PATTERN_LOOKBACK = 5;
 
             // Record in persistent history
             TradeHistoryManager.recordTrade(symbol, profit, assetState.martingaleLevel);
@@ -2454,6 +2467,7 @@ class DerivBot {
         if (!assetState) return;
         if (!assetState.canTrade) return;
         if (!SessionManager.isSessionActive()) return;
+        if (CONFIG.tradeInProgress) return;
 
         const assetConfig = getAssetConfig(symbol);
 
@@ -2522,138 +2536,85 @@ class DerivBot {
 
         const isRecoveryMode = assetState.lastTradeWasWin === false;
 
-        if (isRecoveryMode) {
-            // RECOVERY MODE: After a loss, continue in the SAME direction
-            // This is a martingale continuation strategy - not a new breakout signal
-            // if (assetState.martingaleLevel <= 2) {
-            // if (assetState.lastTradeDirection === 'CALLE') {
-            //     direction = 'PUTE';
-            //     signalReason = `Recovery (${symbol} Prev LOSS on FALL → Continue FALL)`;
-            // } else {
-            //     direction = 'CALLE';
-            //     signalReason = `Recovery (${symbol} Prev LOSS on RISE → Continue RISE)`;
-            // }
-            // }
-            // else if (assetState.martingaleLevel === 3) {
-            //     if (assetState.lastTradeDirection === 'CALLE') {
-            //         direction = 'PUTE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on RISE → Reverse to FALL)`;
-            //     } else {
-            //         direction = 'CALLE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on FALL → Reverse to RISE)`;
-            //     }
-            // } else if (assetState.martingaleLevel === 4) {
-            //     if (assetState.lastTradeDirection === 'CALLE') {
-            //         direction = 'CALLE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on FALL → Reverse to RISE)`;
-            //     } else {
-            //         direction = 'PUTE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on RISE → Reverse to FALL)`;
-            //     }
-            // } else if (assetState.martingaleLevel === 5) {
-            //     if (assetState.lastTradeDirection === 'CALLE') {
-            //         direction = 'PUTE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on FALL → Continue FALL)`;
-            //     } else {
-            //         direction = 'CALLE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on RISE → Continue RISE)`;
-            //     }
-            // } else if (assetState.martingaleLevel === 6) {
-            //     if (assetState.lastTradeDirection === 'CALLE') {
-            //         direction = 'CALLE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on FALL → Reverse to RISE)`;
-            //     } else {
-            //         direction = 'PUTE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on RISE → Reverse to FALL)`;
-            //     }
-            // } else if (assetState.martingaleLevel === 7) {
-            //     if (assetState.lastTradeDirection === 'CALLE') {
-            //         direction = 'CALLE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on FALL → Reverse to RISE)`;
-            //     } else {
-            //         direction = 'PUTE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on RISE → Reverse to FALL)`;
-            //     }
-            // } else if (assetState.martingaleLevel === 8) {
-            //     if (assetState.lastTradeDirection === 'CALLE') {
-            //         direction = 'PUTE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on FALL → Continue FALL)`;
-            //     } else {
-            //         direction = 'CALLE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on RISE → Continue RISE)`;
-            //     }
-            // } else {
-            //     if (assetState.lastTradeDirection === 'CALLE') {
-            //         direction = 'CALLE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on FALL → Reverse to RISE)`;
-            //     } else {
-            //         direction = 'PUTE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on RISE → Reverse to FALL)`;
-            //     }
-            // }
+        if (CONFIG.TRADE_SYSTEM === 1) {
+            if (isRecoveryMode) {
+                // RECOVERY MODE: After a loss, continue in the SAME Previous Closed Candle Direction
+                const candleType = CandleAnalyzer.getCandleDirection(lastClosedCandle);
 
+                if (candleType === 'BULLISH') {
+                    direction = 'CALLE';
+                    signalReason = `Recovery (${symbol} Prev Candle Bullish → Trade RISE)`;
+                } else {
+                    direction = 'PUTE';
+                    signalReason = `Recovery (${symbol} Prev Candle Bearish → Trade FALL)`;
+                }
+
+                LOGGER.trade(`🔄 [${symbol}] RECOVERY MODE: ${signalReason} (Martingale Level: ${assetState.martingaleLevel})`);
+            } else {
+                // ── NORMAL MODE: Candle-pattern signal
+                const lookback = CONFIG.CANDLE_PATTERN_LOOKBACK || 7;
+                const closed = assetState.closedCandles || [];
+
+                if (closed.length < lookback) {
+                    LOGGER.info(`${symbol} ⏳ Waiting for ${lookback} closed candles — have ${closed.length}`);
+                    return;
+                }
+
+                const recent = closed.slice(-lookback);
+
+                // Check for strictly alternating pattern (Bullish↔Bearish or Bearish↔Bullish)
+                // Each consecutive candle must flip direction — Doji candles break the sequence
+                let isAlternating = recent.length >= lookback;
+                for (let i = 1; i < recent.length; i++) {
+                    const prevBullish = CandleAnalyzer.isBullish(recent[i - 1]);
+                    const prevBearish = CandleAnalyzer.isBearish(recent[i - 1]);
+                    const currBullish = CandleAnalyzer.isBullish(recent[i]);
+                    const currBearish = CandleAnalyzer.isBearish(recent[i]);
+                    // Must alternate: (prev bullish & curr bearish) OR (prev bearish & curr bullish)
+                    if (!((prevBullish && currBearish) || (prevBearish && currBullish))) {
+                        isAlternating = false;
+                        break;
+                    }
+                }
+
+                const lastCandle = recent[recent.length - 1];
+                const lastIsBullish = CandleAnalyzer.isBullish(lastCandle);
+                const lastIsBearish = CandleAnalyzer.isBearish(lastCandle);
+
+                if (isAlternating && (lastIsBullish || lastIsBearish)) {
+                    if (lastIsBullish) {
+                        direction = 'CALLE';
+                        signalReason = `Alternating pattern: last ${lookback} candles alternate, last is BULLISH (buy)`;
+                        LOGGER.trade(`⚡ [${symbol}] PATTERN SIGNAL (BUY): ${signalReason}`);
+                    } else {
+                        direction = 'PUTE';
+                        signalReason = `Alternating pattern: last ${lookback} candles alternate, last is BEARISH (sell)`;
+                        LOGGER.trade(`⚡ [${symbol}] PATTERN SIGNAL (SELL): ${signalReason}`);
+                    }
+                } else {
+                    const bulls = recent.filter(c => CandleAnalyzer.isBullish(c)).length;
+                    const bears = recent.filter(c => CandleAnalyzer.isBearish(c)).length;
+                    LOGGER.info(`${symbol} ⏸️ No alternating pattern — last ${lookback}: bulls=${bulls} bears=${bears}`);
+                }
+
+                if (direction) {
+                    LOGGER.trade(`⚡ [${symbol}] PATTERN SIGNAL: ${signalReason}`);
+                }
+            }
+        } else {
+            // SYSTEM 2 MODE: Always Trade the Previous Closed Candle Direction
             const candleType = CandleAnalyzer.getCandleDirection(lastClosedCandle);
 
             if (candleType === 'BULLISH') {
                 direction = 'CALLE';
-                signalReason = `Recovery (${symbol} Prev LOSS on RISE → Continue RISE)`;
+                signalReason = `Recovery (${symbol} Prev Candle Bullish → Trade RISE)`;
             } else {
                 direction = 'PUTE';
-                signalReason = `Recovery (${symbol} Prev LOSS on FALL → Continue FALL)`;
+                signalReason = `Recovery (${symbol} Prev Candle Bearish → Trade FALL)`;
             }
 
             LOGGER.trade(`🔄 [${symbol}] RECOVERY MODE: ${signalReason} (Martingale Level: ${assetState.martingaleLevel})`);
 
-        } else {
-            // ── NORMAL MODE: Candle-pattern signal
-            const lookback = CONFIG.CANDLE_PATTERN_LOOKBACK || 7;
-            const closed = assetState.closedCandles || [];
-
-            if (closed.length < lookback) {
-                LOGGER.info(`${symbol} ⏳ Waiting for ${lookback} closed candles — have ${closed.length}`);
-                return;
-            }
-
-            const recent = closed.slice(-lookback);
-
-            // Check for strictly alternating pattern (Bullish↔Bearish or Bearish↔Bullish)
-            // Each consecutive candle must flip direction — Doji candles break the sequence
-            let isAlternating = recent.length >= lookback;
-            for (let i = 1; i < recent.length; i++) {
-                const prevBullish = CandleAnalyzer.isBullish(recent[i - 1]);
-                const prevBearish = CandleAnalyzer.isBearish(recent[i - 1]);
-                const currBullish = CandleAnalyzer.isBullish(recent[i]);
-                const currBearish = CandleAnalyzer.isBearish(recent[i]);
-                // Must alternate: (prev bullish & curr bearish) OR (prev bearish & curr bullish)
-                if (!((prevBullish && currBearish) || (prevBearish && currBullish))) {
-                    isAlternating = false;
-                    break;
-                }
-            }
-
-            const lastCandle = recent[recent.length - 1];
-            const lastIsBullish = CandleAnalyzer.isBullish(lastCandle);
-            const lastIsBearish = CandleAnalyzer.isBearish(lastCandle);
-
-            if (isAlternating && (lastIsBullish || lastIsBearish)) {
-                if (lastIsBullish) {
-                    direction = 'CALLE';
-                    signalReason = `Alternating pattern: last ${lookback} candles alternate, last is BULLISH (buy)`;
-                    LOGGER.trade(`⚡ [${symbol}] PATTERN SIGNAL (BUY): ${signalReason}`);
-                } else {
-                    direction = 'PUTE';
-                    signalReason = `Alternating pattern: last ${lookback} candles alternate, last is BEARISH (sell)`;
-                    LOGGER.trade(`⚡ [${symbol}] PATTERN SIGNAL (SELL): ${signalReason}`);
-                }
-            } else {
-                const bulls = recent.filter(c => CandleAnalyzer.isBullish(c)).length;
-                const bears = recent.filter(c => CandleAnalyzer.isBearish(c)).length;
-                LOGGER.info(`${symbol} ⏸️ No alternating pattern — last ${lookback}: bulls=${bulls} bears=${bears}`);
-            }
-
-            if (direction) {
-                LOGGER.trade(`⚡ [${symbol}] PATTERN SIGNAL: ${signalReason}`);
-            }
         }
 
         StatePersistence.saveState();
@@ -2722,6 +2683,8 @@ class DerivBot {
 
         const reqId = this.connection.send(tradeRequest);
         position.reqId = reqId;
+
+        CONFIG.tradeInProgress = true;
 
         // Mark this cross direction as traded (prevents re-trading on the same cross)
         if (!isRecoveryMode) {
@@ -2824,6 +2787,7 @@ class DerivBot {
                         `It's past ${CONFIG.SYDNEY_END}:30 GMT+1, all assets recovered, disconnecting.`
                     );
                     // Send end-of-day summary
+                    CONFIG.TRADE_SYSTEM = 1;
                     TelegramService.sendDayEndSummary(TradeHistoryManager.getDateKey());
                     TelegramService.sendSessionSummary();
                     if (this.connection.ws)
