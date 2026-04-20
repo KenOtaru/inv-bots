@@ -33,7 +33,7 @@ const path = require('path');
 // ══════════════════════════════════════════════════════════════════════════════
 // STATE PERSISTENCE MANAGER
 // ══════════════════════════════════════════════════════════════════════════════
-const STATE_FILE = path.join(__dirname, 'digitDifferBotV2_01_state.json');
+const STATE_FILE = path.join(__dirname, 'digitDifferBotV2_02_state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -1247,8 +1247,8 @@ class DigitDifferBotV2 {
         // Current digit count of the running accumulator
         const currentDigitCount = stayedInArray[99] + 1;
 
-        console.log(`📋 Proposal for ${asset}: Current StayIN Digit Count: ${stayedInArray[99]} (${currentDigitCount})`);
-        console.log(`   Filter Number: ${this.filterNum}`);
+        // console.log(`📋 Proposal for ${asset}: Current StayIN Digit Count: ${stayedInArray[99]} (${currentDigitCount})`);
+        // console.log(`   Filter Number: ${this.filterNum}`);
 
         // ── Original frequency analysis logic ──────────────────────────────
         // Create frequency map of digits
@@ -1262,7 +1262,7 @@ class DigitDifferBotV2 {
             .filter(digit => digitFrequency[digit] === this.filterNum)
             .map(Number);
 
-        console.log(`   Digits that appeared ${this.filterNum} times: [${appearedOnceArray.join(', ')}]`);
+        // console.log(`   Digits that appeared ${this.filterNum} times: [${appearedOnceArray.join(', ')}]`);
 
         // Entry condition: current digit count is in appearedOnceArray
         // and not already traded, and stayedIn value >= 0
@@ -1270,7 +1270,7 @@ class DigitDifferBotV2 {
             && !this.tradedDigitArray.includes(stayedInArray[99])
             && stayedInArray[99] > 0;
 
-        console.log(`   Entry condition: ${condition ? '✅ MET' : '❌ NOT MET'}`);
+        // console.log(`   Entry condition: ${condition ? '✅ MET' : '❌ NOT MET'}`);
 
         // 1️⃣ Market regime analysis
         const analysis = this.analyzer.analyzeEntry(prices);
@@ -1336,21 +1336,21 @@ class DigitDifferBotV2 {
             this.tradedDigitArray.push(stayedInArray[99]);
             this.filteredArray = appearedOnceArray;
             this.entryTick = stayedInArray[99];
-            console.log(`   Traded Digit Array: [${this.tradedDigitArray.join(', ')}]`);
+            // console.log(`   Traded Digit Array: [${this.tradedDigitArray.join(', ')}]`);
             // Place trade
             this.placeDigitTrade(asset, digitBias, analysis, monteCarloResult, adaptiveThreshold);
         } else {
-            console.log(`Analysis Stats:
-                Overall Score: ${analysis.overallScore.toFixed(2)}
-                Volatility Regime: ${this.volatilityRegime}
-                Band Width: ${analysis.scores.bandWidth.toFixed(2)}
-                MACD Flat: ${analysis.scores.macdFlat.toFixed(2)}
-                Price Position: ${analysis.scores.pricePosition.toFixed(2)}
-                Tick Stability: ${analysis.scores.tickStability.toFixed(2)}
-                Vol Trend: ${analysis.scores.volTrend.toFixed(2)}
-                Digit Bias: ${digitBias.biasStrength.toFixed(2)} | ${adaptiveThreshold.toFixed(2)}
-                Current Digit: ${this.currentDigit} | Predicted Digit: ${digitBias.mostFrequent}
-                `);
+            // console.log(`Analysis Stats:
+            //     Overall Score: ${analysis.overallScore.toFixed(2)}
+            //     Volatility Regime: ${this.volatilityRegime}
+            //     Band Width: ${analysis.scores.bandWidth.toFixed(2)}
+            //     MACD Flat: ${analysis.scores.macdFlat.toFixed(2)}
+            //     Price Position: ${analysis.scores.pricePosition.toFixed(2)}
+            //     Tick Stability: ${analysis.scores.tickStability.toFixed(2)}
+            //     Vol Trend: ${analysis.scores.volTrend.toFixed(2)}
+            //     Digit Bias: ${digitBias.biasStrength.toFixed(2)} | ${adaptiveThreshold.toFixed(2)}
+            //     Current Digit: ${this.currentDigit} | Predicted Digit: ${digitBias.mostFrequent}
+            // `);
         }
     }
 
