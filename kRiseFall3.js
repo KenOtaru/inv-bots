@@ -2534,63 +2534,6 @@ class DerivBot {
             //     signalReason = `Recovery (${symbol} Prev LOSS on RISE → Continue RISE)`;
             // }
             // }
-            // else if (assetState.martingaleLevel === 3) {
-            //     if (assetState.lastTradeDirection === 'CALLE') {
-            //         direction = 'PUTE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on RISE → Reverse to FALL)`;
-            //     } else {
-            //         direction = 'CALLE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on FALL → Reverse to RISE)`;
-            //     }
-            // } else if (assetState.martingaleLevel === 4) {
-            //     if (assetState.lastTradeDirection === 'CALLE') {
-            //         direction = 'CALLE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on FALL → Reverse to RISE)`;
-            //     } else {
-            //         direction = 'PUTE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on RISE → Reverse to FALL)`;
-            //     }
-            // } else if (assetState.martingaleLevel === 5) {
-            //     if (assetState.lastTradeDirection === 'CALLE') {
-            //         direction = 'PUTE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on FALL → Continue FALL)`;
-            //     } else {
-            //         direction = 'CALLE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on RISE → Continue RISE)`;
-            //     }
-            // } else if (assetState.martingaleLevel === 6) {
-            //     if (assetState.lastTradeDirection === 'CALLE') {
-            //         direction = 'CALLE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on FALL → Reverse to RISE)`;
-            //     } else {
-            //         direction = 'PUTE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on RISE → Reverse to FALL)`;
-            //     }
-            // } else if (assetState.martingaleLevel === 7) {
-            //     if (assetState.lastTradeDirection === 'CALLE') {
-            //         direction = 'CALLE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on FALL → Reverse to RISE)`;
-            //     } else {
-            //         direction = 'PUTE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on RISE → Reverse to FALL)`;
-            //     }
-            // } else if (assetState.martingaleLevel === 8) {
-            //     if (assetState.lastTradeDirection === 'CALLE') {
-            //         direction = 'PUTE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on FALL → Continue FALL)`;
-            //     } else {
-            //         direction = 'CALLE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on RISE → Continue RISE)`;
-            //     }
-            // } else {
-            //     if (assetState.lastTradeDirection === 'CALLE') {
-            //         direction = 'CALLE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on FALL → Reverse to RISE)`;
-            //     } else {
-            //         direction = 'PUTE';
-            //         signalReason = `Recovery (${symbol} Prev LOSS on RISE → Reverse to FALL)`;
-            //     }
-            // }
 
             const candleType = CandleAnalyzer.getCandleDirection(lastClosedCandle);
 
