@@ -1634,7 +1634,6 @@ class SessionManager {
 
             // If the asset is now in a clean state (martingale reset), run a fresh
             // scan to see if another asset has a stronger pattern
-            const assetState = state.assets[symbol];
             if (assetState && assetState.martingaleLevel === 0) {
                 const best = AlternatingPatternAnalyzer.findBestAsset();
                 if (best && best.symbol !== symbol && best.probability > (
@@ -2038,6 +2037,79 @@ class ConnectionManager {
         });
     }
 
+    // handleOpenContract(response) {
+    //     if (response.error) {
+    //         LOGGER.error(`Contract error: ${response.error.message}`);
+    //         return;
+    //     }
+
+    //     const contract = response.proposal_open_contract;
+    //     const contractId = contract.contract_id;
+
+    //     // Find which asset owns this contract
+    //     let ownerSymbol = null;
+    //     let posIndex = -1;
+
+    //     for (const symbol of ACTIVE_ASSETS) {
+    //         const asset = state.assets[symbol];
+    //         if (asset && asset.activePositions) {
+    //             const idx = asset.activePositions.findIndex(
+    //                 p => p.contractId === contractId
+    //             );
+    //             if (idx >= 0) {
+    //                 ownerSymbol = symbol;
+    //                 posIndex = idx;
+    //                 break;
+    //             }
+    //         }
+    //     }
+
+    //     if (posIndex < 0 || !ownerSymbol) return;
+
+    //     const assetState = state.assets[ownerSymbol];
+    //     const position = assetState.activePositions[posIndex];
+    //     position.currentProfit = contract.profit;
+
+    //     if (
+    //         contract.is_sold ||
+    //         contract.is_expired ||
+    //         contract.status === 'sold'
+    //     ) {
+    //         const profit = contract.profit;
+
+    //         LOGGER.trade(
+    //             `[${ownerSymbol}] Contract ${contractId} closed: ${profit >= 0 ? 'WIN' : 'LOSS'} $${profit.toFixed(2)}`
+    //         );
+
+    //         // Record result for THIS SPECIFIC ASSET
+    //         SessionManager.recordTradeResult(
+    //             ownerSymbol,
+    //             profit,
+    //             position.direction
+    //         );
+
+    //         TelegramService.sendTradeAlert(
+    //             profit >= 0 ? 'WIN' : 'LOSS',
+    //             ownerSymbol,
+    //             position.direction,
+    //             position.stake,
+    //             position.duration,
+    //             position.durationUnit,
+    //             { profit }
+    //         );
+
+    //         // Remove position from THIS asset
+    //         assetState.activePositions.splice(posIndex, 1);
+
+    //         if (response.subscription?.id) {
+    //             this.send({ forget: response.subscription.id });
+    //         }
+
+    //         SessionManager.checkSessionTargets();
+    //         StatePersistence.saveState();
+    //     }
+    // }
+
     handleOpenContract(response) {
         if (response.error) {
             LOGGER.error(`Contract error: ${response.error.message}`);
@@ -2046,6 +2118,11 @@ class ConnectionManager {
 
         const contract = response.proposal_open_contract;
         const contractId = contract.contract_id;
+
+        // ── Always unsubscribe immediately to prevent duplicate fire ──
+        if (response.subscription?.id) {
+            this.send({ forget: response.subscription.id });
+        }
 
         // Find which asset owns this contract
         let ownerSymbol = null;
@@ -2078,11 +2155,14 @@ class ConnectionManager {
         ) {
             const profit = contract.profit;
 
+            // ── Remove position FIRST before any async work ──
+            // This prevents re-entry if another close event fires
+            assetState.activePositions.splice(posIndex, 1);
+
             LOGGER.trade(
                 `[${ownerSymbol}] Contract ${contractId} closed: ${profit >= 0 ? 'WIN' : 'LOSS'} $${profit.toFixed(2)}`
             );
 
-            // Record result for THIS SPECIFIC ASSET
             SessionManager.recordTradeResult(
                 ownerSymbol,
                 profit,
@@ -2098,13 +2178,6 @@ class ConnectionManager {
                 position.durationUnit,
                 { profit }
             );
-
-            // Remove position from THIS asset
-            assetState.activePositions.splice(posIndex, 1);
-
-            if (response.subscription?.id) {
-                this.send({ forget: response.subscription.id });
-            }
 
             SessionManager.checkSessionTargets();
             StatePersistence.saveState();
