@@ -2583,13 +2583,13 @@ class DerivBot {
 
             if (isAlternating && (lastIsBullish || lastIsBearish)) {
                 CONFIG.TRADE_SYSTEM = 2;
-                LOGGER.trade(`⚡ [${symbol}] ALTERNATING PATTERN DETECTED: ${lookback} candles alternate : bulls=${bulls} bears=${bears}`);
+                LOGGER.trade(`⚡ [${symbol}] ALTERNATING PATTERN DETECTED: ${lookback} candles alternate`);
+                TelegramService.sendMessage(`⚡ [${symbol}] ALTERNATING PATTERN DETECTED: ${lookback} candles alternate`);
             } else {
                 const bulls = recent.filter(c => CandleAnalyzer.isBullish(c)).length;
                 const bears = recent.filter(c => CandleAnalyzer.isBearish(c)).length;
                 LOGGER.info(`${symbol} ⏸️ No alternating pattern — last ${lookback}: bulls=${bulls} bears=${bears}`);
             }
-            TelegramService.sendMessage(`⚡ [${symbol}] ALTERNATING PATTERN DETECTED: ${lookback} candles alternate : bulls=${bulls} bears=${bears}`);
         } else if (CONFIG.TRADE_SYSTEM === 2) {
             // ── SYSTEM 2: Alternating Candle-pattern Exhaustion Signal
             const lookback = 2;
