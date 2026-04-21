@@ -3286,7 +3286,7 @@ setInterval(() => {
     // Show active asset lock + probability
     const activeAsset = state.activeTradeAsset;
     if (activeAsset && state.assets[activeAsset]) {
-        const patResult = AlternatingPatternAnalyzer.analyze(state.assets[activeAsset].closedCandles, CONFIG.CANDLE_PATTERN_LOOKBACK);
+        const patResult = AlternatingPatternAnalyzer.analyze(state.assets[activeAsset].closedCandles);
         console.log(
             `🔒 Active Asset: [${activeAsset}] | SYS${CONFIG.TRADE_SYSTEM} | ` +
             `Alt-Pattern: ${patResult.probability}% (threshold ${CONFIG.ALTERNATING_PATTERN_THRESHOLD}%) | ` +
