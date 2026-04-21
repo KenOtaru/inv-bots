@@ -1104,7 +1104,7 @@ const CONFIG = {
     // ============================
     // ALTERNATING PATTERN SWITCHING CONFIGURATION
     // ============================
-    ALTERNATING_PATTERN_CANDLE_LOOKBACK: 6, // Number of previous candles to analyze for pattern detection (user configurable)
+    ALTERNATING_PATTERN_CANDLE_LOOKBACK: 4, // Number of previous candles to analyze for pattern detection (user configurable)
     ALTERNATING_PATTERN_THRESHOLD: 60, //60 Percentage threshold for switching to TRADE_SYSTEM 1
 
     // Default Trade Duration Settings (used if asset has no specific config)
