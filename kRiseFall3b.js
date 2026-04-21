@@ -1079,7 +1079,7 @@ class CandleAnalyzer {
 // ============================================
 const CONFIG = {
     // API Settings
-    API_TOKEN: 'rgNedekYXvCaPeP',
+    API_TOKEN: 'Dz2V2KvRf4Uukt3',
     APP_ID: '1089',
     WS_URL: 'wss://ws.derivws.com/websockets/v3',
 
@@ -1098,13 +1098,13 @@ const CONFIG = {
     CANDLES_TO_LOAD: 50,
 
     CANDLE_PATTERN_LOOKBACK: 4, //8 Number of previous candles to analyze for pattern detection (user configurable)
-    TREND_CANDLE_LOOKBACK: 4, //7 Number of previous candles to analyze for trend detection (user configurable)
+    TREND_CANDLE_LOOKBACK: 12, //7 Number of previous candles to analyze for trend detection (user configurable)
     TRADE_SYSTEM: 1,
 
     // ============================
     // ALTERNATING PATTERN SWITCHING CONFIGURATION
     // ============================
-    ALTERNATING_PATTERN_CANDLE_LOOKBACK: 5, // Number of previous candles to analyze for pattern detection (user configurable)
+    ALTERNATING_PATTERN_CANDLE_LOOKBACK: 3, // Number of previous candles to analyze for pattern detection (user configurable)
     ALTERNATING_PATTERN_THRESHOLD: 60, //60 Percentage threshold for switching to TRADE_SYSTEM 1
 
     // Default Trade Duration Settings (used if asset has no specific config)
