@@ -1609,37 +1609,6 @@ class SessionManager {
             // Record in persistent history
             TradeHistoryManager.recordTrade(symbol, profit, assetState.martingaleLevel);
 
-            //Change SYSTEM to 1 if last 6 Candle is same
-            const lookback = CONFIG.TREND_CANDLE_LOOKBACK || 6;
-            const closed = assetState.closedCandles || [];
-
-            const recent = closed.slice(-lookback);
-
-            // Check for strictly Trending pattern (Bullish↔Bullish or Bearish↔Bearish)
-            let isTrending = recent.length >= lookback;
-            for (let i = 1; i < recent.length; i++) {
-                const prevBullish = CandleAnalyzer.isBullish(recent[i - 1]);
-                const prevBearish = CandleAnalyzer.isBearish(recent[i - 1]);
-                const currBullish = CandleAnalyzer.isBullish(recent[i]);
-                const currBearish = CandleAnalyzer.isBearish(recent[i]);
-                // Must Trend: (prev bullish & curr bullish) OR (prev bearish & curr bearish)
-                if (!((prevBullish && currBullish) || (prevBearish && currBearish))) {
-                    isTrending = false;
-                    break;
-                }
-            }
-
-            const lastCandle = recent[recent.length - 1];
-            const lastIsBullish = CandleAnalyzer.isBullish(lastCandle);
-            const lastIsBearish = CandleAnalyzer.isBearish(lastCandle);
-
-            if (isTrending && (lastIsBullish || lastIsBearish)) {
-                CONFIG.TRADE_SYSTEM = 1;
-                state.activeTradeAsset = null;
-                LOGGER.trade(`⚡ [${symbol}] TREND EXHAUSTION PATTERN DETECTED: ${lookback} candles are in same direction`);
-                TelegramService.sendMessage(`⚡ [${symbol}] TREND EXHAUSTION PATTERN DETECTED: ${lookback} candles are in same direction, SYSTEM changed to ${CONFIG.TRADE_SYSTEM}`);
-            }
-
             LOGGER.trade(
                 `✅ [${symbol}] WIN: +$${profit.toFixed(2)} | Direction: ${direction} | ${symbol} Martingale Reset | ${symbol} P/L: $${assetState.netPL.toFixed(2)}`
             );
@@ -2654,19 +2623,19 @@ class DerivBot {
             }
         } else if (CONFIG.TRADE_SYSTEM === 3) {
             // //Change SYSTEM to 1 if last 6 Candle is same
-            // const lookback = CONFIG.TREND_CANDLE_LOOKBACK || 6;
-            // const closed = assetState.closedCandles || [];
+            const lookback = CONFIG.TREND_CANDLE_LOOKBACK || 6;
+            const closed = assetState.closedCandles || [];
 
-            // const recent = closed.slice(-lookback);
-            // const last6Bullish = recent.filter(c => CandleAnalyzer.isBullish(c)).length;
-            // const last6Bearish = recent.filter(c => CandleAnalyzer.isBearish(c)).length;
-            // if (assetState.lastTradeWasWin && (last6Bullish === 6 || last6Bearish === 6)) {
-            //     CONFIG.TRADE_SYSTEM = 1;
-            //     state.activeTradeAsset = null;
-            //     LOGGER.trade(`⚡ [${symbol}] TREND EXHAUSTION PATTERN DETECTED: ${lookback} candles are in same direction`);
-            //     this.sendMessage(`⚡ [${symbol}] TREND EXHAUSTION PATTERN DETECTED: ${lookback} candles are in same direction`);
-            //     return;
-            // }
+            const recent = closed.slice(-lookback);
+            const last6Bullish = recent.filter(c => CandleAnalyzer.isBullish(c)).length;
+            const last6Bearish = recent.filter(c => CandleAnalyzer.isBearish(c)).length;
+            if (assetState.lastTradeWasWin && (last6Bullish === 6 || last6Bearish === 6)) {
+                CONFIG.TRADE_SYSTEM = 1;
+                state.activeTradeAsset = null;
+                LOGGER.trade(`⚡ [${symbol}] TREND EXHAUSTION PATTERN DETECTED: ${lookback} candles are in same direction`);
+                this.sendMessage(`⚡ [${symbol}] TREND EXHAUSTION PATTERN DETECTED: ${lookback} candles are in same direction`);
+                return;
+            }
 
             // const lookback = CONFIG.TREND_CANDLE_LOOKBACK || 6;
             // const closed = assetState.closedCandles || [];
