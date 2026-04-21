@@ -6,8 +6,8 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'KriseFallM_3b_6-state.json');
-const HISTORY_FILE = path.join(__dirname, 'KriseFallM_3b_6-history.json');
+const STATE_FILE = path.join(__dirname, 'KriseFallM_3b_9-state.json');
+const HISTORY_FILE = path.join(__dirname, 'KriseFallM_3b_9-history.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
@@ -1102,7 +1102,7 @@ const CONFIG = {
     CANDLES_SHALLOW: 50,                 // Shallow (pattern trading) size
     CANDLE_PATTERN_LOOKBACK: 8, // Number of previous candles to analyze for pattern detection (user configurable)
     LOOKBACK_SHALLOW: 8,                 // Lookback for TRADE_SYSTEM 1
-    LOOKBACK_DEEP: 5,                    // Lookback for TRADE_SYSTEM 2
+    LOOKBACK_DEEP: 3,                    // Lookback for TRADE_SYSTEM 2
 
     tradeInProgress: false,
 
@@ -1216,9 +1216,9 @@ function getAssetConfig(symbol) {
     };
 }
 
-// let ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'];
+let ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'];
 // let ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V'];
-let ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V', 'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'];
+// let ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V', 'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'];
 
 // ============================================
 // STATE MANAGEMENT
@@ -2046,6 +2046,79 @@ class ConnectionManager {
         });
     }
 
+    // handleOpenContract(response) {
+    //     if (response.error) {
+    //         LOGGER.error(`Contract error: ${response.error.message}`);
+    //         return;
+    //     }
+
+    //     const contract = response.proposal_open_contract;
+    //     const contractId = contract.contract_id;
+
+    //     // Find which asset owns this contract
+    //     let ownerSymbol = null;
+    //     let posIndex = -1;
+
+    //     for (const symbol of ACTIVE_ASSETS) {
+    //         const asset = state.assets[symbol];
+    //         if (asset && asset.activePositions) {
+    //             const idx = asset.activePositions.findIndex(
+    //                 p => p.contractId === contractId
+    //             );
+    //             if (idx >= 0) {
+    //                 ownerSymbol = symbol;
+    //                 posIndex = idx;
+    //                 break;
+    //             }
+    //         }
+    //     }
+
+    //     if (posIndex < 0 || !ownerSymbol) return;
+
+    //     const assetState = state.assets[ownerSymbol];
+    //     const position = assetState.activePositions[posIndex];
+    //     position.currentProfit = contract.profit;
+
+    //     if (
+    //         contract.is_sold ||
+    //         contract.is_expired ||
+    //         contract.status === 'sold'
+    //     ) {
+    //         const profit = contract.profit;
+
+    //         LOGGER.trade(
+    //             `[${ownerSymbol}] Contract ${contractId} closed: ${profit >= 0 ? 'WIN' : 'LOSS'} $${profit.toFixed(2)}`
+    //         );
+
+    //         // Record result for THIS SPECIFIC ASSET
+    //         SessionManager.recordTradeResult(
+    //             ownerSymbol,
+    //             profit,
+    //             position.direction
+    //         );
+
+    //         TelegramService.sendTradeAlert(
+    //             profit >= 0 ? 'WIN' : 'LOSS',
+    //             ownerSymbol,
+    //             position.direction,
+    //             position.stake,
+    //             position.duration,
+    //             position.durationUnit,
+    //             { profit }
+    //         );
+
+    //         // Remove position from THIS asset
+    //         assetState.activePositions.splice(posIndex, 1);
+
+    //         if (response.subscription?.id) {
+    //             this.send({ forget: response.subscription.id });
+    //         }
+
+    //         SessionManager.checkSessionTargets();
+    //         StatePersistence.saveState();
+    //     }
+    // }
+
     handleOpenContract(response) {
         if (response.error) {
             LOGGER.error(`Contract error: ${response.error.message}`);
@@ -2054,6 +2127,11 @@ class ConnectionManager {
 
         const contract = response.proposal_open_contract;
         const contractId = contract.contract_id;
+
+        // ── Always unsubscribe immediately to prevent duplicate fire ──
+        if (response.subscription?.id) {
+            this.send({ forget: response.subscription.id });
+        }
 
         // Find which asset owns this contract
         let ownerSymbol = null;
@@ -2086,11 +2164,14 @@ class ConnectionManager {
         ) {
             const profit = contract.profit;
 
+            // ── Remove position FIRST before any async work ──
+            // This prevents re-entry if another close event fires
+            assetState.activePositions.splice(posIndex, 1);
+
             LOGGER.trade(
                 `[${ownerSymbol}] Contract ${contractId} closed: ${profit >= 0 ? 'WIN' : 'LOSS'} $${profit.toFixed(2)}`
             );
 
-            // Record result for THIS SPECIFIC ASSET
             SessionManager.recordTradeResult(
                 ownerSymbol,
                 profit,
@@ -2106,13 +2187,6 @@ class ConnectionManager {
                 position.durationUnit,
                 { profit }
             );
-
-            // Remove position from THIS asset
-            assetState.activePositions.splice(posIndex, 1);
-
-            if (response.subscription?.id) {
-                this.send({ forget: response.subscription.id });
-            }
 
             SessionManager.checkSessionTargets();
             StatePersistence.saveState();
@@ -2759,12 +2833,14 @@ class DerivBot {
             const lastCandle = recent[recent.length - 1];
             const lastIsBullish = CandleAnalyzer.isBullish(lastCandle);
             const lastIsBearish = CandleAnalyzer.isBearish(lastCandle);
+            const prevB = CandleAnalyzer.isBullish(recent[i - 1]);
+            const prevR = CandleAnalyzer.isBearish(recent[i - 1]);
 
             if (isAlternating && (lastIsBullish || lastIsBearish)) {
-                if (lastIsBullish) {
+                if (lastIsBullish && prevR) {
                     direction = 'CALLE';
                     signalReason = `Alternating pattern (last ${lookback}): last candle BULLISH → RISE`;
-                } else {
+                } else if (lastIsBearish && prevB) {
                     direction = 'PUTE';
                     signalReason = `Alternating pattern (last ${lookback}): last candle BEARISH → FALL`;
                 }
