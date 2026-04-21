@@ -2610,10 +2610,8 @@ class DerivBot {
             // Check for 2 candle Trend
             let isTrend = false;
 
-            const prevBullish = CandleAnalyzer.isBullish(recent[0]);
-            const prevBearish = CandleAnalyzer.isBearish(recent[0]);
-            const currBullish = CandleAnalyzer.isBullish(recent[1]);
-            const currBearish = CandleAnalyzer.isBearish(recent[1]);
+            const prevBullish = CandleAnalyzer.isBullish(recent[1]);
+            const prevBearish = CandleAnalyzer.isBearish(recent[1]);
 
             const lastCandle = recent[recent.length - 1];
             const lastIsBullish = CandleAnalyzer.isBullish(lastCandle);
