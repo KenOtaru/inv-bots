@@ -1084,7 +1084,7 @@ const CONFIG = {
     WS_URL: 'wss://ws.derivws.com/websockets/v3',
 
     // Capital Settings
-    INITIAL_CAPITAL: 250,
+    INITIAL_CAPITAL: 150,
     STAKE: 0.35,
 
     // Session Targets
@@ -1097,8 +1097,8 @@ const CONFIG = {
     MAX_CANDLES_STORED: 50,
     CANDLES_TO_LOAD: 50,
 
-    CANDLE_PATTERN_LOOKBACK: 3, // Number of previous candles to analyze for pattern detection (user configurable)
-    TREND_CANDLE_LOOKBACK: 3, // Number of previous candles to analyze for trend detection (user configurable)
+    CANDLE_PATTERN_LOOKBACK: 4, //8 Number of previous candles to analyze for pattern detection (user configurable)
+    TREND_CANDLE_LOOKBACK: 4, //7 Number of previous candles to analyze for trend detection (user configurable)
     TRADE_SYSTEM: 1,
 
     // Default Trade Duration Settings (used if asset has no specific config)
