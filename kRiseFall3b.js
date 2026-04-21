@@ -1224,7 +1224,6 @@ const state = {
     accountBalance: 0,
     currentTradeDay: null, // Track current trading day for day-change detection
     activeTradeAsset: null,
-    TRADE_SYSTEM: CONFIG.TRADE_SYSTEM,
     session: {
         profit: 0,
         loss: 0,
@@ -1618,10 +1617,10 @@ class SessionManager {
             const last6Bullish = recent.filter(c => CandleAnalyzer.isBullish(c)).length;
             const last6Bearish = recent.filter(c => CandleAnalyzer.isBearish(c)).length;
             if (last6Bullish === 6 || last6Bearish === 6) {
-                state.TRADE_SYSTEM = 1;
+                CONFIG.TRADE_SYSTEM = 1;
                 state.activeTradeAsset = null;
                 LOGGER.trade(`⚡ [${symbol}] TREND EXHAUSTION PATTERN DETECTED: ${lookback} candles are in same direction`);
-                TelegramService.sendMessage(`⚡ [${symbol}] TREND EXHAUSTION PATTERN DETECTED: ${lookback} candles are in same direction, SYSTEM changed to ${state.TRADE_SYSTEM}`);
+                TelegramService.sendMessage(`⚡ [${symbol}] TREND EXHAUSTION PATTERN DETECTED: ${lookback} candles are in same direction, SYSTEM changed to ${CONFIG.TRADE_SYSTEM}`);
                 return;
             }
 
@@ -2286,7 +2285,7 @@ class ConnectionManager {
 
             setTimeout(() => {
                 this.isReconnecting = false;
-                state.TRADE_SYSTEM = 1;
+                CONFIG.TRADE_SYSTEM = 1;
                 state.activeTradeAsset = null;
                 this.connect();
             }, delay);
@@ -2551,7 +2550,7 @@ class DerivBot {
 
         const isRecoveryMode = assetState.lastTradeWasWin === false;
 
-        if (state.TRADE_SYSTEM === 1) {
+        if (CONFIG.TRADE_SYSTEM === 1) {
             // ── SYSTEM 1: Scan for Asset with Alternating Candles of Pattern 7
             const lookback = CONFIG.CANDLE_PATTERN_LOOKBACK || 7;
             const closed = assetState.closedCandles || [];
@@ -2583,15 +2582,20 @@ class DerivBot {
             const lastIsBearish = CandleAnalyzer.isBearish(lastCandle);
 
             if (isAlternating && (lastIsBullish || lastIsBearish)) {
-                state.TRADE_SYSTEM = 2;
+                CONFIG.TRADE_SYSTEM = 2;
                 LOGGER.trade(`⚡ [${symbol}] ALTERNATING PATTERN DETECTED: ${lookback} candles alternate, SYSTEM changed to ${CONFIG.TRADE_SYSTEM}`);
                 TelegramService.sendMessage(`⚡ [${symbol}] ALTERNATING PATTERN DETECTED: ${lookback} candles alternate, SYSTEM changed to ${CONFIG.TRADE_SYSTEM}`);
+                // ── LOCK THIS ASSET ────────────────────────────────────────────────────
+                if (!state.activeTradeAsset) {
+                    state.activeTradeAsset = symbol;
+                    LOGGER.info(`🔒 [${symbol}] Asset locked as active trade asset`);
+                }
             } else {
                 const bulls = recent.filter(c => CandleAnalyzer.isBullish(c)).length;
                 const bears = recent.filter(c => CandleAnalyzer.isBearish(c)).length;
                 LOGGER.info(`${symbol} ⏸️ No alternating pattern — last ${lookback}: bulls=${bulls} bears=${bears}`);
             }
-        } else if (state.TRADE_SYSTEM === 2) {
+        } else if (CONFIG.TRADE_SYSTEM === 2) {
             // ── SYSTEM 2: Alternating Candle-pattern Exhaustion Signal
             const lookback = 2;
             const closed = assetState.closedCandles || [];
@@ -2620,8 +2624,8 @@ class DerivBot {
             const lastIsBearish = CandleAnalyzer.isBearish(lastCandle);
 
             if (isTrend && (lastIsBullish || lastIsBearish)) {
-                state.TRADE_SYSTEM = 3;
-                TelegramService.sendMessage(`⚡ [${symbol}] TREND PATTERN DETECTED: ${lookback} candles are in same direction, SYSTEM changed to ${state.TRADE_SYSTEM}`);
+                CONFIG.TRADE_SYSTEM = 3;
+                TelegramService.sendMessage(`⚡ [${symbol}] TREND PATTERN DETECTED: ${lookback} candles are in same direction, SYSTEM changed to ${CONFIG.TRADE_SYSTEM}`);
                 if (lastIsBullish) {
                     direction = 'CALLE';
                     signalReason = `Trend pattern: last ${lookback} candles are in same direction, and BULLISH (buy)`;
@@ -2640,7 +2644,7 @@ class DerivBot {
             if (direction) {
                 LOGGER.trade(`⚡ [${symbol}] TREND PATTERN SIGNAL: ${signalReason}`);
             }
-        } else if (state.TRADE_SYSTEM === 3) {
+        } else if (CONFIG.TRADE_SYSTEM === 3) {
             // //Change SYSTEM to 1 if last 6 Candle is same
             // const lookback = CONFIG.TREND_CANDLE_LOOKBACK || 6;
             // const closed = assetState.closedCandles || [];
@@ -2649,7 +2653,7 @@ class DerivBot {
             // const last6Bullish = recent.filter(c => CandleAnalyzer.isBullish(c)).length;
             // const last6Bearish = recent.filter(c => CandleAnalyzer.isBearish(c)).length;
             // if (assetState.lastTradeWasWin && (last6Bullish === 6 || last6Bearish === 6)) {
-            //     state.TRADE_SYSTEM = 1;
+            //     CONFIG.TRADE_SYSTEM = 1;
             //     state.activeTradeAsset = null;
             //     LOGGER.trade(`⚡ [${symbol}] TREND EXHAUSTION PATTERN DETECTED: ${lookback} candles are in same direction`);
             //     this.sendMessage(`⚡ [${symbol}] TREND EXHAUSTION PATTERN DETECTED: ${lookback} candles are in same direction`);
@@ -2674,12 +2678,6 @@ class DerivBot {
 
         if (!direction) {
             return;
-        }
-
-        // ── LOCK THIS ASSET ────────────────────────────────────────────────────
-        if (!state.activeTradeAsset) {
-            state.activeTradeAsset = symbol;
-            LOGGER.info(`🔒 [${symbol}] Asset locked as active trade asset`);
         }
 
         // =============================================
@@ -2846,7 +2844,7 @@ class DerivBot {
                     // Send end-of-day summary
                     TelegramService.sendDayEndSummary(TradeHistoryManager.getDateKey());
                     TelegramService.sendSessionSummary();
-                    state.TRADE_SYSTEM = 1;
+                    CONFIG.TRADE_SYSTEM = 1;
                     state.activeTradeAsset = null;
                     if (this.connection.ws)
                         this.connection.ws.close();
