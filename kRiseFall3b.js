@@ -1097,8 +1097,8 @@ const CONFIG = {
     MAX_CANDLES_STORED: 50,
     CANDLES_TO_LOAD: 50,
 
-    CANDLE_PATTERN_LOOKBACK: 9, // Number of previous candles to analyze for pattern detection (user configurable)
-    TREND_CANDLE_LOOKBACK: 6, // Number of previous candles to analyze for trend detection (user configurable)
+    CANDLE_PATTERN_LOOKBACK: 3, // Number of previous candles to analyze for pattern detection (user configurable)
+    TREND_CANDLE_LOOKBACK: 3, // Number of previous candles to analyze for trend detection (user configurable)
     TRADE_SYSTEM: 1,
 
     // Default Trade Duration Settings (used if asset has no specific config)
@@ -1608,6 +1608,21 @@ class SessionManager {
 
             // Record in persistent history
             TradeHistoryManager.recordTrade(symbol, profit, assetState.martingaleLevel);
+
+            //Change SYSTEM to 1 if last 6 Candle is same
+            const lookback = CONFIG.TREND_CANDLE_LOOKBACK || 6;
+            const closed = assetState.closedCandles || [];
+
+            const recent = closed.slice(-lookback);
+            const last6Bullish = recent.filter(c => CandleAnalyzer.isBullish(c)).length;
+            const last6Bearish = recent.filter(c => CandleAnalyzer.isBearish(c)).length;
+            if (last6Bullish === 6 || last6Bearish === 6) {
+                CONFIG.TRADE_SYSTEM = 1;
+                state.activeTradeAsset = null;
+                LOGGER.trade(`⚡ [${symbol}] TREND EXHAUSTION PATTERN DETECTED: ${lookback} candles are in same direction`);
+                this.sendMessage(`⚡ [${symbol}] TREND EXHAUSTION PATTERN DETECTED: ${lookback} candles are in same direction`);
+                return;
+            }
 
             LOGGER.trade(
                 `✅ [${symbol}] WIN: +$${profit.toFixed(2)} | Direction: ${direction} | ${symbol} Martingale Reset | ${symbol} P/L: $${assetState.netPL.toFixed(2)}`
@@ -2626,20 +2641,20 @@ class DerivBot {
                 LOGGER.trade(`⚡ [${symbol}] TREND PATTERN SIGNAL: ${signalReason}`);
             }
         } else if (CONFIG.TRADE_SYSTEM === 3) {
-            //Change SYSTEM to 1 if last 6 Candle is same
-            const lookback = CONFIG.TREND_CANDLE_LOOKBACK || 6;
-            const closed = assetState.closedCandles || [];
+            // //Change SYSTEM to 1 if last 6 Candle is same
+            // const lookback = CONFIG.TREND_CANDLE_LOOKBACK || 6;
+            // const closed = assetState.closedCandles || [];
 
-            const recent = closed.slice(-lookback);
-            const last6Bullish = recent.filter(c => CandleAnalyzer.isBullish(c)).length;
-            const last6Bearish = recent.filter(c => CandleAnalyzer.isBearish(c)).length;
-            if (assetState.lastTradeWasWin && (last6Bullish === 6 || last6Bearish === 6)) {
-                CONFIG.TRADE_SYSTEM = 1;
-                state.activeTradeAsset = null;
-                LOGGER.trade(`⚡ [${symbol}] TREND EXHAUSTION PATTERN DETECTED: ${lookback} candles are in same direction`);
-                this.sendMessage(`⚡ [${symbol}] TREND EXHAUSTION PATTERN DETECTED: ${lookback} candles are in same direction`);
-                return;
-            }
+            // const recent = closed.slice(-lookback);
+            // const last6Bullish = recent.filter(c => CandleAnalyzer.isBullish(c)).length;
+            // const last6Bearish = recent.filter(c => CandleAnalyzer.isBearish(c)).length;
+            // if (assetState.lastTradeWasWin && (last6Bullish === 6 || last6Bearish === 6)) {
+            //     CONFIG.TRADE_SYSTEM = 1;
+            //     state.activeTradeAsset = null;
+            //     LOGGER.trade(`⚡ [${symbol}] TREND EXHAUSTION PATTERN DETECTED: ${lookback} candles are in same direction`);
+            //     this.sendMessage(`⚡ [${symbol}] TREND EXHAUSTION PATTERN DETECTED: ${lookback} candles are in same direction`);
+            //     return;
+            // }
 
             // ── SYSTEM 3: Candle-pattern signal
             const candleType = CandleAnalyzer.getCandleDirection(lastClosedCandle);
