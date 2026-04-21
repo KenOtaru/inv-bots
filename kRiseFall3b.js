@@ -2608,16 +2608,14 @@ class DerivBot {
             const recent = closed.slice(-lookback);
 
             // Check for 2 candle Trend
-            let isTrend = false;
-
-            const prevBullish = CandleAnalyzer.isBullish(recent[1]);
-            const prevBearish = CandleAnalyzer.isBearish(recent[1]);
-
             const lastCandle = recent[recent.length - 1];
+            const last2Candle = recent[recent.length - 2];
             const lastIsBullish = CandleAnalyzer.isBullish(lastCandle);
             const lastIsBearish = CandleAnalyzer.isBearish(lastCandle);
+            const last2IsBullish = CandleAnalyzer.isBullish(last2Candle);
+            const last2IsBearish = CandleAnalyzer.isBearish(last2Candle);
 
-            if ((lastIsBullish && prevBullish) || (lastIsBearish && prevBearish)) {
+            if ((lastIsBullish && last2IsBullish) || (lastIsBearish && last2IsBearish)) {
                 CONFIG.TRADE_SYSTEM = 3;
                 TelegramService.sendMessage(`⚡ [${symbol}] TREND PATTERN DETECTED: ${lookback} candles are in same direction, SYSTEM changed to ${CONFIG.TRADE_SYSTEM}`);
                 if (lastIsBullish) {
