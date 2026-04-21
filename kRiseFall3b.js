@@ -1097,14 +1097,13 @@ const CONFIG = {
     MAX_CANDLES_STORED: 50,
     CANDLES_TO_LOAD: 50,
 
-    CANDLE_PATTERN_LOOKBACK: 4, //8 Number of previous candles to analyze for pattern detection (user configurable)
-    TREND_CANDLE_LOOKBACK: 12, //7 Number of previous candles to analyze for trend detection (user configurable)
+    CANDLE_PATTERN_LOOKBACK: 8, //8 Number of previous candles to analyze for pattern detection (user configurable)
+    TREND_CANDLE_LOOKBACK: 7, //7 Number of previous candles to analyze for trend detection (user configurable)
     TRADE_SYSTEM: 1,
 
     // ============================
     // ALTERNATING PATTERN SWITCHING CONFIGURATION
     // ============================
-    ALTERNATING_PATTERN_CANDLE_LOOKBACK: 4, // Number of previous candles to analyze for pattern detection (user configurable)
     ALTERNATING_PATTERN_THRESHOLD: 60, //60 Percentage threshold for switching to TRADE_SYSTEM 1
 
     // Default Trade Duration Settings (used if asset has no specific config)
@@ -2463,7 +2462,7 @@ class AlternatingPatternAnalyzer {
     static checkActiveAsset(symbol) {
         const assetState = state.assets[symbol];
 
-        const result = this.analyze(assetState.closedCandles, CONFIG.ALTERNATING_PATTERN_CANDLE_LOOKBACK);
+        const result = this.analyze(assetState.closedCandles);
         const threshold = CONFIG.ALTERNATING_PATTERN_THRESHOLD;
 
         return {
@@ -3214,7 +3213,7 @@ setInterval(() => {
         // Show active asset lock + probability
         const activeAsset = state.activeTradeAsset;
         if (activeAsset && state.assets[activeAsset]) {
-            const patResult = AlternatingPatternAnalyzer.analyze(state.assets[activeAsset].closedCandles, CONFIG.ALTERNATING_PATTERN_CANDLE_LOOKBACK);
+            const patResult = AlternatingPatternAnalyzer.analyze(state.assets[activeAsset].closedCandles);
             console.log(
                 `🔒 Active Asset: [${activeAsset}] | SYS:${CONFIG.TRADE_SYSTEM} | ` +
                 `Alt-Pattern: ${patResult.probability}% (threshold ${CONFIG.ALTERNATING_PATTERN_THRESHOLD}%) | ` +
