@@ -2614,16 +2614,12 @@ class DerivBot {
             const prevBearish = CandleAnalyzer.isBearish(recent[0]);
             const currBullish = CandleAnalyzer.isBullish(recent[1]);
             const currBearish = CandleAnalyzer.isBearish(recent[1]);
-            // No alternate: (prev bullish & curr bearish) OR (prev bearish & curr bullish)
-            if (((prevBullish && currBearish) || (prevBearish && currBullish))) {
-                isTrend = true;
-            }
 
             const lastCandle = recent[recent.length - 1];
             const lastIsBullish = CandleAnalyzer.isBullish(lastCandle);
             const lastIsBearish = CandleAnalyzer.isBearish(lastCandle);
 
-            if (isTrend && (lastIsBullish || lastIsBearish)) {
+            if ((lastIsBullish && prevBullish) || (lastIsBearish && prevBearish)) {
                 CONFIG.TRADE_SYSTEM = 3;
                 TelegramService.sendMessage(`⚡ [${symbol}] TREND PATTERN DETECTED: ${lookback} candles are in same direction, SYSTEM changed to ${CONFIG.TRADE_SYSTEM}`);
                 if (lastIsBullish) {
