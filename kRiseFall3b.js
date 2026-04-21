@@ -1620,7 +1620,7 @@ class SessionManager {
                 CONFIG.TRADE_SYSTEM = 1;
                 state.activeTradeAsset = null;
                 LOGGER.trade(`⚡ [${symbol}] TREND EXHAUSTION PATTERN DETECTED: ${lookback} candles are in same direction`);
-                this.sendMessage(`⚡ [${symbol}] TREND EXHAUSTION PATTERN DETECTED: ${lookback} candles are in same direction`);
+                TelegramService.sendMessage(`⚡ [${symbol}] TREND EXHAUSTION PATTERN DETECTED: ${lookback} candles are in same direction`);
                 return;
             }
 
@@ -2584,13 +2584,12 @@ class DerivBot {
             if (isAlternating && (lastIsBullish || lastIsBearish)) {
                 CONFIG.TRADE_SYSTEM = 2;
                 LOGGER.trade(`⚡ [${symbol}] ALTERNATING PATTERN DETECTED: ${lookback} candles alternate : bulls=${bulls} bears=${bears}`);
-                this.sendMessage(`⚡ [${symbol}] ALTERNATING PATTERN DETECTED: ${lookback} candles alternate : bulls=${bulls} bears=${bears}`);
             } else {
                 const bulls = recent.filter(c => CandleAnalyzer.isBullish(c)).length;
                 const bears = recent.filter(c => CandleAnalyzer.isBearish(c)).length;
                 LOGGER.info(`${symbol} ⏸️ No alternating pattern — last ${lookback}: bulls=${bulls} bears=${bears}`);
             }
-
+            TelegramService.sendMessage(`⚡ [${symbol}] ALTERNATING PATTERN DETECTED: ${lookback} candles alternate : bulls=${bulls} bears=${bears}`);
         } else if (CONFIG.TRADE_SYSTEM === 2) {
             // ── SYSTEM 2: Alternating Candle-pattern Exhaustion Signal
             const lookback = 2;
@@ -2620,7 +2619,7 @@ class DerivBot {
             const lastIsBearish = CandleAnalyzer.isBearish(lastCandle);
 
             if (isTrend && (lastIsBullish || lastIsBearish)) {
-                this.sendMessage(`⚡ [${symbol}] TREND PATTERN DETECTED: ${lookback} candles are in same direction`);
+                TelegramService.sendMessage(`⚡ [${symbol}] TREND PATTERN DETECTED: ${lookback} candles are in same direction`);
                 if (lastIsBullish) {
                     direction = 'CALLE';
                     signalReason = `Trend pattern: last ${lookback} candles are in same direction, and BULLISH (buy)`;
