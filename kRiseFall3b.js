@@ -1097,8 +1097,8 @@ const CONFIG = {
     MAX_CANDLES_STORED: 50,
     CANDLES_TO_LOAD: 50,
 
-    CANDLE_PATTERN_LOOKBACK: 8, //8 Number of previous candles to analyze for pattern detection (user configurable)
-    TREND_CANDLE_LOOKBACK: 7, //7 Number of previous candles to analyze for trend detection (user configurable)
+    CANDLE_PATTERN_LOOKBACK: 4, //8 Number of previous candles to analyze for pattern detection (user configurable)
+    TREND_CANDLE_LOOKBACK: 4, //7 Number of previous candles to analyze for trend detection (user configurable)
     TRADE_SYSTEM: 1,
 
     // ============================
@@ -2277,6 +2277,7 @@ class ConnectionManager {
                 this.isReconnecting = false;
                 CONFIG.TRADE_SYSTEM = 1;
                 CONFIG.MAX_CANDLES_STORED = 50;
+                CONFIG.CANDLES_TO_LOAD = 50;
                 state.activeTradeAsset = null;
                 this.connect();
             }, delay);
@@ -2336,7 +2337,7 @@ class AlternatingPatternAnalyzer {
      * @param {number} minRunLen   - Minimum alternating run to start counting (default 3)
      * @returns {{ probability: number, currentRunLength: number, reason: string }}
      */
-    static analyze(candles, minRunLen = 3) {
+    static analyze(candles, minRunLen = 200) {
         if (!candles || candles.length < minRunLen + 1) {
             return { probability: 0, currentRunLength: 0, reason: 'Insufficient candle data' };
         }
@@ -2473,6 +2474,7 @@ class AlternatingPatternAnalyzer {
         };
     }
 }
+
 
 // ============================================
 // MAIN BOT CLASS
@@ -2665,6 +2667,11 @@ class DerivBot {
                     );
                     state.lastSessionLogTime = now;
                 }
+
+                // change system to 1
+                CONFIG.TRADE_SYSTEM = 1;
+                CONFIG.MAX_CANDLES_STORED = 50;
+                CONFIG.CANDLES_TO_LOAD = 50;
                 return;
             }
 
@@ -2734,6 +2741,7 @@ class DerivBot {
             if (isAlternating && (lastIsBullish || lastIsBearish)) {
                 CONFIG.TRADE_SYSTEM = 2;
                 CONFIG.MAX_CANDLES_STORED = 5000;
+                CONFIG.CANDLES_TO_LOAD = 5000;
                 LOGGER.trade(`⚡ [${symbol}] ALTERNATING PATTERN DETECTED: ${lookback} candles alternate, SYSTEM changed to ${CONFIG.TRADE_SYSTEM}`);
                 TelegramService.sendMessage(`⚡ [${symbol}] ALTERNATING PATTERN DETECTED: ${lookback} candles alternate, SYSTEM changed to ${CONFIG.TRADE_SYSTEM}`);
                 // ── LOCK THIS ASSET ────────────────────────────────────────────────────
@@ -2803,6 +2811,7 @@ class DerivBot {
                     // change system to 1
                     CONFIG.TRADE_SYSTEM = 1;
                     CONFIG.MAX_CANDLES_STORED = 50;
+                    CONFIG.CANDLES_TO_LOAD = 50;
                     state.activeTradeAsset = null;
                     TelegramService.sendMessage(`⚡ [${symbol}] Alternaing Pattern Analyzer found a strong alternating pattern with Probability ${check.probability}% >= ${CONFIG.ALTERNATING_PATTERN_THRESHOLD}%, SYSTEM changed to ${CONFIG.TRADE_SYSTEM}`);
                     return;
@@ -2835,6 +2844,7 @@ class DerivBot {
             if (assetState.lastTradeWasWin && (isTrending && (lastIsBullish || lastIsBearish))) {
                 CONFIG.TRADE_SYSTEM = 1;
                 CONFIG.MAX_CANDLES_STORED = 50;
+                CONFIG.CANDLES_TO_LOAD = 50;
                 state.activeTradeAsset = null;
                 LOGGER.trade(`⚡ [${symbol}] TREND EXHAUSTION PATTERN DETECTED: ${lookback} candles are in same direction`);
                 TelegramService.sendMessage(`⚡ [${symbol}] TREND EXHAUSTION PATTERN DETECTED: ${lookback} candles are in same direction, SYSTEM changed to ${CONFIG.TRADE_SYSTEM}`);
@@ -3027,7 +3037,9 @@ class DerivBot {
                     TelegramService.sendSessionSummary();
                     CONFIG.TRADE_SYSTEM = 1;
                     CONFIG.MAX_CANDLES_STORED = 50;
+                    CONFIG.CANDLES_TO_LOAD = 50;
                     state.activeTradeAsset = null;
+
                     if (this.connection.ws)
                         this.connection.ws.close();
                     state.session.isActive = false;
