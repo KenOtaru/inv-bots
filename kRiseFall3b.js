@@ -3160,13 +3160,13 @@ class DerivBot {
 
         } else {
             //Alternating Regime Pattern Detector Analysis
-            if (gate.worstCase.shouldAvoidTrade) {
-                LOGGER.warn(`⛔ Multi-window gate fired: ${gate.worstCase.probability}%`);
-            }
+            // if (gate.worstCase.shouldAvoidTrade) {
+            LOGGER.warn(`⛔ Multi-window gate fired: ${gate.worstCase.probability}%`);
+            // }
 
-            if (regime.shouldAvoidTrade) {
-                LOGGER.warn(`⛔ [${symbol}] Trade blocked — ${regime.signal} (${regime.probability}%)`);
-            }
+            // if (regime.shouldAvoidTrade) {
+            LOGGER.warn(`⛔ [${symbol}] Trade blocked — ${regime.signal} (${regime.probability}%)`);
+            // }
 
             LOGGER.info(
                 `🔬 [${symbol}] Alternating Candle Pattern Check: ${regime.probability}% (threshold ${CONFIG.ALTERNATING_PATTERN_THRESHOLD}%) | ${regime.reason}`
@@ -3212,15 +3212,15 @@ class DerivBot {
             `🎯 ${sessionLabel} [${symbol}] Executing ${direction === 'CALLE' ? 'RISE' : 'FALL'} trade`
         );
         LOGGER.trade(
-            `   [${symbol}]Stake: $${stake.toFixed(2)} | Duration: ${assetConfig.DURATION} ${assetConfig.DURATION_UNIT} | Martingale Level: ${assetState.martingaleLevel} `
+            `   [${symbol}] Stake: $${stake.toFixed(2)} | Duration: ${assetConfig.DURATION} ${assetConfig.DURATION_UNIT} | Martingale Level: ${assetState.martingaleLevel}`
         );
-        LOGGER.trade(`   [${symbol}]Reason: ${signalReason} `);
+        LOGGER.trade(`   [${symbol}] Reason: ${signalReason}`);
         const lastDir = CandleAnalyzer.getCandleDirection(lastClosedCandle);
         LOGGER.trade(
-            `   [${symbol}] Last candle: ${lastDir} | Close: ${lastClosedCandle.close.toFixed(5)} `
+            `   [${symbol}] Last candle: ${lastDir} | Close: ${lastClosedCandle.close.toFixed(5)}`
         );
         LOGGER.trade(
-            `   [${symbol}] Asset Stats: ${assetState.tradesCount} trades, ${assetState.winsCount} W / ${assetState.lossesCount} L, P / L: $${assetState.netPL.toFixed(2)} `
+            `   [${symbol}] Asset Stats: ${assetState.tradesCount} trades, ${assetState.winsCount}W/${assetState.lossesCount}L, P/L: $${assetState.netPL.toFixed(2)}`
         );
 
         const position = {
@@ -3261,7 +3261,7 @@ class DerivBot {
         if (!isRecoveryMode) {
             assetState.lastCrossSignalDirection = direction;
             LOGGER.info(
-                `${symbol} ✅ pattern direction '${direction}' marked as traded — will not re - trade until next valid trigger`
+                `${symbol} ✅ pattern direction '${direction}' marked as traded — will not re-trade until next valid trigger`
             );
         }
     }
