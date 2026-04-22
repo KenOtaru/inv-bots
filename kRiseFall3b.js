@@ -3243,9 +3243,9 @@ class DerivBot {
                     CONFIG.ALTERNATING_PATTERN_LOOKBACK
                 );
 
-                const check = AlternatingRegimeDetector.checkActiveAsset(lockedSymbol);
+                const check = AlternatingRegimeDetector.checkActiveAsset(symbol);
                 if (check.switchToSystem1) {
-                    LOGGER.warn(`⚠️  [${lockedSymbol}] Re-entered alt regime → switch to System 1`);
+                    LOGGER.warn(`⚠️  [${symbol}] Re-entered alt regime → switch to System 1`);
                 }
                 const gate = AlternatingRegimeDetector.multiWindowScan(
                     state.assets[symbol].closedCandles,
@@ -3688,9 +3688,9 @@ setInterval(() => {
                 state.assets[activeAsset].closedCandles,
                 CONFIG.ALTERNATING_PATTERN_LOOKBACK
             );
-            const check = AlternatingRegimeDetector.checkActiveAsset(lockedSymbol);
+            const check = AlternatingRegimeDetector.checkActiveAsset(symbol);
             if (check.switchToSystem1) {
-                LOGGER.warn(`⚠️  [${lockedSymbol}] Re-entered alt regime → switch to System 1`);
+                LOGGER.warn(`⚠️  [${symbol}] Re-entered alt regime → switch to System 1`);
             }
             const gate = AlternatingRegimeDetector.multiWindowScan(
                 state.assets[symbol].closedCandles,
