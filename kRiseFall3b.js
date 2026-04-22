@@ -3688,12 +3688,12 @@ setInterval(() => {
                 state.assets[activeAsset].closedCandles,
                 CONFIG.ALTERNATING_PATTERN_LOOKBACK
             );
-            const check = AlternatingRegimeDetector.checkActiveAsset(symbol);
+            const check = AlternatingRegimeDetector.checkActiveAsset(activeAsset);
             if (check.switchToSystem1) {
-                LOGGER.warn(`⚠️  [${symbol}] Re-entered alt regime → switch to System 1`);
+                LOGGER.warn(`⚠️  [${activeAsset}] Re-entered alt regime → switch to System 1`);
             }
             const gate = AlternatingRegimeDetector.multiWindowScan(
-                state.assets[symbol].closedCandles,
+                state.assets[activeAsset].closedCandles,
                 [50, 100, 200]
             );
             if (gate.worstCase.shouldAvoidTrade) {
@@ -3701,7 +3701,7 @@ setInterval(() => {
             }
 
             if (regime.shouldAvoidTrade) {
-                LOGGER.warn(`⛔ [${symbol}] Trade blocked — ${regime.signal} (${regime.probability}%)`);
+                LOGGER.warn(`⛔ [${activeAsset}] Trade blocked — ${regime.signal} (${regime.probability}%)`);
             }
             console.log(
                 `🔒 Active Asset: [${activeAsset}] | SYS:${CONFIG.TRADE_SYSTEM} | ` +
