@@ -3263,7 +3263,7 @@ class DerivBot {
                     `🔬 [${symbol}] Alternating Candle Pattern Check: ${regime.probability}% (threshold ${CONFIG.ALTERNATING_PATTERN_THRESHOLD}%) | ${regime.reason}`
                 );
 
-                if (regime.probability >= CONFIG.ALTERNATING_PATTERN_THRESHOLD) {
+                if (regime.probability >= CONFIG.ALTERNATING_PATTERN_THRESHOLD || check.switchToSystem1 || gate.worstCase.shouldAvoidTrade || regime.shouldAvoidTrade) {
                     LOGGER.trade(
                         `🔀 [${symbol}] Alt-pattern probability ${regime.probability}% ≥ ${CONFIG.ALTERNATING_PATTERN_THRESHOLD}% — switching to TRADE_SYSTEM 1`
                     );
@@ -3710,43 +3710,3 @@ setInterval(() => {
         }
     }
 }, 60000);
-
-
-//  const regime = AlternatingRegimeDetector.analyze(
-//           state.assets[symbol].closedCandles,
-//           CONFIG.ALTERNATING_PATTERN_LOOKBACK
-//       );
-//
-//       LOGGER.debug(`🔍 [${symbol}] ${regime.reason}`);
-//
-//       if (regime.shouldAvoidTrade) {
-//           LOGGER.warn(`⛔ [${symbol}] Trade blocked — ${regime.signal} (${regime.probability}%)`);
-//           return;
-//       }
-//
-//
-//  4. SCAN ALL ASSETS (e.g. to select the safest symbol to trade):
-//
-//       const dangerous = AlternatingRegimeDetector.findBestAsset();
-//       // dangerous = the asset MOST in an alternating regime, or null if none qualify
-//
-//
-//  5. MONITOR ACTIVE ASSET (in your tick/candle-close handler):
-//
-// const check = AlternatingRegimeDetector.checkActiveAsset(lockedSymbol);
-// if (check.switchToSystem1) {
-//     LOGGER.warn(`⚠️  [${lockedSymbol}] Re-entered alt regime → switch to System 1`);
-//     activateSystem1();
-// }
-//
-//
-//  6. BELT-AND-BRACES MULTI-WINDOW GATE (optional, highest confidence):
-//
-//       const gate = AlternatingRegimeDetector.multiWindowScan(
-//           state.assets[symbol].closedCandles,
-//           [50, 100, 200]
-//       );
-//       if (gate.worstCase.shouldAvoidTrade) {
-//           LOGGER.warn(`⛔ Multi-window gate fired: ${gate.worstCase.probability}%`);
-//           return;
-//       }
