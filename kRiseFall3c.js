@@ -6,8 +6,8 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'KriseFallM_3b_8-state.json');
-const HISTORY_FILE = path.join(__dirname, 'KriseFallM_3b_8-history.json');
+const STATE_FILE = path.join(__dirname, 'KriseFallM_3b_001-state.json');
+const HISTORY_FILE = path.join(__dirname, 'KriseFallM_3b_001-history.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
@@ -613,6 +613,7 @@ class TelegramService {
         stake,
         duration,
         durationUnit,
+        regime,
         details = {}
     ) {
         const emoji =
@@ -638,6 +639,7 @@ class TelegramService {
                 Stake: $${stake.toFixed(2)}
                 Duration: ${duration} (${durationUnit == 't' ? 'Ticks' : durationUnit == 's' ? 'Seconds' : 'Minutes'})
                 Martingale Level: ${assetMartingale}
+                ${type === 'OPEN' ? `\n🔬 [${symbol}] Alternating Candle Pattern Check: ${regime.probability}% (threshold ${CONFIG.ALTERNATING_PATTERN_THRESHOLD}%) | ${regime.reason}` : ''}
                 ${details.profit !== undefined
                 ? `Profit: $${details.profit.toFixed(2)}
 
@@ -1079,12 +1081,12 @@ class CandleAnalyzer {
 // ============================================
 const CONFIG = {
     // API Settings
-    API_TOKEN: 'rgNedekYXvCaPeP',
+    API_TOKEN: 'Dz2V2KvRf4Uukt3',
     APP_ID: '1089',
     WS_URL: 'wss://ws.derivws.com/websockets/v3',
 
     // Capital Settings
-    INITIAL_CAPITAL: 250,
+    INITIAL_CAPITAL: 150,
     STAKE: 0.35,
 
     // Session Targets
@@ -1097,14 +1099,15 @@ const CONFIG = {
     MAX_CANDLES_STORED: 50,
     CANDLES_TO_LOAD: 50,
 
-    ALTERNATING_PATTERN_THRESHOLD: 60,   // % probability to trigger TRADE_SYSTEM 1
-    CANDLES_DEEP: 5000,                  // Deep history size
-    CANDLES_SHALLOW: 50,                 // Shallow (pattern trading) size
-    CANDLE_PATTERN_LOOKBACK: 8, // Number of previous candles to analyze for pattern detection (user configurable)
-    LOOKBACK_SHALLOW: 8,                 // Lookback for TRADE_SYSTEM 1
-    LOOKBACK_DEEP: 3,                    // Lookback for TRADE_SYSTEM 2
+    CANDLE_PATTERN_LOOKBACK: 4, //8 Number of previous candles to analyze for pattern detection (user configurable)
+    TREND_CANDLE_LOOKBACK: 8, //7 Number of previous candles to analyze for trend detection (user configurable)
+    TRADE_SYSTEM: 1,
 
-    tradeInProgress: false,
+    // ============================
+    // ALTERNATING PATTERN SWITCHING CONFIGURATION
+    // ============================
+    ALTERNATING_PATTERN_THRESHOLD: 60, //60 Percentage threshold for switching to TRADE_SYSTEM 1
+    ALTERNATING_PATTERN_LOOKBACK: 100, //100 Number of previous candles to analyze for pattern detection (user configurable)
 
     // Default Trade Duration Settings (used if asset has no specific config)
     DURATION: 58,
@@ -1136,7 +1139,7 @@ const CONFIG = {
     TOKYO_END: 8,
     LONDON_START: 8,
     LONDON_END: 12,
-    NEWYORK_START: 12,
+    NEWYORK_START: 15,
     NEWYORK_END: 19,
     SYDNEY_START: 19,
     SYDNEY_END: 23,
@@ -1228,8 +1231,7 @@ const state = {
     capital: CONFIG.INITIAL_CAPITAL,
     accountBalance: 0,
     currentTradeDay: null, // Track current trading day for day-change detection
-    activeTradeAsset: null,   // The one asset currently being traded (locked)
-    assetScanIndex: 0,        // Which asset to scan next for a pattern signal
+    activeTradeAsset: null,
     session: {
         profit: 0,
         loss: 0,
@@ -1594,8 +1596,6 @@ class SessionManager {
         // ---- Per-asset stats ----
         assetState.tradesCount++;
 
-        CONFIG.tradeInProgress = false;
-
         if (profit > 0) {
             // === WIN ===
             // Global
@@ -1620,41 +1620,6 @@ class SessionManager {
             LOGGER.trade(
                 `✅ [${symbol}] WIN: +$${profit.toFixed(2)} | Direction: ${direction} | ${symbol} Martingale Reset | ${symbol} P/L: $${assetState.netPL.toFixed(2)}`
             );
-
-            // WIN: trade cycle complete — switch to SYSTEM 2 deep monitoring
-            // Keep the same asset locked; re-evaluate pattern on next candles
-            // bot._switchToSystem2(symbol);
-
-            // If the asset is now in a clean state (martingale reset), run a fresh
-            // scan to see if another asset has a stronger pattern
-            // const assetState = state.assets[symbol];
-            // if (assetState && assetState.martingaleLevel === 0) {
-            //     const best = AlternatingPatternAnalyzer.findBestAsset();
-            //     if (best && best.symbol !== symbol && best.probability > (
-            //         AlternatingPatternAnalyzer.analyze(assetState.closedCandles).probability
-            //     )) {
-            //         LOGGER.trade(
-            //             `🔁 Post-win scan: [${best.symbol}] (${best.probability}%) beats [${symbol}] — switching lock`
-            //         );
-            //         state.activeTradeAsset = best.symbol;
-            //         bot._switchToSystem1(best.symbol);
-            //     }
-            // }
-
-            //Check if the asset has now re-developed a strong alternating pattern
-            const check = AlternatingPatternAnalyzer.checkActiveAsset(symbol);
-
-            LOGGER.info(
-                `🔬 [${symbol}] SYS2 pattern check: ${check.probability}% (threshold ${CONFIG.ALTERNATING_PATTERN_THRESHOLD}%) | ${check.reason}`
-            );
-
-            if (check.switchToSystem1) {
-                LOGGER.trade(
-                    `🔀 [${symbol}] Alt-pattern probability ${check.probability}% ≥ ${CONFIG.ALTERNATING_PATTERN_THRESHOLD}% — switching to TRADE_SYSTEM 1`
-                );
-                this._switchToSystem1(symbol);
-            }
-
         } else {
             // === LOSS ===
             // Global
@@ -1753,9 +1718,6 @@ class SessionManager {
                     `❌ [${symbol}] LOSS: -$${Math.abs(profit).toFixed(2)} | Direction: ${direction} | ${symbol} Next Martingale Level: ${assetState.martingaleLevel} | ${symbol} Next Stake: $${assetState.currentStake.toFixed(2)} | ${symbol} P/L: $${assetState.netPL.toFixed(2)}`
                 );
             }
-
-            // LOSS: stay locked on same asset in SYSTEM 2 for martingale recovery
-            // bot._switchToSystem2(symbol);
         }
     }
 }
@@ -2025,6 +1987,11 @@ class ConnectionManager {
             }
         }
 
+        const regime = AlternatingRegimeDetector.analyze(
+            state.assets[foundSymbol].closedCandles,
+            CONFIG.ALTERNATING_PATTERN_LOOKBACK
+        );
+
         if (position) {
             position.contractId = contract.contract_id;
             position.buyPrice = contract.buy_price;
@@ -2035,7 +2002,8 @@ class ConnectionManager {
                 position.direction,
                 position.stake,
                 position.duration,
-                position.durationUnit
+                position.durationUnit,
+                regime
             );
         }
 
@@ -2289,12 +2257,6 @@ class ConnectionManager {
         this.stopPing();
         StatePersistence.saveState();
 
-        CONFIG.TRADE_SYSTEM = 1;
-        CONFIG.MAX_CANDLES_STORED = CONFIG.CANDLES_SHALLOW;
-        CONFIG.CANDLES_TO_LOAD = CONFIG.CANDLES_SHALLOW;
-        CONFIG.CANDLE_PATTERN_LOOKBACK = CONFIG.LOOKBACK_SHALLOW;
-        state.activeTradeAsset = null;
-
         if (this.isReconnecting) {
             LOGGER.info('Already handling disconnect, skipping...');
             return;
@@ -2322,6 +2284,10 @@ class ConnectionManager {
 
             setTimeout(() => {
                 this.isReconnecting = false;
+                CONFIG.TRADE_SYSTEM = 1;
+                CONFIG.MAX_CANDLES_STORED = 50;
+                CONFIG.CANDLES_TO_LOAD = 50;
+                state.activeTradeAsset = null;
                 this.connect();
             }, delay);
         } else {
@@ -2359,119 +2325,159 @@ class ConnectionManager {
     }
 }
 
-// ============================================
-// ALTERNATING PATTERN PROBABILITY ANALYZER
-// ============================================
-class AlternatingPatternAnalyzer {
+/**
+ * ================================================================
+ *  AlternatingRegimeDetector
+ * ================================================================
+ *  Detects when the market is in (or entering) an Alternating
+ *  Candle regime: Bull-Bear-Bull / Bear-Bull-Bear sequences that
+ *  are dangerous for directional Rise/Fall strategies.
+ *
+ *  Six statistical layers are combined into a single probability
+ *  score (0–100) and a human-readable signal level:
+ *
+ *    Layer 1 — Alternation Rate      Raw % of consecutive pairs that flip
+ *    Layer 2 — Wald-Wolfowitz Z      Too many runs = alternating regime
+ *    Layer 3 — Lag-1 Autocorrelation Negative = mean-reverting
+ *    Layer 4 — Streak Analysis       How long is the current alt-run?
+ *    Layer 5 — Momentum (Δ rate)     Is alternation accelerating?
+ *    Layer 6 — Composite Score       Weighted 0–100 probability
+ */
+
+class AlternatingRegimeDetector {
+
+    // ═══════════════════════════════════════════════════════════════
+    //  PUBLIC API
+    // ═══════════════════════════════════════════════════════════════
 
     /**
-     * Core engine: scans a candle array and returns the % probability
-     * that the asset is currently in / about to enter an Alternating Pattern trend.
+     * Core engine. Runs all 6 detection layers on the supplied candle
+     * history and returns a composite probability that the market is
+     * currently in / about to enter an Alternating Candle regime.
      *
-     * Algorithm:
-     *  1. Walk the full history and identify every contiguous alternating run of length >= minRunLen.
-     *  2. For each run, record how it ended (continued alternating on the next candle, or broke).
-     *  3. Given the CURRENT trailing run length, compute:
-     *       P = (times the pattern continued after a run of this length) /
-     *           (total times a run of this length was observed)
-     *  4. Apply a recency weight bonus if the current run is happening right now at the tail.
+     * @param {Array<{ open: number, close: number }>} candleHistory
+     *   Full closed-candle array, newest entry last (up to 5 000 candles).
      *
-     * @param {Array}  candles     - Full closed candle array (up to 5000)
-     * @param {number} minRunLen   - Minimum alternating run to start counting (default 3)
-     * @returns {{ probability: number, currentRunLength: number, reason: string }}
+     * @param {number} patternLookbackNum
+     *   Number of RECENT candles to analyse.
+     *   Recommended: 50–300.  Larger = more power, more lag.
+     *
+     * @returns {{
+     *   probability      : number,   0–100
+     *   signal           : string,   'SAFE' | 'CAUTION' | 'WARNING' | 'DANGER'
+     *   shouldAvoidTrade : boolean,
+     *   currentStreak    : number,   consecutive alternating candles at the tail
+     *   reason           : string,   one-line human summary
+     *   details          : {
+     *     alternationRate  : number,
+     *     runsZScore       : number,
+     *     runsCount        : number,
+     *     expectedRuns     : number,
+     *     runsPValue       : number,
+     *     autocorrelation  : number,
+     *     maxStreak        : number,
+     *     maxStreakRatio   : number,
+     *     currentStreak    : number,
+     *     momentum         : number,
+     *     sampleSize       : number,
+     *     regime           : string,
+     *     layerScores      : object
+     *   }
+     * }}
      */
-    static analyze(candles, minRunLen = 3) {
-        if (!candles || candles.length < minRunLen + 1) {
-            return { probability: 0, currentRunLength: 0, reason: 'Insufficient candle data' };
+    static analyze(candleHistory, patternLookbackNum) {
+
+        // ── Guard ────────────────────────────────────────────────────
+        if (!Array.isArray(candleHistory) || candleHistory.length < 10) {
+            return this._insufficientData(
+                `candleHistory has ${candleHistory?.length ?? 0} candles — need ≥ 10`
+            );
+        }
+        if (typeof patternLookbackNum !== 'number' || patternLookbackNum < 10) {
+            return this._insufficientData('patternLookbackNum must be a number ≥ 10');
+        }
+        const sample = candleHistory[candleHistory.length - 1];
+        if (sample?.open === undefined || sample?.close === undefined) {
+            return this._insufficientData('Each candle must have { open, close } properties');
         }
 
-        // ── Step 1: Build direction array (1 = bullish, -1 = bearish, 0 = doji) ──
-        const dir = candles.map(c => {
-            if (c.close > c.open) return 1;
-            if (c.close < c.open) return -1;
-            return 0;
-        });
+        // ── Slice window (most recent N candles) ─────────────────────
+        const lookback = Math.min(patternLookbackNum, candleHistory.length);
+        const window = candleHistory.slice(-lookback);
 
-        const n = dir.length;
+        // ── Build binary direction sequence ──────────────────────────
+        //    1 = bullish  (close > open)
+        //    0 = bearish / doji
+        const sequence = window.map(c => (c.close > c.open ? 1 : 0));
 
-        // ── Step 2: Identify alternating runs ──
-        // runLen[i] = length of the alternating run ENDING at candle i (min 1)
-        const runLen = new Array(n).fill(1);
-        for (let i = 1; i < n; i++) {
-            if (dir[i] !== 0 && dir[i - 1] !== 0 && dir[i] !== dir[i - 1]) {
-                runLen[i] = runLen[i - 1] + 1;
-            }
-        }
+        // ── Layer 1: Alternation Rate ────────────────────────────────
+        const alternationRate = this._alternationRate(sequence);
 
-        // ── Step 3: Build frequency table ──
-        // For each run length L observed at position i (L >= minRunLen),
-        // did the NEXT candle (i+1) continue the alternating pattern?
-        const freqTotal = {};   // freqTotal[L]    = how many times run of L was seen mid-history
-        const freqContinue = {};   // freqContinue[L] = how many times it then continued
+        // ── Layer 2: Wald-Wolfowitz Runs Test ────────────────────────
+        const {
+            runs, expectedRuns,
+            zScore: runsZScore,
+            pValue: runsPValue,
+        } = this._runsTest(sequence);
 
-        for (let i = minRunLen - 1; i < n - 1; i++) {
-            const L = runLen[i];
-            if (L < minRunLen) continue;
+        // ── Layer 3: Lag-1 Autocorrelation ───────────────────────────
+        const autocorrelation = this._autocorrelation(sequence);
 
-            // Cap bucket at minRunLen+4 so small samples don't produce misleading %
-            const bucket = Math.min(L, minRunLen + 4);
+        // ── Layer 4: Streak Analysis ─────────────────────────────────
+        const { maxStreak, maxStreakRatio, currentStreak } = this._streakAnalysis(sequence);
 
-            freqTotal[bucket] = (freqTotal[bucket] || 0) + 1;
+        // ── Layer 5: Momentum (acceleration of alternation) ──────────
+        const momentum = this._momentum(sequence);
 
-            const nextAlternates =
-                dir[i + 1] !== 0 &&
-                dir[i] !== 0 &&
-                dir[i + 1] !== dir[i];
+        // ── Layer 6: Composite Score ─────────────────────────────────
+        const metrics = { alternationRate, runsZScore, autocorrelation, maxStreakRatio, momentum };
+        const probability = this._compositeScore(metrics);
+        const layerScores = this._layerScores(metrics);
 
-            if (nextAlternates) {
-                freqContinue[bucket] = (freqContinue[bucket] || 0) + 1;
-            }
-        }
+        // ── Signal & action flag ─────────────────────────────────────
+        const { signal, shouldAvoidTrade } = this._mapSignal(probability);
 
-        // ── Step 4: Current trailing run ──
-        const currentRun = runLen[n - 1];
-        const currentBucket = Math.min(currentRun, minRunLen + 4);
+        // ── Regime description ────────────────────────────────────────
+        const regime = this._describeRegime(metrics);
 
-        let probability = 0;
-        let reason = '';
-
-        if (currentRun < minRunLen) {
-            // Not yet in an alternating run — use base-rate of the pattern occurring at all
-            const totalObs = Object.values(freqTotal).reduce((a, b) => a + b, 0);
-            const totalContinue = Object.values(freqContinue).reduce((a, b) => a + b, 0);
-            const baseRate = totalObs > 0 ? (totalContinue / totalObs) * 100 : 0;
-
-            // Scale down: only a fraction of those become a run from here
-            probability = Math.min(baseRate * 0.4, 55);
-            reason = `No active alternating run (run=${currentRun}). Base-rate: ${baseRate.toFixed(1)}%`;
-
-        } else {
-            const total = freqTotal[currentBucket] || 0;
-            const cont = freqContinue[currentBucket] || 0;
-            const histProb = total > 0 ? (cont / total) * 100 : 50;
-
-            // Recency bonus: the run is happening RIGHT NOW at the tail
-            const recencyBonus = Math.min(currentRun * 2, 15);
-            probability = Math.min(histProb + recencyBonus, 99);
-
-            reason = `Active alternating run of ${currentRun} candles. ` +
-                `Historical continuation: ${cont}/${total} (${histProb.toFixed(1)}%) + recency +${recencyBonus}% = ${probability.toFixed(1)}%`;
-        }
+        // ── One-line reason (mirrors AlternatingPatternAnalyzer shape) ─
+        const reason = this._buildReason(probability, signal, currentStreak, alternationRate, runsZScore, autocorrelation);
 
         return {
-            probability: parseFloat(probability.toFixed(2)),
-            currentRunLength: currentRun,
-            reason
+            probability,
+            signal,
+            shouldAvoidTrade,
+            currentStreak,
+            reason,
+            details: {
+                alternationRate: +alternationRate.toFixed(4),
+                runsZScore: +runsZScore.toFixed(4),
+                runsCount: runs,
+                expectedRuns: +expectedRuns.toFixed(2),
+                runsPValue: +runsPValue.toFixed(4),
+                autocorrelation: +autocorrelation.toFixed(4),
+                maxStreak,
+                maxStreakRatio: +maxStreakRatio.toFixed(4),
+                currentStreak,
+                momentum: +momentum.toFixed(4),
+                sampleSize: lookback,
+                regime,
+                layerScores,
+            },
         };
     }
 
+    // ───────────────────────────────────────────────────────────────
+
     /**
-     * Scan ALL active assets and return the one with the highest
-     * alternating-pattern probability (above threshold).
-     * Returns null if none meet the threshold.
+     * Scan ALL active assets and return the one with the HIGHEST
+     * alternating-regime probability above the given threshold.
+     * Returns null if no asset meets the threshold.
      *
-     * @param {number} threshold  - Minimum % to qualify (default CONFIG.ALTERNATING_PATTERN_THRESHOLD)
-     * @returns {{ symbol: string, probability: number, currentRunLength: number, reason: string } | null}
+     * @param {number} [threshold=CONFIG.ALTERNATING_PATTERN_THRESHOLD]
+     * @returns {{ symbol: string, probability: number, signal: string,
+     *             shouldAvoidTrade: boolean, currentStreak: number,
+     *             reason: string, details: object } | null}
      */
     static findBestAsset(threshold = CONFIG.ALTERNATING_PATTERN_THRESHOLD) {
         let best = null;
@@ -2480,10 +2486,14 @@ class AlternatingPatternAnalyzer {
             const assetState = state.assets[symbol];
             if (!assetState || assetState.closedCandles.length < 10) continue;
 
-            const result = this.analyze(assetState.closedCandles);
+            const result = this.analyze(
+                assetState.closedCandles,
+                CONFIG.ALTERNATING_PATTERN_LOOKBACK ?? 100
+            );
 
             LOGGER.debug(
-                `🔍 [${symbol}] Alt-Pattern probability: ${result.probability}% | Run: ${result.currentRunLength} | ${result.reason}`
+                `🔍 [${symbol}] Alt-Regime | ${result.signal} ${result.probability}% ` +
+                `| Streak: ${result.currentStreak} | ${result.reason}`
             );
 
             if (result.probability >= threshold) {
@@ -2496,28 +2506,423 @@ class AlternatingPatternAnalyzer {
         return best;
     }
 
+    // ───────────────────────────────────────────────────────────────
+
     /**
-     * Check if the ACTIVE (locked) asset still warrants TRADE_SYSTEM 2 continuation,
-     * OR if it has re-entered a strong alternating pattern (switch back to TRADE_SYSTEM 1).
+     * Check whether the CURRENTLY LOCKED asset has re-entered a strong
+     * alternating regime and should trigger a switch back to TRADE_SYSTEM 1.
      *
      * @param {string} symbol
-     * @returns {{ switchToSystem1: boolean, probability: number, reason: string }}
+     * @param {number} [threshold=CONFIG.ALTERNATING_PATTERN_THRESHOLD]
+     * @returns {{ switchToSystem1: boolean, probability: number, signal: string,
+     *             currentStreak: number, reason: string, details: object }}
      */
-    static checkActiveAsset(symbol) {
+    static checkActiveAsset(symbol, threshold = CONFIG.ALTERNATING_PATTERN_THRESHOLD) {
         const assetState = state.assets[symbol];
-        if (!assetState) return { switchToSystem1: false, probability: 0, reason: 'Asset not found' };
 
-        const result = this.analyze(assetState.closedCandles);
-        const threshold = CONFIG.ALTERNATING_PATTERN_THRESHOLD;
+        if (!assetState || assetState.closedCandles.length < 10) {
+            return {
+                switchToSystem1: false,
+                probability: 0,
+                signal: 'SAFE',
+                currentStreak: 0,
+                reason: 'Insufficient candle data for active-asset check',
+                details: {},
+            };
+        }
+
+        const result = this.analyze(
+            assetState.closedCandles,
+            CONFIG.ALTERNATING_PATTERN_LOOKBACK ?? 100
+        );
 
         return {
             switchToSystem1: result.probability >= threshold,
             probability: result.probability,
-            currentRunLength: result.currentRunLength,
-            reason: result.reason
+            signal: result.signal,
+            currentStreak: result.currentStreak,
+            reason: result.reason,
+            details: result.details,
+        };
+    }
+
+    // ───────────────────────────────────────────────────────────────
+
+    /**
+     * Run the detector across multiple lookback window sizes and return
+     * the MOST CONSERVATIVE (highest probability) result.
+     * Use as a final hard gate before executing a trade entry.
+     *
+     * @param {Array<{ open: number, close: number }>} candleHistory
+     * @param {number[]} [lookbackSizes=[50, 100, 200]]
+     * @returns {{ worstCase: object, allResults: object[] }}
+     */
+    static multiWindowScan(candleHistory, lookbackSizes = [50, 100, 200]) {
+        const allResults = lookbackSizes
+            .filter(n => n >= 10 && n <= candleHistory.length)
+            .map(n => ({ lookback: n, ...this.analyze(candleHistory, n) }));
+
+        if (allResults.length === 0) {
+            return {
+                worstCase: this._insufficientData('No valid lookback sizes for multiWindowScan'),
+                allResults: [],
+            };
+        }
+
+        const worstCase = allResults.reduce(
+            (worst, r) => (r.probability > worst.probability ? r : worst),
+            allResults[0]
+        );
+
+        return { worstCase, allResults };
+    }
+
+
+    // ═══════════════════════════════════════════════════════════════
+    //  LAYER 1 — Alternation Rate
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Proportion of consecutive candle pairs that flip direction.
+     *   Random        ≈ 0.50
+     *   Full trending = 0.00
+     *   Full alt      = 1.00
+     *
+     * @param {number[]} seq  Binary direction sequence
+     * @returns {number} 0.0–1.0
+     */
+    static _alternationRate(seq) {
+        if (seq.length < 2) return 0;
+        let alt = 0;
+        for (let i = 1; i < seq.length; i++) {
+            if (seq[i] !== seq[i - 1]) alt++;
+        }
+        return alt / (seq.length - 1);
+    }
+
+
+    // ═══════════════════════════════════════════════════════════════
+    //  LAYER 2 — Wald-Wolfowitz Runs Test
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Non-parametric test for randomness in a binary sequence.
+     * TOO MANY runs  → Z >> 0 → alternating / mean-reverting regime.
+     * TOO FEW  runs  → Z << 0 → trending regime.
+     * Critical value: |Z| > 1.96  (α = 0.05, two-tailed)
+     *
+     * Ref: Wald & Wolfowitz (1940)
+     *
+     * @param {number[]} seq
+     * @returns {{ runs: number, expectedRuns: number, zScore: number, pValue: number }}
+     */
+    static _runsTest(seq) {
+        if (seq.length < 10) {
+            return { runs: 0, expectedRuns: 0, zScore: 0, pValue: 0.5 };
+        }
+
+        const n1 = seq.filter(v => v === 1).length;
+        const n2 = seq.length - n1;
+        const n = seq.length;
+
+        // Edge case: all candles the same direction → perfect trend, 1 run
+        if (n1 === 0 || n2 === 0) {
+            return { runs: 1, expectedRuns: 1, zScore: -999, pValue: 0 };
+        }
+
+        let runs = 1;
+        for (let i = 1; i < seq.length; i++) {
+            if (seq[i] !== seq[i - 1]) runs++;
+        }
+
+        const expectedRuns = (2 * n1 * n2) / n + 1;
+        const variance = (2 * n1 * n2 * (2 * n1 * n2 - n)) / (n * n * (n - 1));
+
+        if (variance <= 0) return { runs, expectedRuns, zScore: 0, pValue: 0.5 };
+
+        const zScore = (runs - expectedRuns) / Math.sqrt(variance);
+        const pValue = 2 * (1 - this._normalCDF(Math.abs(zScore)));
+
+        return { runs, expectedRuns, zScore, pValue };
+    }
+
+
+    // ═══════════════════════════════════════════════════════════════
+    //  LAYER 3 — Lag-1 Autocorrelation (Pearson)
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Measures whether each candle's direction predicts the next.
+     *   Negative → mean-reversion → alternating regime
+     *   Positive → momentum / trending
+     *
+     * Thresholds:
+     *   <  -0.15  mild mean-reversion
+     *   <  -0.30  moderate
+     *   <  -0.50  strong alternating regime
+     *
+     * @param {number[]} seq
+     * @returns {number} -1.0 to +1.0
+     */
+    static _autocorrelation(seq) {
+        const n = seq.length;
+        if (n < 4) return 0;
+
+        const x = seq.slice(0, n - 1);   // values at time t
+        const y = seq.slice(1);           // values at time t+1
+
+        const meanX = x.reduce((a, b) => a + b, 0) / x.length;
+        const meanY = y.reduce((a, b) => a + b, 0) / y.length;
+
+        let num = 0, dX = 0, dY = 0;
+        for (let i = 0; i < x.length; i++) {
+            const dx = x[i] - meanX;
+            const dy = y[i] - meanY;
+            num += dx * dy;
+            dX += dx * dx;
+            dY += dy * dy;
+        }
+
+        const denom = Math.sqrt(dX * dY);
+        return denom === 0 ? 0 : num / denom;
+    }
+
+
+    // ═══════════════════════════════════════════════════════════════
+    //  LAYER 4 — Streak Analysis
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Identifies the longest contiguous alternating run within the window
+     * and the live run length ending at the most recent candle.
+     *
+     * @param {number[]} seq
+     * @returns {{ maxStreak: number, maxStreakRatio: number, currentStreak: number }}
+     */
+    static _streakAnalysis(seq) {
+        if (seq.length < 2) {
+            return { maxStreak: 0, maxStreakRatio: 0, currentStreak: 0 };
+        }
+
+        let maxStreak = 1;
+        let cur = 1;
+
+        for (let i = 1; i < seq.length; i++) {
+            if (seq[i] !== seq[i - 1]) {
+                cur++;
+                if (cur > maxStreak) maxStreak = cur;
+            } else {
+                cur = 1;
+            }
+        }
+
+        // Tail streak — unbroken alternating run ending at candle [-1]
+        let tailStreak = 1;
+        for (let i = seq.length - 1; i >= 1; i--) {
+            if (seq[i] !== seq[i - 1]) tailStreak++;
+            else break;
+        }
+
+        return {
+            maxStreak,
+            maxStreakRatio: maxStreak / seq.length,
+            currentStreak: tailStreak,
+        };
+    }
+
+
+    // ═══════════════════════════════════════════════════════════════
+    //  LAYER 5 — Momentum (Rate Acceleration)
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Compares alternation rate between the first and second halves
+     * of the window.
+     *   Positive → alternation is accelerating (regime emerging)
+     *   Negative → alternation is fading
+     *
+     * @param {number[]} seq
+     * @returns {number}
+     */
+    static _momentum(seq) {
+        if (seq.length < 10) return 0;
+        const mid = Math.floor(seq.length / 2);
+        const rateA = this._alternationRate(seq.slice(0, mid));
+        const rateB = this._alternationRate(seq.slice(mid));
+        return rateB - rateA;
+    }
+
+
+    // ═══════════════════════════════════════════════════════════════
+    //  LAYER 6 — Composite Probability Score (0–100)
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Weighted combination of all five layer scores into a single
+     * 0–100 probability figure.
+     *
+     * Weights:
+     *   Alternation Rate   30 %
+     *   Runs Test Z-Score  25 %
+     *   Autocorrelation    25 %
+     *   Streak Ratio       10 %
+     *   Momentum           10 %
+     *
+     * @param {{ alternationRate, runsZScore, autocorrelation,
+     *           maxStreakRatio, momentum }} metrics
+     * @returns {number} integer 0–100
+     */
+    static _compositeScore({ alternationRate, runsZScore, autocorrelation, maxStreakRatio, momentum }) {
+        const s = this._layerScores({ alternationRate, runsZScore, autocorrelation, maxStreakRatio, momentum });
+        const composite =
+            s.alternationRateScore * 0.30 +
+            s.runsTestScore * 0.25 +
+            s.autocorrScore * 0.25 +
+            s.streakScore * 0.10 +
+            s.momentumScore * 0.10;
+        return Math.round(Math.max(0, Math.min(100, composite)));
+    }
+
+    /**
+     * Individual 0–100 scores for each layer (useful for debugging).
+     *
+     * @param {{ alternationRate, runsZScore, autocorrelation,
+     *           maxStreakRatio, momentum }} metrics
+     * @returns {object}
+     */
+    static _layerScores({ alternationRate, runsZScore, autocorrelation, maxStreakRatio, momentum }) {
+        const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+        return {
+            // 0.5 = random (0 pts) … 1.0 = perfect alt (100 pts)
+            alternationRateScore: Math.round(clamp((alternationRate - 0.5) / 0.5 * 100, 0, 100)),
+            // Z=0 → 0 pts … Z=3 → 100 pts  (too many runs = bad)
+            runsTestScore: Math.round(clamp(runsZScore / 3 * 100, 0, 100)),
+            // AC= 0 → 0 pts … AC=-1 → 100 pts
+            autocorrScore: Math.round(clamp(-autocorrelation * 100, 0, 100)),
+            // streak covering > 60 % of window = full score
+            streakScore: Math.round(clamp(maxStreakRatio / 0.6 * 100, 0, 100)),
+            // +0.3 delta = full score
+            momentumScore: Math.round(clamp(momentum / 0.3 * 100, 0, 100)),
+        };
+    }
+
+
+    // ═══════════════════════════════════════════════════════════════
+    //  SIGNAL MAPPING
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Convert a composite probability to a named signal level and
+     * a trade-avoidance flag.
+     *
+     * | Probability | Signal   | shouldAvoidTrade |
+     * |-------------|----------|------------------|
+     * | 0  – 34     | SAFE     | false            |
+     * | 35 – 54     | CAUTION  | false            |
+     * | 55 – 74     | WARNING  | true             |
+     * | 75 – 100    | DANGER   | true             |
+     *
+     * @param {number} probability
+     * @returns {{ signal: string, shouldAvoidTrade: boolean }}
+     */
+    static _mapSignal(probability) {
+        if (probability >= 75) return { signal: 'DANGER', shouldAvoidTrade: true };
+        if (probability >= 55) return { signal: 'WARNING', shouldAvoidTrade: true };
+        if (probability >= 35) return { signal: 'CAUTION', shouldAvoidTrade: false };
+        return { signal: 'SAFE', shouldAvoidTrade: false };
+    }
+
+
+    // ═══════════════════════════════════════════════════════════════
+    //  REGIME DESCRIPTION  &  REASON STRING
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Plain-English characterisation of the current market regime.
+     *
+     * @param {{ alternationRate, autocorrelation, runsZScore }} metrics
+     * @returns {string}
+     */
+    static _describeRegime({ alternationRate, autocorrelation, runsZScore }) {
+        if (alternationRate > 0.72 && autocorrelation < -0.25)
+            return 'Strong Alternating Regime — market flips direction every candle';
+        if (alternationRate > 0.60 && runsZScore > 1.96)
+            return 'Alternating Regime — statistically significant mean-reversion detected';
+        if (alternationRate > 0.55 && autocorrelation < -0.10)
+            return 'Emerging Alternating Regime — early mean-reversion signs present';
+        if (alternationRate < 0.40 && autocorrelation > 0.10)
+            return 'Trending Regime — clear directional momentum active';
+        if (alternationRate < 0.45)
+            return 'Mild Trending Regime — slight directional bias present';
+        return 'Neutral / Random Regime — no dominant pattern detected';
+    }
+
+    /**
+     * One-line summary string (matches the `reason` field of
+     * AlternatingPatternAnalyzer for drop-in compatibility).
+     *
+     * @param {number} probability
+     * @param {string} signal
+     * @param {number} currentStreak
+     * @param {number} alternationRate
+     * @param {number} runsZScore
+     * @param {number} autocorrelation
+     * @returns {string}
+     */
+    static _buildReason(probability, signal, currentStreak, alternationRate, runsZScore, autocorrelation) {
+        return (
+            `[${signal}] ${probability}% alt-regime probability. ` +
+            `Active streak: ${currentStreak} candles | ` +
+            `AltRate: ${(alternationRate * 100).toFixed(1)}% | ` +
+            `Z-Score: ${runsZScore.toFixed(2)} | ` +
+            `AutoCorr: ${autocorrelation.toFixed(3)}`
+        );
+    }
+
+
+    // ═══════════════════════════════════════════════════════════════
+    //  MATH HELPERS
+    // ═══════════════════════════════════════════════════════════════
+
+    /**
+     * Normal CDF approximation — Abramowitz & Stegun rational series.
+     * Max error: 7.5 × 10⁻⁸  (more than sufficient for a z-test).
+     *
+     * @param {number} z
+     * @returns {number} probability P(Z ≤ z)
+     */
+    static _normalCDF(z) {
+        const t = 1 / (1 + 0.2316419 * Math.abs(z));
+        const d = 0.3989422820 * Math.exp(-z * z / 2);
+        const p = d * t * (0.3193815 + t * (-0.3565638 + t * (1.7814779 + t * (-1.8212560 + t * 1.3302744))));
+        return z > 0 ? 1 - p : p;
+    }
+
+    /**
+     * Safe fallback for when there is not enough candle data.
+     *
+     * @param {string} reason
+     * @returns {object}
+     */
+    static _insufficientData(reason) {
+        return {
+            probability: 0,
+            signal: 'SAFE',
+            shouldAvoidTrade: false,
+            currentStreak: 0,
+            reason,
+            details: {
+                alternationRate: 0, runsZScore: 0, runsCount: 0,
+                expectedRuns: 0, runsPValue: 0, autocorrelation: 0,
+                maxStreak: 0, maxStreakRatio: 0, currentStreak: 0,
+                momentum: 0, sampleSize: 0,
+                regime: 'Insufficient data',
+                layerScores: {},
+            },
         };
     }
 }
+
 
 // ============================================
 // MAIN BOT CLASS
@@ -2661,7 +3066,7 @@ class DerivBot {
 
     /**
      * =========================================================
-     * TRADE EXECUTION — Single-Asset Lock + Pattern Probability
+    * TRADE EXECUTION — PER-ASSET Candle-pattern Logic
      * =========================================================
      */
     executeNextTrade(symbol, lastClosedCandle) {
@@ -2669,26 +3074,33 @@ class DerivBot {
         if (!assetState) return;
         if (!assetState.canTrade) return;
         if (!SessionManager.isSessionActive()) return;
-        if (CONFIG.tradeInProgress) return;
-
-        // ── SINGLE-ASSET LOCK ──────────────────────────────────────────────────
-        // If we are locked onto a different asset, ignore candle events from others
-        if (state.activeTradeAsset && state.activeTradeAsset !== symbol) {
-            LOGGER.debug(`[${symbol}] Skipped — bot is locked on [${state.activeTradeAsset}]`);
-            return;
-        }
 
         const assetConfig = getAssetConfig(symbol);
 
+        // ── SKIP IF ANOTHER ASSET IS ALREADY ACTIVE ─────────────────────────────
+        // if (state.activeTradeAsset && state.activeTradeAsset !== symbol) {
+        //     LOGGER.debug(
+        //         `⏭️ [${symbol}] Skipped — [${state.activeTradeAsset}] is already active`
+        //     );
+        //     return;
+        // }
+
         // Check per-asset position limit
-        if (assetState.activePositions.length >= CONFIG.MAX_OPEN_POSITIONS_PER_ASSET) {
+        if (
+            assetState.activePositions.length >=
+            CONFIG.MAX_OPEN_POSITIONS_PER_ASSET
+        ) {
             LOGGER.debug(
                 `${symbol} ⏳ Max positions reached (${assetState.activePositions.length}/${CONFIG.MAX_OPEN_POSITIONS_PER_ASSET})`
             );
             return;
         }
 
-        // ── TRADING SESSION CHECK ──────────────────────────────────────────────
+        // =============================================
+        // TRADING SESSION TIME CHECK
+        // Only enforced for new signals, never for recovery
+        // Skipped entirely when USE_TRADING_SESSIONS is false
+        // =============================================
         const isInMartingaleRecovery = assetState.martingaleLevel > 0;
         let sessionCheck = { inSession: true, sessionName: '24/7', nextSession: null, minutesUntilNext: 0 };
 
@@ -2703,6 +3115,12 @@ class DerivBot {
                     );
                     state.lastSessionLogTime = now;
                 }
+
+                // change system to 1
+                CONFIG.TRADE_SYSTEM = 1;
+                CONFIG.MAX_CANDLES_STORED = 50;
+                CONFIG.CANDLES_TO_LOAD = 50;
+                state.activeTradeAsset = null;
                 return;
             }
 
@@ -2718,23 +3136,29 @@ class DerivBot {
         // Capital sufficiency check
         if (state.capital < stake) {
             LOGGER.error(
-                `[${symbol}] Insufficient capital: $${state.capital.toFixed(2)} (Needed: $${stake.toFixed(2)})`
+                `[${symbol}] Insufficient capital for stake: $${state.capital.toFixed(2)} (Needed: $${stake.toFixed(2)})`
             );
             if (assetState.martingaleLevel > 0) {
+                LOGGER.info(
+                    `[${symbol}] Resetting Martingale level due to insufficient capital.`
+                );
                 assetState.martingaleLevel = 0;
                 assetState.currentStake = CONFIG.STAKE;
             }
             return;
         }
 
-        // ── TRADE SYSTEM ROUTING ───────────────────────────────────────────────
+        // =============================================
+        // DETERMINE TRADE DIRECTION (per-asset logic)
+        // =============================================
         let direction = null;
         let signalReason = '';
+
         const isRecoveryMode = assetState.lastTradeWasWin === false;
 
         if (CONFIG.TRADE_SYSTEM === 1) {
-            // ── SYSTEM 1: Strict alternating pattern signal (shallow history) ──
-            const lookback = CONFIG.CANDLE_PATTERN_LOOKBACK || CONFIG.LOOKBACK_SHALLOW;
+            // ── SYSTEM 1: Scan for Asset with Alternating Candles of Pattern 7
+            const lookback = CONFIG.CANDLE_PATTERN_LOOKBACK || 7;
             const closed = assetState.closedCandles || [];
 
             if (closed.length < lookback) {
@@ -2744,13 +3168,16 @@ class DerivBot {
 
             const recent = closed.slice(-lookback);
 
-            let isAlternating = true;
+            // Check for strictly alternating pattern (Bullish↔Bearish or Bearish↔Bullish)
+            // Each consecutive candle must flip direction — Doji candles break the sequence
+            let isAlternating = recent.length >= lookback;
             for (let i = 1; i < recent.length; i++) {
-                const prevB = CandleAnalyzer.isBullish(recent[i - 1]);
-                const prevR = CandleAnalyzer.isBearish(recent[i - 1]);
-                const currB = CandleAnalyzer.isBullish(recent[i]);
-                const currR = CandleAnalyzer.isBearish(recent[i]);
-                if (!((prevB && currR) || (prevR && currB))) {
+                const prevBullish = CandleAnalyzer.isBullish(recent[i - 1]);
+                const prevBearish = CandleAnalyzer.isBearish(recent[i - 1]);
+                const currBullish = CandleAnalyzer.isBullish(recent[i]);
+                const currBearish = CandleAnalyzer.isBearish(recent[i]);
+                // Must alternate: (prev bullish & curr bearish) OR (prev bearish & curr bullish)
+                if (!((prevBullish && currBearish) || (prevBearish && currBullish))) {
                     isAlternating = false;
                     break;
                 }
@@ -2761,147 +3188,187 @@ class DerivBot {
             const lastIsBearish = CandleAnalyzer.isBearish(lastCandle);
 
             if (isAlternating && (lastIsBullish || lastIsBearish)) {
-                if (lastIsBullish) {
-                    direction = 'CALLE';
-                    signalReason = `Alternating pattern (last ${lookback}): last candle BULLISH → RISE`;
-                } else {
-                    direction = 'PUTE';
-                    signalReason = `Alternating pattern (last ${lookback}): last candle BEARISH → FALL`;
+                CONFIG.TRADE_SYSTEM = 2;
+                CONFIG.MAX_CANDLES_STORED = 5000;
+                CONFIG.CANDLES_TO_LOAD = 5000;
+                LOGGER.trade(`⚡ [${symbol}] ALTERNATING PATTERN DETECTED: ${lookback} candles alternate, SYSTEM changed to ${CONFIG.TRADE_SYSTEM}`);
+                TelegramService.sendMessage(`⚡ [${symbol}] ALTERNATING PATTERN DETECTED: ${lookback} candles alternate, SYSTEM changed to ${CONFIG.TRADE_SYSTEM}`);
+                // ── LOCK THIS ASSET ────────────────────────────────────────────────────
+                if (!state.activeTradeAsset) {
+                    state.activeTradeAsset = symbol;
+                    LOGGER.info(`🔒 [${symbol}] Asset locked as active trade asset`);
                 }
-                LOGGER.trade(`⚡ [${symbol}] SYS1 SIGNAL: ${signalReason}`);
-
-                //Switch to system 2
-                bot._switchToSystem2(symbol);
             } else {
                 const bulls = recent.filter(c => CandleAnalyzer.isBullish(c)).length;
                 const bears = recent.filter(c => CandleAnalyzer.isBearish(c)).length;
-                LOGGER.info(`${symbol} ⏸️ SYS1: No alternating pattern — bulls=${bulls} bears=${bears}`);
+                LOGGER.info(`${symbol} ⏸️ No alternating pattern — last ${lookback}: bulls=${bulls} bears=${bears}`);
+            }
+        } else if (CONFIG.TRADE_SYSTEM === 2) {
+            // ── SYSTEM 2: Alternating Candle-pattern Exhaustion Signal
+            const lookback = 2;
+            const closed = assetState.closedCandles || [];
 
-                // ── Opportunistically scan all assets for the best pattern signal ──
-                // (only when no asset is currently locked)
-                // if (!state.activeTradeAsset) {
-                //     this._scanAndSelectBestAsset();
-                // }
+            if (closed.length < lookback) {
+                LOGGER.info(`${symbol} ⏳ Waiting for ${lookback} closed candles — have ${closed.length}`);
                 return;
             }
 
-            // const lookback = CONFIG.CANDLE_PATTERN_LOOKBACK || CONFIG.LOOKBACK_SHALLOW;
-            // const closed = assetState.closedCandles || [];
+            const recent = closed.slice(-lookback);
 
-            // if (closed.length < lookback) {
-            //     LOGGER.info(`${symbol} ⏳ Waiting for ${lookback} closed candles — have ${closed.length}`);
-            //     return;
-            // }
+            // Check for 2 candle Trend
+            const lastCandle = recent[recent.length - 1];
+            const last2Candle = recent[recent.length - 2];
+            const lastIsBullish = CandleAnalyzer.isBullish(lastCandle);
+            const lastIsBearish = CandleAnalyzer.isBearish(lastCandle);
+            const last2IsBullish = CandleAnalyzer.isBullish(last2Candle);
+            const last2IsBearish = CandleAnalyzer.isBearish(last2Candle);
 
-            // const recent = closed.slice(-lookback);
+            if ((lastIsBullish && last2IsBullish) || (lastIsBearish && last2IsBearish)) {
+                CONFIG.TRADE_SYSTEM = 3;
+                TelegramService.sendMessage(`⚡ [${symbol}] TREND PATTERN DETECTED: ${lookback} candles are in same direction, SYSTEM changed to ${CONFIG.TRADE_SYSTEM}`);
+                if (lastIsBullish) {
+                    direction = 'CALLE';
+                    signalReason = `Trend pattern: last ${lookback} candles are in same direction, and BULLISH (buy)`;
+                    LOGGER.trade(`⚡ [${symbol}] TREND PATTERN SIGNAL (BUY): ${signalReason}`);
+                } else {
+                    direction = 'PUTE';
+                    signalReason = `Trend pattern: last ${lookback} candles are in same direction, and BEARISH (sell)`;
+                    LOGGER.trade(`⚡ [${symbol}] TREND PATTERN SIGNAL (SELL): ${signalReason}`);
+                }
+            } else {
+                const bulls = recent.filter(c => CandleAnalyzer.isBullish(c)).length;
+                const bears = recent.filter(c => CandleAnalyzer.isBearish(c)).length;
+                LOGGER.info(`${symbol} ⏸️ No Trend pattern — last ${lookback}: bulls=${bulls} bears=${bears}`);
+            }
 
-            // Check for strictly alternating pattern (Bullish↔Bearish or Bearish↔Bullish)
-            // Each consecutive candle must flip direction — Doji candles break the sequence
-            // let isAlternating = recent.length >= lookback;
-            // for (let i = 1; i < recent.length; i++) {
-            //     const prevBullish = CandleAnalyzer.isBullish(recent[i - 1]);
-            //     const prevBearish = CandleAnalyzer.isBearish(recent[i - 1]);
-            //     const currBullish = CandleAnalyzer.isBullish(recent[i]);
-            //     const currBearish = CandleAnalyzer.isBearish(recent[i]);
-            //     // Must alternate: (prev bullish & curr bearish) OR (prev bearish & curr bullish)
-            //     if (!((prevBullish && currBearish) || (prevBearish && currBullish))) {
-            //         isAlternating = false;
-            //         break;
-            //     }
-            // }
+            if (direction) {
+                LOGGER.trade(`⚡ [${symbol}] TREND PATTERN SIGNAL: ${signalReason}`);
+            }
+        } else if (CONFIG.TRADE_SYSTEM === 3) {
+            //Check if the active asset has now re-developed a strong alternating pattern
+            const regime = AlternatingRegimeDetector.analyze(
+                state.assets[symbol].closedCandles,
+                CONFIG.ALTERNATING_PATTERN_LOOKBACK
+            );
+            const check = AlternatingRegimeDetector.checkActiveAsset(symbol);
+            if (check.switchToSystem1) {
+                LOGGER.warn(`⚠️  [${symbol}] Re-entered alt regime → switch to System 1`);
+            }
+            const gate = AlternatingRegimeDetector.multiWindowScan(
+                state.assets[symbol].closedCandles,
+                [50, 100, 200]
+            );
+            if (gate.worstCase.shouldAvoidTrade) {
+                LOGGER.warn(`⛔ Multi-window gate fired: ${gate.worstCase.probability}%`);
+            }
 
-            // const lastCandle = recent[recent.length - 1];
-            // const lastIsBullish = CandleAnalyzer.isBullish(lastCandle);
-            // const lastIsBearish = CandleAnalyzer.isBearish(lastCandle);
+            if (regime.shouldAvoidTrade) {
+                LOGGER.warn(`⛔ [${symbol}] Trade blocked — ${regime.signal} (${regime.probability}%)`);
+            }
 
-            // if (isAlternating && (lastIsBullish || lastIsBearish)) {
-            //     if (lastIsBullish) {
-            //         direction = 'CALLE';
-            //         signalReason = `Alternating pattern: last ${lookback} candles alternate, last is BULLISH (buy)`;
-            //         LOGGER.trade(`⚡ [${symbol}] PATTERN SIGNAL (BUY): ${signalReason}`);
-            //     } else {
-            //         direction = 'PUTE';
-            //         signalReason = `Alternating pattern: last ${lookback} candles alternate, last is BEARISH (sell)`;
-            //         LOGGER.trade(`⚡ [${symbol}] PATTERN SIGNAL (SELL): ${signalReason}`);
-            //     }
-            // } else {
-            //     const bulls = recent.filter(c => CandleAnalyzer.isBullish(c)).length;
-            //     const bears = recent.filter(c => CandleAnalyzer.isBearish(c)).length;
-            //     LOGGER.info(`${symbol} ⏸️ No alternating pattern — last ${lookback}: bulls=${bulls} bears=${bears}`);
-            // }
+            LOGGER.info(
+                `🔬 [${symbol}] Alternating Candle Pattern Check: ${regime.probability}% (threshold ${CONFIG.ALTERNATING_PATTERN_THRESHOLD}%) | ${regime.reason}`
+            );
 
-            // if (direction) {
-            //     LOGGER.trade(`⚡ [${symbol}] PATTERN SIGNAL: ${signalReason}`);
-            // }
+            if (assetState.lastTradeWasWin) {
+                if (regime.probability >= CONFIG.ALTERNATING_PATTERN_THRESHOLD || check.switchToSystem1 || gate.worstCase.shouldAvoidTrade || regime.shouldAvoidTrade) {
+                    LOGGER.trade(
+                        `🔀 [${symbol}] Alt-pattern probability ${regime.probability}% ≥ ${CONFIG.ALTERNATING_PATTERN_THRESHOLD}% — switching to TRADE_SYSTEM 1`
+                    );
+                    // change system to 1
+                    CONFIG.TRADE_SYSTEM = 1;
+                    CONFIG.MAX_CANDLES_STORED = 50;
+                    CONFIG.CANDLES_TO_LOAD = 50;
+                    state.activeTradeAsset = null;
+                    TelegramService.sendMessage(`⚡ [${symbol}] Alternaing Pattern Analyzer found a strong alternating pattern with Probability ${check.probability}% >= ${CONFIG.ALTERNATING_PATTERN_THRESHOLD}%, SYSTEM changed to ${CONFIG.TRADE_SYSTEM}`);
+                    return;
+                }
+            }
 
-            // //Switch to system 2
-            // bot._switchToSystem2(symbol);
-        } else {
-            // ── SYSTEM 2: Follow previous candle direction + monitor for SYS1 re-entry ──
+            const lookback = CONFIG.TREND_CANDLE_LOOKBACK || 6;
+            const closed = assetState.closedCandles || [];
 
-            // Check if the active asset has now re-developed a strong alternating pattern
-            // if (state.activeTradeAsset === symbol && !isInMartingaleRecovery) {
-            //     const check = AlternatingPatternAnalyzer.checkActiveAsset(symbol);
+            const recent = closed.slice(-lookback);
 
-            //     LOGGER.info(
-            //         `🔬 [${symbol}] SYS2 pattern check: ${check.probability}% (threshold ${CONFIG.ALTERNATING_PATTERN_THRESHOLD}%) | ${check.reason}`
-            //     );
+            // Check for strictly Trending pattern (Bullish↔Bullish or Bearish↔Bearish)
+            let isTrending = recent.length >= lookback;
+            for (let i = 1; i < recent.length; i++) {
+                const prevBullish = CandleAnalyzer.isBullish(recent[i - 1]);
+                const prevBearish = CandleAnalyzer.isBearish(recent[i - 1]);
+                const currBullish = CandleAnalyzer.isBullish(recent[i]);
+                const currBearish = CandleAnalyzer.isBearish(recent[i]);
+                // Must Trend: (prev bullish & curr bullish) OR (prev bearish & curr bearish)
+                if (!((prevBullish && currBullish) || (prevBearish && currBearish))) {
+                    isTrending = false;
+                    break;
+                }
+            }
 
-            //     if (check.switchToSystem1) {
-            //         LOGGER.trade(
-            //             `🔀 [${symbol}] Alt-pattern probability ${check.probability}% ≥ ${CONFIG.ALTERNATING_PATTERN_THRESHOLD}% — switching to TRADE_SYSTEM 1`
-            //         );
-            //         this._switchToSystem1(symbol);
+            const lastCandle = recent[recent.length - 1];
+            const lastIsBullish = CandleAnalyzer.isBullish(lastCandle);
+            const lastIsBearish = CandleAnalyzer.isBearish(lastCandle);
 
-            //         // Re-evaluate immediately under SYSTEM 1 on this same candle
-            //         this.executeNextTrade(symbol, lastClosedCandle);
-            //         return;
-            //     }
-            // }
+            if (assetState.lastTradeWasWin && (isTrending && (lastIsBullish || lastIsBearish))) {
+                CONFIG.TRADE_SYSTEM = 1;
+                CONFIG.MAX_CANDLES_STORED = 50;
+                CONFIG.CANDLES_TO_LOAD = 50;
+                state.activeTradeAsset = null;
+                LOGGER.trade(`⚡ [${symbol}] TREND EXHAUSTION PATTERN DETECTED: ${lookback} candles are in same direction`);
+                TelegramService.sendMessage(`⚡ [${symbol}] TREND EXHAUSTION PATTERN DETECTED: ${lookback} candles are in same direction, SYSTEM changed to ${CONFIG.TRADE_SYSTEM}
+                    \n🔬 [${symbol}] Alternating Candle Pattern Check: ${regime.probability}% (threshold ${CONFIG.ALTERNATING_PATTERN_THRESHOLD}%) | ${regime.reason}`
+                );
+                return;
+            }
 
-            // SYSTEM 2: Trade the direction of the last closed candle
+            // ── SYSTEM 3: Candle-pattern signal
             const candleType = CandleAnalyzer.getCandleDirection(lastClosedCandle);
+
             if (candleType === 'BULLISH') {
                 direction = 'CALLE';
-                signalReason = `SYS2 Recovery: prev candle BULLISH → RISE (Mart lvl ${assetState.martingaleLevel})`;
-            } else if (candleType === 'BEARISH') {
+                signalReason = `Recovery (${symbol} Prev LOSS on RISE → Continue RISE)`;
+            } else {
                 direction = 'PUTE';
-                signalReason = `SYS2 Recovery: prev candle BEARISH → FALL (Mart lvl ${assetState.martingaleLevel})`;
+                signalReason = `Recovery (${symbol} Prev LOSS on FALL → Continue FALL)`;
             }
-            // else {
-            //     LOGGER.info(`[${symbol}] SYS2: Doji candle — skipping`);
-            //     return;
-            // }
 
-            LOGGER.trade(`🔄 [${symbol}] ${signalReason}`);
+            LOGGER.trade(`🔄 [${symbol}] RECOVERY MODE: ${signalReason} (Martingale Level: ${assetState.martingaleLevel})`);
         }
 
         StatePersistence.saveState();
 
-        if (!direction) return;
-
-        // ── LOCK THIS ASSET ────────────────────────────────────────────────────
-        if (!state.activeTradeAsset) {
-            state.activeTradeAsset = symbol;
-            LOGGER.info(`🔒 [${symbol}] Asset locked as active trade asset`);
+        if (!direction) {
+            return;
         }
 
-        // ── EXECUTE TRADE ──────────────────────────────────────────────────────
+        // =============================================
+        // EXECUTE TRADE FOR THIS ASSET
+        // =============================================
         assetState.canTrade = false;
         assetState.lastTradeDirection = direction;
 
         const sessionLabel = CONFIG.USE_TRADING_SESSIONS
-            ? (sessionCheck.inSession ? `[${sessionCheck.sessionName}]` : `[RECOVERY]`)
+            ? (sessionCheck.inSession
+                ? `[${sessionCheck.sessionName}]`
+                : `[RECOVERY - Outside Session]`)
             : '[24/7]';
 
         LOGGER.trade(
-            `🎯 ${sessionLabel} [${symbol}] SYS${CONFIG.TRADE_SYSTEM} — ${direction === 'CALLE' ? 'RISE' : 'FALL'} | ` +
-            `Stake: $${stake.toFixed(2)} | Mart: ${assetState.martingaleLevel}`
+            `🎯 ${sessionLabel} [${symbol}] Executing ${direction === 'CALLE' ? 'RISE' : 'FALL'} trade`
         );
-        LOGGER.trade(`   Reason: ${signalReason}`);
+        LOGGER.trade(
+            `   [${symbol}] Stake: $${stake.toFixed(2)} | Duration: ${assetConfig.DURATION} ${assetConfig.DURATION_UNIT} | Martingale Level: ${assetState.martingaleLevel}`
+        );
+        LOGGER.trade(`   [${symbol}] Reason: ${signalReason}`);
+        const lastDir = CandleAnalyzer.getCandleDirection(lastClosedCandle);
+        LOGGER.trade(
+            `   [${symbol}] Last candle: ${lastDir} | Close: ${lastClosedCandle.close.toFixed(5)}`
+        );
+        LOGGER.trade(
+            `   [${symbol}] Asset Stats: ${assetState.tradesCount} trades, ${assetState.winsCount}W/${assetState.lossesCount}L, P/L: $${assetState.netPL.toFixed(2)}`
+        );
 
         const position = {
-            symbol,
+            symbol: symbol,
             direction,
             stake,
             duration: assetConfig.DURATION,
@@ -2913,6 +3380,7 @@ class DerivBot {
             buyPrice: 0
         };
 
+        // Add position to THIS asset's positions
         assetState.activePositions.push(position);
 
         const tradeRequest = {
@@ -2921,7 +3389,7 @@ class DerivBot {
             price: stake.toFixed(2),
             parameters: {
                 contract_type: direction,
-                symbol,
+                symbol: symbol,
                 currency: 'USD',
                 amount: stake.toFixed(2),
                 duration: assetConfig.DURATION,
@@ -2933,72 +3401,13 @@ class DerivBot {
         const reqId = this.connection.send(tradeRequest);
         position.reqId = reqId;
 
-        CONFIG.tradeInProgress = true;
-        CONFIG.ACTIVE_ASSET = symbol;
-
+        // Mark this cross direction as traded (prevents re-trading on the same cross)
         if (!isRecoveryMode) {
             assetState.lastCrossSignalDirection = direction;
-        }
-    }
-
-    /**
-     * Scan all assets for the highest alternating-pattern probability
-     * and lock onto the best candidate, switching to TRADE_SYSTEM 1.
-     * Called when no asset is currently locked and SYSTEM 1 finds no signal
-     * on the current asset.
-     */
-    _scanAndSelectBestAsset() {
-        const best = AlternatingPatternAnalyzer.findBestAsset();
-
-        if (best) {
-            LOGGER.trade(
-                `🎯 SCAN: Best asset found — [${best.symbol}] with ${best.probability}% alt-pattern probability | Run: ${best.currentRunLength} | ${best.reason}`
+            LOGGER.info(
+                `${symbol} ✅ pattern direction '${direction}' marked as traded — will not re-trade until next valid trigger`
             );
-            this._switchToSystem1(best.symbol);
-        } else {
-            LOGGER.debug(`🔍 SCAN: No asset meets ${CONFIG.ALTERNATING_PATTERN_THRESHOLD}% threshold — staying on SYSTEM 2`);
         }
-    }
-
-    /**
-     * Switch to TRADE_SYSTEM 1 (shallow candles, strict pattern mode)
-     * and lock the specified symbol as the active trade asset.
-     */
-    _switchToSystem1(symbol) {
-        CONFIG.TRADE_SYSTEM = 1;
-        CONFIG.MAX_CANDLES_STORED = CONFIG.CANDLES_SHALLOW;
-        CONFIG.CANDLES_TO_LOAD = CONFIG.CANDLES_SHALLOW;
-        CONFIG.CANDLE_PATTERN_LOOKBACK = CONFIG.LOOKBACK_SHALLOW;
-        state.activeTradeAsset = symbol;
-
-        LOGGER.trade(
-            `🔀 Switched to TRADE_SYSTEM 1 | Asset: [${symbol}] | ` +
-            `MaxCandles: ${CONFIG.CANDLES_SHALLOW} | Lookback: ${CONFIG.LOOKBACK_SHALLOW}`
-        );
-
-        TelegramService.sendMessage(
-            `🔀 <b>TRADE_SYSTEM → 1</b>\nAsset locked: <b>${symbol}</b>\nAlt-pattern probability ≥ ${CONFIG.ALTERNATING_PATTERN_THRESHOLD}%\nShallow mode: ${CONFIG.CANDLES_SHALLOW} candles / lookback ${CONFIG.LOOKBACK_SHALLOW}`
-        );
-    }
-
-    /**
-     * Switch to TRADE_SYSTEM 2 (deep candles, follow-candle recovery mode)
-     * keeping the same locked asset.
-     */
-    _switchToSystem2(symbol) {
-        CONFIG.TRADE_SYSTEM = 2;
-        CONFIG.MAX_CANDLES_STORED = CONFIG.CANDLES_DEEP;
-        CONFIG.CANDLES_TO_LOAD = CONFIG.CANDLES_DEEP;
-        CONFIG.CANDLE_PATTERN_LOOKBACK = CONFIG.LOOKBACK_DEEP;
-
-        LOGGER.trade(
-            `🔀 Switched to TRADE_SYSTEM 2 | Asset: [${symbol}] | ` +
-            `MaxCandles: ${CONFIG.CANDLES_DEEP} | Lookback: ${CONFIG.LOOKBACK_DEEP}`
-        );
-
-        TelegramService.sendMessage(
-            `🔀 <b>TRADE_SYSTEM → 2</b>\nAsset locked: <b>${symbol}</b>\nMonitoring for alt-pattern re-entry ≥ ${CONFIG.ALTERNATING_PATTERN_THRESHOLD}%\nDeep mode: ${CONFIG.CANDLES_DEEP} candles`
-        );
     }
 
     stop() {
@@ -3096,10 +3505,10 @@ class DerivBot {
                     TelegramService.sendDayEndSummary(TradeHistoryManager.getDateKey());
                     TelegramService.sendSessionSummary();
                     CONFIG.TRADE_SYSTEM = 1;
-                    CONFIG.MAX_CANDLES_STORED = CONFIG.CANDLES_SHALLOW;
-                    CONFIG.CANDLES_TO_LOAD = CONFIG.CANDLES_SHALLOW;
-                    CONFIG.CANDLE_PATTERN_LOOKBACK = CONFIG.LOOKBACK_SHALLOW;
+                    CONFIG.MAX_CANDLES_STORED = 50;
+                    CONFIG.CANDLES_TO_LOAD = 50;
                     state.activeTradeAsset = null;
+
                     if (this.connection.ws)
                         this.connection.ws.close();
                     state.session.isActive = false;
@@ -3281,22 +3690,76 @@ setInterval(() => {
         );
         console.log(`🔧 Per-Asset Status:${assetLines}`);
         console.log(`🕐 ${status.tradingSession}`);
-    }
 
-    // Show active asset lock + probability
-    const activeAsset = state.activeTradeAsset;
-    if (activeAsset && state.assets[activeAsset]) {
-        const patResult = AlternatingPatternAnalyzer.analyze(state.assets[activeAsset].closedCandles);
-        console.log(
-            `🔒 Active Asset: [${activeAsset}] | SYS${CONFIG.TRADE_SYSTEM} | ` +
-            `Alt-Pattern: ${patResult.probability}% (threshold ${CONFIG.ALTERNATING_PATTERN_THRESHOLD}%) | ` +
-            `Run: ${patResult.currentRunLength} candles`
-        );
-    } else {
-        // No asset locked — show top candidates
-        const best = AlternatingPatternAnalyzer.findBestAsset(0); // 0 = show all
-        if (best) {
-            console.log(`🔍 Scanning... Best candidate: [${best.symbol}] at ${best.probability}%`);
+        // Show active asset lock + probability
+        const activeAsset = state.activeTradeAsset;
+        if (activeAsset && state.assets[activeAsset]) {
+
+            const regime = AlternatingRegimeDetector.analyze(
+                state.assets[activeAsset].closedCandles,
+                CONFIG.ALTERNATING_PATTERN_LOOKBACK
+            );
+            const check = AlternatingRegimeDetector.checkActiveAsset(activeAsset);
+            if (check.switchToSystem1) {
+                LOGGER.warn(`⚠️  [${activeAsset}] Re-entered alt regime → switch to System 1`);
+            }
+            const gate = AlternatingRegimeDetector.multiWindowScan(
+                state.assets[activeAsset].closedCandles,
+                [50, 100, 200]
+            );
+
+            LOGGER.warn(
+                `🔬 [${activeAsset}] Alternating Candle Pattern Check: ${regime.probability}% (threshold ${CONFIG.ALTERNATING_PATTERN_THRESHOLD}%) | ${regime.reason}
+                |regi`
+            );
+            // if (gate.worstCase.shouldAvoidTrade) {
+            LOGGER.warn(`⛔ Multi-window gate fired: ${gate.worstCase.probability}%`);
+            // }
+
+            // if (regime.shouldAvoidTrade) {
+            LOGGER.warn(`⛔ [${activeAsset}] Trade blocked — ${regime.signal} (${regime.probability}%)`);
+            // }
+            console.log(
+                `🔒 Active Asset: [${activeAsset}] | SYS:${CONFIG.TRADE_SYSTEM} | ` +
+                `Alt-Pattern: ${regime.probability}% (threshold ${CONFIG.ALTERNATING_PATTERN_THRESHOLD}%)`
+            );
         }
     }
 }, 60000);
+
+
+/**
+     * Core engine. Runs all 6 detection layers on the supplied candle
+     * history and returns a composite probability that the market is
+     * currently in / about to enter an Alternating Candle regime.
+     *
+     * @param {Array<{ open: number, close: number }>} candleHistory
+     *   Full closed-candle array, newest entry last (up to 5 000 candles).
+     *
+     * @param {number} patternLookbackNum
+     *   Number of RECENT candles to analyse.
+     *   Recommended: 50–300.  Larger = more power, more lag.
+     *
+     * @returns {{
+     *   probability      : number,   0–100
+     *   signal           : string,   'SAFE' | 'CAUTION' | 'WARNING' | 'DANGER'
+     *   shouldAvoidTrade : boolean,
+     *   currentStreak    : number,   consecutive alternating candles at the tail
+     *   reason           : string,   one-line human summary
+     *   details          : {
+     *     alternationRate  : number,
+     *     runsZScore       : number,
+     *     runsCount        : number,
+     *     expectedRuns     : number,
+     *     runsPValue       : number,
+     *     autocorrelation  : number,
+     *     maxStreak        : number,
+     *     maxStreakRatio   : number,
+     *     currentStreak    : number,
+     *     momentum         : number,
+     *     sampleSize       : number,
+     *     regime           : string,
+     *     layerScores      : object
+     *   }
+     * }}
+     */
