@@ -1096,8 +1096,8 @@ const CONFIG = {
     // Default Candle Settings (used if asset has no specific config)
     GRANULARITY: 60,
     TIMEFRAME_LABEL: '1m',
-    MAX_CANDLES_STORED: 50,
-    CANDLES_TO_LOAD: 50,
+    MAX_CANDLES_STORED: 5000,
+    CANDLES_TO_LOAD: 5000,
 
     CANDLE_PATTERN_LOOKBACK: 4, //8 Number of previous candles to analyze for pattern detection (user configurable)
     TREND_CANDLE_LOOKBACK: 8, //7 Number of previous candles to analyze for trend detection (user configurable)
@@ -3130,6 +3130,19 @@ class DerivBot {
 
         const isRecoveryMode = assetState.lastTradeWasWin === false;
 
+        const regime = AlternatingRegimeDetector.analyze(
+            state.assets[symbol].closedCandles,
+            CONFIG.ALTERNATING_PATTERN_LOOKBACK
+        );
+        const check = AlternatingRegimeDetector.checkActiveAsset(symbol);
+        if (check.switchToSystem1) {
+            LOGGER.warn(`⚠️  [${symbol}] Re-entered alt regime → switch to System 1`);
+        }
+        const gate = AlternatingRegimeDetector.multiWindowScan(
+            state.assets[symbol].closedCandles,
+            [50, 100, 200]
+        );
+
         if (isRecoveryMode) {
             const candleType = CandleAnalyzer.getCandleDirection(lastClosedCandle);
 
@@ -3143,20 +3156,10 @@ class DerivBot {
 
             LOGGER.trade(`🔄 [${symbol}] RECOVERY MODE: ${signalReason} (Martingale Level: ${assetState.martingaleLevel})`);
 
+            TelegramService.sendMessage(`⚡ [${symbol}] Alternaing Pattern Analyzer found a strong alternating pattern with Probability ${check.probability}% >= ${CONFIG.ALTERNATING_PATTERN_THRESHOLD}%`);
+
         } else {
             //Alternating Regime Pattern Detector Analysis
-            const regime = AlternatingRegimeDetector.analyze(
-                state.assets[symbol].closedCandles,
-                CONFIG.ALTERNATING_PATTERN_LOOKBACK
-            );
-            const check = AlternatingRegimeDetector.checkActiveAsset(symbol);
-            if (check.switchToSystem1) {
-                LOGGER.warn(`⚠️  [${symbol}] Re-entered alt regime → switch to System 1`);
-            }
-            const gate = AlternatingRegimeDetector.multiWindowScan(
-                state.assets[symbol].closedCandles,
-                [50, 100, 200]
-            );
             if (gate.worstCase.shouldAvoidTrade) {
                 LOGGER.warn(`⛔ Multi-window gate fired: ${gate.worstCase.probability}%`);
             }
