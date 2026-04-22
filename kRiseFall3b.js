@@ -3696,13 +3696,13 @@ setInterval(() => {
                 state.assets[activeAsset].closedCandles,
                 [50, 100, 200]
             );
-            if (gate.worstCase.shouldAvoidTrade) {
-                LOGGER.warn(`⛔ Multi-window gate fired: ${gate.worstCase.probability}%`);
-            }
+            // if (gate.worstCase.shouldAvoidTrade) {
+            LOGGER.warn(`⛔ Multi-window gate fired: ${gate.worstCase.probability}%`);
+            // }
 
-            if (regime.shouldAvoidTrade) {
-                LOGGER.warn(`⛔ [${activeAsset}] Trade blocked — ${regime.signal} (${regime.probability}%)`);
-            }
+            // if (regime.shouldAvoidTrade) {
+            LOGGER.warn(`⛔ [${activeAsset}] Trade blocked — ${regime.signal} (${regime.probability}%)`);
+            // }
             console.log(
                 `🔒 Active Asset: [${activeAsset}] | SYS:${CONFIG.TRADE_SYSTEM} | ` +
                 `Alt-Pattern: ${regime.probability}% (threshold ${CONFIG.ALTERNATING_PATTERN_THRESHOLD}%)`
