@@ -3120,6 +3120,7 @@ class DerivBot {
                 CONFIG.TRADE_SYSTEM = 1;
                 CONFIG.MAX_CANDLES_STORED = 50;
                 CONFIG.CANDLES_TO_LOAD = 50;
+                state.activeTradeAsset = null;
                 return;
             }
 
