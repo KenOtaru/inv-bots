@@ -613,6 +613,7 @@ class TelegramService {
         stake,
         duration,
         durationUnit,
+        regime,
         details = {}
     ) {
         const emoji =
@@ -638,6 +639,7 @@ class TelegramService {
                 Stake: $${stake.toFixed(2)}
                 Duration: ${duration} (${durationUnit == 't' ? 'Ticks' : durationUnit == 's' ? 'Seconds' : 'Minutes'})
                 Martingale Level: ${assetMartingale}
+                ${type === 'OPEN' ? `\n🔬 [${symbol}] Alternating Candle Pattern Check: ${regime.probability}% (threshold ${CONFIG.ALTERNATING_PATTERN_THRESHOLD}%) | ${regime.reason}` : ''}
                 ${details.profit !== undefined
                 ? `Profit: $${details.profit.toFixed(2)}
 
@@ -1985,6 +1987,11 @@ class ConnectionManager {
             }
         }
 
+        const regime = AlternatingRegimeDetector.analyze(
+            state.assets[foundSymbol].closedCandles,
+            CONFIG.ALTERNATING_PATTERN_LOOKBACK
+        );
+
         if (position) {
             position.contractId = contract.contract_id;
             position.buyPrice = contract.buy_price;
@@ -1995,7 +2002,8 @@ class ConnectionManager {
                 position.direction,
                 position.stake,
                 position.duration,
-                position.durationUnit
+                position.durationUnit,
+                regime
             );
         }
 
@@ -3237,32 +3245,31 @@ class DerivBot {
             }
         } else if (CONFIG.TRADE_SYSTEM === 3) {
             //Check if the active asset has now re-developed a strong alternating pattern
+            const regime = AlternatingRegimeDetector.analyze(
+                state.assets[symbol].closedCandles,
+                CONFIG.ALTERNATING_PATTERN_LOOKBACK
+            );
+            const check = AlternatingRegimeDetector.checkActiveAsset(symbol);
+            if (check.switchToSystem1) {
+                LOGGER.warn(`⚠️  [${symbol}] Re-entered alt regime → switch to System 1`);
+            }
+            const gate = AlternatingRegimeDetector.multiWindowScan(
+                state.assets[symbol].closedCandles,
+                [50, 100, 200]
+            );
+            if (gate.worstCase.shouldAvoidTrade) {
+                LOGGER.warn(`⛔ Multi-window gate fired: ${gate.worstCase.probability}%`);
+            }
+
+            if (regime.shouldAvoidTrade) {
+                LOGGER.warn(`⛔ [${symbol}] Trade blocked — ${regime.signal} (${regime.probability}%)`);
+            }
+
+            LOGGER.info(
+                `🔬 [${symbol}] Alternating Candle Pattern Check: ${regime.probability}% (threshold ${CONFIG.ALTERNATING_PATTERN_THRESHOLD}%) | ${regime.reason}`
+            );
+
             if (assetState.lastTradeWasWin) {
-                const regime = AlternatingRegimeDetector.analyze(
-                    state.assets[symbol].closedCandles,
-                    CONFIG.ALTERNATING_PATTERN_LOOKBACK
-                );
-
-                const check = AlternatingRegimeDetector.checkActiveAsset(symbol);
-                if (check.switchToSystem1) {
-                    LOGGER.warn(`⚠️  [${symbol}] Re-entered alt regime → switch to System 1`);
-                }
-                const gate = AlternatingRegimeDetector.multiWindowScan(
-                    state.assets[symbol].closedCandles,
-                    [50, 100, 200]
-                );
-                if (gate.worstCase.shouldAvoidTrade) {
-                    LOGGER.warn(`⛔ Multi-window gate fired: ${gate.worstCase.probability}%`);
-                }
-
-                if (regime.shouldAvoidTrade) {
-                    LOGGER.warn(`⛔ [${symbol}] Trade blocked — ${regime.signal} (${regime.probability}%)`);
-                }
-
-                LOGGER.info(
-                    `🔬 [${symbol}] Alternating Candle Pattern Check: ${regime.probability}% (threshold ${CONFIG.ALTERNATING_PATTERN_THRESHOLD}%) | ${regime.reason}`
-                );
-
                 if (regime.probability >= CONFIG.ALTERNATING_PATTERN_THRESHOLD || check.switchToSystem1 || gate.worstCase.shouldAvoidTrade || regime.shouldAvoidTrade) {
                     LOGGER.trade(
                         `🔀 [${symbol}] Alt-pattern probability ${regime.probability}% ≥ ${CONFIG.ALTERNATING_PATTERN_THRESHOLD}% — switching to TRADE_SYSTEM 1`
@@ -3306,7 +3313,9 @@ class DerivBot {
                 CONFIG.CANDLES_TO_LOAD = 50;
                 state.activeTradeAsset = null;
                 LOGGER.trade(`⚡ [${symbol}] TREND EXHAUSTION PATTERN DETECTED: ${lookback} candles are in same direction`);
-                TelegramService.sendMessage(`⚡ [${symbol}] TREND EXHAUSTION PATTERN DETECTED: ${lookback} candles are in same direction, SYSTEM changed to ${CONFIG.TRADE_SYSTEM}`);
+                TelegramService.sendMessage(`⚡ [${symbol}] TREND EXHAUSTION PATTERN DETECTED: ${lookback} candles are in same direction, SYSTEM changed to ${CONFIG.TRADE_SYSTEM}
+                    \n🔬 [${symbol}] Alternating Candle Pattern Check: ${regime.probability}% (threshold ${CONFIG.ALTERNATING_PATTERN_THRESHOLD}%) | ${regime.reason}`
+                );
                 return;
             }
 
@@ -3684,6 +3693,7 @@ setInterval(() => {
         // Show active asset lock + probability
         const activeAsset = state.activeTradeAsset;
         if (activeAsset && state.assets[activeAsset]) {
+
             const regime = AlternatingRegimeDetector.analyze(
                 state.assets[activeAsset].closedCandles,
                 CONFIG.ALTERNATING_PATTERN_LOOKBACK
@@ -3695,6 +3705,11 @@ setInterval(() => {
             const gate = AlternatingRegimeDetector.multiWindowScan(
                 state.assets[activeAsset].closedCandles,
                 [50, 100, 200]
+            );
+
+            LOGGER.warn(
+                `🔬 [${activeAsset}] Alternating Candle Pattern Check: ${regime.probability}% (threshold ${CONFIG.ALTERNATING_PATTERN_THRESHOLD}%) | ${regime.reason}
+                |regi`
             );
             // if (gate.worstCase.shouldAvoidTrade) {
             LOGGER.warn(`⛔ Multi-window gate fired: ${gate.worstCase.probability}%`);
@@ -3710,3 +3725,40 @@ setInterval(() => {
         }
     }
 }, 60000);
+
+
+/**
+     * Core engine. Runs all 6 detection layers on the supplied candle
+     * history and returns a composite probability that the market is
+     * currently in / about to enter an Alternating Candle regime.
+     *
+     * @param {Array<{ open: number, close: number }>} candleHistory
+     *   Full closed-candle array, newest entry last (up to 5 000 candles).
+     *
+     * @param {number} patternLookbackNum
+     *   Number of RECENT candles to analyse.
+     *   Recommended: 50–300.  Larger = more power, more lag.
+     *
+     * @returns {{
+     *   probability      : number,   0–100
+     *   signal           : string,   'SAFE' | 'CAUTION' | 'WARNING' | 'DANGER'
+     *   shouldAvoidTrade : boolean,
+     *   currentStreak    : number,   consecutive alternating candles at the tail
+     *   reason           : string,   one-line human summary
+     *   details          : {
+     *     alternationRate  : number,
+     *     runsZScore       : number,
+     *     runsCount        : number,
+     *     expectedRuns     : number,
+     *     runsPValue       : number,
+     *     autocorrelation  : number,
+     *     maxStreak        : number,
+     *     maxStreakRatio   : number,
+     *     currentStreak    : number,
+     *     momentum         : number,
+     *     sampleSize       : number,
+     *     regime           : string,
+     *     layerScores      : object
+     *   }
+     * }}
+     */
