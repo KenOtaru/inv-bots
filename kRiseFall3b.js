@@ -3188,10 +3188,17 @@ class DerivBot {
             //     layerScores,
             // }
 
-            // Trade signals are generated based on candle patterns
+            LOGGER.warn(
+                `🔬 [${symbol}] Checking Details: currentStreak: ${regime.details.currentStreak}, maxStreak: ${regime.details.maxStreak}, maxStreakRatio: ${regime.details.maxStreakRatio}, autocorrelation: ${regime.details.autocorrelation}, momentum: ${regime.details.momentum}, runsPValue: ${regime.details.runsPValue}, runsCount: ${regime.details.runsCount}, expectedRuns: ${regime.details.expectedRuns}, runsZScore: ${regime.details.runsZScore}, alternationRate: ${regime.details.alternationRate}`
+            );
+            // LOGGER.warn(
+            //     `🔬 [${symbol}] Checking Reason: currentStreak=${regime.reason.currentStreak},maxStreakRatio=${regime.reason.maxStreakRatio},autocorrelation=${regime.reason.autocorrelation},momentum=${regime.reason.momentum},runsPValue=${regime.reason.runsPValue},runsCount=${regime.reason.runsCount},expectedRuns=${regime.reason.expectedRuns},runsZScore=${regime.reason.runsZScore},alternationRate=${regime.reason.alternationRate}`
+            // );
+
+            // Trade signals are generated based on Alternating Regime Analysis and Market Structure candle patterns
             const candleType = CandleAnalyzer.getCandleDirection(lastClosedCandle);
 
-            if (gate.worstCase.probability <= 1 && regime.probability <= 1 && regime.details.maxStreak <= 1 && regime.details.autocorrelation >= 0.1) {
+            if (gate.worstCase.probability <= 1 && regime.probability <= 1 && regime.details.currentStreak <= 2 && regime.details.autocorrelation >= 0.1) {
                 if (candleType === 'BULLISH') {
                     direction = 'CALLE';
                     signalReason = `Filtered Pattern Trade:  (${symbol})`;
