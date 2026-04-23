@@ -614,8 +614,8 @@ class TelegramService {
         duration,
         durationUnit,
         details = {},
-        regime,
-        gate,
+        regime = {},
+        gate = {},
     ) {
         const emoji =
             type === 'OPEN'
@@ -632,6 +632,12 @@ class TelegramService {
 
         const overall = TradeHistoryManager.getOverallStats();
         const today = TradeHistoryManager.getTodayStats();
+
+        // Safe defaults for regime and gate
+        const regimeProb = regime?.probability ?? 0;
+        const regimeReason = regime?.reason ?? 'N/A';
+        const regimeDetails = regime?.details ? JSON.stringify(regime.details) : '{}';
+        const gateProb = gate?.worstCase?.probability ?? 0;
 
         const message = `
                 ${emoji} <b>${type} TRADE ALERT 3b</b>
@@ -654,7 +660,7 @@ class TelegramService {
                 Overall W/L: ${overall.winsCount || 0}/${overall.lossesCount || 0}
                 Total Trades: ${overall.tradesCount || 0}
                 Capital: $${state.capital.toFixed(2)}`
-                : `🔬 <b>Alternating Analyzer:</b> ${regime.probability}% | ${regime.reason} | Details: ${JSON.stringify(regime.details)} | Multi - window gate fired: ${gate.worstCase.probability} %`}
+                : `🔬 <b>Alternating Analyzer:</b> Probability: ${regimeProb}% | Multi - window gate: ${gateProb} % | Details: ${regimeDetails}`}
             }`.trim();
         await this.sendMessage(message);
     }
@@ -1987,12 +1993,12 @@ class ConnectionManager {
         }
 
         const regime = AlternatingRegimeDetector.analyze(
-            state.assets[symbol].closedCandles,
+            state.assets[foundSymbol].closedCandles,
             CONFIG.ALTERNATING_PATTERN_LOOKBACK
         );
 
         const gate = AlternatingRegimeDetector.multiWindowScan(
-            state.assets[symbol].closedCandles,
+            state.assets[foundSymbol].closedCandles,
             [50, 100, 200]
         );
 
@@ -2008,6 +2014,7 @@ class ConnectionManager {
                 position.stake,
                 position.duration,
                 position.durationUnit,
+                {}, // details
                 regime,
                 gate
             );
