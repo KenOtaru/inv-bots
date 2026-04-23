@@ -3603,14 +3603,20 @@ setInterval(() => {
      * 
      * The 6 Detection Layers
         Layer 1 — Alternation Rate (30% weight)
-        The most direct measure: what fraction of consecutive candle pairs flip direction? Random ≈ 0.50, full alternation = 1.0. Sensitive but needs statistical backing.
+        The most direct measure: what fraction of consecutive candle pairs flip direction? Random ≈ 0.50, full alternation = 1.0. 
+        Sensitive but needs statistical backing.
         Layer 2 — Wald-Wolfowitz Runs Test Z-Score (25% weight)
-        A rigorous non-parametric test. It counts "runs" (unbroken sequences of same direction) and compares against what randomness would produce. Too many runs indicate negative serial dependence — exactly the alternating / mean-reverting behaviour you want to avoid. MetricGate A Z-score > 1.96 means statistically significant (p < 0.05).
+        A rigorous non-parametric test. It counts "runs" (unbroken sequences of same direction) and compares against what randomness would produce. 
+        Too many runs indicate negative serial dependence — exactly the alternating / mean-reverting behaviour you want to avoid. 
+        MetricGate A Z-score > 1.96 means statistically significant (p < 0.05).
         Layer 3 — Lag-1 Autocorrelation (25% weight)
-        Negative autocorrelation indicates mean-reverting (ranging) behavior — upward movements are likely followed by downward movements. MQL5 Values below −0.15 signal emerging danger, below −0.30 is significant, below −0.50 is a strong alternating regime.
+        Negative autocorrelation indicates mean-reverting (ranging) behavior — upward movements are likely followed by downward movements. 
+        Values below −0.15 signal emerging danger, below −0.30 is significant, below −0.50 is a strong alternating regime.
         Layer 4 — Streak Analysis (10% weight)
-        Finds the longest contiguous alternating sequence in the window, reported as a ratio. Also tracks the current tail streak — how many consecutive alternating candles are happening right now.
+        Finds the longest contiguous alternating sequence in the window, reported as a ratio. Also tracks the current tail streak — how many consecutive 
+        alternating candles are happening right now.
         Layer 5 — Momentum / Acceleration (10% weight)
-        Splits the window in two halves and compares alternation rates. A positive delta means the regime is entering or deepening — the most actionable early warning.
+        Splits the window in two halves and compares alternation rates. A positive delta means the regime is entering or deepening — the most actionable 
+        early warning.
         Layer 6 — Composite Score → Signal
      */
