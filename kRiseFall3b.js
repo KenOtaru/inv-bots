@@ -639,7 +639,7 @@ class TelegramService {
                 Stake: $${stake.toFixed(2)}
                 Duration: ${duration} (${durationUnit == 't' ? 'Ticks' : durationUnit == 's' ? 'Seconds' : 'Minutes'})
                 Martingale Level: ${assetMartingale}
-                ${type === 'OPEN' ? `\n🔬 [${symbol}] Alternating Candle Pattern Check: ${regime.probability}% (threshold ${CONFIG.ALTERNATING_PATTERN_THRESHOLD}%) | ${regime.reason} | Details: ${JSON.stringify(regime.details)}` : ''}
+                ${type === 'OPEN' ? `\n🔬 [${symbol}] Alternating Candle Pattern Check: ${regime.probability}% | ${regime.reason} | Details: ${JSON.stringify(regime.details)}` : ''}
                 ${details.profit !== undefined
                 ? `Profit: $${details.profit.toFixed(2)}
 
@@ -3146,6 +3146,9 @@ class DerivBot {
         if (isRecoveryMode) {
             const candleType = CandleAnalyzer.getCandleDirection(lastClosedCandle);
 
+            // Send message only for recovery mode (not normal mode)
+            TelegramService.sendMessage(`⚡ [${symbol}] RECOVERY MODE: Continuing Trading, Asset has Strong Non-Alternating Pattern`);
+
             if (candleType === 'BULLISH') {
                 direction = 'CALLE';
                 signalReason = `Recovery (${symbol} Prev LOSS on RISE → Continue RISE)`;
@@ -3155,9 +3158,6 @@ class DerivBot {
             }
 
             LOGGER.trade(`🔄 [${symbol}] RECOVERY MODE: ${signalReason} (Martingale Level: ${assetState.martingaleLevel})`);
-
-            TelegramService.sendMessage(`⚡ [${symbol}] Continuing Trading After A Strong Non-Alternating Pattern with Probability ${check.probability}%`);
-
         } else {
             //Alternating Regime Pattern Detector Analysis
             if (gate.worstCase.shouldAvoidTrade) {
@@ -3169,7 +3169,7 @@ class DerivBot {
             }
 
             LOGGER.info(
-                `🔬 [${symbol}] Alternating Candle Pattern Check: ${regime.probability}% (threshold ${CONFIG.ALTERNATING_PATTERN_THRESHOLD}%) | ${regime.reason} | Details: ${JSON.stringify(regime.details)}`
+                `🔬 [${symbol}] Alternating Candle Pattern Check: ${regime.probability}% | ${regime.reason} | Details: ${JSON.stringify(regime.details)}`
             );
 
             // details: {
@@ -3191,9 +3191,6 @@ class DerivBot {
             LOGGER.warn(
                 `🔬 [${symbol}] Checking Details: currentStreak: ${regime.details.currentStreak}, maxStreak: ${regime.details.maxStreak}, maxStreakRatio: ${regime.details.maxStreakRatio}, autocorrelation: ${regime.details.autocorrelation}, momentum: ${regime.details.momentum}, runsPValue: ${regime.details.runsPValue}, runsCount: ${regime.details.runsCount}, expectedRuns: ${regime.details.expectedRuns}, runsZScore: ${regime.details.runsZScore}, alternationRate: ${regime.details.alternationRate}`
             );
-            // LOGGER.warn(
-            //     `🔬 [${symbol}] Checking Reason: currentStreak=${regime.reason.currentStreak},maxStreakRatio=${regime.reason.maxStreakRatio},autocorrelation=${regime.reason.autocorrelation},momentum=${regime.reason.momentum},runsPValue=${regime.reason.runsPValue},runsCount=${regime.reason.runsCount},expectedRuns=${regime.reason.expectedRuns},runsZScore=${regime.reason.runsZScore},alternationRate=${regime.reason.alternationRate}`
-            // );
 
             // Trade signals are generated based on Alternating Regime Analysis and Market Structure candle patterns
             const candleType = CandleAnalyzer.getCandleDirection(lastClosedCandle);
