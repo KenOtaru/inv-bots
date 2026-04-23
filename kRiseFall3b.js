@@ -615,6 +615,7 @@ class TelegramService {
         durationUnit,
         details = {},
         regime,
+        gate,
     ) {
         const emoji =
             type === 'OPEN'
@@ -653,7 +654,7 @@ class TelegramService {
                 Overall W/L: ${overall.winsCount || 0}/${overall.lossesCount || 0}
                 Total Trades: ${overall.tradesCount || 0}
                 Capital: $${state.capital.toFixed(2)}`
-                : `🔬 <b>Alternating Analyzer:</b> ${regime.probability}% | ${regime.reason} | Details: ${JSON.stringify(regime.details)}`}
+                : `🔬 <b>Alternating Analyzer:</b> ${regime.probability}% | ${regime.reason} | Details: ${JSON.stringify(regime.details)} | Multi - window gate fired: ${gate.worstCase.probability} %`}
             }`.trim();
         await this.sendMessage(message);
     }
@@ -1986,9 +1987,15 @@ class ConnectionManager {
         }
 
         const regime = AlternatingRegimeDetector.analyze(
-            state.assets[foundSymbol].closedCandles,
+            state.assets[symbol].closedCandles,
             CONFIG.ALTERNATING_PATTERN_LOOKBACK
         );
+
+        const gate = AlternatingRegimeDetector.multiWindowScan(
+            state.assets[symbol].closedCandles,
+            [50, 100, 200]
+        );
+
 
         if (position) {
             position.contractId = contract.contract_id;
@@ -2001,7 +2008,8 @@ class ConnectionManager {
                 position.stake,
                 position.duration,
                 position.durationUnit,
-                regime
+                regime,
+                gate
             );
         }
 
