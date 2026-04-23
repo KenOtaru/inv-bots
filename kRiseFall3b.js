@@ -6,8 +6,8 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'KriseFallM_3b_0003-state.json');
-const HISTORY_FILE = path.join(__dirname, 'KriseFallM_3b_0003-history.json');
+const STATE_FILE = path.join(__dirname, 'KriseFallM_3b_0004-state.json');
+const HISTORY_FILE = path.join(__dirname, 'KriseFallM_3b_0004-history.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
@@ -639,7 +639,6 @@ class TelegramService {
                 Stake: $${stake.toFixed(2)}
                 Duration: ${duration} (${durationUnit == 't' ? 'Ticks' : durationUnit == 's' ? 'Seconds' : 'Minutes'})
                 Martingale Level: ${assetMartingale}
-                ${type === 'OPEN' ? `\n🔬 [${symbol}] Alternating Candle Pattern Check: ${regime.probability}% | ${regime.reason} | Details: ${JSON.stringify(regime.details)}` : ''}
                 ${details.profit !== undefined
                 ? `Profit: $${details.profit.toFixed(2)}
 
@@ -654,7 +653,7 @@ class TelegramService {
                 Overall W/L: ${overall.winsCount || 0}/${overall.lossesCount || 0}
                 Total Trades: ${overall.tradesCount || 0}
                 Capital: $${state.capital.toFixed(2)}`
-                : ''
+                : `🔬 <b>Alternating Analyzer:</b> ${regime.probability}% | ${regime.reason} | Details: ${JSON.stringify(regime.details)}`}
             }`.trim();
         await this.sendMessage(message);
     }
@@ -3143,72 +3142,56 @@ class DerivBot {
             [50, 100, 200]
         );
 
-        if (isRecoveryMode) {
-            const candleType = CandleAnalyzer.getCandleDirection(lastClosedCandle);
+        // if (isRecoveryMode) {
+        //     const candleType = CandleAnalyzer.getCandleDirection(lastClosedCandle);
 
-            // Send message only for recovery mode (not normal mode)
-            TelegramService.sendMessage(`⚡ [${symbol}] RECOVERY MODE: Continuing Trading, Asset has Strong Non-Alternating Pattern`);
+        //     // Send message only for recovery mode (not normal mode)
+        //     TelegramService.sendMessage(`⚡ [${symbol}] RECOVERY MODE: Continuing Trading, Asset has Strong Non-Alternating Pattern`);
 
+        //     if (candleType === 'BULLISH') {
+        //         direction = 'CALLE';
+        //         signalReason = `Recovery (${symbol} Prev LOSS on RISE → Continue RISE)`;
+        //     } else {
+        //         direction = 'PUTE';
+        //         signalReason = `Recovery (${symbol} Prev LOSS on FALL → Continue FALL)`;
+        //     }
+
+        //     LOGGER.trade(`🔄 [${symbol}] RECOVERY MODE: ${signalReason} (Martingale Level: ${assetState.martingaleLevel})`);
+        // } else {
+        //Alternating Regime Pattern Detector Analysis
+        if (gate.worstCase.shouldAvoidTrade) {
+            LOGGER.warn(`⛔ Multi-window gate fired: ${gate.worstCase.probability}%`);
+        }
+
+        if (regime.shouldAvoidTrade) {
+            LOGGER.warn(`⛔ [${symbol}] Trade blocked — ${regime.signal} (${regime.probability}%)`);
+        }
+
+        LOGGER.info(
+            `🔬 [${symbol}] Alternating Candle Pattern Check: ${regime.probability}% | ${regime.reason} | Details: ${JSON.stringify(regime.details)}`
+        );
+
+        LOGGER.warn(
+            `🔬 [${symbol}] Checking Details: currentStreak: ${regime.details.currentStreak}, maxStreak: ${regime.details.maxStreak}, maxStreakRatio: ${regime.details.maxStreakRatio}, autocorrelation: ${regime.details.autocorrelation}, momentum: ${regime.details.momentum}, runsPValue: ${regime.details.runsPValue}, runsCount: ${regime.details.runsCount}, expectedRuns: ${regime.details.expectedRuns}, runsZScore: ${regime.details.runsZScore}, alternationRate: ${regime.details.alternationRate}`
+        );
+
+        // Trade signals are generated based on Alternating Regime Analysis and Market Structure candle patterns
+        const candleType = CandleAnalyzer.getCandleDirection(lastClosedCandle);
+
+        if (gate.worstCase.probability <= 1 && regime.probability <= 1 && regime.details.currentStreak <= 2 && regime.details.autocorrelation >= 0.1) {
             if (candleType === 'BULLISH') {
                 direction = 'CALLE';
-                signalReason = `Recovery (${symbol} Prev LOSS on RISE → Continue RISE)`;
+                signalReason = `Filtered Pattern Trade:  (${symbol})`;
             } else {
                 direction = 'PUTE';
-                signalReason = `Recovery (${symbol} Prev LOSS on FALL → Continue FALL)`;
+                signalReason = `Filtered Pattern Trade: (${symbol})`;
             }
 
-            LOGGER.trade(`🔄 [${symbol}] RECOVERY MODE: ${signalReason} (Martingale Level: ${assetState.martingaleLevel})`);
+            LOGGER.trade(`🔄 [${symbol}] NORMAL MODE Trade: ${signalReason}`);
         } else {
-            //Alternating Regime Pattern Detector Analysis
-            if (gate.worstCase.shouldAvoidTrade) {
-                LOGGER.warn(`⛔ Multi-window gate fired: ${gate.worstCase.probability}%`);
-            }
-
-            if (regime.shouldAvoidTrade) {
-                LOGGER.warn(`⛔ [${symbol}] Trade blocked — ${regime.signal} (${regime.probability}%)`);
-            }
-
-            LOGGER.info(
-                `🔬 [${symbol}] Alternating Candle Pattern Check: ${regime.probability}% | ${regime.reason} | Details: ${JSON.stringify(regime.details)}`
-            );
-
-            // details: {
-            //     alternationRate: +alternationRate.toFixed(4),
-            //     runsZScore: +runsZScore.toFixed(4),
-            //     runsCount: runs,
-            //     expectedRuns: +expectedRuns.toFixed(2),
-            //     runsPValue: +runsPValue.toFixed(4),
-            //     autocorrelation: +autocorrelation.toFixed(4),
-            //     maxStreak,
-            //     maxStreakRatio: +maxStreakRatio.toFixed(4),
-            //     currentStreak,
-            //     momentum: +momentum.toFixed(4),
-            //     sampleSize: lookback,
-            //     regime,
-            //     layerScores,
-            // }
-
-            LOGGER.warn(
-                `🔬 [${symbol}] Checking Details: currentStreak: ${regime.details.currentStreak}, maxStreak: ${regime.details.maxStreak}, maxStreakRatio: ${regime.details.maxStreakRatio}, autocorrelation: ${regime.details.autocorrelation}, momentum: ${regime.details.momentum}, runsPValue: ${regime.details.runsPValue}, runsCount: ${regime.details.runsCount}, expectedRuns: ${regime.details.expectedRuns}, runsZScore: ${regime.details.runsZScore}, alternationRate: ${regime.details.alternationRate}`
-            );
-
-            // Trade signals are generated based on Alternating Regime Analysis and Market Structure candle patterns
-            const candleType = CandleAnalyzer.getCandleDirection(lastClosedCandle);
-
-            if (gate.worstCase.probability <= 1 && regime.probability <= 1 && regime.details.currentStreak <= 2 && regime.details.autocorrelation >= 0.1) {
-                if (candleType === 'BULLISH') {
-                    direction = 'CALLE';
-                    signalReason = `Filtered Pattern Trade:  (${symbol})`;
-                } else {
-                    direction = 'PUTE';
-                    signalReason = `Filtered Pattern Trade: (${symbol})`;
-                }
-
-                LOGGER.trade(`🔄 [${symbol}] NORMAL MODE Trade: ${signalReason}`);
-            } else {
-                LOGGER.trade(`🔄 [${symbol}] NORMAL MODE No Trade`);
-            }
+            LOGGER.trade(`🔄 [${symbol}] NORMAL MODE No Trade`);
         }
+        // }
 
         StatePersistence.saveState();
 
@@ -3619,4 +3602,17 @@ setInterval(() => {
         Splits the window in two halves and compares alternation rates. A positive delta means the regime is entering or deepening — the most actionable 
         early warning.
         Layer 6 — Composite Score → Signal
+
+        *    Layer 1 — Alternation Rate      Raw % of consecutive pairs that flip
+        *    Layer 2 — Wald-Wolfowitz Z      Too many runs = alternating regime
+        *    Layer 3 — Lag-1 Autocorrelation Negative = mean-reverting
+        *    Layer 4 — Streak Analysis       How long is the current alt-run?
+        *    Layer 5 — Momentum (Δ rate)     Is alternation accelerating?
+        *    Layer 6 — Composite Score       Weighted 0–100 probability
+
+        Probability    | Signal         | Action
+        0–34            | SAFE           | Trade normal
+        35–54           | CAUTION        | Consider smaller position
+        55–74           | WARNING        | Avoid new trades
+        75–100          | DANGER         | Block all trades
      */
