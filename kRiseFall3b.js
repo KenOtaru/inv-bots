@@ -3156,17 +3156,17 @@ class DerivBot {
 
             LOGGER.trade(`🔄 [${symbol}] RECOVERY MODE: ${signalReason} (Martingale Level: ${assetState.martingaleLevel})`);
 
-            TelegramService.sendMessage(`⚡ [${symbol}] Alternaing Pattern Analyzer found a strong alternating pattern with Probability ${check.probability}% >= ${CONFIG.ALTERNATING_PATTERN_THRESHOLD}%`);
+            TelegramService.sendMessage(`⚡ [${symbol}] Continuing Trading After A Strong Non-Alternating Pattern with Probability ${check.probability}%`);
 
         } else {
             //Alternating Regime Pattern Detector Analysis
-            // if (gate.worstCase.shouldAvoidTrade) {
-            LOGGER.warn(`⛔ Multi-window gate fired: ${gate.worstCase.probability}%`);
-            // }
+            if (gate.worstCase.shouldAvoidTrade) {
+                LOGGER.warn(`⛔ Multi-window gate fired: ${gate.worstCase.probability}%`);
+            }
 
-            // if (regime.shouldAvoidTrade) {
-            LOGGER.warn(`⛔ [${symbol}] Trade blocked — ${regime.signal} (${regime.probability}%)`);
-            // }
+            if (regime.shouldAvoidTrade) {
+                LOGGER.warn(`⛔ [${symbol}] Trade blocked — ${regime.signal} (${regime.probability}%)`);
+            }
 
             LOGGER.info(
                 `🔬 [${symbol}] Alternating Candle Pattern Check: ${regime.probability}% (threshold ${CONFIG.ALTERNATING_PATTERN_THRESHOLD}%) | ${regime.reason} | Details: ${JSON.stringify(regime.details)}`
