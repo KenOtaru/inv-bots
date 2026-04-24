@@ -1225,9 +1225,9 @@ function getAssetConfig(symbol) {
     };
 }
 
-let ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'];
+// let ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'];
 // let ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V'];
-// let ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V', 'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'];
+let ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V', 'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'];
 
 // ============================================
 // STATE MANAGEMENT
@@ -1619,6 +1619,11 @@ class SessionManager {
             assetState.martingaleLevel = 0;
             assetState.lastTradeWasWin = true;
             assetState.currentStake = CONFIG.STAKE;
+
+            // ── RESET LOCK ────────────────────────────────────────────────────
+            CONFIG.MAX_CANDLES_STORED = 200;
+            CONFIG.CANDLES_TO_LOAD = 200;
+            state.activeTradeAsset = null;
 
             // Record in persistent history
             TradeHistoryManager.recordTrade(symbol, profit, assetState.martingaleLevel);
@@ -3220,16 +3225,16 @@ class DerivBot {
                 }
 
                 LOGGER.trade(`🔄 [${symbol}] NORMAL MODE Trade: ${signalReason}`);
+
+                // ── LOCK THIS ASSET ────────────────────────────────────────────────────
+                if (!state.activeTradeAsset) {
+                    state.activeTradeAsset = symbol;
+                    CONFIG.MAX_CANDLES_STORED = 50;
+                    CONFIG.CANDLES_TO_LOAD = 50;
+                    LOGGER.info(`🔒 [${symbol}] Asset locked as active trade asset`);
+                }
             } else {
                 LOGGER.trade(`🔄 [${symbol}] NORMAL MODE No Trade`);
-            }
-
-            // ── LOCK THIS ASSET ────────────────────────────────────────────────────
-            if (!state.activeTradeAsset) {
-                state.activeTradeAsset = symbol;
-                CONFIG.MAX_CANDLES_STORED = 50;
-                CONFIG.CANDLES_TO_LOAD = 50;
-                LOGGER.info(`🔒 [${symbol}] Asset locked as active trade asset`);
             }
         }
 
