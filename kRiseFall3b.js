@@ -1102,8 +1102,8 @@ const CONFIG = {
     // Default Candle Settings (used if asset has no specific config)
     GRANULARITY: 60,
     TIMEFRAME_LABEL: '1m',
-    MAX_CANDLES_STORED: 200,
-    CANDLES_TO_LOAD: 200,
+    MAX_CANDLES_STORED: 100,
+    CANDLES_TO_LOAD: 100,
 
     CANDLE_PATTERN_LOOKBACK: 4, //8 Number of previous candles to analyze for pattern detection (user configurable)
     TREND_CANDLE_LOOKBACK: 8, //7 Number of previous candles to analyze for trend detection (user configurable)
@@ -3154,7 +3154,7 @@ class DerivBot {
         }
         const gate = AlternatingRegimeDetector.multiWindowScan(
             state.assets[symbol].closedCandles,
-            [50, 100, 200]
+            [10, 50, 100]
         );
 
         // if (isRecoveryMode) {
@@ -3193,7 +3193,8 @@ class DerivBot {
         // Trade signals are generated based on Alternating Regime Analysis and Market Structure candle patterns
         const candleType = CandleAnalyzer.getCandleDirection(lastClosedCandle);
 
-        if (gate.worstCase.probability <= 1 && regime.probability <= 1 && regime.details.currentStreak <= 1 && regime.details.autocorrelation >= 0.2) {
+        // if (gate.worstCase.probability <= 1 && regime.probability <= 1 && regime.details.currentStreak <= 1 && regime.details.autocorrelation >= 0.2) {
+        if (regime.details.autocorrelation >= 0.2) {
             if (candleType === 'BULLISH') {
                 direction = 'CALLE';
                 signalReason = `Filtered Pattern Trade:  (${symbol})`;
