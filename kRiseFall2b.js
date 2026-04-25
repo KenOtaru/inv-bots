@@ -3229,7 +3229,7 @@ class DerivBot {
             const candleType = CandleAnalyzer.getCandleDirection(lastClosedCandle);
 
             // if (gate.worstCase.probability <= 1 && regime.probability <= 1 && regime.details.currentStreak <= 1 && regime.details.autocorrelation >= 0.12) {
-            if (regime.details.autocorrelation >= 0.10) {
+            if (regime.details.autocorrelation < -0.07) {
                 if (candleType === 'BULLISH') {
                     direction = 'CALLE';
                     signalReason = `Filtered Pattern Trade:  (${symbol})`;
