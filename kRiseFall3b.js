@@ -3235,6 +3235,8 @@ class DerivBot {
                 // ── LOCK THIS ASSET ────────────────────────────────────────────────────
                 if (!state.activeTradeAsset) {
                     state.activeTradeAsset = symbol;
+                    CONFIG.MAX_CANDLES_STORED = 50;
+                    CONFIG.CANDLES_TO_LOAD = 50;
                     LOGGER.info(`🔒 [${symbol}] Asset locked as active trade asset`);
                 }
             } else {

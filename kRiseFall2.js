@@ -6,8 +6,8 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'KriseFallM_2_011-state.json');
-const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2_011-history.json');
+const STATE_FILE = path.join(__dirname, 'KriseFallM_2_012-state.json');
+const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2_012-history.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
@@ -3235,6 +3235,8 @@ class DerivBot {
                 // ── LOCK THIS ASSET ────────────────────────────────────────────────────
                 if (!state.activeTradeAsset) {
                     state.activeTradeAsset = symbol;
+                    CONFIG.MAX_CANDLES_STORED = 50;
+                    CONFIG.CANDLES_TO_LOAD = 50;
                     LOGGER.info(`🔒 [${symbol}] Asset locked as active trade asset`);
                 }
             } else {
