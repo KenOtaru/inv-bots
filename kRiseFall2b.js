@@ -6,8 +6,8 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'KriseFallM_2_012-state.json');
-const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2_012-history.json');
+const STATE_FILE = path.join(__dirname, 'KriseFallM_2b_01-state.json');
+const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2b_01-history.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
@@ -640,7 +640,7 @@ class TelegramService {
         const gateProb = gate?.worstCase?.probability ?? 0;
 
         const message = `
-                ${emoji} <b>${type} TRADE ALERT 2</b>
+                ${emoji} <b>${type} TRADE ALERT 2b</b>
                 Asset: ${symbol}
                 Direction: ${direction}
                 Stake: $${stake.toFixed(2)}
@@ -721,7 +721,7 @@ class TelegramService {
                 : '0.0%';
 
             const message = [
-                `📊 <b>SESSION SUMMARY 2</b>`,
+                `📊 <b>SESSION SUMMARY 2b</b>`,
                 ``,
                 `📅 <b>Today (${TradeHistoryManager.getDateKey()}):</b>`,
                 `Duration: ${stats.duration}`,
@@ -791,7 +791,7 @@ class TelegramService {
             const pnlEmoji = (dayStats.netPL || 0) >= 0 ? '🟢' : '🔴';
 
             const message = [
-                `🌙 <b>END OF DAY REPORT 2 - ${dateKey}</b>`,
+                `🌙 <b>END OF DAY REPORT 2b - ${dateKey}</b>`,
                 ``,
                 `${pnlEmoji} <b>Day Results:</b>`,
                 `├ Trades: ${dayStats.tradesCount}`,
@@ -843,7 +843,7 @@ class TelegramService {
             console.log(`  SYDNEY_START: ${CONFIG.SYDNEY_START}, SYDNEY_END: ${CONFIG.SYDNEY_END}`);
 
             const message = [
-                `🤖 <b>DERIV RISE/FALL BOT STARTED 2</b>`,
+                `🤖 <b>DERIV RISE/FALL BOT STARTED 2b</b>`,
                 `Strategy: Candle-pattern detection - lookback ${CONFIG.CANDLE_PATTERN_LOOKBACK || 7}`,
                 `Mode: <b>Independent Per-Asset Management</b>`,
                 `Capital: $${state.capital.toFixed(2)}`,
@@ -924,7 +924,7 @@ class TelegramService {
             });
 
             const message = [
-                `⏰ <b>Rise/Fall Bot Hourly Summary 2</b>`,
+                `⏰ <b>Rise/Fall Bot Hourly Summary 2b</b>`,
                 ``,
                 `📊 <b>Last Hour</b>`,
                 `├ Trades: ${statsSnapshot.trades}`,
@@ -2307,7 +2307,7 @@ class ConnectionManager {
             );
 
             TelegramService.sendMessage(
-                `⚠️ <b>CONNECTION LOST - RECONNECTING 2</b>\n📊 Attempt: ${this.reconnectAttempts}/${this.maxReconnectAttempts}\n⏱️ Retrying in ${(delay / 1000).toFixed(1)}s\n💾 State preserved: ${state.session.tradesCount} trades, $${state.session.netPL.toFixed(2)} P&L`
+                `⚠️ <b>CONNECTION LOST - RECONNECTING 2b</b>\n📊 Attempt: ${this.reconnectAttempts}/${this.maxReconnectAttempts}\n⏱️ Retrying in ${(delay / 1000).toFixed(1)}s\n💾 State preserved: ${state.session.tradesCount} trades, $${state.session.netPL.toFixed(2)} P&L`
             );
 
             setTimeout(() => {
@@ -2320,7 +2320,7 @@ class ConnectionManager {
         } else {
             LOGGER.error('Max reconnection attempts reached.');
             TelegramService.sendMessage(
-                `🛑 <b>BOT STOPPED 2</b>\nMax reconnection attempts reached.\nFinal P&L: $${state.session.netPL.toFixed(2)}`
+                `🛑 <b>BOT STOPPED 2b</b>\nMax reconnection attempts reached.\nFinal P&L: $${state.session.netPL.toFixed(2)}`
             );
             process.exit(1);
         }
@@ -3192,7 +3192,7 @@ class DerivBot {
             const candleType = CandleAnalyzer.getCandleDirection(lastClosedCandle);
 
             // Send message only for recovery mode (not normal mode)
-            TelegramService.sendMessage(`⚡kRISE/FALL2: [${symbol}] RECOVERY MODE: Continuing Trading, Asset has Strong Non-Alternating Pattern`);
+            TelegramService.sendMessage(`⚡kRISE/FALL2B: [${symbol}] RECOVERY MODE: Continuing Trading, Asset has Strong Non-Alternating Pattern`);
 
             if (candleType === 'BULLISH') {
                 direction = 'CALLE';
