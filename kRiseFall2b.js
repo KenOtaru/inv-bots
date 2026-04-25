@@ -1102,8 +1102,8 @@ const CONFIG = {
     // Default Candle Settings (used if asset has no specific config)
     GRANULARITY: 60,
     TIMEFRAME_LABEL: '1m',
-    MAX_CANDLES_STORED: 4320,
-    CANDLES_TO_LOAD: 4320,
+    MAX_CANDLES_STORED: 1440,
+    CANDLES_TO_LOAD: 1440,
 
     CANDLE_PATTERN_LOOKBACK: 4, //8 Number of previous candles to analyze for pattern detection (user configurable)
     TREND_CANDLE_LOOKBACK: 8, //7 Number of previous candles to analyze for trend detection (user configurable)
@@ -1113,7 +1113,7 @@ const CONFIG = {
     // ALTERNATING PATTERN SWITCHING CONFIGURATION
     // ============================
     ALTERNATING_PATTERN_THRESHOLD: 60, //60 Percentage threshold for switching to TRADE_SYSTEM 1
-    ALTERNATING_PATTERN_LOOKBACK: 4320, //100 Number of previous candles to analyze for pattern detection (user configurable)
+    ALTERNATING_PATTERN_LOOKBACK: 1440, //100 Number of previous candles to analyze for pattern detection (user configurable)
 
     // Default Trade Duration Settings (used if asset has no specific config)
     DURATION: 58,
@@ -1625,8 +1625,9 @@ class SessionManager {
             assetState.currentStake = CONFIG.STAKE;
 
             // ── RESET LOCK ────────────────────────────────────────────────────
-            state.candlesStored = 4320;
-            state.candlesToLoad = 4320;
+            state.candlesStored = CONFIG.MAX_CANDLES_STORED;
+            state.candlesToLoad = CONFIG.MAX_CANDLES_STORED;
+            state.alternatingPatternLookback = CONFIG.ALTERNATING_PATTERN_LOOKBACK;
             state.activeTradeAsset = null;
 
             // Record in persistent history
@@ -1640,6 +1641,7 @@ class SessionManager {
             // When loss happens set to small amount of candles History for fast recovery
             state.candlesStored = 100;
             state.candlesToLoad = 100;
+            state.alternatingPatternLookback = 100;
 
             // === LOSS ===
             // Global
@@ -2312,8 +2314,9 @@ class ConnectionManager {
 
             setTimeout(() => {
                 this.isReconnecting = false;
-                state.candlesStored = 4320;
-                state.candlesToLoad = 4320;
+                state.candlesStored = CONFIG.MAX_CANDLES_STORED;
+                state.candlesToLoad = CONFIG.MAX_CANDLES_STORED;
+                state.alternatingPatternLookback = CONFIG.ALTERNATING_PATTERN_LOOKBACK;
                 state.activeTradeAsset = null;
                 this.connect();
             }, delay);
@@ -3136,8 +3139,9 @@ class DerivBot {
                     state.lastSessionLogTime = now;
                 }
 
-                state.candlesStored = 4320;
-                state.candlesToLoad = 4320;
+                state.candlesStored = CONFIG.MAX_CANDLES_STORED;
+                state.candlesToLoad = CONFIG.MAX_CANDLES_STORED;
+                state.alternatingPatternLookback = CONFIG.ALTERNATING_PATTERN_LOOKBACK;
                 state.activeTradeAsset = null;
 
                 return;
@@ -3225,7 +3229,7 @@ class DerivBot {
             const candleType = CandleAnalyzer.getCandleDirection(lastClosedCandle);
 
             // if (gate.worstCase.probability <= 1 && regime.probability <= 1 && regime.details.currentStreak <= 1 && regime.details.autocorrelation >= 0.12) {
-            if (regime.details.currentStreak >= (regime.details.maxStreak - 5)) {
+            if (regime.details.autocorrelation >= 0.10) {
                 if (candleType === 'BULLISH') {
                     direction = 'CALLE';
                     signalReason = `Filtered Pattern Trade:  (${symbol})`;
@@ -3239,8 +3243,9 @@ class DerivBot {
                 // ── LOCK THIS ASSET ────────────────────────────────────────────────────
                 if (!state.activeTradeAsset) {
                     state.activeTradeAsset = symbol;
-                    state.candlesStored = 100;
-                    state.candlesToLoad = 100;
+                    // state.candlesStored = 100;
+                    // state.candlesToLoad = 100;
+                    // state.alternatingPatternLookback = 100;
                     LOGGER.info(`🔒 [${symbol}] Asset locked as active trade asset`);
                 }
             } else {
@@ -3419,8 +3424,9 @@ class DerivBot {
                     TelegramService.sendDayEndSummary(TradeHistoryManager.getDateKey());
                     TelegramService.sendSessionSummary();
 
-                    state.candlesStored = 4320;
-                    state.candlesToLoad = 4320;
+                    state.candlesStored = CONFIG.MAX_CANDLES_STORED;
+                    state.candlesToLoad = CONFIG.MAX_CANDLES_STORED;
+                    state.alternatingPatternLookback = CONFIG.ALTERNATING_PATTERN_LOOKBACK;
                     state.activeTradeAsset = null;
 
                     if (this.connection.ws)
