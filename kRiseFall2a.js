@@ -798,6 +798,7 @@ const state = {
     candlesToLoad: CONFIG.CANDLES_TO_LOAD,
     candlesStored: CONFIG.MAX_CANDLES_STORED,
     alternatingPatternLookback: CONFIG.ALTERNATING_PATTERN_LOOKBACK,
+    lastTradeDirection: null,
 
     session: {
         profit: 0, loss: 0, netPL: 0,
@@ -1867,6 +1868,7 @@ class DerivBot {
 
         assetState.activePositions.push(position);
         assetState.canTrade = false; // prevent normal candle-close from double-trading
+        state.lastTradeDirection = direction;
 
         const tradeRequest = {
             buy: 1,
