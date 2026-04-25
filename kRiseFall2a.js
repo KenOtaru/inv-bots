@@ -6,8 +6,8 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'KriseFallM_2_017-state.json');
-const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2_017-history.json');
+const STATE_FILE = path.join(__dirname, 'KriseFallM_2_018-state.json');
+const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2_018-history.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
