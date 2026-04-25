@@ -3214,6 +3214,9 @@ class DerivBot {
             }
 
             LOGGER.trade(`🔄 [${symbol}] RECOVERY MODE: ${signalReason} (Martingale Level: ${assetState.martingaleLevel})`);
+
+            // ── FORCE LOCK (Only this asset trades) ────────────────────────────────────────
+            ACTIVE_ASSETS = [symbol];
         } else {
             //Alternating Regime Pattern Detector Analysis
             if (gate.worstCase.shouldAvoidTrade) {
