@@ -760,7 +760,8 @@ const CONFIG = {
     // trade. 500–1500 ms is usually enough for the API to be ready.
     // Never set this to 0 — give the WebSocket a moment to breathe.
     // ─────────────────────────────────────────────────────────────────────────
-    RECOVERY_TRADE_DELAY_MS: 1200,
+    RECOVERY_TRADE_DELAY_MS: 1500,
+    RECOVERY_TRADE_DELAY_MS2: 2000,
 
     DEBUG_MODE: true,
     TELEGRAM_ENABLED: true,
@@ -1301,7 +1302,7 @@ class ConnectionManager {
                 LOGGER.trade(`🔄 [${ownerSymbol}] Loss confirmed — scheduling immediate recovery trade in ${CONFIG.RECOVERY_TRADE_DELAY_MS}ms`);
                 setTimeout(() => {
                     bot.executeRecoveryTrade(ownerSymbol);
-                }, CONFIG.RECOVERY_TRADE_DELAY_MS);
+                }, ownerSymbol === ('1HZ10V' || '1HZ25V' || '1HZ50V' || '1HZ75V' || '1HZ100V') ? CONFIG.RECOVERY_TRADE_DELAY_MS2 : CONFIG.RECOVERY_TRADE_DELAY_MS);
             }
         }
     }
