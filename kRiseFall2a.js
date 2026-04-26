@@ -760,8 +760,8 @@ const CONFIG = {
     // trade. 500–1500 ms is usually enough for the API to be ready.
     // Never set this to 0 — give the WebSocket a moment to breathe.
     // ─────────────────────────────────────────────────────────────────────────
-    RECOVERY_TRADE_DELAY_MS: 1500,
-    RECOVERY_TRADE_DELAY_MS2: 2000,
+    RECOVERY_TRADE_DELAY_MS: 800,
+    RECOVERY_TRADE_DELAY_MS2: 1500,
 
     DEBUG_MODE: true,
     TELEGRAM_ENABLED: true,
@@ -1050,8 +1050,6 @@ class SessionManager {
             } else {
                 LOGGER.trade(`❌ [${symbol}] LOSS: -$${Math.abs(profit).toFixed(2)} | Direction: ${direction} | Next Martingale: ${assetState.martingaleLevel} | Next Stake: $${assetState.currentStake.toFixed(2)} | P/L: $${assetState.netPL.toFixed(2)}`);
             }
-
-            bot.executeRecoveryTrade(symbol, assetState.lastClosedCandleForRecovery); // Recovery trade
         }
     }
 }
@@ -1300,12 +1298,12 @@ class ConnectionManager {
             // ★ IMMEDIATE RECOVERY TRADE — fired right here, no candle-close wait
             //   Only triggered on LOSS and only when we're still in session.
             // ─────────────────────────────────────────────────────────────────
-            // if (profit < 0 && SessionManager.isSessionActive()) {
-            //     LOGGER.trade(`🔄 [${ownerSymbol}] Loss confirmed — scheduling immediate recovery trade in ${CONFIG.RECOVERY_TRADE_DELAY_MS}ms`);
-            //     setTimeout(() => {
-            //         bot.executeRecoveryTrade(ownerSymbol);
-            //     }, ownerSymbol === ('1HZ10V' || '1HZ25V' || '1HZ50V' || '1HZ75V' || '1HZ100V') ? CONFIG.RECOVERY_TRADE_DELAY_MS2 : CONFIG.RECOVERY_TRADE_DELAY_MS);
-            // }
+            if (profit < 0 && SessionManager.isSessionActive()) {
+                LOGGER.trade(`🔄 [${ownerSymbol}] Loss confirmed — scheduling immediate recovery trade in ${CONFIG.RECOVERY_TRADE_DELAY_MS}ms`);
+                setTimeout(() => {
+                    bot.executeRecoveryTrade(ownerSymbol, assetState.lastClosedCandleForRecovery);
+                }, ownerSymbol === ('1HZ10V' || '1HZ25V' || '1HZ50V' || '1HZ75V' || '1HZ100V') ? CONFIG.RECOVERY_TRADE_DELAY_MS2 : CONFIG.RECOVERY_TRADE_DELAY_MS);
+            }
         }
     }
 
