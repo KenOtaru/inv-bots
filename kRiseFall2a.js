@@ -1020,8 +1020,6 @@ class SessionManager {
             state.portfolio.dailyLosses++;
             state.hourlyStats.losses++;
 
-            this.executeRecoveryTrade(symbol);
-
             assetState.lossesCount++;
             assetState.loss += Math.abs(profit);
             assetState.netPL += profit;
@@ -1363,7 +1361,11 @@ class ConnectionManager {
 
                 // Normal (non-recovery) trade signal on candle close
                 assetState.canTrade = true;
-                bot.executeNextTrade(symbol, closedCandle);
+                if (assetState.martingaleLevel === 0) {
+                    bot.executeNextTrade(symbol, closedCandle);
+                } else {
+                    bot.executeRecoveryTrade(symbol, closedCandle);
+                }
             }
         }
 
@@ -1775,7 +1777,7 @@ class DerivBot {
     //  closed candle (lastClosedCandleForRecovery) to determine direction.
     //  Bypasses all heavy analysis — recovery is directional persistence.
     // ================================================================
-    executeRecoveryTrade(symbol) {
+    executeRecoveryTrade(symbol, closedCandle) {
         const assetState = state.assets[symbol];
         if (!assetState) return;
 
@@ -1825,12 +1827,12 @@ class DerivBot {
         // ── Determine direction from the last closed candle ──────────
         //   Recovery logic: trade the opposite of the previous trade.
         //   The lastTradeDirection is already set from the failed trade.
-        const lastCandle = CandleAnalyzer.getLastClosedCandle(symbol);// assetState.lastClosedCandleForRecovery
+        // const lastCandle = CandleAnalyzer.getLastClosedCandle(symbol);// assetState.lastClosedCandleForRecovery
 
-        if (!lastCandle) {
-            LOGGER.warn(`[${symbol}] Recovery skipped — no reference candle available yet`);
-            return;
-        }
+        // if (!lastCandle) {
+        //     LOGGER.warn(`[${symbol}] Recovery skipped — no reference candle available yet`);
+        //     return;
+        // }
 
         // Use the saved direction from the lost trade (true martingale persistence)
         // const direction = assetState.lastTradeDirection === 'CALLE' ? 'PUTE' : 'CALLE';
@@ -1840,7 +1842,7 @@ class DerivBot {
         // }
 
         const assetConfig = getAssetConfig(symbol);
-        const candleType = CandleAnalyzer.getCandleDirection(lastCandle);
+        const candleType = CandleAnalyzer.getCandleDirection(closedCandle);
         let direction;
 
         if (candleType === 'BULLISH') {
