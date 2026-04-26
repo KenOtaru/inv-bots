@@ -6,8 +6,8 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'KriseFallM_2_018-state.json');
-const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2_018-history.json');
+const STATE_FILE = path.join(__dirname, 'KriseFallM_2_019-state.json');
+const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2_019-history.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
@@ -1986,7 +1986,7 @@ class DerivBot {
 
         const candleType = CandleAnalyzer.getCandleDirection(lastClosedCandle);
 
-        if (regime.details.currentStreak >= (regime.details.maxStreak - 4)) {
+        if (regime.details.currentStreak >= (regime.details.maxStreak - 5)) {
             if (candleType === 'BULLISH') {
                 direction = 'CALLE';
                 signalReason = `Filtered Pattern Trade: (${symbol})`;
