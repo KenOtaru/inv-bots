@@ -1855,7 +1855,7 @@ class DerivBot {
             LOGGER.info(`[${symbol}] Recovery skipped — session ended`);
             return;
         }
-        if (assetState.lastTradeWasWin !== false || assetState.martingaleLevel === 0) {
+        if (assetState.martingaleLevel === 0) {
             LOGGER.info(`[${symbol}] Recovery skipped — not in loss recovery (mart=${assetState.martingaleLevel})`);
             return;
         }
