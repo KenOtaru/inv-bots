@@ -1020,6 +1020,8 @@ class SessionManager {
             state.portfolio.dailyLosses++;
             state.hourlyStats.losses++;
 
+            bot.executeRecoveryTrade(symbol);
+
             assetState.lossesCount++;
             assetState.loss += Math.abs(profit);
             assetState.netPL += profit;
@@ -1298,12 +1300,12 @@ class ConnectionManager {
             // ★ IMMEDIATE RECOVERY TRADE — fired right here, no candle-close wait
             //   Only triggered on LOSS and only when we're still in session.
             // ─────────────────────────────────────────────────────────────────
-            if (profit < 0 && SessionManager.isSessionActive()) {
-                LOGGER.trade(`🔄 [${ownerSymbol}] Loss confirmed — scheduling immediate recovery trade in ${CONFIG.RECOVERY_TRADE_DELAY_MS}ms`);
-                setTimeout(() => {
-                    bot.executeRecoveryTrade(ownerSymbol);
-                }, ownerSymbol === ('1HZ10V' || '1HZ25V' || '1HZ50V' || '1HZ75V' || '1HZ100V') ? CONFIG.RECOVERY_TRADE_DELAY_MS2 : CONFIG.RECOVERY_TRADE_DELAY_MS);
-            }
+            // if (profit < 0 && SessionManager.isSessionActive()) {
+            //     LOGGER.trade(`🔄 [${ownerSymbol}] Loss confirmed — scheduling immediate recovery trade in ${CONFIG.RECOVERY_TRADE_DELAY_MS}ms`);
+            //     setTimeout(() => {
+            //         bot.executeRecoveryTrade(ownerSymbol);
+            //     }, ownerSymbol === ('1HZ10V' || '1HZ25V' || '1HZ50V' || '1HZ75V' || '1HZ100V') ? CONFIG.RECOVERY_TRADE_DELAY_MS2 : CONFIG.RECOVERY_TRADE_DELAY_MS);
+            // }
         }
     }
 
@@ -1831,14 +1833,21 @@ class DerivBot {
         }
 
         // Use the saved direction from the lost trade (true martingale persistence)
-        const direction = assetState.lastTradeDirection === 'CALLE' ? 'PUTE' : 'CALLE';
-        if (!direction) {
-            LOGGER.warn(`[${symbol}] Recovery skipped — no previous direction recorded`);
-            return;
-        }
+        // const direction = assetState.lastTradeDirection === 'CALLE' ? 'PUTE' : 'CALLE';
+        // if (!direction) {
+        //     LOGGER.warn(`[${symbol}] Recovery skipped — no previous direction recorded`);
+        //     return;
+        // }
 
         const assetConfig = getAssetConfig(symbol);
         const candleType = CandleAnalyzer.getCandleDirection(lastCandle);
+        let direction;
+
+        if (candleType === 'BULLISH') {
+            direction = 'CALLE';
+        } else {
+            direction = 'PUTE';
+        }
 
         LOGGER.trade(`⚡ [${symbol}] IMMEDIATE RECOVERY TRADE`);
         LOGGER.trade(`   Direction: ${direction === 'CALLE' ? 'RISE' : 'FALL'} | Stake: $${stake.toFixed(2)} | Martingale Level: ${assetState.martingaleLevel}`);
@@ -1977,7 +1986,7 @@ class DerivBot {
 
         const candleType = CandleAnalyzer.getCandleDirection(lastClosedCandle);
 
-        if (regime.details.currentStreak >= (regime.details.maxStreak - 5)) {
+        if (regime.details.currentStreak >= (regime.details.maxStreak - 4)) {
             if (candleType === 'BULLISH') {
                 direction = 'CALLE';
                 signalReason = `Filtered Pattern Trade: (${symbol})`;
