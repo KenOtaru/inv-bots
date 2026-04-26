@@ -1853,7 +1853,7 @@ class DerivBot {
 
         LOGGER.trade(`⚡ [${symbol}] IMMEDIATE RECOVERY TRADE`);
         LOGGER.trade(`   Direction: ${direction === 'CALLE' ? 'RISE' : 'FALL'} | Stake: $${stake.toFixed(2)} | Martingale Level: ${assetState.martingaleLevel}`);
-        LOGGER.trade(`   Reference Candle: ${candleType} | Close: ${lastCandle.close.toFixed(5)}`);
+        LOGGER.trade(`   Reference Candle: ${candleType}`);
         LOGGER.trade(`   Duration: ${assetConfig.DURATION}${assetConfig.DURATION_UNIT} | Asset P/L: $${assetState.netPL.toFixed(2)}`);
 
         // Notify Telegram
