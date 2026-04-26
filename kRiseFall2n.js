@@ -999,7 +999,7 @@ const CONFIG = {
     TELEGRAM_ENABLED: true,
     TELEGRAM_BOT_TOKEN: '8306232249:AAGMwjFngs68Lcq27oGmqewQgthXTJJRxP0',
     TELEGRAM_CHAT_ID: '752497117',
-    ACTIVE_ASSETS: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V', 'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5']
+    ACTIVE_ASSETS: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', '1HZ10V', '1HZ25V', '1HZ75V', '1HZ100V', 'stpRNG', 'stpRNG3', 'stpRNG4', 'stpRNG5']
 };
 
 const ASSET_CONFIGS = {};
@@ -1546,15 +1546,15 @@ class ConnectionManager {
             SessionManager.checkSessionTargets();
             StatePersistence.saveState();
 
-            if (profit < 0 && SessionManager.isSessionActive()) {
-                LOGGER.trade(`🔄 [${ownerSymbol}] Loss confirmed — scheduling immediate recovery trade in ${CONFIG.RECOVERY_TRADE_DELAY_MS}ms`);
-                setTimeout(() => {
-                    bot.executeRecoveryTrade(ownerSymbol, assetState.lastClosedCandleForRecovery);
-                }, ['1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V'].includes(ownerSymbol)
-                    ? CONFIG.RECOVERY_TRADE_DELAY_MS2
-                    : CONFIG.RECOVERY_TRADE_DELAY_MS
-                );
-            }
+            // if (profit < 0 && SessionManager.isSessionActive()) {
+            //     LOGGER.trade(`🔄 [${ownerSymbol}] Loss confirmed — scheduling immediate recovery trade in ${CONFIG.RECOVERY_TRADE_DELAY_MS}ms`);
+            //     setTimeout(() => {
+            //         bot.executeRecoveryTrade(ownerSymbol, assetState.lastClosedCandleForRecovery);
+            //     }, ['1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V'].includes(ownerSymbol)
+            //         ? CONFIG.RECOVERY_TRADE_DELAY_MS2
+            //         : CONFIG.RECOVERY_TRADE_DELAY_MS
+            //     );
+            // }
         }
     }
 
@@ -1623,7 +1623,11 @@ class ConnectionManager {
                 LOGGER.info(`${symbol} CurrentStreak: ${currentStreak} | AssetMaxStreak: ${assetMaxStreak} | Threshold: ${assetMaxStreak !== 'N/A' ? assetMaxStreak - 5 : 'N/A'}`);
 
                 assetState.canTrade = true;
-                bot.executeNextTrade(symbol, closedCandle);
+                if (assetState.martingaleLevel > 0) {
+                    bot.executeRecoveryTrade(symbol, closedCandle);
+                } else {
+                    bot.executeNextTrade(symbol, closedCandle);
+                }
             }
         }
 
