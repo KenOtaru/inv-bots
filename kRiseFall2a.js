@@ -1020,7 +1020,7 @@ class SessionManager {
             state.portfolio.dailyLosses++;
             state.hourlyStats.losses++;
 
-            bot.executeRecoveryTrade(symbol);
+            this.executeRecoveryTrade(symbol);
 
             assetState.lossesCount++;
             assetState.loss += Math.abs(profit);
