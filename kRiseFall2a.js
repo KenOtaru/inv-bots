@@ -1050,6 +1050,8 @@ class SessionManager {
             } else {
                 LOGGER.trade(`❌ [${symbol}] LOSS: -$${Math.abs(profit).toFixed(2)} | Direction: ${direction} | Next Martingale: ${assetState.martingaleLevel} | Next Stake: $${assetState.currentStake.toFixed(2)} | P/L: $${assetState.netPL.toFixed(2)}`);
             }
+
+            bot.executeRecoveryTrade(symbol, assetState.lastClosedCandleForRecovery); // Recovery trade
         }
     }
 }
@@ -1361,11 +1363,7 @@ class ConnectionManager {
 
                 // Normal (non-recovery) trade signal on candle close
                 assetState.canTrade = true;
-                if (assetState.martingaleLevel === 0) {
-                    bot.executeNextTrade(symbol, closedCandle);
-                } else {
-                    bot.executeRecoveryTrade(symbol, closedCandle);
-                }
+                bot.executeNextTrade(symbol, closedCandle);
             }
         }
 
