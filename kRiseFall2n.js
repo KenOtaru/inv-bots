@@ -82,7 +82,7 @@ class AssetMaxStreakManager {
     fetchMaxStreakForAsset(symbol, connection) {
         return new Promise((resolve, reject) => {
             const assetConfig = getAssetConfig(symbol);
-            const BATCH_SIZE = 5000;
+            const BATCH_SIZE = 5000; //5000
             const MAX_BATCHES = 10; // 10 × 5,000 = 50,000
 
             let batchesDone = 0;
@@ -273,6 +273,15 @@ class AssetMaxStreakManager {
             ? Math.max(0, this._updateIntervalMs - (Date.now() - this.data.lastUpdated))
             : 0;
 
+        // Node.js setTimeout limit is 2^31 - 1 (approx 24.8 days)
+        const MAX_TIMEOUT = 2147483647;
+
+        if (msUntilRefresh > MAX_TIMEOUT) {
+            LOGGER.info(`🗓️ Next assetMaxStreak refresh in ${(msUntilRefresh / 3600000).toFixed(1)} hours (capping timeout at 24 days)`);
+            this._refreshTimer = setTimeout(() => this.scheduleMonthlyRefresh(connection), MAX_TIMEOUT);
+            return;
+        }
+
         LOGGER.info(`🗓️ Next assetMaxStreak refresh in ${(msUntilRefresh / 3600000).toFixed(1)} hours`);
 
         this._refreshTimer = setTimeout(async () => {
@@ -287,7 +296,9 @@ class AssetMaxStreakManager {
 
             // Resume trading by re-subscribing candles
             CONFIG.ACTIVE_ASSETS.forEach(symbol => {
-                bot.subscribeToCandles(symbol);
+                if (typeof bot !== 'undefined' && bot.subscribeToCandles) {
+                    bot.subscribeToCandles(symbol);
+                }
             });
 
             // Schedule next refresh
@@ -968,8 +979,8 @@ const CONFIG = {
     TIMEFRAME_LABEL: '1m',
     // Normal trading only needs ~50 candles (for currentStreak analysis)
     // after assetMaxStreak is computed
-    MAX_CANDLES_STORED: 50,
-    CANDLES_TO_LOAD: 50,
+    MAX_CANDLES_STORED: 20,
+    CANDLES_TO_LOAD: 20,
     CANDLE_PATTERN_LOOKBACK: 4,
     TREND_CANDLE_LOOKBACK: 8,
     TRADE_SYSTEM: 1,

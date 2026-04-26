@@ -6,8 +6,8 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'KriseFallM_2_019-state.json');
-const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2_019-history.json');
+const STATE_FILE = path.join(__dirname, 'KriseFallM_2_02-state.json');
+const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2_012-history.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
@@ -1236,7 +1236,7 @@ class ConnectionManager {
         );
         const gate = AlternatingRegimeDetector.multiWindowScan(
             state.assets[foundSymbol].closedCandles,
-            state.candlesStored === CONFIG.MAX_CANDLES_STORED ? [100, 1000, 5000] : [10, 30, 50]
+            state.candlesStored === CONFIG.MAX_CANDLES_STORED ? [100, 1000, 5000] : [5, 10, 20]
         );
 
         if (position) {
@@ -1298,12 +1298,12 @@ class ConnectionManager {
             // ★ IMMEDIATE RECOVERY TRADE — fired right here, no candle-close wait
             //   Only triggered on LOSS and only when we're still in session.
             // ─────────────────────────────────────────────────────────────────
-            if (profit < 0 && SessionManager.isSessionActive()) {
-                LOGGER.trade(`🔄 [${ownerSymbol}] Loss confirmed — scheduling immediate recovery trade in ${CONFIG.RECOVERY_TRADE_DELAY_MS}ms`);
-                setTimeout(() => {
-                    bot.executeRecoveryTrade(ownerSymbol, assetState.lastClosedCandleForRecovery);
-                }, ownerSymbol === ('1HZ10V' || '1HZ25V' || '1HZ50V' || '1HZ75V' || '1HZ100V') ? CONFIG.RECOVERY_TRADE_DELAY_MS2 : CONFIG.RECOVERY_TRADE_DELAY_MS);
-            }
+            // if (profit < 0 && SessionManager.isSessionActive()) {
+            //     LOGGER.trade(`🔄 [${ownerSymbol}] Loss confirmed — scheduling immediate recovery trade in ${CONFIG.RECOVERY_TRADE_DELAY_MS}ms`);
+            //     setTimeout(() => {
+            //         bot.executeRecoveryTrade(ownerSymbol, assetState.lastClosedCandleForRecovery);
+            //     }, ownerSymbol === ('1HZ10V' || '1HZ25V' || '1HZ50V' || '1HZ75V' || '1HZ100V') ? CONFIG.RECOVERY_TRADE_DELAY_MS2 : CONFIG.RECOVERY_TRADE_DELAY_MS);
+            // }
         }
     }
 
@@ -1361,7 +1361,11 @@ class ConnectionManager {
 
                 // Normal (non-recovery) trade signal on candle close
                 assetState.canTrade = true;
-                bot.executeNextTrade(symbol, closedCandle);
+                if (assetState.currentMartingaleLevel === 0) {
+                    bot.executeNextTrade(symbol, closedCandle);
+                } else {
+                    bot.executeRecoveryTrade(symbol, closedCandle);
+                }
             }
         }
 
@@ -1521,7 +1525,7 @@ class AlternatingRegimeDetector {
         for (const symbol of ACTIVE_ASSETS) {
             const assetState = state.assets[symbol];
             if (!assetState || assetState.closedCandles.length < 10) continue;
-            const result = this.analyze(assetState.closedCandles, state.alternatingPatternLookback ?? 100);
+            const result = this.analyze(assetState.closedCandles, state.alternatingPatternLookback ?? 20);
             LOGGER.debug(`🔍 [${symbol}] Alt-Regime | ${result.signal} ${result.probability}% | Streak: ${result.currentStreak} | ${result.reason}`);
             if (result.probability >= threshold) {
                 if (!best || result.probability > best.probability) best = { symbol, ...result };
@@ -1535,7 +1539,7 @@ class AlternatingRegimeDetector {
         if (!assetState || assetState.closedCandles.length < 10) {
             return { switchToSystem1: false, probability: 0, signal: 'SAFE', currentStreak: 0, reason: 'Insufficient candle data', details: {} };
         }
-        const result = this.analyze(assetState.closedCandles, state.alternatingPatternLookback ?? 100);
+        const result = this.analyze(assetState.closedCandles, state.alternatingPatternLookback ?? 20);
         return { switchToSystem1: result.probability >= threshold, ...result };
     }
 
@@ -1967,7 +1971,7 @@ class DerivBot {
 
         const gate = AlternatingRegimeDetector.multiWindowScan(
             state.assets[symbol].closedCandles,
-            state.candlesStored === CONFIG.MAX_CANDLES_STORED ? [100, 1000, 5000] : [10, 30, 50]
+            state.candlesStored === CONFIG.MAX_CANDLES_STORED ? [100, 1000, 5000] : [5, 10, 20]
         );
 
         // ── Signal determination (normal / non-recovery) ──────────────
