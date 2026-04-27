@@ -6,9 +6,9 @@ const path = require('path');
 // ============================================
 // FILE PATHS & CONSTANTS
 // ============================================
-const STATE_FILE = path.join(__dirname, 'KriseFallM_2_019-state.json');
-const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2_019-history.json');
-const MAXSTREAK_FILE = path.join(__dirname, 'KriseFallM_2_019-maxstreak.json');
+const STATE_FILE = path.join(__dirname, 'KriseFallM_2b_001-state.json');
+const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2b_001-history.json');
+const MAXSTREAK_FILE = path.join(__dirname, 'KriseFallM_2b_001-maxstreak.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
@@ -1414,7 +1414,7 @@ class ConnectionManager {
             if (response.subscription?.id) this.send({ forget: response.subscription.id });
             SessionManager.checkSessionTargets();
             StatePersistence.saveState();
-            
+
             // Immediate recovery on loss
             // if (profit < 0 && SessionManager.isSessionActive()) {
             //     LOGGER.trade(`🔄 [${ownerSymbol}] Loss confirmed — scheduling immediate recovery trade in ${CONFIG.RECOVERY_TRADE_DELAY_MS}ms`);
