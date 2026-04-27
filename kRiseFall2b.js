@@ -858,13 +858,9 @@ const CONFIG = {
     MAX_CANDLES_STORED: 1440,
     CANDLES_TO_LOAD: 1440,
 
-    CANDLE_PATTERN_LOOKBACK: 4,
-    TREND_CANDLE_LOOKBACK: 8,
-    TRADE_SYSTEM: 1,
-
     // ── Autocorrelation trade threshold ──────────────────────────
     // Trade fires when autocorrelation < AUTOCORR_THRESHOLD
-    AUTOCORR_THRESHOLD: -0.06,
+    AUTOCORR_THRESHOLD: -0.6,
 
     DURATION: 58,
     DURATION_UNIT: 's',
@@ -875,8 +871,6 @@ const CONFIG = {
     MARTINGALE_MULTIPLIER2: 1.8,
     MARTINGALE_MULTIPLIER3: 2.1,
     MAX_MARTINGALE_STEPS: 9,
-    System: 1,
-    iDirection: 'RISE',
 
     USE_TRADING_SESSIONS: true,
     TOKYO_START: 3,
@@ -1480,16 +1474,16 @@ class ConnectionManager {
                 LOGGER.info(`${symbol} AutoCorr: ${regime.autocorrelation.toFixed(4)} (threshold: ${CONFIG.AUTOCORR_THRESHOLD}) | AssetMaxStreak: ${assetMaxStreak} | Candles: ${assetState.closedCandles.length}`);
 
                 // Only trigger trades if maxStreak is ready
-                if (!state.isMaxStreakReady) {
-                    LOGGER.debug(`[${symbol}] Candle closed but maxStreak not ready yet — buffering`);
+                // if (!state.isMaxStreakReady) {
+                //     LOGGER.debug(`[${symbol}] Candle closed but maxStreak not ready yet — buffering`);
+                // } else {
+                assetState.canTrade = true;
+                if (assetState.martingaleLevel > 0) {
+                    bot.executeRecoveryTrade(symbol, closedCandle);
                 } else {
-                    assetState.canTrade = true;
-                    if (assetState.martingaleLevel > 0) {
-                        bot.executeRecoveryTrade(symbol, closedCandle);
-                    } else {
-                        bot.executeNextTrade(symbol, closedCandle);
-                    }
+                    bot.executeNextTrade(symbol, closedCandle);
                 }
+                // }
             }
         }
 
