@@ -572,7 +572,7 @@ Overall P&amp;L: $${(overall.netPL || 0).toFixed(2)}
 Overall W/L: ${overall.winsCount || 0}/${overall.lossesCount || 0}
 Total Trades: ${overall.tradesCount || 0}
 Capital: $${state.capital.toFixed(2)}`
-                : `Signal: autocorrelation(${regime.autocorrelation.toFixed(4)}) < -0.06`
+                : `Signal: autocorrelation(${regime.autocorrelation.toFixed(4)}) &lt; ${CONFIG.AUTOCORR_THRESHOLD}`
             }`.trim();
 
         await this.sendMessage(message);
@@ -1414,7 +1414,7 @@ class ConnectionManager {
             if (response.subscription?.id) this.send({ forget: response.subscription.id });
             SessionManager.checkSessionTargets();
             StatePersistence.saveState();
-
+            
             // Immediate recovery on loss
             // if (profit < 0 && SessionManager.isSessionActive()) {
             //     LOGGER.trade(`🔄 [${ownerSymbol}] Loss confirmed — scheduling immediate recovery trade in ${CONFIG.RECOVERY_TRADE_DELAY_MS}ms`);
@@ -1559,7 +1559,7 @@ class ConnectionManager {
                 `⚠️ <b>CONNECTION LOST - RECONNECTING 2b</b>\n` +
                 `Attempt: ${this.reconnectAttempts}/${this.maxReconnectAttempts}\n` +
                 `Retrying in ${(delay / 1000).toFixed(1)}s\n` +
-                `State preserved: ${state.session.tradesCount} trades, $${state.session.netPL.toFixed(2)} P&L`
+                `State preserved: ${state.session.tradesCount} trades, $${state.session.netPL.toFixed(2)} P&amp;L`
             );
             setTimeout(() => {
                 this.isReconnecting = false;
@@ -1568,7 +1568,7 @@ class ConnectionManager {
             }, delay);
         } else {
             LOGGER.error('Max reconnection attempts reached.');
-            TelegramService.sendMessage(`🛑 <b>BOT STOPPED 2b</b>\nMax reconnection attempts reached.\nFinal P&L: $${state.session.netPL.toFixed(2)}`);
+            TelegramService.sendMessage(`🛑 <b>BOT STOPPED 2b</b>\nMax reconnection attempts reached.\nFinal P&amp;L: $${state.session.netPL.toFixed(2)}`);
             process.exit(1);
         }
     }
@@ -1752,7 +1752,7 @@ class DerivBot {
         state.lastTradeDirection = direction;
 
         const tradeRequest = {
-            buy: 1, subscribe: 1,
+            buy: 1,
             price: stake.toFixed(2),
             parameters: {
                 contract_type: direction, symbol,
@@ -1902,7 +1902,7 @@ class DerivBot {
         assetState.activePositions.push(position);
 
         const tradeRequest = {
-            buy: 1, subscribe: 1,
+            buy: 1,
             price: stake.toFixed(2),
             parameters: {
                 contract_type: direction, symbol,
