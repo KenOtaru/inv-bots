@@ -6,9 +6,9 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'KriseFallM_2b_0001-state.json');
-const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2b_0001-history.json');
-const MAXSTREAK_FILE = path.join(__dirname, 'KriseFallM_2b_0001-maxstreak.json');
+const STATE_FILE = path.join(__dirname, 'KriseFallM_2b_0006-state.json');
+const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2b_0006-history.json');
+const MAXSTREAK_FILE = path.join(__dirname, 'KriseFallM_2b_0006-maxstreak.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
@@ -29,7 +29,7 @@ const STATE_SAVE_INTERVAL = 5000;
 class AssetMaxStreakManager {
     constructor() {
         this.data = this._load();
-        this._updateIntervalMs = 1 * 24 * 60 * 60 * 1000; // 30 days
+        this._updateIntervalMs = 7 * 24 * 60 * 60 * 1000; // 30 days
         this._refreshTimer = null;
     }
 
@@ -82,7 +82,7 @@ class AssetMaxStreakManager {
     fetchMaxStreakForAsset(symbol, connection) {
         return new Promise((resolve, reject) => {
             const assetConfig = getAssetConfig(symbol);
-            const BATCH_SIZE = 5000; //5000
+            const BATCH_SIZE = 1440; //5000
             const MAX_BATCHES = 1; // 10 × 5,000 = 50,000
 
             let batchesDone = 0;
@@ -985,7 +985,8 @@ const CONFIG = {
 
     // ── Autocorrelation trade threshold ──────────────────────────
     // Trade fires when autocorrelation < AUTOCORR_THRESHOLD
-    AUTOCORR_THRESHOLD: -0.6,
+    AUTOCORR_THRESHOLD: -0.25,
+    AUTOCORR_THRESHOLD2: -0.5,
     DURATION: 58,
     DURATION_UNIT: 's',
     MAX_OPEN_POSITIONS_PER_ASSET: 1,
@@ -1998,7 +1999,7 @@ class DerivBot {
         let direction = null;
         let signalReason = '';
 
-        if (regime.autocorrelation < CONFIG.AUTOCORR_THRESHOLD) {
+        if (regime.autocorrelation < CONFIG.AUTOCORR_THRESHOLD && regime.autocorrelation > CONFIG.AUTOCORR_THRESHOLD2) {
             const candleType = CandleAnalyzer.getCandleDirection(lastClosedCandle);
             if (candleType === 'BULLISH') {
                 direction = 'CALLE';
