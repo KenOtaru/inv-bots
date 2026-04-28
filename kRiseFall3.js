@@ -2605,7 +2605,7 @@ class DerivBot {
 
             const recent = closed.slice(-lookback);
 
-            // Check for 2 candle Trend
+            // Check for 3 candle Trend
             const lastCandle = recent[recent.length - 1];
             const last2Candle = recent[recent.length - 2];
             const last3Candle = recent[recent.length - 3];
