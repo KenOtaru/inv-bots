@@ -6,9 +6,9 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'KriseFallM_2b_0006-state.json');
-const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2b_0006-history.json');
-const MAXSTREAK_FILE = path.join(__dirname, 'KriseFallM_2b_0006-maxstreak.json');
+const STATE_FILE = path.join(__dirname, 'KriseFallM_2b_0007-state.json');
+const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2b_0007-history.json');
+const MAXSTREAK_FILE = path.join(__dirname, 'KriseFallM_2b_0007-maxstreak.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
@@ -208,7 +208,7 @@ class AssetMaxStreakManager {
     async computeAllMaxStreaks(connection) {
         LOGGER.info('🔄 Starting sequential maxStreak computation for all assets...');
         await TelegramService.sendMessage(
-            '🔄 <b>RISEFALL2b MaxStreak Update Started</b>\n' +
+            '🔄 <b>RISEFALL2b2 MaxStreak Update Started</b>\n' +
             `Computing 50k-candle maxStreak for ${CONFIG.ACTIVE_ASSETS.length} assets sequentially.\n` +
             'Trading is PAUSED until complete.'
         );
@@ -259,7 +259,7 @@ class AssetMaxStreakManager {
 
         LOGGER.info('✅ All asset maxStreaks computed. Trading resuming.');
         await TelegramService.sendMessage(
-            '✅ <b>RISEFALL2b MaxStreak Update Complete</b>\n' +
+            '✅ <b>RISEFALL2b2 MaxStreak Update Complete</b>\n' +
             `${summary}\n` +
             'Trading has RESUMED.'
         );
@@ -689,7 +689,7 @@ class TelegramService {
         const assetMaxStreak = assetMaxStreakManager ? assetMaxStreakManager.getMaxStreak(symbol) : 'N/A';
 
         const message = `
-${emoji} <b>${type} TRADE ALERT 2b</b>
+${emoji} <b>${type} TRADE ALERT 2b2</b>
 Asset: ${symbol}
 Direction: ${direction}
 Stake: $${stake.toFixed(2)}
@@ -805,7 +805,7 @@ Capital: $${state.capital.toFixed(2)}`
 
             const pnlEmoji = (dayStats.netPL || 0) >= 0 ? '🟢' : '🔴';
             const message = [
-                `🌙 <b>END OF DAY REPORT 2b - ${dateKey}</b>`, ``,
+                `🌙 <b>END OF DAY REPORT 2b2 - ${dateKey}</b>`, ``,
                 `${pnlEmoji} <b>Day Results:</b>`,
                 `├ Trades: ${dayStats.tradesCount}`,
                 `├ Wins: ${dayStats.winsCount} | Losses: ${dayStats.lossesCount}`,
@@ -840,7 +840,7 @@ Capital: $${state.capital.toFixed(2)}`
             });
 
             const message = [
-                `🤖 <b>DERIV RISE/FALL BOT STARTED 2b</b>`,
+                `🤖 <b>DERIV RISE/FALL BOT STARTED 2b2</b>`,
                 `Strategy: 50k-candle assetMaxStreak detection`,
                 `Mode: <b>Independent Per-Asset Management</b>`,
                 `Capital: $${state.capital.toFixed(2)}`,
@@ -886,7 +886,7 @@ Capital: $${state.capital.toFixed(2)}`
             });
 
             const message = [
-                `⏰ <b>Rise/Fall Bot Hourly Summary 2b</b>`, ``,
+                `⏰ <b>Rise/Fall Bot Hourly Summary 2b2</b>`, ``,
                 `📊 <b>Last Hour</b>`,
                 `├ Trades: ${statsSnapshot.trades}`,
                 `├ Wins: ${statsSnapshot.wins} | Losses: ${statsSnapshot.losses}`,
@@ -1722,7 +1722,7 @@ class ConnectionManager {
             }, delay);
         } else {
             LOGGER.error('Max reconnection attempts reached.');
-            TelegramService.sendMessage(`🛑 <b>BOT STOPPED 2b</b>\nMax reconnection attempts reached.\nFinal P&L: $${state.session.netPL.toFixed(2)}`);
+            TelegramService.sendMessage(`🛑 <b>BOT STOPPED 2b2</b>\nMax reconnection attempts reached.\nFinal P&L: $${state.session.netPL.toFixed(2)}`);
             process.exit(1);
         }
     }
@@ -1892,7 +1892,7 @@ class DerivBot {
         LOGGER.trade(`  Direction: ${direction === 'CALLE' ? 'RISE' : 'FALL'} | Stake: $${stake.toFixed(2)} | Martingale Level: ${assetState.martingaleLevel}`);
 
         TelegramService.sendMessage(
-            `⚡ <b>kRISE/FALL2b IMMEDIATE RECOVERY</b>\n` +
+            `⚡ <b>kRISE/FALL2b2 IMMEDIATE RECOVERY</b>\n` +
             `[${symbol}] Martingale Level: ${assetState.martingaleLevel}\n` +
             `Direction: ${direction === 'CALLE' ? 'RISE ↑' : 'FALL ↓'}\n` +
             `Stake: $${stake.toFixed(2)} | Capital: $${state.capital.toFixed(2)}\n` +

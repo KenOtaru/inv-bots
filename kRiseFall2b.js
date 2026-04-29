@@ -6,9 +6,9 @@ const path = require('path');
 // ============================================
 // FILE PATHS & CONSTANTS
 // ============================================
-const STATE_FILE = path.join(__dirname, 'KriseFallM_2b_111-state.json');
-const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2b_111-history.json');
-const MAXSTREAK_FILE = path.join(__dirname, 'KriseFallM_2b_111-maxstreak.json');
+const STATE_FILE = path.join(__dirname, 'KriseFallM_2b_112-state.json');
+const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2b_112-history.json');
+const MAXSTREAK_FILE = path.join(__dirname, 'KriseFallM_2b_112-maxstreak.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
@@ -860,7 +860,7 @@ const CONFIG = {
 
     // ── Autocorrelation trade threshold ──────────────────────────
     // Trade fires when autocorrelation < AUTOCORR_THRESHOLD
-    AUTOCORR_THRESHOLD: -0.25,
+    AUTOCORR_THRESHOLD: -0.70,
     AUTOCORR_THRESHOLD2: -0.99,
 
     DURATION: 58,
