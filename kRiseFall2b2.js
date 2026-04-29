@@ -1632,11 +1632,11 @@ class ConnectionManager {
                 LOGGER.info(`${symbol} AutoCorr: ${regime.autocorrelation.toFixed(4)} (threshold: ${CONFIG.AUTOCORR_THRESHOLD}) | AssetMaxStreak: ${assetMaxStreak} | Candles: ${assetState.closedCandles.length}`);
 
                 assetState.canTrade = true;
-                if (assetState.martingaleLevel > 0) {
-                    bot.executeRecoveryTrade(symbol, closedCandle);
-                } else {
-                    bot.executeNextTrade(symbol, closedCandle);
-                }
+                // if (assetState.martingaleLevel > 0) {
+                //     bot.executeRecoveryTrade(symbol, closedCandle);
+                // } else {
+                bot.executeNextTrade(symbol, closedCandle);
+                // }
             }
         }
 
