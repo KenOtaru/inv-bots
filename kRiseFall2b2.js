@@ -29,7 +29,7 @@ const STATE_SAVE_INTERVAL = 5000;
 class AssetMaxStreakManager {
     constructor() {
         this.data = this._load();
-        this._updateIntervalMs = 7 * 24 * 60 * 60 * 1000; // 30 days
+        this._updateIntervalMs = 1 * 24 * 60 * 60 * 1000; // 30 days
         this._refreshTimer = null;
     }
 
@@ -970,7 +970,7 @@ class CandleAnalyzer {
 // CONFIGURATION
 // ============================================
 const CONFIG = {
-    API_TOKEN: 'DMylfkyce6VyZt7',
+    API_TOKEN: 'rgNedekYXvCaPeP',
     APP_ID: '1089',
     WS_URL: 'wss://ws.derivws.com/websockets/v3',
     INITIAL_CAPITAL: 250,
@@ -980,13 +980,13 @@ const CONFIG = {
     GRANULARITY: 60,
     TIMEFRAME_LABEL: '1m',
     // ── After assetMaxStreak is computed we only keep 1440 live candles ──
-    MAX_CANDLES_STORED: 1440,
-    CANDLES_TO_LOAD: 1440,
+    MAX_CANDLES_STORED: 60,
+    CANDLES_TO_LOAD: 60,
 
     // ── Autocorrelation trade threshold ──────────────────────────
     // Trade fires when autocorrelation < AUTOCORR_THRESHOLD
-    AUTOCORR_THRESHOLD: -0.25,
-    AUTOCORR_THRESHOLD2: -0.5,
+    AUTOCORR_THRESHOLD: 0.25,
+    AUTOCORR_THRESHOLD2: 0.99,
     DURATION: 58,
     DURATION_UNIT: 's',
     MAX_OPEN_POSITIONS_PER_ASSET: 1,
@@ -1012,8 +1012,8 @@ const CONFIG = {
     TELEGRAM_CHAT_ID: '752497117',
     ACTIVE_ASSETS: [
         'R_10', 'R_25', 'R_50', 'R_75', 'R_100',
-        '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V',
-        'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'
+        '1HZ10V', '1HZ25V', '1HZ75V', '1HZ100V',
+        'stpRNG', 'stpRNG3', 'stpRNG4', 'stpRNG5'
     ]
 };
 
@@ -1961,10 +1961,10 @@ class DerivBot {
         }
 
         // Skip if in martingale recovery
-        if (assetState.lastTradeWasWin === false && assetState.martingaleLevel > 0) {
-            LOGGER.debug(`  [${symbol}] Normal signal skipped — in recovery (mart=${assetState.martingaleLevel}), handled by immediate recovery path`);
-            return;
-        }
+        // if (assetState.lastTradeWasWin === false && assetState.martingaleLevel > 0) {
+        //     LOGGER.debug(`  [${symbol}] Normal signal skipped — in recovery (mart=${assetState.martingaleLevel}), handled by immediate recovery path`);
+        //     return;
+        // }
 
         // Session window check
         let sessionCheck = { inSession: true, sessionName: '24/7', nextSession: null, minutesUntilNext: 0 };
@@ -1999,7 +1999,7 @@ class DerivBot {
         let direction = null;
         let signalReason = '';
 
-        if (regime.autocorrelation < CONFIG.AUTOCORR_THRESHOLD && regime.autocorrelation > CONFIG.AUTOCORR_THRESHOLD2) {
+        if (regime.autocorrelation >= CONFIG.AUTOCORR_THRESHOLD && regime.autocorrelation <= CONFIG.AUTOCORR_THRESHOLD2) {
             const candleType = CandleAnalyzer.getCandleDirection(lastClosedCandle);
             if (candleType === 'BULLISH') {
                 direction = 'CALLE';
