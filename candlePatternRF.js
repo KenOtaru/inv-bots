@@ -9,10 +9,10 @@
 
 require('dotenv').config();
 
-const WebSocket   = require('ws');
+const WebSocket = require('ws');
 const TelegramBot = require('node-telegram-bot-api');
-const fs          = require('fs');
-const path        = require('path');
+const fs = require('fs');
+const path = require('path');
 
 // ══════════════════════════════════════════════════════════════════════════════
 // CANDLE PATTERN ANALYZER CLASS
@@ -114,7 +114,7 @@ class CandlePatternAnalyzer {
         direction: null,
         confidence: 0,
         reason: `Insufficient candle history: ${closedCandles.length} candles ` +
-                `(need at least ${maxPatLen + 20} for reliable analysis)`,
+          `(need at least ${maxPatLen + 20} for reliable analysis)`,
         details: {}
       };
     }
@@ -210,7 +210,7 @@ class CandlePatternAnalyzer {
         direction: null,
         confidence: 0,
         reason: 'No patterns met minimum occurrence threshold ' +
-                `(need >= ${this.minOccurrences} matches per pattern)`,
+          `(need >= ${this.minOccurrences} matches per pattern)`,
         details: { patternResults: [] }
       };
     }
@@ -279,7 +279,7 @@ class CandlePatternAnalyzer {
       // finalConfidence = Math.max(consensusConfidence, bestPattern.confidence);
       finalConfidence = consensusConfidence; // Use consensus confidence for more stability
       decisionMethod = 'CONSENSUS+BEST_AGREE';
-    } 
+    }
     // else if (bestPattern.confidence >= this.minConfidence &&
     //            bestPattern.confidence > consensusConfidence + 0.05) {
     //   // Best pattern disagrees but is significantly stronger — follow best
@@ -312,19 +312,19 @@ class CandlePatternAnalyzer {
     if (shouldTrade) {
       const dirLabel = finalDirection === 'CALLE' ? 'BULLISH' : 'BEARISH';
       reason = `Pattern analysis predicts ${dirLabel} with ` +
-               `${(finalConfidence * 100).toFixed(1)}% confidence ` +
-               `(threshold: ${(this.minConfidence * 100).toFixed(1)}%) | ` +
-               `Method: ${decisionMethod} | ` +
-               `${agreeingPatterns.length}/${patternResults.length} patterns agree | ` +
-               `Best: L${bestPattern.patternLength} "${bestPattern.pattern}" ` +
-               `(${(bestPattern.confidence * 100).toFixed(1)}%, ${bestPattern.rawOccurrences} matches)`;
+        `${(finalConfidence * 100).toFixed(1)}% confidence ` +
+        `(threshold: ${(this.minConfidence * 100).toFixed(1)}%) | ` +
+        `Method: ${decisionMethod} | ` +
+        `${agreeingPatterns.length}/${patternResults.length} patterns agree | ` +
+        `Best: L${bestPattern.patternLength} "${bestPattern.pattern}" ` +
+        `(${(bestPattern.confidence * 100).toFixed(1)}%, ${bestPattern.rawOccurrences} matches)`;
     } else {
       reason = `Confidence ${(finalConfidence * 100).toFixed(1)}% below threshold ` +
-               `${(this.minConfidence * 100).toFixed(1)}% | ` +
-               `Method: ${decisionMethod} | ` +
-               `${agreeingPatterns.length}/${patternResults.length} patterns agree | ` +
-               `Best: L${bestPattern.patternLength} "${bestPattern.pattern}" ` +
-               `(${(bestPattern.confidence * 100).toFixed(1)}%, ${bestPattern.rawOccurrences} matches)`;
+        `${(this.minConfidence * 100).toFixed(1)}% | ` +
+        `Method: ${decisionMethod} | ` +
+        `${agreeingPatterns.length}/${patternResults.length} patterns agree | ` +
+        `Best: L${bestPattern.patternLength} "${bestPattern.pattern}" ` +
+        `(${(bestPattern.confidence * 100).toFixed(1)}%, ${bestPattern.rawOccurrences} matches)`;
     }
 
     // Cache result
@@ -403,24 +403,24 @@ class CandlePatternAnalyzer {
 // ══════════════════════════════════════════════════════════════════════════════
 
 const DEFAULT_CONFIG = {
-  apiToken: 'Dz2V2KvRf4Uukt3',
-  appId:    '1089',
+  apiToken: 'rgNedekYXvCaPeP',
+  appId: '1089',
 
-  symbol:        'stpRNG',
-  tickDuration:  54, // seconds (trade duration)
-  initialStake:  0.35,
+  symbol: 'stpRNG',
+  tickDuration: 58, // seconds (trade duration)
+  initialStake: 0.35,
   investmentAmount: 100,
 
-  martingaleMultiplier:  1.48,
-  maxMartingaleLevel:    3,
-  afterMaxLoss:          'continue',
-  continueExtraLevels:   6,
+  martingaleMultiplier: 1.48,
+  maxMartingaleLevel: 3,
+  afterMaxLoss: 'continue',
+  continueExtraLevels: 6,
   extraLevelMultipliers: [2.0, 2.0, 2.1, 2.1, 2.2, 2.3],
 
-  autoCompounding:    true,
+  autoCompounding: true,
   compoundPercentage: 0.35,
 
-  stopLoss:   100,
+  stopLoss: 100,
   takeProfit: 10000,
 
   // ── Pattern Analysis Configuration ──────────────────────────────────────
@@ -453,18 +453,18 @@ const DEFAULT_CONFIG = {
   // ── Candle History Configuration ────────────────────────────────────────
   candle: {
     // Number of historical candles to maintain in memory
-    maxCandles: 5000,
+    maxCandles: 1440,
 
     // Number of candles to load on startup
     // Set to 5000 to get full history for pattern analysis
-    loadCount: 5000,
+    loadCount: 1440,
 
     // Candle granularity in seconds (60 = 1-minute candles)
     granularity: 60,
   },
 
-  telegramToken:   '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
-  telegramChatId:  '752497117',
+  telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
+  telegramChatId: '752497117',
   telegramEnabled: true,
 };
 
@@ -472,7 +472,7 @@ const DEFAULT_CONFIG = {
 // FILE PATHS
 // ══════════════════════════════════════════════════════════════════════════════
 
-const STATE_FILE          = path.join(__dirname, 'ST-grid-state-pattern-v200002.json');
+const STATE_FILE = path.join(__dirname, 'ST-grid-state-pattern-v200002.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -485,21 +485,21 @@ class StatePersistence {
       const payload = {
         savedAt: Date.now(),
         trading: {
-          totalProfit:         bot.totalProfit,
-          totalTrades:         bot.totalTrades,
-          wins:                bot.wins,
-          losses:              bot.losses,
-          currentGridLevel:    bot.currentGridLevel,
-          currentDirection:    bot.currentDirection,
-          baseStake:           bot.baseStake,
-          chainBaseStake:      bot.chainBaseStake,
+          totalProfit: bot.totalProfit,
+          totalTrades: bot.totalTrades,
+          wins: bot.wins,
+          losses: bot.losses,
+          currentGridLevel: bot.currentGridLevel,
+          currentDirection: bot.currentDirection,
+          baseStake: bot.baseStake,
+          chainBaseStake: bot.chainBaseStake,
           investmentRemaining: bot.investmentRemaining,
-          totalRecovered:      bot.totalRecovered,
-          maxWinStreak:        bot.maxWinStreak,
-          maxLossStreak:       bot.maxLossStreak,
-          currentStreak:       bot.currentStreak,
-          inRecoveryMode:      bot.inRecoveryMode,
-          skippedCandles:      bot.skippedCandles,
+          totalRecovered: bot.totalRecovered,
+          maxWinStreak: bot.maxWinStreak,
+          maxLossStreak: bot.maxLossStreak,
+          currentStreak: bot.currentStreak,
+          inRecoveryMode: bot.inRecoveryMode,
+          skippedCandles: bot.skippedCandles,
         },
       };
       fs.writeFileSync(STATE_FILE, JSON.stringify(payload, null, 2), 'utf8');
@@ -511,7 +511,7 @@ class StatePersistence {
   static load() {
     try {
       if (!fs.existsSync(STATE_FILE)) return null;
-      const data   = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
+      const data = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
       const ageMin = (Date.now() - data.savedAt) / 60000;
       if (ageMin > 30) {
         console.warn(`[StatePersistence] State is ${ageMin.toFixed(1)} min old — discarding`);
@@ -548,64 +548,64 @@ class STEPINDEXGridBot {
 
     // ── Pattern Analyzer ────────────────────────────────────────────────────
     this.patternAnalyzer = new CandlePatternAnalyzer({
-      minConfidence:  this.config.pattern.minConfidence,
+      minConfidence: this.config.pattern.minConfidence,
       patternLengths: this.config.pattern.patternLengths,
       minOccurrences: this.config.pattern.minOccurrences,
-      recencyDecay:   this.config.pattern.recencyDecay,
-      dojiThreshold:  this.config.pattern.dojiThreshold,
+      recencyDecay: this.config.pattern.recencyDecay,
+      dojiThreshold: this.config.pattern.dojiThreshold,
     });
 
     // ── WebSocket ───────────────────────────────────────────────────────────
-    this.ws            = null;
-    this.isConnected   = false;
-    this.isAuthorized  = false;
-    this.reqId         = 1;
+    this.ws = null;
+    this.isConnected = false;
+    this.isAuthorized = false;
+    this.reqId = 1;
 
     // ── Reconnection ────────────────────────────────────────────────────────
-    this.reconnectAttempts    = 0;
+    this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 50;
-    this.reconnectDelay       = 5000;
-    this.reconnectTimer       = null;
-    this.isReconnecting       = false;
+    this.reconnectDelay = 5000;
+    this.reconnectTimer = null;
+    this.isReconnecting = false;
 
     // ── Ping / Keepalive ────────────────────────────────────────────────────
     this.pingInterval = null;
 
     // ── Trade Watchdog ───────────────────────────────────────────────────────
-    this.tradeWatchdogTimer    = null;
+    this.tradeWatchdogTimer = null;
     this.tradeWatchdogPollTimer = null;
-    this.tradeWatchdogMs       = 60000;
-    this.tradeStartTime        = null;
+    this.tradeWatchdogMs = 60000;
+    this.tradeStartTime = null;
 
     // ── Message queue ────────────────────────────────────────────────────────
     this.messageQueue = [];
     this.maxQueueSize = 50;
 
     // ── Account ──────────────────────────────────────────────────────────────
-    this.balance   = 0;
-    this.currency  = 'USD';
+    this.balance = 0;
+    this.currency = 'USD';
     this.accountId = '';
 
     // ── Session trading state ────────────────────────────────────────────────
-    this.running               = false;
-    this.tradeInProgress       = false;
-    this.currentContractId     = null;
-    this.pendingTradeInfo      = null;
+    this.running = false;
+    this.tradeInProgress = false;
+    this.currentContractId = null;
+    this.pendingTradeInfo = null;
 
-    this.currentGridLevel      = 0;
-    this.currentDirection      = 'CALLE';
-    this.baseStake             = this.config.initialStake;
-    this.chainBaseStake        = this.config.initialStake;
-    this.investmentRemaining   = 0;
+    this.currentGridLevel = 0;
+    this.currentDirection = 'CALLE';
+    this.baseStake = this.config.initialStake;
+    this.chainBaseStake = this.config.initialStake;
+    this.investmentRemaining = 0;
     this.investmentStartAmount = 0;
-    this.totalProfit           = 0;
-    this.totalTrades           = 0;
-    this.wins                  = 0;
-    this.losses                = 0;
-    this.currentStreak         = 0;
-    this.maxWinStreak          = 0;
-    this.maxLossStreak         = 0;
-    this.totalRecovered        = 0;
+    this.totalProfit = 0;
+    this.totalTrades = 0;
+    this.wins = 0;
+    this.losses = 0;
+    this.currentStreak = 0;
+    this.maxWinStreak = 0;
+    this.maxLossStreak = 0;
+    this.totalRecovered = 0;
 
     // ── Candle tracking (upgraded to 5000) ──────────────────────────────────
     this.assetState = {
@@ -634,20 +634,20 @@ class STEPINDEXGridBot {
     //   6. LOSS → increment level, inRecoveryMode = true, wait for NEW candle,
     //            then re-analyze before placing recovery trade
     //            (recovery trades MUST also pass pattern confidence check)
-    this.canTrade       = false;
+    this.canTrade = false;
     this.inRecoveryMode = false;
 
     // Track consecutive skipped candles for monitoring
     this.skippedCandles = 0;
 
     // ── Session control ──────────────────────────────────────────────────────
-    this.endOfDay         = false;
-    this.isWinTrade       = false;
-    this.hasStartedOnce   = false;
+    this.endOfDay = false;
+    this.isWinTrade = false;
+    this.hasStartedOnce = false;
     this._autoSaveInterval = null;
 
     this._processedContracts = new Set();
-    this._maxProcessedCache  = 200;
+    this._maxProcessedCache = 200;
 
     // ── Hourly Telegram stats ─────────────────────────────────────────────────
     this.hourlyStats = {
@@ -681,24 +681,24 @@ class STEPINDEXGridBot {
     const saved = StatePersistence.load();
     if (!saved) return;
     const t = saved.trading;
-    this.totalProfit         = t.totalProfit         || 0;
-    this.totalTrades         = t.totalTrades         || 0;
-    this.wins                = t.wins                || 0;
-    this.losses              = t.losses              || 0;
-    this.currentGridLevel    = t.currentGridLevel    || 0;
-    this.currentDirection    = t.currentDirection    || 'CALLE';
-    this.baseStake           = t.baseStake           || this.config.initialStake;
-    this.chainBaseStake      = t.chainBaseStake      || this.baseStake;
+    this.totalProfit = t.totalProfit || 0;
+    this.totalTrades = t.totalTrades || 0;
+    this.wins = t.wins || 0;
+    this.losses = t.losses || 0;
+    this.currentGridLevel = t.currentGridLevel || 0;
+    this.currentDirection = t.currentDirection || 'CALLE';
+    this.baseStake = t.baseStake || this.config.initialStake;
+    this.chainBaseStake = t.chainBaseStake || this.baseStake;
     this.investmentRemaining = t.investmentRemaining || 0;
-    this.totalRecovered      = t.totalRecovered      || 0;
-    this.maxWinStreak        = t.maxWinStreak        || 0;
-    this.maxLossStreak       = t.maxLossStreak       || 0;
-    this.currentStreak       = t.currentStreak       || 0;
-    this.skippedCandles      = t.skippedCandles      || 0;
-    this.inRecoveryMode      = t.inRecoveryMode      || false;
+    this.totalRecovered = t.totalRecovered || 0;
+    this.maxWinStreak = t.maxWinStreak || 0;
+    this.maxLossStreak = t.maxLossStreak || 0;
+    this.currentStreak = t.currentStreak || 0;
+    this.skippedCandles = t.skippedCandles || 0;
+    this.inRecoveryMode = t.inRecoveryMode || false;
     // Always wait for pattern analysis — don't auto-trade on restore
-    this.canTrade            = false;
-    this.hasStartedOnce      = true;
+    this.canTrade = false;
+    this.hasStartedOnce = true;
     this.log(
       `State restored | Trades: ${this.totalTrades} | W/L: ${this.wins}/${this.losses} | ` +
       `P&L: $${this.totalProfit.toFixed(2)} | Level: ${this.currentGridLevel} | ` +
@@ -713,7 +713,7 @@ class STEPINDEXGridBot {
   // ══════════════════════════════════════════════════════════════════════════
 
   log(message, type = 'info') {
-    const ts    = new Date().toISOString();
+    const ts = new Date().toISOString();
     const emoji = { error: '❌', success: '✅', warning: '⚠️', info: 'ℹ️' }[type] || 'ℹ️';
     console.log(`[${ts}] ${emoji} ${message}`);
   }
@@ -771,7 +771,7 @@ class STEPINDEXGridBot {
 
   calculateStake(level) {
     const cfg = this.config;
-    let base  = this.baseStake;
+    let base = this.baseStake;
 
     if (cfg.autoCompounding && this.investmentRemaining > 0) {
       base = Math.max(this.investmentRemaining * cfg.compoundPercentage / 100, 0.35);
@@ -782,9 +782,9 @@ class STEPINDEXGridBot {
       return Number((base * Math.pow(cfg.martingaleMultiplier, level)).toFixed(2));
     }
 
-    let stake    = base * Math.pow(cfg.martingaleMultiplier, cfg.maxMartingaleLevel);
+    let stake = base * Math.pow(cfg.martingaleMultiplier, cfg.maxMartingaleLevel);
     const extraIdx = level - cfg.maxMartingaleLevel - 1;
-    const mults  = cfg.extraLevelMultipliers || [];
+    const mults = cfg.extraLevelMultipliers || [];
     for (let i = 0; i <= extraIdx; i++) {
       stake *= (mults[i] > 0 ? mults[i] : cfg.martingaleMultiplier);
     }
@@ -808,17 +808,17 @@ class STEPINDEXGridBot {
 
     this.ws = new WebSocket(wsUrl);
 
-    this.ws.on('open',    ()     => this._onOpen());
-    this.ws.on('message', data   => this._onRawMessage(data));
-    this.ws.on('error',   err    => this._onError(err));
-    this.ws.on('close',   (code) => this._onClose(code));
+    this.ws.on('open', () => this._onOpen());
+    this.ws.on('message', data => this._onRawMessage(data));
+    this.ws.on('error', err => this._onError(err));
+    this.ws.on('close', (code) => this._onClose(code));
   }
 
   _onOpen() {
     this.log('WebSocket connected ✅', 'success');
-    this.isConnected       = true;
+    this.isConnected = true;
     this.reconnectAttempts = 0;
-    this.isReconnecting    = false;
+    this.isReconnecting = false;
 
     this._startPing();
     StatePersistence.startAutoSave(this);
@@ -832,13 +832,13 @@ class STEPINDEXGridBot {
 
   _onClose(code) {
     this.log(`WebSocket closed (code: ${code})`, 'warning');
-    this.isConnected  = false;
+    this.isConnected = false;
     this.isAuthorized = false;
 
     this._stopPing();
     this._clearAllWatchdogTimers();
 
-    this.tradeInProgress  = false;
+    this.tradeInProgress = false;
     this.pendingTradeInfo = null;
 
     StatePersistence.save(this);
@@ -892,13 +892,13 @@ class STEPINDEXGridBot {
       this.ws.removeAllListeners();
       try {
         if (this.ws.readyState === WebSocket.OPEN ||
-            this.ws.readyState === WebSocket.CONNECTING) {
+          this.ws.readyState === WebSocket.CONNECTING) {
           this.ws.close();
         }
-      } catch (_) {}
+      } catch (_) { }
       this.ws = null;
     }
-    this.isConnected  = false;
+    this.isConnected = false;
     this.isAuthorized = false;
   }
 
@@ -968,14 +968,14 @@ class STEPINDEXGridBot {
     }
 
     switch (msg.msg_type) {
-      case 'authorize':              this._onAuthorize(msg);           break;
-      case 'balance':                this._onBalance(msg);             break;
-      case 'proposal':               this._onProposal(msg);           break;
-      case 'buy':                    this._onBuy(msg);                 break;
-      case 'proposal_open_contract': this._onContract(msg);           break;
-      case 'ohlc':                   this._handleOHLC(msg.ohlc);      break;
-      case 'candles':                this._handleCandlesHistory(msg);  break;
-      case 'ping':                   break;
+      case 'authorize': this._onAuthorize(msg); break;
+      case 'balance': this._onBalance(msg); break;
+      case 'proposal': this._onProposal(msg); break;
+      case 'buy': this._onBuy(msg); break;
+      case 'proposal_open_contract': this._onContract(msg); break;
+      case 'ohlc': this._handleOHLC(msg.ohlc); break;
+      case 'candles': this._handleCandlesHistory(msg); break;
+      case 'ping': break;
     }
   }
 
@@ -1036,7 +1036,7 @@ class STEPINDEXGridBot {
         const closeTime = new Date(closedCandle.epoch * 1000).toISOString();
         const candleType = closedCandle.close > closedCandle.open
           ? 'BULLISH' : closedCandle.close < closedCandle.open
-          ? 'BEARISH' : 'DOJI';
+            ? 'BEARISH' : 'DOJI';
         const candleEmoji = candleType === 'BULLISH' ? '🟢'
           : candleType === 'BEARISH' ? '🔴' : '⚪';
 
@@ -1113,14 +1113,14 @@ class STEPINDEXGridBot {
 
             const skipMsg = this.inRecoveryMode
               ? `⏳ RECOVERY WAITING — Pattern confidence too low ` +
-                `(${(analysis.confidence * 100).toFixed(1)}% < ` +
-                `${(this.config.pattern.minConfidence * 100).toFixed(1)}%) | ` +
-                `L${this.currentGridLevel} | Skipped: ${this.skippedCandles} candles | ` +
-                `Next stake: $${this.calculateStake(this.currentGridLevel).toFixed(2)}`
+              `(${(analysis.confidence * 100).toFixed(1)}% < ` +
+              `${(this.config.pattern.minConfidence * 100).toFixed(1)}%) | ` +
+              `L${this.currentGridLevel} | Skipped: ${this.skippedCandles} candles | ` +
+              `Next stake: $${this.calculateStake(this.currentGridLevel).toFixed(2)}`
               : `⏳ SKIPPED — Pattern confidence too low ` +
-                `(${(analysis.confidence * 100).toFixed(1)}% < ` +
-                `${(this.config.pattern.minConfidence * 100).toFixed(1)}%) | ` +
-                `Skipped: ${this.skippedCandles} candles`;
+              `(${(analysis.confidence * 100).toFixed(1)}% < ` +
+              `${(this.config.pattern.minConfidence * 100).toFixed(1)}%) | ` +
+              `Skipped: ${this.skippedCandles} candles`;
 
             this.log(skipMsg, 'warning');
 
@@ -1247,7 +1247,7 @@ class STEPINDEXGridBot {
     if (msg.msg_type === 'buy' || msg.msg_type === 'proposal') {
       this.log('Trade error — releasing lock and retrying on next candle', 'warning');
       this._clearAllWatchdogTimers();
-      this.tradeInProgress  = false;
+      this.tradeInProgress = false;
       this.pendingTradeInfo = null;
       this.currentContractId = null;
 
@@ -1272,9 +1272,9 @@ class STEPINDEXGridBot {
     }
 
     this.isAuthorized = true;
-    this.accountId    = msg.authorize.loginid;
-    this.balance      = msg.authorize.balance;
-    this.currency     = msg.authorize.currency;
+    this.accountId = msg.authorize.loginid;
+    this.balance = msg.authorize.balance;
+    this.currency = msg.authorize.currency;
 
     this.log(
       `Authorized ✅ | Account: ${this.accountId} | ` +
@@ -1352,8 +1352,8 @@ class STEPINDEXGridBot {
   // ── buy confirmation ──────────────────────────────────────────────────────
   _onBuy(msg) {
     const b = msg.buy;
-    this.currentContractId   = b.contract_id;
-    this.tradeStartTime      = Date.now();
+    this.currentContractId = b.contract_id;
+    this.tradeStartTime = Date.now();
     this.investmentRemaining = Math.max(
       0,
       Number((this.investmentRemaining - b.buy_price).toFixed(2))
@@ -1426,23 +1426,23 @@ class STEPINDEXGridBot {
 
     const profit = parseFloat(c.profit);
     const payout = parseFloat(c.payout || 0);
-    const isWin  = profit > 0;
+    const isWin = profit > 0;
 
-    this.tradeInProgress   = false;
-    this.pendingTradeInfo  = null;
+    this.tradeInProgress = false;
+    this.pendingTradeInfo = null;
     this.currentContractId = null;
-    this.tradeStartTime    = null;
+    this.tradeStartTime = null;
 
     // ── Update counters ───────────────────────────────────────────────────
     this.totalTrades += 1;
-    this.totalProfit  = Number((this.totalProfit + profit).toFixed(2));
-    if (isWin) { this.wins++;   this.isWinTrade = true;  }
-    else       { this.losses++; this.isWinTrade = false; }
+    this.totalProfit = Number((this.totalProfit + profit).toFixed(2));
+    if (isWin) { this.wins++; this.isWinTrade = true; }
+    else { this.losses++; this.isWinTrade = false; }
 
     this.currentStreak = isWin
       ? (this.currentStreak > 0 ? this.currentStreak + 1 : 1)
       : (this.currentStreak < 0 ? this.currentStreak - 1 : -1);
-    if (isWin)  this.maxWinStreak  = Math.max(this.currentStreak, this.maxWinStreak);
+    if (isWin) this.maxWinStreak = Math.max(this.currentStreak, this.maxWinStreak);
     if (!isWin) this.maxLossStreak = Math.min(this.currentStreak, this.maxLossStreak);
 
     this.hourlyStats.trades++;
@@ -1511,9 +1511,9 @@ class STEPINDEXGridBot {
 
       // ── RESET after win ─────────────────────────────────────────────
       this.currentGridLevel = 0;
-      this.inRecoveryMode   = false;
-      this.canTrade         = false;  // WAIT for next candle + pattern
-      this.skippedCandles   = 0;
+      this.inRecoveryMode = false;
+      this.canTrade = false;  // WAIT for next candle + pattern
+      this.skippedCandles = 0;
 
       this.log(
         `⏳ Waiting for next new candle + pattern analysis before trading…`,
@@ -1522,9 +1522,9 @@ class STEPINDEXGridBot {
 
       this._sendTelegramTradeResult(isWin, profit);
 
-    // ══════════════════════════════════════════════════════════════════════
-    // LOSS HANDLING — PATTERN-AWARE RECOVERY
-    // ══════════════════════════════════════════════════════════════════════
+      // ══════════════════════════════════════════════════════════════════════
+      // LOSS HANDLING — PATTERN-AWARE RECOVERY
+      // ══════════════════════════════════════════════════════════════════════
     } else {
       const nextLevel = this.currentGridLevel + 1;
       const absoluteMax = cfg.afterMaxLoss === 'continue'
@@ -1537,7 +1537,7 @@ class STEPINDEXGridBot {
       // KEY: canTrade = false — we do NOT trade immediately
       // Instead we wait for the next candle to close, then re-analyze
       this.inRecoveryMode = true;
-      this.canTrade       = false;  // Wait for next candle + re-analysis
+      this.canTrade = false;  // Wait for next candle + re-analysis
 
       if (nextLevel > absoluteMax) {
         this.log(
@@ -1549,14 +1549,14 @@ class STEPINDEXGridBot {
           `Investment remaining: $${this.investmentRemaining.toFixed(2)}\n` +
           `Total P&L: $${this.totalProfit.toFixed(2)}`
         );
-        shouldContinue      = false;
+        shouldContinue = false;
         this.inRecoveryMode = false;
-        this.canTrade       = false;
+        this.canTrade = false;
 
       } else if (nextLevel > cfg.maxMartingaleLevel && cfg.afterMaxLoss === 'reset') {
         this.currentGridLevel = 0;
-        this.inRecoveryMode   = false;
-        this.canTrade         = false;
+        this.inRecoveryMode = false;
+        this.canTrade = false;
         this.log(
           `🔄 MAX LEVEL — Resetting to L0 (reset mode) — ` +
           `waiting for pattern signal`,
@@ -1584,26 +1584,26 @@ class STEPINDEXGridBot {
             `remaining $${this.investmentRemaining.toFixed(2)}`,
             'error'
           );
-          shouldContinue      = false;
+          shouldContinue = false;
           this.inRecoveryMode = false;
-          this.canTrade       = false;
+          this.canTrade = false;
         } else if (nextStake > this.balance) {
           this.log(
             `🛑 INSUFFICIENT BALANCE: next $${nextStake.toFixed(2)} > ` +
             `balance $${this.balance.toFixed(2)}`,
             'error'
           );
-          shouldContinue      = false;
+          shouldContinue = false;
           this.inRecoveryMode = false;
-          this.canTrade       = false;
+          this.canTrade = false;
         }
       }
     }
 
     if (!shouldContinue) {
-      this.running        = false;
+      this.running = false;
       this.inRecoveryMode = false;
-      this.canTrade       = false;
+      this.canTrade = false;
       this._logSummary();
       return;
     }
@@ -1735,8 +1735,8 @@ class STEPINDEXGridBot {
   _recoverStuckTrade(reason) {
     this._clearAllWatchdogTimers();
 
-    const contractId  = this.currentContractId;
-    const stakeInfo   = this.pendingTradeInfo;
+    const contractId = this.currentContractId;
+    const stakeInfo = this.pendingTradeInfo;
     const openSeconds = this.tradeStartTime
       ? Math.round((Date.now() - this.tradeStartTime) / 1000)
       : '?';
@@ -1762,10 +1762,10 @@ class STEPINDEXGridBot {
       this._processedContracts.add(String(contractId));
     }
 
-    this.tradeInProgress   = false;
-    this.pendingTradeInfo  = null;
+    this.tradeInProgress = false;
+    this.pendingTradeInfo = null;
     this.currentContractId = null;
-    this.tradeStartTime    = null;
+    this.tradeStartTime = null;
 
     // Wait for next candle + pattern analysis (don't retry immediately)
     this.canTrade = false;
@@ -1795,7 +1795,7 @@ class STEPINDEXGridBot {
       this.log('Not authorized — cannot trade', 'error');
       return;
     }
-    if (!this.running)        return;
+    if (!this.running) return;
     if (this.tradeInProgress) {
       this.log('Trade already in progress…', 'warning');
       return;
@@ -1810,11 +1810,11 @@ class STEPINDEXGridBot {
       return;
     }
 
-    const stake     = this.calculateStake(this.currentGridLevel);
+    const stake = this.calculateStake(this.currentGridLevel);
 
     // const direction = this.currentDirection;
     const direction = directions === 'CALLE' ? 'CALLE' : 'PUTE';
-    const label     = direction === 'CALLE' ? 'HIGHER' : 'LOWER';
+    const label = direction === 'CALLE' ? 'HIGHER' : 'LOWER';
     const tradeType = this.inRecoveryMode
       ? `⚡ RECOVERY L${this.currentGridLevel}`
       : '🕯️ PATTERN TRADE';
@@ -1860,35 +1860,35 @@ class STEPINDEXGridBot {
     this._sendTelegram(
       `${DEFAULT_CONFIG.symbol} Trade Open\n` +
       `Pattern signal: ${analysis.direction === 'CALLE' ? 'HIGHER 🟢' : 'LOWER 🔴'}\n` +
-        `Confidence: ${(analysis.confidence * 100).toFixed(1)}%\n` + 
-        `Agreement: ${consensusAgreement}%\n` +
-        `Stake: $${this.calculateStake(this.currentGridLevel).toFixed(2)}\n` +
-        `Duration: ${DEFAULT_CONFIG.tickDuration}\n` +
-        `Investment: $${this.investmentRemaining.toFixed(2)}`
+      `Confidence: ${(analysis.confidence * 100).toFixed(1)}%\n` +
+      `Agreement: ${consensusAgreement}%\n` +
+      `Stake: $${this.calculateStake(this.currentGridLevel).toFixed(2)}\n` +
+      `Duration: ${DEFAULT_CONFIG.tickDuration}\n` +
+      `Investment: $${this.investmentRemaining.toFixed(2)}`
     );
 
     // After placing, prevent double-trading until next candle
     this.canTrade = false;
 
-    this.tradeInProgress  = true;
+    this.tradeInProgress = true;
     this.pendingTradeInfo = {
-      id:         Date.now(),
-      time:       new Date().toISOString(),
+      id: Date.now(),
+      time: new Date().toISOString(),
       direction,
       stake,
-      gridLevel:  this.currentGridLevel,
+      gridLevel: this.currentGridLevel,
       confidence: confidenceStr,
     };
 
     this._send({
-      proposal:      1,
-      amount:        stake,
-      basis:         'stake',
+      proposal: 1,
+      amount: stake,
+      basis: 'stake',
       contract_type: direction,
-      currency:      this.currency,
-      duration:      this.config.tickDuration,
+      currency: this.currency,
+      duration: this.config.tickDuration,
       duration_unit: 's', //t=ticks, s=seconds, m=minutes, h=hours 
-      symbol:        this.config.symbol,
+      symbol: this.config.symbol,
     });
   }
 
@@ -1934,30 +1934,30 @@ class STEPINDEXGridBot {
       this.log(`💰 Fixed stake: $${this.baseStake.toFixed(2)}`);
     }
 
-    this.running               = true;
-    this.currentGridLevel      = 0;
-    this.currentDirection      = 'CALLE';
-    this.totalProfit           = 0;
-    this.totalTrades           = 0;
-    this.wins                  = 0;
-    this.losses                = 0;
-    this.currentStreak         = 0;
-    this.maxWinStreak          = 0;
-    this.maxLossStreak         = 0;
-    this.totalRecovered        = 0;
-    this.investmentRemaining   = cfg.investmentAmount;
+    this.running = true;
+    this.currentGridLevel = 0;
+    this.currentDirection = 'CALLE';
+    this.totalProfit = 0;
+    this.totalTrades = 0;
+    this.wins = 0;
+    this.losses = 0;
+    this.currentStreak = 0;
+    this.maxWinStreak = 0;
+    this.maxLossStreak = 0;
+    this.totalRecovered = 0;
+    this.investmentRemaining = cfg.investmentAmount;
     this.investmentStartAmount = cfg.investmentAmount;
-    this.tradeInProgress       = false;
-    this.pendingTradeInfo      = null;
-    this.currentContractId     = null;
-    this.isWinTrade            = false;
-    this.reconnectAttempts     = 0;
-    this.hasStartedOnce        = true;
-    this.skippedCandles        = 0;
+    this.tradeInProgress = false;
+    this.pendingTradeInfo = null;
+    this.currentContractId = null;
+    this.isWinTrade = false;
+    this.reconnectAttempts = 0;
+    this.hasStartedOnce = true;
+    this.skippedCandles = 0;
 
     // Initialize pattern-gated trading
     this.inRecoveryMode = false;
-    this.canTrade       = false;  // Wait for first candle + pattern analysis
+    this.canTrade = false;  // Wait for first candle + pattern analysis
 
     this.log(
       `🚀 ${this.config.symbol} Pattern Recognition Bot STARTED!`,
@@ -2011,10 +2011,10 @@ class STEPINDEXGridBot {
   }
 
   stop() {
-    this.running         = false;
+    this.running = false;
     this.tradeInProgress = false;
-    this.inRecoveryMode  = false;
-    this.canTrade        = false;
+    this.inRecoveryMode = false;
+    this.canTrade = false;
     this._clearAllWatchdogTimers();
     this.log('🛑 Bot stopped', 'warning');
     this._sendTelegram(
@@ -2026,10 +2026,10 @@ class STEPINDEXGridBot {
   }
 
   emergencyStop() {
-    this.running         = false;
+    this.running = false;
     this.tradeInProgress = false;
-    this.inRecoveryMode  = false;
-    this.canTrade        = false;
+    this.inRecoveryMode = false;
+    this.canTrade = false;
     this._clearAllWatchdogTimers();
     this.log('🚨 EMERGENCY STOP — All activity halted!', 'error');
     this._sendTelegram(
@@ -2071,9 +2071,9 @@ class STEPINDEXGridBot {
   }
 
   _sendTelegramTradeResult(isWin, profit) {
-    const wr      = this.totalTrades > 0
+    const wr = this.totalTrades > 0
       ? ((this.wins / this.totalTrades) * 100).toFixed(1) : '0.0';
-    const pnlStr  = (profit >= 0 ? '+' : '') + '$' + profit.toFixed(2);
+    const pnlStr = (profit >= 0 ? '+' : '') + '$' + profit.toFixed(2);
 
     const lastAnalysis = this.patternAnalyzer.lastAnalysis;
     const confStr = lastAnalysis
@@ -2108,8 +2108,8 @@ class STEPINDEXGridBot {
   }
 
   async _sendHourlySummary() {
-    const s      = this.hourlyStats;
-    const wr     = (s.wins + s.losses) > 0
+    const s = this.hourlyStats;
+    const wr = (s.wins + s.losses) > 0
       ? ((s.wins / (s.wins + s.losses)) * 100).toFixed(1) : '0.0';
     const pnlStr = (s.pnl >= 0 ? '+' : '') + '$' + s.pnl.toFixed(2);
 
@@ -2147,8 +2147,8 @@ class STEPINDEXGridBot {
   }
 
   startTelegramTimer() {
-    const now         = new Date();
-    const nextHour    = new Date(now);
+    const now = new Date();
+    const nextHour = new Date(now);
     nextHour.setHours(nextHour.getHours() + 1, 0, 0, 0);
     const msUntilNext = nextHour.getTime() - now.getTime();
 
@@ -2197,10 +2197,10 @@ class STEPINDEXGridBot {
 
   _resetDailyStats() {
     this.tradeInProgress = false;
-    this.isWinTrade      = false;
-    this.inRecoveryMode  = false;
-    this.canTrade        = false;
-    this.skippedCandles  = 0;
+    this.isWinTrade = false;
+    this.inRecoveryMode = false;
+    this.canTrade = false;
+    this.skippedCandles = 0;
   }
 }
 
@@ -2247,7 +2247,7 @@ function main() {
     StatePersistence.save(bot);
     setTimeout(() => process.exit(0), 2000);
   };
-  process.on('SIGINT',  () => shutdown('SIGINT'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
   process.on('SIGTERM', () => shutdown('SIGTERM'));
 
   process.on('unhandledRejection', (reason) => {
