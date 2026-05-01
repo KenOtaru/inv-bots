@@ -46,10 +46,10 @@ const CONFIG = {
 
 // Active Assets List
 const ACTIVE_ASSETS = [
-  // 'R_10', 'R_25', 'R_50', 'R_75', 'R_100',
+  'R_10', 'R_25', 'R_50', 'R_75', 'R_100',
   // '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V',
-  // 'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'
-  'R_25', 'stpRNG'
+  'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'
+  // 'R_25', 'stpRNG'
 ];
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -92,7 +92,7 @@ const DEFAULT_ASSET_CONFIG = {
   MIN_PATTERN_CONFIDENCE: 0.02,
   MIN_PATTERN_CONFIDENCE_STEP_RNG: 0.02,
   PATTERN_LENGTHS: [7], //[3, 4, 5, 6, 7, 8]
-  PATTERN_MIN_OCCURRENCES: 10,
+  PATTERN_MIN_OCCURRENCES: 14,
   PATTERN_RECENCY_DECAY: 0.9990,
   PATTERN_DOJI_THRESHOLD: 0.00001
 };
@@ -1474,7 +1474,7 @@ class DerivPatternBot {
   constructor() {
     this.connection = new ConnectionManager();
     this._processedContracts = new Set();
-    this.tradeWatchdogMs = 75000; // 75 second watchdog timeout
+    this.tradeWatchdogMs = 120000; // 120 second watchdog timeout
   }
 
   async start() {
@@ -1569,6 +1569,10 @@ class DerivPatternBot {
           return;
         }
       }
+
+      // const newDirection = analysis.direction;
+
+      // direction = newDirection === 'CALLE' ? 'PUTE' : 'CALLE';
 
       direction = analysis.direction;
       isRecovery = false;
@@ -1749,22 +1753,28 @@ class DerivPatternBot {
       }
     });
 
-    // Release the lock
-    state.tradeInProgress = false;
-    state.pendingTradeInfo = null;
-    state.currentContractId = null;
-    state.tradeStartTime = null;
-
     LOGGER.warn(`🔄 Trade lock released. Bot will continue trading on next candle…`);
 
     TelegramService.sendMessage(
       `⚠️ <b>CANDLE PATTERN STUCK TRADE RECOVERED [${reason}]</b>\n` +
+      `Asset: ${symbol}\n` +
+      `Pattern: ${stakeInfo.pattern}\n` +
+      `Direction: ${stakeInfo.direction}\n` +
+      `Stake: $${stakeInfo.amount}\n` +
+      `Open Time: ${stakeInfo.openTime}\n` +
+      `Expected Close: ${stakeInfo.expectedClose}\n` +
       `Contract: ${contractId || 'unknown'}\n` +
       `Open for: ${openSeconds}s\n` +
       `Action: lock released, retrying on next candle\n` +
       `⚠️ IMPORTANT: Manually verify outcome on Deriv\n` +
       `Session P&L: $${state.session.netPL.toFixed(2)}`
     );
+
+    // Release the lock
+    state.tradeInProgress = false;
+    state.pendingTradeInfo = null;
+    state.currentContractId = null;
+    state.tradeStartTime = null;
 
     StatePersistence.saveState();
   }
