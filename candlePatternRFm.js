@@ -46,10 +46,10 @@ const CONFIG = {
 
 // Active Assets List
 const ACTIVE_ASSETS = [
-  'R_10', 'R_25', 'R_50', 'R_75', 'R_100',
+  // 'R_10', 'R_25', 'R_50', 'R_75', 'R_100',
   // '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V',
-  'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'
-  // 'R_25', 'stpRNG'
+  // 'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'
+  'stpRNG'
 ];
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -60,8 +60,8 @@ const DEFAULT_ASSET_CONFIG = {
   // Candle Settings
   GRANULARITY: 60,
   TIMEFRAME_LABEL: '1m',
-  MAX_CANDLES_STORED: 1440,
-  CANDLES_TO_LOAD: 1440,
+  MAX_CANDLES_STORED: 60,
+  CANDLES_TO_LOAD: 60,
 
   // Trade Duration
   DURATION: 58,
@@ -87,12 +87,12 @@ const DEFAULT_ASSET_CONFIG = {
   TAKE_PROFIT: 10000,
 
   // Pattern Analysis Settings
-  PATTERN_MIN_CONFIDENCE: 0.03,
-  MIN_AGREEMENT_RATIO_CONFIDENCE: 0.02,
-  MIN_PATTERN_CONFIDENCE: 0.02,
-  MIN_PATTERN_CONFIDENCE_STEP_RNG: 0.02,
-  PATTERN_LENGTHS: [7], //[3, 4, 5, 6, 7, 8]
-  PATTERN_MIN_OCCURRENCES: 14,
+  PATTERN_MIN_CONFIDENCE: 0.5,
+  MIN_AGREEMENT_RATIO_CONFIDENCE: 0.5,
+  MIN_PATTERN_CONFIDENCE: 0.5,
+  MIN_PATTERN_CONFIDENCE_STEP_RNG: 0.5,
+  PATTERN_LENGTHS: [3, 7], //[3, 4, 5, 6, 7, 8]
+  PATTERN_MIN_OCCURRENCES: 5,
   PATTERN_RECENCY_DECAY: 0.9990,
   PATTERN_DOJI_THRESHOLD: 0.00001
 };
@@ -1231,6 +1231,9 @@ class ConnectionManager {
     const assetState = state.assets[symbol];
     if (!assetState) return;
 
+    // Clear watchdog FIRST
+    bot._clearAllWatchdogTimers();
+
     const isWin = profit > 0;
     state.capital += profit;
 
@@ -1725,8 +1728,6 @@ class DerivPatternBot {
   _recoverStuckTrade(reason) {
     LOGGER.warn(`🔄 Entering recovery mode: ${reason}`);
 
-    this._clearAllWatchdogTimers();
-
     const contractId = state.currentContractId;
     const stakeInfo = state.pendingTradeInfo;
     const openSeconds = state.tradeStartTime ? Math.round((Date.now() - state.tradeStartTime) / 1000) : '?';
@@ -1753,16 +1754,17 @@ class DerivPatternBot {
       }
     });
 
+    // Release the lock
+    state.tradeInProgress = false;
+    state.pendingTradeInfo = null;
+    state.currentContractId = null;
+    state.tradeStartTime = null;
+
     LOGGER.warn(`🔄 Trade lock released. Bot will continue trading on next candle…`);
 
     TelegramService.sendMessage(
       `⚠️ <b>CANDLE PATTERN STUCK TRADE RECOVERED [${reason}]</b>\n` +
-      `Asset: ${symbol}\n` +
-      `Pattern: ${stakeInfo.pattern}\n` +
-      `Direction: ${stakeInfo.direction}\n` +
-      `Stake: $${stakeInfo.amount}\n` +
-      `Open Time: ${stakeInfo.openTime}\n` +
-      `Expected Close: ${stakeInfo.expectedClose}\n` +
+      `Asset: ${stakeInfo.symbol}\n` +
       `Contract: ${contractId || 'unknown'}\n` +
       `Open for: ${openSeconds}s\n` +
       `Action: lock released, retrying on next candle\n` +
@@ -1770,13 +1772,9 @@ class DerivPatternBot {
       `Session P&L: $${state.session.netPL.toFixed(2)}`
     );
 
-    // Release the lock
-    state.tradeInProgress = false;
-    state.pendingTradeInfo = null;
-    state.currentContractId = null;
-    state.tradeStartTime = null;
-
     StatePersistence.saveState();
+
+    this._clearAllWatchdogTimers();
   }
 }
 
