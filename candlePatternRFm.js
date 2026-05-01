@@ -1474,7 +1474,7 @@ class DerivPatternBot {
   constructor() {
     this.connection = new ConnectionManager();
     this._processedContracts = new Set();
-    this.tradeWatchdogMs = 62000; // 62 second watchdog timeout
+    this.tradeWatchdogMs = 68000; // 68 second watchdog timeout
   }
 
   async start() {
