@@ -46,10 +46,10 @@ const CONFIG = {
 
 // Active Assets List
 const ACTIVE_ASSETS = [
-  // 'R_10', 'R_25', 'R_50', 'R_75', 'R_100',
-  // '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V',
-  // 'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'
-  'stpRNG'
+  'R_10', 'R_25', 'R_50', 'R_75', 'R_100',
+  '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V',
+  'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'
+  // 'stpRNG'
 ];
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -89,8 +89,8 @@ const DEFAULT_ASSET_CONFIG = {
   // Pattern Analysis Settings
   PATTERN_MIN_CONFIDENCE: 0.53,
   MIN_AGREEMENT_RATIO_CONFIDENCE: 0.80,
-  MIN_PATTERN_CONFIDENCE: 0.51,
-  MIN_PATTERN_CONFIDENCE_STEP_RNG: 0.51,
+  MIN_PATTERN_CONFIDENCE: 0.80,
+  MIN_PATTERN_CONFIDENCE_STEP_RNG: 0.80,
   PATTERN_LENGTHS: [3], //[3, 4, 5, 6, 7, 8]
   PATTERN_MIN_OCCURRENCES: 5,
   PATTERN_RECENCY_DECAY: 0.9990,
