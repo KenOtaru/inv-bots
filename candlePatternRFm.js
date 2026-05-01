@@ -428,17 +428,20 @@ class TradeHistoryManager {
       if (!fs.existsSync(HISTORY_FILE)) {
         LOGGER.info('📂 No trade history file found, starting fresh');
         return {
-          overall: { tradesCount: 0, winsCount: 0, lossesCount: 0, profit: 0, loss: 0, netPL: 0 },
+          overall: { tradesCount: 0, winsCount: 0, lossesCount: 0, profit: 0, loss: 0, netPL: 0, x2Losses: 0, x3Losses: 0, x4Losses: 0, x5Losses: 0, x6Losses: 0, x7Losses: 0, x8Losses: 0, x9Losses: 0 },
           overallAssets: {},
           dailyHistory: {},
           lastUpdated: Date.now()
         };
       }
       const data = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
+      if (data.overall && data.overall.x2Losses === undefined) {
+        data.overall = { ...data.overall, x2Losses: 0, x3Losses: 0, x4Losses: 0, x5Losses: 0, x6Losses: 0, x7Losses: 0, x8Losses: 0, x9Losses: 0 };
+      }
       return data;
     } catch (error) {
       LOGGER.error(`Failed to load history: ${error.message}`);
-      return { overall: { tradesCount: 0, winsCount: 0, lossesCount: 0, profit: 0, loss: 0, netPL: 0 }, overallAssets: {}, dailyHistory: {}, lastUpdated: Date.now() };
+      return { overall: { tradesCount: 0, winsCount: 0, lossesCount: 0, profit: 0, loss: 0, netPL: 0, x2Losses: 0, x3Losses: 0, x4Losses: 0, x5Losses: 0, x6Losses: 0, x7Losses: 0, x8Losses: 0, x9Losses: 0 }, overallAssets: {}, dailyHistory: {}, lastUpdated: Date.now() };
     }
   }
 
@@ -453,7 +456,7 @@ class TradeHistoryManager {
   static ensureDayEntry(dateKey) {
     if (!tradeHistory.dailyHistory[dateKey]) {
       tradeHistory.dailyHistory[dateKey] = {
-        date: dateKey, tradesCount: 0, winsCount: 0, lossesCount: 0, profit: 0, loss: 0, netPL: 0, assets: {}, startCapital: state.capital, endCapital: state.capital
+        date: dateKey, tradesCount: 0, winsCount: 0, lossesCount: 0, profit: 0, loss: 0, netPL: 0, x2Losses: 0, x3Losses: 0, x4Losses: 0, x5Losses: 0, x6Losses: 0, x7Losses: 0, x8Losses: 0, x9Losses: 0, assets: {}, startCapital: state.capital, endCapital: state.capital
       };
     }
   }
@@ -461,13 +464,13 @@ class TradeHistoryManager {
   static ensureAssetDayEntry(dateKey, symbol) {
     this.ensureDayEntry(dateKey);
     if (!tradeHistory.dailyHistory[dateKey].assets[symbol]) {
-      tradeHistory.dailyHistory[dateKey].assets[symbol] = { tradesCount: 0, winsCount: 0, lossesCount: 0, profit: 0, loss: 0, netPL: 0 };
+      tradeHistory.dailyHistory[dateKey].assets[symbol] = { tradesCount: 0, winsCount: 0, lossesCount: 0, profit: 0, loss: 0, netPL: 0, x2Losses: 0, x3Losses: 0, x4Losses: 0, x5Losses: 0, x6Losses: 0, x7Losses: 0, x8Losses: 0, x9Losses: 0 };
     }
   }
 
   static ensureOverallAssetEntry(symbol) {
     if (!tradeHistory.overallAssets[symbol]) {
-      tradeHistory.overallAssets[symbol] = { tradesCount: 0, winsCount: 0, lossesCount: 0, profit: 0, loss: 0, netPL: 0 };
+      tradeHistory.overallAssets[symbol] = { tradesCount: 0, winsCount: 0, lossesCount: 0, profit: 0, loss: 0, netPL: 0, x2Losses: 0, x3Losses: 0, x4Losses: 0, x5Losses: 0, x6Losses: 0, x7Losses: 0, x8Losses: 0, x9Losses: 0 };
     }
   }
 
@@ -512,6 +515,15 @@ class TradeHistoryManager {
       overallAsset.lossesCount++;
       overallAsset.loss += Math.abs(profit);
       overallAsset.netPL += profit;
+
+      // Track consecutive loss stats
+      if (martingaleLevel >= 2 && martingaleLevel <= 9) {
+        const key = `x${martingaleLevel}Losses`;
+        dayStats[key]++;
+        dayAssetStats[key]++;
+        overall[key]++;
+        overallAsset[key]++;
+      }
     }
 
     dayStats.endCapital = state.capital;
@@ -544,6 +556,8 @@ const state = {
   session: {
     profit: 0, loss: 0, netPL: 0,
     tradesCount: 0, winsCount: 0, lossesCount: 0,
+    x2Losses: 0, x3Losses: 0, x4Losses: 0, x5Losses: 0,
+    x6Losses: 0, x7Losses: 0, x8Losses: 0, x9Losses: 0,
     isActive: true, startTime: Date.now(), startCapital: CONFIG.INITIAL_CAPITAL
   },
   isConnected: false,
@@ -593,6 +607,14 @@ class StatePersistence {
           profit: asset.profit,
           loss: asset.loss,
           netPL: asset.netPL,
+          x2Losses: asset.x2Losses,
+          x3Losses: asset.x3Losses,
+          x4Losses: asset.x4Losses,
+          x5Losses: asset.x5Losses,
+          x6Losses: asset.x6Losses,
+          x7Losses: asset.x7Losses,
+          x8Losses: asset.x8Losses,
+          x9Losses: asset.x9Losses,
           // Active positions
           activePositions: asset.activePositions.map(pos => ({
             symbol: pos.symbol, direction: pos.direction, stake: pos.stake,
@@ -656,6 +678,14 @@ class StatePersistence {
             asset.profit = saved.profit || 0;
             asset.loss = saved.loss || 0;
             asset.netPL = saved.netPL || 0;
+            asset.x2Losses = saved.x2Losses || 0;
+            asset.x3Losses = saved.x3Losses || 0;
+            asset.x4Losses = saved.x4Losses || 0;
+            asset.x5Losses = saved.x5Losses || 0;
+            asset.x6Losses = saved.x6Losses || 0;
+            asset.x7Losses = saved.x7Losses || 0;
+            asset.x8Losses = saved.x8Losses || 0;
+            asset.x9Losses = saved.x9Losses || 0;
             asset.activePositions = (saved.activePositions || []).map(pos => ({ ...pos, entryTime: pos.entryTime || Date.now() }));
 
             LOGGER.info(`  🔄 ${symbol}: Martingale=${asset.martingaleLevel}, Stake=$${asset.currentStake.toFixed(2)}, P/L=$${asset.netPL.toFixed(2)}, Positions=${asset.activePositions.length}`);
@@ -744,6 +774,7 @@ class TelegramService {
         💵 Stake: $${stake.toFixed(2)}
         ⏱ Duration: ${duration}
         🔢 Martingale Level: ${asset ? asset.martingaleLevel : 0}
+        📉 Session Losses: x2:${state.session.x2Losses} x3:${state.session.x3Losses} x4:${state.session.x4Losses} x5:${state.session.x5Losses}
         ${analysisDetails}${resultDetails}
 
         ⏰ ${new Date().toLocaleTimeString()}`.trim();
@@ -790,7 +821,8 @@ class TelegramService {
     📅 <b>Today (${TradeHistoryManager.getDateKey()})</b>
     ├ Total Trades: ${today.tradesCount}
     ├ Total W/L: ${today.winsCount}/${today.lossesCount}
-    └ Today P/L: ${today.netPL >= 0 ? '+' : ''}$${today.netPL.toFixed(2)}
+    ├ Today P/L: ${today.netPL >= 0 ? '+' : ''}$${today.netPL.toFixed(2)}
+    └ Loss Stats: x2:${today.x2Losses || 0} x3:${today.x3Losses || 0} x4:${today.x4Losses || 0} x5:${today.x5Losses || 0} x6:${today.x6Losses || 0} x7:${today.x7Losses || 0} x8:${today.x8Losses || 0} x9:${today.x9Losses || 0}
 
     📈 <b>Overall (All Time)</b>
     ├ Total Trades: ${overall.tradesCount}
@@ -860,6 +892,7 @@ class TelegramService {
 
 📅 Today: ${stats.tradesCount} trades, ${stats.winsCount}W/${stats.lossesCount}L
 P/L: $${stats.netPL.toFixed(2)}
+📉 Loss Stats: x2:${stats.x2Losses || 0} x3:${stats.x3Losses || 0} x4:${stats.x4Losses || 0} x5:${stats.x5Losses || 0} x6:${stats.x6Losses || 0} x7:${stats.x7Losses || 0} x8:${stats.x8Losses || 0} x9:${stats.x9Losses || 0}
 
 📈 Per-Asset:${assetBreakdown || '\n  No trades yet'}
 
@@ -951,6 +984,14 @@ class ConnectionManager {
           tradesCount: 0,
           winsCount: 0,
           lossesCount: 0,
+          x2Losses: 0,
+          x3Losses: 0,
+          x4Losses: 0,
+          x5Losses: 0,
+          x6Losses: 0,
+          x7Losses: 0,
+          x8Losses: 0,
+          x9Losses: 0,
           profit: 0,
           loss: 0,
           netPL: 0,
@@ -1203,6 +1244,13 @@ class ConnectionManager {
       state.session.loss += Math.abs(profit);
     }
     state.session.netPL += profit;
+
+    // Track consecutive loss stats in session and assetState
+    if (!isWin && assetState.martingaleLevel >= 2 && assetState.martingaleLevel <= 9) {
+      const key = `x${assetState.martingaleLevel}Losses`;
+      state.session[key]++;
+      assetState[key]++;
+    }
 
     // Hourly stats
     state.hourlyStats.trades++;
