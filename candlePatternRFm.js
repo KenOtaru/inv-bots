@@ -49,7 +49,7 @@ const ACTIVE_ASSETS = [
   // 'R_10', 'R_25', 'R_50', 'R_75', 'R_100',
   // '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V',
   // 'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'
-  'stpRNG'
+  'R_25', 'stpRNG'
 ];
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -60,8 +60,8 @@ const DEFAULT_ASSET_CONFIG = {
   // Candle Settings
   GRANULARITY: 60,
   TIMEFRAME_LABEL: '1m',
-  MAX_CANDLES_STORED: 60,
-  CANDLES_TO_LOAD: 60,
+  MAX_CANDLES_STORED: 1440,
+  CANDLES_TO_LOAD: 1440,
 
   // Trade Duration
   DURATION: 58,
@@ -88,11 +88,11 @@ const DEFAULT_ASSET_CONFIG = {
 
   // Pattern Analysis Settings
   PATTERN_MIN_CONFIDENCE: 0.03,
-  MIN_AGREEMENT_RATIO_CONFIDENCE: 0.80,
+  MIN_AGREEMENT_RATIO_CONFIDENCE: 0.02,
   MIN_PATTERN_CONFIDENCE: 0.02,
   MIN_PATTERN_CONFIDENCE_STEP_RNG: 0.02,
   PATTERN_LENGTHS: [7], //[3, 4, 5, 6, 7, 8]
-  PATTERN_MIN_OCCURRENCES: 5,
+  PATTERN_MIN_OCCURRENCES: 11,
   PATTERN_RECENCY_DECAY: 0.9990,
   PATTERN_DOJI_THRESHOLD: 0.00001
 };
@@ -760,6 +760,7 @@ class TelegramService {
       ${isWin ? '🟢' : '🔴'} <b>Profit: $${details.profit.toFixed(2)}</b>
 
       📊 Today's P/L: $${today.netPL.toFixed(2)}
+      Today W/L: ${today.winsCount || 0}/${today.lossesCount || 0} 
       📈 Overall P/L: $${overall.netPL.toFixed(2)}
       💰 Capital: $${state.capital.toFixed(2)}`;
     }
