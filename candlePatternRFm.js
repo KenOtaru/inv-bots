@@ -774,10 +774,9 @@ class TelegramService {
         💵 Stake: $${stake.toFixed(2)}
         ⏱ Duration: ${duration}
         🔢 Martingale Level: ${asset ? asset.martingaleLevel : 0}
-        ${type !== 'OPEN' ? `📉 xLosses x2-x9: ${state.session.x2Losses} | ${state.session.x3Losses} | ${state.session.x4Losses} | ${state.session.x5Losses} | ${state.session.x6Losses} | ${state.session.x7Losses} | ${state.session.x8Losses} | ${state.session.x9Losses}` : ''}
+        ${type !== 'OPEN' ? `📉 x2-x9: ${state.session.x2Losses} | ${state.session.x3Losses} | ${state.session.x4Losses} | ${state.session.x5Losses} | ${state.session.x6Losses} | ${state.session.x7Losses} | ${state.session.x8Losses} | ${state.session.x9Losses}` : ''}
         ${analysisDetails}${resultDetails}
-
-        ⏰ ${new Date().toLocaleTimeString()}`.trim();
+        `.trim();
 
     await this.sendMessage(msg);
   }
@@ -1474,7 +1473,7 @@ class DerivPatternBot {
   constructor() {
     this.connection = new ConnectionManager();
     this._processedContracts = new Set();
-    this.tradeWatchdogMs = 68000; // 68 second watchdog timeout
+    this.tradeWatchdogMs = 75000; // 75 second watchdog timeout
   }
 
   async start() {
