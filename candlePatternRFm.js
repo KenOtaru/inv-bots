@@ -861,6 +861,9 @@ class TelegramService {
   }
 
   static startHourlyTimer() {
+    if (this.hourlyTimerStarted) return;
+    this.hourlyTimerStarted = true;
+
     const now = new Date();
     const nextHour = new Date(now);
     nextHour.setHours(nextHour.getHours() + 1);
@@ -1493,9 +1496,13 @@ class DerivPatternBot {
     this.connection = new ConnectionManager();
     this._processedContracts = new Set();
     this.tradeWatchdogMs = 120000; // 120 second watchdog timeout
+    this.timeCheckStarted = false;
   }
 
   checkTimeForDisconnectReconnect() {
+    if (this.timeCheckStarted) return;
+    this.timeCheckStarted = true;
+
     setInterval(() => {
       const now = new Date();
       // GMT+1 calculation from example
