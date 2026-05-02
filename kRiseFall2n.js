@@ -631,6 +631,8 @@ class StatePersistence {
 // TELEGRAM SERVICE
 // ============================================
 class TelegramService {
+    static hourlyTimerStarted = false;
+    static dailyTimerStarted = false;
     static async sendMessage(message) {
         if (!CONFIG.TELEGRAM_ENABLED) return;
         try {
@@ -908,6 +910,8 @@ Capital: $${state.capital.toFixed(2)}`
     }
 
     static startHourlyTimer() {
+        if (this.hourlyTimerStarted) return;
+        this.hourlyTimerStarted = true;
         const now = new Date();
         const nextHour = new Date(now);
         nextHour.setHours(nextHour.getHours() + 1, 0, 0, 0);
@@ -921,6 +925,8 @@ Capital: $${state.capital.toFixed(2)}`
     }
 
     static startDailyTimer() {
+        if (this.dailyTimerStarted) return;
+        this.dailyTimerStarted = true;
         const now = new Date();
         const nextDay = new Date(now);
         nextDay.setDate(nextDay.getDate() + 1);
@@ -1750,6 +1756,7 @@ class ConnectionManager {
 class DerivBot {
     constructor() {
         this.connection = new ConnectionManager();
+        this.timeCheckStarted = false;
     }
 
     async start() {
@@ -2083,6 +2090,8 @@ class DerivBot {
     }
 
     startSessionTimeChecker() {
+        if (this.timeCheckStarted) return;
+        this.timeCheckStarted = true;
         setInterval(() => {
             const now = new Date();
             const gmtPlus1Time = new Date(now.getTime() + 1 * 60 * 60 * 1000);
