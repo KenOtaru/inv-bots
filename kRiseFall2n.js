@@ -706,12 +706,15 @@ ${symbol} P&amp;L: $${assetNetPL.toFixed(2)}
 ${symbol} W/L: ${assetWins}/${assetLosses}
 Today P&amp;L: $${(today.netPL || 0).toFixed(2)}
 Today W/L: ${today.winsCount || 0}/${today.lossesCount || 0}
+${type !== 'OPEN' ? `Loss Stats: x2:${today.x2Losses || 0} | x3:${today.x3Losses || 0} | x4:${today.x4Losses || 0} | x5:${today.x5Losses || 0} | x6:${today.x6Losses || 0} | x7:${today.x7Losses || 0} | x8:${today.x8Losses || 0} | x9:${today.x9Losses || 0}` : ''}
 
 📋 <b>Overall Stats:</b>
 Overall P&amp;L: $${(overall.netPL || 0).toFixed(2)}
 Overall W/L: ${overall.winsCount || 0}/${overall.lossesCount || 0}
 Total Trades: ${overall.tradesCount || 0}
-Capital: $${state.capital.toFixed(2)}`
+Capital: $${state.capital.toFixed(2)}
+Loss Stats: x2:${overall.x2Losses || 0} | x3:${overall.x3Losses || 0} | x4:${overall.x4Losses || 0} | x5:${overall.x5Losses || 0} | x6:${overall.x6Losses || 0} | x7:${overall.x7Losses || 0} | x8:${overall.x8Losses || 0} | x9:${overall.x9Losses || 0}
+`
                 : `Signal: currentStreak(${currentStreak}) >= assetMaxStreak(${assetMaxStreak}) - 5`
             }`.trim();
 
