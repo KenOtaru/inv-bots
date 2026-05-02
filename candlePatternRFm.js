@@ -60,8 +60,8 @@ const DEFAULT_ASSET_CONFIG = {
   // Candle Settings
   GRANULARITY: 60,
   TIMEFRAME_LABEL: '1m',
-  MAX_CANDLES_STORED: 60,
-  CANDLES_TO_LOAD: 60,
+  MAX_CANDLES_STORED: 4,
+  CANDLES_TO_LOAD: 10,
 
   // Trade Duration
   DURATION: 58,
@@ -87,12 +87,12 @@ const DEFAULT_ASSET_CONFIG = {
   TAKE_PROFIT: 10000,
 
   // Pattern Analysis Settings
-  PATTERN_MIN_CONFIDENCE: 0.5,
-  MIN_AGREEMENT_RATIO_CONFIDENCE: 0.5,
-  MIN_PATTERN_CONFIDENCE: 0.5,
-  MIN_PATTERN_CONFIDENCE_STEP_RNG: 0.5,
-  PATTERN_LENGTHS: [7], //[3, 4, 5, 6, 7, 8]
-  PATTERN_MIN_OCCURRENCES: 5,
+  PATTERN_MIN_CONFIDENCE: 0.1,
+  MIN_AGREEMENT_RATIO_CONFIDENCE: 0.1,
+  MIN_PATTERN_CONFIDENCE: 0.1,
+  MIN_PATTERN_CONFIDENCE_STEP_RNG: 0.1,
+  PATTERN_LENGTHS: [1], //[3, 4, 5, 6, 7, 8]
+  PATTERN_MIN_OCCURRENCES: 1,
   PATTERN_RECENCY_DECAY: 0.9990,
   PATTERN_DOJI_THRESHOLD: 0.00001
 };
@@ -228,7 +228,7 @@ class CandlePatternAnalyzer {
 
   analyze(closedCandles) {
     const maxPatLen = Math.max(...this.patternLengths);
-    if (closedCandles.length < maxPatLen + 20) {
+    if (closedCandles.length < maxPatLen) {
       return {
         shouldTrade: false,
         direction: null,
@@ -335,6 +335,7 @@ class CandlePatternAnalyzer {
     const finalDirection = consensusDirection;
     const finalConfidence = consensusConfidence;
     const decisionMethod = 'CONSENSUS+BEST_AGREE';
+    const patternOccurrence = bestPattern.rawOccurrences;
 
     const shouldTrade = finalConfidence >= this.minConfidence;
 
@@ -351,6 +352,7 @@ class CandlePatternAnalyzer {
       direction: shouldTrade ? finalDirection : null,
       confidence: finalConfidence,
       reason,
+      patternOccurrence: patternOccurrence,
       details: {
         patternResults,
         consensus: {
@@ -750,6 +752,7 @@ class TelegramService {
         analysisDetails = `
         🧠 <b>PATTERN ANALYSIS:</b>
         📊 Confidence: ${(analysis.confidence * 100).toFixed(1)}%
+        📊 Pattern Occurrence: ${analysis.patternOccurrence}
         🤝 Agreement: ${agreementRatio}%
         📈 Best Pattern: L${bestPattern?.patternLength || 'N/A'} "${bestPattern?.pattern || 'N/A'}" (${(bestPattern?.confidence * 100).toFixed(1)}%)`;
       }
@@ -1623,7 +1626,7 @@ class DerivPatternBot {
 
       direction = analysis.direction;
       isRecovery = false;
-      LOGGER.trade(`🎯 [${symbol}] PATTERN TRADE - Direction: ${direction} | Confidence: ${(analysis.confidence * 100).toFixed(1)}%`);
+      LOGGER.trade(`🎯 [${symbol}] PATTERN TRADE - Direction: ${direction} | Confidence: ${(analysis.confidence * 100).toFixed(1)}% | Pattern Occurrence: ${analysis.patternOccurrence}`);
     }
 
     const stake = assetState.currentStake;
@@ -1635,7 +1638,7 @@ class DerivPatternBot {
       LOGGER.trade(`   Recovery Mode: ${isRecovery ? 'YES' : 'NO'} | Same direction as loss | Stake: $${stake.toFixed(2)} | Martingale: L${assetState.martingaleLevel}`);
     } else {
       const agreementRatio = analysis?.details?.consensus?.agreementRatio ? (analysis.details.consensus.agreementRatio * 100).toFixed(0) : 'N/A';
-      LOGGER.trade(`   Recovery Mode: NO | Confidence: ${(analysis.confidence * 100).toFixed(1)}% | Agreement: ${agreementRatio}% | Stake: $${stake.toFixed(2)} | Martingale: L${assetState.martingaleLevel}`);
+      LOGGER.trade(`   Recovery Mode: NO | Confidence: ${(analysis.confidence * 100).toFixed(1)}% | Agreement: ${agreementRatio}% | Stake: $${stake.toFixed(2)} | Martingale: L${assetState.martingaleLevel} | Pattern Occurrence: ${analysis.patternOccurrence}`);
     }
 
     // Execute trade
