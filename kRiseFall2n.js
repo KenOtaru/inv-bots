@@ -6,9 +6,9 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'KriseFallM_2n_1-state.json');
-const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2n_1-history.json');
-const MAXSTREAK_FILE = path.join(__dirname, 'KriseFallM_2n_1-maxstreak.json');
+const STATE_FILE = path.join(__dirname, 'KriseFallM_2n_010101-state.json');
+const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2n_010101-history.json');
+const MAXSTREAK_FILE = path.join(__dirname, 'KriseFallM_2n_010101-maxstreak.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
