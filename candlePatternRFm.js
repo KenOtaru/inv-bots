@@ -91,7 +91,7 @@ const DEFAULT_ASSET_CONFIG = {
   MIN_AGREEMENT_RATIO_CONFIDENCE: 0.5,
   MIN_PATTERN_CONFIDENCE: 0.5,
   MIN_PATTERN_CONFIDENCE_STEP_RNG: 0.5,
-  PATTERN_LENGTHS: [3, 7], //[3, 4, 5, 6, 7, 8]
+  PATTERN_LENGTHS: [7], //[3, 4, 5, 6, 7, 8]
   PATTERN_MIN_OCCURRENCES: 5,
   PATTERN_RECENCY_DECAY: 0.9990,
   PATTERN_DOJI_THRESHOLD: 0.00001
@@ -415,7 +415,7 @@ const LOGGER = {
 // TRADE HISTORY MANAGER
 // ══════════════════════════════════════════════════════════════════════════════
 
-const HISTORY_FILE = path.join(__dirname, 'candlePatternRFn-multi-history0106.json');
+const HISTORY_FILE = path.join(__dirname, 'candlePatternRFn-multi-history0107.json');
 let tradeHistory = null;
 
 class TradeHistoryManager {
@@ -546,7 +546,7 @@ class TradeHistoryManager {
 // STATE MANAGEMENT
 // ══════════════════════════════════════════════════════════════════════════════
 
-const STATE_FILE = path.join(__dirname, 'candlePatternRFn-multi-state0106.json');
+const STATE_FILE = path.join(__dirname, 'candlePatternRFn-multi-state0107.json');
 
 const state = {
   assets: {},
@@ -564,6 +564,9 @@ const state = {
   isAuthorized: false,
   hourlyStats: { trades: 0, wins: 0, losses: 0, pnl: 0, lastHour: new Date().getHours() },
   requestId: 1,
+  // Time-based control
+  isWinTrade: false,
+  endOfDay: false,
   // Watchdog properties
   tradeWatchdogTimer: null,
   tradeWatchdogPollTimer: null,
@@ -1021,6 +1024,14 @@ class ConnectionManager {
     });
   }
 
+  disconnect() {
+    LOGGER.info('🛑 Disconnecting...');
+    StatePersistence.saveState();
+    state.endOfDay = true;
+    this.cleanup();
+    LOGGER.info('✅ Bot disconnected');
+  }
+
   cleanup() {
     if (this.ws) {
       this.ws.removeAllListeners();
@@ -1235,6 +1246,7 @@ class ConnectionManager {
     bot._clearAllWatchdogTimers();
 
     const isWin = profit > 0;
+    state.isWinTrade = isWin;
     state.capital += profit;
 
     // Global session
@@ -1480,6 +1492,35 @@ class DerivPatternBot {
     this.tradeWatchdogMs = 120000; // 120 second watchdog timeout
   }
 
+  checkTimeForDisconnectReconnect() {
+    setInterval(() => {
+      const now = new Date();
+      // GMT+1 calculation from example
+      const gmtPlus1Time = new Date(now.getTime() + (1 * 60 * 60 * 1000));
+      const currentHours = gmtPlus1Time.getUTCHours();
+      const currentMinutes = gmtPlus1Time.getUTCMinutes();
+
+      // Afternoon resume: 2:00 AM
+      if (state.endOfDay && currentHours === 2 && currentMinutes >= 0) {
+        LOGGER.info("It's 2:00 AM, reconnecting the bot.");
+        state.endOfDay = false;
+        state.session.isActive = true;
+        state.tradeInProgress = false;
+        this.connection.connect();
+      }
+
+      // Evening stop: after 11:00 PM following a win
+      if (state.isWinTrade && !state.endOfDay) {
+        if (currentHours >= 23 && currentMinutes >= 0) {
+          LOGGER.info("It's past 11:00 PM after a win trade, disconnecting.");
+          TelegramService.sendSessionSummary();
+          this.connection.disconnect();
+          state.endOfDay = true;
+        }
+      }
+    }, 20000);
+  }
+
   async start() {
     console.log('\n' + '═'.repeat(80));
     console.log(' MULTI-ASSET PATTERN RECOGNITION BOT - Grid Martingale');
@@ -1499,6 +1540,9 @@ class DerivPatternBot {
 
     // Start hourly Telegram timer
     TelegramService.startHourlyTimer();
+
+    // Start time-based disconnect/reconnect monitoring
+    this.checkTimeForDisconnectReconnect();
 
     TelegramService.sendMessage(`🤖 <b>MULTI-ASSET PATTERN BOT STARTED</b>\nAssets: ${ACTIVE_ASSETS.length}\nCapital: $${state.capital}\n🔄 Recovery Strategy: ${CONFIG.USE_RECOVERY_STRATEGY ? 'ENABLED' : 'DISABLED'}`);
   }
