@@ -6,9 +6,9 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'KriseFallM_2b0_0104-state.json');
-const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2b0_0104-history.json');
-const MAXSTREAK_FILE = path.join(__dirname, 'KriseFallM_2b0_0104-maxstreak.json');
+const STATE_FILE = path.join(__dirname, 'KriseFallM_2b0_0105-state.json');
+const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2b0_0105-history.json');
+const MAXSTREAK_FILE = path.join(__dirname, 'KriseFallM_2b0_0105-maxstreak.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
@@ -29,7 +29,7 @@ const STATE_SAVE_INTERVAL = 5000;
 class AssetMaxStreakManager {
     constructor() {
         this.data = this._load();
-        this._updateIntervalMs = 7 * 24 * 60 * 60 * 1000; // 30 days
+        this._updateIntervalMs = 1 * 24 * 60 * 60 * 1000; // 30 days
         this._refreshTimer = null;
     }
 
