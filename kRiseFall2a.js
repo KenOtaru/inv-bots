@@ -6,8 +6,8 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'KriseFallM_2a_0250-state.json');
-const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2a_0250-history.json');
+const STATE_FILE = path.join(__dirname, 'KriseFallM_2a_0251-state.json');
+const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2a_0251-history.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
@@ -2196,11 +2196,11 @@ class ConnectionManager {
                 // TRIGGER TRADE ANALYSIS FOR THIS SPECIFIC ASSET
                 assetState.canTrade = true;
 
-                if (assetState.martingaleLevel > 0) {
-                    bot.executeRecoveryTrade(symbol, closedCandle);
-                } else {
-                    bot.executeNextTrade(symbol, closedCandle);
-                }
+                // if (assetState.martingaleLevel > 0) {
+                //     bot.executeRecoveryTrade(symbol, closedCandle);
+                // } else {
+                bot.executeNextTrade(symbol, closedCandle);
+                // }
             }
         }
 
@@ -3148,24 +3148,29 @@ class DerivBot {
         );
 
         const position = {
-            symbol, direction, stake,
+            symbol: symbol,
+            direction,
+            stake,
             duration: assetConfig.DURATION,
             durationUnit: assetConfig.DURATION_UNIT,
             entryTime: Date.now(),
-            contractId: null, reqId: null,
-            currentProfit: 0, buyPrice: 0
+            contractId: null,
+            reqId: null,
+            currentProfit: 0,
+            buyPrice: 0
         };
 
+        // Add position to THIS asset's positions
         assetState.activePositions.push(position);
-        assetState.canTrade = false;
-        state.lastTradeDirection = direction;
 
         const tradeRequest = {
-            buy: 1, subscribe: 1,
+            buy: 1,
+            subscribe: 1,
             price: stake.toFixed(2),
             parameters: {
                 contract_type: direction,
-                symbol, currency: 'USD',
+                symbol: symbol,
+                currency: 'USD',
                 amount: stake.toFixed(2),
                 duration: assetConfig.DURATION,
                 duration_unit: assetConfig.DURATION_UNIT,
