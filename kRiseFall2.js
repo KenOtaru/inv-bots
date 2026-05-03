@@ -6,8 +6,8 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'KriseFallM_2_014-state.json');
-const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2_014-history.json');
+const STATE_FILE = path.join(__dirname, 'KriseFallM_2_025-state.json');
+const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2_025-history.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
@@ -615,7 +615,6 @@ class TelegramService {
         durationUnit,
         details = {},
         regime = {},
-        gate = {},
     ) {
         const emoji =
             type === 'OPEN'
@@ -635,9 +634,7 @@ class TelegramService {
 
         // Safe defaults for regime and gate
         const regimeProb = regime?.probability ?? 0;
-        const regimeReason = regime?.reason ?? 'N/A';
         const regimeDetails = regime?.details ? JSON.stringify(regime.details) : '{}';
-        const gateProb = gate?.worstCase?.probability ?? 0;
 
         const message = `
                 ${emoji} <b>${type} TRADE ALERT 2</b>
@@ -660,7 +657,7 @@ class TelegramService {
                 Overall W/L: ${overall.winsCount || 0}/${overall.lossesCount || 0}
                 Total Trades: ${overall.tradesCount || 0}
                 Capital: $${state.capital.toFixed(2)}`
-                : `🔬 <b>Alternating Analyzer:</b> Probability: ${regimeProb}% | Multi - window gate: ${gateProb} % | Details: ${regimeDetails}`}
+                : `🔬 <b>Alternating Analyzer:</b> Probability: ${regimeProb}% | Details: ${regimeDetails}`}
             }`.trim();
         await this.sendMessage(message);
     }
@@ -1087,7 +1084,7 @@ class CandleAnalyzer {
 // ============================================
 const CONFIG = {
     // API Settings
-    API_TOKEN: 'hsj0tA0XJoIzJG5',
+    API_TOKEN: 'rgNedekYXvCaPeP',
     APP_ID: '1089',
     WS_URL: 'wss://ws.derivws.com/websockets/v3',
 
@@ -1102,8 +1099,8 @@ const CONFIG = {
     // Default Candle Settings (used if asset has no specific config)
     GRANULARITY: 60,
     TIMEFRAME_LABEL: '1m',
-    MAX_CANDLES_STORED: 4320,
-    CANDLES_TO_LOAD: 4320,
+    MAX_CANDLES_STORED: 60,
+    CANDLES_TO_LOAD: 60,
 
     CANDLE_PATTERN_LOOKBACK: 4, //8 Number of previous candles to analyze for pattern detection (user configurable)
     TREND_CANDLE_LOOKBACK: 8, //7 Number of previous candles to analyze for trend detection (user configurable)
@@ -1113,7 +1110,9 @@ const CONFIG = {
     // ALTERNATING PATTERN SWITCHING CONFIGURATION
     // ============================
     ALTERNATING_PATTERN_THRESHOLD: 60, //60 Percentage threshold for switching to TRADE_SYSTEM 1
-    ALTERNATING_PATTERN_LOOKBACK: 4320, //100 Number of previous candles to analyze for pattern detection (user configurable)
+    ALTERNATING_PATTERN_LOOKBACK: 60, //100 Number of previous candles to analyze for pattern detection (user configurable)
+    AUTOCORR_THRESHOLD: -0.45,
+    AUTOCORR_THRESHOLD2: -0.99,
 
     // Default Trade Duration Settings (used if asset has no specific config)
     DURATION: 58,
@@ -1159,7 +1158,7 @@ const CONFIG = {
     TELEGRAM_CHAT_ID: '752497117',
 
     // === TRADE ALL ASSETS AFTER A WIN ===
-    ACTIVE_ASSETS: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V', 'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5']
+    ACTIVE_ASSETS: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', '1HZ10V', '1HZ25V', '1HZ75V', '1HZ100V', 'stpRNG', 'stpRNG3', 'stpRNG4', 'stpRNG5']
 };
 
 // ============================================
@@ -1228,9 +1227,10 @@ function getAssetConfig(symbol) {
     };
 }
 
+let ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', '1HZ10V', '1HZ25V', '1HZ75V', '1HZ100V', 'stpRNG', 'stpRNG3', 'stpRNG4', 'stpRNG5'];
 // let ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'];
 // let ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V'];
-let ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V', 'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'];
+// let ACTIVE_ASSETS = ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V', 'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4', 'stpRNG5'];
 
 // ============================================
 // STATE MANAGEMENT
@@ -2021,12 +2021,6 @@ class ConnectionManager {
             state.alternatingPatternLookback
         );
 
-        const gate = AlternatingRegimeDetector.multiWindowScan(
-            state.assets[foundSymbol].closedCandles,
-            state.candlesStored === CONFIG.MAX_CANDLES_STORED ? [100, 1000, 5000] : [10, 30, 50]
-        );
-
-
         if (position) {
             position.contractId = contract.contract_id;
             position.buyPrice = contract.buy_price;
@@ -2039,8 +2033,7 @@ class ConnectionManager {
                 position.duration,
                 position.durationUnit,
                 {}, // details
-                regime,
-                gate
+                regime
             );
         }
 
@@ -2202,7 +2195,12 @@ class ConnectionManager {
 
                 // TRIGGER TRADE ANALYSIS FOR THIS SPECIFIC ASSET
                 assetState.canTrade = true;
-                bot.executeNextTrade(symbol, closedCandle);
+
+                if (assetState.martingaleLevel > 0) {
+                    bot.executeRecoveryTrade(symbol, closedCandle);
+                } else {
+                    bot.executeNextTrade(symbol, closedCandle);
+                }
             }
         }
 
@@ -3094,6 +3092,92 @@ class DerivBot {
         });
     }
 
+    // ── IMMEDIATE RECOVERY TRADE ───────────────────────────────────
+    executeRecoveryTrade(symbol, closedCandle) {
+        const assetState = state.assets[symbol];
+        if (!assetState) return;
+
+        if (!SessionManager.isSessionActive()) {
+            LOGGER.info(`[${symbol}] Recovery skipped — session ended`);
+            return;
+        }
+        if (assetState.martingaleLevel === 0) {
+            LOGGER.info(`[${symbol}] Recovery skipped — not in loss recovery (mart=${assetState.martingaleLevel})`);
+            return;
+        }
+        if (assetState.activePositions.length >= CONFIG.MAX_OPEN_POSITIONS_PER_ASSET) {
+            LOGGER.warn(`[${symbol}] Recovery skipped — position already open (${assetState.activePositions.length})`);
+            return;
+        }
+
+        const stake = assetState.currentStake;
+        if (state.capital < stake) {
+            LOGGER.error(`[${symbol}] Recovery skipped — insufficient capital $${state.capital.toFixed(2)} (need $${stake.toFixed(2)})`);
+            if (assetState.martingaleLevel > 0) { assetState.martingaleLevel = 0; assetState.currentStake = CONFIG.STAKE; }
+            return;
+        }
+        if (!state.isConnected || !state.isAuthorized) {
+            LOGGER.warn(`[${symbol}] Recovery skipped — not connected/authorised`);
+            return;
+        }
+        if (!state.isMaxStreakReady) {
+            LOGGER.warn(`[${symbol}] Recovery skipped — maxStreak not yet ready`);
+            return;
+        }
+
+        if (CONFIG.USE_TRADING_SESSIONS) {
+            const sessionCheck = TradingSessionManager.isWithinTradingSession();
+            if (!sessionCheck.inSession) {
+                LOGGER.info(`🔄 [${symbol}] Recovery outside session — proceeding (Martingale Level: ${assetState.martingaleLevel})`);
+            }
+        }
+
+        const assetConfig = getAssetConfig(symbol);
+        const candleType = CandleAnalyzer.getCandleDirection(closedCandle);
+        const direction = candleType === 'BULLISH' ? 'CALLE' : 'PUTE';
+
+        LOGGER.trade(`⚡ [${symbol}] IMMEDIATE RECOVERY TRADE`);
+        LOGGER.trade(`  Direction: ${direction === 'CALLE' ? 'RISE' : 'FALL'} | Stake: $${stake.toFixed(2)} | Martingale Level: ${assetState.martingaleLevel}`);
+
+        TelegramService.sendMessage(
+            `⚡ <b>kRISE/FALL2b IMMEDIATE RECOVERY</b>\n` +
+            `[${symbol}] Martingale Level: ${assetState.martingaleLevel}\n` +
+            `Direction: ${direction === 'CALLE' ? 'RISE ↑' : 'FALL ↓'}\n` +
+            `Stake: $${stake.toFixed(2)} | Capital: $${state.capital.toFixed(2)}\n` +
+            `Asset P/L: $${assetState.netPL.toFixed(2)}`
+        );
+
+        const position = {
+            symbol, direction, stake,
+            duration: assetConfig.DURATION,
+            durationUnit: assetConfig.DURATION_UNIT,
+            entryTime: Date.now(),
+            contractId: null, reqId: null,
+            currentProfit: 0, buyPrice: 0
+        };
+
+        assetState.activePositions.push(position);
+        assetState.canTrade = false;
+        state.lastTradeDirection = direction;
+
+        const tradeRequest = {
+            buy: 1, subscribe: 1,
+            price: stake.toFixed(2),
+            parameters: {
+                contract_type: direction,
+                symbol, currency: 'USD',
+                amount: stake.toFixed(2),
+                duration: assetConfig.DURATION,
+                duration_unit: assetConfig.DURATION_UNIT,
+                basis: 'stake'
+            }
+        };
+
+        const reqId = this.connection.send(tradeRequest);
+        position.reqId = reqId;
+        LOGGER.trade(`✅ [${symbol}] Recovery trade sent (reqId: ${reqId})`);
+    }
+
     /**
      * =========================================================
     * TRADE EXECUTION — PER-ASSET Candle-pattern Logic
@@ -3190,76 +3274,39 @@ class DerivBot {
             state.assets[symbol].closedCandles,
             state.alternatingPatternLookback
         );
-        const check = AlternatingRegimeDetector.checkActiveAsset(symbol);
-        if (check.switchToSystem1) {
-            LOGGER.warn(`⚠️  [${symbol}] Re-entered alt regime → switch to System 1`);
-        }
-        const gate = AlternatingRegimeDetector.multiWindowScan(
-            state.assets[symbol].closedCandles,
-            state.candlesStored === CONFIG.MAX_CANDLES_STORED ? [100, 1000, 5000] : [10, 30, 50]
+
+        LOGGER.warn(
+            `🔬 [${symbol}] Autocorrelation: ${regime.details.autocorrelation}, alternationRate: ${regime.details.alternationRate}`
         );
 
-        if (isRecoveryMode) {
-            const candleType = CandleAnalyzer.getCandleDirection(lastClosedCandle);
+        // Trade signals are generated based on Alternating Regime Analysis and Market Structure candle patterns
+        const candleType = CandleAnalyzer.getCandleDirection(lastClosedCandle);
 
-            // Send message only for recovery mode (not normal mode)
-            TelegramService.sendMessage(`⚡kRISE/FALL2: [${symbol}] RECOVERY MODE: Continuing Trading, Asset has Strong Non-Alternating Pattern`);
+        if (regime.details.autocorrelation < CONFIG.AUTOCORR_THRESHOLD && regime.details.autocorrelation > CONFIG.AUTOCORR_THRESHOLD2) {
 
             if (candleType === 'BULLISH') {
                 direction = 'CALLE';
-                signalReason = `Recovery (${symbol} Prev LOSS on RISE → Continue RISE)`;
+                signalReason = `Filtered Pattern Trade:  (${symbol})`;
             } else {
                 direction = 'PUTE';
-                signalReason = `Recovery (${symbol} Prev LOSS on FALL → Continue FALL)`;
+                signalReason = `Filtered Pattern Trade: (${symbol})`;
             }
 
-            LOGGER.trade(`🔄 [${symbol}] RECOVERY MODE: ${signalReason} (Martingale Level: ${assetState.martingaleLevel})`);
+            LOGGER.trade(`🔄 [${symbol}] NORMAL MODE Trade: ${signalReason}`);
+
+            // ── LOCK THIS ASSET ────────────────────────────────────────────────────
+            if (!state.activeTradeAsset) {
+                state.activeTradeAsset = symbol;
+                ACTIVE_ASSETS = [symbol];
+                // state.candlesStored = 100;
+                // state.candlesToLoad = 100;
+                // state.alternatingPatternLookback = 100;
+                LOGGER.info(`🔒 [${symbol}] Asset locked as active trade asset`);
+            }
         } else {
-            //Alternating Regime Pattern Detector Analysis
-            if (gate.worstCase.shouldAvoidTrade) {
-                LOGGER.warn(`⛔ Multi-window gate fired: ${gate.worstCase.probability}%`);
-            }
-
-            if (regime.shouldAvoidTrade) {
-                LOGGER.warn(`⛔ [${symbol}] Trade blocked — ${regime.signal} (${regime.probability}%)`);
-            }
-
-            LOGGER.info(
-                `🔬 [${symbol}] Alternating Candle Pattern Check: ${regime.probability}% | ${regime.reason} | Details: ${JSON.stringify(regime.details)}`
-            );
-
-            LOGGER.warn(
-                `🔬 [${symbol}] Checking Details: currentStreak: ${regime.details.currentStreak}, maxStreak: ${regime.details.maxStreak}, maxStreakRatio: ${regime.details.maxStreakRatio}, autocorrelation: ${regime.details.autocorrelation}, momentum: ${regime.details.momentum}, runsPValue: ${regime.details.runsPValue}, runsCount: ${regime.details.runsCount}, expectedRuns: ${regime.details.expectedRuns}, runsZScore: ${regime.details.runsZScore}, alternationRate: ${regime.details.alternationRate}`
-            );
-
-            // Trade signals are generated based on Alternating Regime Analysis and Market Structure candle patterns
-            const candleType = CandleAnalyzer.getCandleDirection(lastClosedCandle);
-
-            // if (gate.worstCase.probability <= 1 && regime.probability <= 1 && regime.details.currentStreak <= 1 && regime.details.autocorrelation >= 0.12) {
-            if (regime.details.currentStreak >= (regime.details.maxStreak - 5)) {
-                if (candleType === 'BULLISH') {
-                    direction = 'CALLE';
-                    signalReason = `Filtered Pattern Trade:  (${symbol})`;
-                } else {
-                    direction = 'PUTE';
-                    signalReason = `Filtered Pattern Trade: (${symbol})`;
-                }
-
-                LOGGER.trade(`🔄 [${symbol}] NORMAL MODE Trade: ${signalReason}`);
-
-                // ── LOCK THIS ASSET ────────────────────────────────────────────────────
-                if (!state.activeTradeAsset) {
-                    state.activeTradeAsset = symbol;
-                    ACTIVE_ASSETS = [symbol];
-                    // state.candlesStored = 100;
-                    // state.candlesToLoad = 100;
-                    // state.alternatingPatternLookback = 100;
-                    LOGGER.info(`🔒 [${symbol}] Asset locked as active trade asset`);
-                }
-            } else {
-                LOGGER.trade(`🔄 [${symbol}] NORMAL MODE No Trade`);
-            }
+            LOGGER.trade(`🔄 [${symbol}] NORMAL MODE No Trade`);
         }
+        // }
 
         StatePersistence.saveState();
 
