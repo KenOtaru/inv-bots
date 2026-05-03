@@ -1634,10 +1634,10 @@ class DerivPatternBot {
       if (analysis.patternOccurrence >= 2) {
         direction = analysis.direction;
         isRecovery = false;
-      } else {
-        return;
       }
     }
+
+    if (!direction) return;
 
     const stake = assetState.currentStake;
     const duration = assetConfig.DURATION;
