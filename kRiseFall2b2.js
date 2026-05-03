@@ -208,7 +208,7 @@ class AssetMaxStreakManager {
     async computeAllMaxStreaks(connection) {
         LOGGER.info('🔄 Starting sequential maxStreak computation for all assets...');
         await TelegramService.sendMessage(
-            '🔄 <b>RISEFALL2b MaxStreak Update Started</b>\n' +
+            '🔄 <b>RISEFALL2b2 MaxStreak Update Started</b>\n' +
             `Computing 50k-candle maxStreak for ${CONFIG.ACTIVE_ASSETS.length} assets sequentially.\n` +
             'Trading is PAUSED until complete.'
         );
