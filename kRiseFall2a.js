@@ -1084,7 +1084,7 @@ class CandleAnalyzer {
 // ============================================
 const CONFIG = {
     // API Settings
-    API_TOKEN: 'rgNedekYXvCaPeP',
+    API_TOKEN: 'DMylfkyce6VyZt7',
     APP_ID: '1089',
     WS_URL: 'wss://ws.derivws.com/websockets/v3',
 
