@@ -417,7 +417,7 @@ const LOGGER = {
 // TRADE HISTORY MANAGER
 // ══════════════════════════════════════════════════════════════════════════════
 
-const HISTORY_FILE = path.join(__dirname, 'candlePatternRFn-multi-history01001.json');
+const HISTORY_FILE = path.join(__dirname, 'candlePatternRFn-multi-history01002.json');
 let tradeHistory = null;
 
 class TradeHistoryManager {
@@ -548,7 +548,7 @@ class TradeHistoryManager {
 // STATE MANAGEMENT
 // ══════════════════════════════════════════════════════════════════════════════
 
-const STATE_FILE = path.join(__dirname, 'candlePatternRFn-multi-state01001.json');
+const STATE_FILE = path.join(__dirname, 'candlePatternRFn-multi-state01002.json');
 
 const state = {
   assets: {},
@@ -1632,7 +1632,8 @@ class DerivPatternBot {
       LOGGER.trade(`🎯 [${symbol}] PATTERN TRADE - Direction: ${direction} | Confidence: ${(analysis.confidence * 100).toFixed(1)}% | Pattern Occurrence: ${analysis.patternOccurrence}`);
 
       if (analysis.patternOccurrence >= 2) {
-        direction = analysis.direction;
+        const newDirection = analysis.direction
+        direction = newDirection === 'CALLE' ? 'PUTE' : 'CALLE';
         isRecovery = false;
       }
     }

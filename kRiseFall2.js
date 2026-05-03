@@ -1111,7 +1111,7 @@ const CONFIG = {
     // ============================
     ALTERNATING_PATTERN_THRESHOLD: 60, //60 Percentage threshold for switching to TRADE_SYSTEM 1
     ALTERNATING_PATTERN_LOOKBACK: 60, //100 Number of previous candles to analyze for pattern detection (user configurable)
-    AUTOCORR_THRESHOLD: -0.15,
+    AUTOCORR_THRESHOLD: -0.05,
     AUTOCORR_THRESHOLD2: -0.99,
 
     // Default Trade Duration Settings (used if asset has no specific config)
@@ -1628,9 +1628,9 @@ class SessionManager {
             assetState.currentStake = CONFIG.STAKE;
 
             // ── RESET LOCK ────────────────────────────────────────────────────
-            state.candlesStored = CONFIG.MAX_CANDLES_STORED;
-            state.candlesToLoad = CONFIG.MAX_CANDLES_STORED;
-            state.alternatingPatternLookback = CONFIG.ALTERNATING_PATTERN_LOOKBACK;
+            // state.candlesStored = CONFIG.MAX_CANDLES_STORED;
+            // state.candlesToLoad = CONFIG.MAX_CANDLES_STORED;
+            // state.alternatingPatternLookback = CONFIG.ALTERNATING_PATTERN_LOOKBACK;
             state.activeTradeAsset = null;
             ACTIVE_ASSETS = CONFIG.ACTIVE_ASSETS;
 
@@ -1648,7 +1648,7 @@ class SessionManager {
             // state.alternatingPatternLookback = 50;
 
             // ── FORCE LOCK (Only this asset trades) ────────────────────────────────────────
-            ACTIVE_ASSETS = [symbol];
+            // ACTIVE_ASSETS = [symbol];
 
             // === LOSS ===
             // Global
@@ -3120,16 +3120,24 @@ class DerivBot {
             LOGGER.warn(`[${symbol}] Recovery skipped — not connected/authorised`);
             return;
         }
-        if (!state.isMaxStreakReady) {
-            LOGGER.warn(`[${symbol}] Recovery skipped — maxStreak not yet ready`);
-            return;
-        }
+        // if (!state.isMaxStreakReady) {
+        //     LOGGER.warn(`[${symbol}] Recovery skipped — maxStreak not yet ready`);
+        //     return;
+        // }
 
-        if (CONFIG.USE_TRADING_SESSIONS) {
-            const sessionCheck = TradingSessionManager.isWithinTradingSession();
-            if (!sessionCheck.inSession) {
-                LOGGER.info(`🔄 [${symbol}] Recovery outside session — proceeding (Martingale Level: ${assetState.martingaleLevel})`);
-            }
+        // if (CONFIG.USE_TRADING_SESSIONS) {
+        //     const sessionCheck = TradingSessionManager.isWithinTradingSession();
+        //     if (!sessionCheck.inSession) {
+        //         LOGGER.info(`🔄 [${symbol}] Recovery outside session — proceeding (Martingale Level: ${assetState.martingaleLevel})`);
+        //     }
+        // }
+
+        // ── SKIP IF ANOTHER ASSET IS ALREADY ACTIVE ─────────────────────────────
+        if (state.activeTradeAsset !== symbol) {
+            LOGGER.debug(
+                `⏭️ [${symbol}] Skipped — [${state.activeTradeAsset}] is already active`
+            );
+            return;
         }
 
         const assetConfig = getAssetConfig(symbol);
@@ -3139,13 +3147,13 @@ class DerivBot {
         LOGGER.trade(`⚡ [${symbol}] IMMEDIATE RECOVERY TRADE`);
         LOGGER.trade(`  Direction: ${direction === 'CALLE' ? 'RISE' : 'FALL'} | Stake: $${stake.toFixed(2)} | Martingale Level: ${assetState.martingaleLevel}`);
 
-        TelegramService.sendMessage(
-            `⚡ <b>kRISE/FALL2b IMMEDIATE RECOVERY</b>\n` +
-            `[${symbol}] Martingale Level: ${assetState.martingaleLevel}\n` +
-            `Direction: ${direction === 'CALLE' ? 'RISE ↑' : 'FALL ↓'}\n` +
-            `Stake: $${stake.toFixed(2)} | Capital: $${state.capital.toFixed(2)}\n` +
-            `Asset P/L: $${assetState.netPL.toFixed(2)}`
-        );
+        // TelegramService.sendMessage(
+        //     `⚡ <b>kRISE/FALL2b IMMEDIATE RECOVERY</b>\n` +
+        //     `[${symbol}] Martingale Level: ${assetState.martingaleLevel}\n` +
+        //     `Direction: ${direction === 'CALLE' ? 'RISE ↑' : 'FALL ↓'}\n` +
+        //     `Stake: $${stake.toFixed(2)} | Capital: $${state.capital.toFixed(2)}\n` +
+        //     `Asset P/L: $${assetState.netPL.toFixed(2)}`
+        // );
 
         const position = {
             symbol: symbol,
@@ -3303,9 +3311,6 @@ class DerivBot {
             if (!state.activeTradeAsset) {
                 state.activeTradeAsset = symbol;
                 ACTIVE_ASSETS = [symbol];
-                // state.candlesStored = 100;
-                // state.candlesToLoad = 100;
-                // state.alternatingPatternLookback = 100;
                 LOGGER.info(`🔒 [${symbol}] Asset locked as active trade asset`);
             }
         } else {
@@ -3319,9 +3324,7 @@ class DerivBot {
             return;
         }
 
-        // =============================================
-        // EXECUTE TRADE FOR THIS ASSET
-        // =============================================
+        // ── Execute normal trade ──────────────────────────────────────
         assetState.canTrade = false;
         assetState.lastTradeDirection = direction;
 
@@ -3379,14 +3382,6 @@ class DerivBot {
 
         const reqId = this.connection.send(tradeRequest);
         position.reqId = reqId;
-
-        // Mark this cross direction as traded (prevents re-trading on the same cross)
-        if (!isRecoveryMode) {
-            assetState.lastCrossSignalDirection = direction;
-            LOGGER.info(
-                `${symbol} ✅ pattern direction '${direction}' marked as traded — will not re-trade until next valid trigger`
-            );
-        }
     }
 
     stop() {
