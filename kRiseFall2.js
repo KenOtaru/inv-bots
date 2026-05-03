@@ -1111,7 +1111,7 @@ const CONFIG = {
     // ============================
     ALTERNATING_PATTERN_THRESHOLD: 60, //60 Percentage threshold for switching to TRADE_SYSTEM 1
     ALTERNATING_PATTERN_LOOKBACK: 60, //100 Number of previous candles to analyze for pattern detection (user configurable)
-    AUTOCORR_THRESHOLD: -0.45,
+    AUTOCORR_THRESHOLD: -0.15,
     AUTOCORR_THRESHOLD2: -0.99,
 
     // Default Trade Duration Settings (used if asset has no specific config)
@@ -1643,9 +1643,9 @@ class SessionManager {
         } else {
 
             // When loss happens set to small amount of candles History for fast recovery
-            state.candlesStored = 50;
-            state.candlesToLoad = 50;
-            state.alternatingPatternLookback = 50;
+            // state.candlesStored = 50;
+            // state.candlesToLoad = 50;
+            // state.alternatingPatternLookback = 50;
 
             // ── FORCE LOCK (Only this asset trades) ────────────────────────────────────────
             ACTIVE_ASSETS = [symbol];
