@@ -820,11 +820,17 @@ Loss Stats: x2:${overall.x2Losses || 0} | x3:${overall.x3Losses || 0} | x4:${ove
                 `├ Net P/L: $${(dayStats.netPL || 0).toFixed(2)}`,
                 `├ Start Capital: $${(dayStats.startCapital || 0).toFixed(2)}`,
                 `└ End Capital: $${(dayStats.endCapital || 0).toFixed(2)}`, ``,
+                ``,
+                `📊 Loss Stats: x2:${dayStats.x2Losses || 0} x3:${dayStats.x3Losses || 0} x4:${dayStats.x4Losses || 0} x5:${dayStats.x5Losses || 0} x6:${dayStats.x6Losses || 0} x7:${dayStats.x7Losses || 0} x8:${dayStats.x8Losses || 0} x9:${dayStats.x9Losses || 0}`,
+                ``,
                 `📋 <b>Per-Asset:</b>${assetBreakdown || '\n  No trades'}`, ``,
+                ``,
                 `📊 <b>Overall Stats (All Time):</b>`,
                 `├ Total Trades: ${overall.tradesCount || 0}`,
                 `├ Overall Win Rate: ${overallWinRate}`,
-                `└ Overall P/L: $${(overall.netPL || 0).toFixed(2)}`, ``,
+                `├ Overall P/L: $${(overall.netPL || 0).toFixed(2)}`,
+                `└ Loss Stats: x2:${overall.x2Losses || 0} x3:${overall.x3Losses || 0} x4:${overall.x4Losses || 0} x5:${overall.x5Losses || 0} x6:${overall.x6Losses || 0} x7:${overall.x7Losses || 0} x8:${overall.x8Losses || 0} x9:${overall.x9Losses || 0}`,
+                ``,
                 `💰 Current Capital: $${state.capital.toFixed(2)}`
             ].join('\n');
 
@@ -1694,11 +1700,11 @@ class ConnectionManager {
                 LOGGER.info(`${symbol} AutoCorr: ${regime.autocorrelation.toFixed(4)} (threshold: ${CONFIG.AUTOCORR_THRESHOLD}) | AssetMaxStreak: ${assetMaxStreak} | Candles: ${assetState.closedCandles.length}`);
 
                 assetState.canTrade = true;
-                if (assetState.martingaleLevel > 0) {
-                    bot.executeRecoveryTrade(symbol, closedCandle);
-                } else {
-                    bot.executeNextTrade(symbol, closedCandle);
-                }
+                // if (assetState.martingaleLevel > 0) {
+                //     bot.executeRecoveryTrade(symbol, closedCandle);
+                // } else {
+                bot.executeNextTrade(symbol, closedCandle);
+                // }
             }
         }
 

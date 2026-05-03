@@ -825,6 +825,12 @@ Loss Stats: x2:${overall.x2Losses || 0} | x3:${overall.x3Losses || 0} | x4:${ove
                 `├ Total Trades: ${overall.tradesCount || 0}`,
                 `├ Overall Win Rate: ${overallWinRate}`,
                 `└ Overall P/L: $${(overall.netPL || 0).toFixed(2)}`, ``,
+                `📊 <b>Overall Stats (All Time):</b>`,
+                `├ Total Trades: ${overall.tradesCount || 0}`,
+                `├ Overall Win Rate: ${overallWinRate}`,
+                `├ Overall P/L: $${(overall.netPL || 0).toFixed(2)}`,
+                `└ Loss Stats: x2:${overall.x2Losses || 0} x3:${overall.x3Losses || 0} x4:${overall.x4Losses || 0} x5:${overall.x5Losses || 0} x6:${overall.x6Losses || 0} x7:${overall.x7Losses || 0} x8:${overall.x8Losses || 0} x9:${overall.x9Losses || 0}`,
+                ``,
                 `💰 Current Capital: $${state.capital.toFixed(2)}`
             ].join('\n');
 
