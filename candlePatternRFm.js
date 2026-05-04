@@ -1519,7 +1519,7 @@ class DerivPatternBot {
         (currentDay === 1 && currentHours < 2);    // Monday before 2am
 
       // Afternoon resume: 2:00 AM (Monday to Friday)
-      if (state.endOfDay && currentHours === 3 && currentMinutes >= 0) {
+      if (state.endOfDay && currentHours === 2 && currentMinutes >= 0) {
         LOGGER.info("It's 2:00 AM, reconnecting the bot.");
         state.endOfDay = false;
         state.session.isActive = true;
@@ -1639,11 +1639,11 @@ class DerivPatternBot {
 
       LOGGER.trade(`🎯 [${symbol}] PATTERN TRADE - Direction: ${direction} | Confidence: ${(analysis.confidence * 100).toFixed(1)}% | Pattern Occurrence: ${analysis.patternOccurrence}`);
 
-      // if (analysis.patternOccurrence >= 2) {
-      const newDirection = analysis.direction
-      direction = newDirection === 'CALLE' ? 'PUTE' : 'CALLE';
-      isRecovery = false;
-      // }
+      if (analysis.patternOccurrence >= 2) {
+        const newDirection = analysis.direction
+        direction = newDirection === 'CALLE' ? 'PUTE' : 'CALLE';
+        isRecovery = false;
+      }
     }
 
     if (!direction) return;
