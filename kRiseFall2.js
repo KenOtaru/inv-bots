@@ -634,7 +634,7 @@ class TelegramService {
 
         // Safe defaults for regime and gate
         const regimeProb = regime?.probability ?? 0;
-        const regimeDetails = regime?.details ? JSON.stringify(regime.details) : '{}';
+        const regimeDetails = regime.details.autocorrelation.toFixed(4);
 
         const message = `
                 ${emoji} <b>${type} TRADE ALERT 2b</b>
@@ -657,7 +657,7 @@ class TelegramService {
                 Overall W/L: ${overall.winsCount || 0}/${overall.lossesCount || 0}
                 Total Trades: ${overall.tradesCount || 0}
                 Capital: $${state.capital.toFixed(2)}`
-                : `🔬 <b>Alternating Analyzer:</b> Probability: ${regimeProb}% | Details: ${regimeDetails}`}
+                : `🔬 <b>Alternating Analyzer:</b> Probability: ${regimeProb}% | Correlation: ${regimeDetails}`}
             }`.trim();
         await this.sendMessage(message);
     }
@@ -1136,7 +1136,7 @@ const CONFIG = {
     // true  = only trade during defined session windows below (recovery allowed anytime)
     // false = trade 24/7 (ignore session windows entirely)
     // ============================================
-    USE_TRADING_SESSIONS: true,
+    USE_TRADING_SESSIONS: false,
     // ============================================
     // TRADING SESSION WINDOWS (GMT+1 hours)
     // ============================================
@@ -2191,7 +2191,9 @@ class ConnectionManager {
                 const recent = assetState.closedCandles.slice(-lastN);
                 const bullCount = recent.filter(c => CandleAnalyzer.isBullish(c)).length;
                 const bearCount = recent.filter(c => CandleAnalyzer.isBearish(c)).length;
-                LOGGER.info(`${symbol} 📊 Recent candles (last ${recent.length}): bulls=${bullCount} bears=${bearCount}`);
+                const regime = AlternatingRegimeDetector.analyze(assetState.closedCandles);
+                LOGGER.info(`${symbol} AutoCorr: ${regime.details.autocorrelation.toFixed(4)} (threshold: ${CONFIG.AUTOCORR_THRESHOLD}) | Candles: ${assetState.closedCandles.length}`);
+                // LOGGER.info(`${symbol} 📊 Recent candles (last ${recent.length}): bulls=${bullCount} bears=${bearCount}`);
 
                 // TRIGGER TRADE ANALYSIS FOR THIS SPECIFIC ASSET
                 assetState.canTrade = true;

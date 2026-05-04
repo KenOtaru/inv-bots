@@ -82,7 +82,7 @@ class AssetMaxStreakManager {
     fetchMaxStreakForAsset(symbol, connection) {
         return new Promise((resolve, reject) => {
             const assetConfig = getAssetConfig(symbol);
-            const BATCH_SIZE = 1440; //5000
+            const BATCH_SIZE = 60; //5000
             const MAX_BATCHES = 1; // 10 × 5,000 = 50,000
 
             let batchesDone = 0;
@@ -1012,7 +1012,7 @@ const CONFIG = {
     MARTINGALE_MULTIPLIER2: 1.8,
     MARTINGALE_MULTIPLIER3: 2.1,
     MAX_MARTINGALE_STEPS: 9,
-    USE_TRADING_SESSIONS: true,
+    USE_TRADING_SESSIONS: false,
     TOKYO_START: 3,
     TOKYO_END: 8,
     LONDON_START: 8,
