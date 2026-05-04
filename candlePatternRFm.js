@@ -719,11 +719,26 @@ class StatePersistence {
 // ══════════════════════════════════════════════════════════════════════════════
 
 class TelegramService {
+  static bot = null;
+
+  static getBot() {
+    if (!this.bot && CONFIG.TELEGRAM_ENABLED) {
+      const TelegramBot = require('node-telegram-bot-api');
+      this.bot = new TelegramBot(CONFIG.TELEGRAM_BOT_TOKEN, { 
+        polling: false,
+        request: {
+          timeout: 10000 // 10 second timeout for Telegram API calls
+        }
+      });
+    }
+    return this.bot;
+  }
+
   static async sendMessage(message) {
     if (!CONFIG.TELEGRAM_ENABLED) return;
     try {
-      const TelegramBot = require('node-telegram-bot-api');
-      const bot = new TelegramBot(CONFIG.TELEGRAM_BOT_TOKEN, { polling: false });
+      const bot = this.getBot();
+      if (!bot) return;
       await bot.sendMessage(CONFIG.TELEGRAM_CHAT_ID, message, { parse_mode: 'HTML' });
     } catch (error) {
       LOGGER.error(`[Telegram] Failed: ${error.message}`);
@@ -1623,6 +1638,8 @@ class DerivPatternBot {
         return;
       }
 
+      direction = analysis.direction;
+
       if ((symbol === 'stpRNG' || symbol === 'stpRNG2' || symbol === 'stpRNG3' || symbol === 'stpRNG4' || symbol === 'stpRNG5')) {
         if (bestPatternConfidence < DEFAULT_ASSET_CONFIG.MIN_PATTERN_CONFIDENCE_STEP_RNG) {
           LOGGER.info(`[${symbol}] Low Pattern Confidence (Confidence: ${bestPatternConfidence ? (bestPatternConfidence * 100).toFixed(0) + '%' : 'N/A'})`);
@@ -1640,7 +1657,7 @@ class DerivPatternBot {
       LOGGER.trade(`🎯 [${symbol}] PATTERN TRADE - Direction: ${direction} | Confidence: ${(analysis.confidence * 100).toFixed(1)}% | Pattern Occurrence: ${analysis.patternOccurrence}`);
 
       if (analysis.patternOccurrence >= 2) {
-        const newDirection = analysis.direction
+        const newDirection = analysis.direction;
         direction = newDirection === 'CALLE' ? 'PUTE' : 'CALLE';
         isRecovery = false;
       }
