@@ -89,7 +89,7 @@ const BOT_CONFIG = {
 // ─────────────────────────────────────────────────────────────────────────────
 // STATE PERSISTENCE
 // ─────────────────────────────────────────────────────────────────────────────
-const STATE_FILE = path.join(__dirname, 'differBot_v2_state.json');
+const STATE_FILE = path.join(__dirname, 'pattern_differBot_v2_state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
