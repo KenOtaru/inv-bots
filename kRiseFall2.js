@@ -621,7 +621,7 @@ class TelegramService {
         duration,
         durationUnit,
         details = {},
-        regime = {},
+        regime,
     ) {
         const emoji =
             type === 'OPEN'
@@ -640,8 +640,7 @@ class TelegramService {
         const today = TradeHistoryManager.getTodayStats();
 
         // Safe defaults for regime and gate
-        const regimeProb = regime?.probability ?? 0;
-        const regimeDetails = regime.details.autocorrelation.toFixed(4);
+        regimeDetails = regime.details.autocorrelation.toFixed(4);
 
         const message = `
                 ${emoji} <b>${type} TRADE ALERT 2b</b>
@@ -650,6 +649,7 @@ class TelegramService {
                 Stake: $${stake.toFixed(2)}
                 Duration: ${duration} (${durationUnit == 't' ? 'Ticks' : durationUnit == 's' ? 'Seconds' : 'Minutes'})
                 Martingale Level: ${assetMartingale}
+                Correlation: ${regimeDetails}
                 ${details.profit !== undefined
                 ? `Profit: $${details.profit.toFixed(2)}
 
@@ -664,7 +664,7 @@ class TelegramService {
                 Overall W/L: ${overall.winsCount || 0}/${overall.lossesCount || 0}
                 Total Trades: ${overall.tradesCount || 0}
                 Capital: $${state.capital.toFixed(2)}`
-                : `🔬 <b>Alternating Analyzer:</b> Probability: ${regimeProb}% | Correlation: ${regimeDetails}`}
+                : ''}
             }`.trim();
         await this.sendMessage(message);
     }
