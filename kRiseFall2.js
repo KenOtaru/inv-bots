@@ -334,6 +334,7 @@ class StatePersistence {
                 },
                 hourlyStats: { ...state.hourlyStats },
                 currentTradeDay: state.currentTradeDay,
+                activeTradeAsset: state.activeTradeAsset,
                 assets: {}
             };
 
@@ -430,6 +431,12 @@ class StatePersistence {
                 pnl: 0,
                 lastHour: new Date().getHours()
             };
+
+            state.activeTradeAsset = savedData.activeTradeAsset || null;
+            if (state.activeTradeAsset) {
+                ACTIVE_ASSETS = [state.activeTradeAsset];
+                LOGGER.info(`🔒 Restored active trade lock: ${state.activeTradeAsset}`);
+            }
 
             if (savedData.assets) {
                 Object.keys(savedData.assets).forEach(symbol => {
@@ -1266,6 +1273,10 @@ const state = {
     },
     isConnected: false,
     isAuthorized: false,
+    tradeInProgress: false,
+    currentContractId: null,
+    tradeStartTime: null,
+    pendingTradeInfo: null,
     portfolio: {
         dailyProfit: 0,
         dailyLoss: 0,
@@ -1648,7 +1659,8 @@ class SessionManager {
             // state.alternatingPatternLookback = 50;
 
             // ── FORCE LOCK (Only this asset trades) ────────────────────────────────────────
-            // ACTIVE_ASSETS = [symbol];
+            state.activeTradeAsset = symbol;
+            ACTIVE_ASSETS = [symbol];
 
             // === LOSS ===
             // Global
@@ -2025,6 +2037,19 @@ class ConnectionManager {
             position.contractId = contract.contract_id;
             position.buyPrice = contract.buy_price;
 
+            // Set watchdog tracking fields
+            state.tradeInProgress = true;
+            state.currentContractId = contract.contract_id;
+            state.tradeStartTime = Date.now();
+            state.pendingTradeInfo = {
+                stake: position.stake,
+                direction: position.direction,
+                symbol: position.symbol
+            };
+
+            // Start the watchdog timer
+            bot._startTradeWatchdog(contract.contract_id);
+
             TelegramService.sendTradeAlert(
                 'OPEN',
                 position.symbol,
@@ -2052,6 +2077,18 @@ class ConnectionManager {
 
         const contract = response.proposal_open_contract;
         const contractId = contract.contract_id;
+
+        // Check if contract already processed
+        if (bot._processedContracts.has(String(contractId))) {
+            LOGGER.debug(
+                `⚠️ Contract ${contractId} already processed, ignoring duplicate`
+            );
+            // Unsubscribe from this contract
+            if (response.subscription && response.subscription.id) {
+                this.send({ forget: response.subscription.id });
+            }
+            return;
+        }
 
         // Find which asset owns this contract
         let ownerSymbol = null;
@@ -2082,6 +2119,12 @@ class ConnectionManager {
             contract.is_expired ||
             contract.status === 'sold'
         ) {
+            // Clear watchdog FIRST
+            bot._clearAllWatchdogTimers();
+
+            // Mark as processed BEFORE recording result
+            bot._processedContracts.add(String(contractId));
+
             const profit = contract.profit;
 
             LOGGER.trade(
@@ -2107,6 +2150,12 @@ class ConnectionManager {
 
             // Remove position from THIS asset
             assetState.activePositions.splice(posIndex, 1);
+
+            // Release watchdog lock
+            state.tradeInProgress = false;
+            state.currentContractId = null;
+            state.tradeStartTime = null;
+            state.pendingTradeInfo = null;
 
             if (response.subscription?.id) {
                 this.send({ forget: response.subscription.id });
@@ -2960,6 +3009,8 @@ class AlternatingRegimeDetector {
 class DerivBot {
     constructor() {
         this.connection = new ConnectionManager();
+        this._processedContracts = new Set();
+        this.tradeWatchdogMs = 120000; // 2 minutes
     }
 
     async start() {
@@ -3134,12 +3185,24 @@ class DerivBot {
         //     }
         // }
 
-        // ── SKIP IF ANOTHER ASSET IS ALREADY ACTIVE ─────────────────────────────
-        if (state.activeTradeAsset !== symbol) {
+        // ── SKIP IF ANOTHER ASSET IS ALREADY ACTIVE (GLOBAL LOCK) ─────────────────────────────
+        if (state.tradeInProgress) {
+            LOGGER.debug(`⏭️ [${symbol}] Recovery Skipped — A trade is already in progress`);
+            return;
+        }
+
+        if (state.activeTradeAsset && state.activeTradeAsset !== symbol) {
             LOGGER.debug(
-                `⏭️ [${symbol}] Skipped — [${state.activeTradeAsset}] is already active`
+                `⏭️ [${symbol}] Recovery Skipped — [${state.activeTradeAsset}] is already active`
             );
             return;
+        }
+
+        // ── Ensure lock is set if this is the active recovery asset ─────────────────────────────
+        if (!state.activeTradeAsset && assetState.martingaleLevel > 0) {
+            state.activeTradeAsset = symbol;
+            ACTIVE_ASSETS = [symbol];
+            LOGGER.info(`🔒 [${symbol}] Asset re-locked as active recovery asset`);
         }
 
         const assetConfig = getAssetConfig(symbol);
@@ -3206,7 +3269,12 @@ class DerivBot {
 
         const assetConfig = getAssetConfig(symbol);
 
-        // ── SKIP IF ANOTHER ASSET IS ALREADY ACTIVE ─────────────────────────────
+        // ── SKIP IF ANOTHER ASSET IS ALREADY ACTIVE (GLOBAL LOCK) ─────────────────────────────
+        if (state.tradeInProgress) {
+            LOGGER.debug(`⏭️ [${symbol}] Skipped — A trade is already in progress`);
+            return;
+        }
+
         if (state.activeTradeAsset && state.activeTradeAsset !== symbol) {
             LOGGER.debug(
                 `⏭️ [${symbol}] Skipped — [${state.activeTradeAsset}] is already active`
@@ -3385,6 +3453,130 @@ class DerivBot {
         const reqId = this.connection.send(tradeRequest);
         position.reqId = reqId;
     }
+
+    // ============================================
+    // TRADE WATCHDOG MANAGER
+    // ============================================
+
+    _startTradeWatchdog(contractId) {
+        const timeoutMs = this.tradeWatchdogMs;
+
+        state.tradeWatchdogTimer = setTimeout(() => {
+            if (!state.tradeInProgress) {
+                LOGGER.debug('Watchdog fired but trade already completed');
+                return;
+            }
+
+            LOGGER.warn(
+                `⏰ WATCHDOG FIRED — Contract ${contractId} has been open for ` +
+                `${(timeoutMs / 1000)}s with no settlement`
+            );
+
+            // Step 1: try to poll the contract
+            if (contractId && state.isConnected && state.isAuthorized) {
+                LOGGER.info(`🔍 Polling contract ${contractId} for current status…`);
+
+                // Unsubscribe from old subscription if exists
+                this.connection.send({
+                    forget_all: 'proposal_open_contract'
+                });
+
+                // Subscribe fresh
+                this.connection.send({
+                    proposal_open_contract: 1,
+                    contract_id: contractId,
+                    subscribe: 1
+                });
+
+                // Give the poll 15 seconds before force recovery
+                state.tradeWatchdogPollTimer = setTimeout(() => {
+                    if (!state.tradeInProgress) {
+                        LOGGER.debug('Poll timer fired but trade already completed');
+                        return;
+                    }
+                    LOGGER.error(
+                        `🚨 WATCHDOG: Poll timed out — contract ${contractId} still unresolved ` +
+                        `after ${(timeoutMs / 1000)}s — force-releasing lock`
+                    );
+                    this._recoverStuckTrade('watchdog-force');
+                }, 15000);
+
+            } else {
+                LOGGER.error('Cannot poll contract - not connected or authorized');
+                this._recoverStuckTrade('watchdog-offline');
+            }
+        }, timeoutMs);
+
+        LOGGER.debug(`Watchdog started for contract ${contractId} (${timeoutMs}ms)`);
+    }
+
+    _clearAllWatchdogTimers() {
+        if (state.tradeWatchdogTimer) {
+            clearTimeout(state.tradeWatchdogTimer);
+            state.tradeWatchdogTimer = null;
+        }
+        if (state.tradeWatchdogPollTimer) {
+            clearTimeout(state.tradeWatchdogPollTimer);
+            state.tradeWatchdogPollTimer = null;
+        }
+    }
+
+    // ============================================
+    // RECOVER FROM STUCK TRADE
+    // ============================================
+
+    _recoverStuckTrade(reason) {
+        LOGGER.warn(`🔄 Entering recovery mode: ${reason}`);
+
+        this._clearAllWatchdogTimers();
+
+        const contractId = state.currentContractId;
+        const openSeconds = state.tradeStartTime ? Math.round((Date.now() - state.tradeStartTime) / 1000) : '?';
+
+        LOGGER.error(
+            `🚨 STUCK TRADE RECOVERY [${reason}] | Contract: ${contractId} | ` +
+            `Open for: ${openSeconds}s`
+        );
+
+        // Mark contract as processed to prevent duplicate handling
+        if (contractId) {
+            this._processedContracts.add(String(contractId));
+        }
+
+        // Remove the stuck position from activePositions
+        ACTIVE_ASSETS.forEach(symbol => {
+            const asset = state.assets[symbol];
+            if (asset && asset.activePositions) {
+                const posIndex = asset.activePositions.findIndex(p => p.contractId === contractId);
+                if (posIndex >= 0) {
+                    asset.activePositions.splice(posIndex, 1);
+                    LOGGER.info(`Removed stuck position from ${symbol} activePositions`);
+                }
+            }
+        });
+
+        // Release the lock
+        state.tradeInProgress = false;
+        state.pendingTradeInfo = null;
+        state.currentContractId = null;
+        state.tradeStartTime = null;
+        state.activeTradeAsset = null;
+        ACTIVE_ASSETS = [...CONFIG.ACTIVE_ASSETS];
+
+        LOGGER.warn(`🔄 Trade lock released. Bot will continue trading on next candle…`);
+
+        TelegramService.sendMessage(
+            `⚠️ <b>kRISE/FALL2 STUCK TRADE RECOVERED [${reason}]</b>\n` +
+            `Contract: ${contractId || 'unknown'}\n` +
+            `Open for: ${openSeconds}s\n` +
+            `Action: lock released, retrying on next candle\n` +
+            `⚠️ IMPORTANT: Manually verify outcome on Deriv\n` +
+            `Session P&L: $${state.session.netPL.toFixed(2)}`
+        );
+
+        StatePersistence.saveState();
+    }
+
 
     stop() {
         LOGGER.info('🛑 Stopping bot...');
