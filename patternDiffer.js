@@ -1,17 +1,20 @@
 /**
  * ╔══════════════════════════════════════════════════════════════╗
- * ║              differBot — Digit Differ Trading Bot            ║
+ * ║        differBot v2 — 4-Engine Consensus Digit Differ        ║
  * ╠══════════════════════════════════════════════════════════════╣
- * ║  STRATEGY:                                                   ║
- * ║  • Tracks last-digit frequency over a rolling window         ║
- * ║  • Identifies the "hot" digit (most frequent) and bets       ║
- * ║    DIFFER — predicting the NEXT tick will NOT end in it      ║
- * ║  • Bollinger Bands + MACD overlay gate low-volatility entry  ║
- * ║  • Repeat-digit guard prevents chasing streaks               ║
- * ║  • Martingale stake recovery on loss (identical to accum)    ║
+ * ║  STRATEGY (corrected):                                       ║
+ * ║  • DIGITDIFF wins when next_digit ≠ chosen_digit             ║
+ * ║  • Win prob = 1 − P(chosen_digit appears next)               ║
+ * ║  • Goal: choose the COLDEST digit (least likely next tick)   ║
  * ║                                                              ║
- * ║  CONVERTED FROM: accumBotM (accumulator strategy)            ║
- * ║  KEY CHANGE: stayedIn condition → hot-digit rank score       ║
+ * ║  4-ENGINE CONSENSUS:                                         ║
+ * ║  1. MarkovEngine    — Order-2 Markov chain transitions       ║
+ * ║  2. FrequencyEngine — Multi-window (20/50/100) cold digit    ║
+ * ║  3. StatisticalEngine — Z-score + Chi-square + Entropy       ║
+ * ║  4. StreakEngine    — Absence streak + hot-filter veto        ║
+ * ║                                                              ║
+ * ║  Engines vote → weighted consensus → coldest digit chosen    ║
+ * ║  Martingale stake recovery on loss                           ║
  * ╚══════════════════════════════════════════════════════════════╝
  */
 
@@ -22,6 +25,7 @@ const WebSocket = require('ws');
 const TelegramBot = require('node-telegram-bot-api');
 const fs = require('fs');
 const path = require('path');
+const { ConsensusAnalyzer } = require('./differAnalyzer');
 
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -38,27 +42,29 @@ const BOT_CONFIG = {
     stopLoss: 108,             // Total P&L stop-loss (USD)
     takeProfit: 10000,           // Session take-profit (USD)
 
-    // Digit Differ specific
-    digitWindow: 50,              // Rolling ticks to analyse digit frequency
-    minHotFrequency: 8,              // Minimum appearances to classify digit as "hot"
-    minFrequencyEdge: 2,              // Hot digit must lead 2nd-most by this many ticks
-    predictedDigitCount: 1,              // How many digits to bet DIFFER on (1 = most reliable)
+    // ── 4-Engine Consensus Settings ──────────────────────────────
+    requiredHistoryLength: 150,      // Ticks needed before analysis starts
 
-    // Technical filter thresholds (same as accumulator)
-    bbPeriod: 20,
-    macdFast: 12,
-    macdSlow: 26,
-    macdSignal: 9,
-    minBandWidthScore: 0.85,           // Reject if BB expanding hard (0–1)
-    minMacdFlatScore: 0.90,           // Reject if strong momentum
-    minPricePositionScore: 0.90,           // Reject if price at band edge
-    minTickStabilityScore: 0.90,           // Reject if erratic recent ticks
-    minVolTrendScore: 0.65,           // Reject if volatility rising
-    minMaxTickMove: 0.0001,         // Raw ratio (NOT percent). 0.0001 = 0.01% per-tick minimum
-    maxTickMove: 0.0003,         // Raw ratio (NOT percent). 0.0003 = 0.03% per-tick minimum
+    // Markov Engine
+    markovMinSamples: 20,           // Min state observations to trust Markov
 
-    minTimeBetweenTrades: 5000,           // ms cooldown per asset after a trade
-    requiredHistoryLength: 100,            // Ticks needed before analysis starts
+    // Frequency Engine
+    freqWindows: [20, 50, 100],     // Multi-window sizes
+    freqWeights: [0.50, 0.30, 0.20],// Weights (recent ticks weighted highest)
+
+    // Statistical Engine
+    statWindow: 100,                // Window for chi-square / z-score
+    minChiSquare: 3.5,              // Min chi-square stat to detect bias
+    maxEntropy: 3.10,               // Max Shannon entropy (bits) — higher = too random
+
+    // Streak Engine
+    hotFilterTicks: 3,              // Veto digit if appeared in last N ticks
+
+    // Consensus Gate
+    minConsensusScore: 0.45,        // Minimum weighted consensus score to trade
+    minEnginesAgreeing: 2,          // Minimum engines that must vote same digit
+
+    minTimeBetweenTrades: 5000,     // ms cooldown per asset after a trade
 
     telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
     telegramChatId: '752497117',
@@ -139,9 +145,10 @@ class StatePersistence {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TECHNICAL INDICATORS (unchanged from accumulator)
+// TECHNICAL INDICATORS — removed (irrelevant to digit prediction)
+// Analysis now handled by ConsensusAnalyzer (differAnalyzer.js)
 // ─────────────────────────────────────────────────────────────────────────────
-class TechnicalIndicators {
+class _RemovedIndicators {
     static SMA(data, period) {
         if (data.length < period) return null;
         const slice = data.slice(-period);
@@ -221,196 +228,7 @@ class TechnicalIndicators {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DIGIT DIFFER ANALYZER
-// ─────────────────────────────────────────────────────────────────────────────
-class DigitDifferAnalyzer {
-    constructor(config) {
-        this.cfg = config;
-    }
-
-    /**
-     * Build a frequency map of last digits over the rolling window.
-     * Returns an array sorted by frequency descending.
-     *
-     * [{digit, count, percentage}, …]
-     */
-    buildFrequencyRanking(digitHistory) {
-        const window = digitHistory.slice(-this.cfg.digitWindow);
-        const freq = {};
-        for (let d = 0; d <= 9; d++) freq[d] = 0;
-        window.forEach(d => freq[d]++);
-
-        return Object.entries(freq)
-            .map(([digit, count]) => ({
-                digit: parseInt(digit),
-                count,
-                percentage: (count / window.length * 100).toFixed(1),
-            }))
-            .sort((a, b) => b.count - a.count);
-    }
-
-    /**
-     * Core prediction logic.
-     *
-     * Returns:
-     *   { shouldTrade, predictedDigit, reason, scores, ... }
-     * HOT-DIGIT INVERSION approach (default):
-     *   The most frequent digit is statistically likely to be "overdue for a break".
-     *   We bet DIFFER on it — predicting the next tick will NOT end in that digit.
-     *   Win rate: ~90% (Deriv Differ baseline) minus the edge we lose when the hot
-     *   digit keeps repeating. The frequency gate (minHotFrequency) filters entries
-     *   where the hot digit is genuinely dominant.
-     *
-     * COLD-DIGIT APPROACH (alternative, set coldMode: true):
-     *   The least frequent digit is "due". We bet DIFFER on all OTHER digits
-     *   by finding the second-most-frequent digit and betting against it.
-     *   Trickier to model — hot-digit inversion is preferred.
-     */
-    analyzeEntry(digitHistory, priceHistory) {
-        if (digitHistory.length < this.cfg.requiredHistoryLength) {
-            return { shouldTrade: false, reason: 'insufficient_digit_history', overallScore: 0, scores: {} };
-        }
-
-        // ── 1. Technical scores (computed first so they're always in the returned object) ──
-        const techResult = this._technicalScores(priceHistory);
-        const scores = techResult.ok ? techResult.scores : {};
-        const bb = techResult.ok ? techResult.bb : null;
-        const macd = techResult.ok ? techResult.macd : null;
-        const maxTickMove = techResult.ok ? techResult.maxTickMove : 0;
-        const atr = techResult.ok ? techResult.atr : null;
-
-        // Composite score is always computed so the log is always meaningful
-        const weights = { bandWidth: 0.25, macdFlat: 0.20, macdConverging: 0.10, pricePosition: 0.20, tickStability: 0.15, volTrend: 0.10 };
-        const overallScore = Object.entries(weights).reduce((s, [k, w]) => s + (scores[k] || 0) * w, 0);
-
-        // Base result object — always include scores so _logAnalysis always shows real values
-        const baseResult = { scores, overallScore, bb, macd, maxTickMove, atr };
-
-        if (!techResult.ok) {
-            return { ...baseResult, shouldTrade: false, reason: techResult.reason };
-        }
-
-        // ── 2. Frequency ranking ──────────────────────────────────────────────
-        const ranking = this.buildFrequencyRanking(digitHistory);
-        const hotEntry = ranking[0];
-        const secondEntry = ranking[1];
-        const edge = hotEntry.count - secondEntry.count;
-
-        // Reject if hot digit doesn't dominate enough
-        if (hotEntry.count < this.cfg.minHotFrequency) {
-            return {
-                ...baseResult, shouldTrade: false, ranking,
-                reason: `hot_digit_${hotEntry.digit}_count_${hotEntry.count}_below_min_${this.cfg.minHotFrequency}`,
-            };
-        }
-
-        // Reject if edge over 2nd-most is too narrow
-        if (edge < this.cfg.minFrequencyEdge) {
-            return {
-                ...baseResult, shouldTrade: false, ranking,
-                reason: `frequency_edge_${edge}_too_narrow`,
-            };
-        }
-
-        // ── 3. Technical hard gates ───────────────────────────────────────────
-        // NOTE: minMaxTickMove is a raw ratio (e.g. 0.0003), NOT a percentage
-        if (scores.bandWidth < this.cfg.minBandWidthScore) return { ...baseResult, shouldTrade: false, reason: 'bands_expanding', ranking };
-        if (scores.macdFlat < this.cfg.minMacdFlatScore) return { ...baseResult, shouldTrade: false, reason: 'strong_momentum', ranking };
-        if (scores.pricePosition < this.cfg.minPricePositionScore) return { ...baseResult, shouldTrade: false, reason: 'price_at_band_edge', ranking };
-        if (scores.tickStability < this.cfg.minTickStabilityScore) return { ...baseResult, shouldTrade: false, reason: 'erratic_tick_movement', ranking };
-        if (maxTickMove < this.cfg.minMaxTickMove) return { ...baseResult, shouldTrade: false, reason: 'tick_movement_too_flat', ranking };
-        if (scores.volTrend < this.cfg.minVolTrendScore) return { ...baseResult, shouldTrade: false, reason: 'volatility_rising', ranking };
-
-        return {
-            ...baseResult,
-            shouldTrade: true,
-            reason: 'conditions_favorable',
-            predictedDigit: hotEntry.digit,
-            hotDigitCount: hotEntry.count,
-            hotDigitPct: hotEntry.percentage,
-            frequencyEdge: edge,
-            scores,
-            baseResult,
-            ranking,
-        };
-    }
-
-    _technicalScores(prices) {
-        if (!prices || prices.length < 50) return { ok: false, reason: 'insufficient_price_history' };
-
-        const bb = TechnicalIndicators.bollingerBands(prices, this.cfg.bbPeriod);
-        if (!bb) return { ok: false, reason: 'bb_calc_failed' };
-
-        const macd = TechnicalIndicators.MACD(prices, this.cfg.macdFast, this.cfg.macdSlow, this.cfg.macdSignal);
-        if (!macd) return { ok: false, reason: 'macd_calc_failed' };
-
-        const atr = TechnicalIndicators.ATR(prices, 14);
-        const curPrice = prices[prices.length - 1];
-        const scores = {};
-
-        // ── Band width ────────────────────────────────────────────────────────
-        // BUG FIX: bandWidthPercentile needs prices.length >= lookback + bbPeriod.
-        // With 100 ticks and default lookback=100, bbPeriod=20 → needs 120 ticks → always null.
-        // Use a shorter lookback (60) so it works with 100-tick history.
-        const bwPct = TechnicalIndicators.bandWidthPercentile(prices, this.cfg.bbPeriod, 60);
-        if (bwPct !== null) {
-            if (bwPct <= 0.20) scores.bandWidth = 1.0;
-            else if (bwPct <= 0.40) scores.bandWidth = 0.85;
-            else if (bwPct <= 0.55) scores.bandWidth = 0.65;
-            else if (bwPct <= 0.70) scores.bandWidth = 0.40;
-            else scores.bandWidth = 0.15;
-        } else {
-            scores.bandWidth = 0.00;
-        }
-
-        // ── MACD flat ─────────────────────────────────────────────────────────
-        const normHist = Math.abs(macd.histogram) / curPrice;
-        if (normHist < 0.00005) scores.macdFlat = 1.0;
-        else if (normHist < 0.00015) scores.macdFlat = 0.85;
-        else if (normHist < 0.00035) scores.macdFlat = 0.60;
-        else if (normHist < 0.00060) scores.macdFlat = 0.35;
-        else scores.macdFlat = 0.10;
-
-        // ── MACD converging ───────────────────────────────────────────────────
-        scores.macdConverging = macd.isConverging ? 1.0 : 0.35;
-
-        // ── %B position ───────────────────────────────────────────────────────
-        if (bb.percentB >= 0.40 && bb.percentB <= 0.60) scores.pricePosition = 1.0;
-        else if (bb.percentB >= 0.20 && bb.percentB <= 0.80) scores.pricePosition = 0.70;
-        else if (bb.percentB >= 0.10 && bb.percentB <= 0.90) scores.pricePosition = 0.40;
-        else scores.pricePosition = 0.10;
-
-        // ── Tick stability (last 10 ticks) ────────────────────────────────────
-        const recent = prices.slice(-10);
-        let maxMove = 0;
-        for (let i = 1; i < recent.length; i++)
-            maxMove = Math.max(maxMove, Math.abs(recent[i] - recent[i - 1]) / recent[i - 1]);
-
-        // maxMove is a ratio, e.g. 0.0005 = 0.05%
-        if (maxMove < 0.0003) scores.tickStability = 1.0;
-        else if (maxMove < 0.0008) scores.tickStability = 0.80;
-        else if (maxMove < 0.0015) scores.tickStability = 0.55;
-        else if (maxMove < 0.0025) scores.tickStability = 0.30;
-        else scores.tickStability = 0.05;
-
-        // ── Volatility trend ──────────────────────────────────────────────────
-        const atrShort = TechnicalIndicators.ATR(prices, 7);
-        const atrLonger = TechnicalIndicators.ATR(prices.slice(0, -7), 14);
-        if (atrShort && atrLonger && atrLonger > 0) {
-            const ratio = atrShort / atrLonger;
-            if (ratio < 0.70) scores.volTrend = 1.0;
-            else if (ratio < 0.85) scores.volTrend = 0.80;
-            else if (ratio < 1.0) scores.volTrend = 0.60;
-            else if (ratio < 1.15) scores.volTrend = 0.40;
-            else scores.volTrend = 0.15;
-        } else {
-            scores.volTrend = 0.5;
-        }
-
-        return { ok: true, scores, bb, macd, maxTickMove: maxMove, atr };
-    }
-}
+// NOTE: DigitDifferAnalyzer replaced by ConsensusAnalyzer from differAnalyzer.js
 
 // ══════════════════════════════════════════════════════════════════════════════
 // MONTE CARLO SIMULATOR — Risk Analysis & Position Sizing
@@ -590,8 +408,22 @@ class DigitDifferBot {
             this.proposalIds[a] = null;
         });
 
-        // Components
-        this.analyzer = new DigitDifferAnalyzer(config);
+        // 4-Engine Consensus Analyzer (per-asset, each has its own Markov state)
+        this.analyzers = {};
+        config.assets.forEach(a => {
+            this.analyzers[a] = new ConsensusAnalyzer({
+                requiredHistoryLength: config.requiredHistoryLength,
+                markovMinSamples: config.markovMinSamples,
+                freqWindows: config.freqWindows,
+                freqWeights: config.freqWeights,
+                statWindow: config.statWindow,
+                minChiSquare: config.minChiSquare,
+                maxEntropy: config.maxEntropy,
+                hotFilterTicks: config.hotFilterTicks,
+                minConsensusScore: config.minConsensusScore,
+                minEnginesAgreeing: config.minEnginesAgreeing,
+            });
+        });
 
         // Monte Carlo
         this.monteCarlo = new MonteCarloSimulator();
@@ -751,7 +583,9 @@ class DigitDifferBot {
         const asset = msg.echo_req.ticks_history;
         this.priceHistories[asset] = msg.history.prices.map(p => parseFloat(p));
         this.digitHistories[asset] = this.priceHistories[asset].map(p => this._lastDigit(p, asset));
-        console.log(`📊 ${asset}: loaded ${this.priceHistories[asset].length} ticks`);
+        // Bootstrap Markov matrix from history
+        this.analyzers[asset].bootstrap(this.digitHistories[asset]);
+        console.log(`📊 ${asset}: loaded ${this.digitHistories[asset].length} ticks, Markov bootstrapped`);
     }
 
     _onTick(tick) {
@@ -763,16 +597,16 @@ class DigitDifferBot {
         if (this.priceHistories[asset].length > 500) this.priceHistories[asset] = this.priceHistories[asset].slice(-300);
 
         this.digitHistories[asset].push(digit);
-        if (this.digitHistories[asset].length > this.cfg.requiredHistoryLength) this.digitHistories[asset].shift();
+        if (this.digitHistories[asset].length > 500) this.digitHistories[asset] = this.digitHistories[asset].slice(-300);
+
+        // Update Markov matrix incrementally on every tick
+        this.analyzers[asset].update(this.digitHistories[asset]);
 
         this.tickCounts[asset] = (this.tickCounts[asset] || 0) + 1;
 
         if (!this.wsReady) return;
         if (this.activeTrades[asset]) return;
         if (this.digitHistories[asset].length < this.cfg.requiredHistoryLength) return;
-        // if (Date.now() - (this.lastTradeTime[asset] || 0) < this.cfg.minTimeBetweenTrades) return;
-
-        // console.log(`asset [${asset}] ${price} | ${this.digitHistories[asset].slice(-10)}`);
 
         if (!this.tradeInProgress) {
             this._evaluateAsset(asset);
@@ -781,24 +615,11 @@ class DigitDifferBot {
 
     // ── Analysis & proposal ───────────────────────────────────────────────────
     _evaluateAsset(asset) {
-        const analysis = this.analyzer.analyzeEntry(
-            this.digitHistories[asset],
-            this.priceHistories[asset]
-        );
-
-        // this._logAnalysis(asset, analysis);
+        const analysis = this.analyzers[asset].analyze(this.digitHistories[asset]);
 
         if (!analysis.shouldTrade) return;
 
-        // Don't repeat the same predicted digit consecutively (avoid chasing streaks)
-        const recentLen = Math.min(this.recentPredictions.length, 2);
-        const recentPreds = this.recentPredictions.slice(-recentLen);
-        if (recentPreds.every(d => d === analysis.predictedDigit)) {
-            // console.log(`   ⚠️  Skipping — digit ${analysis.predictedDigit} predicted ${recentLen}x in a row`);
-            // return;
-        }
-
-        // Request a Digit Differ proposal
+        // Request a Digit Differ proposal for the coldest (least likely) digit
         this._requestProposal(asset, analysis.predictedDigit);
     }
 
@@ -833,53 +654,36 @@ class DigitDifferBot {
         const proposal = msg.proposal;
         this.proposalIds[asset] = proposal.id;
 
-        // Re-run analysis to confirm conditions still met (market may have moved)
-        const analysis = this.analyzer.analyzeEntry(
-            this.digitHistories[asset],
-            this.priceHistories[asset]
-        );
-
-        // Run Monte Carlo risk analysis
-        const mcResult = MonteCarloSimulator.runSimulation(this.tradeHistory, 500, 50);
+        // Re-confirm analysis (market may have moved since proposal request)
+        const analysis = this.analyzers[asset].analyze(this.digitHistories[asset]);
 
         if (!analysis.shouldTrade) {
-            console.log(`   ❌ Conditions changed — aborting entry`);
+            console.log(`   ❌ [${asset}] Conditions changed — aborting (${analysis.reason})`);
             return;
         }
 
         const predictedDigit = analysis.predictedDigit;
         const payout = parseFloat(proposal.payout || 0);
         const payoutPct = this.currentStake > 0 ? ((payout - this.currentStake) / this.currentStake * 100).toFixed(1) : '?';
+        const ev = analysis.engineVotes || {};
+        const entropy = analysis.entropy != null ? analysis.entropy.toFixed(3) : 'n/a';
+        const chi = analysis.chiSquare != null ? analysis.chiSquare.toFixed(2) : 'n/a';
+        const absence = analysis.absenceStreak != null ? analysis.absenceStreak : 'n/a';
+        const wFreq = analysis.weightedFreq != null ? (analysis.weightedFreq * 100).toFixed(1) : 'n/a';
+        const zScore = analysis.zScore != null ? analysis.zScore.toFixed(2) : 'n/a';
 
-        if (analysis.overallScore >= 0.9
-            && analysis.scores.bandWidth >= this.cfg.minBandWidthScore
-            && analysis.scores.macdFlat >= this.cfg.minMacdFlatScore
-            && analysis.scores.pricePosition >= this.cfg.minPricePositionScore
-            && analysis.scores.tickStability >= this.cfg.minTickStabilityScore
-            && analysis.scores.volTrend >= this.cfg.minVolTrendScore
-            && analysis.maxTickMove <= this.cfg.maxTickMove
-            && analysis.maxTickMove >= this.cfg.minMaxTickMove
-            && predictedDigit === this.digitHistories[asset].slice(-1)[0]
-            // && mcResult.riskOfRuin < 0.05
-        ) {
+        {
             console.log(`\n🎯 ENTRY SIGNAL — ${asset}`);
-            console.log(`   Predicted digit: ${predictedDigit} (betting it will NOT appear next tick)`);
-            console.log(`   Last 10 Digits: ${this.digitHistories[asset].slice(-10)}`);
-            console.log(`   Hot digit appeared ${analysis.hotDigitCount}x in last ${this.cfg.digitWindow} ticks (${analysis.hotDigitPct}%)`);
-            console.log(`   Frequency edge over 2nd: ${analysis.frequencyEdge}`);
-            console.log(`   Score: ${(analysis.overallScore * 100).toFixed(1)}%`);
+            console.log(`   Strategy: COLD-DIGIT DIFFER (betting digit ${predictedDigit} will NOT appear)`);
+            console.log(`   Last 10 Digits: [${this.digitHistories[asset].slice(-10)}]`);
+            console.log(`   Consensus Score: ${(analysis.consensusScore * 100).toFixed(1)}% (${analysis.agreeing} engines agree)`);
+            console.log(`   Engine Votes — Markov:${ev.markov?.vote ?? '-'} Freq:${ev.frequency?.vote ?? '-'} Stat:${ev.statistical?.vote ?? '-'} Streak:${ev.streak?.vote ?? '-'}`);
+            console.log(`   Entropy: ${entropy} bits | Chi²: ${chi} | Z-Score: ${zScore}`);
+            console.log(`   Absence Streak: ${absence} ticks | Weighted Freq: ${wFreq}%`);
             console.log(`   Stake: $${this.currentStake.toFixed(2)} | Payout: $${payout.toFixed(2)} (+${payoutPct}%)`);
-            console.log(`   BB: ${analysis.bb.percentB.toFixed(2)} (${analysis.bb.stdDev.toFixed(2)})`);
-            console.log(`   BB Width: ${analysis.bb.width.toFixed(4)}`);
-            console.log(`   MACD Converging: ${analysis.macd.isConverging}`);
-            console.log(`   ATR: ${analysis.atr.toFixed(2)}`);
-            console.log(`   Max Tick Move: ${analysis.maxTickMove.toFixed(4)}`);
-            console.log(`   BandWidth: ${(analysis.scores.bandWidth * 100).toFixed(1)}%`);
-            console.log(`   MacdFlat: ${(analysis.scores.macdFlat * 100).toFixed(1)}%`);
-            console.log(`   PricePosition: ${(analysis.scores.pricePosition * 100).toFixed(1)}%`);
-            console.log(`   TickStability: ${(analysis.scores.tickStability * 100).toFixed(1)}%`);
-            console.log(`   VolTrend: ${(analysis.scores.volTrend * 100).toFixed(1)}%`);
-            console.log(`   MC Risk of Ruin: ${(mcResult.riskOfRuin * 100).toFixed(2)}%`);
+            console.log(`   Consecutive losses: ${this.consecutiveLosses}`);
+
+            const mcResult = MonteCarloSimulator.runSimulation(this.tradeHistory, 500, 50);
             console.log(`   MC Confidence: ${(mcResult.confidence * 100).toFixed(1)}%`);
             console.log(`   MC Win Probability: ${(mcResult.winProbability * 100).toFixed(1)}%`);
 
@@ -904,27 +708,18 @@ class DigitDifferBot {
             entryTime: Date.now(),
         };
 
+        const _ev = analysis.engineVotes || {};
         this._sendTelegram(
-            `🎯 <b>BOTv1 Trade Opened</b>\n\n` +
+            `\ud83c\udfaf <b>BOTv2 Trade Opened</b>\n\n` +
             `Asset: <b>${asset}</b>\n` +
+            `Strategy: COLD-DIGIT DIFFER\n` +
             `Betting digit <b>${predictedDigit}</b> will NOT appear\n` +
-            `Digit Appeared ${analysis.hotDigitCount}x (${analysis.hotDigitPct}%)\n` +
-            `Last 10 Digits: ${this.digitHistories[asset].slice(-10)}\n` +
-            `Score: ${(analysis.overallScore * 100).toFixed(1)}%\n` +
-            `Frequency edge over 2nd: ${analysis.frequencyEdge}\n` +
-            `BB: ${analysis.bb.percentB.toFixed(2)} (${analysis.bb.stdDev.toFixed(2)})\n` +
-            `BB Width: ${analysis.bb.width.toFixed(4)}\n` +
-            `MACD Converging: ${analysis.macd.isConverging}\n` +
-            `ATR: ${analysis.atr.toFixed(2)}\n` +
-            `Max Tick Move: ${analysis.maxTickMove.toFixed(4)}\n` +
-            `BandWidth: ${(analysis.scores.bandWidth * 100).toFixed(1)}%\n` +
-            `MacdFlat: ${(analysis.scores.macdFlat * 100).toFixed(1)}%\n` +
-            `PricePosition: ${(analysis.scores.pricePosition * 100).toFixed(1)}%\n` +
-            `TickStability: ${(analysis.scores.tickStability * 100).toFixed(1)}%\n` +
-            `VolTrend: ${(analysis.scores.volTrend * 100).toFixed(1)}%\n` +
-            `MC Risk of Ruin: ${(mcResult.riskOfRuin * 100).toFixed(2)}%\n` +
+            `Last 10: [${this.digitHistories[asset].slice(-10)}]\n` +
+            `Consensus: ${(analysis.consensusScore * 100).toFixed(1)}% (${analysis.agreeing} engines agree)\n` +
+            `Votes \u2014 Mk:${_ev.markov?.vote ?? '-'} Fr:${_ev.frequency?.vote ?? '-'} Stat:${_ev.statistical?.vote ?? '-'} Sk:${_ev.streak?.vote ?? '-'}\n` +
+            `Entropy: ${analysis.entropy?.toFixed(3) ?? 'n/a'} bits | Chi\u00b2: ${analysis.chiSquare?.toFixed(2) ?? 'n/a'}\n` +
+            `Z-Score: ${analysis.zScore?.toFixed(2) ?? 'n/a'} | Absence: ${analysis.absenceStreak ?? 'n/a'} ticks\n` +
             `MC Confidence: ${(mcResult.confidence * 100).toFixed(1)}%\n` +
-            `MC Win Probability: ${(mcResult.winProbability * 100).toFixed(1)}%\n` +
             `Stake: $${this.currentStake.toFixed(2)}\n` +
             `Consecutive losses: ${this.consecutiveLosses}`
         );
@@ -1138,25 +933,16 @@ class DigitDifferBot {
 
     // ── Logging ───────────────────────────────────────────────────────────────
     _logAnalysis(asset, analysis) {
-        const s = analysis.scores || {};
-
-        // Show top-2 frequency even on rejection so we can tune thresholds
-        let freqStr = '';
-        if (analysis.ranking && analysis.ranking.length >= 2) {
-            const r = analysis.ranking;
-            freqStr = `top:[${r[0].digit}×${r[0].count} ${r[1].digit}×${r[1].count} ${r[2]?.digit}×${r[2]?.count}] edge:${r[0].count - r[1].count} | `;
-        }
-
+        const ev = analysis.engineVotes || {};
+        const entropy = analysis.entropy != null ? analysis.entropy.toFixed(2) : '?';
+        const chi = analysis.chiSquare != null ? analysis.chiSquare.toFixed(1) : '?';
         const digit = analysis.predictedDigit !== undefined ? `D${analysis.predictedDigit}` : '--';
+        const votes = `Mk:${ev.markov?.vote ?? '-'} Fr:${ev.frequency?.vote ?? '-'} Stat:${ev.statistical?.vote ?? '-'} Sk:${ev.streak?.vote ?? '-'}`;
 
         console.log(
-            `📊 ${asset} | ${digit} | Score:${((analysis.overallScore || 0) * 100).toFixed(0)}% | ` +
-            `${freqStr}` +
-            `BW:${((s.bandWidth || 0) * 100).toFixed(0)} ` +
-            `MACD:${((s.macdFlat || 0) * 100).toFixed(0)} ` +
-            `Pos:${((s.pricePosition || 0) * 100).toFixed(0)} ` +
-            `Conv:${((s.macdConverging || 0) * 100).toFixed(0)} ` +
-            `Vol:${((s.volTrend || 0) * 100).toFixed(0)} | ` +
+            `📊 ${asset} | ${digit} | Consensus:${((analysis.consensusScore || 0) * 100).toFixed(0)}% ` +
+            `(${analysis.agreeing ?? 0} engines) | [${votes}] | ` +
+            `H:${entropy}bits Chi:${chi} | ` +
             `${analysis.shouldTrade ? '✅' : '❌'} ${analysis.reason}`
         );
     }
@@ -1205,14 +991,19 @@ class DigitDifferBot {
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
     start() {
-        console.log('═══════════════════════════════════════════════════════════');
-        console.log('  🎯 differBot — Digit Differ Trading Bot');
-        console.log('═══════════════════════════════════════════════════════════');
-        console.log(`  Assets:      ${this.cfg.assets.join(', ')}`);
-        console.log(`  Stake:       $${this.cfg.initialStake} × ${this.cfg.multiplier}x`);
-        console.log(`  Digit win:   rolling ${this.cfg.digitWindow} ticks, hot ≥${this.cfg.minHotFrequency}`);
-        console.log(`  Max losses:  ${this.cfg.maxConsecutiveLosses}`);
-        console.log('═══════════════════════════════════════════════════════════\n');
+        console.log('═'.repeat(59));
+        console.log('  🎯 differBot v2 — 4-Engine Consensus Digit Differ Bot');
+        console.log('═'.repeat(59));
+        console.log(`  Assets:        ${this.cfg.assets.join(', ')}`);
+        console.log(`  Stake:         $${this.cfg.initialStake} × ${this.cfg.multiplier}x martingale`);
+        console.log(`  Strategy:      COLD-DIGIT DIFFER (least likely digit)`);
+        console.log(`  Engines:       Markov(0.35) Freq(0.30) Stat(0.20) Streak(0.15)`);
+        console.log(`  Consensus gate: ≥${(this.cfg.minConsensusScore * 100).toFixed(0)}% score, ≥${this.cfg.minEnginesAgreeing} engines`);
+        console.log(`  Entropy gate:   < ${this.cfg.maxEntropy} bits (random market filter)`);
+        console.log(`  Chi² gate:      > ${this.cfg.minChiSquare} (bias detection)`);
+        console.log(`  Hot filter:     veto if digit in last ${this.cfg.hotFilterTicks} ticks`);
+        console.log(`  Max losses:    ${this.cfg.maxConsecutiveLosses}`);
+        console.log('═'.repeat(59) + '\n');
 
         this.connect();
         // this._startTimeScheduler();
