@@ -417,7 +417,7 @@ const LOGGER = {
 // TRADE HISTORY MANAGER
 // ══════════════════════════════════════════════════════════════════════════════
 
-const HISTORY_FILE = path.join(__dirname, 'candlePatternRFn-multi-history01002.json');
+const HISTORY_FILE = path.join(__dirname, 'candlePatternRFn-multi-history01005.json');
 let tradeHistory = null;
 
 class TradeHistoryManager {
@@ -548,7 +548,7 @@ class TradeHistoryManager {
 // STATE MANAGEMENT
 // ══════════════════════════════════════════════════════════════════════════════
 
-const STATE_FILE = path.join(__dirname, 'candlePatternRFn-multi-state01002.json');
+const STATE_FILE = path.join(__dirname, 'candlePatternRFn-multi-state01005.json');
 
 const state = {
   assets: {},
@@ -724,7 +724,7 @@ class TelegramService {
   static getBot() {
     if (!this.bot && CONFIG.TELEGRAM_ENABLED) {
       const TelegramBot = require('node-telegram-bot-api');
-      this.bot = new TelegramBot(CONFIG.TELEGRAM_BOT_TOKEN, { 
+      this.bot = new TelegramBot(CONFIG.TELEGRAM_BOT_TOKEN, {
         polling: false,
         request: {
           timeout: 10000 // 10 second timeout for Telegram API calls
@@ -1657,8 +1657,10 @@ class DerivPatternBot {
       LOGGER.trade(`🎯 [${symbol}] PATTERN TRADE - Direction: ${direction} | Confidence: ${(analysis.confidence * 100).toFixed(1)}% | Pattern Occurrence: ${analysis.patternOccurrence}`);
 
       if (analysis.patternOccurrence >= 2) {
-        const newDirection = analysis.direction;
-        direction = newDirection === 'CALLE' ? 'PUTE' : 'CALLE';
+        // const newDirection = analysis.direction;
+        // direction = newDirection === 'CALLE' ? 'PUTE' : 'CALLE';
+
+        direction = analysis.direction;
         isRecovery = false;
       }
     }
