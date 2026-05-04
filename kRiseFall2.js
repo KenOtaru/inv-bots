@@ -640,7 +640,7 @@ class TelegramService {
         const today = TradeHistoryManager.getTodayStats();
 
         // Safe defaults for regime and gate
-        regimeDetails = regime.details.autocorrelation.toFixed(4);
+        const regimeDetails = regime.details.autocorrelation.toFixed(4);
 
         const message = `
                 ${emoji} <b>${type} TRADE ALERT 2b</b>
@@ -649,7 +649,7 @@ class TelegramService {
                 Stake: $${stake.toFixed(2)}
                 Duration: ${duration} (${durationUnit == 't' ? 'Ticks' : durationUnit == 's' ? 'Seconds' : 'Minutes'})
                 Martingale Level: ${assetMartingale}
-                Correlation: ${regimeDetails}
+                Correlation: ${type === 'OPEN' ? regimeDetails : ''}
                 ${details.profit !== undefined
                 ? `Profit: $${details.profit.toFixed(2)}
 
