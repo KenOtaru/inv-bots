@@ -1509,25 +1509,33 @@ class DerivPatternBot {
       const now = new Date();
       // GMT+1 calculation from example
       const gmtPlus1Time = new Date(now.getTime() + (1 * 60 * 60 * 1000));
+      const currentDay = gmtPlus1Time.getUTCDay(); // 0: Sunday, 1: Monday, ..., 6: Saturday
       const currentHours = gmtPlus1Time.getUTCHours();
       const currentMinutes = gmtPlus1Time.getUTCMinutes();
 
-      // Afternoon resume: 2:00 AM
-      if (state.endOfDay && currentHours === 2 && currentMinutes >= 0) {
+      // Weekend logic: Saturday 11pm to Monday 2am GMT+1 -> Disconnect and stay disconnected
+      const isWeekend = (currentDay === 0) || // Sunday
+        (currentDay === 6 && currentHours >= 23) || // Saturday after 11pm
+        (currentDay === 1 && currentHours < 2);    // Monday before 2am
+
+      // Afternoon resume: 2:00 AM (Monday to Friday)
+      if (state.endOfDay && currentHours === 3 && currentMinutes >= 0) {
         LOGGER.info("It's 2:00 AM, reconnecting the bot.");
         state.endOfDay = false;
         state.session.isActive = true;
         state.tradeInProgress = false;
+        state.isWinTrade = false;
         this.connection.connect();
       }
 
       // Evening stop: after 11:00 PM following a win
       if (state.isWinTrade && !state.endOfDay) {
-        if (currentHours >= 23 && currentMinutes >= 0) {
-          LOGGER.info("It's past 11:00 PM after a win trade, disconnecting.");
+        if (currentHours >= 23 || currentHours < 2) {
+          LOGGER.info("It's past 11:00 PM (or weekend) after a win trade, disconnecting.");
+          state.session.isActive = false;
+          state.endOfDay = true;
           TelegramService.sendSessionSummary();
           this.connection.disconnect();
-          state.endOfDay = true;
         }
       }
     }, 20000);
@@ -1631,11 +1639,11 @@ class DerivPatternBot {
 
       LOGGER.trade(`🎯 [${symbol}] PATTERN TRADE - Direction: ${direction} | Confidence: ${(analysis.confidence * 100).toFixed(1)}% | Pattern Occurrence: ${analysis.patternOccurrence}`);
 
-      if (analysis.patternOccurrence >= 2) {
-        const newDirection = analysis.direction
-        direction = newDirection === 'CALLE' ? 'PUTE' : 'CALLE';
-        isRecovery = false;
-      }
+      // if (analysis.patternOccurrence >= 2) {
+      const newDirection = analysis.direction
+      direction = newDirection === 'CALLE' ? 'PUTE' : 'CALLE';
+      isRecovery = false;
+      // }
     }
 
     if (!direction) return;

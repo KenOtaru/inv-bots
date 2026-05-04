@@ -2253,11 +2253,11 @@ class ConnectionManager {
                 // TRIGGER TRADE ANALYSIS FOR THIS SPECIFIC ASSET
                 assetState.canTrade = true;
 
-                if (assetState.martingaleLevel > 0) {
-                    bot.executeRecoveryTrade(symbol, closedCandle);
-                } else {
-                    bot.executeNextTrade(symbol, closedCandle);
-                }
+                // if (assetState.martingaleLevel > 0) {
+                //     bot.executeRecoveryTrade(symbol, closedCandle);
+                // } else {
+                bot.executeNextTrade(symbol, closedCandle);
+                // }
             }
         }
 
