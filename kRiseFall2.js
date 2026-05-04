@@ -1124,7 +1124,7 @@ const CONFIG = {
     // ============================
     ALTERNATING_PATTERN_THRESHOLD: 60, //60 Percentage threshold for switching to TRADE_SYSTEM 1
     ALTERNATING_PATTERN_LOOKBACK: 60, //100 Number of previous candles to analyze for pattern detection (user configurable)
-    AUTOCORR_THRESHOLD: -0.05,
+    AUTOCORR_THRESHOLD: -0.25,
     AUTOCORR_THRESHOLD2: -0.99,
 
     // Default Trade Duration Settings (used if asset has no specific config)
