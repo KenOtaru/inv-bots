@@ -30,7 +30,8 @@ const path = require('path');
 const BOT_CONFIG = {
     token: 'hsj0tA0XJoIzJG5',
 
-    assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'RDBULL', 'RDBEAR'],
+    // assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'RDBULL', 'RDBEAR'],
+    assets: ['R_10'],
 
     initialStake: 1,
     multiplier: 11.3,
