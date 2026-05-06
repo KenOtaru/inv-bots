@@ -52,30 +52,16 @@ const BOT_CONFIG = {
     ensembleWeights: {
         markov: 0.20,
         patterns: 0.15,
-        autocorr: 0.10,
-        entropy: 0.10,
+        autocorr: 0.15,
+        entropy: 0.15,
         bayesian: 0.20,
         hmm: 0.15,
-        technical: 0.10
     },
 
     // Trading filters
     minEnsembleConfidence: 0.72,        // Minimum consensus confidence to trade
     minStrategyAgreement: 4,            // Min number of strategies that must agree
     adaptiveWeightWindow: 50,           // Trades to consider for weight adjustment
-
-    // Technical (kept from V1)
-    bbPeriod: 20,
-    macdFast: 12,
-    macdSlow: 26,
-    macdSignal: 9,
-    minBandWidthScore: 0.80,
-    minMacdFlatScore: 0.85,
-    minPricePositionScore: 0.85,
-    minTickStabilityScore: 0.85,
-    minVolTrendScore: 0.60,
-    minMaxTickMove: 0.0001,
-    maxTickMove: 0.0004,
 
     minTimeBetweenTrades: 3000,
     requiredHistoryLength: 300,         // Increased for better pattern detection
@@ -157,89 +143,6 @@ class StatePersistence {
         process.on('SIGINT', shutdown);
         process.on('SIGTERM', shutdown);
         process.on('uncaughtException', err => { console.error(err); shutdown(); });
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// TECHNICAL INDICATORS
-// ─────────────────────────────────────────────────────────────────────────────
-class TechnicalIndicators {
-    static SMA(data, period) {
-        if (data.length < period) return null;
-        const slice = data.slice(-period);
-        return slice.reduce((s, v) => s + v, 0) / period;
-    }
-
-    static EMA(data, period) {
-        if (data.length < period) return null;
-        const k = 2 / (period + 1);
-        let ema = data.slice(0, period).reduce((s, v) => s + v, 0) / period;
-        for (let i = period; i < data.length; i++) ema = data[i] * k + ema * (1 - k);
-        return ema;
-    }
-
-    static stdDev(data, period) {
-        if (data.length < period) return null;
-        const slice = data.slice(-period);
-        const mean = slice.reduce((s, v) => s + v, 0) / period;
-        return Math.sqrt(slice.reduce((s, v) => s + (v - mean) ** 2, 0) / period);
-    }
-
-    static bollingerBands(prices, period = 20, mult = 2.0) {
-        if (prices.length < period) return null;
-        const middle = this.SMA(prices, period);
-        const sd = this.stdDev(prices, period);
-        const upper = middle + mult * sd;
-        const lower = middle - mult * sd;
-        const cur = prices[prices.length - 1];
-        const width = (upper - lower) / middle;
-        const pctB = (upper - lower) !== 0 ? (cur - lower) / (upper - lower) : 0.5;
-        return { upper, middle, lower, width, percentB: pctB, stdDev: sd };
-    }
-
-    static MACD(prices, fast = 12, slow = 26, signal = 9) {
-        if (prices.length < slow + signal) return null;
-        const macdVals = [];
-        for (let i = slow; i <= prices.length; i++) {
-            const sl = prices.slice(0, i);
-            const fEMA = this.EMA(sl, fast);
-            const sEMA = this.EMA(sl, slow);
-            if (fEMA !== null && sEMA !== null) macdVals.push(fEMA - sEMA);
-        }
-        if (macdVals.length < signal) return null;
-        const macdLine = macdVals[macdVals.length - 1];
-        const signalLine = this.EMA(macdVals, signal);
-        const histogram = macdLine - signalLine;
-        const prevMacd = macdVals.slice(0, -1);
-        const prevSig = prevMacd.length >= signal ? this.EMA(prevMacd, signal) : signalLine;
-        const prevHist = prevMacd[prevMacd.length - 1] - prevSig;
-        return {
-            macdLine, signalLine, histogram, prevHistogram: prevHist,
-            isConverging: Math.abs(histogram) < Math.abs(prevHist),
-            histogramTrend: histogram - prevHist,
-        };
-    }
-
-    static ATR(prices, period = 14) {
-        if (prices.length < period + 1) return null;
-        const ranges = [];
-        for (let i = prices.length - period; i < prices.length; i++)
-            ranges.push(Math.abs(prices[i] - prices[i - 1]));
-        return ranges.reduce((s, v) => s + v, 0) / period;
-    }
-
-    static bandWidthPercentile(prices, bbPeriod = 20, lookback = 60) {
-        if (prices.length < lookback + bbPeriod) return null;
-        const widths = [];
-        for (let i = bbPeriod; i <= Math.min(lookback, prices.length - bbPeriod); i++) {
-            const sl = prices.slice(0, prices.length - i + bbPeriod);
-            const bb = this.bollingerBands(sl, bbPeriod);
-            if (bb) widths.push(bb.width);
-        }
-        if (widths.length < 10) return null;
-        const cur = widths[0];
-        const sorted = [...widths].sort((a, b) => a - b);
-        return sorted.findIndex(w => w >= cur) / sorted.length;
     }
 }
 
@@ -994,9 +897,6 @@ class EnsembleDecisionSystem {
         predictions.bayesian = this.bayesian.predictForDiffer(digitHistory);
         predictions.hmm = this.hmm.predictForDiffer(digitHistory);
 
-        // Technical score (from existing system)
-        predictions.technical = this._technicalScore(priceHistory);
-
         // Market regime
         const regime = RegimeDetector.detectRegime(priceHistory);
 
@@ -1040,106 +940,6 @@ class EnsembleDecisionSystem {
             votes,
             regime,
             reason: this._buildReason(predictions, shouldTrade, strategiesVoting)
-        };
-    }
-
-    _technicalScore(priceHistory) {
-        if (!priceHistory || priceHistory.length < 50) {
-            return { shouldTrade: false, digit: null, confidence: 0, reason: 'insufficient_price_data' };
-        }
-
-        const bb = TechnicalIndicators.bollingerBands(priceHistory, this.cfg.bbPeriod);
-        if (!bb) return { shouldTrade: false, digit: null, confidence: 0, reason: 'bb_failed' };
-
-        const macd = TechnicalIndicators.MACD(priceHistory, this.cfg.macdFast, this.cfg.macdSlow, this.cfg.macdSignal);
-        if (!macd) return { shouldTrade: false, digit: null, confidence: 0, reason: 'macd_failed' };
-
-        const atr = TechnicalIndicators.ATR(priceHistory, 14);
-        const curPrice = priceHistory[priceHistory.length - 1];
-
-        // Calculate scores
-        const scores = {};
-
-        // Band width
-        const bwPct = TechnicalIndicators.bandWidthPercentile(priceHistory, this.cfg.bbPeriod, 60);
-        if (bwPct !== null) {
-            if (bwPct <= 0.20) scores.bandWidth = 1.0;
-            else if (bwPct <= 0.40) scores.bandWidth = 0.85;
-            else if (bwPct <= 0.55) scores.bandWidth = 0.65;
-            else if (bwPct <= 0.70) scores.bandWidth = 0.40;
-            else scores.bandWidth = 0.15;
-        } else {
-            scores.bandWidth = 0.5;
-        }
-
-        // MACD flat
-        const normHist = Math.abs(macd.histogram) / curPrice;
-        if (normHist < 0.00005) scores.macdFlat = 1.0;
-        else if (normHist < 0.00015) scores.macdFlat = 0.85;
-        else if (normHist < 0.00035) scores.macdFlat = 0.60;
-        else if (normHist < 0.00060) scores.macdFlat = 0.35;
-        else scores.macdFlat = 0.10;
-
-        // Price position
-        if (bb.percentB >= 0.40 && bb.percentB <= 0.60) scores.pricePosition = 1.0;
-        else if (bb.percentB >= 0.20 && bb.percentB <= 0.80) scores.pricePosition = 0.70;
-        else if (bb.percentB >= 0.10 && bb.percentB <= 0.90) scores.pricePosition = 0.40;
-        else scores.pricePosition = 0.10;
-
-        // Tick stability
-        const recent = priceHistory.slice(-10);
-        let maxMove = 0;
-        for (let i = 1; i < recent.length; i++)
-            maxMove = Math.max(maxMove, Math.abs(recent[i] - recent[i - 1]) / recent[i - 1]);
-
-        if (maxMove < 0.0003) scores.tickStability = 1.0;
-        else if (maxMove < 0.0008) scores.tickStability = 0.80;
-        else if (maxMove < 0.0015) scores.tickStability = 0.55;
-        else if (maxMove < 0.0025) scores.tickStability = 0.30;
-        else scores.tickStability = 0.05;
-
-        // Volatility trend
-        const atrShort = TechnicalIndicators.ATR(priceHistory, 7);
-        const atrLonger = TechnicalIndicators.ATR(priceHistory.slice(0, -7), 14);
-        if (atrShort && atrLonger && atrLonger > 0) {
-            const ratio = atrShort / atrLonger;
-            if (ratio < 0.70) scores.volTrend = 1.0;
-            else if (ratio < 0.85) scores.volTrend = 0.80;
-            else if (ratio < 1.0) scores.volTrend = 0.60;
-            else if (ratio < 1.15) scores.volTrend = 0.40;
-            else scores.volTrend = 0.15;
-        } else {
-            scores.volTrend = 0.5;
-        }
-
-        const overallScore = (
-            scores.bandWidth * 0.25 +
-            scores.macdFlat * 0.25 +
-            scores.pricePosition * 0.20 +
-            scores.tickStability * 0.20 +
-            scores.volTrend * 0.10
-        );
-
-        const shouldTrade =
-            overallScore >= 0.7 &&
-            scores.bandWidth >= this.cfg.minBandWidthScore &&
-            scores.macdFlat >= this.cfg.minMacdFlatScore &&
-            scores.pricePosition >= this.cfg.minPricePositionScore &&
-            scores.tickStability >= this.cfg.minTickStabilityScore &&
-            scores.volTrend >= this.cfg.minVolTrendScore &&
-            maxMove >= this.cfg.minMaxTickMove &&
-            maxMove <= this.cfg.maxTickMove;
-
-        return {
-            shouldTrade,
-            digit: null, // Technical doesn't predict specific digit
-            confidence: overallScore,
-            scores,
-            bb,
-            macd,
-            maxMove,
-            atr,
-            reason: `technical_score_${overallScore.toFixed(3)}`
         };
     }
 
@@ -1346,7 +1146,6 @@ class DigitDifferBotV2 {
             entropy: { predictions: 0, wins: 0, losses: 0, recentWins: 0, recentPredictions: [] },
             bayesian: { predictions: 0, wins: 0, losses: 0, recentWins: 0, recentPredictions: [] },
             hmm: { predictions: 0, wins: 0, losses: 0, recentWins: 0, recentPredictions: [] },
-            technical: { predictions: 0, wins: 0, losses: 0, recentWins: 0, recentPredictions: [] }
         };
 
         // Ensemble weights (will be adapted)
