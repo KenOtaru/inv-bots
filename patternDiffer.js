@@ -43,7 +43,7 @@ const BOT_CONFIG = {
     takeProfit: 10000,           // Session take-profit (USD)
 
     // ── 4-Engine Consensus Settings ──────────────────────────────
-    requiredHistoryLength: 1000,      // Ticks needed before analysis starts
+    requiredHistoryLength: 300,      // Ticks needed before analysis starts
 
     // Markov Engine
     markovMinSamples: 20,           // Min state observations to trust Markov
