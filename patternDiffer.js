@@ -520,6 +520,8 @@ class DigitDifferBot {
 
         this.tickCounts[asset] = (this.tickCounts[asset] || 0) + 1;
 
+        console.log(`${asset}: ${digit} ${price} | Hist: ${this.digitHistories[asset].length} ticks | Target: ${this.cfg.requiredHistoryLength}`);
+
         if (!this.wsReady) return;
         if (this.activeTrades[asset]) return;
         if (this.digitHistories[asset].length < this.cfg.requiredHistoryLength) return;
