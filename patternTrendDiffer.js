@@ -972,6 +972,38 @@ class TrendReversalBot {
         console.log(`    Descending: ${descStats.won}/${descStats.traded} (${descStats.traded > 0 ? (descStats.won / descStats.traded * 100).toFixed(1) : '0.0'}%) | Detected: ${descStats.detected}`);
     }
 
+    // ── Time-based reconnect ──────────────────────────────────────────────────
+    _startTimeScheduler() {
+        setInterval(() => {
+            const now = new Date();
+            const gmt1 = new Date(now.getTime() + 3600000);
+            const day = gmt1.getUTCDay();
+            const hr = gmt1.getUTCHours();
+            const min = gmt1.getUTCMinutes();
+
+            const weekend = day === 0 || (day === 6 && hr >= 23) || (day === 1 && hr < 8);
+            // if (weekend && !this.endOfDay) {
+            //     console.log('📅 Weekend — pausing');
+            //     this.endOfDay = true;
+            //     this._cleanupWs();
+            // }
+
+            if (this.endOfDay && hr === 2 && min < 1) {
+                console.log('⏰ 2:00 AM — reconnecting');
+                this.endOfDay = false;
+                this.tradeInProgress = false;
+                this.connect();
+            }
+
+            if (this.isWinTrade && !this.endOfDay && hr >= 23) {
+                console.log('🌙 Post-win 11 PM — stopping for the night');
+                this.endOfDay = true;
+                this._sendTelegram(`🌙 <b>Night stop after win</b>\nP&L: $${this.totalProfitLoss.toFixed(2)}`);
+                this._cleanupWs();
+            }
+        }, 20000);
+    }
+
     // ── Lifecycle ─────────────────────────────────────────────────────────────
     start() {
         console.log('═══════════════════════════════════════════════════════════');
@@ -987,6 +1019,7 @@ class TrendReversalBot {
         console.log('═══════════════════════════════════════════════════════════\n');
 
         this.connect();
+        this._startTimeScheduler();
         StatePersistence.startAutoSave(this);
     }
 }

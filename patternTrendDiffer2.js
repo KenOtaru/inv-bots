@@ -826,6 +826,7 @@ class VolatilityReversalBot {
             `🎯 <b>Volatility Breakout Reversal</b>\n\n` +
             `Asset: <b>${asset}</b>\n` +
             `Digit: <b>${analysis.predictedDigit}</b> will NOT appear\n` +
+            `Last10Digits: ${this.digitHistories[asset].slice(-10).join(',')}\n` +
             `Zone: ${analysis.zone.dominantZone} (${(analysis.zone.maxConcentration * 100).toFixed(1)}%)\n` +
             `Frequency: ${analysis.prediction.percentage}%\n` +
             `Volatility: ${analysis.volatility.value.toFixed(6)}\n` +
@@ -928,6 +929,7 @@ class VolatilityReversalBot {
         this._sendTelegram(
             `${won ? '✅' : '❌'} <b>Result</b>\n\n` +
             `Asset: ${asset}\n` +
+            `Last10Digits: ${this.digitHistories[asset].slice(-10).join(',')}\n` +
             `P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(3)}\n` +
             `Trades: ${this.totalTrades} (WR: ${wr}%)\n` +
             `Consecutive losses: ${this.consecutiveLosses}\n` +
@@ -987,6 +989,38 @@ class VolatilityReversalBot {
         console.log(`  Stake: $${this.currentStake.toFixed(2)}`);
     }
 
+    // ── Time-based reconnect ──────────────────────────────────────────────────
+    _startTimeScheduler() {
+        setInterval(() => {
+            const now = new Date();
+            const gmt1 = new Date(now.getTime() + 3600000);
+            const day = gmt1.getUTCDay();
+            const hr = gmt1.getUTCHours();
+            const min = gmt1.getUTCMinutes();
+
+            const weekend = day === 0 || (day === 6 && hr >= 23) || (day === 1 && hr < 8);
+            // if (weekend && !this.endOfDay) {
+            //     console.log('📅 Weekend — pausing');
+            //     this.endOfDay = true;
+            //     this._cleanupWs();
+            // }
+
+            if (this.endOfDay && hr === 2 && min < 1) {
+                console.log('⏰ 2:00 AM — reconnecting');
+                this.endOfDay = false;
+                this.tradeInProgress = false;
+                this.connect();
+            }
+
+            if (this.isWinTrade && !this.endOfDay && hr >= 23) {
+                console.log('🌙 Post-win 11 PM — stopping for the night');
+                this.endOfDay = true;
+                this._sendTelegram(`🌙 <b>Night stop after win</b>\nP&L: $${this.totalProfitLoss.toFixed(2)}`);
+                this._cleanupWs();
+            }
+        }, 20000);
+    }
+
     // ── Lifecycle ─────────────────────────────────────────────────────────────
     start() {
         console.log('═══════════════════════════════════════════════════════════');
@@ -998,6 +1032,7 @@ class VolatilityReversalBot {
         console.log('═══════════════════════════════════════════════════════════\n');
 
         this.connect();
+        this._startTimeScheduler();
         StatePersistence.startAutoSave(this);
     }
 }
