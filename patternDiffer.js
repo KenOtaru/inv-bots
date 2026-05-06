@@ -533,6 +533,8 @@ class DigitDifferBot {
     _evaluateAsset(asset) {
         const analysis = this.analyzers[asset].analyze(this.digitHistories[asset]);
 
+        console.log(`${asset} Analysis:`, analysis);
+
         if (!analysis.shouldTrade) return;
 
         // Request a Digit Differ proposal for the coldest (least likely) digit

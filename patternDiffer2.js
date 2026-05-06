@@ -1541,6 +1541,8 @@ class DigitDifferBotV2 {
             this.priceHistories[asset]
         );
 
+        console.log(`${asset} Analysis:`, analysis);
+
         if (!analysis.shouldTrade) return;
 
         // Adaptive weight tuning every 50 trades
