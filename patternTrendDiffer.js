@@ -9,6 +9,18 @@
  * ║  • Only trade if historical win probability ≥ 70%            ║
  * ║  • Validate pattern against 1000+ tick history               ║
  * ╚══════════════════════════════════════════════════════════════╝
+ * ✅ What It Does:
+ * Analyzes Last 10 Digits for trends:
+*  Ascending: 0→2→4→6, 1→3→5→7, 3→6→9 (steps of +1, +2, +3)
+*  Descending: 6→4→2→0, 7→5→3→1, 9→6→3 (steps of -1, -2, -3)
+* Predicts Trend Continuation:
+*  Ascending 0→2→4 → predicts next will be 6
+*  Descending 7→5→3 → predicts next will be 1
+*  Then bets DIFFER on that digit (betting it WON'T appear = trend breaks)
+* Validates with History (1000 ticks):
+*  Scans entire tick history for similar patterns
+*  Counts how many times trend broke vs continued
+*  Only trades if break probability ≥ 70%
  */
 
 'use strict';
@@ -33,18 +45,18 @@ const BOT_CONFIG = {
     stopLoss: 108,
     takeProfit: 10000,
 
+    minTimeBetweenTrades: 3000,
+    requiredHistoryLength: 5000,
+
     // Trend Analysis Config
     trendWindow: 10,                    // Number of recent digits to analyze for trend
     minTrendStrength: 3,                // Minimum consecutive steps in same direction
     minWinProbability: 0.70,            // 70% minimum historical win rate
-    historyDepth: 1000,                 // Ticks to analyze for probability calculation
+    historyDepth: 5000,                 // Ticks to analyze for probability calculation
 
     // Pattern detection
     allowedStepSizes: [1, 2, 3],       // e.g., +1 (0→1), +2 (0→2), +3 (0→3)
     minPatternOccurrences: 5,           // Minimum times pattern must appear in history
-
-    minTimeBetweenTrades: 3000,
-    requiredHistoryLength: 1000,
 
     telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
     telegramChatId: '752497117',
