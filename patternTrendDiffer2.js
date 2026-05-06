@@ -719,7 +719,7 @@ class VolatilityReversalBot {
 
         this.tickCounts[asset]++;
 
-        console.log(`📈 ${asset}: last5Digits=[${this.digitHistories[asset].slice(-5).join(',')}] digit=${digit}`);
+        // console.log(`📈 ${asset}: last5Digits=[${this.digitHistories[asset].slice(-5).join(',')}] digit=${digit}`);
 
         if (!this.wsReady || this.tradeInProgress) return;
         if (this.digitHistories[asset].length < this.cfg.requiredHistoryLength) return;
