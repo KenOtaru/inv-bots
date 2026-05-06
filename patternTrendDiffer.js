@@ -46,13 +46,13 @@ const BOT_CONFIG = {
     takeProfit: 10000,
 
     minTimeBetweenTrades: 3000,
-    requiredHistoryLength: 5000,
+    requiredHistoryLength: 1000,
 
     // Trend Analysis Config
     trendWindow: 10,                    // Number of recent digits to analyze for trend
     minTrendStrength: 3,                // Minimum consecutive steps in same direction
     minWinProbability: 0.70,            // 70% minimum historical win rate
-    historyDepth: 5000,                 // Ticks to analyze for probability calculation
+    historyDepth: 1000,                 // Ticks to analyze for probability calculation
 
     // Pattern detection
     allowedStepSizes: [1, 2],       // e.g., +1 (0→1), +2 (0→2), +3 (0→3)
