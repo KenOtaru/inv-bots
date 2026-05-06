@@ -699,7 +699,10 @@ class TrendReversalBot {
 
         //Don't Trade if Trend Sequence is not same as Last 4 Digits 
         if (analysis.trend.sequence.join(',') !== this.digitHistories[asset].slice(-4).join(',')) {
-            console.log(`   ❌ Trend Sequence is not same as Last 4 Digits — aborting`);
+            console.log(`   ❌ Trend Sequence is not same as Last 4 Digits — aborting
+                Trend Sequence: ${analysis.trend.sequence.join(',')}
+                Last 4 Digits: ${this.digitHistories[asset].slice(-4).join(',')}
+                `);
             return;
         }
 
