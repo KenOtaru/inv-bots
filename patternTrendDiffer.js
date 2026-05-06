@@ -37,7 +37,8 @@ const path = require('path');
 const BOT_CONFIG = {
     token: 'hsj0tA0XJoIzJG5',
 
-    assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'RDBULL', 'RDBEAR'],
+    // assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'RDBULL', 'RDBEAR'],
+    assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
 
     initialStake: 1,
     multiplier: 11.3,
@@ -50,7 +51,7 @@ const BOT_CONFIG = {
 
     // Trend Analysis Config
     trendWindow: 10,                    // Number of recent digits to analyze for trend
-    minTrendStrength: 5,                // Minimum consecutive steps in same direction
+    minTrendStrength: 4,                //4 Minimum consecutive steps in same direction
     minWinProbability: 0.70,            // 70% minimum historical win rate
     historyDepth: 1000,                 // Ticks to analyze for probability calculation
 
@@ -68,7 +69,7 @@ const BOT_CONFIG = {
 // ─────────────────────────────────────────────────────────────────────────────
 // STATE PERSISTENCE
 // ─────────────────────────────────────────────────────────────────────────────
-const STATE_FILE = path.join(__dirname, 'trend_reversal-01_state.json');
+const STATE_FILE = path.join(__dirname, 'trend_reversal-05_state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -246,7 +247,7 @@ class TrendAnalyzer {
         }
 
         return {
-            isValid: strength >= this.cfg.minTrendStrength && sequence.length >= this.cfg.minTrendStrength,
+            isValid: strength >= this.cfg.minTrendStrength && sequence.length >= 3,
             sequence,
             strength,
             predictedDigit,
@@ -698,10 +699,10 @@ class TrendReversalBot {
         }
 
         //Don't Trade if Trend Sequence is not same as Last 4 Digits 
-        if (analysis.trend.sequence.join(',') !== this.digitHistories[asset].slice(-4).join(',')) {
+        if (analysis.trend.sequence.join(',') !== this.digitHistories[asset].slice(-(this.cfg.minTrendStrength + 1)).join(',')) {
             console.log(`   ❌ Trend Sequence is not same as Last 4 Digits — aborting
                 Trend Sequence: ${analysis.trend.sequence.join(',')}
-                Last 4 Digits: ${this.digitHistories[asset].slice(-4).join(',')}
+                Last 4 Digits: ${this.digitHistories[asset].slice(-(this.cfg.minTrendStrength + 1)).join(',')}
                 `);
             return;
         }
