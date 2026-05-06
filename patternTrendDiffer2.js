@@ -737,7 +737,7 @@ class VolatilityReversalBot {
             this.priceHistories[asset]
         );
 
-        console.log(`📈 ${asset}: shouldTrade=${analysis.shouldTrade} predictedDigit=${analysis.predictedDigit} analysis=${JSON.stringify(analysis, null, 2)}`);
+        // console.log(`📈 ${asset}: shouldTrade=${analysis.shouldTrade} predictedDigit=${analysis.predictedDigit} analysis=${JSON.stringify(analysis, null, 2)}`);
 
         if (!analysis.shouldTrade) return;
 
