@@ -60,7 +60,7 @@ const BOT_CONFIG = {
 
     // Trading filters
     minEnsembleConfidence: 0.72,        // Minimum consensus confidence to trade
-    minStrategyAgreement: 4,            // Min number of strategies that must agree
+    minStrategyAgreement: 2,            // Min number of strategies that must agree 4
     adaptiveWeightWindow: 50,           // Trades to consider for weight adjustment
 
     minTimeBetweenTrades: 3000,
@@ -150,7 +150,7 @@ class StatePersistence {
 // ADVANCED PATTERN RECOGNITION: MARKOV CHAIN ANALYSIS
 // ══════════════════════════════════════════════════════════════════════════════
 class MarkovChainAnalyzer {
-    constructor(order = 3) {
+    constructor(order = 2) {
         this.order = order;
         this.chains = {}; // Store transition matrices for each order
     }
@@ -928,7 +928,7 @@ class EnsembleDecisionSystem {
         const shouldTrade =
             strategiesVoting >= this.cfg.minStrategyAgreement &&
             consensusConfidence >= this.cfg.minEnsembleConfidence &&
-            agreementScore > 0.4;
+            agreementScore >= 0.3;
 
         return {
             shouldTrade,
