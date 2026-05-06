@@ -50,12 +50,12 @@ const BOT_CONFIG = {
 
     // Trend Analysis Config
     trendWindow: 10,                    // Number of recent digits to analyze for trend
-    minTrendStrength: 4,                // Minimum consecutive steps in same direction
+    minTrendStrength: 3,                // Minimum consecutive steps in same direction
     minWinProbability: 0.70,            // 70% minimum historical win rate
     historyDepth: 5000,                 // Ticks to analyze for probability calculation
 
     // Pattern detection
-    allowedStepSizes: [1, 2, 3],       // e.g., +1 (0→1), +2 (0→2), +3 (0→3)
+    allowedStepSizes: [1, 2],       // e.g., +1 (0→1), +2 (0→2), +3 (0→3)
     minPatternOccurrences: 5,           // Minimum times pattern must appear in history
 
     telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
@@ -856,6 +856,7 @@ class TrendReversalBot {
             `Asset: <b>${asset}</b>\n` +
             `Trend: ${trade.analysis.trend.direction}\n` +
             `Digit: ${trade.predictedDigit} | ${won ? 'Did NOT appear ✅' : 'Appeared ❌'}\n` +
+            `Last10Digits: ${this.digitHistories[asset].slice(-10).join(',')}\n` +
             `P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(3)}\n` +
             `Consecutive losses: ${this.consecutiveLosses}\n` +
             `Trades: ${this.totalTrades} (${this.totalWins}W/${this.totalLosses}L)\n` +
