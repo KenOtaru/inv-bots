@@ -697,6 +697,12 @@ class TrendReversalBot {
             return;
         }
 
+        //Don't Trade if Trend Sequence is not same as Last 4 Digits 
+        if (analysis.trend.sequence.join(',') !== this.digitHistories[asset].slice(-4).join(',')) {
+            console.log(`   ❌ Trend Sequence is not same as Last 4 Digits — aborting`);
+            return;
+        }
+
         const payout = parseFloat(proposal.payout || 0);
         const payoutPct = this.currentStake > 0 ? ((payout - this.currentStake) / this.currentStake * 100).toFixed(1) : '?';
 
