@@ -58,7 +58,7 @@ const BOT_CONFIG = {
     allowedStepSizes: [1, 2],       // e.g., +1 (0→1), +2 (0→2), +3 (0→3)
     minPatternOccurrences: 5,           // Minimum times pattern must appear in history
 
-    telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
+    telegramToken: '8578702717:AAFShpdLRtat7PHqjZMUqhY4UNKlWyaGtmo',
     telegramChatId: '752497117',
 
     maxReconnectAttempts: 50,

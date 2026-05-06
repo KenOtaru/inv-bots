@@ -28,10 +28,10 @@ const BOT_CONFIG = {
 
     assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
 
-    initialStake: 0.62,
+    initialStake: 1,
     multiplier: 11.3,                    // Conservative Martingale (not aggressive 11.3x)
-    maxConsecutiveLosses: 4,
-    stopLoss: 400,
+    maxConsecutiveLosses: 3,
+    stopLoss: 100,
     takeProfit: 10000,
 
     // Volatility & Dispersion Config
@@ -59,7 +59,7 @@ const BOT_CONFIG = {
 
     requiredHistoryLength: 200,
 
-    telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
+    telegramToken: '8565754902:AAHS6UQWEgLJ0DO-JTpAGQhZLs-UDVVNAQc',
     telegramChatId: '752497117',
 
     maxReconnectAttempts: 50,
@@ -719,6 +719,8 @@ class VolatilityReversalBot {
 
         this.tickCounts[asset]++;
 
+        console.log(`📈 ${asset}: last5Digits=[${this.digitHistories[asset].slice(-5).join(',')}] digit=${digit}`);
+
         if (!this.wsReady || this.tradeInProgress) return;
         if (this.digitHistories[asset].length < this.cfg.requiredHistoryLength) return;
 
@@ -734,6 +736,8 @@ class VolatilityReversalBot {
             this.digitHistories[asset],
             this.priceHistories[asset]
         );
+
+        console.log(`📈 ${asset}: shouldTrade=${analysis.shouldTrade} predictedDigit=${analysis.predictedDigit} analysis=${JSON.stringify(analysis, null, 2)}`);
 
         if (!analysis.shouldTrade) return;
 
