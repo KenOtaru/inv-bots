@@ -59,7 +59,7 @@ const BOT_CONFIG = {
     // Layer 4: Multi-Lag Autocorrelation Engine
     multiLagAutocorr: {
         lags: [7, 13, 19],
-        criticalValueCutoff: 0.25, //0.35 Strict covariance bounds
+        criticalValueCutoff: 0.15, //0.35 Strict covariance bounds
     },
 
     // Layer 5: Kinetic Velocity-Weighted Sweeper
