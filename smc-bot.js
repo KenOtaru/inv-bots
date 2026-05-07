@@ -815,13 +815,13 @@ class SmartMoneyBot {
             asset
         );
 
-        console.log(`${asset}: 
-            Sweep: ${analysis.results.liquiditySweep.detected ? 'YES' : 'NO'} | ${analysis.results.liquiditySweep.reason} (${analysis.results.liquiditySweep.sweptDigit})
-            BoS: ${analysis.results.breakOfStructure.detected ? 'YES' : 'NO'} | ${analysis.results.breakOfStructure.reason} (${analysis.results.breakOfStructure.zoneStabilityCount} | ${analysis.results.breakOfStructure.transition}) ${analysis.results.breakOfStructure.currentZone} | ${analysis.results.breakOfStructure.previousZone}
-            FVG: ${analysis.results.fairValueGap.detected ? 'YES' : 'NO'} | ${analysis.results.fairValueGap.reason} (${analysis.results.fairValueGap.gapCount})
-            OB: ${analysis.results.orderBlock.detected ? 'YES' : 'NO'} | ${analysis.results.orderBlock.reason} (${analysis.results.orderBlock.orderBlocks} | ${analysis.results.orderBlock.nearestBlock}) ${analysis.results.orderBlock.currentDigit}
-            TF: ${analysis.results.trendFilter.detected ? 'YES' : 'NO'} | ${analysis.results.trendFilter.reason} (${analysis.results.trendFilter.zoneStrength} | ${analysis.results.trendFilter.priceStrength})
-        `);
+        // console.log(`${asset}: 
+        //     Sweep: ${analysis.results.liquiditySweep.detected ? 'YES' : 'NO'} | ${analysis.results.liquiditySweep.reason} (${analysis.results.liquiditySweep.sweptDigit})
+        //     BoS: ${analysis.results.breakOfStructure.detected ? 'YES' : 'NO'} | ${analysis.results.breakOfStructure.reason} (${analysis.results.breakOfStructure.zoneStabilityCount} | ${analysis.results.breakOfStructure.transition}) ${analysis.results.breakOfStructure.currentZone} | ${analysis.results.breakOfStructure.previousZone}
+        //     FVG: ${analysis.results.fairValueGap.detected ? 'YES' : 'NO'} | ${analysis.results.fairValueGap.reason} (${analysis.results.fairValueGap.gapCount})
+        //     OB: ${analysis.results.orderBlock.detected ? 'YES' : 'NO'} | ${analysis.results.orderBlock.reason} (${analysis.results.orderBlock.orderBlocks} | ${analysis.results.orderBlock.nearestBlock}) ${analysis.results.orderBlock.currentDigit}
+        //     TF: ${analysis.results.trendFilter.detected ? 'YES' : 'NO'} | ${analysis.results.trendFilter.reason} (${analysis.results.trendFilter.zoneStrength} | ${analysis.results.trendFilter.priceStrength})
+        // `);
 
         if (!analysis.shouldTrade) return;
 
