@@ -168,7 +168,7 @@ const BOT_CONFIG = {
 
     // ENSEMBLE CONFIG
     ensemble: {
-        minLayersAgreement: 3,          // Need 5/6 layers to agree
+        minLayersAgreement: 5,          // Need 5/6 layers to agree
         minConfidenceThreshold: 0.62,   // 82% minimum confidence
         enableDynamicWeighting: true,
     },
@@ -176,7 +176,7 @@ const BOT_CONFIG = {
     // Risk Management
     minTimeBetweenTrades: 15000,        // 15 seconds
     cooldownAfterLoss: 30000,           // 30 seconds
-    maxTradesPerHour: 20,
+    maxTradesPerHour: 200,
 
     requiredHistoryLength: 250,
 

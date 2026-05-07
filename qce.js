@@ -153,14 +153,14 @@ const BOT_CONFIG = {
 
     // ENSEMBLE CONFIG
     ensemble: {
-        minLayersAgreement: 4,          // Need 6/7 layers (stricter)
+        minLayersAgreement: 6,          // Need 6/7 layers (stricter)
         minConfidenceThreshold: 0.65,   // 85% minimum confidence
         lstmWeight: 1.2,                // LSTM has higher weight
     },
 
     minTimeBetweenTrades: 20000,
     cooldownAfterLoss: 45000,
-    maxTradesPerHour: 15,
+    maxTradesPerHour: 1500,
 
     requiredHistoryLength: 250,
 

@@ -79,7 +79,7 @@ const BOT_CONFIG = {
 
     // Ensemble System Config
     ensemble: {
-        strictQuorumCount: 3,       // At least 5 systems must match target projection
+        strictQuorumCount: 4,       // At least 5 systems must match target projection
         masterConfidenceLimit: 0.68, //0.88 Minimum probability bound to fire execution
         bayesianMemoryLength: 50,
     },
