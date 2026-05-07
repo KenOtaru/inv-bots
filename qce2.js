@@ -624,10 +624,15 @@ class VaultStorage {
                     totalTrades: engine.totalTrades,
                     totalWins: engine.totalWins,
                     totalLosses: engine.totalLosses,
-                    totalProfitLoss: engine.totalProfitLoss
+                    totalProfitLoss: engine.totalProfitLoss,
+                    dailyProfitLoss: engine.dailyProfitLoss
                 },
                 ensembleWeights: engine.ensemble.weights,
-                assetMetrics: engine.assetMetrics
+                assetMetrics: engine.assetMetrics,
+                hourlyTrades: engine.hourlyTrades,
+                hourlyStats: engine.hourlyStats,
+                session: engine.session,
+                currentTradeDay: engine.currentTradeDay
             };
             fs.writeFileSync(STORAGE_FILE_PATH, JSON.stringify(schema, null, 2));
         } catch (e) {
@@ -647,8 +652,13 @@ class VaultStorage {
             engine.totalWins = data.metrics.totalWins;
             engine.totalLosses = data.metrics.totalLosses;
             engine.totalProfitLoss = data.metrics.totalProfitLoss;
+            engine.dailyProfitLoss = data.metrics.dailyProfitLoss || 0;
             engine.ensemble.weights = data.ensembleWeights;
             engine.assetMetrics = data.assetMetrics;
+            if (data.hourlyTrades) engine.hourlyTrades = data.hourlyTrades;
+            if (data.hourlyStats) engine.hourlyStats = data.hourlyStats;
+            if (data.session) engine.session = data.session;
+            if (data.currentTradeDay) engine.currentTradeDay = data.currentTradeDay;
 
             QLog.sys('Vault state vector parsed and hydrated back successfully');
         } catch (e) {
@@ -698,6 +708,27 @@ class QuantumConfluenceBot {
         }
 
         VaultStorage.reconstitute(this);
+
+        // New tracking for summaries
+        if (!this.hourlyStats) {
+            this.hourlyStats = { trades: 0, wins: 0, losses: 0, pnl: 0, lastHour: new Date().getHours() };
+        }
+        if (!this.session) {
+            this.session = {
+                startTime: Date.now(),
+                startCapital: 0,
+                tradesCount: 0,
+                winsCount: 0,
+                lossesCount: 0,
+                netPL: 0,
+                isActive: true
+            };
+        }
+        if (!this.currentTradeDay) {
+            this.currentTradeDay = new Date().toISOString().split('T')[0];
+        }
+        this.dailyProfitLoss = 0;
+        this.hourlyTrades = [];
     }
 
     connect() {
@@ -752,6 +783,11 @@ class QuantumConfluenceBot {
             case 'authorize':
                 QLog.sys('Broker Handshake Established', { balance: msg.authorize.balance });
                 this.wsReady = true;
+
+                if (this.session.startCapital === 0) {
+                    this.session.startCapital = msg.authorize.balance;
+                }
+
                 this.cfg.assets.forEach(asset => {
                     this._send({ ticks_history: asset, adjust_start_time: 1, count: this.cfg.requiredHistoryLength, end: 'latest', start: 1, style: 'ticks' });
                     this._send({ ticks: asset, subscribe: 1 });
@@ -854,15 +890,33 @@ class QuantumConfluenceBot {
 
         this.totalTrades++;
         this.totalProfitLoss += profit;
+        this.dailyProfitLoss += profit;
         this.assetMetrics[asset].trades++;
         this.assetMetrics[asset].profitLoss += profit;
 
+        // Update Hourly & Session Stats
+        this._checkDayChange();
+        const currentHour = new Date().getHours();
+        if (currentHour !== this.hourlyStats.lastHour) {
+            this.hourlyStats = { trades: 0, wins: 0, losses: 0, pnl: 0, lastHour: currentHour };
+        }
+        this.hourlyStats.trades++;
+        this.hourlyStats.pnl += profit;
+
+        this.session.tradesCount++;
+        this.session.netPL += profit;
+
         if (won) {
+            this.hourlyStats.wins++;
+            this.session.winsCount++;
             this.totalWins++;
+            this.isWinTrade = true;
             this.currentStake = this.cfg.initialStake;
             this.consecutiveLosses = 0;
             this.assetMetrics[asset].wins++;
         } else {
+            this.hourlyStats.losses++;
+            this.session.lossesCount++;
             this.totalLosses++;
             this.consecutiveLosses++;
             this.assetMetrics[asset].losses++;
@@ -877,8 +931,18 @@ class QuantumConfluenceBot {
         VaultStorage.preserve(this);
 
         // Terminate bounds loops if limits crossed
-        if (this.totalProfitLoss >= this.cfg.takeProfit || this.consecutiveLosses >= this.cfg.maxConsecutiveLosses || this.totalProfitLoss <= -this.cfg.stopLoss) {
+        if (this.totalProfitLoss >= this.cfg.takeProfit) {
             this.endOfDay = true;
+            this._dispatchTelegramNotification(asset, contract, won); // Ensure last result is sent
+            this._sendTelegram(`🎯 <b>Take Profit!</b> P&L: +$${this.totalProfitLoss.toFixed(2)}`);
+            this._sendSessionSummary();
+            this._cleanupWs();
+            QLog.crit('System Core Bound Intersect Triggered. Engine Halt.');
+        } else if (this.consecutiveLosses >= this.cfg.maxConsecutiveLosses || this.totalProfitLoss <= -this.cfg.stopLoss) {
+            this.endOfDay = true;
+            this._dispatchTelegramNotification(asset, contract, won); // Ensure last result is sent
+            this._sendTelegram(`🛑 <b>Stop Loss</b>\nLosses: ${this.consecutiveLosses} | P&L: $${this.totalProfitLoss.toFixed(2)}`);
+            this._sendSessionSummary();
             this._cleanupWs();
             QLog.crit('System Core Bound Intersect Triggered. Engine Halt.');
         }
@@ -897,9 +961,145 @@ class QuantumConfluenceBot {
         try { await this.telegram.sendMessage(this.cfg.telegramChatId, text, { parse_mode: 'HTML' }); } catch (_) { }
     }
 
+    async _sendTelegram(text) {
+        if (!this.telegram) return;
+        try { await this.telegram.sendMessage(this.cfg.telegramChatId, text, { parse_mode: 'HTML' }); }
+        catch (e) { }
+    }
+
+    // ── Summaries & Timers ────────────────────────────────────────────────────
+    async _sendHourlySummary() {
+        try {
+            const stats = { ...this.hourlyStats };
+            if (stats.trades === 0) return;
+
+            const winRate = stats.trades > 0 ? ((stats.wins / stats.trades) * 100).toFixed(1) : '0.0';
+            const pnlEmoji = stats.pnl >= 0 ? '🟢' : '🔴';
+            const pnlStr = (stats.pnl >= 0 ? '+' : '') + '$' + stats.pnl.toFixed(2);
+
+            const message = [
+                `⏰ <b>Quantum Confluence v3 Hourly Summary</b>`, ``,
+                `📊 <b>Last Hour</b>`,
+                `├ Trades: ${stats.trades}`,
+                `├ Wins: ${stats.wins} | Losses: ${stats.losses}`,
+                `├ Win Rate: ${winRate}%`,
+                `└ ${pnlEmoji} <b>P&L:</b> ${pnlStr}`, ``,
+                `🗓️ <b>Today</b>`,
+                `├ Total Trades: ${this.totalTrades}`,
+                `└ Today P&L: ${this.dailyProfitLoss >= 0 ? '+' : ''}$${this.dailyProfitLoss.toFixed(2)}`
+            ].join('\n');
+
+            await this._sendTelegram(message);
+            this.hourlyStats = { trades: 0, wins: 0, losses: 0, pnl: 0, lastHour: new Date().getHours() };
+        } catch (err) {
+            console.error(`❌ _sendHourlySummary crashed: ${err.message}`);
+        }
+    }
+
+    async _sendSessionSummary() {
+        try {
+            const durationMs = Date.now() - this.session.startTime;
+            const hours = Math.floor(durationMs / 3600000);
+            const minutes = Math.floor((durationMs % 3600000) / 60000);
+            const winRate = this.session.tradesCount > 0 
+                ? ((this.session.winsCount / this.session.tradesCount) * 100).toFixed(1) + '%'
+                : '0%';
+
+            const message = [
+                `📊 <b>SESSION SUMMARY - Quantum Confluence v3</b>`, ``,
+                `⏱️ Duration: ${hours}h ${minutes}m`,
+                `🔢 Trades: ${this.session.tradesCount}`,
+                `✅ Wins: ${this.session.winsCount} | ❌ Losses: ${this.session.lossesCount}`,
+                `📈 Win Rate: ${winRate}`,
+                `💰 Session P/L: ${this.session.netPL >= 0 ? '+' : ''}$${this.session.netPL.toFixed(2)}`,
+                `💵 Total P&L: ${this.totalProfitLoss >= 0 ? '+' : ''}$${this.totalProfitLoss.toFixed(2)}`
+            ].join('\n');
+
+            await this._sendTelegram(message);
+        } catch (err) {
+            console.error(`❌ _sendSessionSummary crashed: ${err.message}`);
+        }
+    }
+
+    async _sendDayEndSummary(dateKey) {
+        try {
+            const wr = this.totalTrades > 0 ? ((this.totalWins / this.totalTrades) * 100).toFixed(1) + '%' : '0%';
+            const pnlEmoji = this.dailyProfitLoss >= 0 ? '🟢' : '🔴';
+
+            const message = [
+                `🌙 <b>END OF DAY REPORT - ${dateKey}</b>`, ``,
+                `${pnlEmoji} <b>Day Results:</b>`,
+                `├ Trades: ${this.totalTrades}`,
+                `├ Wins: ${this.totalWins} | Losses: ${this.totalLosses}`,
+                `├ Win Rate: ${wr}`,
+                `└ Net P/L: $${this.dailyProfitLoss.toFixed(2)}`, ``,
+                `📊 <b>Overall Stats:</b>`,
+                `└ Total P&L: $${this.totalProfitLoss.toFixed(2)}`
+            ].join('\n');
+
+            await this._sendTelegram(message);
+        } catch (err) {
+            console.error(`❌ _sendDayEndSummary crashed: ${err.message}`);
+        }
+    }
+
+    _startHourlyTimer() {
+        const now = new Date();
+        const nextHour = new Date(now);
+        nextHour.setHours(nextHour.getHours() + 1, 0, 0, 0);
+        const timeUntilNextHour = nextHour.getTime() - now.getTime();
+
+        console.log(`⏰ Hourly Telegram timer started (first summary in ${Math.ceil(timeUntilNextHour / 60000)} min)`);
+        
+        setTimeout(() => {
+            this._sendHourlySummary();
+            setInterval(() => this._sendHourlySummary(), 60 * 60 * 1000);
+        }, timeUntilNextHour);
+    }
+
+    _checkDayChange() {
+        const currentDay = new Date().toISOString().split('T')[0];
+        if (this.currentTradeDay && this.currentTradeDay !== currentDay) {
+            console.log(`🗓️ Day changed from ${this.currentTradeDay} to ${currentDay}`);
+            this._sendDayEndSummary(this.currentTradeDay);
+            
+            // Reset daily stats
+            this.dailyProfitLoss = 0;
+            this.currentTradeDay = currentDay;
+            VaultStorage.preserve(this);
+        }
+    }
+
+    // ── Time-based reconnect ──────────────────────────────────────────────────
+    _startTimeScheduler() {
+        setInterval(() => {
+            const now = new Date();
+            const gmt1 = new Date(now.getTime() + 3600000);
+            const hr = gmt1.getUTCHours();
+            const min = gmt1.getUTCMinutes();
+
+            if (this.endOfDay && hr === 2 && min < 1) {
+                console.log('⏰ 2:00 AM — reconnecting');
+                this.endOfDay = false;
+                this.tradeInProgress = false;
+                this.connect();
+            }
+
+            if (this.isWinTrade && !this.endOfDay && hr >= 23) {
+                console.log('🌙 Post-win 11 PM — stopping for the night');
+                this.endOfDay = true;
+                this._sendTelegram(`🌙 <b>Night stop after win</b>\nP&L: $${this.totalProfitLoss.toFixed(2)}`);
+                this._sendSessionSummary();
+                this._cleanupWs();
+            }
+        }, 20000);
+    }
+
     start() {
         QLog.sys('Quantum Confluence Core Boot Sequence Initialized');
         this.connect();
+        this._startTimeScheduler();
+        this._startHourlyTimer();
         setInterval(() => { if (this.connected) this._send({ ping: 1 }); }, 22000);
     }
 }

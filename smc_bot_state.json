@@ -1,0 +1,92 @@
+{
+  "savedAt": 1778189162717,
+  "trading": {
+    "currentStake": 1,
+    "consecutiveLosses": 0,
+    "consecutiveLosses2": 0,
+    "consecutiveLosses3": 0,
+    "consecutiveLosses4": 0,
+    "totalTrades": 0,
+    "totalWins": 0,
+    "totalLosses": 0,
+    "totalProfitLoss": 0,
+    "dailyProfitLoss": 0
+  },
+  "assetMetrics": {
+    "R_10": {
+      "trades": 0,
+      "wins": 0,
+      "losses": 0,
+      "profitLoss": 0
+    },
+    "R_25": {
+      "trades": 0,
+      "wins": 0,
+      "losses": 0,
+      "profitLoss": 0
+    },
+    "R_50": {
+      "trades": 0,
+      "wins": 0,
+      "losses": 0,
+      "profitLoss": 0
+    },
+    "R_75": {
+      "trades": 0,
+      "wins": 0,
+      "losses": 0,
+      "profitLoss": 0
+    },
+    "R_100": {
+      "trades": 0,
+      "wins": 0,
+      "losses": 0,
+      "profitLoss": 0
+    }
+  },
+  "hourlyTrades": [],
+  "hourlyStats": {
+    "trades": 0,
+    "wins": 0,
+    "losses": 0,
+    "pnl": 0,
+    "lastHour": 22
+  },
+  "session": {
+    "startTime": 1778189077020,
+    "startCapital": 7807.81,
+    "tradesCount": 0,
+    "winsCount": 0,
+    "lossesCount": 0,
+    "netPL": 0,
+    "isActive": true
+  },
+  "currentTradeDay": "2026-05-07",
+  "smcStats": {
+    "liquiditySweeps": {
+      "detected": 0,
+      "traded": 0,
+      "won": 0
+    },
+    "bos": {
+      "detected": 0,
+      "traded": 0,
+      "won": 0
+    },
+    "fvg": {
+      "detected": 0,
+      "traded": 0,
+      "won": 0
+    },
+    "orderBlocks": {
+      "detected": 0,
+      "traded": 0,
+      "won": 0
+    },
+    "trendAligned": {
+      "detected": 0,
+      "traded": 0,
+      "won": 0
+    }
+  }
+}
