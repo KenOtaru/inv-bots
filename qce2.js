@@ -46,7 +46,7 @@ const BOT_CONFIG = {
     crossAssetCorrelation: {
         anchor: 'R_10',
         maxLagWindow: 12,
-        minCorrelationThreshold: 0.58, //0.68
+        minCorrelationThreshold: 0.5, //0.68
     },
 
     // Layer 3: Temporal Entropy Periodicity Tracker
@@ -79,7 +79,7 @@ const BOT_CONFIG = {
 
     // Ensemble System Config
     ensemble: {
-        strictQuorumCount: 5,       // At least 5 systems must match target projection
+        strictQuorumCount: 6,       // At least 5/6 systems must match target projection
         masterConfidenceLimit: 0.68, //0.88 Minimum probability bound to fire execution
         bayesianMemoryLength: 50,
     },

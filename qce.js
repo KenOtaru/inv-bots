@@ -90,11 +90,11 @@ const logger = new AnalysisLogger();
 const BOT_CONFIG = {
     token: 'hsj0tA0XJoIzJG5',
 
-    assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],// ['R_10', 'R_25', 'R_50', 'R_75', 'R_100']
+    assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
 
-    initialStake: 1,
+    initialStake: 2.75,
     multiplier: 11.3,
-    maxConsecutiveLosses: 3,
+    maxConsecutiveLosses: 2,
     stopLoss: 100,
     takeProfit: 10000,
 
@@ -102,34 +102,40 @@ const BOT_CONFIG = {
     // QCE-FULL LAYERS CONFIG
     // ═══════════════════════════════════════════════════════════════════════
 
+    //LAYER 1 - PRNG ENTROPY
     prngEstimator: {
         window: 100,
         entropyThreshold: 2.65, //2.65 - increase to filter more
     },
 
+    //LAYER 2 - CROSS ASSET CORRELATION
     crossAssetCorrelation: {
         leadAsset: 'R_10',
         lagWindow: 10,
-        minCorrelation: 0.68, //0.68
+        minCorrelation: 0.3, //0.68
     },
 
+    //LAYER 3 - TEMPORAL ENTROPY
     temporalEntropy: {
         cycleWindow: 30,
         minLowEntropyPeriod: 8,
         entropyThreshold: 2.7, //2.7
     },
 
+    //LAYER 4 - AUTOCORRELATION
     multiLagAutocorr: {
         lags: [7, 13, 19],
-        minCombinedCorrelation: 0.30, //0.30
+        minCombinedCorrelation: 0.03, //0.30
     },
 
+    //LAYER 5 - LIQUIDITY
     volumeWeightedLiquidity: {
         lookbackWindow: 50,
         minTickVelocity: 1.5, //1.5
         minSweepFrequency: 3,
     },
 
+    //LAYER 6 - SMC WITH TIGHT CONSTRAINTS
     enhancedSMC: {
         liquiditySweepMinRepeats: 3,
         breakOfStructureMinStability: 4,
@@ -153,7 +159,7 @@ const BOT_CONFIG = {
 
     // ENSEMBLE CONFIG
     ensemble: {
-        minLayersAgreement: 5,          // Need 6/7 layers (stricter)
+        minLayersAgreement: 7,          // Need 6/7 layers (stricter)
         minConfidenceThreshold: 0.75,   // 85% minimum confidence
         lstmWeight: 1.2,                // LSTM has higher weight
     },
