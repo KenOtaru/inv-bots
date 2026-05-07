@@ -93,7 +93,7 @@ const BOT_CONFIG = {
     assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],// ['R_10', 'R_25', 'R_50', 'R_75', 'R_100']
 
     initialStake: 1,
-    multiplier: 1.8,                    // Very conservative for high win rate
+    multiplier: 11.3,
     maxConsecutiveLosses: 3,
     stopLoss: 100,
     takeProfit: 10000,
@@ -104,7 +104,7 @@ const BOT_CONFIG = {
 
     prngEstimator: {
         window: 100,
-        entropyThreshold: 2.65,
+        entropyThreshold: 2.85, //2.65 - increase to filter more
     },
 
     crossAssetCorrelation: {
@@ -116,17 +116,17 @@ const BOT_CONFIG = {
     temporalEntropy: {
         cycleWindow: 30,
         minLowEntropyPeriod: 8,
-        entropyThreshold: 2.7,
+        entropyThreshold: 2.85, //2.7
     },
 
     multiLagAutocorr: {
         lags: [7, 13, 19],
-        minCombinedCorrelation: 0.30,
+        minCombinedCorrelation: 0.20, //0.30
     },
 
     volumeWeightedLiquidity: {
         lookbackWindow: 50,
-        minTickVelocity: 1.5,
+        minTickVelocity: 0.5, //1.5
         minSweepFrequency: 3,
     },
 
@@ -135,7 +135,7 @@ const BOT_CONFIG = {
         breakOfStructureMinStability: 4,
         fairValueGapMinSize: 2,
         orderBlockMinFrequency: 10,
-        minConfluenceScore: 3.0,
+        minConfluenceScore: 2.0, // 3.0
     },
 
     // LAYER 7: LSTM NEURAL NETWORK
@@ -146,15 +146,15 @@ const BOT_CONFIG = {
         sequenceLength: 15,             // Lookback sequence
         learningRate: 0.01,
         batchSize: 5,                   // Train every 5 ticks
-        minPredictionConfidence: 0.75,  // LSTM must be 75% confident
+        minPredictionConfidence: 0.65,  // LSTM must be 75% confident
         enableOnlineLearning: true,
         gradientClip: 5.0,              // Prevent exploding gradients
     },
 
     // ENSEMBLE CONFIG
     ensemble: {
-        minLayersAgreement: 6,          // Need 6/7 layers (stricter)
-        minConfidenceThreshold: 0.85,   // 85% minimum confidence
+        minLayersAgreement: 4,          // Need 6/7 layers (stricter)
+        minConfidenceThreshold: 0.65,   // 85% minimum confidence
         lstmWeight: 1.2,                // LSTM has higher weight
     },
 

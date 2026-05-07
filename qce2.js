@@ -29,9 +29,9 @@ const path = require('path');
 // ─────────────────────────────────────────────────────────────────────────────
 const BOT_CONFIG = {
     token: 'hsj0tA0XJoIzJG5',
-    assets: ['R_10', 'R_25'],// ['R_10', 'R_25', 'R_50', 'R_75', 'R_100']
+    assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
     initialStake: 1.00,
-    multiplier: 2.0,
+    multiplier: 11.3,
     maxConsecutiveLosses: 3,
     stopLoss: 150.00,
     takeProfit: 5000.00,
@@ -39,34 +39,34 @@ const BOT_CONFIG = {
     // Layer 1: PRNG State Complexity Estimator
     prngEstimator: {
         window: 120,
-        entropyThreshold: 2.45, // Critical limit for structural predictability
+        entropyThreshold: 2.85, //2.45 Critical limit for structural predictability
     },
 
     // Layer 2: Multi-Asset Multiplex Lag Matrix
     crossAssetCorrelation: {
         anchor: 'R_10',
         maxLagWindow: 12,
-        minCorrelationThreshold: 0.68,
+        minCorrelationThreshold: 0.58, //0.68
     },
 
     // Layer 3: Temporal Entropy Periodicity Tracker
     temporalEntropy: {
         sampleIntervalMs: 60000,
         macroLookbackWindow: 45,  // 45-minute moving frame
-        minLowEntropyDensity: 0.75, // Must be 75% low entropy inside the current cycle
+        minLowEntropyDensity: 0.65, // Must be 75% low entropy inside the current cycle
     },
 
     // Layer 4: Multi-Lag Autocorrelation Engine
     multiLagAutocorr: {
         lags: [7, 13, 19],
-        criticalValueCutoff: 0.35, // Strict covariance bounds
+        criticalValueCutoff: 0.45, //0.35 Strict covariance bounds
     },
 
     // Layer 5: Kinetic Velocity-Weighted Sweeper
     kineticLiquidity: {
         window: 60,
-        minVelocityTPS: 1.85, // Minimum Ticks Per Second arrival density
-        minRepetitionCount: 4,  // Strong clustering constraint
+        minVelocityTPS: 0.5, //1.85 Minimum Ticks Per Second arrival density
+        minRepetitionCount: 2,  //4 Strong clustering constraint
     },
 
     // Layer 6: Native Recurrent Neural Pattern Emergence Classifier
@@ -74,13 +74,13 @@ const BOT_CONFIG = {
         hiddenSize: 16,
         learningRate: 0.015,
         sequenceLength: 15,
-        targetConfidence: 0.88,
+        targetConfidence: 0.68,//0.88
     },
 
     // Ensemble System Config
     ensemble: {
-        strictQuorumCount: 5,       // At least 5 systems must match target projection
-        masterConfidenceLimit: 0.88, // Minimum probability bound to fire execution
+        strictQuorumCount: 3,       // At least 5 systems must match target projection
+        masterConfidenceLimit: 0.68, //0.88 Minimum probability bound to fire execution
         bayesianMemoryLength: 50,
     },
 

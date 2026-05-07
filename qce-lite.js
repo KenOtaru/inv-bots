@@ -108,7 +108,7 @@ const BOT_CONFIG = {
     assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
 
     initialStake: 1,
-    multiplier: 2.0,                    // Conservative
+    multiplier: 11.3,
     maxConsecutiveLosses: 3,
     stopLoss: 100,
     takeProfit: 10000,
@@ -120,7 +120,7 @@ const BOT_CONFIG = {
     // LAYER 1: PRNG Entropy Estimation
     prngEstimator: {
         window: 100,                    // Ticks to analyze
-        entropyThreshold: 2.65,         // Entropy < 2.65 = predictable state
+        entropyThreshold: 2.85,         // Entropy < 2.65 = predictable state
         compressionMethod: 'lz77',      // Lempel-Ziv 77 compression ratio
     },
 
@@ -144,15 +144,15 @@ const BOT_CONFIG = {
     multiLagAutocorr: {
         lags: [7, 13, 19],              // Check these lags
         minCorrelation: 0.12,           // Minimum lag correlation
-        minCombinedCorrelation: 0.30,   // Combined lags must exceed this
+        minCombinedCorrelation: 0.20,   //0.30 Combined lags must exceed this
         enableDebugLogging: true,
     },
 
     // LAYER 5: Volume-Weighted Liquidity
     volumeWeightedLiquidity: {
         lookbackWindow: 50,
-        minTickVelocity: 1.5,           // Ticks per second
-        minSweepFrequency: 3,           // Digit must repeat 3+ times
+        minTickVelocity: 0.5,           // Ticks per second
+        minSweepFrequency: 2,           // Digit must repeat 3+ times
         velocityWeight: 0.6,            // How much velocity affects score
         enableDebugLogging: true,
     },
@@ -163,13 +163,13 @@ const BOT_CONFIG = {
         breakOfStructureMinStability: 4,
         fairValueGapMinSize: 2,
         orderBlockMinFrequency: 10,
-        minConfluenceScore: 3.0,        // Out of 6
+        minConfluenceScore: 2.0,        //3.0 Out of 6
     },
 
     // ENSEMBLE CONFIG
     ensemble: {
-        minLayersAgreement: 5,          // Need 5/6 layers to agree
-        minConfidenceThreshold: 0.82,   // 82% minimum confidence
+        minLayersAgreement: 3,          // Need 5/6 layers to agree
+        minConfidenceThreshold: 0.62,   // 82% minimum confidence
         enableDynamicWeighting: true,
     },
 
