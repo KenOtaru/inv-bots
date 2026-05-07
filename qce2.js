@@ -66,7 +66,7 @@ const BOT_CONFIG = {
     kineticLiquidity: {
         window: 60,
         minVelocityTPS: 1.85, //1.85 Minimum Ticks Per Second arrival density
-        minRepetitionCount: 2,  //4 Strong clustering constraint
+        minRepetitionCount: 3,  //4 Strong clustering constraint
     },
 
     // Layer 6: Native Recurrent Neural Pattern Emergence Classifier
