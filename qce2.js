@@ -29,7 +29,7 @@ const path = require('path');
 // ─────────────────────────────────────────────────────────────────────────────
 const BOT_CONFIG = {
     token: 'hsj0tA0XJoIzJG5',
-    assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
+    assets: ['R_10', 'R_25'],// ['R_10', 'R_25', 'R_50', 'R_75', 'R_100']
     initialStake: 1.00,
     multiplier: 2.0,
     maxConsecutiveLosses: 3,
