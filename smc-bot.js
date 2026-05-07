@@ -83,7 +83,7 @@ const BOT_CONFIG = {
 
     // CONFLUENCE SCORING
     confluence: {
-        minScore: 4.0,                  // Minimum score to trade (out of 5)
+        minScore: 4.5,                  // Minimum score to trade (out of 5)
         weights: {
             liquiditySweep: 1.2,
             breakOfStructure: 1.0,
@@ -429,10 +429,9 @@ class SmartMoneyAnalyzer {
         const currentDigit = digitHistory[digitHistory.length - 1];
         let nearOrderBlock = false;
         let nearestBlock = null;
-        let distance = null;
 
         for (const block of orderBlocks) {
-            distance = Math.abs(block.digit - currentDigit);
+            const distance = Math.abs(block.digit - currentDigit);
             if (distance <= this.cfg.orderBlock.proximityTicks) {
                 nearOrderBlock = true;
                 nearestBlock = block;
@@ -446,7 +445,6 @@ class SmartMoneyAnalyzer {
             nearestBlock,
             currentDigit,
             reason: !nearOrderBlock ? 'no_nearby_order_block' : 'order_block_proximity',
-            distance,
             nearOrderBlock
         };
     }
@@ -821,7 +819,7 @@ class SmartMoneyBot {
             Sweep: ${analysis.results.liquiditySweep.detected ? 'YES' : 'NO'} | ${analysis.results.liquiditySweep.reason} (${analysis.results.liquiditySweep.sweptDigit})
             BoS: ${analysis.results.breakOfStructure.detected ? 'YES' : 'NO'} | ${analysis.results.breakOfStructure.reason} (${analysis.results.breakOfStructure.zoneStabilityCount} | ${analysis.results.breakOfStructure.transition}) ${analysis.results.breakOfStructure.currentZone} | ${analysis.results.breakOfStructure.previousZone}
             FVG: ${analysis.results.fairValueGap.detected ? 'YES' : 'NO'} | ${analysis.results.fairValueGap.reason} (${analysis.results.fairValueGap.gapCount})
-            OB: ${analysis.results.orderBlock.detected ? 'YES' : 'NO'} | ${analysis.results.orderBlock.reason} (${analysis.results.orderBlock.distance} | ${analysis.results.orderBlock.nearOrderBlock})
+            OB: ${analysis.results.orderBlock.detected ? 'YES' : 'NO'} | ${analysis.results.orderBlock.reason} (${analysis.results.orderBlock.orderBlocks} | ${analysis.results.orderBlock.nearestBlock}) ${analysis.results.orderBlock.currentDigit}
             TF: ${analysis.results.trendFilter.detected ? 'YES' : 'NO'} | ${analysis.results.trendFilter.reason} (${analysis.results.trendFilter.zoneStrength} | ${analysis.results.trendFilter.priceStrength})
         `);
 
