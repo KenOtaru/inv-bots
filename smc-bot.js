@@ -83,7 +83,7 @@ const BOT_CONFIG = {
 
     // CONFLUENCE SCORING
     confluence: {
-        minScore: 3.5,                  // Minimum score to trade (out of 5)
+        minScore: 4.0,                  // Minimum score to trade (out of 5)
         weights: {
             liquiditySweep: 1.2,
             breakOfStructure: 1.0,
