@@ -153,7 +153,7 @@ const BOT_CONFIG = {
 
     // ENSEMBLE CONFIG
     ensemble: {
-        minLayersAgreement: 6,          // Need 6/7 layers (stricter)
+        minLayersAgreement: 5,          // Need 6/7 layers (stricter)
         minConfidenceThreshold: 0.65,   // 85% minimum confidence
         lstmWeight: 1.2,                // LSTM has higher weight
     },
@@ -963,37 +963,37 @@ class QuantumConfluenceEngine {
         const results = { asset: currentAsset, timestamp: Date.now(), layers: {} };
 
         // Layer 1
-        // logger.analysis('LAYER 1: PRNG Entropy');
+        logger.analysis('LAYER 1: PRNG Entropy');
         const layer1 = this.prngEstimator.estimateEntropy(digitHistory);
         results.layers.prngEntropy = layer1;
-        // logger.info('Layer 1', { entropy: layer1.entropy?.toFixed(3), pass: layer1.isPredictable });
+        logger.info('Layer 1', { entropy: layer1.entropy?.toFixed(3), pass: layer1.isPredictable });
 
         // Layer 2
-        // logger.analysis('LAYER 2: Cross-Asset Correlation');
+        logger.analysis('LAYER 2: Cross-Asset Correlation');
         for (const [asset, history] of Object.entries(digitHistories)) {
             this.crossAssetCorr.updateAssetHistory(asset, history);
         }
         const layer2 = this.crossAssetCorr.analyzeCorrelation(currentAsset);
         results.layers.crossAsset = layer2;
-        // logger.info('Layer 2', { correlation: layer2.maxCorrelation?.toFixed(3), pass: layer2.correlated });
+        logger.info('Layer 2', { correlation: layer2.maxCorrelation?.toFixed(3), pass: layer2.correlated });
 
         // Layer 3
-        // logger.analysis('LAYER 3: Temporal Cycles');
+        logger.analysis('LAYER 3: Temporal Cycles');
         const layer3 = this.temporalCycles.isInLowEntropyCycle(layer1.entropy || 3.0);
         results.layers.temporalCycles = layer3;
-        // logger.info('Layer 3', { duration: layer3.duration?.toFixed(2), pass: layer3.inLowCycle });
+        logger.info('Layer 3', { duration: layer3.duration?.toFixed(2), pass: layer3.inLowCycle });
 
         // Layer 4
-        // logger.analysis('LAYER 4: Multi-Lag Autocorr');
+        logger.analysis('LAYER 4: Multi-Lag Autocorr');
         const layer4 = this.multiLagAutocorr.analyzeAutocorrelation(digitHistory);
         results.layers.multiLagAutocorr = layer4;
-        // logger.info('Layer 4', { combinedCorr: layer4.combinedCorrelation?.toFixed(3), pass: layer4.isSignificant });
+        logger.info('Layer 4', { combinedCorr: layer4.combinedCorrelation?.toFixed(3), pass: layer4.isSignificant });
 
         // Layer 5
-        // logger.analysis('LAYER 5: Volume-Weighted Liquidity');
+        logger.analysis('LAYER 5: Volume-Weighted Liquidity');
         const layer5 = this.volumeWeightedLiq.analyzeLiquidity(digitHistory);
         results.layers.volumeWeighted = layer5;
-        // logger.info('Layer 5', { velocity: layer5.tickVelocity?.toFixed(2), pass: layer5.isHighConviction });
+        logger.info('Layer 5', { velocity: layer5.tickVelocity?.toFixed(2), pass: layer5.isHighConviction });
 
         // Layer 6
         logger.analysis('LAYER 6: Enhanced SMC');

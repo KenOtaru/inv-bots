@@ -168,7 +168,7 @@ const BOT_CONFIG = {
 
     // ENSEMBLE CONFIG
     ensemble: {
-        minLayersAgreement: 5,          // Need 5/6 layers to agree
+        minLayersAgreement: 4,          // Need 5/6 layers to agree
         minConfidenceThreshold: 0.62,   // 82% minimum confidence
         enableDynamicWeighting: true,
     },
@@ -811,19 +811,19 @@ class QuantumConfluenceEngine {
         // ══════════════════════════════════════════════════════════════════════════════
         // LAYER 1: PRNG ENTROPY ESTIMATION
         // ══════════════════════════════════════════════════════════════════════════════
-        // logger.analysis('LAYER 1: PRNG Entropy Estimation');
+        logger.analysis('LAYER 1: PRNG Entropy Estimation');
         const layer1 = this.prngEstimator.estimateEntropy(digitHistory);
         results.layers.prngEntropy = layer1;
-        // logger.info('Layer 1 Result', {
-        //     entropy: layer1.entropy?.toFixed(3),
-        //     isPredictable: layer1.isPredictable,
-        //     verdict: layer1.isPredictable ? '✅ PASS' : '❌ FAIL'
-        // });
+        logger.info('Layer 1 Result', {
+            entropy: layer1.entropy?.toFixed(3),
+            isPredictable: layer1.isPredictable,
+            verdict: layer1.isPredictable ? '✅ PASS' : '❌ FAIL'
+        });
 
         // ══════════════════════════════════════════════════════════════════════════════
         // LAYER 2: CROSS-ASSET CORRELATION
         // ══════════════════════════════════════════════════════════════════════════════
-        // logger.analysis('LAYER 2: Cross-Asset Correlation');
+        logger.analysis('LAYER 2: Cross-Asset Correlation');
 
         // Update all asset histories
         for (const [asset, history] of Object.entries(digitHistories)) {
@@ -832,56 +832,56 @@ class QuantumConfluenceEngine {
 
         const layer2 = this.crossAssetCorr.analyzeCorrelation(currentAsset);
         results.layers.crossAsset = layer2;
-        // logger.info('Layer 2 Result', {
-        //     correlated: layer2.correlated,
-        //     maxCorrelation: layer2.maxCorrelation?.toFixed(3),
-        //     bestLag: layer2.bestLag,
-        //     verdict: layer2.correlated ? '✅ PASS' : '❌ FAIL'
-        // });
+        logger.info('Layer 2 Result', {
+            correlated: layer2.correlated,
+            maxCorrelation: layer2.maxCorrelation?.toFixed(3),
+            bestLag: layer2.bestLag,
+            verdict: layer2.correlated ? '✅ PASS' : '❌ FAIL'
+        });
 
         // ══════════════════════════════════════════════════════════════════════════════
         // LAYER 3: TEMPORAL ENTROPY CYCLES
         // ══════════════════════════════════════════════════════════════════════════════
-        // logger.analysis('LAYER 3: Temporal Entropy Cycles');
+        logger.analysis('LAYER 3: Temporal Entropy Cycles');
         const layer3 = this.temporalCycles.isInLowEntropyCycle(layer1.entropy || 3.0);
         results.layers.temporalCycles = layer3;
-        // logger.info('Layer 3 Result', {
-        //     inLowCycle: layer3.inLowCycle,
-        //     duration: layer3.duration?.toFixed(2),
-        //     verdict: layer3.inLowCycle ? '✅ PASS' : '❌ FAIL'
-        // });
+        logger.info('Layer 3 Result', {
+            inLowCycle: layer3.inLowCycle,
+            duration: layer3.duration?.toFixed(2),
+            verdict: layer3.inLowCycle ? '✅ PASS' : '❌ FAIL'
+        });
 
         // ══════════════════════════════════════════════════════════════════════════════
         // LAYER 4: MULTI-LAG AUTOCORRELATION
         // ══════════════════════════════════════════════════════════════════════════════
-        // logger.analysis('LAYER 4: Multi-Lag Autocorrelation');
+        logger.analysis('LAYER 4: Multi-Lag Autocorrelation');
         const layer4 = this.multiLagAutocorr.analyzeAutocorrelation(digitHistory);
         results.layers.multiLagAutocorr = layer4;
-        // logger.info('Layer 4 Result', {
-        //     isSignificant: layer4.isSignificant,
-        //     combinedCorrelation: layer4.combinedCorrelation?.toFixed(3),
-        //     ...layer4.correlations,
-        //     verdict: layer4.isSignificant ? '✅ PASS' : '❌ FAIL'
-        // });
+        logger.info('Layer 4 Result', {
+            isSignificant: layer4.isSignificant,
+            combinedCorrelation: layer4.combinedCorrelation?.toFixed(3),
+            ...layer4.correlations,
+            verdict: layer4.isSignificant ? '✅ PASS' : '❌ FAIL'
+        });
 
         // ══════════════════════════════════════════════════════════════════════════════
         // LAYER 5: VOLUME-WEIGHTED LIQUIDITY
         // ══════════════════════════════════════════════════════════════════════════════
-        // logger.analysis('LAYER 5: Volume-Weighted Liquidity');
+        logger.analysis('LAYER 5: Volume-Weighted Liquidity');
         const layer5 = this.volumeWeightedLiq.analyzeLiquidity(digitHistory);
         results.layers.volumeWeighted = layer5;
-        // logger.info('Layer 5 Result', {
-        //     isHighConviction: layer5.isHighConviction,
-        //     tickVelocity: layer5.tickVelocity?.toFixed(2),
-        //     sweepCount: layer5.sweeps?.length || 0,
-        //     topSweep: layer5.sweeps?.[0] || null,
-        //     verdict: layer5.isHighConviction ? '✅ PASS' : '❌ FAIL'
-        // });
+        logger.info('Layer 5 Result', {
+            isHighConviction: layer5.isHighConviction,
+            tickVelocity: layer5.tickVelocity?.toFixed(2),
+            sweepCount: layer5.sweeps?.length || 0,
+            topSweep: layer5.sweeps?.[0] || null,
+            verdict: layer5.isHighConviction ? '✅ PASS' : '❌ FAIL'
+        });
 
         // ══════════════════════════════════════════════════════════════════════════════
         // LAYER 6: ENHANCED SMC
         // ══════════════════════════════════════════════════════════════════════════════
-        // logger.analysis('LAYER 6: Enhanced SMC Analysis');
+        logger.analysis('LAYER 6: Enhanced SMC Analysis');
         const layer6 = this.enhancedSMC.analyze(digitHistory);
         results.layers.enhancedSMC = {
             liquiditySweep: layer6.sweeps.detected,
@@ -891,19 +891,19 @@ class QuantumConfluenceEngine {
             confluenceScore: layer6.confluenceScore,
             isSignificant: layer6.isSignificant
         };
-        // logger.info('Layer 6 Result', {
-        //     liquiditySweep: layer6.sweeps.detected,
-        //     bos: layer6.bos.detected,
-        //     fvg: layer6.fvg.detected,
-        //     orderBlock: layer6.orderBlocks.detected,
-        //     confluenceScore: layer6.confluenceScore.toFixed(2),
-        //     verdict: layer6.isSignificant ? '✅ PASS' : '❌ FAIL'
-        // });
+        logger.info('Layer 6 Result', {
+            liquiditySweep: layer6.sweeps.detected,
+            bos: layer6.bos.detected,
+            fvg: layer6.fvg.detected,
+            orderBlock: layer6.orderBlocks.detected,
+            confluenceScore: layer6.confluenceScore.toFixed(2),
+            verdict: layer6.isSignificant ? '✅ PASS' : '❌ FAIL'
+        });
 
         // ══════════════════════════════════════════════════════════════════════════════
         // ENSEMBLE VOTING & CONFIDENCE
         // ══════════════════════════════════════════════════════════════════════════════
-        // logger.analysis('ENSEMBLE VOTING');
+        logger.analysis('ENSEMBLE VOTING');
 
         const layerPasses = [
             layer1.isPredictable,
