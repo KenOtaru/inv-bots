@@ -86,7 +86,7 @@ const BOT_CONFIG = {
 
     minTimeBetweenTrades: 25000,
     requiredHistoryLength: 200,
-    telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
+    telegramToken: '7919033379:AAHluKFMECmhMrBhNr_XVpWvCKEonQPx9_0',
     telegramChatId: '752497117',
     maxReconnectAttempts: 30,
     reconnectDelay: 4000
@@ -1001,7 +1001,7 @@ class QuantumConfluenceBot {
             const durationMs = Date.now() - this.session.startTime;
             const hours = Math.floor(durationMs / 3600000);
             const minutes = Math.floor((durationMs % 3600000) / 60000);
-            const winRate = this.session.tradesCount > 0 
+            const winRate = this.session.tradesCount > 0
                 ? ((this.session.winsCount / this.session.tradesCount) * 100).toFixed(1) + '%'
                 : '0%';
 
@@ -1050,7 +1050,7 @@ class QuantumConfluenceBot {
         const timeUntilNextHour = nextHour.getTime() - now.getTime();
 
         console.log(`⏰ Hourly Telegram timer started (first summary in ${Math.ceil(timeUntilNextHour / 60000)} min)`);
-        
+
         setTimeout(() => {
             this._sendHourlySummary();
             setInterval(() => this._sendHourlySummary(), 60 * 60 * 1000);
@@ -1062,7 +1062,7 @@ class QuantumConfluenceBot {
         if (this.currentTradeDay && this.currentTradeDay !== currentDay) {
             console.log(`🗓️ Day changed from ${this.currentTradeDay} to ${currentDay}`);
             this._sendDayEndSummary(this.currentTradeDay);
-            
+
             // Reset daily stats
             this.dailyProfitLoss = 0;
             this.currentTradeDay = currentDay;
