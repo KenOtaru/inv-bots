@@ -53,7 +53,7 @@ const BOT_CONFIG = {
     temporalEntropy: {
         sampleIntervalMs: 60000,
         macroLookbackWindow: 45,  // 45-minute moving frame
-        minLowEntropyDensity: 0.65, // Must be 75% low entropy inside the current cycle
+        minLowEntropyDensity: 0.75, // Must be 75% low entropy inside the current cycle
     },
 
     // Layer 4: Multi-Lag Autocorrelation Engine
@@ -65,7 +65,7 @@ const BOT_CONFIG = {
     // Layer 5: Kinetic Velocity-Weighted Sweeper
     kineticLiquidity: {
         window: 60,
-        minVelocityTPS: 0.5, //1.85 Minimum Ticks Per Second arrival density
+        minVelocityTPS: 1.85, //1.85 Minimum Ticks Per Second arrival density
         minRepetitionCount: 2,  //4 Strong clustering constraint
     },
 
@@ -74,7 +74,7 @@ const BOT_CONFIG = {
         hiddenSize: 16,
         learningRate: 0.015,
         sequenceLength: 15,
-        targetConfidence: 0.68,//0.88
+        targetConfidence: 0.88,//0.88
     },
 
     // Ensemble System Config

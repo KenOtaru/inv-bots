@@ -126,7 +126,7 @@ const BOT_CONFIG = {
 
     volumeWeightedLiquidity: {
         lookbackWindow: 50,
-        minTickVelocity: 0.5, //1.5
+        minTickVelocity: 1.5, //1.5
         minSweepFrequency: 3,
     },
 
@@ -154,7 +154,7 @@ const BOT_CONFIG = {
     // ENSEMBLE CONFIG
     ensemble: {
         minLayersAgreement: 5,          // Need 6/7 layers (stricter)
-        minConfidenceThreshold: 0.85,   // 85% minimum confidence
+        minConfidenceThreshold: 0.75,   // 85% minimum confidence
         lstmWeight: 1.2,                // LSTM has higher weight
     },
 
