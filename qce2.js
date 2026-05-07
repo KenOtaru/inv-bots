@@ -39,7 +39,7 @@ const BOT_CONFIG = {
     // Layer 1: PRNG State Complexity Estimator
     prngEstimator: {
         window: 120,
-        entropyThreshold: 2.85, //2.45 Critical limit for structural predictability
+        entropyThreshold: 2.45, //2.45 Critical limit for structural predictability
     },
 
     // Layer 2: Multi-Asset Multiplex Lag Matrix
@@ -79,7 +79,7 @@ const BOT_CONFIG = {
 
     // Ensemble System Config
     ensemble: {
-        strictQuorumCount: 4,       // At least 5 systems must match target projection
+        strictQuorumCount: 5,       // At least 5 systems must match target projection
         masterConfidenceLimit: 0.68, //0.88 Minimum probability bound to fire execution
         bayesianMemoryLength: 50,
     },

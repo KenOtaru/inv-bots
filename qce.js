@@ -135,7 +135,7 @@ const BOT_CONFIG = {
         breakOfStructureMinStability: 4,
         fairValueGapMinSize: 2,
         orderBlockMinFrequency: 10,
-        minConfluenceScore: 2.0, // 3.0
+        minConfluenceScore: 3.0, // 3.0
     },
 
     // LAYER 7: LSTM NEURAL NETWORK
