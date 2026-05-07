@@ -1297,7 +1297,7 @@ class QCEFullBot {
         if (!canTrade.can) return;
 
         const analysis = this.qceEngine.analyze(this.digitHistories, asset);
-        if (!analysis.shouldTrade) return;
+        if (!analysis.shouldTrade || analysis.asset === 'R_10') return;
 
         this._requestProposal(asset, analysis);
     }
