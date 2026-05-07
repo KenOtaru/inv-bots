@@ -46,7 +46,7 @@ const BOT_CONFIG = {
     crossAssetCorrelation: {
         anchor: 'R_10',
         maxLagWindow: 12,
-        minCorrelationThreshold: 0.5, //0.68
+        minCorrelationThreshold: 0.58, //0.68
     },
 
     // Layer 3: Temporal Entropy Periodicity Tracker
@@ -59,7 +59,7 @@ const BOT_CONFIG = {
     // Layer 4: Multi-Lag Autocorrelation Engine
     multiLagAutocorr: {
         lags: [7, 13, 19],
-        criticalValueCutoff: 0.35, //0.35 Strict covariance bounds
+        criticalValueCutoff: 0.25, //0.35 Strict covariance bounds
     },
 
     // Layer 5: Kinetic Velocity-Weighted Sweeper
@@ -80,7 +80,7 @@ const BOT_CONFIG = {
     // Ensemble System Config
     ensemble: {
         strictQuorumCount: 6,       // At least 5/6 systems must match target projection
-        masterConfidenceLimit: 0.68, //0.88 Minimum probability bound to fire execution
+        masterConfidenceLimit: 0.80, //0.88 Minimum probability bound to fire execution
         bayesianMemoryLength: 50,
     },
 
