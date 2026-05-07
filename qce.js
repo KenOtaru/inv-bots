@@ -104,24 +104,24 @@ const BOT_CONFIG = {
 
     prngEstimator: {
         window: 100,
-        entropyThreshold: 2.85, //2.65 - increase to filter more
+        entropyThreshold: 2.65, //2.65 - increase to filter more
     },
 
     crossAssetCorrelation: {
         leadAsset: 'R_10',
         lagWindow: 10,
-        minCorrelation: 0.55,
+        minCorrelation: 0.68, //0.68
     },
 
     temporalEntropy: {
         cycleWindow: 30,
         minLowEntropyPeriod: 8,
-        entropyThreshold: 2.85, //2.7
+        entropyThreshold: 2.7, //2.7
     },
 
     multiLagAutocorr: {
         lags: [7, 13, 19],
-        minCombinedCorrelation: 0.20, //0.30
+        minCombinedCorrelation: 0.30, //0.30
     },
 
     volumeWeightedLiquidity: {
@@ -146,7 +146,7 @@ const BOT_CONFIG = {
         sequenceLength: 15,             // Lookback sequence
         learningRate: 0.01,
         batchSize: 5,                   // Train every 5 ticks
-        minPredictionConfidence: 0.65,  // LSTM must be 75% confident
+        minPredictionConfidence: 0.75,  // LSTM must be 75% confident
         enableOnlineLearning: true,
         gradientClip: 5.0,              // Prevent exploding gradients
     },
@@ -154,7 +154,7 @@ const BOT_CONFIG = {
     // ENSEMBLE CONFIG
     ensemble: {
         minLayersAgreement: 5,          // Need 6/7 layers (stricter)
-        minConfidenceThreshold: 0.65,   // 85% minimum confidence
+        minConfidenceThreshold: 0.85,   // 85% minimum confidence
         lstmWeight: 1.2,                // LSTM has higher weight
     },
 

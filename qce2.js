@@ -42,7 +42,7 @@ const BOT_CONFIG = {
         entropyThreshold: 2.45, //2.45 Critical limit for structural predictability
     },
 
-    // Layer 2: Multi-Asset Multiplex Lag Matrix
+    // Layer 2: Multi-Asset Multiplex Lag Matrix 
     crossAssetCorrelation: {
         anchor: 'R_10',
         maxLagWindow: 12,
@@ -59,7 +59,7 @@ const BOT_CONFIG = {
     // Layer 4: Multi-Lag Autocorrelation Engine
     multiLagAutocorr: {
         lags: [7, 13, 19],
-        criticalValueCutoff: 0.45, //0.35 Strict covariance bounds
+        criticalValueCutoff: 0.35, //0.35 Strict covariance bounds
     },
 
     // Layer 5: Kinetic Velocity-Weighted Sweeper
