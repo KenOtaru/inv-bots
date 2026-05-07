@@ -55,7 +55,7 @@ const BOT_CONFIG = {
             MID: [4, 5, 6],
             HIGH: [7, 8, 9]
         },
-        minZoneStability: 5,            // Must stay in zone for 5+ ticks
+        minZoneStability: 4,            // Must stay in zone for 5+ ticks
         confirmationTicks: 2,           // BOS confirmed after 2 ticks in new zone
     },
 
@@ -819,7 +819,7 @@ class SmartMoneyBot {
 
         console.log(`${asset}: 
             Sweep: ${analysis.results.liquiditySweep.detected ? 'YES' : 'NO'} | ${analysis.results.liquiditySweep.reason} (${analysis.results.liquiditySweep.sweptDigit})
-            BoS: ${analysis.results.breakOfStructure.detected ? 'YES' : 'NO'} | ${analysis.results.breakOfStructure.reason} (${analysis.results.breakOfStructure.zoneStabilityCount} | ${this.cfg.breakOfStructure.minZoneStability}) ${previousZone} | ${previousZone}
+            BoS: ${analysis.results.breakOfStructure.detected ? 'YES' : 'NO'} | ${analysis.results.breakOfStructure.reason} (${analysis.results.breakOfStructure.zoneStabilityCount} | ${analysis.results.breakOfStructure.transition}) ${analysis.results.breakOfStructure.currentZone} | ${analysis.results.breakOfStructure.previousZone}
             FVG: ${analysis.results.fairValueGap.detected ? 'YES' : 'NO'} | ${analysis.results.fairValueGap.reason} (${analysis.results.fairValueGap.gapCount})
             OB: ${analysis.results.orderBlock.detected ? 'YES' : 'NO'} | ${analysis.results.orderBlock.reason} (${analysis.results.orderBlock.distance} | ${analysis.results.orderBlock.nearOrderBlock})
             TF: ${analysis.results.trendFilter.detected ? 'YES' : 'NO'} | ${analysis.results.trendFilter.reason} (${analysis.results.trendFilter.zoneStrength} | ${analysis.results.trendFilter.priceStrength})
