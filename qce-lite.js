@@ -103,11 +103,11 @@ const logger = new AnalysisLogger();
 // CONFIG
 // ─────────────────────────────────────────────────────────────────────────────
 const BOT_CONFIG = {
-    token: 'hsj0tA0XJoIzJG5',
+    token: '0P94g4WdSrSrzir',
 
     assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
 
-    initialStake: 1,
+    initialStake: 2.75,
     multiplier: 11.3,
     maxConsecutiveLosses: 3,
     stopLoss: 100,
