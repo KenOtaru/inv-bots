@@ -46,18 +46,18 @@ const BOT_CONFIG = {
     stopLoss: 108,
     takeProfit: 10000,
 
-    minTimeBetweenTrades: 3000,
-    requiredHistoryLength: 1000,
-
-    // Trend Analysis Config
-    trendWindow: 10,                    // Number of recent digits to analyze for trend
+    // Trend Analysis Config 
+    trendWindow: 15,                    //10 Number of recent digits to analyze for trend
     minTrendStrength: 5,                //4 Minimum consecutive steps in same direction
-    minWinProbability: 0.70,            // 70% minimum historical win rate
+    minWinProbability: 0.50,            // 70% minimum historical win rate
     historyDepth: 1000,                 // Ticks to analyze for probability calculation
 
     // Pattern detection
-    allowedStepSizes: [1, 2, 3, 4, 5, 6],       // e.g., +1 (0→1), +2 (0→2), +3 (0→3)
-    minPatternOccurrences: 5,           // Minimum times pattern must appear in history
+    allowedStepSizes: [1],       //[1, 2, 3,] e.g., +1 (0→1), +2 (0→2), +3 (0→3)
+    minPatternOccurrences: 0,           // Minimum times pattern must appear in history
+
+    minTimeBetweenTrades: 3000,
+    requiredHistoryLength: 1000,
 
     telegramToken: '8578702717:AAFShpdLRtat7PHqjZMUqhY4UNKlWyaGtmo',
     telegramChatId: '752497117',
@@ -69,7 +69,7 @@ const BOT_CONFIG = {
 // ─────────────────────────────────────────────────────────────────────────────
 // STATE PERSISTENCE
 // ─────────────────────────────────────────────────────────────────────────────
-const STATE_FILE = path.join(__dirname, 'trend_reversal-06_state.json');
+const STATE_FILE = path.join(__dirname, 'trend_reversal-09_state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -739,6 +739,16 @@ class TrendReversalBot {
             return;
         }
 
+        //Don't Trade if Descending Sequence ends in 9 or 8 or 7 and Ascending Sequence ends in 0 or 1 or 2
+        if (analysis.trend.direction.toLowerCase() === 'descending' && this.digitHistories[asset].slice(-(this.cfg.minTrendStrength + 1))[this.cfg.minTrendStrength] === 9) {
+            console.log(`   ❌ Descending Sequence ends in 9 — aborting`);
+            return;
+        }
+        if (analysis.trend.direction.toLowerCase() === 'ascending' && this.digitHistories[asset].slice(-(this.cfg.minTrendStrength + 1))[this.cfg.minTrendStrength] === 0) {
+            console.log(`   ❌ Ascending Sequence ends in 0 — aborting`);
+            return;
+        }
+
         const payout = parseFloat(proposal.payout || 0);
         const payoutPct = this.currentStake > 0 ? ((payout - this.currentStake) / this.currentStake * 100).toFixed(1) : '?';
 
@@ -872,7 +882,7 @@ class TrendReversalBot {
         }
         this.hourlyStats.trades++;
         this.hourlyStats.pnl += profit;
-        
+
         this.session.tradesCount++;
         this.session.netPL += profit;
 
@@ -1041,7 +1051,7 @@ class TrendReversalBot {
             const durationMs = Date.now() - this.session.startTime;
             const hours = Math.floor(durationMs / 3600000);
             const minutes = Math.floor((durationMs % 3600000) / 60000);
-            const winRate = this.session.tradesCount > 0 
+            const winRate = this.session.tradesCount > 0
                 ? ((this.session.winsCount / this.session.tradesCount) * 100).toFixed(1) + '%'
                 : '0%';
 
@@ -1090,7 +1100,7 @@ class TrendReversalBot {
         const timeUntilNextHour = nextHour.getTime() - now.getTime();
 
         console.log(`⏰ Hourly Telegram timer started (first summary in ${Math.ceil(timeUntilNextHour / 60000)} min)`);
-        
+
         setTimeout(() => {
             this._sendHourlySummary();
             setInterval(() => this._sendHourlySummary(), 60 * 60 * 1000);
@@ -1102,7 +1112,7 @@ class TrendReversalBot {
         if (this.currentTradeDay && this.currentTradeDay !== currentDay) {
             console.log(`🗓️ Day changed from ${this.currentTradeDay} to ${currentDay}`);
             this._sendDayEndSummary(this.currentTradeDay);
-            
+
             // Reset daily stats
             this.dailyProfitLoss = 0;
             this.currentTradeDay = currentDay;
