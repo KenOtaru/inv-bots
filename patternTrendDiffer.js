@@ -740,12 +740,15 @@ class TrendReversalBot {
         }
 
         //Don't Trade if Descending Sequence ends in 9 or 8 or 7 and Ascending Sequence ends in 0 or 1 or 2
-        if (analysis.trend.direction.toLowerCase() === 'descending' && this.digitHistories[asset].slice(-(this.cfg.minTrendStrength + 1))[this.cfg.minTrendStrength] === 9) {
-            console.log(`   ❌ Descending Sequence ends in 9 — aborting`);
-            return;
-        }
-        if (analysis.trend.direction.toLowerCase() === 'ascending' && this.digitHistories[asset].slice(-(this.cfg.minTrendStrength + 1))[this.cfg.minTrendStrength] === 0) {
-            console.log(`   ❌ Ascending Sequence ends in 0 — aborting`);
+        if (
+            (analysis.trend.direction.toLowerCase() === 'descending' && [7, 8, 9].includes(analysis.trend.sequence[analysis.trend.sequence.length - 1])) ||
+            (analysis.trend.direction.toLowerCase() === 'ascending' && [0, 1, 2].includes(analysis.trend.sequence[analysis.trend.sequence.length - 1]))
+        ) {
+            console.log(`\n⛔ REVERSAL PATTERN CONFLICT:`);
+            console.log(`   Trend is [${analysis.trend.direction.toUpperCase()}]`);
+            console.log(`   But last digit is [${analysis.trend.sequence[analysis.trend.sequence.length - 1]}]`);
+            console.log(`   Trend continuation expected, but pattern suggests reversal.`);
+            console.log(`   Skipping trade to avoid conflict.`);
             return;
         }
 

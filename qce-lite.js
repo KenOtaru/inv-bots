@@ -59,7 +59,7 @@ class AnalysisLogger {
         const color = colors[level] || '\x1b[0m';
         const reset = '\x1b[0m';
 
-        console.log(`${color}[${level}]${reset} ${timestamp} | ${message}`, Object.keys(data).length > 0 ? data : '');
+        // console.log(`${color}[${level}]${reset} ${timestamp} | ${message}`, Object.keys(data).length > 0 ? data : '');
 
         // Flush buffer periodically
         if (this.logBuffer.length >= this.maxBufferSize) {
@@ -120,7 +120,7 @@ const BOT_CONFIG = {
     // LAYER 1: PRNG Entropy Estimation
     prngEstimator: {
         window: 100,                    // Ticks to analyze
-        entropyThreshold: 2.65,         // Entropy < 2.65 = predictable state
+        entropyThreshold: 2.85,         // Entropy < 2.65 = predictable state
         compressionMethod: 'lz77',      // Lempel-Ziv 77 compression ratio
     },
 
@@ -128,7 +128,7 @@ const BOT_CONFIG = {
     crossAssetCorrelation: {
         leadAsset: 'R_10',              // R_10 leads other assets
         lagWindow: 10,                  // Check up to 10-tick lag
-        minCorrelation: 0.55,           // Minimum correlation threshold
+        minCorrelation: 0.35,           // Minimum correlation threshold
         enableDebugLogging: true,
     },
 
@@ -144,7 +144,7 @@ const BOT_CONFIG = {
     multiLagAutocorr: {
         lags: [7, 13, 19],              // Check these lags
         minCorrelation: 0.12,           // Minimum lag correlation
-        minCombinedCorrelation: 0.20,   //0.30 Combined lags must exceed this
+        minCombinedCorrelation: 0.030,   //0.30 Combined lags must exceed this
         enableDebugLogging: true,
     },
 
@@ -163,7 +163,7 @@ const BOT_CONFIG = {
         breakOfStructureMinStability: 4,
         fairValueGapMinSize: 2,
         orderBlockMinFrequency: 10,
-        minConfluenceScore: 3.0,        //3.0 Out of 6
+        minConfluenceScore: 2.0,        //3.0 Out of 6
     },
 
     // ENSEMBLE CONFIG

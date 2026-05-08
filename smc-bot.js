@@ -27,13 +27,13 @@ const path = require('path');
 // CONFIG
 // ─────────────────────────────────────────────────────────────────────────────
 const BOT_CONFIG = {
-    token: 'rgNedekYXvCaPeP',
+    token: 'DMylfkyce6VyZt7',
 
     assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
 
-    initialStake: 1,
+    initialStake: 2,
     multiplier: 11.3,
-    maxConsecutiveLosses: 3,
+    maxConsecutiveLosses: 2,
     stopLoss: 100,
     takeProfit: 10000,
 
