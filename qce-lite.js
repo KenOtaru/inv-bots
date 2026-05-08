@@ -120,7 +120,7 @@ const BOT_CONFIG = {
     // LAYER 1: PRNG Entropy Estimation
     prngEstimator: {
         window: 100,                    // Ticks to analyze
-        entropyThreshold: 2.85,         // Entropy < 2.65 = predictable state
+        entropyThreshold: 2.65,         // Entropy < 2.65 = predictable state
         compressionMethod: 'lz77',      // Lempel-Ziv 77 compression ratio
     },
 
@@ -163,12 +163,12 @@ const BOT_CONFIG = {
         breakOfStructureMinStability: 4,
         fairValueGapMinSize: 2,
         orderBlockMinFrequency: 10,
-        minConfluenceScore: 2.0,        //3.0 Out of 6
+        minConfluenceScore: 3.0,        //3.0 Out of 6
     },
 
     // ENSEMBLE CONFIG
     ensemble: {
-        minLayersAgreement: 4,          // Need 5/6 layers to agree
+        minLayersAgreement: 5,          // Need 5/6 layers to agree
         minConfidenceThreshold: 0.62,   // 82% minimum confidence
         enableDynamicWeighting: true,
     },
