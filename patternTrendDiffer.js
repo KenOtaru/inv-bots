@@ -48,7 +48,7 @@ const BOT_CONFIG = {
 
     // Trend Analysis Config 
     trendWindow: 15,                    //10 Number of recent digits to analyze for trend
-    minTrendStrength: 5,                //4 Minimum consecutive steps in same direction
+    minTrendStrength: 4,                //4 Minimum consecutive steps in same direction
     minWinProbability: 0.50,            // 70% minimum historical win rate
     historyDepth: 1000,                 // Ticks to analyze for probability calculation
 
