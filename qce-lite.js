@@ -59,7 +59,7 @@ class AnalysisLogger {
         const color = colors[level] || '\x1b[0m';
         const reset = '\x1b[0m';
 
-        // console.log(`${color}[${level}]${reset} ${timestamp} | ${message}`, Object.keys(data).length > 0 ? data : '');
+        console.log(`${color}[${level}]${reset} ${timestamp} | ${message}`, Object.keys(data).length > 0 ? data : '');
 
         // Flush buffer periodically
         if (this.logBuffer.length >= this.maxBufferSize) {
@@ -105,9 +105,9 @@ const logger = new AnalysisLogger();
 const BOT_CONFIG = {
     token: '0P94g4WdSrSrzir',
 
-    assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
+    assets: ['R_10', 'R_25', 'R_75', 'RDBULL', 'RDBEAR'], //['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'RDBULL', 'RDBEAR']
 
-    initialStake: 2.75,
+    initialStake: 2.55,
     multiplier: 11.3,
     maxConsecutiveLosses: 3,
     stopLoss: 100,
