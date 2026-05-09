@@ -848,12 +848,10 @@ class DerivFrequencyBot {
             `📊 <b>Frequency Signal Trade</b>\n\n` +
             `Asset: <b>${asset}</b>\n` +
             `Last10digits: ${this.digitHistories[asset].slice(-10).join(',')}\n` +
-            `Signal: ${analysis.reason}\n` +
-            `UR Count: ${analysis.underrepresentedCount}\n` +
             `Target Digit: ${this.predictedDigit}\n` +
-            `All UR: ${analysis.underrepresented.map(r => `(${r.from}->${r.to}: ${r.rarity})`).join(' ')}\n` +
             `Confidence: ${(parseFloat(analysis.confidence) * 100).toFixed(1)}%\n` +
-            `Type: ${analysis.contractType}\n` +
+            `UR Count: ${analysis.underrepresentedCount}\n` +
+            `All UR: ${analysis.underrepresented.map(r => `(${r.from}->${r.to}: ${r.rarity})`).join(' ')}\n` +
             `Stake: $${this.currentStake.toFixed(2)}`
         );
 
