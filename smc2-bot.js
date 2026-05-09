@@ -763,7 +763,7 @@ class DerivFrequencyBot {
         console.log(`  Last 20 digits: [ ${this.digitHistories[asset].slice(-20).join(' ')} ]`);
         console.log(`[${asset}] ${analysis.reason} conf=${analysis.confidence}| UR=${analysis.underrepresentedCount}| ${analysis.underrepresented.map(r => `(${r.from}->${r.to}: ${r.rarity})`).join(' ')}`);
 
-        if (!analysis.shouldTrade || analysis.underrepresentedCount >= 36) return;
+        if (!analysis.shouldTrade || analysis.underrepresentedCount >= 37) return;
 
         this._requestProposal(asset, analysis);
     }
@@ -774,13 +774,7 @@ class DerivFrequencyBot {
         // For this POC, use MATCH contract targeting the cold digit
         // In production, vary contract type based on signal
         const contractType = analysis.contractType;
-        const barrier = analysis.predictedDigit !== null ? analysis.predictedDigit.toString() : null;
-
-        if (contractType === 'DIFFER' && barrier === null) {
-            this.tradeInProgress = false;
-            console.log(`⚠️ No barrier found for ${asset}, skipping trade`);
-            return;
-        }
+        this.predictedDigit = analysis.underrepresented[2].to.toString()
 
         this._send({
             proposal: 1,
@@ -791,8 +785,7 @@ class DerivFrequencyBot {
             symbol: asset,
             duration: 1,
             duration_unit: 't',
-            barrier: barrier,
-            // ...(contractType === 'DIGITDIFF' ? { barrier } : {}), //only for DIGITDIFF trades 
+            barrier: this.predictedDigit,
         });
 
         this.proposalIds[asset] = { analysis };
@@ -822,7 +815,7 @@ class DerivFrequencyBot {
 
         console.log(`  Confidence  : ${(parseFloat(analysis.confidence) * 100).toFixed(1)}%`);
         console.log(`  Contract    : ${analysis.contractType}`);
-        if (analysis.predictedDigit !== null) console.log(`  Target Digit: ${analysis.predictedDigit}`);
+        if (this.predictedDigit !== null) console.log(`  Target Digit: ${this.predictedDigit}`);
         console.log(`  Stake       : $${this.currentStake.toFixed(2)}  →  Payout: $${payout.toFixed(2)} (+${payoutPct}%)`);
 
         if (analysis.signals[0]?.hotDigits) {
@@ -857,7 +850,8 @@ class DerivFrequencyBot {
             `Last10digits: ${this.digitHistories[asset].slice(-10).join(',')}\n` +
             `Signal: ${analysis.reason}\n` +
             `UR Count: ${analysis.underrepresentedCount}\n` +
-            `Target Digit: ${analysis.predictedDigit}\n` +
+            `Target Digit: ${this.predictedDigit}\n` +
+            `All UR: ${analysis.underrepresented.map(r => `(${r.from}->${r.to}: ${r.rarity})`).join(' ')}\n` +
             `Confidence: ${(parseFloat(analysis.confidence) * 100).toFixed(1)}%\n` +
             `Type: ${analysis.contractType}\n` +
             `Stake: $${this.currentStake.toFixed(2)}`
