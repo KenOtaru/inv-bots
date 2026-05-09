@@ -763,7 +763,7 @@ class DerivFrequencyBot {
         console.log(`  Last 20 digits: [ ${this.digitHistories[asset].slice(-20).join(' ')} ]`);
         console.log(`[${asset}] ${analysis.reason} conf=${analysis.confidence}| UR=${analysis.underrepresentedCount}| ${analysis.underrepresented.map(r => `(${r.from}->${r.to}: ${r.rarity})`).join(' ')}`);
 
-        if (!analysis.shouldTrade || analysis.underrepresentedCount >= 37) return;
+        if (!analysis.shouldTrade || analysis.underrepresentedCount >= 36) return;
 
         this._requestProposal(asset, analysis);
     }
