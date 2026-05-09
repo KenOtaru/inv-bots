@@ -411,7 +411,27 @@ class FrequencySignalGenerator {
             }
         }
 
-        // 2. Even/Odd bias
+        // 2. Chi-square test on short window
+        const longDigits = digitHistory.slice(-this.cfg.frequencyAnalysis.shortWindow);
+        const chiSquareLong = StatisticalAnalyzer.chiSquareUniform(longDigits);
+        if (chiSquareLong.pValue < this.cfg.frequencyAnalysis.chiSquareP) {
+            const hotCold = StatisticalAnalyzer.detectHotCold(
+                longDigits,
+                this.cfg.frequencyAnalysis.hotThreshold,
+                this.cfg.frequencyAnalysis.coldThreshold
+            );
+            if (hotCold.hotDigits.length > 0) {
+                signals.push({
+                    type: 'CHI_SQUARE_HOT_LONG_TERM',
+                    confidence: 1.0 - parseFloat(chiSquareLong.pValue),
+                    coldDigits: hotCold.coldDigits,
+                    hotDigits: hotCold.hotDigits,
+                    chiSquare: chiSquareLong.chiSquare,
+                });
+            }
+        }
+
+        // 3. Even/Odd bias
         if (this.cfg.evenOddAnalysis.enabled) {
             const eoDigits = digitHistory.slice(-this.cfg.evenOddAnalysis.window);
             const eoBias = StatisticalAnalyzer.binomialEvenOdd(eoDigits);
@@ -425,7 +445,7 @@ class FrequencySignalGenerator {
             }
         }
 
-        // 3. Transition analysis
+        // 4. Transition analysis
         if (this.cfg.transitionAnalysis.enabled && signals.length === 0) {
             const transDigits = digitHistory.slice(-this.cfg.transitionAnalysis.window);
             const transitions = StatisticalAnalyzer.analyzeTransitions(transDigits);
@@ -447,18 +467,27 @@ class FrequencySignalGenerator {
         let contractType = null;
         let predictedDigit = null;
 
-        if (primary.type === 'CHI_SQUARE_COLD' && primary.coldDigits.length > 0) {
-            // Fade the cold digit (bet it will appear)
-            // Use MATCH if we're targeting a specific digit
-            contractType = 'MATCH';
-            predictedDigit = primary.coldDigits[0].digit;
-        } else if (primary.type === 'EVEN_ODD_BIAS') {
-            contractType = primary.direction === 'EVEN_BIASED' ? 'EVEN' : 'ODD';
-            predictedDigit = null;  // Doesn't apply to EVEN/ODD
-        } else if (primary.type === 'RARE_TRANSITION') {
+        if (primary.type === 'RARE_TRANSITION') {
             contractType = 'DIFFER';  // Bet that the rare transition WON'T happen
-            predictedDigit = null;
+            predictedDigit = transitions.underrepresented[0]; // Bet that the rare transition WON'T happen 
         }
+        // else if (primary.type === 'EVEN_ODD_BIAS') {
+        //     contractType = primary.direction === 'EVEN_BIASED' ? 'EVEN' : 'ODD';
+        //     predictedDigit = null;  // Doesn't apply to EVEN/ODD
+        // }
+        else if (primary.type === 'CHI_SQUARE_HOT_LONG_TERM' && primary.hotDigits.length > 0) {
+            // Bet on the hot digit (bet it will appear)
+            // Use DIGITDIFF if we're targeting a specific digit
+            contractType = 'DIFFER';
+            predictedDigit = primary.hotDigits[0].digit;
+        }
+
+        // else if (primary.type === 'CHI_SQUARE_COLD' && primary.coldDigits.length > 0) {
+        //     // Fade the cold digit (bet it will appear)
+        //     // Use MATCH if we're targeting a specific digit
+        //     contractType = 'MATCH';
+        //     predictedDigit = primary.coldDigits[0].digit;
+        // }
 
         confidence = signals.reduce((max, s) => Math.max(max, s.confidence), 0);
 
@@ -727,7 +756,7 @@ class DerivFrequencyBot {
         const analysis = this.signalGen.analyze(this.digitHistories[asset]);
 
         // Uncomment for verbose debug:
-        // console.log(`[${asset}] ${analysis.reason} conf=${analysis.confidence} χ²=${analysis.chiSquare?.chiSquare}`);
+        console.log(`[${asset}] ${analysis.reason} conf=${analysis.confidence} χ²=${analysis.chiSquare?.chiSquare}`);
 
         if (!analysis.shouldTrade) return;
 
@@ -739,7 +768,7 @@ class DerivFrequencyBot {
 
         // For this POC, use MATCH contract targeting the cold digit
         // In production, vary contract type based on signal
-        const contractType = analysis.contractType || 'MATCH';
+        const contractType = analysis.contractType;
         const barrier = analysis.predictedDigit !== null ? analysis.predictedDigit.toString() : '0';
 
         this._send({
@@ -752,6 +781,7 @@ class DerivFrequencyBot {
             duration: 1,
             duration_unit: 't',
             barrier: barrier,
+            // ...(contractType === 'DIGITDIFF' ? { barrier } : {}), //only for DIGITDIFF trades 
         });
 
         this.proposalIds[asset] = { analysis };
