@@ -821,8 +821,8 @@ class DerivFrequencyBot {
         console.log(`  Stake       : $${this.currentStake.toFixed(2)}  →  Payout: $${payout.toFixed(2)} (+${payoutPct}%)`);
         console.log(`  χ² Stat     : ${analysis.chiSquare?.chiSquare} (p=${analysis.chiSquare?.pValue})`);
 
-        if (analysis.signals[0]?.coldDigits) {
-            console.log(`  Cold Digits : ${analysis.signals[0].coldDigits.map(d => `${d.digit}(${d.ratio})`).join(', ')}`);
+        if (analysis.signals[0]?.hotDigits) {
+            console.log(`  Hot Digits : ${analysis.signals[0].hotDigits.map(d => `${d.digit}(${d.ratio})`).join(', ')}`);
         }
 
         console.log(`  Last 20 digits: [ ${this.digitHistories[asset].slice(-20).join(' ')} ]`);

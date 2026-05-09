@@ -919,13 +919,13 @@ class SmartMoneyAnalyzer {
             return results.liquiditySweep.sweptDigit;
         }
         // 2. OB cluster mean
-        if (results.orderBlock.detected && results.orderBlock.nearestOB) {
-            return results.orderBlock.nearestOB.clusterMean;
-        }
+        // if (results.orderBlock.detected && results.orderBlock.nearestOB) {
+        //     return results.orderBlock.nearestOB.clusterMean;
+        // }
         // 3. FVG midpoint
-        if (results.fairValueGap.detected && results.fairValueGap.nearestFVG) {
-            return results.fairValueGap.nearestFVG.midpoint;
-        }
+        // if (results.fairValueGap.detected && results.fairValueGap.nearestFVG) {
+        //     return results.fairValueGap.nearestFVG.midpoint;
+        // }
         // // 4. last digit
         // return digitHistory[digitHistory.length - 1];
         // 4. No digit  
