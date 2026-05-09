@@ -55,7 +55,7 @@ const path = require('path');
 const BOT_CONFIG = {
     token: 'DMylfkyce6VyZt7',
 
-    assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
+    assets: ['R_10'], //['R_10', 'R_25', 'R_50', 'R_75', 'R_100']
 
     initialStake: 2.55,
     multiplier: 11.3,
@@ -100,7 +100,7 @@ const BOT_CONFIG = {
 
     // Digit pair transition analysis (which digit follows which)
     transitionAnalysis: {
-        window: 100,
+        window: 2000,
         // Track which digit-pair transitions are underrepresented
         minTransitionCount: 2,  // Transition must occur < 2x (vs expected ~10/100)
         enabled: true,
@@ -112,7 +112,7 @@ const BOT_CONFIG = {
     maxTradesPerHour: 200,
     maxExposure: 50,              // Never have more than $50 at risk simultaneously
 
-    requiredHistoryLength: 300,
+    requiredHistoryLength: 3000,
 
     telegramToken: '8218636914:AAGvaKFh8MT769-_9eOEiU4XKufL0aHRhZ4',
     telegramChatId: '752497117',
@@ -446,17 +446,17 @@ class FrequencySignalGenerator {
         // }
 
         // 4. Transition analysis
-        if (this.cfg.transitionAnalysis.enabled && signals.length === 0) {
-            const transDigits = digitHistory.slice(-this.cfg.transitionAnalysis.window);
-            const transitions = StatisticalAnalyzer.analyzeTransitions(transDigits);
-            if (transitions.underrepresentedCount > 0) {
-                signals.push({
-                    type: 'RARE_TRANSITION',
-                    confidence: 0.6,
-                    underrepresented: transitions.underrepresented,
-                });
-            }
+        // if (this.cfg.transitionAnalysis.enabled && signals.length === 0) {
+        const transDigits = digitHistory.slice(-this.cfg.transitionAnalysis.window);
+        const transitions = StatisticalAnalyzer.analyzeTransitions(transDigits);
+        if (transitions.underrepresentedCount > 0) {
+            signals.push({
+                type: 'RARE_TRANSITION',
+                confidence: 0.8,
+                underrepresented: transitions.underrepresented,
+            });
         }
+        // }
 
         if (signals.length === 0) {
             return { shouldTrade: false, reason: 'no_statistical_bias', chiSquare: chiSquareShort };
@@ -469,7 +469,7 @@ class FrequencySignalGenerator {
 
         if (primary.type === 'RARE_TRANSITION') {
             contractType = 'DIGITDIFF';  // Bet that the rare transition WON'T happen
-            predictedDigit = transitions.underrepresented[0]; // Bet that the rare transition WON'T happen 
+            predictedDigit = transitions.underrepresented[0].to; // Bet that the rare transition WON'T happen 
         }
         // else if (primary.type === 'EVEN_ODD_BIAS') {
         //     contractType = primary.direction === 'EVEN_BIASED' ? 'EVEN' : 'ODD';
@@ -498,7 +498,7 @@ class FrequencySignalGenerator {
             contractType,
             predictedDigit,
             signals,
-            chiSquare: chiSquareShort,
+            chiSquare: chiSquareShort
         };
     }
 }

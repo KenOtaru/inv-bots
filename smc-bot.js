@@ -380,7 +380,7 @@ class SmartMoneyAnalyzer {
 
         // Determine the digit to avoid (DIGITDIFF target)
         const avoidDigit = this._resolveAvoidDigit(results, digitHistory);
-        if (avoidDigit === null) {
+        if (avoidDigit === null || !(tfResult.isBullish || tfResult.isBearish)) {
             return { shouldTrade: false, reason: 'no_clear_avoid_digit', confluence, results };
         }
 
@@ -919,13 +919,13 @@ class SmartMoneyAnalyzer {
         //     return results.liquiditySweep.sweptDigit;
         // }
         // 2. OB cluster mean
-        if (results.orderBlock.detected && results.orderBlock.nearestOB) {
-            return results.orderBlock.nearestOB.clusterMean;
-        }
-        // 3. FVG midpoint
-        // if (results.fairValueGap.detected && results.fairValueGap.nearestFVG) {
-        //     return results.fairValueGap.nearestFVG.midpoint;
+        // if (results.orderBlock.detected && results.orderBlock.nearestOB) {
+        //     return results.orderBlock.nearestOB.clusterMean;
         // }
+        // 3. FVG midpoint
+        if (results.fairValueGap.detected && results.fairValueGap.nearestFVG) {
+            return results.fairValueGap.nearestFVG.midpoint;
+        }
         // // 4. last digit
         // return digitHistory[digitHistory.length - 1];
         // 4. No digit  
