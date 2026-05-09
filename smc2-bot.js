@@ -258,9 +258,9 @@ class StatisticalAnalyzer {
 
         // Fallback: linear interpolation
         // This is crude but functional for screening
-        if (chiSquare < 14.68) return 0.15;
-        if (chiSquare < 16.92) return 0.08;
-        if (chiSquare < 21.67) return 0.02;
+        // if (chiSquare < 14.68) return 0.15;
+        // if (chiSquare < 16.92) return 0.08;
+        // if (chiSquare < 21.67) return 0.02;
         return 0.001;
     }
 

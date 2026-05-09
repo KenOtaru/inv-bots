@@ -53,9 +53,9 @@ const BOT_CONFIG = {
 
     assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
 
-    initialStake: 2,
+    initialStake: 2.55,
     multiplier: 11.3,
-    maxConsecutiveLosses: 2,
+    maxConsecutiveLosses: 3,
     stopLoss: 100,
     takeProfit: 10000,
 
