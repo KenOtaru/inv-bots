@@ -159,7 +159,7 @@ const BOT_CONFIG = {
     // ── Risk Management ──────────────────────────────────────────────────
     minTimeBetweenTrades: 20000,
     cooldownAfterLoss: 45000,
-    maxTradesPerHour: 15,
+    maxTradesPerHour: 1500,
 
     requiredHistoryLength: 150,
 
