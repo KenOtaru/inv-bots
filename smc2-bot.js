@@ -412,24 +412,24 @@ class FrequencySignalGenerator {
         // }
 
         // 2. Chi-square test on short window
-        const longDigits = digitHistory.slice(-this.cfg.frequencyAnalysis.shortWindow);
-        const chiSquareLong = StatisticalAnalyzer.chiSquareUniform(longDigits);
-        if (chiSquareLong.pValue < this.cfg.frequencyAnalysis.chiSquareP) {
-            const hotCold = StatisticalAnalyzer.detectHotCold(
-                longDigits,
-                this.cfg.frequencyAnalysis.hotThreshold,
-                this.cfg.frequencyAnalysis.coldThreshold
-            );
-            if (hotCold.hotDigits.length > 0) {
-                signals.push({
-                    type: 'CHI_SQUARE_HOT',
-                    confidence: 1.0 - parseFloat(chiSquareLong.pValue),
-                    coldDigits: hotCold.coldDigits,
-                    hotDigits: hotCold.hotDigits,
-                    chiSquare: chiSquareLong.chiSquare,
-                });
-            }
-        }
+        // const longDigits = digitHistory.slice(-this.cfg.frequencyAnalysis.shortWindow);
+        // const chiSquareLong = StatisticalAnalyzer.chiSquareUniform(longDigits);
+        // if (chiSquareLong.pValue < this.cfg.frequencyAnalysis.chiSquareP) {
+        //     const hotCold = StatisticalAnalyzer.detectHotCold(
+        //         longDigits,
+        //         this.cfg.frequencyAnalysis.hotThreshold,
+        //         this.cfg.frequencyAnalysis.coldThreshold
+        //     );
+        //     if (hotCold.hotDigits.length > 0) {
+        //         signals.push({
+        //             type: 'CHI_SQUARE_HOT',
+        //             confidence: 1.0 - parseFloat(chiSquareLong.pValue),
+        //             coldDigits: hotCold.coldDigits,
+        //             hotDigits: hotCold.hotDigits,
+        //             chiSquare: chiSquareLong.chiSquare,
+        //         });
+        //     }
+        // }
 
         // 3. Even/Odd bias
         // if (this.cfg.evenOddAnalysis.enabled) {
@@ -475,12 +475,12 @@ class FrequencySignalGenerator {
         //     contractType = primary.direction === 'EVEN_BIASED' ? 'EVEN' : 'ODD';
         //     predictedDigit = null;  // Doesn't apply to EVEN/ODD
         // }
-        else if (primary.type === 'CHI_SQUARE_HOT' && primary.hotDigits.length > 0) {
-            // Bet on the hot digit (bet it will appear)
-            // Use DIGITDIFF if we're targeting a specific digit
-            contractType = 'DIGITDIFF';
-            predictedDigit = primary.hotDigits[0].digit;
-        }
+        // else if (primary.type === 'CHI_SQUARE_HOT' && primary.hotDigits.length > 0) {
+        //     // Bet on the hot digit (bet it will appear)
+        //     // Use DIGITDIFF if we're targeting a specific digit
+        //     contractType = 'DIGITDIFF';
+        //     predictedDigit = primary.hotDigits[0].digit;
+        // }
 
         // else if (primary.type === 'CHI_SQUARE_COLD' && primary.coldDigits.length > 0) {
         //     // Fade the cold digit (bet it will appear)

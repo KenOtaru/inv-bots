@@ -915,13 +915,13 @@ class SmartMoneyAnalyzer {
      */
     _resolveAvoidDigit(results, digitHistory) {
         // 1. Swept digit
-        if (results.liquiditySweep.detected && results.liquiditySweep.sweptDigit !== undefined) {
-            return results.liquiditySweep.sweptDigit;
-        }
-        // 2. OB cluster mean
-        // if (results.orderBlock.detected && results.orderBlock.nearestOB) {
-        //     return results.orderBlock.nearestOB.clusterMean;
+        // if (results.liquiditySweep.detected && results.liquiditySweep.sweptDigit !== undefined) {
+        //     return results.liquiditySweep.sweptDigit;
         // }
+        // 2. OB cluster mean
+        if (results.orderBlock.detected && results.orderBlock.nearestOB) {
+            return results.orderBlock.nearestOB.clusterMean;
+        }
         // 3. FVG midpoint
         // if (results.fairValueGap.detected && results.fairValueGap.nearestFVG) {
         //     return results.fairValueGap.nearestFVG.midpoint;
