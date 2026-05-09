@@ -762,7 +762,7 @@ class DerivFrequencyBot {
         // console.log(`[${asset}] ${analysis.reason} conf=${analysis.confidence} χ²=${analysis.chiSquare?.chiSquare}`);
         console.log(`[${asset}] ${analysis.reason} conf=${analysis.confidence}| UR=${analysis.underrepresentedCount}| ${analysis.underrepresented.map(r => `(${r.from}->${r.to}: ${r.rarity})`).join(' ')}`);
 
-        if (!analysis.shouldTrade || analysis.underrepresentedCount >= 31) return;
+        if (!analysis.shouldTrade || analysis.underrepresentedCount >= 37) return;
 
         this._requestProposal(asset, analysis);
     }
