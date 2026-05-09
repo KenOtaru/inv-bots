@@ -394,22 +394,22 @@ class FrequencySignalGenerator {
         // 1. Chi-square test on short window
         const shortDigits = digitHistory.slice(-this.cfg.frequencyAnalysis.shortWindow);
         const chiSquareShort = StatisticalAnalyzer.chiSquareUniform(shortDigits);
-        if (chiSquareShort.pValue < this.cfg.frequencyAnalysis.chiSquareP) {
-            const hotCold = StatisticalAnalyzer.detectHotCold(
-                shortDigits,
-                this.cfg.frequencyAnalysis.hotThreshold,
-                this.cfg.frequencyAnalysis.coldThreshold
-            );
-            if (hotCold.coldDigits.length > 0) {
-                signals.push({
-                    type: 'CHI_SQUARE_COLD',
-                    confidence: 1.0 - parseFloat(chiSquareShort.pValue),
-                    coldDigits: hotCold.coldDigits,
-                    hotDigits: hotCold.hotDigits,
-                    chiSquare: chiSquareShort.chiSquare,
-                });
-            }
-        }
+        // if (chiSquareShort.pValue < this.cfg.frequencyAnalysis.chiSquareP) {
+        //     const hotCold = StatisticalAnalyzer.detectHotCold(
+        //         shortDigits,
+        //         this.cfg.frequencyAnalysis.hotThreshold,
+        //         this.cfg.frequencyAnalysis.coldThreshold
+        //     );
+        //     if (hotCold.coldDigits.length > 0) {
+        //         signals.push({
+        //             type: 'CHI_SQUARE_COLD',
+        //             confidence: 1.0 - parseFloat(chiSquareShort.pValue),
+        //             coldDigits: hotCold.coldDigits,
+        //             hotDigits: hotCold.hotDigits,
+        //             chiSquare: chiSquareShort.chiSquare,
+        //         });
+        //     }
+        // }
 
         // 2. Chi-square test on short window
         const longDigits = digitHistory.slice(-this.cfg.frequencyAnalysis.shortWindow);
@@ -422,7 +422,7 @@ class FrequencySignalGenerator {
             );
             if (hotCold.hotDigits.length > 0) {
                 signals.push({
-                    type: 'CHI_SQUARE_HOT_LONG_TERM',
+                    type: 'CHI_SQUARE_HOT',
                     confidence: 1.0 - parseFloat(chiSquareLong.pValue),
                     coldDigits: hotCold.coldDigits,
                     hotDigits: hotCold.hotDigits,
@@ -432,18 +432,18 @@ class FrequencySignalGenerator {
         }
 
         // 3. Even/Odd bias
-        if (this.cfg.evenOddAnalysis.enabled) {
-            const eoDigits = digitHistory.slice(-this.cfg.evenOddAnalysis.window);
-            const eoBias = StatisticalAnalyzer.binomialEvenOdd(eoDigits);
-            if (eoBias.significant) {
-                signals.push({
-                    type: 'EVEN_ODD_BIAS',
-                    confidence: parseFloat(eoBias.biasStrength),
-                    direction: eoBias.direction,
-                    pEven: eoBias.pEven,
-                });
-            }
-        }
+        // if (this.cfg.evenOddAnalysis.enabled) {
+        //     const eoDigits = digitHistory.slice(-this.cfg.evenOddAnalysis.window);
+        //     const eoBias = StatisticalAnalyzer.binomialEvenOdd(eoDigits);
+        //     if (eoBias.significant) {
+        //         signals.push({
+        //             type: 'EVEN_ODD_BIAS',
+        //             confidence: parseFloat(eoBias.biasStrength),
+        //             direction: eoBias.direction,
+        //             pEven: eoBias.pEven,
+        //         });
+        //     }
+        // }
 
         // 4. Transition analysis
         if (this.cfg.transitionAnalysis.enabled && signals.length === 0) {
