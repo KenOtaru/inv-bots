@@ -537,7 +537,7 @@ class DerivFrequencyBot {
         this.totalProfitLoss = 0;
         this.dailyProfitLoss = 0;
         this.endOfDay = false;
-        this.underrepresentedIndex = 0;
+        this.underrepresentedIndex = 4;
         this.underrepresentedIndeLimit = 5;
         this.predictedDigit = null;
 
@@ -766,7 +766,13 @@ class DerivFrequencyBot {
         console.log(`  Last 20 digits: [ ${this.digitHistories[asset].slice(-20).join(' ')} ]`);
         console.log(`[${asset}] ${analysis.reason} conf=${analysis.confidence}| UR=${analysis.underrepresentedCount}| ${analysis.underrepresented.map(r => `(${r.from}->${r.to}: ${r.rarity})`).join(' ')}`);
 
-        if (!analysis.shouldTrade || analysis.underrepresentedCount < 30 || analysis.underrepresentedCount > 35) return;
+        if (!analysis.shouldTrade || analysis.underrepresentedCount < 20 || analysis.underrepresentedCount > 55) return;
+
+        //Don't Trade if Last Digit is not same as analysis.underrepresented[4].from.toString()
+        if (this.digitHistories[asset][this.digitHistories[asset].length - 1] !== analysis.underrepresented[4].from.toString()) {
+            console.log("Last Digit is not same as analysis.underrepresented[4].from");
+            return;
+        }
 
         this._requestProposal(asset, analysis);
     }
@@ -938,7 +944,7 @@ class DerivFrequencyBot {
             this.lastLossTime[asset] = Date.now();
             this.assetMetrics[asset].losses++;
             this.session.lossesCount++;
-            this.underrepresentedIndex++;
+            // this.underrepresentedIndex++;
 
             if (this.underrepresentedIndex >= this.underrepresentedIndeLimit) {
                 this.underrepresentedIndex = 0;
