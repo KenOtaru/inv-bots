@@ -537,6 +537,9 @@ class DerivFrequencyBot {
         this.totalProfitLoss = 0;
         this.dailyProfitLoss = 0;
         this.endOfDay = false;
+        this.underrepresentedIndex = 0;
+        this.underrepresentedIndeLimit = 5;
+        this.predictedDigit = null;
 
         // Rate limiting
         this.hourlyTrades = [];
@@ -774,7 +777,7 @@ class DerivFrequencyBot {
         // For this POC, use MATCH contract targeting the cold digit
         // In production, vary contract type based on signal
         const contractType = analysis.contractType;
-        this.predictedDigit = analysis.underrepresented[2].to.toString()
+        this.predictedDigit = analysis.underrepresented[this.underrepresentedIndex].to.toString()
 
         this._send({
             proposal: 1,
@@ -935,6 +938,11 @@ class DerivFrequencyBot {
             this.lastLossTime[asset] = Date.now();
             this.assetMetrics[asset].losses++;
             this.session.lossesCount++;
+            this.underrepresentedIndex++;
+
+            if (this.underrepresentedIndex >= this.underrepresentedIndeLimit) {
+                this.underrepresentedIndex = 0;
+            }
 
             this.currentStake = Math.ceil(this.currentStake * this.cfg.multiplier * 100) / 100;
         }
