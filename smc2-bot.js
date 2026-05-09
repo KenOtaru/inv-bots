@@ -109,7 +109,7 @@ const BOT_CONFIG = {
     // Risk management
     minTimeBetweenTrades: 8000,   // 8 seconds between trades per asset
     cooldownAfterLoss: 30000,     // 30 seconds after loss
-    maxTradesPerHour: 20,
+    maxTradesPerHour: 200,
     maxExposure: 50,              // Never have more than $50 at risk simultaneously
 
     requiredHistoryLength: 300,
@@ -475,7 +475,7 @@ class FrequencySignalGenerator {
         //     contractType = primary.direction === 'EVEN_BIASED' ? 'EVEN' : 'ODD';
         //     predictedDigit = null;  // Doesn't apply to EVEN/ODD
         // }
-        else if (primary.type === 'CHI_SQUARE_HOT_LONG_TERM' && primary.hotDigits.length > 0) {
+        else if (primary.type === 'CHI_SQUARE_HOT' && primary.hotDigits.length > 0) {
             // Bet on the hot digit (bet it will appear)
             // Use DIGITDIFF if we're targeting a specific digit
             contractType = 'DIGITDIFF';
