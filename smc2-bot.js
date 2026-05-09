@@ -814,6 +814,7 @@ class DerivFrequencyBot {
         console.log(`  📊 FREQUENCY SIGNAL TRADE — ${asset}`);
         console.log(`${'═'.repeat(60)}`);
         console.log(`  Signal      : ${analysis.reason}`);
+
         console.log(`  Confidence  : ${(parseFloat(analysis.confidence) * 100).toFixed(1)}%`);
         console.log(`  Contract    : ${analysis.contractType}`);
         if (analysis.predictedDigit !== null) console.log(`  Target Digit: ${analysis.predictedDigit}`);
@@ -850,6 +851,7 @@ class DerivFrequencyBot {
             `📊 <b>Frequency Signal Trade</b>\n\n` +
             `Asset: <b>${asset}</b>\n` +
             `Signal: ${analysis.reason}\n` +
+            `Target Digit: ${analysis.predictedDigit}\n` +
             `Confidence: ${(parseFloat(analysis.confidence) * 100).toFixed(1)}%\n` +
             `Type: ${analysis.contractType}\n` +
             `Stake: $${this.currentStake.toFixed(2)}`
