@@ -163,7 +163,7 @@ const BOT_CONFIG = {
 
     requiredHistoryLength: 150,
 
-    telegramToken: '8106601008:AAEMyCma6mvPYIHEvw3RHQX2tkD5-wUe1o0',
+    telegramToken: '8218636914:AAGvaKFh8MT769-_9eOEiU4XKufL0aHRhZ4',
     telegramChatId: '752497117',
 
     maxReconnectAttempts: 50,
