@@ -469,7 +469,7 @@ class FrequencySignalGenerator {
 
         if (primary.type === 'RARE_TRANSITION') {
             contractType = 'DIGITDIFF';  // Bet that the rare transition WON'T happen
-            predictedDigit = transitions.underrepresented[0].to; // Bet that the rare transition WON'T happen 
+            predictedDigit = transitions.underrepresented[4].to; // Bet that the rare transition WON'T happen 
         }
         // else if (primary.type === 'EVEN_ODD_BIAS') {
         //     contractType = primary.direction === 'EVEN_BIASED' ? 'EVEN' : 'ODD';
@@ -760,9 +760,9 @@ class DerivFrequencyBot {
 
         // Uncomment for verbose debug:
         // console.log(`[${asset}] ${analysis.reason} conf=${analysis.confidence} χ²=${analysis.chiSquare?.chiSquare}`);
-        console.log(`[${asset}] ${analysis.reason} conf=${analysis.confidence} Transitions=${analysis.underrepresentedCount} ${analysis.underrepresented.map(r => `(${r.from}->${r.to}: ${r.rarity})`).join(' ')}`);
+        console.log(`[${asset}] ${analysis.reason} conf=${analysis.confidence}| transitions=${analysis.transitions.length}| UR=${analysis.underrepresentedCount}| ${analysis.underrepresented.map(r => `(${r.from}->${r.to}: ${r.rarity})`).join(' ')}`);
 
-        if (!analysis.shouldTrade) return;
+        if (!analysis.shouldTrade || analysis.underrepresentedCount >= 39) return;
 
         this._requestProposal(asset, analysis);
     }
