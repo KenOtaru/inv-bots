@@ -770,7 +770,7 @@ class DerivFrequencyBot {
 
         //Don't Trade if Last Digit is not same as analysis.underrepresented[4].from.toString()
         if (this.digitHistories[asset][this.digitHistories[asset].length - 1] !== analysis.underrepresented[4].from.toString()) {
-            console.log("Last Digit is not same as analysis.underrepresented[4].from");
+            console.log("Last Digit is not same as analysis.underrepresented[4].from |", this.digitHistories[asset][this.digitHistories[asset].length - 1], "|", analysis.underrepresented[4].from.toString());
             return;
         }
 
