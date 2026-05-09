@@ -854,6 +854,7 @@ class DerivFrequencyBot {
         this._sendTelegram(
             `📊 <b>Frequency Signal Trade</b>\n\n` +
             `Asset: <b>${asset}</b>\n` +
+            `Last10digits: ${this.digitHistories[asset].slice(-10).join(',')}\n` +
             `Signal: ${analysis.reason}\n` +
             `UR Count: ${analysis.underrepresentedCount}\n` +
             `Target Digit: ${analysis.predictedDigit}\n` +
@@ -954,6 +955,7 @@ class DerivFrequencyBot {
         this._sendTelegram(
             `${won ? '✅' : '❌'} <b>Result</b>\n\n` +
             `Asset: ${asset}\n` +
+            `Last10digits: ${this.digitHistories[asset].slice(-10).join(',')}\n` +
             `P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(3)}\n` +
             `Trades: ${this.totalTrades} (${this.totalWins}/${this.totalLosses})\n` +
             `Win Rate: ${wr}%\n` +
@@ -962,7 +964,7 @@ class DerivFrequencyBot {
             `Total P&L: ${this.totalProfitLoss >= 0 ? '+' : ''}$${this.totalProfitLoss.toFixed(2)}`
         );
 
-        this._logSummary();
+        this._logSummary(asset);
         StatePersistence.save(this);
 
         if (this.totalProfitLoss >= this.cfg.takeProfit) {
@@ -1025,10 +1027,11 @@ class DerivFrequencyBot {
         }, 20000);
     }
 
-    _logSummary() {
+    _logSummary(asset) {
         const wr = this.totalTrades > 0 ? ((this.totalWins / this.totalTrades) * 100).toFixed(2) : '0.00';
         console.log('\n📊 SUMMARY');
         console.log(`  Trades: ${this.totalTrades} | W: ${this.totalWins} | L: ${this.totalLosses} | WR: ${wr}%`);
+        console.log(`  Last20digits: ${this.digitHistories[asset].slice(-20).join(',')}`);
         console.log(`  Total P&L: $${this.totalProfitLoss.toFixed(2)}`);
         console.log(`  Next stake: $${this.currentStake.toFixed(2)}`);
     }
