@@ -103,9 +103,9 @@ const logger = new AnalysisLogger();
 // CONFIG
 // ─────────────────────────────────────────────────────────────────────────────
 const BOT_CONFIG = {
-    token: '0P94g4WdSrSrzir',
+    token: 'Dz2V2KvRf4Uukt3',
 
-    assets: ['R_10', 'R_25'], //['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'RDBULL', 'RDBEAR']
+    assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'RDBULL', 'RDBEAR'], //['R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'RDBULL', 'RDBEAR']
 
     initialStake: 2.55,
     multiplier: 11.3,
@@ -168,7 +168,7 @@ const BOT_CONFIG = {
 
     // ENSEMBLE CONFIG
     ensemble: {
-        minLayersAgreement: 5,          // Need 5/6 layers to agree
+        minLayersAgreement: 6,          // Need 5/6 layers to agree
         minConfidenceThreshold: 0.62,   // 82% minimum confidence
         enableDynamicWeighting: true,
     },
@@ -180,7 +180,7 @@ const BOT_CONFIG = {
 
     requiredHistoryLength: 250,
 
-    telegramToken: '8218636914:AAGvaKFh8MT769-_9eOEiU4XKufL0aHRhZ4',
+    telegramToken: '8106601008:AAEMyCma6mvPYIHEvw3RHQX2tkD5-wUe1o0',
     telegramChatId: '752497117',
 
     maxReconnectAttempts: 50,
@@ -190,7 +190,7 @@ const BOT_CONFIG = {
 // ─────────────────────────────────────────────────────────────────────────────
 // STATE PERSISTENCE
 // ─────────────────────────────────────────────────────────────────────────────
-const STATE_FILE = path.join(__dirname, 'qce_lite_state02.json');
+const STATE_FILE = path.join(__dirname, 'qce_lite2_state01.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
