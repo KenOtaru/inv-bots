@@ -498,7 +498,10 @@ class FrequencySignalGenerator {
             contractType,
             predictedDigit,
             signals,
-            chiSquare: chiSquareShort
+            chiSquare: chiSquareShort,
+            underrepresented: transitions.underrepresented,
+            underrepresentedCount: transitions.underrepresentedCount,
+            transitions: transitions.transitions,
         };
     }
 }
@@ -756,7 +759,8 @@ class DerivFrequencyBot {
         const analysis = this.signalGen.analyze(this.digitHistories[asset]);
 
         // Uncomment for verbose debug:
-        console.log(`[${asset}] ${analysis.reason} conf=${analysis.confidence} χ²=${analysis.chiSquare?.chiSquare}`);
+        // console.log(`[${asset}] ${analysis.reason} conf=${analysis.confidence} χ²=${analysis.chiSquare?.chiSquare}`);
+        console.log(`[${asset}] ${analysis.reason} conf=${analysis.confidence} Transitions=${analysis.underrepresentedCount} ${analysis.underrepresented.map(r => `(${r.from}->${r.to}: ${r.rarity})`).join(' ')}`);
 
         if (!analysis.shouldTrade) return;
 

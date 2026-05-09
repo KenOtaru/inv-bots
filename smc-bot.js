@@ -380,7 +380,7 @@ class SmartMoneyAnalyzer {
 
         // Determine the digit to avoid (DIGITDIFF target)
         const avoidDigit = this._resolveAvoidDigit(results, digitHistory);
-        if (avoidDigit === null || !(tfResult.isBullish || tfResult.isBearish)) {
+        if (avoidDigit === null) {
             return { shouldTrade: false, reason: 'no_clear_avoid_digit', confluence, results };
         }
 
@@ -889,7 +889,11 @@ class SmartMoneyAnalyzer {
 
         const shouldTrade =
             score >= this.cfg.confluence.minScore &&
-            results.liquiditySweep.detected;   // Liquidity Sweep is mandatory
+            results.liquiditySweep.detected &&
+            results.breakOfStructure.detected &&
+            results.fairValueGap.detected &&
+            results.orderBlock.detected &&
+            results.trendFilter.aligned;
 
         return {
             shouldTrade,
