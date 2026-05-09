@@ -889,10 +889,7 @@ class SmartMoneyAnalyzer {
 
         const shouldTrade =
             score >= this.cfg.confluence.minScore &&
-            results.liquiditySweep.detected &&
-            results.breakOfStructure.detected &&
             results.fairValueGap.detected &&
-            results.orderBlock.detected &&
             results.trendFilter.aligned;
 
         return {

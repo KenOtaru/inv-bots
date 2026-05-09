@@ -760,9 +760,9 @@ class DerivFrequencyBot {
 
         // Uncomment for verbose debug:
         // console.log(`[${asset}] ${analysis.reason} conf=${analysis.confidence} χ²=${analysis.chiSquare?.chiSquare}`);
-        console.log(`[${asset}] ${analysis.reason} conf=${analysis.confidence}| transitions=${analysis.transitions.length}| UR=${analysis.underrepresentedCount}| ${analysis.underrepresented.map(r => `(${r.from}->${r.to}: ${r.rarity})`).join(' ')}`);
+        console.log(`[${asset}] ${analysis.reason} conf=${analysis.confidence}| UR=${analysis.underrepresentedCount}| ${analysis.underrepresented.map(r => `(${r.from}->${r.to}: ${r.rarity})`).join(' ')}`);
 
-        if (!analysis.shouldTrade || analysis.underrepresentedCount >= 39) return;
+        if (!analysis.shouldTrade || analysis.underrepresentedCount >= 31) return;
 
         this._requestProposal(asset, analysis);
     }
@@ -823,7 +823,6 @@ class DerivFrequencyBot {
         console.log(`  Contract    : ${analysis.contractType}`);
         if (analysis.predictedDigit !== null) console.log(`  Target Digit: ${analysis.predictedDigit}`);
         console.log(`  Stake       : $${this.currentStake.toFixed(2)}  →  Payout: $${payout.toFixed(2)} (+${payoutPct}%)`);
-        console.log(`  χ² Stat     : ${analysis.chiSquare?.chiSquare} (p=${analysis.chiSquare?.pValue})`);
 
         if (analysis.signals[0]?.hotDigits) {
             console.log(`  Hot Digits : ${analysis.signals[0].hotDigits.map(d => `${d.digit}(${d.ratio})`).join(', ')}`);
@@ -855,6 +854,7 @@ class DerivFrequencyBot {
             `📊 <b>Frequency Signal Trade</b>\n\n` +
             `Asset: <b>${asset}</b>\n` +
             `Signal: ${analysis.reason}\n` +
+            `UR Count: ${analysis.underrepresentedCount}\n` +
             `Target Digit: ${analysis.predictedDigit}\n` +
             `Confidence: ${(parseFloat(analysis.confidence) * 100).toFixed(1)}%\n` +
             `Type: ${analysis.contractType}\n` +
