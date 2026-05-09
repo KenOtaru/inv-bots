@@ -468,7 +468,7 @@ class FrequencySignalGenerator {
         let predictedDigit = null;
 
         if (primary.type === 'RARE_TRANSITION') {
-            contractType = 'DIFFER';  // Bet that the rare transition WON'T happen
+            contractType = 'DIGITDIFF';  // Bet that the rare transition WON'T happen
             predictedDigit = transitions.underrepresented[0]; // Bet that the rare transition WON'T happen 
         }
         // else if (primary.type === 'EVEN_ODD_BIAS') {
@@ -478,7 +478,7 @@ class FrequencySignalGenerator {
         else if (primary.type === 'CHI_SQUARE_HOT_LONG_TERM' && primary.hotDigits.length > 0) {
             // Bet on the hot digit (bet it will appear)
             // Use DIGITDIFF if we're targeting a specific digit
-            contractType = 'DIFFER';
+            contractType = 'DIGITDIFF';
             predictedDigit = primary.hotDigits[0].digit;
         }
 
@@ -769,7 +769,13 @@ class DerivFrequencyBot {
         // For this POC, use MATCH contract targeting the cold digit
         // In production, vary contract type based on signal
         const contractType = analysis.contractType;
-        const barrier = analysis.predictedDigit !== null ? analysis.predictedDigit.toString() : '0';
+        const barrier = analysis.predictedDigit !== null ? analysis.predictedDigit.toString() : null;
+
+        if (contractType === 'DIFFER' && barrier === null) {
+            this.tradeInProgress = false;
+            console.log(`⚠️ No barrier found for ${asset}, skipping trade`);
+            return;
+        }
 
         this._send({
             proposal: 1,
