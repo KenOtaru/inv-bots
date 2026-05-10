@@ -707,18 +707,18 @@ class DerivDigitPairBot {
 
         const analysis = this.analyzer.analyzeTransitions(this.digitHistories[asset]);
 
-        if (analysis.shouldTrade) {
-            console.log(`📊 ${asset}`);
-            console.log(`Trade Signal: ${analysis.reason}`);
-            console.log(`Confidence: ${analysis.confidence}`);
-            console.log(`Contract: ${analysis.contractType}`);
-            console.log(`Last 20 digits: ${this.digitHistories[asset].slice(-20).join(',')}`);
-            console.log(`Current digit: ${analysis.currentDigit}`);
-            console.log(`Predicted digit: ${analysis.predictedDigit}`);
-            console.log(`Analysis: ${JSON.stringify(analysis.analysis, null, 2)}`);
-            console.log(`All opportunities: ${JSON.stringify(analysis.allOpportunities, null, 2)}`);
-            console.log("==========================\n");
-        }
+        // if (analysis.shouldTrade) {
+        console.log(`📊 ${asset}`);
+        console.log(`Trade Signal: ${analysis?.reason}`);
+        console.log(`Confidence: ${analysis?.confidence}`);
+        console.log(`Contract: ${analysis?.contractType}`);
+        console.log(`Last 20 digits: ${this.digitHistories[asset].slice(-20).join(',')}`);
+        console.log(`Current digit: ${analysis?.currentDigit}`);
+        console.log(`Predicted digit: ${analysis?.predictedDigit}`);
+        console.log(`Analysis: ${JSON.stringify(analysis?.analysis, null, 2)}`);
+        console.log(`All opportunities: ${JSON.stringify(analysis?.allOpportunities, null, 2)}`);
+        console.log("==========================\n");
+        // }
 
         if (!analysis.shouldTrade) return;
 

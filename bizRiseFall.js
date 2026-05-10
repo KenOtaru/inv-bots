@@ -805,7 +805,7 @@ class VolatilityBreakoutAnalyzer {
             if (strength >= CONFIG.BREAKOUT.MIN_STRENGTH && confirmed) {
                 return {
                     hasBreakout: true,
-                    direction: 'CALL',
+                    direction: 'CALLE',
                     strength,
                     isStrong: strength >= CONFIG.BREAKOUT.STRONG_STRENGTH,
                     breakoutPrice: high,
@@ -822,7 +822,7 @@ class VolatilityBreakoutAnalyzer {
             if (strength >= CONFIG.BREAKOUT.MIN_STRENGTH && confirmed) {
                 return {
                     hasBreakout: true,
-                    direction: 'PUT',
+                    direction: 'PUTE',
                     strength,
                     isStrong: strength >= CONFIG.BREAKOUT.STRONG_STRENGTH,
                     breakoutPrice: low,
@@ -960,9 +960,9 @@ class VolatilityBreakoutAnalyzer {
         if (CONFIG.RSI.ENABLED) {
             rsi = this.calculateRSI(candles, CONFIG.RSI.PERIOD);
 
-            // For CALL: prefer RSI not overbought
-            // For PUT: prefer RSI not oversold
-            if (breakout.direction === 'CALL') {
+            // For CALLE: prefer RSI not overbought
+            // For PUTE: prefer RSI not oversold
+            if (breakout.direction === 'CALLE') {
                 rsiSignal = rsi < CONFIG.RSI.OVERBOUGHT;
             } else {
                 rsiSignal = rsi > CONFIG.RSI.OVERSOLD;
@@ -993,16 +993,16 @@ class VolatilityBreakoutAnalyzer {
         // Trend alignment adds confidence
         if (trend.aligned && trend.trend !== 'NEUTRAL') {
             const trendMatch =
-                (trend.trend === 'UPTREND' && breakout.direction === 'CALL') ||
-                (trend.trend === 'DOWNTREND' && breakout.direction === 'PUT');
+                (trend.trend === 'UPTREND' && breakout.direction === 'CALLE') ||
+                (trend.trend === 'DOWNTREND' && breakout.direction === 'PUTE');
 
             if (trendMatch) confidence += 0.20;
         }
 
         // RSI confirmation
         if (CONFIG.RSI.ENABLED) {
-            if (breakout.direction === 'CALL' && rsi < 50) confidence += 0.10;
-            if (breakout.direction === 'PUT' && rsi > 50) confidence += 0.10;
+            if (breakout.direction === 'CALLE' && rsi < 50) confidence += 0.10;
+            if (breakout.direction === 'PUTE' && rsi > 50) confidence += 0.10;
         }
 
         // Cap confidence
@@ -1023,7 +1023,7 @@ class VolatilityBreakoutAnalyzer {
 
         return {
             shouldTrade: true,
-            direction: breakout.direction === 'CALL' ? 'CALLE' : 'PUTE',
+            direction: breakout.direction === 'CALLE' ? 'CALLE' : 'PUTE',
             confidence,
             reason: 'volatility_breakout_confirmed',
             signal: `${breakout.isStrong ? 'STRONG' : 'NORMAL'} ${breakout.direction} breakout from squeeze`,
