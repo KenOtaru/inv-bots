@@ -307,18 +307,8 @@ class DigitPairPatternAnalyzer {
             let signalType = null;
             let confidence = 0;
 
-            // COLD TRANSITION → BET FOR (MATCH)
-            if (shortRatio < this.cfg.coldTransitionRatio && compositeZ < -this.cfg.zScoreThreshold) {
-                signalType = 'COLD_REVERSION';
-                confidence = Math.min(Math.abs(compositeZ) / 3, 1); // Normalize to 0-1
-
-                if (shortRatio < this.cfg.extremelyColdRatio) {
-                    signalType = 'EXTREMELY_COLD';
-                    confidence = Math.min(confidence * 1.2, 1);
-                }
-            }
             // HOT TRANSITION → BET AGAINST (DIFFER)
-            else if (shortRatio > this.cfg.hotTransitionRatio && compositeZ > this.cfg.zScoreThreshold) {
+            if (shortRatio > this.cfg.hotTransitionRatio && compositeZ > this.cfg.zScoreThreshold) {
                 signalType = 'HOT_FADE';
                 confidence = Math.min(compositeZ / 3, 1);
 
@@ -327,6 +317,16 @@ class DigitPairPatternAnalyzer {
                     confidence = Math.min(confidence * 1.2, 1);
                 }
             }
+            // COLD TRANSITION → BET FOR (MATCH)
+            // else if (shortRatio < this.cfg.coldTransitionRatio && compositeZ < -this.cfg.zScoreThreshold) {
+            //     signalType = 'COLD_REVERSION';
+            //     confidence = Math.min(Math.abs(compositeZ) / 3, 1); // Normalize to 0-1
+
+            //     if (shortRatio < this.cfg.extremelyColdRatio) {
+            //         signalType = 'EXTREMELY_COLD';
+            //         confidence = Math.min(confidence * 1.2, 1);
+            //     }
+            // }
 
             if (signalType && confidence >= this.cfg.minConfidenceScore) {
                 opportunities.push({
