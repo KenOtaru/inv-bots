@@ -57,7 +57,7 @@ const path = require('path');
 // ─────────────────────────────────────────────────────────────────────────────
 const BOT_CONFIG = {
     token: 'rgNedekYXvCaPeP',
-    assets: ['R_10'],
+    assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
 
     initialStake: 2.55,
     multiplier: 11.3,
@@ -707,6 +707,19 @@ class DerivDigitPairBot {
 
         const analysis = this.analyzer.analyzeTransitions(this.digitHistories[asset]);
 
+        if (analysis.shouldTrade) {
+            console.log(`📊 ${asset}`);
+            console.log(`Trade Signal: ${analysis.reason}`);
+            console.log(`Confidence: ${analysis.confidence}`);
+            console.log(`Contract: ${analysis.contractType}`);
+            console.log(`Last 20 digits: ${this.digitHistories[asset].slice(-20).join(',')}`);
+            console.log(`Current digit: ${analysis.currentDigit}`);
+            console.log(`Predicted digit: ${analysis.predictedDigit}`);
+            console.log(`Analysis: ${JSON.stringify(analysis.analysis, null, 2)}`);
+            console.log(`All opportunities: ${JSON.stringify(analysis.allOpportunities, null, 2)}`);
+            console.log("==========================\n");
+        }
+
         if (!analysis.shouldTrade) return;
 
         // Additional filter: check triple pattern if enabled
@@ -807,10 +820,12 @@ class DerivDigitPairBot {
             `🔗 <b>Digit Pair Pattern Trade</b>\n\n` +
             `Asset: <b>${asset}</b>\n` +
             `Transition: ${analysis.currentDigit} → ${analysis.predictedDigit}\n` +
-            `Signal: ${analysis.reason}\n` +
-            `Contract: ${analysis.contractType}\n` +
+            `Last10Digits: [ ${this.digitHistories[asset].slice(-10).join(' ')} ]\n` +
+            `PredictedDigit: ${analysis.predictedDigit}\n` +
             `Confidence: ${(parseFloat(analysis.confidence) * 100).toFixed(1)}%\n` +
             `Z-Score: ${analysis.analysis.zScore}\n` +
+            `Signal: ${analysis.reason}\n` +
+            // `Contract: ${analysis.contractType}\n` +
             `Short: ${analysis.analysis.shortCount} (${(parseFloat(analysis.analysis.shortRatio) * 100).toFixed(2)}%)\n` +
             `Stake: $${this.currentStake.toFixed(2)}`
         );
@@ -918,6 +933,7 @@ class DerivDigitPairBot {
         this._sendTelegram(
             `${won ? '✅' : '❌'} <b>Result</b>\n\n` +
             `Transition: ${trade.analysis.currentDigit} → ${trade.analysis.predictedDigit}\n` +
+            `Last10Digits: [ ${this.digitHistories[asset].slice(-10).join(' ')} ]\n` +
             `P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(3)}\n` +
             `Trades: ${this.totalTrades} (${this.totalWins}W/${this.totalLosses}L)\n` +
             `Win Rate: ${wr}%\n` +
