@@ -124,7 +124,7 @@ const BOT_CONFIG = {
 // ─────────────────────────────────────────────────────────────────────────────
 // STATE PERSISTENCE
 // ─────────────────────────────────────────────────────────────────────────────
-const STATE_FILE = path.join(__dirname, 'deriv_freq_bot_state.json');
+const STATE_FILE = path.join(__dirname, 'deriv_freq_bot_state_01.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
