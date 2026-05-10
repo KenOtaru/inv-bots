@@ -140,9 +140,12 @@ class StatePersistence {
                     totalLosses: bot.totalLosses,
                     totalProfitLoss: bot.totalProfitLoss,
                     dailyProfitLoss: bot.dailyProfitLoss,
+                    consecutiveLosses2: bot.consecutiveLosses2,
+                    consecutiveLosses3: bot.consecutiveLosses3,
                 },
                 assetMetrics: bot.assetMetrics,
                 hourlyTrades: bot.hourlyTrades,
+                hourlyStats: bot.hourlyStats,
                 session: bot.session,
                 currentTradeDay: bot.currentTradeDay,
             };
@@ -536,10 +539,24 @@ class DerivFrequencyBot {
         this.totalLosses = 0;
         this.totalProfitLoss = 0;
         this.dailyProfitLoss = 0;
+        this.consecutiveLosses2 = 0;
+        this.consecutiveLosses3 = 0;
         this.endOfDay = false;
         this.underrepresentedIndex = 4;
         this.underrepresentedIndeLimit = 5;
         this.predictedDigit = null;
+
+        // New tracking for summaries
+        this.hourlyStats = { trades: 0, wins: 0, losses: 0, pnl: 0, lastHour: new Date().getHours() };
+        this.session = {
+            startTime: Date.now(),
+            startCapital: 0,
+            tradesCount: 0,
+            winsCount: 0,
+            lossesCount: 0,
+            netPL: 0,
+            isActive: true
+        };
 
         // Rate limiting
         this.hourlyTrades = [];
@@ -571,19 +588,16 @@ class DerivFrequencyBot {
 
         this._loadState();
 
-        if (!this.session) {
-            this.session = {
-                startTime: Date.now(),
-                startCapital: 0,
-                tradesCount: 0,
-                winsCount: 0,
-                lossesCount: 0,
-                netPL: 0,
-            };
-        }
-        if (!this.currentTradeDay) {
-            this.currentTradeDay = new Date().toISOString().split('T')[0];
-        }
+        this.session ||= {
+            startTime: Date.now(),
+            startCapital: 0,
+            tradesCount: 0,
+            winsCount: 0,
+            lossesCount: 0,
+            netPL: 0,
+            isActive: true
+        };
+        this.currentTradeDay ||= new Date().toISOString().split('T')[0];
     }
 
     _loadState() {
@@ -598,8 +612,11 @@ class DerivFrequencyBot {
                 this.totalLosses = s.trading.totalLosses || 0;
                 this.totalProfitLoss = s.trading.totalProfitLoss || 0;
                 this.dailyProfitLoss = s.trading.dailyProfitLoss || 0;
+                this.consecutiveLosses2 = s.trading.consecutiveLosses2 || 0;
+                this.consecutiveLosses3 = s.trading.consecutiveLosses3 || 0;
             }
             if (s.assetMetrics) this.assetMetrics = s.assetMetrics;
+            if (s.hourlyStats) this.hourlyStats = s.hourlyStats;
             if (s.session) this.session = s.session;
             if (s.currentTradeDay) this.currentTradeDay = s.currentTradeDay;
             console.log(`✅ State restored — ${this.totalTrades} trades, P&L $${this.totalProfitLoss.toFixed(2)}`);
@@ -929,22 +946,36 @@ class DerivFrequencyBot {
         this.assetMetrics[asset].profitLoss += profit;
 
         this._checkDayChange();
+
+        // Update Hourly & Session Stats
+        const currentHour = new Date().getHours();
+        if (currentHour !== this.hourlyStats.lastHour) {
+            this.hourlyStats = { trades: 0, wins: 0, losses: 0, pnl: 0, lastHour: currentHour };
+        }
+        this.hourlyStats.trades++;
+        this.hourlyStats.pnl += profit;
+
         this.session.tradesCount++;
         this.session.netPL += profit;
 
         if (won) {
+            this.hourlyStats.wins++;
             this.totalWins++;
+            this.isWinTrade = true;
             this.consecutiveLosses = 0;
             this.currentStake = this.cfg.initialStake;
             this.assetMetrics[asset].wins++;
             this.session.winsCount++;
         } else {
+            this.hourlyStats.losses++;
             this.totalLosses++;
             this.consecutiveLosses++;
             this.lastLossTime[asset] = Date.now();
             this.assetMetrics[asset].losses++;
             this.session.lossesCount++;
-            // this.underrepresentedIndex++;
+
+            if (this.consecutiveLosses === 2) this.consecutiveLosses2++;
+            else if (this.consecutiveLosses === 3) this.consecutiveLosses3++;
 
             if (this.underrepresentedIndex >= this.underrepresentedIndeLimit) {
                 this.underrepresentedIndex = 0;
@@ -965,6 +996,7 @@ class DerivFrequencyBot {
             `P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(3)}\n` +
             `Trades: ${this.totalTrades} (${this.totalWins}/${this.totalLosses})\n` +
             `Win Rate: ${wr}%\n` +
+            `2x-x3 Losses: ${this.consecutiveLosses2}/${this.consecutiveLosses3}\n` +
             `Consec losses: ${this.consecutiveLosses}\n` +
             `Next stake: $${this.currentStake.toFixed(2)}\n` +
             `Total P&L: ${this.totalProfitLoss >= 0 ? '+' : ''}$${this.totalProfitLoss.toFixed(2)}`
@@ -976,13 +1008,104 @@ class DerivFrequencyBot {
         if (this.totalProfitLoss >= this.cfg.takeProfit) {
             this.endOfDay = true;
             this._sendTelegram(`🎯 <b>Take Profit!</b> P&L: +$${this.totalProfitLoss.toFixed(2)}`);
+            this._sendSessionSummary();
             this._cleanupWs();
         } else if (this.consecutiveLosses >= this.cfg.maxConsecutiveLosses ||
             this.totalProfitLoss <= -this.cfg.stopLoss) {
             this.endOfDay = true;
             this._sendTelegram(`🛑 <b>Stop Loss</b>\nLosses: ${this.consecutiveLosses} | P&L: $${this.totalProfitLoss.toFixed(2)}`);
+            this._sendSessionSummary();
             this._cleanupWs();
         }
+    }
+
+    // ── Summaries & Timers ────────────────────────────────────────────────────
+    async _sendHourlySummary() {
+        try {
+            const stats = { ...this.hourlyStats };
+            if (stats.trades === 0) return;
+
+            const winRate = stats.trades > 0 ? ((stats.wins / stats.trades) * 100).toFixed(1) : '0.0';
+            const pnlEmoji = stats.pnl >= 0 ? '🟢' : '🔴';
+            const pnlStr = (stats.pnl >= 0 ? '+' : '') + '$' + stats.pnl.toFixed(2);
+
+            const message = [
+                `⏰ <b>Statistical Analyzer Hourly Summary</b>`, ``,
+                `📊 <b>Last Hour</b>`,
+                `├ Trades: ${stats.trades}`,
+                `├ Wins: ${stats.wins} | Losses: ${stats.losses}`,
+                `├ 2x-x3 Losses: ${this.consecutiveLosses2}/${this.consecutiveLosses3}`,
+                `├ Win Rate: ${winRate}%`,
+                `└ ${pnlEmoji} <b>P&L:</b> ${pnlStr}`, ``,
+                `🗓️ <b>Today</b>`,
+                `├ Total Trades: ${this.totalTrades}`,
+                `└ Today P&L: ${this.dailyProfitLoss >= 0 ? '+' : ''}$${this.dailyProfitLoss.toFixed(2)}`
+            ].join('\n');
+
+            await this._sendTelegram(message);
+            this.hourlyStats = { trades: 0, wins: 0, losses: 0, pnl: 0, lastHour: new Date().getHours() };
+        } catch (err) {
+            console.error(`❌ _sendHourlySummary: ${err.message}`);
+        }
+    }
+
+    async _sendSessionSummary() {
+        try {
+            const durationMs = Date.now() - this.session.startTime;
+            const hours = Math.floor(durationMs / 3600000);
+            const minutes = Math.floor((durationMs % 3600000) / 60000);
+            const winRate = this.session.tradesCount > 0
+                ? ((this.session.winsCount / this.session.tradesCount) * 100).toFixed(1) + '%'
+                : '0%';
+
+            const message = [
+                `📊 <b>SESSION SUMMARY — Statistical Analyzer</b>`, ``,
+                `⏱️ Duration: ${hours}h ${minutes}m`,
+                `🔢 Trades: ${this.session.tradesCount}`,
+                `✅ Wins: ${this.session.winsCount} | ❌ Losses: ${this.session.lossesCount}`,
+                `🔢 2x-x3 Losses: ${this.consecutiveLosses2}/${this.consecutiveLosses3}`,
+                `📈 Win Rate: ${winRate}`,
+                `💰 Session P/L: ${this.session.netPL >= 0 ? '+' : ''}$${this.session.netPL.toFixed(2)}`,
+                `💵 Total P&L: ${this.totalProfitLoss >= 0 ? '+' : ''}$${this.totalProfitLoss.toFixed(2)}`
+            ].join('\n');
+
+            await this._sendTelegram(message);
+        } catch (err) {
+            console.error(`❌ _sendSessionSummary: ${err.message}`);
+        }
+    }
+
+    async _sendDayEndSummary(dateKey) {
+        try {
+            const wr = this.totalTrades > 0 ? ((this.totalWins / this.totalTrades) * 100).toFixed(1) + '%' : '0%';
+            const message = [
+                `🌙 <b>END OF DAY — ${dateKey}</b>`, ``,
+                `${this.dailyProfitLoss >= 0 ? '🟢' : '🔴'} <b>Day Results:</b>`,
+                `├ Trades: ${this.totalTrades}`,
+                `├ Wins: ${this.totalWins} | Losses: ${this.totalLosses}`,
+                `├ 2x-x3 Losses: ${this.consecutiveLosses2}/${this.consecutiveLosses3}`,
+                `├ Win Rate: ${wr}`,
+                `└ Net P/L: $${this.dailyProfitLoss.toFixed(2)}`, ``,
+                `📊 <b>Overall:</b>`,
+                `└ Total P&L: $${this.totalProfitLoss.toFixed(2)}`
+            ].join('\n');
+
+            await this._sendTelegram(message);
+        } catch (err) {
+            console.error(`❌ _sendDayEndSummary: ${err.message}`);
+        }
+    }
+
+    _startHourlyTimer() {
+        const now = new Date();
+        const next = new Date(now);
+        next.setHours(next.getHours() + 1, 0, 0, 0);
+        const wait = next.getTime() - now.getTime();
+        console.log(`⏰ Hourly summary in ${Math.ceil(wait / 60000)} min`);
+        setTimeout(() => {
+            this._sendHourlySummary();
+            setInterval(() => this._sendHourlySummary(), 60 * 60 * 1000);
+        }, wait);
     }
 
     _startWatchdog(asset) {
@@ -1014,6 +1137,7 @@ class DerivFrequencyBot {
         const today = new Date().toISOString().split('T')[0];
         if (this.currentTradeDay && this.currentTradeDay !== today) {
             console.log(`🗓️ Day change: ${this.currentTradeDay} → ${today}`);
+            this._sendDayEndSummary(this.currentTradeDay);
             this.dailyProfitLoss = 0;
             this.currentTradeDay = today;
             StatePersistence.save(this);
@@ -1024,11 +1148,24 @@ class DerivFrequencyBot {
         setInterval(() => {
             const gmt1 = new Date(Date.now() + 3600000);
             const hr = gmt1.getUTCHours();
-            if (this.endOfDay && hr === 2) {
-                console.log('⏰ 2:00 AM GMT+1 — reconnecting');
+
+            // Reconnect at 2 AM
+            if (this.endOfDay && hr === 7) {
+                console.log('⏰ 7:00 AM GMT+1 — reconnecting');
                 this.endOfDay = false;
                 this.tradeInProgress = false;
                 this.connect();
+            }
+
+            // Shutdown at 11 PM
+            if (!this.endOfDay && hr === 17) {
+                if (this.isWinTrade || this.consecutiveLosses === 0) {
+                    console.log('🌙 5:00 PM GMT+1 — nightly shutdown');
+                    this.endOfDay = true;
+                    this._sendTelegram('🌙 <b>Nightly Shutdown</b> (5 PM GMT+1)\nBot will restart at 7 AM.');
+                    this._sendSessionSummary();
+                    this._cleanupWs();
+                }
             }
         }, 20000);
     }
@@ -1056,6 +1193,7 @@ class DerivFrequencyBot {
 
         this.connect();
         this._startTimeScheduler();
+        this._startHourlyTimer();
         StatePersistence.startAutoSave(this);
     }
 }
