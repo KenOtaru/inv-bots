@@ -44,7 +44,7 @@ const path = require('path');
 //        DERIV_TOKEN, TELEGRAM_TOKEN, TELEGRAM_CHAT_ID
 // ─────────────────────────────────────────────────────────────────────────────
 const BOT_CONFIG = {
-    token: process.env.DERIV_TOKEN,
+    token: 'rgNedekYXvCaPeP',
     assets: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100'],
 
     initialStake: 2.55,
@@ -64,7 +64,7 @@ const BOT_CONFIG = {
         longWindow: 2000,
 
         minTransitionSample: 5,
-        zScoreThreshold: 1.20,//1.60
+        zScoreThreshold: 1.60,//1.60
 
         coldTransitionRatio: 0.006,
         extremelyColdRatio: 0.003,
@@ -86,8 +86,8 @@ const BOT_CONFIG = {
     maxTradesPerHour: 200,
     maxExposure: 50,
 
-    telegramToken: process.env.TELEGRAM_TOKEN,
-    telegramChatId: process.env.TELEGRAM_CHAT_ID,
+    telegramToken: '8218636914:AAGvaKFh8MT769-_9eOEiU4XKufL0aHRhZ4',
+    telegramChatId: '752497117',
 
     maxReconnectAttempts: 50,
     reconnectDelay: 5000,
