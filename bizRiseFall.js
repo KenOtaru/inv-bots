@@ -6,8 +6,8 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'VolatilityBreakout_v1-state.json');
-const HISTORY_FILE = path.join(__dirname, 'VolatilityBreakout_v1-history.json');
+const STATE_FILE = path.join(__dirname, 'VolatilityBreakout_01_v1-state.json');
+const HISTORY_FILE = path.join(__dirname, 'VolatilityBreakout_01_v1-history.json');
 
 const STATE_SAVE_INTERVAL = 5000;
 
