@@ -1157,7 +1157,7 @@ class DerivFrequencyBot {
                 this.connect();
             }
 
-            // Shutdown at 11 PM
+            // Shutdown at 5 PM
             if (!this.endOfDay && hr === 17) {
                 if (this.isWinTrade || this.consecutiveLosses === 0) {
                     console.log('🌙 5:00 PM GMT+1 — nightly shutdown');
