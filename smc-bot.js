@@ -1086,18 +1086,18 @@ class DerivDigitPairBot {
             const gmt1 = new Date(Date.now() + 3600000);
             const hr = gmt1.getUTCHours();
 
-            if (this.endOfDay && hr === 7) {
-                console.log('⏰ 7:00 AM GMT+1 — reconnecting');
+            if (this.endOfDay && hr === 2) {
+                console.log('⏰ 2:00 AM GMT+1 — reconnecting');
                 this.endOfDay = false;
                 this.tradeInProgress = false;
                 this.connect();
             }
 
-            if (!this.endOfDay && hr === 17) {
+            if (!this.endOfDay && hr === 11) {
                 if (this.consecutiveLosses === 0) {
-                    console.log('🌙 5:00 PM GMT+1 — nightly shutdown');
+                    console.log('🌙 11:00 PM GMT+1 — nightly shutdown');
                     this.endOfDay = true;
-                    this._sendTelegram('🌙 <b>Nightly Shutdown</b> (5 PM GMT+1)\nBot will restart at 7 AM.');
+                    this._sendTelegram('🌙 <b>Nightly Shutdown</b> (11 PM GMT+1)\nBot will restart at 2 AM.');
                     this._sendSessionSummary();
                     this._cleanupWs();
                 }
