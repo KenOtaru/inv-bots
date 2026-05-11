@@ -64,7 +64,7 @@ const BOT_CONFIG = {
         longWindow: 2000,
 
         minTransitionSample: 5,
-        zScoreThreshold: 2.10,//1.60
+        zScoreThreshold: 1.60,//1.60
 
         coldTransitionRatio: 0.006,
         extremelyColdRatio: 0.003,
