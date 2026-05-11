@@ -700,6 +700,13 @@ class DerivDigitPairBot {
             return;
         }
 
+        // Don't Trade if Current Digit === Predicted Digit
+        if (analysis.currentDigit === analysis.predictedDigit) {
+            console.log(`⚠️ Current Digit is same as Predicted Digit, Do Not Trade`);
+            delete this.proposalIds[asset];
+            return;
+        }
+
         if (this.cfg.transitionAnalysis.useTriplePatterns) {
             const triplePattern = this.analyzer.analyzeTriplePatterns(this.digitHistories[asset]);
             if (triplePattern) {
