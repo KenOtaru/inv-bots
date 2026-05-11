@@ -64,7 +64,7 @@ const BOT_CONFIG = {
         longWindow: 2000,
 
         minTransitionSample: 5,
-        zScoreThreshold: 1.60,//1.60
+        zScoreThreshold: 2.10,//1.60
 
         coldTransitionRatio: 0.006,
         extremelyColdRatio: 0.003,
@@ -81,9 +81,9 @@ const BOT_CONFIG = {
         minConfidenceScore: 0.75,
     },
 
-    minTimeBetweenTrades: 8000,
-    cooldownAfterLoss: 30000,
-    maxTradesPerHour: 200,
+    minTimeBetweenTrades: 25000,
+    cooldownAfterLoss: 60000,
+    maxTradesPerHour: 20000,
     maxExposure: 50,
 
     telegramToken: '8218636914:AAGvaKFh8MT769-_9eOEiU4XKufL0aHRhZ4',
