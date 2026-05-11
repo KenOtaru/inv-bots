@@ -715,7 +715,7 @@ class DerivDigitPairBot {
 
         // Check if longCount < 30
         if (analysis.analysis.longCount < 30) {
-            console.log(`⚠️  LongCount is not less than 30`);
+            console.log(`⚠️  LongCount is not less than 30 ${analysis.analysis.longCount.toFixed(2)}`);
             delete this.proposalIds[asset];
             return;
         }
