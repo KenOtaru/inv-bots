@@ -96,7 +96,7 @@ const BOT_CONFIG = {
 // ─────────────────────────────────────────────────────────────────────────────
 // STATE PERSISTENCE
 // ─────────────────────────────────────────────────────────────────────────────
-const STATE_FILE = path.join(__dirname, 'deriv_digitpair_bot_state.json');
+const STATE_FILE = path.join(__dirname, 'deriv_digitpair_bot_state_01.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -686,11 +686,20 @@ class DerivDigitPairBot {
             console.log(`ShortRatio: ${(parseFloat(analysis.analysis.shortRatio) * 100).toFixed(2)}%`);
             console.log(`MediumRatio: ${(parseFloat(analysis.analysis.mediumRatio) * 100).toFixed(2)}%`);
             console.log(`LongRatio: ${(parseFloat(analysis.analysis.longRatio) * 100).toFixed(2)}%`);
+            console.log(`AllOpportunities: ${analysis.allOpportunities.map(o => `${o.digit}:${o.ratio}`).join(', ')}`);
+            // console.log(`All: ${analysis.analysis.ratios}`);
             console.log(`Z-Score: ${analysis.analysis.zScore}`);
         }
         console.log('==========================\n');
 
         if (!analysis.shouldTrade) return;
+
+        // [M2] Strictly ensure the analysis is performed on the current live tick data
+        if (analysis.currentDigit !== this.digitHistories[asset][this.digitHistories[asset].length - 1]) {
+            console.log(`⚠️  Analysis Current Digit is not same as Asset Last Digit`);
+            delete this.proposalIds[asset];
+            return;
+        }
 
         if (this.cfg.transitionAnalysis.useTriplePatterns) {
             const triplePattern = this.analyzer.analyzeTriplePatterns(this.digitHistories[asset]);
@@ -770,6 +779,8 @@ class DerivDigitPairBot {
         console.log(`  Short Window : ${analysis.analysis.shortCount} occurrences (${(parseFloat(analysis.analysis.shortRatio) * 100).toFixed(2)}%)`);
         console.log(`  Medium Window: ${analysis.analysis.mediumCount} occurrences (${(parseFloat(analysis.analysis.mediumRatio) * 100).toFixed(2)}%)`);
         console.log(`  Long Window  : ${analysis.analysis.longCount} occurrences (${(parseFloat(analysis.analysis.longRatio) * 100).toFixed(2)}%)`);
+        console.log(`AllOpportunities: ${analysis.allOpportunities.map(o => `${o.digit}:${o.ratio}`).join(', ')}`);
+        // console.log(`AllOpportunities: ${JSON.stringify(analysis.allOpportunities)}`);
         console.log(`  ─────────────────────────────────────────────────────────────────`);
         console.log(`  Stake        : $${this.currentStake.toFixed(2)}  →  Payout: $${payout.toFixed(2)} (+${payoutPct}%)`);
         console.log(`  Last 20      : [ ${this.digitHistories[asset].slice(-20).join(' ')} ]`);
