@@ -686,8 +686,7 @@ class DerivDigitPairBot {
             console.log(`ShortRatio: ${(parseFloat(analysis.analysis.shortRatio) * 100).toFixed(2)}%`);
             console.log(`MediumRatio: ${(parseFloat(analysis.analysis.mediumRatio) * 100).toFixed(2)}%`);
             console.log(`LongRatio: ${(parseFloat(analysis.analysis.longRatio) * 100).toFixed(2)}%`);
-            console.log(`AllOpportunities: ${analysis.allOpportunities.map(o => `${o.digit}:${o.ratio}`).join(', ')}`);
-            // console.log(`All: ${analysis.analysis.ratios}`);
+            console.log(`All: ${analysis.analysis.ratios}`);
             console.log(`Z-Score: ${analysis.analysis.zScore}`);
         }
         console.log('==========================\n');
@@ -779,8 +778,7 @@ class DerivDigitPairBot {
         console.log(`  Short Window : ${analysis.analysis.shortCount} occurrences (${(parseFloat(analysis.analysis.shortRatio) * 100).toFixed(2)}%)`);
         console.log(`  Medium Window: ${analysis.analysis.mediumCount} occurrences (${(parseFloat(analysis.analysis.mediumRatio) * 100).toFixed(2)}%)`);
         console.log(`  Long Window  : ${analysis.analysis.longCount} occurrences (${(parseFloat(analysis.analysis.longRatio) * 100).toFixed(2)}%)`);
-        console.log(`AllOpportunities: ${analysis.allOpportunities.map(o => `${o.digit}:${o.ratio}`).join(', ')}`);
-        // console.log(`AllOpportunities: ${JSON.stringify(analysis.allOpportunities)}`);
+        console.log(`AllOpportunities: ${JSON.stringify(analysis.allOpportunities)}`);
         console.log(`  ─────────────────────────────────────────────────────────────────`);
         console.log(`  Stake        : $${this.currentStake.toFixed(2)}  →  Payout: $${payout.toFixed(2)} (+${payoutPct}%)`);
         console.log(`  Last 20      : [ ${this.digitHistories[asset].slice(-20).join(' ')} ]`);
@@ -822,6 +820,7 @@ class DerivDigitPairBot {
             `Z-Score: ${analysis.analysis.zScore}\n` +
             `Signal: ${analysis.reason}\n` +
             `Short: ${analysis.analysis.shortCount} (${(parseFloat(analysis.analysis.shortRatio) * 100).toFixed(2)}%)\n` +
+            `AllOpportunities: ${JSON.stringify(analysis.allOpportunities)}` +
             `Stake: $${this.currentStake.toFixed(2)}`
         );
 
