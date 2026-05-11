@@ -714,6 +714,13 @@ class DerivDigitPairBot {
             return;
         }
 
+        // Check if shortCount >= 3 (At least 3 short occurrences)
+        // if (analysis.allOpportunities[0].shortCount >= 3) {
+        //     console.log(`⚠️  ShortCount is not greater than or equal to 3`);
+        //     delete this.proposalIds[asset];
+        //     return;
+        // }
+
         if (this.cfg.transitionAnalysis.useTriplePatterns) {
             const triplePattern = this.analyzer.analyzeTriplePatterns(this.digitHistories[asset]);
             if (triplePattern) {
@@ -792,7 +799,10 @@ class DerivDigitPairBot {
         console.log(`  Short Window : ${analysis.analysis.shortCount} occurrences (${(parseFloat(analysis.analysis.shortRatio) * 100).toFixed(2)}%)`);
         console.log(`  Medium Window: ${analysis.analysis.mediumCount} occurrences (${(parseFloat(analysis.analysis.mediumRatio) * 100).toFixed(2)}%)`);
         console.log(`  Long Window  : ${analysis.analysis.longCount} occurrences (${(parseFloat(analysis.analysis.longRatio) * 100).toFixed(2)}%)`);
-        console.log(`AllOpportunities: ${JSON.stringify(analysis.allOpportunities)}`);
+        console.log(`Last 3 Short Count: ${analysis.allOpportunities[0].shortCount}`);
+        console.log(`Last 3 Medium Count: ${analysis.allOpportunities[0].mediumCount}`);
+        console.log(`Last 3 Long Count: ${analysis.allOpportunities[0].longCount}`);
+        console.log(`All Opportunities: ${analysis.allOpportunities}`);
         console.log(`  ─────────────────────────────────────────────────────────────────`);
         console.log(`  Stake        : $${this.currentStake.toFixed(2)}  →  Payout: $${payout.toFixed(2)} (+${payoutPct}%)`);
         console.log(`  Last 20      : [ ${this.digitHistories[asset].slice(-20).join(' ')} ]`);
