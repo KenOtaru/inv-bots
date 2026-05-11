@@ -707,6 +707,13 @@ class DerivDigitPairBot {
             return;
         }
 
+        // Check if shortRatio < 1.0
+        if (analysis.analysis.shortCount < 1.0) {
+            console.log(`⚠️  ShortRatio is not less than 1.0`);
+            delete this.proposalIds[asset];
+            return;
+        }
+
         if (this.cfg.transitionAnalysis.useTriplePatterns) {
             const triplePattern = this.analyzer.analyzeTriplePatterns(this.digitHistories[asset]);
             if (triplePattern) {
@@ -826,7 +833,7 @@ class DerivDigitPairBot {
             `Confidence: ${(parseFloat(analysis.confidence) * 100).toFixed(1)}%\n` +
             `Z-Score: ${analysis.analysis.zScore}\n` +
             `Signal: ${analysis.reason}\n` +
-            `Short: ${analysis.analysis.shortCount} (${(parseFloat(analysis.analysis.shortRatio) * 100).toFixed(2)}%)\n` +
+            `Short: ${analysis.analysis.shortCount.toFixed(3)} (${(parseFloat(analysis.analysis.shortRatio) * 100).toFixed(2)}%)\n` +
             `AllOpportunities: ${JSON.stringify(analysis.allOpportunities)}` +
             `Stake: $${this.currentStake.toFixed(2)}`
         );
