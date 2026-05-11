@@ -701,21 +701,21 @@ class DerivDigitPairBot {
 
         // Don't Trade if Current Digit === Predicted Digit
         if (analysis.currentDigit === analysis.predictedDigit) {
-            console.log(`⚠️ Current Digit is same as Predicted Digit, Do Not Trade`);
+            console.log(`⚠️ Current Digit is same as Predicted Digit, Do Not Trade (${analysis.currentDigit} | ${analysis.predictedDigit})`);
             delete this.proposalIds[asset];
             return;
         }
 
         // Check if shortRatio < 1.0
         if (analysis.analysis.shortCount < 1.0) {
-            console.log(`⚠️  ShortRatio is not less than 1.0`);
+            console.log(`⚠️  ShortRatio is not less than 1.0 (${analysis.analysis.shortCount.toFixed(2)})`);
             delete this.proposalIds[asset];
             return;
         }
 
         // Check if longCount < 30
         if (analysis.analysis.longCount < 30) {
-            console.log(`⚠️  LongCount is not less than 30 ${analysis.analysis.longCount.toFixed(2)}`);
+            console.log(`⚠️  LongCount is not less than 30 (${analysis.analysis.longCount.toFixed(2)})`);
             delete this.proposalIds[asset];
             return;
         }
