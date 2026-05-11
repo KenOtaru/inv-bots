@@ -838,10 +838,9 @@ class DerivDigitPairBot {
             `Confidence: ${(parseFloat(analysis.confidence) * 100).toFixed(1)}%\n` +
             `Z-Score: ${analysis.analysis.zScore}\n` +
             `Signal: ${analysis.reason}\n` +
-            `Short: ${analysis.analysis.shortCount.toFixed(2)} (${(parseFloat(analysis.analysis.shortRatio) * 100).toFixed(2)}%)\n` +
-            `Short Window : ${analysis.analysis.shortCount.toFixed(2)} (${(parseFloat(analysis.analysis.shortRatio) * 100).toFixed(2)}%)` +
-            `Medium Window: ${analysis.analysis.mediumCount.toFixed(2)} (${(parseFloat(analysis.analysis.mediumRatio) * 100).toFixed(2)}%)` +
-            `Long Window  : ${analysis.analysis.longCount.toFixed(2)} (${(parseFloat(analysis.analysis.longRatio) * 100).toFixed(2)}%)` +
+            `Short Window : ${analysis.analysis.shortCount.toFixed(2)} (${(parseFloat(analysis.analysis.shortRatio) * 100).toFixed(2)}%)\n` +
+            `Medium Window: ${analysis.analysis.mediumCount.toFixed(2)} (${(parseFloat(analysis.analysis.mediumRatio) * 100).toFixed(2)}%)\n` +
+            `Long Window  : ${analysis.analysis.longCount.toFixed(2)} (${(parseFloat(analysis.analysis.longRatio) * 100).toFixed(2)}%)\n` +
             `Stake: $${this.currentStake.toFixed(2)}`
         );
 
