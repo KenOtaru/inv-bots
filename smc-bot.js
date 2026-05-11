@@ -713,12 +713,12 @@ class DerivDigitPairBot {
             return;
         }
 
-        // Check if shortCount >= 3 (At least 3 short occurrences)
-        // if (analysis.allOpportunities[0].shortCount >= 3) {
-        //     console.log(`⚠️  ShortCount is not greater than or equal to 3`);
-        //     delete this.proposalIds[asset];
-        //     return;
-        // }
+        // Check if longCount < 30
+        if (analysis.analysis.longCount < 30) {
+            console.log(`⚠️  LongCount is not less than 30`);
+            delete this.proposalIds[asset];
+            return;
+        }
 
         if (this.cfg.transitionAnalysis.useTriplePatterns) {
             const triplePattern = this.analyzer.analyzeTriplePatterns(this.digitHistories[asset]);
