@@ -38,12 +38,12 @@ const BOT_CONFIG = {
         longWindow: 1000,
 
         // Minimum history required before trading
-        minHistorySize: 5000,
+        minHistorySize: 1000,
 
         // Frequency thresholds for each window (in percentage)
         shortWindowThreshold: 60,    // >= 60%
-        mediumWindowThreshold: 60,   // >= 70%
-        longWindowThreshold: 60,     // >= 80%
+        mediumWindowThreshold: 10,   // >= 10%
+        longWindowThreshold: 10,     // >= 10%
 
         // Repeat probability threshold
         maxRepeatProbability: 10,    // <= 10%
@@ -57,7 +57,7 @@ const BOT_CONFIG = {
     maxTradesPerHour: 20000,
     maxExposure: 50,
 
-    telegramToken: '8218636914:AAGvaKFh8MT769-_9eOEiU4XKufL0aHRhZ4',
+    telegramToken: '8106601008:AAEMyCma6mvPYIHEvw3RHQX2tkD5-wUe1o0',
     telegramChatId: '752497117',
 
     maxReconnectAttempts: 50,
