@@ -6,9 +6,9 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'KriseFallM_2b0_01207-state.json');
-const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2b0_01207-history.json');
-const MAXSTREAK_FILE = path.join(__dirname, 'KriseFallM_2b0_01207-maxstreak.json');
+const STATE_FILE = path.join(__dirname, 'KriseFallM_2b0_01208-state.json');
+const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2b0_01208-history.json');
+const MAXSTREAK_FILE = path.join(__dirname, 'KriseFallM_2b0_01208-maxstreak.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
@@ -1652,10 +1652,10 @@ class ConnectionManager {
             bot._safelyCompleteContract(contractId, ownerSymbol, profit, position);
 
             // Release watchdog lock
-            // state.tradeInProgress = false;
-            // state.currentContractId = null;
-            // state.tradeStartTime = null;
-            // state.pendingTradeInfo = null;
+            state.tradeInProgress = false;
+            state.currentContractId = null;
+            state.tradeStartTime = null;
+            state.pendingTradeInfo = null;
 
             if (response.subscription?.id) this.send({ forget: response.subscription.id });
             SessionManager.checkSessionTargets();
