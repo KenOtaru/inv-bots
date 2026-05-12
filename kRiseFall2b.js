@@ -6,9 +6,9 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'KriseFallM_2b0_01007-state.json');
-const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2b0_01007-history.json');
-const MAXSTREAK_FILE = path.join(__dirname, 'KriseFallM_2b0_01007-maxstreak.json');
+const STATE_FILE = path.join(__dirname, 'KriseFallM_2b0_01207-state.json');
+const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2b0_01207-history.json');
+const MAXSTREAK_FILE = path.join(__dirname, 'KriseFallM_2b0_01207-maxstreak.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
@@ -1662,93 +1662,6 @@ class ConnectionManager {
             StatePersistence.saveState();
         }
     }
-
-    // handleOHLC(ohlc) {
-    //     const symbol = ohlc.symbol;
-    //     if (!state.assets[symbol]) return;
-
-    //     // Block candle processing until assetMaxStreak is ready
-    //     if (!state.isMaxStreakReady) {
-    //         LOGGER.debug(`[${symbol}] OHLC received but maxStreak not ready yet — buffering candle only`);
-    //         // Still track forming candle but don't trigger trades
-    //         const assetState = state.assets[symbol];
-    //         const assetConfig = getAssetConfig(symbol);
-    //         const granularity = assetConfig.GRANULARITY;
-    //         const calculatedOpenTime = ohlc.open_time || Math.floor(ohlc.epoch / granularity) * granularity;
-    //         assetState.currentFormingCandle = {
-    //             open: parseFloat(ohlc.open), high: parseFloat(ohlc.high),
-    //             low: parseFloat(ohlc.low), close: parseFloat(ohlc.close),
-    //             epoch: ohlc.epoch, open_time: calculatedOpenTime
-    //         };
-    //         return;
-    //     }
-
-    //     const assetState = state.assets[symbol];
-    //     const assetConfig = getAssetConfig(symbol);
-    //     const granularity = assetConfig.GRANULARITY;
-    //     const calculatedOpenTime = ohlc.open_time || Math.floor(ohlc.epoch / granularity) * granularity;
-
-    //     const incomingCandle = {
-    //         open: parseFloat(ohlc.open), high: parseFloat(ohlc.high),
-    //         low: parseFloat(ohlc.low), close: parseFloat(ohlc.close),
-    //         epoch: ohlc.epoch, open_time: calculatedOpenTime
-    //     };
-
-    //     const currentOpenTime = assetState.currentFormingCandle?.open_time;
-    //     const isNewCandle = currentOpenTime && incomingCandle.open_time !== currentOpenTime;
-
-    //     if (isNewCandle) {
-    //         const closedCandle = { ...assetState.currentFormingCandle };
-    //         closedCandle.epoch = closedCandle.open_time + granularity;
-
-    //         if (closedCandle.open_time !== assetState.lastProcessedCandleOpenTime) {
-    //             assetState.closedCandles.push(closedCandle);
-    //             assetState.lastClosedCandleForRecovery = closedCandle;
-
-    //             // Keep closedCandles at MAX_CANDLES_STORED (50 after maxStreak is computed)
-    //             if (assetState.closedCandles.length > assetConfig.MAX_CANDLES_STORED) {
-    //                 assetState.closedCandles = assetState.closedCandles.slice(-assetConfig.MAX_CANDLES_STORED);
-    //             }
-
-    //             assetState.lastProcessedCandleOpenTime = closedCandle.open_time;
-
-    //             const closeTime = new Date(closedCandle.epoch * 1000).toISOString();
-    //             const candleType = CandleAnalyzer.getCandleDirection(closedCandle);
-    //             const candleEmoji = candleType === 'BULLISH' ? '🟢' : candleType === 'BEARISH' ? '🔴' : '⚪';
-
-    //             LOGGER.info(
-    //                 `${symbol} ${candleEmoji} CANDLE CLOSED [${closeTime}] ${candleType}: ` +
-    //                 `O:${closedCandle.open.toFixed(5)} H:${closedCandle.high.toFixed(5)} ` +
-    //                 `L:${closedCandle.low.toFixed(5)} C:${closedCandle.close.toFixed(5)}`
-    //             );
-
-    //             // Display autocorrelation
-    //             const regime = AlternatingRegimeDetector.analyze(assetState.closedCandles);
-    //             const assetMaxStreak = assetMaxStreakManager ? assetMaxStreakManager.getMaxStreak(symbol) : 'N/A';
-    //             LOGGER.info(`${symbol} AutoCorr: ${regime.autocorrelation.toFixed(4)} (threshold: ${CONFIG.AUTOCORR_THRESHOLD}) | AssetMaxStreak: ${assetMaxStreak} | Candles: ${assetState.closedCandles.length}`);
-
-    //             assetState.canTrade = true;
-    //             if (assetState.martingaleLevel > 0) {
-    //                 bot.executeRecoveryTrade(symbol, closedCandle);
-    //             } else {
-    //                 bot.executeNextTrade(symbol, closedCandle);
-    //             }
-    //         }
-    //     }
-
-    //     assetState.currentFormingCandle = incomingCandle;
-
-    //     const candles = assetState.candles;
-    //     const existingIndex = candles.findIndex(c => c.open_time === incomingCandle.open_time);
-    //     if (existingIndex >= 0) {
-    //         candles[existingIndex] = incomingCandle;
-    //     } else {
-    //         candles.push(incomingCandle);
-    //     }
-    //     if (candles.length > assetConfig.MAX_CANDLES_STORED) {
-    //         assetState.candles = candles.slice(-assetConfig.MAX_CANDLES_STORED);
-    //     }
-    // }
 
     handleOHLC(ohlc) {
         const symbol = ohlc.symbol;
