@@ -41,12 +41,14 @@ const BOT_CONFIG = {
         minHistorySize: 1000,
 
         // Frequency thresholds for each window (in percentage)
-        shortWindowThreshold: 60,    // >= 60%
+        shortWindowThreshold: 40,    // >= 60%
         mediumWindowThreshold: 10,   // >= 10%
+        mediumWindowThresholdHigh: 15, //15%
         longWindowThreshold: 10,     // >= 10%
-
+        longWindowThresholdHigh: 12, //12%
         // Repeat probability threshold
-        maxRepeatProbability: 10,    // <= 10%
+        maxRepeatProbability: 7,    // <= 10%
+        minRepeatProbability: 5,    // >= 10%
 
         // Minimum sample size for repeat probability calculation
         minRepeatSample: 10,
@@ -243,8 +245,8 @@ class DigitFrequencyAnalyzer {
 
             // Check if digit meets all frequency thresholds
             const meetsShort = shortPct >= this.cfg.shortWindowThreshold;
-            const meetsMedium = mediumPct >= this.cfg.mediumWindowThreshold;
-            const meetsLong = longPct >= this.cfg.longWindowThreshold;
+            const meetsMedium = mediumPct > this.cfg.mediumWindowThreshold && mediumPct < this.cfg.mediumWindowThresholdHigh;
+            const meetsLong = longPct > this.cfg.longWindowThreshold && longPct < this.cfg.longWindowThresholdHigh;
 
             if (meetsShort && meetsMedium && meetsLong) {
                 // Calculate repeat probability across different windows
@@ -260,9 +262,9 @@ class DigitFrequencyAnalyzer {
 
                 // Use weighted average for repeat probability
                 const avgRepeatProb = (
-                    shortRepeat.probability * 0.2 +
-                    mediumRepeat.probability * 0.3 +
-                    longRepeat.probability * 0.5
+                    shortRepeat.probability * 0.4 +
+                    mediumRepeat.probability * 0.4 +
+                    longRepeat.probability * 0.2
                 );
 
                 candidates.push({
@@ -277,7 +279,7 @@ class DigitFrequencyAnalyzer {
                     shortRepeatData: shortRepeat,
                     mediumRepeatData: mediumRepeat,
                     longRepeatData: longRepeat,
-                    meetsRepeatThreshold: avgRepeatProb <= this.cfg.maxRepeatProbability
+                    meetsRepeatThreshold: avgRepeatProb <= this.cfg.maxRepeatProbability && avgRepeatProb > this.cfg.minRepeatProbability
                 });
             }
         }
@@ -355,9 +357,9 @@ class DigitFrequencyAnalyzer {
     /**
      * Display detailed frequency table
      */
-    displayFrequencyTable(frequencies, windowName) {
+    displayFrequencyTable(frequencies, windowName, asset) {
         console.log(`\n  ┌─────────────────────────────────────────────────────────┐`);
-        console.log(`  │  ${windowName.toUpperCase()} WINDOW FREQUENCIES`.padEnd(57) + '│');
+        console.log(`  │ [${asset}] ${windowName.toUpperCase()} WINDOW FREQUENCIES`.padEnd(57) + '│');
         console.log(`  ├────────┬──────────┬─────────────┬─────────────────────┤`);
         console.log(`  │ Digit  │  Count   │ Percentage  │  Visual Bar         │`);
         console.log(`  ├────────┼──────────┼─────────────┼─────────────────────┤`);
@@ -628,10 +630,10 @@ class DerivFrequencyBot {
         const digit = this._lastDigit(price, asset);
 
         this.priceHistories[asset].push(price);
-        if (this.priceHistories[asset].length > 6000) this.priceHistories[asset].shift();
+        if (this.priceHistories[asset].length > this.cfg.frequencyAnalysis.minHistorySize) this.priceHistories[asset].shift();
 
         this.digitHistories[asset].push(digit);
-        if (this.digitHistories[asset].length > 6000) this.digitHistories[asset].shift();
+        if (this.digitHistories[asset].length > this.cfg.frequencyAnalysis.minHistorySize) this.digitHistories[asset].shift();
 
         if (!this.wsReady || !this.historyLoaded[asset]) return;
         if (this.digitHistories[asset].length < this.cfg.frequencyAnalysis.minHistorySize) return;
@@ -651,21 +653,24 @@ class DerivFrequencyBot {
         console.log(`  📊 FREQUENCY ANALYSIS — ${asset}`);
         console.log(`${'═'.repeat(70)}`);
         console.log(`  Current Digit: ${currentDigit}`);
-        console.log(`  Last 30 Digits: [ ${this.digitHistories[asset].slice(-30).join(' ')} ]`);
+        console.log(`  Last 10 Digits: [ ${this.digitHistories[asset].slice(-10).join(' ')} ]`);
 
         if (analysis.frequencies) {
-            this.analyzer.displayFrequencyTable(
-                analysis.frequencies.short,
-                `Short (${this.cfg.frequencyAnalysis.shortWindow})`
-            );
-            this.analyzer.displayFrequencyTable(
-                analysis.frequencies.medium,
-                `Medium (${this.cfg.frequencyAnalysis.mediumWindow})`
-            );
-            this.analyzer.displayFrequencyTable(
-                analysis.frequencies.long,
-                `Long (${this.cfg.frequencyAnalysis.longWindow})`
-            );
+            // this.analyzer.displayFrequencyTable(
+            //     analysis.frequencies.short,
+            //     `Short (${this.cfg.frequencyAnalysis.shortWindow})`,
+            //     asset
+            // );
+            // this.analyzer.displayFrequencyTable(
+            //     analysis.frequencies.medium,
+            //     `Medium (${this.cfg.frequencyAnalysis.mediumWindow})`,
+            //     asset
+            // );
+            // this.analyzer.displayFrequencyTable(
+            //     analysis.frequencies.long,
+            //     `Long (${this.cfg.frequencyAnalysis.longWindow})`,
+            //     asset
+            // );
         }
 
         if (analysis.shouldTrade) {
@@ -678,7 +683,7 @@ class DerivFrequencyBot {
             console.log(`  └─────────────────────────────┴───────────────────────────┘`);
 
             console.log(`\n  ┌─────────────────────────────────────────────────────────┐`);
-            console.log(`  │  DIGIT ${analysis.predictedDigit} - FREQUENCY ANALYSIS`.padEnd(57) + '│');
+            console.log(`  │  DIGIT ${analysis.predictedDigit} - FREQUENCY ANALYSIS ${asset}`.padEnd(57) + '│');
             console.log(`  ├─────────────────────────────┬───────────────────────────┤`);
             console.log(`  │ Short Window Frequency      │  ${analysis.analysis.shortFrequency}%`.padEnd(57) + '│');
             console.log(`  │ Medium Window Frequency     │  ${analysis.analysis.mediumFrequency}%`.padEnd(57) + '│');
@@ -707,9 +712,9 @@ class DerivFrequencyBot {
                 `Long (${this.cfg.frequencyAnalysis.longWindow})`
             );
 
-            // Don't trade if current digit equals predicted digit
-            if (analysis.currentDigit === analysis.predictedDigit) {
-                console.log(`\n  ⚠️  Current digit matches predicted digit — skipping trade`);
+            // Don't trade if current digit is not equal to predicted digit
+            if (analysis.currentDigit !== analysis.predictedDigit) {
+                console.log(`\n  ⚠️  Current digit (${analysis.currentDigit}) Not Same as Predicted digit (${analysis.predictedDigit}) — skipping trade`);
                 console.log(`${'═'.repeat(70)}\n`);
                 return;
             }
@@ -726,7 +731,7 @@ class DerivFrequencyBot {
                 });
             }
         }
-        console.log(`${'═'.repeat(70)}\n`);
+        // console.log(`${'═'.repeat(70)}\n`);
     }
 
     _requestProposal(asset, analysis) {
