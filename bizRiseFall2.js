@@ -31,17 +31,17 @@ const CONFIG = {
     VOLATILITY: {
         ATR_PERIOD: 14,           // Standard ATR period
         VOLATILITY_WINDOW: 50,    // Compare recent vs historical
-        HISTORICAL_PERIOD: 30,    // FIX #12: Separate period for historical baseline
-        LOW_VOLATILITY_RATIO: 0.65, // ATR must be 65% below average
-        SQUEEZE_CONFIRMATION: 3,   // Need 3 ticks confirmation
+        HISTORICAL_PERIOD: 30,    // Separate period for historical baseline
+        LOW_VOLATILITY_RATIO: 0.75, // ATR must be 75% or below average (was 0.65 - too strict)
+        SQUEEZE_CONFIRMATION: 2,   // Need 2 ticks confirmation (was 3)
     },
 
     // Breakout detection
     BREAKOUT: {
         LOOKBACK_PERIOD: 20,      // Candles for high/low range
-        MIN_STRENGTH: 0.1,        // FIX #2: was 1.2 (impossible), now 10% of range
-        STRONG_STRENGTH: 0.3,     // FIX #2: was 1.8, now 30%
-        CONFIRMATION_TICKS: 2,    // Wait for confirmation
+        MIN_STRENGTH: 0.05,       // 5% of range (was 10% - too strict)
+        STRONG_STRENGTH: 0.15,    // 15% for strong breakout (was 30%)
+        CONFIRMATION_TICKS: 1,    // Wait for confirmation (was 2)
     },
 
     // Trend filters
@@ -754,21 +754,47 @@ class VolatilityBreakoutAnalyzer {
 
     /**
      * Detect volatility compression (squeeze)
-     * FIX #12: Use separate historical period instead of same ATR_PERIOD
+     * CRITICAL FIX: Compare recent ATR vs historical baseline (non-overlapping windows)
      */
     static detectVolatilitySqueeze(candles) {
         if (candles.length < CONFIG.VOLATILITY.VOLATILITY_WINDOW) {
             return { isSqueezing: false, ratio: 0, currentATR: 0, historicalATR: 0 };
         }
 
+        // Recent ATR: last 14 candles
         const currentATR = this.calculateATR(
             candles.slice(-CONFIG.VOLATILITY.ATR_PERIOD - 1),
             CONFIG.VOLATILITY.ATR_PERIOD
         );
 
-        // FIX #12: Use separate HISTORICAL_PERIOD for baseline comparison
+        // Historical baseline ATR: candles from 30-60 periods ago (non-overlapping)
+        // This ensures we're comparing current volatility against a true historical baseline
+        const historicalStart = -(CONFIG.VOLATILITY.HISTORICAL_PERIOD + CONFIG.VOLATILITY.ATR_PERIOD + 1);
+        const historicalEnd = -(CONFIG.VOLATILITY.ATR_PERIOD + 1);
+        
+        if (candles.length < Math.abs(historicalStart)) {
+            // Not enough data for proper comparison, use all available historical data
+            const historicalATR = this.calculateATR(
+                candles.slice(0, -CONFIG.VOLATILITY.ATR_PERIOD - 1),
+                Math.min(CONFIG.VOLATILITY.HISTORICAL_PERIOD, candles.length - CONFIG.VOLATILITY.ATR_PERIOD - 1)
+            );
+            
+            if (historicalATR === 0) return { isSqueezing: false, ratio: 0, currentATR, historicalATR };
+            
+            const ratio = currentATR / historicalATR;
+            const isSqueezing = ratio < CONFIG.VOLATILITY.LOW_VOLATILITY_RATIO;
+            
+            return {
+                isSqueezing,
+                ratio,
+                currentATR,
+                historicalATR,
+                compressionLevel: (1 - ratio) * 100
+            };
+        }
+        
         const historicalATR = this.calculateATR(
-            candles.slice(-CONFIG.VOLATILITY.HISTORICAL_PERIOD - 1),
+            candles.slice(historicalStart, historicalEnd),
             CONFIG.VOLATILITY.HISTORICAL_PERIOD
         );
 
@@ -945,6 +971,14 @@ class VolatilityBreakoutAnalyzer {
         const squeeze = this.detectVolatilitySqueeze(candles);
 
         if (!squeeze.isSqueezing) {
+            if (CONFIG.DEBUG_MODE) {
+                LOGGER.debug(
+                    `Volatility check: ratio=${squeeze.ratio.toFixed(3)} ` +
+                    `(need <${CONFIG.VOLATILITY.LOW_VOLATILITY_RATIO}), ` +
+                    `currentATR=${squeeze.currentATR.toFixed(5)}, ` +
+                    `historicalATR=${squeeze.historicalATR.toFixed(5)}`
+                );
+            }
             return {
                 shouldTrade: false,
                 reason: 'no_volatility_compression',
@@ -1027,7 +1061,7 @@ class VolatilityBreakoutAnalyzer {
         confidence = Math.min(confidence, 0.95);
 
         // Minimum confidence threshold
-        if (confidence < 0.65) {
+        if (confidence < 0.55) {  // Lowered from 0.65 to allow more trades
             return {
                 shouldTrade: false,
                 reason: 'low_confidence',
