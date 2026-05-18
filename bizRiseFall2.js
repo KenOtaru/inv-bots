@@ -32,7 +32,7 @@ const CONFIG = {
         ATR_PERIOD: 14,           // Standard ATR period
         VOLATILITY_WINDOW: 50,    // Compare recent vs historical
         HISTORICAL_PERIOD: 30,    // Separate period for historical baseline
-        LOW_VOLATILITY_RATIO: 0.85, // ATR must be 75% or below average (was 0.65 - too strict)
+        LOW_VOLATILITY_RATIO: 0.95, // ATR must be 75% or below average (was 0.65 - too strict)
         SQUEEZE_CONFIRMATION: 2,   // Need 2 ticks confirmation (was 3)
     },
 
@@ -93,7 +93,11 @@ const CONFIG = {
     TELEGRAM_BOT_TOKEN: '8306232249:AAGMwjFngs68Lcq27oGmqewQgthXTJJRxP0',
     TELEGRAM_CHAT_ID: '752497117',
 
-    ACTIVE_ASSETS: ['R_10', 'R_25', 'R_50', 'R_75', 'R_100']
+    ACTIVE_ASSETS: [
+        'R_10', 'R_25', 'R_50', 'R_75', 'R_100',
+        '1HZ10V', '1HZ25V', '1HZ75V', '1HZ100V',
+        'stpRNG', 'stpRNG3', 'stpRNG4', 'stpRNG5'
+    ]
 };
 
 // ============================================
