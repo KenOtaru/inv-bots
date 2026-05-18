@@ -69,12 +69,24 @@ const CONFIG = {
     // Bollinger Bands for volatility bursts
     BB_PERIOD:              14,
     BB_STD_DEV:             2.0,
-    BB_SQUEEZE_THRESHOLD:   0.0015,     // Tighter squeeze for 1m
+    BB_SQUEEZE_THRESHOLD:   0.015,     //0.0015 Tighter squeeze for 1m
 
     // ATR for volatility filter (synths have consistent ATR)
     ATR_PERIOD:             9,
-    ATR_MIN_THRESHOLD:      0.0001,     // Very small moves allowed (synths trade 0.0001 increments)
-    ATR_MAX_THRESHOLD:      0.002,      // Max before extreme volatility
+    // ATR_MIN_THRESHOLD:      0.0001,     // Very small moves allowed (synths trade 0.0001 increments)
+    // ATR_MAX_THRESHOLD:      0.002,      // Max before extreme volatility
+    ATR_THRESHOLDS: {
+        R_10:  { min: 0.2,  max: 3.0 },
+        R_25:  { min: 0.5,  max: 5.0 },
+        R_50:  { min: 0.02, max: 0.5 },
+        R_75:  { min: 5.0,  max: 50.0 },
+        R_100: { min: 0.2,  max: 2.0 },
+
+        stpRNG:  { min: 0.5, max: 5.0 },
+        stpRNG3: { min: 1.0, max: 10.0 },
+        stpRNG4: { min: 1.0, max: 10.0 },
+        stpRNG5: { min: 1.0, max: 10.0 },
+    },
 
     // MACD for quick momentum
     MACD_FAST:              5,          // Very fast for 1m
@@ -99,7 +111,7 @@ const CONFIG = {
     MARTINGALE_MULTIPLIER:  2.5,        // 1m trades lose more % due to volatility
     MARTINGALE_MULTIPLIER2: 3.0,
     MARTINGALE_MULTIPLIER3: 3.5,
-    MAX_MARTINGALE_STEPS:   3,          // Only 3 steps max (limited capital)
+    MAX_MARTINGALE_STEPS:   5,          // Only 3 steps max (limited capital)
 
     // ── Candle Pattern Detection ───────────────────────────────────
     // For 1m: focus on quick reversals
@@ -475,15 +487,26 @@ class SignalAnalyzer {
 
         // ── Gate: ATR Filter ──────────────────────────────────────
         if (atr !== null) {
-            if (atr < CONFIG.ATR_MIN_THRESHOLD) {
-                result.reason = `ATR too low (${atr.toFixed(5)}) — no movement`;
-                result.warnings.push('LOW_VOLATILITY');
-                return result;
-            }
-            if (atr > CONFIG.ATR_MAX_THRESHOLD) {
-                result.reason = `ATR extreme (${atr.toFixed(5)}) — avoid wild market`;
-                result.warnings.push('EXTREME_VOLATILITY');
-                return result;
+
+            const atrConfig = CONFIG.ATR_THRESHOLDS[symbol];
+
+            if (atrConfig) {
+
+                if (atr < atrConfig.min) {
+                    result.reason =
+                        `ATR too low (${atr.toFixed(5)} < ${atrConfig.min})`;
+
+                    result.warnings.push('LOW_VOLATILITY');
+                    return result;
+                }
+
+                if (atr > atrConfig.max) {
+                    result.reason =
+                        `ATR too high (${atr.toFixed(5)} > ${atrConfig.max})`;
+
+                    result.warnings.push('EXTREME_VOLATILITY');
+                    return result;
+                }
             }
         }
 
