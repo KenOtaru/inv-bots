@@ -6,8 +6,8 @@ const path = require('path');
 // ============================================
 // FILE PATHS
 // ============================================
-const STATE_FILE   = path.join(__dirname, 'ForexBot-state_02.json');
-const HISTORY_FILE = path.join(__dirname, 'ForexBot-history_02.json');
+const STATE_FILE   = path.join(__dirname, 'ForexBot-state_04.json');
+const HISTORY_FILE = path.join(__dirname, 'ForexBot-history_04.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
@@ -124,6 +124,7 @@ const CONFIG = {
         'frxUSDCAD',    // Dollar/Loonie — oil-correlated trends
         'frxEURGBP',    // Euro/Cable — range-bound, good for reversals
         'frxEURJPY',    // Euro/Yen — high volatility cross
+        'frxXAUUSD',    // Gold — commodity-linked, clear trends
     ]
 };
 
@@ -1537,6 +1538,13 @@ class ConnectionManager {
 
         SessionManager.checkSessionTargets();
         StatePersistence.saveState();
+
+        if (profit < 0 && SessionManager.isSessionActive()) {
+            LOGGER.trade(`🔄 [${ownerSym}] Loss confirmed — scheduling immediate recovery trade in ${500}ms`);
+            setTimeout(() => {
+                bot.executeRecoveryTrade(ownerSym, assetState.lastClosedCandleForRecovery);
+            }, 500);
+        }
     }
 
     handleOHLC(ohlc) {
@@ -1586,9 +1594,16 @@ class ConnectionManager {
 
                     a.canTrade = true;
 
+                    // try {
+                    //     if (a.martingaleLevel > 0) bot.executeRecoveryTrade(symbol, closed);
+                    //     else                       bot.executeNextTrade(symbol, closed);
+                    // } catch (err) {
+                    //     LOGGER.error(`[${symbol}] Trade execution error: ${err.message}`);
+                    //     bot._forceReleaseTradeLock();
+                    // }
+
                     try {
-                        if (a.martingaleLevel > 0) bot.executeRecoveryTrade(symbol, closed);
-                        else                       bot.executeNextTrade(symbol, closed);
+                        if (a.martingaleLevel <= 0) bot.executeNextTrade(symbol, closed);
                     } catch (err) {
                         LOGGER.error(`[${symbol}] Trade execution error: ${err.message}`);
                         bot._forceReleaseTradeLock();
