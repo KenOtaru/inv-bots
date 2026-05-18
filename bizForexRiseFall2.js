@@ -890,7 +890,7 @@ class TelegramService {
         const a     = state.assets[symbol];
         const today = TradeHistoryManager.getTodayStats();
 
-        let msg = `${emoji} <b>1M INDICES BOT ${type}</b>\n${symbol} ${direction === 'CALLE' ? '📈 CALL' : '📉 PUT'}\nStake: $${stake.toFixed(2)} | Mart: ${a?.martingaleLevel ?? 0}`;
+        let msg = `${emoji} <b>1M INDICES BOT ${type}</b>\n${symbol} ${direction === 'CALLE' ? '📈 CALLE' : '📉 PUTE'}\nStake: $${stake.toFixed(2)} | Mart: ${a?.martingaleLevel ?? 0}`;
 
         if (profit !== null) {
             msg += `\nResult: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)}`;
@@ -1461,7 +1461,7 @@ class IndicesBot {
 
     async start() {
         console.log('\n' + '═'.repeat(70));
-        console.log(' DERIV 1-MINUTE SYNTHETIC INDICES CALL/PUT BOT');
+        console.log(' DERIV 1-MINUTE SYNTHETIC INDICES CALLE/PUTE BOT');
         console.log('═'.repeat(70));
         console.log(`  Indices  : ${CONFIG.ACTIVE_ASSETS.join(', ')}`);
         console.log(`  Timeframe: ${CONFIG.TIMEFRAME_LABEL} | Duration: ${CONFIG.DURATION}${CONFIG.DURATION_UNIT}`);
@@ -1536,7 +1536,7 @@ class IndicesBot {
         // Recovery: same direction as original trade
         const direction = a.lastTradeDirection || 'CALLE';
 
-        LOGGER.trade(`⚡ [${symbol}] RECOVERY | ${direction === 'CALLE' ? 'CALL' : 'PUT'} | $${stake.toFixed(2)} | M${a.martingaleLevel}`);
+        LOGGER.trade(`⚡ [${symbol}] RECOVERY | ${direction === 'CALLE' ? 'CALLE' : 'PUTE'} | $${stake.toFixed(2)} | M${a.martingaleLevel}`);
         TelegramService.sendMessage(`⚡ <b>${symbol} RECOVERY</b>\nM${a.martingaleLevel} | $${stake.toFixed(2)}`);
 
         const pos = {
