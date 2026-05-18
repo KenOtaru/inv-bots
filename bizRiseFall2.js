@@ -61,6 +61,8 @@ const CONFIG = {
         USE_DIVERGENCE: false,
     },
 
+    Confidence: 0.55,
+
     // Position management
     DURATION: 2,                  // 2 ticks duration
     DURATION_UNIT: 't',
@@ -125,8 +127,8 @@ function getAssetConfig(symbol) {
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'VolatilityBreakout_v1-state.json');
-const HISTORY_FILE = path.join(__dirname, 'VolatilityBreakout_v1-history.json');
+const STATE_FILE = path.join(__dirname, 'VolatilityBreakout_v1_01-state.json');
+const HISTORY_FILE = path.join(__dirname, 'VolatilityBreakout_v1_01-history.json');
 
 const STATE_SAVE_INTERVAL = 5000;
 
@@ -859,7 +861,7 @@ class VolatilityBreakoutAnalyzer {
             if (strength >= CONFIG.BREAKOUT.MIN_STRENGTH && confirmed) {
                 return {
                     hasBreakout: true,
-                    direction: 'CALL',
+                    direction: 'CALLE',
                     strength,
                     isStrong: strength >= CONFIG.BREAKOUT.STRONG_STRENGTH,
                     breakoutPrice: high,
@@ -1020,7 +1022,7 @@ class VolatilityBreakoutAnalyzer {
         if (CONFIG.RSI.ENABLED) {
             rsi = this.calculateRSI(candles, CONFIG.RSI.PERIOD);
 
-            if (breakout.direction === 'CALL') {
+            if (breakout.direction === 'CALLE') {
                 rsiSignal = rsi < CONFIG.RSI.OVERBOUGHT;
             } else {
                 rsiSignal = rsi > CONFIG.RSI.OVERSOLD;
@@ -1046,19 +1048,19 @@ class VolatilityBreakoutAnalyzer {
 
         if (trend.aligned && trend.trend !== 'NEUTRAL') {
             const trendMatch =
-                (trend.trend === 'UPTREND' && breakout.direction === 'CALL') ||
-                (trend.trend === 'DOWNTREND' && breakout.direction === 'PUT');
+                (trend.trend === 'UPTREND' && breakout.direction === 'CALLE') ||
+                (trend.trend === 'DOWNTREND' && breakout.direction === 'PUTE');
             if (trendMatch) confidence += 0.20;
         }
 
         if (CONFIG.RSI.ENABLED) {
-            if (breakout.direction === 'CALL' && rsi < 50) confidence += 0.10;
-            if (breakout.direction === 'PUT' && rsi > 50) confidence += 0.10;
+            if (breakout.direction === 'CALLE' && rsi < 50) confidence += 0.10;
+            if (breakout.direction === 'PUTE' && rsi > 50) confidence += 0.10;
         }
 
         confidence = Math.min(confidence, 0.95);
 
-        if (confidence < 0.55) {
+        if (confidence < CONFIG.Confidence) {
             return {
                 shouldTrade: false,
                 reason: 'low_confidence',
@@ -2009,7 +2011,7 @@ class DerivBot {
         LOGGER.trade(`\n${'═'.repeat(70)}`);
         LOGGER.trade(`  🎯 VOLATILITY BREAKOUT TRADE - ${symbol}`);
         LOGGER.trade(`${'═'.repeat(70)}`);
-        LOGGER.trade(`  Direction       : ${direction === 'CALL' ? 'RISE ↑' : 'FALL ↓'}`);
+        LOGGER.trade(`  Direction       : ${direction === 'CALLE' ? 'RISE ↑' : 'FALL ↓'}`);
         LOGGER.trade(`  Signal          : ${analysis.signal}`);
         LOGGER.trade(`  Confidence      : ${(confidence * 100).toFixed(1)}%`);
         LOGGER.trade(`  Stake           : $${stake.toFixed(2)} (Kelly-adjusted)`);
@@ -2051,7 +2053,7 @@ class DerivBot {
             subscribe: 1,
             price: stake.toFixed(2),
             parameters: {
-                contract_type: direction,  // FIX #1: Now CALL or PUT
+                contract_type: direction,  // FIX #1: Now CALLE or PUTE
                 symbol,
                 currency: 'USD',
                 amount: stake.toFixed(2),
@@ -2261,7 +2263,7 @@ if (CONFIG.API_TOKEN === 'YOUR_API_TOKEN_HERE') {
 
 console.log('═'.repeat(80));
 console.log(' DERIV VOLATILITY BREAKOUT BOT - PROFESSIONAL STRATEGY (ALL FIXES APPLIED)');
-console.log(' ✓ CALLE/PUTE → CALL/PUT');
+console.log(' ✓ CALL/PUT → CALLE/PUTE');
 console.log(' ✓ Breakout MIN_STRENGTH: 1.2 → 0.1');
 console.log(' ✓ Kelly updates from real history');
 console.log(' ✓ Asset auto-resume after 30m cooldown');
