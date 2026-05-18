@@ -32,7 +32,7 @@ const CONFIG = {
         ATR_PERIOD: 14,           // Standard ATR period
         VOLATILITY_WINDOW: 50,    // Compare recent vs historical
         HISTORICAL_PERIOD: 30,    // Separate period for historical baseline
-        LOW_VOLATILITY_RATIO: 0.75, // ATR must be 75% or below average (was 0.65 - too strict)
+        LOW_VOLATILITY_RATIO: 0.85, // ATR must be 75% or below average (was 0.65 - too strict)
         SQUEEZE_CONFIRMATION: 2,   // Need 2 ticks confirmation (was 3)
     },
 
