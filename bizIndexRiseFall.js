@@ -116,7 +116,7 @@ const CONFIG = {
 
     // ── Position Management ────────────────────────────────────────
     MAX_OPEN_POSITIONS_PER_ASSET: 1,
-    MAX_TOTAL_POSITIONS:          10,    // Max simultaneous trades across all pairs
+    MAX_TOTAL_POSITIONS:          1,    // Max simultaneous trades across all pairs
 
     // ── Misc ───────────────────────────────────────────────────────
     DEBUG_MODE:             true,
@@ -431,6 +431,26 @@ class Indicators {
             pattern: c0.close > c0.open ? 'BULLISH_CANDLE' : 'BEARISH_CANDLE',
             bias:    c0.close > c0.open ? 'BULLISH' : 'BEARISH'
         };
+    }
+}
+
+// ============================================
+// CANDLE ANALYSIS UTILITY
+// ============================================
+class CandleAnalyzer {
+    static isBullish(candle)  { return candle.close > candle.open; }
+    static isBearish(candle)  { return candle.close < candle.open; }
+
+    static getLastClosedCandle(symbol) {
+        const assetState = state.assets[symbol];
+        if (!assetState?.closedCandles?.length) return null;
+        return assetState.closedCandles[assetState.closedCandles.length - 1];
+    }
+
+    static getCandleDirection(candle) {
+        if (this.isBullish(candle)) return 'BULLISH';
+        if (this.isBearish(candle)) return 'BEARISH';
+        return 'DOJI';
     }
 }
 
@@ -1557,12 +1577,12 @@ class ConnectionManager {
         SessionManager.checkSessionTargets();
         StatePersistence.saveState();
 
-        if (profit < 0 && SessionManager.isSessionActive()) {
-            LOGGER.trade(`🔄 [${ownerSym}] Loss confirmed — scheduling immediate recovery trade in ${500}ms`);
-            setTimeout(() => {
-                bot.executeRecoveryTrade(ownerSym);
-            }, 500);
-        }
+        // if (profit < 0 && SessionManager.isSessionActive()) {
+        //     LOGGER.trade(`🔄 [${ownerSym}] Loss confirmed — scheduling immediate recovery trade in ${500}ms`);
+        //     setTimeout(() => {
+        //         bot.executeRecoveryTrade(ownerSym);
+        //     }, 500);
+        // }
     }
 
     handleOHLC(ohlc) {
@@ -1612,16 +1632,9 @@ class ConnectionManager {
 
                     a.canTrade = true;
 
-                    // try {
-                    //     if (a.martingaleLevel > 0) bot.executeRecoveryTrade(symbol);
-                    //     else                       bot.executeNextTrade(symbol, closed);
-                    // } catch (err) {
-                    //     LOGGER.error(`[${symbol}] Trade execution error: ${err.message}`);
-                    //     bot._forceReleaseTradeLock();
-                    // }
-
                     try {
-                        if (a.martingaleLevel <= 0) bot.executeNextTrade(symbol, closed);
+                        if (a.martingaleLevel > 0) bot.executeRecoveryTrade(symbol, closed);
+                        else                       bot.executeNextTrade(symbol, closed);
                     } catch (err) {
                         LOGGER.error(`[${symbol}] Trade execution error: ${err.message}`);
                         bot._forceReleaseTradeLock();
@@ -1795,7 +1808,7 @@ class IndexBot {
     }
 
     // ── RECOVERY TRADE ──────────────────────────────────────────────
-    executeRecoveryTrade(symbol) {
+    executeRecoveryTrade(symbol, lastClosedCandle) {
         const a = state.assets[symbol];
         if (!a || a.martingaleLevel === 0)                        return;
         if (!SessionManager.isSessionActive())                    return;
@@ -1814,7 +1827,10 @@ class IndexBot {
         const cfg       = getAssetConfig(symbol);
         // In recovery, trade same direction as last trade
         // (following trend that caused the loss)
-        const direction = a.lastTradeDirection || 'CALLE';
+        // const direction = a.lastTradeDirection || 'CALLE';
+
+        const candleType  = CandleAnalyzer.getCandleDirection(lastClosedCandle);
+        const direction   = candleType === 'BULLISH' ? 'CALLE' : 'PUTE';
 
         LOGGER.trade(`⚡ [${symbol}] RECOVERY | ${direction === 'CALLE' ? 'CALLE' : 'PUTE'} | Stake: $${stake.toFixed(2)} | Mart: ${a.martingaleLevel}`);
         TelegramService.sendMessage(
