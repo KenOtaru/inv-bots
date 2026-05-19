@@ -1806,16 +1806,19 @@ class ConnectionManager {
 
         const assetState  = state.assets[symbol];
         const assetConfig = getAssetConfig(symbol);
-        const granularity = assetConfig.GRANULARITY;
-        const calcOpenTime = ohlc.open_time || Math.floor(ohlc.epoch / granularity) * granularity;
+        const granularity = Number(assetConfig.GRANULARITY);
+        
+        // FIX: Normalize to numbers to prevent string/number === mismatch desync
+        const incomingOpenTime = Number(ohlc.open_time) || Math.floor(Number(ohlc.epoch) / granularity) * granularity;
+        if (isNaN(incomingOpenTime)) {
+            LOGGER.warn(`[${symbol}] Invalid open_time/epoch, skipping OHLC`);
+            return;
+        }
 
         const incomingCandle = {
-            open:      parseFloat(ohlc.open),
-            high:      parseFloat(ohlc.high),
-            low:       parseFloat(ohlc.low),
-            close:     parseFloat(ohlc.close),
-            epoch:     ohlc.epoch,
-            open_time: calcOpenTime
+            open: parseFloat(ohlc.open), high: parseFloat(ohlc.high),
+            low: parseFloat(ohlc.low), close: parseFloat(ohlc.close),
+            epoch: Number(ohlc.epoch), open_time: incomingOpenTime
         };
 
         if (isNaN(incomingCandle.open) || isNaN(incomingCandle.close) ||
@@ -1824,16 +1827,13 @@ class ConnectionManager {
             return;
         }
 
-        // Buffer-only mode during maxStreak computation
         if (!state.isMaxStreakReady) {
             assetState.currentFormingCandle = incomingCandle;
             return;
         }
 
         const currentOpenTime = assetState.currentFormingCandle?.open_time;
-        const isNewCandle     = currentOpenTime !== undefined &&
-                                currentOpenTime !== null &&
-                                incomingCandle.open_time !== currentOpenTime;
+        const isNewCandle     = currentOpenTime != null && incomingOpenTime !== currentOpenTime;
 
         if (isNewCandle) {
             const closedCandle     = { ...assetState.currentFormingCandle };
@@ -1921,42 +1921,26 @@ class ConnectionManager {
             return;
         }
 
-        // Skip maxStreak batch responses — they have no subscribe field
-        // and their listeners are handled inside fetchMaxStreakForAsset
-        // The initial subscription load comes WITHOUT subscribe in echo_req
-        // but we can distinguish by checking if a subscription was requested
         const symbol = response.echo_req?.ticks_history;
         if (!symbol || !state.assets[symbol]) return;
 
-        // FIX #5: If this req_id belongs to maxStreak computation,
-        // the dedicated listener in fetchMaxStreakForAsset handles it.
-        // We detect this by checking if echo_req has no subscribe=1
-        // AND was NOT sent from subscribeToCandles (which sends count=CANDLES_TO_LOAD).
-        // 
-        // The cleanest guard: maxStreak requests use a specific req_id range
-        // tracked in the manager. Here we use a simpler heuristic:
-        // if there's no 'subscribe' key in echo_req AND candles count matches
-        // BATCH_SIZE (60), it's likely a maxStreak batch — skip it since the
-        // dedicated listener will handle it. If the listener already resolved,
-        // ignore silently.
-        if (!response.echo_req?.subscribe && response.echo_req?.count === 60 && 
-            assetMaxStreakManager?._isComputing) {
-            LOGGER.debug(`[${symbol}] Skipping candles response during maxStreak computation`);
+        const assetState = state.assets[symbol];
+        
+        // FIX: Never overwrite state after initial load. Deriv may resend history unexpectedly.
+        if (assetState.candlesLoaded) {
+            LOGGER.debug(`[${symbol}] Ignoring late candles history response (already loaded)`);
             return;
         }
 
-        const assetConfig  = getAssetConfig(symbol);
-        const granularity  = assetConfig.GRANULARITY;
+        const assetConfig = getAssetConfig(symbol);
+        const granularity = assetConfig.GRANULARITY;
 
         const candles = response.candles.map(c => {
-            const openTime = Math.floor((c.epoch - granularity) / granularity) * granularity;
+            const openTime = Math.floor((Number(c.epoch) - granularity) / granularity) * granularity;
             return {
-                open:      parseFloat(c.open),
-                high:      parseFloat(c.high),
-                low:       parseFloat(c.low),
-                close:     parseFloat(c.close),
-                epoch:     c.epoch,
-                open_time: openTime
+                open: parseFloat(c.open), high: parseFloat(c.high),
+                low: parseFloat(c.low), close: parseFloat(c.close),
+                epoch: Number(c.epoch), open_time: openTime
             };
         });
 
@@ -1965,14 +1949,14 @@ class ConnectionManager {
             return;
         }
 
-        state.assets[symbol].candles                      = [...candles];
-        state.assets[symbol].closedCandles                = [...candles];
-        state.assets[symbol].lastClosedCandleForRecovery  = candles[candles.length - 1];
-        state.assets[symbol].lastProcessedCandleOpenTime  = candles[candles.length - 1].open_time;
-        state.assets[symbol].currentFormingCandle         = null;
-        state.assets[symbol].candlesLoaded                = true;
+        assetState.candles                     = [...candles];
+        assetState.closedCandles               = [...candles];
+        assetState.lastClosedCandleForRecovery = candles[candles.length - 1];
+        assetState.lastProcessedCandleOpenTime = candles[candles.length - 1].open_time;
+        assetState.currentFormingCandle        = null;
+        assetState.candlesLoaded               = true; // 🔒 Locks against future overwrites
 
-        const regime = AlternatingRegimeDetector.analyze(state.assets[symbol].closedCandles);
+        const regime = AlternatingRegimeDetector.analyze(assetState.closedCandles);
         LOGGER.info(`📊 Loaded ${candles.length} ${assetConfig.TIMEFRAME_LABEL} candles for ${symbol} | AutoCorr: ${regime.autocorrelation.toFixed(4)} | Ready`);
     }
 
@@ -2277,9 +2261,15 @@ class DerivBot {
             }
         };
 
-        const reqId   = this.connection.send(tradeRequest);
+        const reqId = this.connection.send(tradeRequest);
+        if (!reqId) {
+            LOGGER.error(`[${symbol}] Trade send failed — reverting lock`);
+            assetState.canTrade = true;
+            assetState.activePositions.pop(); // Remove the position we just pushed
+            return;
+        }
         position.reqId = reqId;
-        LOGGER.trade(`✅ [${symbol}] Recovery trade sent (reqId: ${reqId})`);
+        LOGGER.trade(`✅ [${symbol}] Recovery Trade sent (reqId: ${reqId})`);
     }
 
     // ── NORMAL TRADE EXECUTION ─────────────────────────────────────
@@ -2398,8 +2388,15 @@ class DerivBot {
             }
         };
 
-        const reqId    = this.connection.send(tradeRequest);
+        const reqId = this.connection.send(tradeRequest);
+        if (!reqId) {
+            LOGGER.error(`[${symbol}] Trade send failed — reverting lock`);
+            assetState.canTrade = true;
+            assetState.activePositions.pop(); // Remove the position we just pushed
+            return;
+        }
         position.reqId = reqId;
+        LOGGER.trade(`✅ [${symbol}] Trade sent (reqId: ${reqId})`);
     }
 
     _forceReleaseTradeLock() {
