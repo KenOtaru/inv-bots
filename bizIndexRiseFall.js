@@ -6,8 +6,8 @@ const path = require('path');
 // ============================================
 // FILE PATHS
 // ============================================
-const STATE_FILE   = path.join(__dirname, 'IndexBot-state_00.json');
-const HISTORY_FILE = path.join(__dirname, 'IndexBot-history_00.json');
+const STATE_FILE   = path.join(__dirname, 'IndexBot-state_01.json');
+const HISTORY_FILE = path.join(__dirname, 'IndexBot-history_01.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
@@ -42,14 +42,14 @@ const CONFIG = {
     // ── Candle / Contract Settings ─────────────────────────────────
     // 1-minute candles: best balance of signal quality vs trade frequency
     // for Deriv Index Assets
-    GRANULARITY:            60,        // 5 minutes in seconds
-    TIMEFRAME_LABEL:        '1m',
+    GRANULARITY:            300,        // 5 minutes in seconds
+    TIMEFRAME_LABEL:        '5m',
     CANDLES_TO_LOAD:        100,        // History for indicator warmup
     MAX_CANDLES_STORED:     200,        // Rolling window
 
     // 1-minute duration aligns contract expiry with candle close
     // giving the best directional accuracy for Index on Deriv
-    DURATION:               58,
+    DURATION:               298,
     DURATION_UNIT:          's',        // Minutes
 
     // ── Strategy Parameters ────────────────────────────────────────
