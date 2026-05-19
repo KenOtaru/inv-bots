@@ -6,9 +6,9 @@ const path = require('path');
 // ============================================
 // STATE PERSISTENCE MANAGER
 // ============================================
-const STATE_FILE = path.join(__dirname, 'KriseFallM_2b0_01211-state.json');
-const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2b0_01211-history.json');
-const MAXSTREAK_FILE = path.join(__dirname, 'KriseFallM_2b0_01211-maxstreak.json');
+const STATE_FILE = path.join(__dirname, 'KriseFallM_2b0_01213-state.json');
+const HISTORY_FILE = path.join(__dirname, 'KriseFallM_2b0_01213-history.json');
+const MAXSTREAK_FILE = path.join(__dirname, 'KriseFallM_2b0_01213-maxstreak.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================
@@ -190,148 +190,159 @@ class AssetMaxStreakManager {
      *   2. Uses a unique req_id to filter ONLY its own response
      *   3. Wraps everything in a single Promise with guaranteed cleanup
      */
-    fetchMaxStreakForAsset(symbol, connection) {
-        return new Promise((resolve, reject) => {
-            const assetConfig = getAssetConfig(symbol);
-            const BATCH_SIZE = 60;
-            const MAX_BATCHES = 1;
+    async fetchMaxStreakForAsset(symbol, connection, retryCount = 0) {
+        try {
+            return await new Promise((resolve, reject) => {
+                const assetConfig = getAssetConfig(symbol);
+                const BATCH_SIZE = 60;
+                const MAX_BATCHES = 1;
 
-            let batchesDone = 0;
-            let endEpoch = 'latest';
-            let overallMaxStreak = 1;
-            let crossBatchLastDir = null;
-            let currentListener = null;
-            let timeoutId = null;
-            let isSettled = false;
+                let batchesDone = 0;
+                let endEpoch = 'latest';
+                let overallMaxStreak = 1;
+                let crossBatchLastDir = null;
+                let currentListener = null;
+                let timeoutId = null;
+                let isSettled = false;
 
-            const settle = (fn, val) => {
-                if (isSettled) return;
-                isSettled = true;
-                cleanup();
-                clearTimeout(timeoutId);
-                fn(val);
-            };
-
-            const cleanup = () => {
-                if (currentListener && connection.ws) {
-                    connection.ws.removeListener('message', currentListener);
-                    currentListener = null;
-                }
-            };
-
-            // 2-minute safety timeout for the entire fetch
-            timeoutId = setTimeout(() => {
-                LOGGER.error(`[${symbol}] MaxStreak fetch timeout — using fallback`);
-                settle(resolve, overallMaxStreak || 10);
-            }, 120000);
-
-            LOGGER.info(`📡 [${symbol}] Starting maxStreak fetch (${MAX_BATCHES} batch)...`);
-
-            const fetchBatch = () => {
-                if (batchesDone >= MAX_BATCHES) {
-                    LOGGER.info(`✅ [${symbol}] maxStreak = ${overallMaxStreak} (${batchesDone} batches)`);
-                    settle(resolve, overallMaxStreak);
-                    return;
-                }
-
-                // Verify connection is still valid
-                if (!connection.ws || connection.ws.readyState !== WebSocket.OPEN) {
-                    LOGGER.error(`[${symbol}] WebSocket closed during maxStreak fetch`);
-                    settle(resolve, overallMaxStreak || 10);
-                    return;
-                }
-
-                // Generate a unique req_id for THIS specific request
-                const myReqId = state.requestId++;
-                
-                const reqPayload = {
-                    ticks_history: symbol,
-                    adjust_start_time: 1,
-                    count: BATCH_SIZE,
-                    end: endEpoch,
-                    start: 1,
-                    style: 'candles',
-                    granularity: assetConfig.GRANULARITY,
-                    req_id: myReqId  // Use known req_id for precise filtering
+                const settle = (fn, val) => {
+                    if (isSettled) return;
+                    isSettled = true;
+                    cleanup();
+                    clearTimeout(timeoutId);
+                    fn(val);
                 };
 
-                // FIX: Create listener, register it, then send — in that order
-                // This prevents a race where the response arrives before listener is set
-                const messageHandler = (rawData) => {
-                    let response;
-                    try { response = JSON.parse(rawData); } catch { return; }
+                const cleanup = () => {
+                    if (currentListener && connection.ws) {
+                        connection.ws.removeListener('message', currentListener);
+                        currentListener = null;
+                    }
+                    clearTimeout(timeoutId);
+                };
 
-                    // FIX: Filter by BOTH msg_type AND req_id to prevent
-                    // interference with other candles responses (e.g., from subscriptions)
-                    if (response.msg_type !== 'candles') return;
-                    if (response.echo_req?.req_id !== myReqId) return;
+                // 2-minute safety timeout for the entire fetch
+                timeoutId = setTimeout(() => {
+                    LOGGER.error(`[${symbol}] MaxStreak fetch timeout — using fallback`);
+                    settle(resolve, overallMaxStreak || 10);
+                }, 120000);
 
-                    // Remove listener IMMEDIATELY — this is the critical fix
-                    // In original code this happened inside a conditional, causing leaks
-                    cleanup();
+                LOGGER.info(`📡 [${symbol}] Starting maxStreak fetch (${MAX_BATCHES} batch)...`);
 
-                    if (response.error) {
-                        LOGGER.warn(`⚠️ [${symbol}] Batch error: ${response.error.message}`);
+                const fetchBatch = () => {
+                    if (batchesDone >= MAX_BATCHES) {
+                        LOGGER.info(`✅ [${symbol}] maxStreak = ${overallMaxStreak} (${batchesDone} batches)`);
                         settle(resolve, overallMaxStreak);
                         return;
                     }
 
-                    const candles = response.candles;
-                    if (!candles || candles.length === 0) {
-                        LOGGER.info(`✅ [${symbol}] No more candles`);
-                        settle(resolve, overallMaxStreak);
+                    // Verify connection is still valid
+                    if (!connection.ws || connection.ws.readyState !== WebSocket.OPEN) {
+                        LOGGER.error(`[${symbol}] WebSocket closed during maxStreak fetch`);
+                        settle(resolve, overallMaxStreak || 10);
                         return;
                     }
 
-                    LOGGER.info(`📊 [${symbol}] Batch ${batchesDone + 1}: ${candles.length} candles`);
+                    // Generate a unique req_id for THIS specific request
+                    const myReqId = state.requestId++;
+                    
+                    const reqPayload = {
+                        ticks_history: symbol,
+                        adjust_start_time: 1,
+                        count: BATCH_SIZE,
+                        end: endEpoch,
+                        start: 1,
+                        style: 'candles',
+                        granularity: assetConfig.GRANULARITY,
+                        req_id: myReqId  // Use known req_id for precise filtering
+                    };
 
-                    // Process streak
-                    let currentStreak = 1;
-                    let prevDir = crossBatchLastDir;
+                    // FIX: Create listener, register it, then send — in that order
+                    // This prevents a race where the response arrives before listener is set
+                    const messageHandler = (rawData) => {
+                        let response;
+                        try { response = JSON.parse(rawData); } catch { return; }
 
-                    for (let i = 0; i < candles.length; i++) {
-                        const c = candles[i];
-                        const dir = c.close > c.open ? 1 : 0;
-                        if (prevDir === null) { prevDir = dir; continue; }
-                        if (dir !== prevDir) {
-                            currentStreak++;
-                            if (currentStreak > overallMaxStreak) overallMaxStreak = currentStreak;
-                        } else {
-                            currentStreak = 1;
+                        // FIX: Filter by BOTH msg_type AND req_id to prevent
+                        // interference with other candles responses (e.g., from subscriptions)
+                        if (response.msg_type !== 'candles') return;
+                        if (response.echo_req?.req_id !== myReqId) return;
+
+                        // Remove listener IMMEDIATELY — this is the critical fix
+                        // In original code this happened inside a conditional, causing leaks
+                        cleanup();
+
+                        if (response.error) {
+                            LOGGER.warn(`⚠️ [${symbol}] Batch error: ${response.error.message}`);
+                            settle(resolve, overallMaxStreak);
+                            return;
                         }
-                        prevDir = dir;
+
+                        const candles = response.candles;
+                        if (!candles || candles.length === 0) {
+                            LOGGER.info(`✅ [${symbol}] No more candles`);
+                            settle(resolve, overallMaxStreak);
+                            return;
+                        }
+
+                        LOGGER.info(`📊 [${symbol}] Batch ${batchesDone + 1}: ${candles.length} candles`);
+
+                        // Process streak
+                        let currentStreak = 1;
+                        let prevDir = crossBatchLastDir;
+
+                        for (let i = 0; i < candles.length; i++) {
+                            const c = candles[i];
+                            const dir = c.close > c.open ? 1 : 0;
+                            if (prevDir === null) { prevDir = dir; continue; }
+                            if (dir !== prevDir) {
+                                currentStreak++;
+                                if (currentStreak > overallMaxStreak) overallMaxStreak = currentStreak;
+                            } else {
+                                currentStreak = 1;
+                            }
+                            prevDir = dir;
+                        }
+
+                        const lastC = candles[candles.length - 1];
+                        crossBatchLastDir = lastC.close > lastC.open ? 1 : 0;
+                        endEpoch = candles[0].epoch - 1;
+                        batchesDone++;
+
+                        if (candles.length < BATCH_SIZE) {
+                            LOGGER.info(`✅ [${symbol}] History exhausted at batch ${batchesDone}`);
+                            settle(resolve, overallMaxStreak);
+                            return;
+                        }
+
+                        // Next batch after brief pause (don't hammer the API)
+                        setTimeout(fetchBatch, 400);
+                    };
+
+                    // Register listener BEFORE sending
+                    currentListener = messageHandler;
+                    connection.ws.on('message', messageHandler);
+
+                    try {
+                        connection.ws.send(JSON.stringify(reqPayload));
+                    } catch (err) {
+                        cleanup();
+                        LOGGER.error(`[${symbol}] Send failed: ${err.message}`);
+                        settle(resolve, overallMaxStreak || 10);
                     }
-
-                    const lastC = candles[candles.length - 1];
-                    crossBatchLastDir = lastC.close > lastC.open ? 1 : 0;
-                    endEpoch = candles[0].epoch - 1;
-                    batchesDone++;
-
-                    if (candles.length < BATCH_SIZE) {
-                        LOGGER.info(`✅ [${symbol}] History exhausted at batch ${batchesDone}`);
-                        settle(resolve, overallMaxStreak);
-                        return;
-                    }
-
-                    // Next batch after brief pause (don't hammer the API)
-                    setTimeout(fetchBatch, 400);
                 };
 
-                // Register listener BEFORE sending
-                currentListener = messageHandler;
-                connection.ws.on('message', messageHandler);
-
-                try {
-                    connection.ws.send(JSON.stringify(reqPayload));
-                } catch (err) {
-                    cleanup();
-                    LOGGER.error(`[${symbol}] Send failed: ${err.message}`);
-                    settle(resolve, overallMaxStreak || 10);
-                }
-            };
-
-            fetchBatch();
-        });
+                fetchBatch();
+            });
+        } catch (error) {
+            if (retryCount < 3) {
+                const delay = Math.min(1000 * Math.pow(2, retryCount), 5000);
+                LOGGER.warn(`[${symbol}] Retry ${retryCount + 1}/3 in ${delay}ms`);
+                await new Promise(r => setTimeout(r, delay));
+                return this.fetchMaxStreakForAsset(symbol, connection, retryCount + 1);
+            }
+            throw error;
+        }
     }
 
     async computeAllMaxStreaks(connection) {
@@ -342,39 +353,46 @@ class AssetMaxStreakManager {
         this._isComputing = true;
 
         LOGGER.info('🔄 Starting sequential maxStreak computation for all assets...');
-        await TelegramService.sendMessage(
-            '🔄 <b>RISEFALL2b MaxStreak Update Started</b>\n' +
-            `Computing maxStreak for ${CONFIG.ACTIVE_ASSETS.length} assets sequentially.\n` +
-            'Trading is PAUSED until complete.'
-        );
 
-        for (const symbol of CONFIG.ACTIVE_ASSETS) {
-            if (!state.isConnected || !state.isAuthorized) {
-                LOGGER.error('Connection lost during maxStreak computation — aborting');
-                break;
-            }
+        try { 
+            await TelegramService.sendMessage(
+                '🔄 <b>RISEFALL2b MaxStreak Update Started</b>\n' +
+                `Computing maxStreak for ${CONFIG.ACTIVE_ASSETS.length} assets sequentially.\n` +
+                'Trading is PAUSED until complete.'
+            );
 
-            try {
-                const maxStreak = await this.fetchMaxStreakForAsset(symbol, connection);
-                this.data.assets[symbol] = { maxStreak, computedAt: Date.now() };
-                this._save();
-                LOGGER.info(`✅ [${symbol}] assetMaxStreak = ${maxStreak}`);
-
-                // Trim closedCandles for this asset
-                const assetState = state.assets[symbol];
-                if (assetState && assetState.closedCandles.length > 50) {
-                    assetState.closedCandles = assetState.closedCandles.slice(-50);
+            for (const symbol of CONFIG.ACTIVE_ASSETS) {
+                if (!state.isConnected || !state.isAuthorized) {
+                    LOGGER.error('Connection lost during maxStreak computation — aborting');
+                    break;
                 }
 
-                await new Promise(r => setTimeout(r, 500));
-            } catch (err) {
-                LOGGER.error(`❌ [${symbol}] maxStreak fetch failed: ${err.message}`);
-                if (!this.data.assets[symbol]) {
-                    this.data.assets[symbol] = { maxStreak: 10, computedAt: Date.now() };
+                try {
+                    const maxStreak = await this.fetchMaxStreakForAsset(symbol, connection);
+                    this.data.assets[symbol] = { maxStreak, computedAt: Date.now() };
                     this._save();
+                    LOGGER.info(`✅ [${symbol}] assetMaxStreak = ${maxStreak}`);
+
+                    // Trim closedCandles for this asset
+                    const assetState = state.assets[symbol];
+                    if (assetState && assetState.closedCandles.length > 50) {
+                        assetState.closedCandles = assetState.closedCandles.slice(-50);
+                    }
+
+                    await new Promise(r => setTimeout(r, 500));
+                } catch (err) {
+                    LOGGER.error(`❌ [${symbol}] maxStreak fetch failed: ${err.message}`);
+                    if (!this.data.assets[symbol]) {
+                        this.data.assets[symbol] = { maxStreak: 10, computedAt: Date.now() };
+                        this._save();
+                    }
                 }
             }
-        }
+        } catch (error) {
+            LOGGER.error(`💥 computeAllMaxStreaks crashed: ${error.message}`);
+        } finally {
+            this._isComputing = false; 
+        } 
 
         this.data.lastUpdated = Date.now();
         this._save();
@@ -1292,8 +1310,13 @@ class SessionManager {
         this.checkDayChange();
 
         const currentHour = new Date().getHours();
+        // ⚠️ FIX: Reset stats even if no trades
         if (currentHour !== state.hourlyStats.lastHour) {
-            state.hourlyStats = { trades: 0, wins: 0, losses: 0, pnl: 0, lastHour: currentHour };
+            LOGGER.debug(`Hour changed: ${state.hourlyStats.lastHour} → ${currentHour}`);
+            state.hourlyStats = { 
+                trades: 0, wins: 0, losses: 0, pnl: 0, 
+                lastHour: currentHour 
+            };
         }
 
         state.session.tradesCount++;
@@ -1378,6 +1401,7 @@ class ConnectionManager {
         this.isReconnecting      = false;
         this.activeSubscriptions = new Set(); // tracks subscribed symbols
         this._subscriptionIds    = new Map(); // symbol → subscription stream id
+        this._contractRetryCount = new Map();
     }
 
     connect() {
@@ -1403,6 +1427,7 @@ class ConnectionManager {
             this.autoSaveStarted = true;
         }
         this.send({ authorize: CONFIG.API_TOKEN });
+        this.startHealthCheck();
     }
 
     initializeAssets() {
@@ -1431,6 +1456,17 @@ class ConnectionManager {
         });
     }
 
+    unsubscribeAllCandles() {
+        this._subscriptionIds.forEach((subId, symbol) => {
+            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                this.send({ forget: subId });
+                LOGGER.debug(`Unsubscribed from ${symbol} (id: ${subId})`);
+            }
+        });
+        this._subscriptionIds.clear();
+        this.activeSubscriptions.clear();
+    }
+
     restoreSubscriptions() {
         LOGGER.info('📊 Restoring subscriptions after reconnection...');
         this.activeSubscriptions.clear();
@@ -1452,6 +1488,7 @@ class ConnectionManager {
     cleanup() {
         // Stop ping first
         this.stopPing();
+        this.unsubscribeAllCandles(); 
 
         if (this.ws) {
             this.ws.removeAllListeners();
@@ -1461,9 +1498,28 @@ class ConnectionManager {
             this.ws = null;
         }
 
+        if (this.healthCheckInterval) {
+            clearInterval(this.healthCheckInterval);
+            this.healthCheckInterval = null;
+        }
+
         // Reset subscription tracking
         this.activeSubscriptions.clear();
         this._subscriptionIds.clear();
+    }
+
+    startHealthCheck() {
+        this.healthCheckInterval = setInterval(() => {
+            if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                const lastPing = this.lastPingTime || 0;
+                const elapsed = Date.now() - lastPing;
+                
+                if (elapsed > 60000) { // No ping response in 60s
+                    LOGGER.error('⚠️ WebSocket health check failed — reconnecting');
+                    this.ws.close();
+                }
+            }
+        }, 30000);
     }
 
     onMessage(data) {
@@ -1501,6 +1557,12 @@ class ConnectionManager {
         state.accountBalance = response.authorize.balance;
         if (state.capital === CONFIG.INITIAL_CAPITAL) state.capital = response.authorize.balance;
         this.send({ balance: 1, subscribe: 1 });
+        
+        // ⚠️ FIX: Restore maxStreak ready state if all streaks are available
+        if (!state.isMaxStreakReady && assetMaxStreakManager.allReady()) {
+            LOGGER.info('✅ Restoring isMaxStreakReady=true after reconnect');
+            state.isMaxStreakReady = true;
+        }
 
         if (this.reconnectAttempts > 0 || this.hasAnyActivePositions()) {
             LOGGER.info('🔄 Reconnection detected, restoring subscriptions...');
@@ -1614,6 +1676,10 @@ class ConnectionManager {
         if (response.subscription?.id) {
             // Map from contractId to subscription id
             this._subscriptionIds.set(contractIdStr, response.subscription.id);
+            const symbol = response.echo_req?.ticks_history;
+            if (symbol) {
+                this._subscriptionIds.set(symbol, response.subscription.id);
+            }
         }
 
         // Already processed — unsubscribe and ignore
@@ -1653,13 +1719,36 @@ class ConnectionManager {
 
         // FIX #3: Handle race condition where buy response hasn't arrived yet
         if (posIndex < 0 || !ownerSymbol) {
-            LOGGER.warn(`⚠️ Contract ${contractId} settled but not in activePositions yet — retrying in 500ms`);
-            setTimeout(() => this.handleOpenContract(response), 500);
+            const retryCount = this._contractRetryCount.get(contractIdStr) || 0;
+            
+            if (retryCount < 5) { // Max 5 retries = 2.5 seconds
+                this._contractRetryCount.set(contractIdStr, retryCount + 1);
+                LOGGER.warn(`⚠️ Contract ${contractId} not found (retry ${retryCount + 1}/5)`);
+                setTimeout(() => this.handleOpenContract(response), 500);
+                return;
+            }
+            
+            // After 5 retries, force-process as orphaned contract
+            LOGGER.error(`❌ Contract ${contractId} orphaned after 5 retries — marking processed`);
+            bot._processedContracts.add(contractIdStr);
+            this._contractRetryCount.delete(contractIdStr);
+            
+            // Clear watchdog
+            bot._clearAllWatchdogTimers();
+            state.currentContractId = null;
+            state.pendingTradeInfo = null;
+            
+            if (response.subscription?.id) {
+                this.send({ forget: response.subscription.id });
+            }
             return;
         }
 
         // Mark as processed IMMEDIATELY
         bot._processedContracts.add(contractIdStr);
+
+        // Clear retry count on successful find:
+        this._contractRetryCount.delete(contractIdStr);
 
         // Clear watchdog
         bot._clearAllWatchdogTimers();
@@ -1925,11 +2014,14 @@ class ConnectionManager {
         }
     }
 
+    // Update startPing():
     startPing() {
-        this.stopPing(); // Ensure no duplicate ping intervals
+        this.stopPing();
+        this.lastPingTime = Date.now();
         this.pingInterval = setInterval(() => {
             if (state.isConnected && this.ws?.readyState === WebSocket.OPEN) {
                 this.send({ ping: 1 });
+                this.lastPingTime = Date.now();
             }
         }, 30000);
     }
@@ -1974,12 +2066,30 @@ class DerivBot {
         // Also reset the set rather than clear when >500 to avoid clearing
         // contracts that are still in-flight
         this.contractCleanupIntervalId = setInterval(() => {
-            const size = this._processedContracts.size;
+        const size = this._processedContracts.size;
             if (size > 1000) {
-                // Keep only recent 100 to prevent clearing contracts still being tracked
+                // ⚠️ FIX: Keep contracts from last 24 hours instead of last 100
+                const oneDayAgo = Date.now() - 86400000;
+                const activeContracts = new Set();
+                
+                // Collect all active contract IDs
+                CONFIG.ACTIVE_ASSETS.forEach(symbol => {
+                    const asset = state.assets[symbol];
+                    asset?.activePositions?.forEach(pos => {
+                        if (pos.contractId) {
+                            activeContracts.add(String(pos.contractId));
+                        }
+                    });
+                });
+                
+                // Keep only recent processed + active contracts
                 const entries = [...this._processedContracts];
-                this._processedContracts = new Set(entries.slice(-100));
-                LOGGER.info(`♻️ Trimmed processed contracts: ${size} → ${this._processedContracts.size}`);
+                this._processedContracts = new Set([
+                    ...entries.slice(-500), // Keep last 500
+                    ...activeContracts      // Keep all active
+                ]);
+                
+                LOGGER.info(`♻️ Trimmed contracts: ${size} → ${this._processedContracts.size}`);
             }
         }, 1800000); // Every 30 minutes
     }
