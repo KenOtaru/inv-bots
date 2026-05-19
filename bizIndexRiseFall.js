@@ -40,15 +40,15 @@ const CONFIG = {
     SESSION_STOP_LOSS:      -100,       // Stop trading after -$100 session loss
 
     // ── Candle / Contract Settings ─────────────────────────────────
-    // 5-minute candles: best balance of signal quality vs trade frequency
-    // for Deriv forex pairs (reduces noise vs 1m, faster than 15m)
+    // 1-minute candles: best balance of signal quality vs trade frequency
+    // for Deriv Index Assets
     GRANULARITY:            60,        // 5 minutes in seconds
     TIMEFRAME_LABEL:        '1m',
     CANDLES_TO_LOAD:        100,        // History for indicator warmup
     MAX_CANDLES_STORED:     200,        // Rolling window
 
-    // 5-minute duration aligns contract expiry with candle close
-    // giving the best directional accuracy for forex on Deriv
+    // 1-minute duration aligns contract expiry with candle close
+    // giving the best directional accuracy for Index on Deriv
     DURATION:               58,
     DURATION_UNIT:          's',        // Minutes
 
@@ -97,7 +97,7 @@ const CONFIG = {
     MARTINGALE_MULTIPLIER:  2.05,       // Covers loss + commission on standard win
     MARTINGALE_MULTIPLIER2: 2.10,
     MARTINGALE_MULTIPLIER3: 2.3,
-    MAX_MARTINGALE_STEPS:   5,          // Lower than synthetic — forex more predictable
+    MAX_MARTINGALE_STEPS:   5,          
 
     // ── Trading Sessions (GMT) ─────────────────────────────────────
     // London: 08:00–17:00 GMT | New York: 13:00–22:00 GMT
@@ -124,7 +124,7 @@ const CONFIG = {
     TELEGRAM_BOT_TOKEN: '8306232249:AAGMwjFngs68Lcq27oGmqewQgthXTJJRxP0',
     TELEGRAM_CHAT_ID: '752497117',
 
-    // ── Active Forex Pairs ─────────────────────────────────────────
+    // ── Active Index Assets ─────────────────────────────────────────
     // Deriv offers these as frxXXXYYY format
     // Selected for highest liquidity and binary option suitability
     ACTIVE_ASSETS: [
@@ -1012,7 +1012,7 @@ class TelegramService {
         const ind     = details.indicators || {};
 
         const lines = [
-            `${emoji} <b>FOREX BOT ${type}</b>`,
+            `${emoji} <b>INDEX BOT ${type}</b>`,
             `Pair: <b>${symbol}</b>  Direction: <b>${direction === 'CALLE' ? '📈 CALL' : '📉 PUT'}</b>`,
             `Stake: $${stake.toFixed(2)} | Duration: ${duration}${durationUnit.toUpperCase()}`,
             `Martingale: ${a?.martingaleLevel ?? 0} | Session: ${session.activeSessions.join('+')}`,
@@ -1066,7 +1066,7 @@ class TelegramService {
         });
 
         const msg = [
-            `⏰ <b>Forex Bot Hourly</b>`,
+            `⏰ <b>Index Bot Hourly</b>`,
             `Last Hour: ${h.trades}t ${h.wins}W/${h.losses}L ${wr}% ${h.pnl >= 0 ? '🟢' : '🔴'} $${h.pnl.toFixed(2)}`,
             `Today: ${today.tradesCount}t P/L: $${(today.netPL || 0).toFixed(2)}`,
             `Capital: $${state.capital.toFixed(2)}`,
@@ -1094,7 +1094,7 @@ class TelegramService {
         });
 
         await this.sendMessage([
-            `📊 <b>FOREX BOT SESSION SUMMARY</b>`,
+            `📊 <b>INDEX BOT SESSION SUMMARY</b>`,
             `Duration: ${stats.duration} | Trades: ${stats.trades}`,
             `Wins: ${stats.wins} | Losses: ${stats.losses} | Win Rate: ${stats.winRate}`,
             `Session P/L: $${stats.netPL.toFixed(2)}`,
@@ -1120,7 +1120,7 @@ class TelegramService {
         });
 
         await this.sendMessage([
-            `🤖 <b>DERIV FOREX BOT STARTED</b>`,
+            `🤖 <b>DERIV INDEX BOT STARTED</b>`,
             `Strategy: EMA+RSI+MACD+BB+Stoch+Pattern (${CONFIG.MIN_CONFLUENCE_SCORE}/${6} confluence)`,
             `Timeframe: ${CONFIG.TIMEFRAME_LABEL} | Duration: ${CONFIG.DURATION}${CONFIG.DURATION_UNIT}`,
             `Capital: $${state.capital.toFixed(2)} | Base Stake: $${CONFIG.STAKE}`,
@@ -1716,11 +1716,11 @@ class ConnectionManager {
 // ============================================
 // MAIN BOT CLASS
 // ============================================
-class ForexBot {
+class IndexBot {
     constructor() {
         this.connection              = new ConnectionManager();
         this._processedContracts     = new Set();
-        this.tradeWatchdogMs         = 960000;  // 16 minutes (15m duration + buffer)
+        this.tradeWatchdogMs         = 80000;  // 1:20 minutes (1m duration + buffer)
         this.timeCheckStarted        = false;
         this.sessionTimeCheckerId    = null;
         this.statusDisplayIntervalId = null;
@@ -1734,7 +1734,7 @@ class ForexBot {
 
     async start() {
         console.log('\n' + '═'.repeat(70));
-        console.log(' DERIV FOREX CALL/PUT BOT — Multi-Factor Confluence Strategy');
+        console.log(' DERIV Index CALLE/PUTE BOT — Multi-Factor Confluence Strategy');
         console.log('═'.repeat(70));
         console.log(`  Pairs     : ${CONFIG.ACTIVE_ASSETS.join(', ')}`);
         console.log(`  Timeframe : ${CONFIG.TIMEFRAME_LABEL} candles`);
@@ -1756,7 +1756,7 @@ class ForexBot {
         TelegramService.startHourlyTimer();
         TelegramService.startDailyTimer();
         this.startSessionTimeChecker();
-        LOGGER.info('✅ Forex Bot started!');
+        LOGGER.info('✅ Index Bot started!');
     }
 
     subscribeToCandles(symbol) {
@@ -1816,10 +1816,10 @@ class ForexBot {
         // (following trend that caused the loss)
         const direction = a.lastTradeDirection || 'CALLE';
 
-        LOGGER.trade(`⚡ [${symbol}] RECOVERY | ${direction === 'CALLE' ? 'CALL' : 'PUT'} | Stake: $${stake.toFixed(2)} | Mart: ${a.martingaleLevel}`);
+        LOGGER.trade(`⚡ [${symbol}] RECOVERY | ${direction === 'CALLE' ? 'CALLE' : 'PUTE'} | Stake: $${stake.toFixed(2)} | Mart: ${a.martingaleLevel}`);
         TelegramService.sendMessage(
-            `⚡ <b>FOREX RECOVERY [${symbol}]</b>\n` +
-            `Direction: ${direction === 'CALLE' ? '📈 CALL' : '📉 PUT'}\n` +
+            `⚡ <b>Index RECOVERY [${symbol}]</b>\n` +
+            `Direction: ${direction === 'CALLE' ? '📈 CALLE' : '📉 PUTE'}\n` +
             `Stake: $${stake.toFixed(2)} | Martingale Level: ${a.martingaleLevel}\n` +
             `Capital: $${state.capital.toFixed(2)}`
         );
@@ -2068,7 +2068,7 @@ class ForexBot {
 // INITIALIZATION
 // ============================================
 tradeHistory = TradeHistoryManager.loadHistory();
-const bot    = new ForexBot();
+const bot    = new IndexBot();
 
 process.on('SIGINT',  () => { bot.stop(); setTimeout(() => process.exit(0), 3000); });
 process.on('SIGTERM', () => { bot.stop(); setTimeout(() => process.exit(0), 3000); });
@@ -2083,7 +2083,7 @@ if (CONFIG.API_TOKEN === 'YOUR_API_TOKEN_HERE') {
     process.exit(1);
 }
 
-console.log('\n🚀 Starting Deriv Forex Bot...\n');
+console.log('\n🚀 Starting Deriv Index Bot...\n');
 bot.connection.connect();
 
 // ── Status display every 60s ───────────────────────────────────────
