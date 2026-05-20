@@ -125,7 +125,7 @@ const CONFIG = {
     // Deriv offers these as frxXXXYYY format
     // Selected for highest liquidity and binary option suitability
     ACTIVE_ASSETS: [
-        // 'R_100',    // 100-index: highest volatility, most patterns
+        'R_100',    // 100-index: highest volatility, most patterns
         'R_75',     // 75-index: very volatile
         'R_50',     // 50-index: balanced volatility
         'R_25',     // 25-index: lower volatility, cleaner signals
