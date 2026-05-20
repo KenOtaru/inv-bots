@@ -80,6 +80,7 @@ const CONFIG = {
         R_100: { min: 0.2,  max: 2.0 },
 
         stpRNG:  { min: 0.5, max: 10.0 },
+        stpRNG2: { min: 1.0, max: 10.0 },
         stpRNG3: { min: 1.0, max: 10.0 },
         stpRNG4: { min: 1.0, max: 10.0 },
         stpRNG5: { min: 1.0, max: 10.0 },
