@@ -928,9 +928,14 @@ class EnhancedDerivTradingBot {
         const quoteString = quote.toString();
         const [, fractionalPart = ''] = quoteString.split('.');
 
-        if (['RDBULL', 'RDBEAR', 'R_75', 'R_50'].includes(asset)) {
+        if (['BOOM150N', 'CRASH150N'].includes(asset)) {
+            return fractionalPart.length >= 5 ? parseInt(fractionalPart[4]) : 0;
+        } else if (['RDBULL', 'RDBEAR', 'R_75', 'R_50'].includes(asset)) {
             return fractionalPart.length >= 4 ? parseInt(fractionalPart[3]) : 0;
-        } else if (['R_10', 'R_25'].includes(asset)) {
+        } else if (['R_10', 'R_25', 'BOOM50',
+            'BOOM300N',  'BOOM500',   'BOOM600',   'BOOM900',
+            'BOOM1000',  'CRASH50',   'CRASH300N',
+            'CRASH500',  'CRASH600',  'CRASH900',  'CRASH1000'].includes(asset)) {
             return fractionalPart.length >= 3 ? parseInt(fractionalPart[2]) : 0;
         } else {
             return fractionalPart.length >= 2 ? parseInt(fractionalPart[1]) : 0;
@@ -1742,7 +1747,12 @@ const bot = new EnhancedDerivTradingBot('DMylfkyce6VyZt7', {
     growthRate: 0.05,
     takeProfitMultiplier: 0.05,
     filterNum: 4,
-    assets: ['R_10', 'R_25', 'R_50', 'R_75'], //['R_10', 'R_25', 'R_50', 'R_75', 'R_100']
+    assets: [
+        'BOOM50',
+        'BOOM150N',  'BOOM300N',  'BOOM500',   'BOOM600',   'BOOM900',
+        'BOOM1000',  'RDBULL',    'CRASH50',   'CRASH150N', 'CRASH300N',
+        'CRASH500',  'CRASH600',  'CRASH900',  'CRASH1000',
+    ], //['R_10', 'R_25', 'R_50', 'R_75', 'R_100']
     telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
     telegramChatId: '752497117',
 });
