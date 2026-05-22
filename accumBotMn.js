@@ -541,9 +541,9 @@ class ResearchBasedAccumulatorBot {
             minStake: safeNum(config.minStake, 0.35),
             maxStakeAsBalancePercent: safeNum(config.maxStakeAsBalancePercent, 98),
             maxConsecutiveLosses: safeNum(config.maxConsecutiveLosses, 3),
-            growthRateMin: 0.01,
-            growthRateMax: 0.03,
-            minScoreForTrade: safeNum(config.minScoreForTrade, 0.78),
+            growthRateMin: 0.03,
+            growthRateMax: 0.05,
+            minScoreForTrade: safeNum(config.minScoreForTrade, 0.80),
             useDigitLogic: false,
             maxReconnectAttempts: safeNum(config.maxReconnectAttempts, 30),
             reconnectDelay: safeNum(config.reconnectDelay, 4000),
@@ -877,7 +877,7 @@ class ResearchBasedAccumulatorBot {
             symbol: meta.asset,
             growth_rate: meta.growthRate,
             limit_order: {
-                take_profit: meta.takeProfitAmount,
+                take_profit: 0.01, //meta.takeProfitAmount
             },
             passthrough: {
                 asset: meta.asset,
@@ -1297,7 +1297,7 @@ if (require.main === module) {
         maxDailyLossPercent: 6,
         maxDailyProfitPercent: 12,
         assets: (process.env.DERIV_ASSETS || 'R_10,R_25,R_50').split(',').map((x) => x.trim()).filter(Boolean),
-        investmentCapital: 100,
+        investmentCapital: safeNum(100, 0),
         telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
         telegramChatId: '752497117',
     });
