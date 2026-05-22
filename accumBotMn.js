@@ -535,7 +535,7 @@ class ResearchBasedAccumulatorBot {
             timezone: config.timezone || 'Africa/Lagos',
             riskPercent: clamp(safeNum(config.riskPercent, 1.5), 1, 2),
             investmentCapital: safeNum(config.investmentCapital, 0),
-            useBalanceAsCapitalBase: config.useBalanceAsCapitalBase !== false,
+            useBalanceAsCapitalBase: config.useBalanceAsCapitalBase === false,
             maxDailyLossPercent: safeNum(config.maxDailyLossPercent, 6),
             maxDailyProfitPercent: safeNum(config.maxDailyProfitPercent, 12),
             minStake: safeNum(config.minStake, 0.35),
@@ -953,14 +953,14 @@ class ResearchBasedAccumulatorBot {
             req_id: this.nextReqId(),
         });
 
-        this.sendTelegramMessage(
-            `🚀 <b>TRADE OPENING</b>\n` +
-            `Asset: <b>${asset}</b>\n` +
-            `Stake: ${this.accountCurrency} ${meta.stake.toFixed(2)}\n` +
-            `Growth: ${(meta.growthRate * 100).toFixed(0)}%\n` +
-            `Score: ${(meta.analysis.overallScore * 100).toFixed(1)}%\n` +
-            `TP: ${this.accountCurrency} ${meta.takeProfitAmount.toFixed(2)} (~${meta.targetTicks} ticks)`
-        );
+        // this.sendTelegramMessage(
+        //     `🚀 <b>TRADE OPENING</b>\n` +
+        //     `Asset: <b>${asset}</b>\n` +
+        //     `Stake: ${this.accountCurrency} ${meta.stake.toFixed(2)}\n` +
+        //     `Growth: ${(meta.growthRate * 100).toFixed(0)}%\n` +
+        //     `Score: ${(meta.analysis.overallScore * 100).toFixed(1)}%\n` +
+        //     `TP: ${this.accountCurrency} ${meta.takeProfitAmount.toFixed(2)} (~${meta.targetTicks} ticks)`
+        // );
     }
 
     handleBuyResponse(msg) {
@@ -993,10 +993,10 @@ class ResearchBasedAccumulatorBot {
             req_id: this.nextReqId(),
         });
 
-        console.log(`✅ Contract opened ${trade.contractId} on ${asset}`);
+        console.log(`🚀 Contract opened ${trade.contractId} on ${asset}`);
 
         this.sendTelegramMessage(
-            `✅ <b>CONTRACT OPENED</b>\n` +
+            `🚀 <b>CONTRACT OPENED</b>\n` +
             `Asset: ${asset}\n` +
             `Stake: ${this.accountCurrency} ${trade.stake.toFixed(2)}\n` +
             `Buy price: ${this.accountCurrency} ${trade.buyPrice.toFixed(2)}\n` +
@@ -1296,7 +1296,7 @@ if (require.main === module) {
         riskPercent: 1.5,
         maxDailyLossPercent: 6,
         maxDailyProfitPercent: 12,
-        assets: (process.env.DERIV_ASSETS || 'R_10,R_25,R_50').split(',').map((x) => x.trim()).filter(Boolean),
+        assets: ('R_10,R_25,R_50').split(',').map((x) => x.trim()).filter(Boolean),
         investmentCapital: safeNum(100, 0),
         telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
         telegramChatId: '752497117',
