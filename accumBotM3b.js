@@ -29,7 +29,7 @@ const path = require('path');
 // ══════════════════════════════════════════════════════════════════════════════
 // STATE PERSISTENCE MANAGER
 // ══════════════════════════════════════════════════════════════════════════════
-const STATE_FILE = path.join(__dirname, 'accumBotM3a_02_state.json');
+const STATE_FILE = path.join(__dirname, 'accumBotM3a_05_state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -1109,7 +1109,7 @@ class EnhancedDerivTradingBot {
 
         if (analysis.overallScore < 0.80) return;
 
-        // if (analysis.scores.bandWidth < 1) return;
+        if (analysis.scores.bandWidth < 1) return;
 
         // if (analysis.scores.macdFlat < 0.5) return;
 
@@ -1117,11 +1117,11 @@ class EnhancedDerivTradingBot {
 
         if (!analysis.tickStability || analysis.tickStability === 'undefined' || analysis.tickStability === 'NaN' || analysis.tickStability < 1) return;
 
-        // if (analysis.scores.macdConverging < 1) return;
+        if (analysis.scores.macdConverging < 1) return;
 
         // if (this.maxTickMove < 0.03) return;
 
-        // if (analysis.scores.volTrend < 0.5) return;
+        if (analysis.scores.volTrend < 0.5) return;
 
         // Check if we should place trade
         if (condition) {
