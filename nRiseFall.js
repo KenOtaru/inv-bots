@@ -207,7 +207,7 @@ class TelegramService {
         msg += `${'─'.repeat(30)}\n\n`;
         
         msg += `📊 <b>Asset:</b> ${symbol}\n`;
-        msg += `${direction === 'CALL' ? '📈' : '📉'} <b>Direction:</b> ${direction}\n`;
+        msg += `${direction === 'CALLE' ? '📈' : '📉'} <b>Direction:</b> ${direction}\n`;
         msg += `💰 <b>Stake:</b> $${stake.toFixed(2)}\n`;
         msg += `📍 <b>Entry Price:</b> ${entrySpot}\n\n`;
         
@@ -218,9 +218,9 @@ class TelegramService {
         
         if (score.reasonsRise.length > 0 || score.reasonsFall.length > 0) {
             msg += `💡 <b>Signals:</b>\n`;
-            if (direction === 'CALL' && score.reasonsRise.length > 0) {
+            if (direction === 'CALLE' && score.reasonsRise.length > 0) {
                 msg += `   ${score.reasonsRise.slice(0, 3).join('\n   ')}\n`;
-            } else if (direction === 'PUT' && score.reasonsFall.length > 0) {
+            } else if (direction === 'PUTE' && score.reasonsFall.length > 0) {
                 msg += `   ${score.reasonsFall.slice(0, 3).join('\n   ')}\n`;
             }
             msg += '\n';
@@ -246,7 +246,7 @@ class TelegramService {
         msg += `${'─'.repeat(30)}\n\n`;
         
         msg += `📊 <b>Asset:</b> ${symbol}\n`;
-        msg += `${direction === 'CALL' ? '📈' : '📉'} <b>Direction:</b> ${direction}\n\n`;
+        msg += `${direction === 'CALLE' ? '📈' : '📉'} <b>Direction:</b> ${direction}\n\n`;
         
         msg += `📍 <b>Entry:</b> ${entrySpot}\n`;
         msg += `🎯 <b>Exit:</b> ${exitSpot}\n`;
@@ -275,7 +275,7 @@ class TelegramService {
         const exitNum = parseFloat(exit);
         const diff = exitNum - entryNum;
         const diffPct = (diff / entryNum * 100).toFixed(3);
-        const correct = (direction === 'CALL' && diff > 0) || (direction === 'PUT' && diff < 0);
+        const correct = (direction === 'CALLE' && diff > 0) || (direction === 'PUTE' && diff < 0);
         
         return `${diff >= 0 ? '+' : ''}${diff.toFixed(5)} (${diff >= 0 ? '+' : ''}${diffPct}%) ${correct ? '✓' : '✗'}`;
     }
@@ -553,7 +553,7 @@ class HedgedBot {
                     `Asset: ${pending.symbol} | Direction: ${pending.direction}${pending.isHedge ? ' (HEDGE)' : ''}\n` +
                     `Stake: $${pending.stake.toFixed(2)} | Entry: ${pending.entrySpot}\n` +
                     `Score: R${pending.score.rise}/F${pending.score.fall} | RSI: ${pending.score.rsi} (${pending.score.trend})\n` +
-                    `Signals: ${pending.direction === 'CALL' ? pending.score.reasonsRise.slice(0, 2).join(', ') : pending.score.reasonsFall.slice(0, 2).join(', ')}\n` +
+                    `Signals: ${pending.direction === 'CALLE' ? pending.score.reasonsRise.slice(0, 2).join(', ') : pending.score.reasonsFall.slice(0, 2).join(', ')}\n` +
                     `Contract ID: ${contractId}`;
                 
                 LOGGER.entry(entryLog);
@@ -747,13 +747,13 @@ class HedgedBot {
             asset.lastTradeTime = Date.now();
             this.executeHedge(ohlc.symbol, score, candle.close);
         } else if (shouldRise) {
-            LOGGER.analysis(`✅ ${ohlc.symbol} DECISION: CALL (R:${score.rise} > F:${score.fall})`);
+            LOGGER.analysis(`✅ ${ohlc.symbol} DECISION: CALLE (R:${score.rise} > F:${score.fall})`);
             asset.lastTradeTime = Date.now();
-            this.executeSingle(ohlc.symbol, 'CALL', score, candle.close);
+            this.executeSingle(ohlc.symbol, 'CALLE', score, candle.close);
         } else if (shouldFall) {
-            LOGGER.analysis(`✅ ${ohlc.symbol} DECISION: PUT (F:${score.fall} > R:${score.rise})`);
+            LOGGER.analysis(`✅ ${ohlc.symbol} DECISION: PUTE (F:${score.fall} > R:${score.rise})`);
             asset.lastTradeTime = Date.now();
-            this.executeSingle(ohlc.symbol, 'PUT', score, candle.close);
+            this.executeSingle(ohlc.symbol, 'PUTE', score, candle.close);
         } else {
             LOGGER.analysis(`❌ ${ohlc.symbol} NO TRADE - Insufficient scores`);
         }
@@ -800,7 +800,7 @@ class HedgedBot {
             buy: 1, 
             price: stake.toFixed(2), 
             parameters: { 
-                contract_type: 'CALL', 
+                contract_type: 'CALLE', 
                 symbol, 
                 amount: stake.toFixed(2),
                 duration: CONFIG.DURATION, 
@@ -811,7 +811,7 @@ class HedgedBot {
         });
         this.pendingTrades.set(callReq, { 
             symbol, 
-            direction: 'CALL', 
+            direction: 'CALLE', 
             stake, 
             score, 
             isHedge: true, 
@@ -823,7 +823,7 @@ class HedgedBot {
                 buy: 1, 
                 price: stake.toFixed(2), 
                 parameters: { 
-                    contract_type: 'PUT', 
+                    contract_type: 'PUTE', 
                     symbol, 
                     duration: CONFIG.DURATION, 
                     duration_unit: CONFIG.DURATION_UNIT, 
@@ -833,7 +833,7 @@ class HedgedBot {
             });
             this.pendingTrades.set(putReq, { 
                 symbol, 
-                direction: 'PUT', 
+                direction: 'PUTE', 
                 stake, 
                 score, 
                 isHedge: true, 
