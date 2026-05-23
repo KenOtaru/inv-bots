@@ -82,9 +82,9 @@ const BOT_CONFIG = {
     conservativeZ: Number(1.64),
     minTransitionSamples: Number(80),
 
-    preProposalMaxLoseProb: 0.0925,
+    preProposalMaxLoseProb: Number(0.0925),
     requiredEdgeMargin: Number(0.0040),
-    minDigitGapVsRunnerUp: 0.0015,
+    minDigitGapVsRunnerUp: Number(0.0015),
   },
 
   minTimeBetweenTrades: Number(25000),
@@ -765,10 +765,10 @@ class DerivDigitDiffMergedBot {
       Predicted Digit: ${analysis.predictedDigit}
       Signal Score: ${(analysis.signalScore * 100).toFixed(2)}%
       Est. Lose Prob: ${(analysis.estimatedLoseProb * 100).toFixed(2)}%
-      Cons. Lose Prob: ${(analysis.conservativeLoseProb * 100).toFixed(2)}% | ${this.cfg.preProposalMaxLoseProb}
+      Cons. Lose Prob: ${(analysis.conservativeLoseProb * 100).toFixed(2)}% | ${BOT_CONFIG.analysis.preProposalMaxLoseProb}
       Est. Win Prob: ${(analysis.estimatedWinProb * 100).toFixed(2)}%
       Cons. Win Prob: ${(analysis.conservativeWinProb * 100).toFixed(2)}%
-      Gap vs Runner-Up: ${(analysis.gapVsRunnerUp * 100).toFixed(4)}% | ${this.cfg.minDigitGapVsRunnerUp}
+      Gap vs Runner-Up: ${(analysis.gapVsRunnerUp * 100).toFixed(4)}% | ${BOT_CONFIG.analysis.minDigitGapVsRunnerUp}
       Streak: Digit ${analysis.streak.digit} for ${analysis.streak.streak} ticks
       `);
     
