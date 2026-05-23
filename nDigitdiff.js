@@ -760,6 +760,7 @@ class DerivDigitDiffMergedBot {
     const analysis = this.analyzer.analyze(this.digitHistories[asset]);
     console.log(`asset: ${asset} 
       Analysis:
+      shouldRequestProposal: ${analysis.shouldRequestProposal}
       Reason: ${analysis.reason}
       Current Digit: ${analysis.currentDigit}
       Predicted Digit: ${analysis.predictedDigit}
