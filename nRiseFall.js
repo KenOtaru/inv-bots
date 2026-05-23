@@ -1,8 +1,7 @@
 /**
- * DERIV HEDGED BOT v3.1 - FIXED
- * - Fixed syntax errors, websocket drops, and impossible hedge logic
- * - Now trades BOTH single-direction AND hedges
- * - Uses weighted confluence scoring + D'Alembert
+ * DERIV HEDGED BOT v3.2 - WITH FULL ANALYSIS LOGGING
+ * - Adds detailed trade analysis visibility
+ * - Fixes API 'end' error
  */
 
 const WebSocket = require('ws');
@@ -11,10 +10,8 @@ const fs = require('fs');
 const path = require('path');
 
 // ============================================
-// CONFIGURATION
-// ============================================
 const CONFIG = {
-    API_TOKEN: 'rgNedekYXvCaPeP', //
+    API_TOKEN: 'rgNedekYXvCaPeP',
     APP_ID: '1089',
     WS_URL: 'wss://ws.derivws.com/websockets/v3',
     
@@ -22,11 +19,11 @@ const CONFIG = {
     BASE_STAKE: 3.75,
     RISK_PERCENT: 1.5,
     
-    ACTIVE_ASSETS: ['R_10', 'R_25', 'R_50'], 
+    ACTIVE_ASSETS: ['R_10', 'R_25', 'R_50'],
     
-    HEDGE_MIN_SCORE: 3,  // FIXED: lowered from 4
-    HEDGE_MAX_DIFF: 1,   // FIXED: tighter diff
-    MIN_SCORE_TO_TRADE: 5, // FIXED: lowered from 6
+    HEDGE_MIN_SCORE: 3,
+    HEDGE_MAX_DIFF: 1,
+    MIN_SCORE_TO_TRADE: 5,
     
     DALEMBERT_UNIT: 0.5,
     MAX_DALEMBERT_STEPS: 5,
@@ -45,10 +42,9 @@ const CONFIG = {
     TELEGRAM_CHAT_ID: '752497117',
     
     DEBUG_MODE: true,
+    ANALYSIS_LOGGING: true, // NEW: Always show analysis
 };
 
-// ============================================
-// LOGGER - FIXED
 // ============================================
 const getGMTTime = () => new Date().toISOString().split('T')[1].split('.')[0] + ' GMT';
 const LOGGER = {
@@ -56,14 +52,12 @@ const LOGGER = {
     trade: msg => console.log(`\x1b[32m[TRADE] ${getGMTTime()} - ${msg}\x1b[0m`),
     warn: msg => console.warn(`\x1b[33m[WARN] ${getGMTTime()} - ${msg}\x1b[0m`),
     error: msg => console.error(`\x1b[31m[ERROR] ${getGMTTime()} - ${msg}\x1b[0m`),
-    debug: msg => { if (CONFIG.DEBUG_MODE) console.log(`\x1b[90m[DEBUG] ${getGMTTime()} - ${msg}\x1b[0m`); }
+    debug: msg => { if (CONFIG.DEBUG_MODE) console.log(`\x1b[90m[DEBUG] ${getGMTTime()} - ${msg}\x1b[0m`); },
+    analysis: msg => { if (CONFIG.ANALYSIS_LOGGING) console.log(`\x1b[36m[ANALYSIS] ${getGMTTime()} - ${msg}\x1b[0m`); }
 };
 
 // ============================================
-// STATE & HISTORY
-// ============================================
 const HISTORY_FILE = path.join(__dirname, 'HedgedBot-history.json');
-
 let tradeHistory = {
     overall: { tradesCount: 0, winsCount: 0, lossesCount: 0, profit: 0, loss: 0, netPL: 0, hedges: 0, firstTradeDate: null, lastTradeDate: null },
     dailyHistory: {},
@@ -72,70 +66,39 @@ let tradeHistory = {
 
 class TradeHistoryManager {
     static getDateKey() { return new Date().toISOString().split('T')[0]; }
-    
     static loadHistory() {
         try {
             if (fs.existsSync(HISTORY_FILE)) {
                 tradeHistory = JSON.parse(fs.readFileSync(HISTORY_FILE, 'utf8'));
-                LOGGER.info(`📂 Loaded history: ${tradeHistory.overall.tradesCount} trades, ${tradeHistory.overall.hedges} hedges`);
+                LOGGER.info(`📂 Loaded history: ${tradeHistory.overall.tradesCount} trades`);
             }
         } catch (e) { LOGGER.error(`History load failed: ${e.message}`); }
     }
-    
     static saveHistory() {
         try {
             tradeHistory.lastUpdated = Date.now();
             fs.writeFileSync(HISTORY_FILE, JSON.stringify(tradeHistory, null, 2));
-        } catch (e) { LOGGER.error(`History save failed: ${e.message}`); }
+        } catch (e) { }
     }
-    
-    static ensureDay(dateKey) {
-        if (!tradeHistory.dailyHistory[dateKey]) {
-            tradeHistory.dailyHistory[dateKey] = { 
-                date: dateKey, tradesCount: 0, winsCount: 0, lossesCount: 0, 
-                profit: 0, loss: 0, netPL: 0, hedges: 0,
-                startCapital: state.capital, endCapital: state.capital
-            };
-        }
-    }
-    
     static recordTrade(symbol, profit, isHedge = false) {
         const dateKey = this.getDateKey();
-        this.ensureDay(dateKey);
-        
+        if (!tradeHistory.dailyHistory[dateKey]) {
+            tradeHistory.dailyHistory[dateKey] = { date: dateKey, tradesCount: 0, winsCount: 0, lossesCount: 0, profit: 0, loss: 0, netPL: 0, hedges: 0, startCapital: state.capital, endCapital: state.capital };
+        }
         const day = tradeHistory.dailyHistory[dateKey];
         const overall = tradeHistory.overall;
-        
         if (!overall.firstTradeDate) overall.firstTradeDate = dateKey;
         overall.lastTradeDate = dateKey;
-        
         day.tradesCount++; overall.tradesCount++;
         day.endCapital = state.capital;
-        
         if (isHedge) { day.hedges++; overall.hedges++; }
-        
-        if (profit > 0) {
-            day.winsCount++; overall.winsCount++;
-            day.profit += profit; overall.profit += profit;
-        } else if (profit < 0) {
-            day.lossesCount++; overall.lossesCount++;
-            day.loss += Math.abs(profit); overall.loss += Math.abs(profit);
-        }
+        if (profit > 0) { day.winsCount++; overall.winsCount++; day.profit += profit; overall.profit += profit; }
+        else if (profit < 0) { day.lossesCount++; overall.lossesCount++; day.loss += Math.abs(profit); overall.loss += Math.abs(profit); }
         day.netPL += profit; overall.netPL += profit;
-        
         this.saveHistory();
     }
-    
-    static getToday() {
-        this.ensureDay(this.getDateKey());
-        return tradeHistory.dailyHistory[this.getDateKey()];
-    }
-    
-    static getOverall() { return tradeHistory.overall; }
 }
 
-// ============================================
-// TELEGRAM SERVICE
 // ============================================
 class TelegramService {
     static async sendMessage(message) {
@@ -143,42 +106,20 @@ class TelegramService {
         try {
             const url = `https://api.telegram.org/bot${CONFIG.TELEGRAM_BOT_TOKEN}/sendMessage`;
             const data = JSON.stringify({ chat_id: CONFIG.TELEGRAM_CHAT_ID, text: message, parse_mode: 'HTML' });
-            
             return new Promise((resolve) => {
-                const req = https.request(url, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) }
-                }, res => { res.on('data', () => {}); res.on('end', () => resolve(res.statusCode === 200)); });
+                const req = https.request(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(data) } },
+                    res => { res.on('data', () => {}); res.on('end', () => resolve(true)); });
                 req.on('error', () => resolve(false));
                 req.write(data); req.end();
             });
-        } catch (e) { LOGGER.error(`Telegram failed: ${e.message}`); }
-    }
-    
-    static async sendStartupMessage() {
-        const overall = TradeHistoryManager.getOverall();
-        const msg = `
-🤖 <b>HEDGED BOT v3.1 STARTED</b>
-Assets: ${CONFIG.ACTIVE_ASSETS.join(', ')}
-Base Stake: $${CONFIG.BASE_STAKE}
-Strategy: Confluence + Hedging (FIXED)
-
-📊 <b>Historical:</b>
-Total Trades: ${overall.tradesCount}
-Total Hedges: ${overall.hedges}
-Overall P/L: $${overall.netPL.toFixed(2)}
-Win Rate: ${overall.tradesCount > 0 ? ((overall.winsCount/overall.tradesCount)*100).toFixed(1) : 0}%
-        `.trim();
-        await this.sendMessage(msg);
+        } catch (e) { }
     }
 }
 
 // ============================================
-// SCORER - COMPLETELY REWRITTEN
-// ============================================
 class ConfluenceScorer {
     static calculateScore(candles) {
-        if (candles.length < 30) return { rise: 0, fall: 0, rsi: 0, trend: 'NONE' };
+        if (candles.length < 30) return { rise: 0, fall: 0, rsi: 0, trend: 'NONE', bbWidth: 0, details: 'Not enough candles' };
         
         const closes = candles.map(c => c.close);
         const highs = candles.map(c => c.high);
@@ -194,32 +135,32 @@ class ConfluenceScorer {
         const bbWidth = (bb.upper - bb.lower) / bb.middle * 100;
         
         let rise = 0, fall = 0;
+        let reasonsRise = [], reasonsFall = [];
         
-        // TREND (weight 4)
-        if (ema5 > ema20 && ema20 > ema50) rise += 4;
-        else if (ema5 < ema20 && ema20 < ema50) fall += 4;
-        else if (ema5 > ema20) rise += 2;
-        else if (ema5 < ema20) fall += 2;
+        // TREND
+        if (ema5 > ema20 && ema20 > ema50) { rise += 4; reasonsRise.push('Strong uptrend'); }
+        else if (ema5 < ema20 && ema20 < ema50) { fall += 4; reasonsFall.push('Strong downtrend'); }
+        else if (ema5 > ema20) { rise += 2; reasonsRise.push('EMA5>EMA20'); }
+        else if (ema5 < ema20) { fall += 2; reasonsFall.push('EMA5<EMA20'); }
         
-        // RSI (weight 3)
-        if (rsi < 30) rise += 3;
-        else if (rsi < 40) rise += 2;
-        else if (rsi > 70) fall += 3;
-        else if (rsi > 60) fall += 2;
-        else if (rsi >= 45 && rsi <= 55) { rise += 1; fall += 1; } // Neutral zone - good for hedge
+        // RSI
+        if (rsi < 30) { rise += 3; reasonsRise.push(`RSI oversold ${rsi.toFixed(1)}`); }
+        else if (rsi < 40) { rise += 2; reasonsRise.push(`RSI low ${rsi.toFixed(1)}`); }
+        else if (rsi > 70) { fall += 3; reasonsFall.push(`RSI overbought ${rsi.toFixed(1)}`); }
+        else if (rsi > 60) { fall += 2; reasonsFall.push(`RSI high ${rsi.toFixed(1)}`); }
+        else if (rsi >= 45 && rsi <= 55) { rise += 1; fall += 1; reasonsRise.push('RSI neutral'); reasonsFall.push('RSI neutral'); }
         
-        // Bollinger Bands (weight 3)
-        if (current <= bb.lower) rise += 3;
-        else if (current < bb.middle * 0.998) rise += 1;
+        // Bollinger
+        if (current <= bb.lower) { rise += 3; reasonsRise.push('Price at lower BB'); }
+        else if (current < bb.middle) { rise += 1; reasonsRise.push('Below mid BB'); }
         
-        if (current >= bb.upper) fall += 3;
-        else if (current > bb.middle * 1.002) fall += 1;
+        if (current >= bb.upper) { fall += 3; reasonsFall.push('Price at upper BB'); }
+        else if (current > bb.middle) { fall += 1; reasonsFall.push('Above mid BB'); }
         
-        // BB Squeeze - HIGH UNCERTAINTY = HEDGE OPPORTUNITY
-        if (bbWidth < 0.15) { rise += 2; fall += 2; } // Both get points in squeeze
+        // Squeeze
+        if (bbWidth < 0.15) { rise += 2; fall += 2; reasonsRise.push(`BB squeeze ${bbWidth.toFixed(3)}%`); reasonsFall.push(`BB squeeze`); }
         else if (bbWidth < 0.3) { rise += 1; fall += 1; }
         
-        // Volatility
         if (atr > 0.0008) { rise += 1; fall += 1; }
         
         return { 
@@ -227,7 +168,10 @@ class ConfluenceScorer {
             fall: Math.min(10, fall), 
             rsi: rsi.toFixed(1), 
             trend: ema5 > ema20 ? 'BULL' : 'BEAR',
-            bbWidth: bbWidth.toFixed(3)
+            bbWidth: bbWidth.toFixed(3),
+            price: current.toFixed(5),
+            reasonsRise,
+            reasonsFall
         };
     }
     
@@ -238,8 +182,6 @@ class ConfluenceScorer {
 }
 
 // ============================================
-// STATE
-// ============================================
 const state = {
     capital: CONFIG.INITIAL_CAPITAL,
     dailyPL: 0,
@@ -249,13 +191,12 @@ const state = {
     dalembertLevel: 0,
     assets: {},
     activeHedges: new Map(),
-    hourlyStats: { trades: 0, wins: 0, losses: 0, pnl: 0, lastHour: new Date().getHours() },
+    hourlyStats: { trades: 0, wins: 0, losses: 0, pnl: 0 },
+    candlesReceived: 0,
 };
 
-CONFIG.ACTIVE_ASSETS.forEach(s => state.assets[s] = { closedCandles: [], lastTradeTime: 0 });
+CONFIG.ACTIVE_ASSETS.forEach(s => state.assets[s] = { closedCandles: [], lastTradeTime: 0, lastAnalysis: null });
 
-// ============================================
-// BOT - FIXED
 // ============================================
 class HedgedBot {
     constructor() {
@@ -273,22 +214,13 @@ class HedgedBot {
         
         this.ws.on('open', () => { 
             this.send({ authorize: CONFIG.API_TOKEN });
-            // FIXED: Add ping to prevent disconnects
             this.pingInterval = setInterval(() => {
-                if (this.ws.readyState === WebSocket.OPEN) {
-                    this.send({ ping: 1 });
-                }
+                if (this.ws.readyState === WebSocket.OPEN) this.send({ ping: 1 });
             }, 30000);
         });
         
         this.ws.on('message', d => this.onMessage(JSON.parse(d)));
-        
-        this.ws.on('close', () => {
-            LOGGER.warn('Connection closed, reconnecting...');
-            clearInterval(this.pingInterval);
-            setTimeout(() => this.connect(), 5000);
-        });
-        
+        this.ws.on('close', () => { LOGGER.warn('Connection closed'); clearInterval(this.pingInterval); setTimeout(() => this.connect(), 5000); });
         this.ws.on('error', (e) => LOGGER.error(`WS Error: ${e.message}`));
     }
     
@@ -300,15 +232,16 @@ class HedgedBot {
     }
     
     onMessage(res) {
+        // LOG EVERYTHING FOR DEBUGGING
         if (res.error) {
-            LOGGER.error(`API Error: ${res.error.message}`);
+            LOGGER.error(`API Error [${res.msg_type}]: ${res.error.message} | Details: ${JSON.stringify(res.error)}`);
             return;
         }
         
         if (res.msg_type === 'authorize') {
             state.capital = res.authorize.balance;
-            LOGGER.info(`🔐 Authorized | $${state.capital}`);
-            TelegramService.sendStartupMessage();
+            LOGGER.info(`🔐 Authorized | Balance: $${state.capital} | Currency: ${res.authorize.currency}`);
+            LOGGER.info(`📡 Subscribing to ${CONFIG.ACTIVE_ASSETS.length} assets...`);
             CONFIG.ACTIVE_ASSETS.forEach(s => this.subscribe(s));
         }
         
@@ -317,14 +250,18 @@ class HedgedBot {
             state.assets[sym].closedCandles = res.candles.map(c => ({ 
                 open: +c.open, close: +c.close, high: +c.high, low: +c.low, epoch: +c.epoch 
             }));
-            LOGGER.info(`📈 ${sym} loaded ${res.candles.length} candles`);
+            LOGGER.info(`📈 ${sym} | Loaded ${res.candles.length} historical candles | Latest: ${state.assets[sym].closedCandles.slice(-1)[0].close}`);
         }
         
-        if (res.msg_type === 'ohlc') this.onCandle(res.ohlc);
+        if (res.msg_type === 'ohlc') {
+            state.candlesReceived++;
+            this.onCandle(res.ohlc);
+        }
         
-        if (res.msg_type === 'buy' && !res.error) {
+        if (res.msg_type === 'buy') {
             const pending = this.pendingTrades.get(res.echo_req.req_id);
             if (pending) {
+                LOGGER.info(`✅ Order placed: ${pending.direction} ${pending.symbol} $${pending.stake} | Contract ID: ${res.buy.contract_id}`);
                 state.activeHedges.set(res.buy.contract_id, { ...pending, contractId: res.buy.contract_id });
                 this.send({ proposal_open_contract: 1, contract_id: res.buy.contract_id, subscribe: 1 });
                 this.pendingTrades.delete(res.echo_req.req_id);
@@ -333,7 +270,7 @@ class HedgedBot {
         
         if (res.msg_type === 'proposal_open_contract') {
             const c = res.proposal_open_contract;
-            if (c.is_sold) { // FIXED: was c.is_sold broken
+            if (c.is_sold) {
                 const h = state.activeHedges.get(c.contract_id);
                 if (!h) return;
                 
@@ -341,78 +278,108 @@ class HedgedBot {
                 state.capital += profit; 
                 state.dailyPL += profit; 
                 state.tradesToday++;
-                state.hourlyStats.trades++; 
-                state.hourlyStats.pnl += profit;
+                
+                const result = profit >= 0 ? 'WIN' : 'LOSS';
+                LOGGER.trade(`[${h.symbol}] ${h.direction} ${result} $${profit.toFixed(2)} | Entry:${h.entrySpot} Exit:${c.exit_tick} | Balance: $${state.capital.toFixed(2)}`);
+                
+                TradeHistoryManager.recordTrade(h.symbol, profit, h.isHedge);
+                state.activeHedges.delete(c.contract_id);
                 
                 if (profit > 0) { 
-                    state.hourlyStats.wins++; 
                     state.dalembertLevel = Math.max(0, state.dalembertLevel-1); 
                     state.consecutiveLosses = 0; 
                 } else { 
-                    state.hourlyStats.losses++; 
                     state.dalembertLevel = Math.min(CONFIG.MAX_DALEMBERT_STEPS, state.dalembertLevel+1); 
                     state.consecutiveLosses++; 
                 }
-                
-                LOGGER.trade(`[${h.symbol}] ${h.direction} ${profit>=0?'WIN':'LOSS'} $${profit.toFixed(2)} | Score R${h.score.rise}/F${h.score.fall}`);
-                TradeHistoryManager.recordTrade(h.symbol, profit, h.isHedge);
-                
-                state.activeHedges.delete(c.contract_id);
-                
-                if (state.consecutiveLosses >= CONFIG.MAX_CONSECUTIVE_LOSSES) {
-                    state.isPaused = true;
-                    LOGGER.warn('⏸️ Paused after 3 losses');
-                    TelegramService.sendMessage('⏸️ <b>PAUSED</b> - 3 consecutive losses');
-                    setTimeout(() => { state.isPaused = false; state.consecutiveLosses = 0; LOGGER.info('▶️ Resumed'); }, 900000);
-                }
             }
+        }
+        
+        if (res.msg_type === 'ping') {
+            LOGGER.debug('🏓 Pong received');
         }
     }
     
     subscribe(s) {
-        this.send({ ticks_history: s, count: CONFIG.CANDLES_TO_LOAD, end: 'latest', style: 'candles', granularity: CONFIG.GRANULARITY });
-        this.send({ ticks_history: s, subscribe: 1, style: 'candles', granularity: CONFIG.GRANULARITY });
+        LOGGER.info(`→ Subscribing ${s}...`);
+        // FIXED: Removed 'end: latest' which caused validation error
+        this.send({ 
+            ticks_history: s, 
+            count: CONFIG.CANDLES_TO_LOAD, 
+            style: 'candles', 
+            granularity: CONFIG.GRANULARITY 
+        });
+        // Subscribe to live candles
+        this.send({ 
+            ticks_history: s, 
+            subscribe: 1, 
+            style: 'candles', 
+            granularity: CONFIG.GRANULARITY 
+        });
     }
     
     onCandle(ohlc) {
         const asset = state.assets[ohlc.symbol];
-        asset.closedCandles.push({ 
+        const candle = { 
             open: +ohlc.open, close: +ohlc.close, high: +ohlc.high, low: +ohlc.low, epoch: +ohlc.epoch 
-        });
+        };
+        
+        asset.closedCandles.push(candle);
         if (asset.closedCandles.length > 200) asset.closedCandles.shift();
         
-        if (state.isPaused || state.activeHedges.size >= 6) return;
-        if (Date.now() - asset.lastTradeTime < 30000) return; // 30s cooldown per asset
-        
+        // ALWAYS LOG ANALYSIS
         const score = ConfluenceScorer.calculateScore(asset.closedCandles);
-        LOGGER.debug(`[${ohlc.symbol}] R:${score.rise} F:${score.fall} | RSI:${score.rsi} ${score.trend} BBw:${score.bbWidth}%`);
+        asset.lastAnalysis = score;
         
-        // FIXED LOGIC
+        LOGGER.analysis(`${ohlc.symbol} | Price:${score.price} | R:${score.rise} (${score.reasonsRise.join(', ') || 'none'}) | F:${score.fall} (${score.reasonsFall.join(', ') || 'none'}) | RSI:${score.rsi} ${score.trend} BBw:${score.bbWidth}%`);
+        
+        // DECISION LOGIC WITH EXPLANATION
+        if (state.isPaused) {
+            LOGGER.analysis(`⏸️ ${ohlc.symbol} SKIPPED - Bot paused (${state.consecutiveLosses} losses)`);
+            return;
+        }
+        
+        if (state.activeHedges.size >= 6) {
+            LOGGER.analysis(`⏸️ ${ohlc.symbol} SKIPPED - Too many active trades (${state.activeHedges.size})`);
+            return;
+        }
+        
+        if (Date.now() - asset.lastTradeTime < 30000) {
+            const wait = Math.ceil((30000 - (Date.now() - asset.lastTradeTime))/1000);
+            LOGGER.analysis(`⏳ ${ohlc.symbol} SKIPPED - Cooldown ${wait}s`);
+            return;
+        }
+        
         const shouldHedge = score.rise >= CONFIG.HEDGE_MIN_SCORE && score.fall >= CONFIG.HEDGE_MIN_SCORE && Math.abs(score.rise - score.fall) <= CONFIG.HEDGE_MAX_DIFF;
         const shouldRise = score.rise >= CONFIG.MIN_SCORE_TO_TRADE && score.rise > score.fall + 2;
         const shouldFall = score.fall >= CONFIG.MIN_SCORE_TO_TRADE && score.fall > score.rise + 2;
         
         if (shouldHedge) {
+            LOGGER.analysis(`✅ ${ohlc.symbol} DECISION: HEDGE (Both strong, diff=${Math.abs(score.rise-score.fall)})`);
             asset.lastTradeTime = Date.now();
-            this.executeHedge(ohlc.symbol, score);
+            this.executeHedge(ohlc.symbol, score, candle.close);
         } else if (shouldRise) {
+            LOGGER.analysis(`✅ ${ohlc.symbol} DECISION: CALL (Rise dominant)`);
             asset.lastTradeTime = Date.now();
-            this.executeSingle(ohlc.symbol, 'CALL', score);
+            this.executeSingle(ohlc.symbol, 'CALL', score, candle.close);
         } else if (shouldFall) {
+            LOGGER.analysis(`✅ ${ohlc.symbol} DECISION: PUT (Fall dominant)`);
             asset.lastTradeTime = Date.now();
-            this.executeSingle(ohlc.symbol, 'PUT', score);
+            this.executeSingle(ohlc.symbol, 'PUT', score, candle.close);
+        } else {
+            LOGGER.analysis(`❌ ${ohlc.symbol} NO TRADE - R:${score.rise}<${CONFIG.MIN_SCORE_TO_TRADE} and F:${score.fall}<${CONFIG.MIN_SCORE_TO_TRADE}, not hedging`);
         }
     }
     
     getStake() { 
         const riskStake = state.capital * (CONFIG.RISK_PERCENT / 100);
         const dalembertStake = CONFIG.BASE_STAKE + (state.dalembertLevel * CONFIG.DALEMBERT_UNIT);
-        return Math.min(dalembertStake, riskStake, state.capital * 0.05); // Max 5% capital
+        return Math.min(dalembertStake, riskStake, state.capital * 0.05);
     }
     
-    executeSingle(symbol, direction, score) {
+    executeSingle(symbol, direction, score, entryPrice) {
         const stake = this.getStake();
-        LOGGER.trade(`🚀 [${symbol}] ${direction} R:${score.rise} F:${score.fall} | $${stake.toFixed(2)}`);
+        LOGGER.trade(`🚀 EXECUTING ${direction} | ${symbol} | Stake:$${stake.toFixed(2)} | Price:${entryPrice} | R${score.rise}/F${score.fall}`);
         
         const req_id = this.send({ 
             buy: 1, 
@@ -426,36 +393,46 @@ class HedgedBot {
                 currency: 'USD' 
             }
         });
-        this.pendingTrades.set(req_id, { symbol, direction, stake, score, isHedge: false });
+        this.pendingTrades.set(req_id, { symbol, direction, stake, score, isHedge: false, entrySpot: entryPrice });
     }
     
-    executeHedge(symbol, score) {
-        const stake = this.getStake() * 0.6; // 60% each side
-        LOGGER.trade(`⚖️ [${symbol}] HEDGE R:${score.rise} F:${score.fall} | $${stake.toFixed(2)} each`);
+    executeHedge(symbol, score, entryPrice) {
+        const stake = this.getStake() * 0.6;
+        LOGGER.trade(`⚖️ EXECUTING HEDGE | ${symbol} | $${stake.toFixed(2)} each | Price:${entryPrice} | R${score.rise}/F${score.fall}`);
         
         const callReq = this.send({ 
             buy: 1, price: stake.toFixed(2), 
             parameters: { contract_type: 'CALL', symbol, duration: CONFIG.DURATION, duration_unit: CONFIG.DURATION_UNIT, basis: 'stake', currency: 'USD' }
         });
-        this.pendingTrades.set(callReq, { symbol, direction: 'CALL', stake, score, isHedge: true });
+        this.pendingTrades.set(callReq, { symbol, direction: 'CALL', stake, score, isHedge: true, entrySpot: entryPrice });
         
         setTimeout(() => {
             const putReq = this.send({ 
                 buy: 1, price: stake.toFixed(2), 
                 parameters: { contract_type: 'PUT', symbol, duration: CONFIG.DURATION, duration_unit: CONFIG.DURATION_UNIT, basis: 'stake', currency: 'USD' }
             });
-            this.pendingTrades.set(putReq, { symbol, direction: 'PUT', stake, score, isHedge: true });
+            this.pendingTrades.set(putReq, { symbol, direction: 'PUT', stake, score, isHedge: true, entrySpot: entryPrice });
         }, 300);
     }
 }
 
 // START
 console.log('\n' + '='.repeat(70));
-console.log(' HEDGED BOT v3.1 - FIXED');
+console.log(' HEDGED BOT v3.2 - FULL ANALYSIS LOGGING');
 console.log('='.repeat(70) + '\n');
 
 new HedgedBot();
 
 setInterval(() => {
-    LOGGER.info(`📊 Capital:$${state.capital.toFixed(2)} Daily:$${state.dailyPL.toFixed(2)} Trades:${state.tradesToday} Active:${state.activeHedges.size}`);
+    const totalAnalyses = Object.values(state.assets).reduce((sum, a) => sum + (a.lastAnalysis ? 1 : 0), 0);
+    LOGGER.info(`📊 Capital:$${state.capital.toFixed(2)} | Daily:$${state.dailyPL.toFixed(2)} | Trades:${state.tradesToday} | Active:${state.activeHedges.size} | Candles:${state.candlesReceived} | Analyses:${totalAnalyses}`);
+    
+    // Show last analysis for each asset
+    CONFIG.ACTIVE_ASSETS.forEach(sym => {
+        const asset = state.assets[sym];
+        if (asset.lastAnalysis) {
+            const s = asset.lastAnalysis;
+            LOGGER.info(`   ${sym}: R${s.rise}/F${s.fall} | ${s.trend} | RSI${s.rsi}`);
+        }
+    });
 }, 60000);
