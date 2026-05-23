@@ -17,7 +17,7 @@ const CONFIG = {
     WS_URL: 'wss://ws.derivws.com/websockets/v3',
     
     INITIAL_CAPITAL: 250,
-    BASE_STAKE: 3.75,
+    BASE_STAKE: 1.0,
     RISK_PERCENT: 1.5,
     
     ACTIVE_ASSETS: ['R_10', 'R_25', 'R_50'],
@@ -29,13 +29,13 @@ const CONFIG = {
     DALEMBERT_UNIT: 0.5,
     MAX_DALEMBERT_STEPS: 5,
     
-    MAX_CONSECUTIVE_LOSSES: 3,
+    MAX_CONSECUTIVE_LOSSES: 5,
     DAILY_PROFIT_TARGET: 15,
     DAILY_STOP_LOSS: -20,
     
     GRANULARITY: 60,
     CANDLES_TO_LOAD: 100,
-    DURATION: 5,
+    DURATION: 58,
     DURATION_UNIT: 't',
     
     TELEGRAM_ENABLED: true,
