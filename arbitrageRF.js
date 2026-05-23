@@ -20,11 +20,11 @@ const CONFIG = {
     BASE_STAKE: 1.0,
     RISK_PERCENT: 1.5,
     
-    ACTIVE_ASSETS: ['R_10'], //['R_10', 'R_25', 'R_50', 'stpRNG']
+    ACTIVE_ASSETS: ['R_10', 'R_25', 'R_50', 'stpRNG'], //['R_10', 'R_25', 'R_50', 'stpRNG']
     
-    HEDGE_MIN_SCORE: 3,
+    HEDGE_MIN_SCORE: 7,
     HEDGE_MAX_DIFF: 9,
-    MIN_SCORE_TO_TRADE: 9,
+    MIN_SCORE_TO_TRADE: 7,
     
     DALEMBERT_UNIT: 0.5,
     MAX_DALEMBERT_STEPS: 5,
