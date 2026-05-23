@@ -787,11 +787,11 @@ class DerivDigitDiffMergedBot {
       duration: this.cfg.contract.duration,
       duration_unit: this.cfg.contract.durationUnit,
       barrier: String(analysis.predictedDigit),
-      passthrough: {
-        asset,
-        requestedAt: this.pendingProposals[asset].requestedAt,
-        predictedDigit: analysis.predictedDigit,
-      },
+      // passthrough: {
+      //   asset,
+      //   requestedAt: this.pendingProposals[asset].requestedAt,
+      //   predictedDigit: analysis.predictedDigit,
+      // },
     });
   }
 
@@ -864,6 +864,14 @@ class DerivDigitDiffMergedBot {
       stored.analysis.conservativeLoseProb < requiredMaxLoseProb &&
       conservativeEV > 0;
 
+    concole.log(`
+      Proposal for ${asset}: ask $${askPrice.toFixed(2)} 
+      Payout $${payout.toFixed(2)}, break-even WR ${(breakeven * 100).toFixed(2)}% 
+      Required max lose prob ${(requiredMaxLoseProb * 100).toFixed(2)}% < ${(stored.analysis.conservativeLoseProb * 100).toFixed(2)}% && Conservative EV $${conservativeEV.toFixed(4)} > 0
+      Conservative EV $${conservativeEV.toFixed(4)}
+      Decision: ${approved ? 'APPROVED' : 'REJECTED'}
+    `);
+    
     if (!approved) {
       this._logSignal(asset, stored.analysis, proposalInfo, 'skip_no_ev');
       return;
