@@ -107,9 +107,9 @@ const BOT_CONFIG = {
   },
 
   files: {
-    state: path.join(__dirname, 'digitdiff_merged_state.json'),
-    signals: path.join(__dirname, 'digitdiff_merged_signals.csv'),
-    trades: path.join(__dirname, 'digitdiff_merged_trades.csv'),
+    state: path.join(__dirname, 'digitdiff_merged_state_01.json'),
+    signals: path.join(__dirname, 'digitdiff_merged_signals_01.csv'),
+    trades: path.join(__dirname, 'digitdiff_merged_trades_01.csv'),
   },
 };
 
