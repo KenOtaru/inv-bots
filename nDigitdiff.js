@@ -82,7 +82,7 @@ const BOT_CONFIG = {
     conservativeZ: Number(1.64),
     minTransitionSamples: Number(80),
 
-    preProposalMaxLoseProb: Number(0.0925),
+    preProposalMaxLoseProb: Number(0.11), //Number(0.0925)
     requiredEdgeMargin: Number(0.0040),
     minDigitGapVsRunnerUp: Number(0.0015),
   },
