@@ -22,7 +22,7 @@ const CONFIG = {
     
     ACTIVE_ASSETS: ['R_10'], //['R_10', 'R_25', 'R_50']
     
-    HEDGE_MIN_SCORE: 3,
+    HEDGE_MIN_SCORE: 6,
     HEDGE_MAX_DIFF: 1,
     MIN_SCORE_TO_TRADE: 5,
     
