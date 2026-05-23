@@ -771,13 +771,14 @@ class HedgedBot {
         
         const req_id = this.send({ 
             buy: 1, 
+            price: stake.toFixed(2), 
             parameters: { 
                 contract_type: direction, 
                 symbol, 
+                amount: stake.toFixed(2),
                 duration: CONFIG.DURATION, 
                 duration_unit: CONFIG.DURATION_UNIT, 
                 basis: 'stake', 
-                amount: stake.toFixed(2),  // ✅ CHANGED FROM 'price' to 'amount'
                 currency: 'USD' 
             }
         });
@@ -791,25 +792,26 @@ class HedgedBot {
             entrySpot: entryPrice.toFixed(5) 
         });
     }
-
+    
     executeHedge(symbol, score, entryPrice) {
         const stake = this.getStake() * 0.6;
         
         const callReq = this.send({ 
             buy: 1, 
+            price: stake.toFixed(2), 
             parameters: { 
-                contract_type: 'CALLE', 
+                contract_type: 'CALL', 
                 symbol, 
+                amount: stake.toFixed(2),
                 duration: CONFIG.DURATION, 
                 duration_unit: CONFIG.DURATION_UNIT, 
                 basis: 'stake', 
-                amount: stake.toFixed(2),  // ✅ CHANGED FROM 'price' to 'amount'
                 currency: 'USD' 
             }
         });
         this.pendingTrades.set(callReq, { 
             symbol, 
-            direction: 'CALLE', 
+            direction: 'CALL', 
             stake, 
             score, 
             isHedge: true, 
@@ -819,19 +821,19 @@ class HedgedBot {
         setTimeout(() => {
             const putReq = this.send({ 
                 buy: 1, 
+                price: stake.toFixed(2), 
                 parameters: { 
-                    contract_type: 'PUTE', 
+                    contract_type: 'PUT', 
                     symbol, 
                     duration: CONFIG.DURATION, 
                     duration_unit: CONFIG.DURATION_UNIT, 
                     basis: 'stake', 
-                    amount: stake.toFixed(2),  // ✅ CHANGED FROM 'price' to 'amount'
                     currency: 'USD' 
                 }
             });
             this.pendingTrades.set(putReq, { 
                 symbol, 
-                direction: 'PUTE', 
+                direction: 'PUT', 
                 stake, 
                 score, 
                 isHedge: true, 
