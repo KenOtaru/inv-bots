@@ -49,7 +49,7 @@ try {
 const BOT_CONFIG = {
   appId: Number(1089),
   token: 'rgNedekYXvCaPeP', // process.env.DERIV_TOKEN || 'rg
-  tradeMode: ('live').toLowerCase(), // paper | live
+  tradeMode: ('paper').toLowerCase(), // paper | live
   assets: ('R_10,R_25,R_50,R_75')
     .split(',')
     .map(v => v.trim())
