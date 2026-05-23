@@ -860,9 +860,9 @@ class DerivDigitDiffMergedBot {
       conservativeEV: round(conservativeEV, 6),
     };
 
-    const conservativeProb = (stored.analysis.conservativeLoseProb).toFixed(4)
-    const approved = //conservativeProb < 0.15
-      stored.analysis.conservativeLoseProb < 0.1060
+    const conservativeProb = (stored.analysis.conservativeLoseProb).toFixed(3)
+    const approved = conservativeProb <= 0.106
+      // stored.analysis.conservativeLoseProb < requiredMaxLoseProb 
       // &&
       // conservativeEV > 0;
     
@@ -872,7 +872,7 @@ class DerivDigitDiffMergedBot {
           Decision: ${approved ? 'APPROVED' : 'REJECTED'}
           Proposal for: ${asset}: ask $${askPrice.toFixed(2)} 
           Payout: $${payout.toFixed(2)}, break-even WR ${(breakeven * 100).toFixed(2)}% 
-          Required max lose prob: ${(stored.analysis.conservativeLoseProb).toFixed(4)}% < ${0.1060}%
+          Required max lose prob: ${(stored.analysis.conservativeLoseProb).toFixed(3)}% < ${0.106}%
           Conservative EV: $${conservativeEV.toFixed(4)}
         `);
       return;
