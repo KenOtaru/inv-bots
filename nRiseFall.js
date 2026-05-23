@@ -1,7 +1,8 @@
 /**
- * DERIV HEDGED BOT v3.2.1 - FIXED API VALIDATION ERROR
- * - Fixed missing 'end' parameter in ticks_history requests
- * - Improved error handling
+ * DERIV HEDGED BOT v3.3 - ENHANCED TRADE NOTIFICATIONS
+ * - Detailed trade entry notifications (Telegram + Console)
+ * - Comprehensive trade result notifications with P/L breakdown
+ * - Beautiful formatting and emoji indicators
  */
 
 const WebSocket = require('ws');
@@ -43,6 +44,11 @@ const CONFIG = {
     
     DEBUG_MODE: true,
     ANALYSIS_LOGGING: true,
+    
+    // NEW: Notification settings
+    NOTIFY_ALL_ENTRIES: true,      // Send telegram for all trade entries
+    NOTIFY_ALL_RESULTS: true,      // Send telegram for all trade results
+    NOTIFY_MIN_PROFIT: 1,          // Only notify if P/L > this amount
 };
 
 // ============================================
@@ -53,7 +59,30 @@ const LOGGER = {
     warn: msg => console.warn(`\x1b[33m[WARN] ${getGMTTime()} - ${msg}\x1b[0m`),
     error: msg => console.error(`\x1b[31m[ERROR] ${getGMTTime()} - ${msg}\x1b[0m`),
     debug: msg => { if (CONFIG.DEBUG_MODE) console.log(`\x1b[90m[DEBUG] ${getGMTTime()} - ${msg}\x1b[0m`); },
-    analysis: msg => { if (CONFIG.ANALYSIS_LOGGING) console.log(`\x1b[36m[ANALYSIS] ${getGMTTime()} - ${msg}\x1b[0m`); }
+    analysis: msg => { if (CONFIG.ANALYSIS_LOGGING) console.log(`\x1b[36m[ANALYSIS] ${getGMTTime()} - ${msg}\x1b[0m`); },
+    
+    // NEW: Enhanced trade logging
+    entry: (msg) => {
+        console.log('\n' + '┌' + '─'.repeat(78) + '┐');
+        console.log(`│ \x1b[1m\x1b[33m🎯 TRADE ENTRY - ${getGMTTime()}\x1b[0m`.padEnd(88) + '│');
+        console.log('├' + '─'.repeat(78) + '┤');
+        msg.split('\n').forEach(line => {
+            console.log(`│ \x1b[33m${line}\x1b[0m`.padEnd(88) + '│');
+        });
+        console.log('└' + '─'.repeat(78) + '┘\n');
+    },
+    
+    result: (msg, isWin) => {
+        const color = isWin ? '\x1b[32m' : '\x1b[31m';
+        const icon = isWin ? '✅ WIN' : '❌ LOSS';
+        console.log('\n' + '┌' + '─'.repeat(78) + '┐');
+        console.log(`│ \x1b[1m${color}${icon} - ${getGMTTime()}\x1b[0m`.padEnd(88) + '│');
+        console.log('├' + '─'.repeat(78) + '┤');
+        msg.split('\n').forEach(line => {
+            console.log(`│ ${color}${line}\x1b[0m`.padEnd(88) + '│');
+        });
+        console.log('└' + '─'.repeat(78) + '┘\n');
+    }
 };
 
 // ============================================
@@ -66,6 +95,7 @@ let tradeHistory = {
 
 class TradeHistoryManager {
     static getDateKey() { return new Date().toISOString().split('T')[0]; }
+    
     static loadHistory() {
         try {
             if (fs.existsSync(HISTORY_FILE)) {
@@ -74,12 +104,14 @@ class TradeHistoryManager {
             }
         } catch (e) { LOGGER.error(`History load failed: ${e.message}`); }
     }
+    
     static saveHistory() {
         try {
             tradeHistory.lastUpdated = Date.now();
             fs.writeFileSync(HISTORY_FILE, JSON.stringify(tradeHistory, null, 2));
         } catch (e) { LOGGER.error(`History save failed: ${e.message}`); }
     }
+    
     static recordTrade(symbol, profit, isHedge = false) {
         const dateKey = this.getDateKey();
         if (!tradeHistory.dailyHistory[dateKey]) {
@@ -111,18 +143,35 @@ class TradeHistoryManager {
         day.netPL += profit; overall.netPL += profit;
         this.saveHistory();
     }
+    
+    static getTodayStats() {
+        const dateKey = this.getDateKey();
+        const today = tradeHistory.dailyHistory[dateKey] || {
+            tradesCount: 0, winsCount: 0, lossesCount: 0, 
+            profit: 0, loss: 0, netPL: 0
+        };
+        
+        return {
+            trades: today.tradesCount,
+            wins: today.winsCount,
+            losses: today.lossesCount,
+            winRate: today.tradesCount > 0 ? (today.winsCount / today.tradesCount * 100).toFixed(1) : '0.0',
+            netPL: today.netPL
+        };
+    }
 }
 
 // ============================================
 class TelegramService {
-    static async sendMessage(message) {
+    static async sendMessage(message, silent = false) {
         if (!CONFIG.TELEGRAM_ENABLED) return;
         try {
             const url = `https://api.telegram.org/bot${CONFIG.TELEGRAM_BOT_TOKEN}/sendMessage`;
             const data = JSON.stringify({ 
                 chat_id: CONFIG.TELEGRAM_CHAT_ID, 
                 text: message, 
-                parse_mode: 'HTML' 
+                parse_mode: 'HTML',
+                disable_notification: silent
             });
             
             return new Promise((resolve) => {
@@ -147,6 +196,93 @@ class TelegramService {
         } catch (e) { 
             LOGGER.debug(`Telegram exception: ${e.message}`); 
         }
+    }
+    
+    // NEW: Format trade entry notification
+    static formatTradeEntry(tradeInfo) {
+        const { symbol, direction, stake, score, entrySpot, isHedge, contractId } = tradeInfo;
+        const stats = TradeHistoryManager.getTodayStats();
+        
+        let msg = `🎯 <b>TRADE ENTRY${isHedge ? ' (HEDGE)' : ''}</b>\n`;
+        msg += `${'─'.repeat(30)}\n\n`;
+        
+        msg += `📊 <b>Asset:</b> ${symbol}\n`;
+        msg += `${direction === 'CALL' ? '📈' : '📉'} <b>Direction:</b> ${direction}\n`;
+        msg += `💰 <b>Stake:</b> $${stake.toFixed(2)}\n`;
+        msg += `📍 <b>Entry Price:</b> ${entrySpot}\n\n`;
+        
+        msg += `📈 <b>Score Rise:</b> ${score.rise}/10\n`;
+        msg += `📉 <b>Score Fall:</b> ${score.fall}/10\n`;
+        msg += `🎯 <b>RSI:</b> ${score.rsi} (${score.trend})\n`;
+        msg += `📊 <b>BB Position:</b> ${score.bbPosition}%\n\n`;
+        
+        if (score.reasonsRise.length > 0 || score.reasonsFall.length > 0) {
+            msg += `💡 <b>Signals:</b>\n`;
+            if (direction === 'CALL' && score.reasonsRise.length > 0) {
+                msg += `   ${score.reasonsRise.slice(0, 3).join('\n   ')}\n`;
+            } else if (direction === 'PUT' && score.reasonsFall.length > 0) {
+                msg += `   ${score.reasonsFall.slice(0, 3).join('\n   ')}\n`;
+            }
+            msg += '\n';
+        }
+        
+        msg += `💼 <b>Balance:</b> $${state.capital.toFixed(2)}\n`;
+        msg += `📊 <b>Today:</b> ${stats.trades} trades | ${stats.wins}W/${stats.losses}L (${stats.winRate}%)\n`;
+        msg += `📈 <b>Daily P/L:</b> $${state.dailyPL.toFixed(2)}\n\n`;
+        
+        msg += `🆔 <code>${contractId}</code>\n`;
+        msg += `⏰ ${new Date().toLocaleString('en-US', { timeZone: 'GMT', hour12: false })} GMT`;
+        
+        return msg;
+    }
+    
+    // NEW: Format trade result notification
+    static formatTradeResult(resultInfo) {
+        const { symbol, direction, profit, entrySpot, exitSpot, duration, isHedge, stake, buyPrice, sellPrice } = resultInfo;
+        const stats = TradeHistoryManager.getTodayStats();
+        const isWin = profit >= 0;
+        
+        let msg = `${isWin ? '✅' : '❌'} <b>${isWin ? 'WIN' : 'LOSS'}${isHedge ? ' (HEDGE)' : ''}</b>\n`;
+        msg += `${'─'.repeat(30)}\n\n`;
+        
+        msg += `📊 <b>Asset:</b> ${symbol}\n`;
+        msg += `${direction === 'CALL' ? '📈' : '📉'} <b>Direction:</b> ${direction}\n\n`;
+        
+        msg += `📍 <b>Entry:</b> ${entrySpot}\n`;
+        msg += `🎯 <b>Exit:</b> ${exitSpot}\n`;
+        msg += `📊 <b>Movement:</b> ${this.formatPriceMovement(entrySpot, exitSpot, direction)}\n\n`;
+        
+        msg += `💰 <b>Stake:</b> $${stake.toFixed(2)}\n`;
+        msg += `💵 <b>Buy Price:</b> $${buyPrice.toFixed(2)}\n`;
+        msg += `💸 <b>Sell Price:</b> $${sellPrice.toFixed(2)}\n`;
+        msg += `${isWin ? '💚' : '💔'} <b>Profit/Loss:</b> ${isWin ? '+' : ''}$${profit.toFixed(2)} (${this.formatROI(profit, stake)})\n\n`;
+        
+        msg += `⏱️ <b>Duration:</b> ${duration}s\n`;
+        msg += `💼 <b>New Balance:</b> $${state.capital.toFixed(2)}\n\n`;
+        
+        msg += `📊 <b>Today's Stats:</b>\n`;
+        msg += `   Trades: ${stats.trades} | W/L: ${stats.wins}/${stats.losses} (${stats.winRate}%)\n`;
+        msg += `   Daily P/L: ${stats.netPL >= 0 ? '+' : ''}$${stats.netPL.toFixed(2)}\n`;
+        msg += `   Streak: ${state.consecutiveLosses > 0 ? `${state.consecutiveLosses} losses` : 'No losses'}\n\n`;
+        
+        msg += `⏰ ${new Date().toLocaleString('en-US', { timeZone: 'GMT', hour12: false })} GMT`;
+        
+        return msg;
+    }
+    
+    static formatPriceMovement(entry, exit, direction) {
+        const entryNum = parseFloat(entry);
+        const exitNum = parseFloat(exit);
+        const diff = exitNum - entryNum;
+        const diffPct = (diff / entryNum * 100).toFixed(3);
+        const correct = (direction === 'CALL' && diff > 0) || (direction === 'PUT' && diff < 0);
+        
+        return `${diff >= 0 ? '+' : ''}${diff.toFixed(5)} (${diff >= 0 ? '+' : ''}${diffPct}%) ${correct ? '✓' : '✗'}`;
+    }
+    
+    static formatROI(profit, stake) {
+        const roi = (profit / stake * 100).toFixed(1);
+        return `${roi >= 0 ? '+' : ''}${roi}%`;
     }
 }
 
@@ -179,35 +315,31 @@ class ConfluenceScorer {
         // TREND ANALYSIS
         if (ema5 > ema20 && ema20 > ema50) { 
             rise += 4; 
-            reasonsRise.push('Strong uptrend (EMA5>20>50)'); 
+            reasonsRise.push('✓ Strong uptrend (EMA alignment)'); 
         } else if (ema5 < ema20 && ema20 < ema50) { 
             fall += 4; 
-            reasonsFall.push('Strong downtrend (EMA5<20<50)'); 
+            reasonsFall.push('✓ Strong downtrend (EMA alignment)'); 
         } else if (ema5 > ema20) { 
             rise += 2; 
-            reasonsRise.push('Short-term bullish (EMA5>20)'); 
+            reasonsRise.push('✓ Short-term bullish'); 
         } else if (ema5 < ema20) { 
             fall += 2; 
-            reasonsFall.push('Short-term bearish (EMA5<20)'); 
+            reasonsFall.push('✓ Short-term bearish'); 
         }
         
         // RSI ANALYSIS
         if (rsi < 30) { 
             rise += 3; 
-            reasonsRise.push(`RSI oversold (${rsi.toFixed(1)})`); 
+            reasonsRise.push(`✓ RSI oversold (${rsi.toFixed(1)})`); 
         } else if (rsi < 40) { 
             rise += 2; 
-            reasonsRise.push(`RSI low (${rsi.toFixed(1)})`); 
+            reasonsRise.push(`✓ RSI low (${rsi.toFixed(1)})`); 
         } else if (rsi > 70) { 
             fall += 3; 
-            reasonsFall.push(`RSI overbought (${rsi.toFixed(1)})`); 
+            reasonsFall.push(`✓ RSI overbought (${rsi.toFixed(1)})`); 
         } else if (rsi > 60) { 
             fall += 2; 
-            reasonsFall.push(`RSI high (${rsi.toFixed(1)})`); 
-        } else if (rsi >= 45 && rsi <= 55) { 
-            rise += 1; fall += 1; 
-            reasonsRise.push(`RSI neutral (${rsi.toFixed(1)})`); 
-            reasonsFall.push(`RSI neutral (${rsi.toFixed(1)})`); 
+            reasonsFall.push(`✓ RSI high (${rsi.toFixed(1)})`); 
         }
         
         // BOLLINGER BANDS
@@ -215,32 +347,25 @@ class ConfluenceScorer {
         
         if (current <= bb.lower) { 
             rise += 3; 
-            reasonsRise.push(`At lower BB (${bbPosition}%)`); 
+            reasonsRise.push(`✓ Price at lower BB`); 
         } else if (current < bb.middle) { 
             rise += 1; 
-            reasonsRise.push(`Below mid BB (${bbPosition}%)`); 
+            reasonsRise.push(`✓ Below BB middle`); 
         }
         
         if (current >= bb.upper) { 
             fall += 3; 
-            reasonsFall.push(`At upper BB (${bbPosition}%)`); 
+            reasonsFall.push(`✓ Price at upper BB`); 
         } else if (current > bb.middle) { 
             fall += 1; 
-            reasonsFall.push(`Above mid BB (${bbPosition}%)`); 
+            reasonsFall.push(`✓ Above BB middle`); 
         }
         
-        // VOLATILITY (BB Squeeze)
+        // VOLATILITY
         if (bbWidth < 0.15) { 
             rise += 2; fall += 2; 
-            reasonsRise.push(`Tight squeeze (${bbWidth.toFixed(3)}%)`); 
-            reasonsFall.push(`Tight squeeze (${bbWidth.toFixed(3)}%)`); 
-        } else if (bbWidth < 0.3) { 
-            rise += 1; fall += 1; 
-        }
-        
-        // ATR Volatility bonus
-        if (atr > 0.0008) { 
-            rise += 1; fall += 1; 
+            reasonsRise.push(`✓ Tight squeeze (breakout setup)`); 
+            reasonsFall.push(`✓ Tight squeeze (breakout setup)`); 
         }
         
         return { 
@@ -371,7 +496,6 @@ class HedgedBot {
     }
     
     onMessage(res) {
-        // ERROR HANDLING
         if (res.error) {
             LOGGER.error(`API Error [${res.msg_type || 'unknown'}]: ${res.error.message}`);
             if (res.error.code === 'InputValidationFailed') {
@@ -380,7 +504,6 @@ class HedgedBot {
             return;
         }
         
-        // AUTHORIZATION
         if (res.msg_type === 'authorize') {
             state.capital = res.authorize.balance;
             LOGGER.info(`🔐 Authorized | Balance: $${state.capital.toFixed(2)} | Currency: ${res.authorize.currency}`);
@@ -388,7 +511,6 @@ class HedgedBot {
             CONFIG.ACTIVE_ASSETS.forEach(s => this.subscribe(s));
         }
         
-        // HISTORICAL CANDLES
         if (res.msg_type === 'candles') {
             const sym = res.echo_req.ticks_history;
             if (!state.assets[sym]) return;
@@ -402,36 +524,55 @@ class HedgedBot {
             }));
             
             const latest = state.assets[sym].closedCandles.slice(-1)[0];
-            LOGGER.info(`📈 ${sym} | Loaded ${res.candles.length} candles | Latest: ${latest.close.toFixed(5)} @ ${new Date(latest.epoch * 1000).toISOString()}`);
+            LOGGER.info(`📈 ${sym} | Loaded ${res.candles.length} candles | Latest: ${latest.close.toFixed(5)}`);
         }
         
-        // LIVE CANDLE UPDATES
         if (res.msg_type === 'ohlc') {
             state.candlesReceived++;
             this.onCandle(res.ohlc);
         }
         
-        // BUY CONFIRMATION
         if (res.msg_type === 'buy') {
             const pending = this.pendingTrades.get(res.echo_req.req_id);
             if (pending) {
-                LOGGER.info(`✅ Order placed: ${pending.direction} ${pending.symbol} $${pending.stake.toFixed(2)} | Contract: ${res.buy.contract_id}`);
-                state.activeHedges.set(res.buy.contract_id, { 
+                const contractId = res.buy.contract_id;
+                const buyPrice = +res.buy.buy_price;
+                
+                // Store trade info
+                const tradeInfo = { 
                     ...pending, 
-                    contractId: res.buy.contract_id,
-                    buyPrice: res.buy.buy_price,
+                    contractId,
+                    buyPrice,
                     startTime: Date.now()
-                });
+                };
+                
+                state.activeHedges.set(contractId, tradeInfo);
+                
+                // ✅ ENHANCED ENTRY LOGGING
+                const entryLog = 
+                    `Asset: ${pending.symbol} | Direction: ${pending.direction}${pending.isHedge ? ' (HEDGE)' : ''}\n` +
+                    `Stake: $${pending.stake.toFixed(2)} | Entry: ${pending.entrySpot}\n` +
+                    `Score: R${pending.score.rise}/F${pending.score.fall} | RSI: ${pending.score.rsi} (${pending.score.trend})\n` +
+                    `Signals: ${pending.direction === 'CALL' ? pending.score.reasonsRise.slice(0, 2).join(', ') : pending.score.reasonsFall.slice(0, 2).join(', ')}\n` +
+                    `Contract ID: ${contractId}`;
+                
+                LOGGER.entry(entryLog);
+                
+                // ✅ SEND TELEGRAM NOTIFICATION FOR ENTRY
+                if (CONFIG.NOTIFY_ALL_ENTRIES) {
+                    TelegramService.sendMessage(TelegramService.formatTradeEntry(tradeInfo));
+                }
+                
                 this.send({ 
                     proposal_open_contract: 1, 
-                    contract_id: res.buy.contract_id, 
+                    contract_id: contractId, 
                     subscribe: 1 
                 });
+                
                 this.pendingTrades.delete(res.echo_req.req_id);
             }
         }
         
-        // CONTRACT RESULT
         if (res.msg_type === 'proposal_open_contract') {
             const c = res.proposal_open_contract;
             if (c.is_sold) {
@@ -439,24 +580,43 @@ class HedgedBot {
                 if (!h) return;
                 
                 const profit = +c.profit;
+                const sellPrice = +c.sell_price;
+                const exitSpot = c.exit_tick || c.exit_tick_display_value || 'N/A';
+                const duration = ((Date.now() - h.startTime) / 1000).toFixed(1);
+                
                 state.capital += profit; 
                 state.dailyPL += profit; 
                 state.tradesToday++;
                 
-                const result = profit >= 0 ? '✅ WIN' : '❌ LOSS';
-                const duration = ((Date.now() - h.startTime) / 1000).toFixed(1);
+                const isWin = profit >= 0;
                 
-                LOGGER.trade(`${result} | ${h.symbol} ${h.direction} | P/L: $${profit.toFixed(2)} | Entry:${h.entrySpot} Exit:${c.exit_tick} | Duration:${duration}s | Balance: $${state.capital.toFixed(2)}`);
+                // ✅ ENHANCED RESULT LOGGING
+                const resultLog =
+                    `Asset: ${h.symbol} | Direction: ${h.direction}${h.isHedge ? ' (HEDGE)' : ''}\n` +
+                    `Entry: ${h.entrySpot} → Exit: ${exitSpot}\n` +
+                    `Movement: ${TelegramService.formatPriceMovement(h.entrySpot, exitSpot, h.direction)}\n` +
+                    `Stake: $${h.stake.toFixed(2)} | Buy: $${h.buyPrice.toFixed(2)} | Sell: $${sellPrice.toFixed(2)}\n` +
+                    `P/L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(2)} (${TelegramService.formatROI(profit, h.stake)}) | Duration: ${duration}s\n` +
+                    `New Balance: $${state.capital.toFixed(2)} | Daily: ${state.dailyPL >= 0 ? '+' : ''}$${state.dailyPL.toFixed(2)}\n` +
+                    `Contract ID: ${c.contract_id}`;
                 
-                // Telegram notification for significant trades
-                if (Math.abs(profit) > 0) {
-                    TelegramService.sendMessage(
-                        `<b>${result}</b>\n` +
-                        `${h.symbol} ${h.direction}\n` +
-                        `P/L: $${profit.toFixed(2)}\n` +
-                        `Balance: $${state.capital.toFixed(2)}\n` +
-                        `Daily: $${state.dailyPL.toFixed(2)}`
-                    );
+                LOGGER.result(resultLog, isWin);
+                
+                // ✅ SEND TELEGRAM NOTIFICATION FOR RESULT
+                if (CONFIG.NOTIFY_ALL_RESULTS || Math.abs(profit) >= CONFIG.NOTIFY_MIN_PROFIT) {
+                    const resultInfo = {
+                        symbol: h.symbol,
+                        direction: h.direction,
+                        profit,
+                        entrySpot: h.entrySpot,
+                        exitSpot,
+                        duration,
+                        isHedge: h.isHedge,
+                        stake: h.stake,
+                        buyPrice: h.buyPrice,
+                        sellPrice
+                    };
+                    TelegramService.sendMessage(TelegramService.formatTradeResult(resultInfo));
                 }
                 
                 TradeHistoryManager.recordTrade(h.symbol, profit, h.isHedge);
@@ -474,13 +634,16 @@ class HedgedBot {
                 // Circuit breaker
                 if (state.consecutiveLosses >= CONFIG.MAX_CONSECUTIVE_LOSSES) {
                     state.isPaused = true;
-                    LOGGER.warn(`⏸️ PAUSED - ${state.consecutiveLosses} consecutive losses. Resuming in 5 minutes...`);
-                    TelegramService.sendMessage(`⚠️ <b>BOT PAUSED</b>\n${state.consecutiveLosses} losses\nBalance: $${state.capital.toFixed(2)}`);
+                    const pauseMsg = `⏸️ BOT PAUSED - ${state.consecutiveLosses} consecutive losses\nBalance: $${state.capital.toFixed(2)}\nResuming in 5 minutes...`;
+                    LOGGER.warn(pauseMsg);
+                    TelegramService.sendMessage(`⚠️ <b>CIRCUIT BREAKER ACTIVATED</b>\n\n${pauseMsg}`);
+                    
                     setTimeout(() => {
                         state.isPaused = false;
                         state.consecutiveLosses = 0;
                         LOGGER.info('▶️ Resumed trading');
-                    }, 300000); // 5 minutes
+                        TelegramService.sendMessage('▶️ <b>Trading Resumed</b>');
+                    }, 300000);
                 }
             }
         }
@@ -490,20 +653,17 @@ class HedgedBot {
         }
     }
     
-    // ✅ FIXED SUBSCRIBE METHOD
     subscribe(s) {
         LOGGER.info(`→ Subscribing ${s}...`);
         
-        // ✅ Request historical candles WITH 'end' parameter
         this.send({ 
             ticks_history: s, 
-            end: 'latest',  // THIS FIXES THE ERROR!
+            end: 'latest',
             count: CONFIG.CANDLES_TO_LOAD, 
             style: 'candles', 
             granularity: CONFIG.GRANULARITY 
         });
         
-        // Subscribe to live candle stream
         this.send({ 
             ticks_history: s, 
             subscribe: 1, 
@@ -525,17 +685,14 @@ class HedgedBot {
             epoch: +ohlc.epoch 
         };
         
-        // Add to history
         asset.closedCandles.push(candle);
         if (asset.closedCandles.length > 200) asset.closedCandles.shift();
         
-        // Skip if not enough data
         if (asset.closedCandles.length < 50) {
             LOGGER.debug(`${ohlc.symbol} - Building history (${asset.closedCandles.length}/50)`);
             return;
         }
         
-        // ANALYZE
         const score = ConfluenceScorer.calculateScore(asset.closedCandles);
         asset.lastAnalysis = score;
         
@@ -546,7 +703,6 @@ class HedgedBot {
             `RSI:${score.rsi} ${score.trend} BB:${score.bbPosition}%`
         );
         
-        // DECISION LOGIC
         if (state.isPaused) {
             LOGGER.analysis(`⏸️ ${ohlc.symbol} SKIPPED - Bot paused`);
             return;
@@ -573,7 +729,6 @@ class HedgedBot {
             return;
         }
         
-        // TRADE DECISIONS
         const shouldHedge = 
             score.rise >= CONFIG.HEDGE_MIN_SCORE && 
             score.fall >= CONFIG.HEDGE_MIN_SCORE && 
@@ -588,36 +743,31 @@ class HedgedBot {
             score.fall > score.rise + 2;
         
         if (shouldHedge) {
-            LOGGER.analysis(`✅ ${ohlc.symbol} DECISION: HEDGE (R:${score.rise}/F:${score.fall} diff:${Math.abs(score.rise - score.fall)})`);
+            LOGGER.analysis(`✅ ${ohlc.symbol} DECISION: HEDGE (R:${score.rise}/F:${score.fall})`);
             asset.lastTradeTime = Date.now();
             this.executeHedge(ohlc.symbol, score, candle.close);
         } else if (shouldRise) {
-            LOGGER.analysis(`✅ ${ohlc.symbol} DECISION: CALLE (Rise dominant R:${score.rise} > F:${score.fall})`);
+            LOGGER.analysis(`✅ ${ohlc.symbol} DECISION: CALL (R:${score.rise} > F:${score.fall})`);
             asset.lastTradeTime = Date.now();
-            this.executeSingle(ohlc.symbol, 'CALLE', score, candle.close);
+            this.executeSingle(ohlc.symbol, 'CALL', score, candle.close);
         } else if (shouldFall) {
-            LOGGER.analysis(`✅ ${ohlc.symbol} DECISION: PUTE (Fall dominant F:${score.fall} > R:${score.rise})`);
+            LOGGER.analysis(`✅ ${ohlc.symbol} DECISION: PUT (F:${score.fall} > R:${score.rise})`);
             asset.lastTradeTime = Date.now();
-            this.executeSingle(ohlc.symbol, 'PUTE', score, candle.close);
+            this.executeSingle(ohlc.symbol, 'PUT', score, candle.close);
         } else {
-            LOGGER.analysis(`❌ ${ohlc.symbol} NO TRADE - Scores too low (R:${score.rise}/F:${score.fall} min:${CONFIG.MIN_SCORE_TO_TRADE})`);
+            LOGGER.analysis(`❌ ${ohlc.symbol} NO TRADE - Insufficient scores`);
         }
     }
     
     getStake() { 
         const riskStake = state.capital * (CONFIG.RISK_PERCENT / 100);
         const dalembertStake = CONFIG.BASE_STAKE + (state.dalembertLevel * CONFIG.DALEMBERT_UNIT);
-        const maxStake = state.capital * 0.05; // Never risk more than 5% per trade
+        const maxStake = state.capital * 0.05;
         return Math.min(dalembertStake, riskStake, maxStake);
     }
     
     executeSingle(symbol, direction, score, entryPrice) {
         const stake = this.getStake();
-        LOGGER.trade(
-            `🚀 EXECUTING ${direction} | ${symbol} | ` +
-            `Stake:$${stake.toFixed(2)} | Price:${entryPrice.toFixed(5)} | ` +
-            `Score R:${score.rise}/F:${score.fall} | RSI:${score.rsi}`
-        );
         
         const req_id = this.send({ 
             buy: 1, 
@@ -643,19 +793,13 @@ class HedgedBot {
     }
     
     executeHedge(symbol, score, entryPrice) {
-        const stake = this.getStake() * 0.6; // 60% stake for each leg
-        LOGGER.trade(
-            `⚖️ EXECUTING HEDGE | ${symbol} | ` +
-            `$${stake.toFixed(2)} per leg | Price:${entryPrice.toFixed(5)} | ` +
-            `Score R:${score.rise}/F:${score.fall}`
-        );
+        const stake = this.getStake() * 0.6;
         
-        // Place CALLE
         const callReq = this.send({ 
             buy: 1, 
             price: stake.toFixed(2), 
             parameters: { 
-                contract_type: 'CALLE', 
+                contract_type: 'CALL', 
                 symbol, 
                 duration: CONFIG.DURATION, 
                 duration_unit: CONFIG.DURATION_UNIT, 
@@ -665,20 +809,19 @@ class HedgedBot {
         });
         this.pendingTrades.set(callReq, { 
             symbol, 
-            direction: 'CALLE', 
+            direction: 'CALL', 
             stake, 
             score, 
             isHedge: true, 
             entrySpot: entryPrice.toFixed(5) 
         });
         
-        // Place PUTE (slight delay)
         setTimeout(() => {
             const putReq = this.send({ 
                 buy: 1, 
                 price: stake.toFixed(2), 
                 parameters: { 
-                    contract_type: 'PUTE', 
+                    contract_type: 'PUT', 
                     symbol, 
                     duration: CONFIG.DURATION, 
                     duration_unit: CONFIG.DURATION_UNIT, 
@@ -688,7 +831,7 @@ class HedgedBot {
             });
             this.pendingTrades.set(putReq, { 
                 symbol, 
-                direction: 'PUTE', 
+                direction: 'PUT', 
                 stake, 
                 score, 
                 isHedge: true, 
@@ -701,36 +844,32 @@ class HedgedBot {
 // ============================================
 // START BOT
 // ============================================
-console.log('\n' + '='.repeat(70));
-console.log(' 🤖 DERIV HEDGED BOT v3.2.1 - FIXED & READY');
-console.log('='.repeat(70));
-console.log(` Capital: $${CONFIG.INITIAL_CAPITAL}`);
-console.log(` Base Stake: $${CONFIG.BASE_STAKE}`);
-console.log(` Assets: ${CONFIG.ACTIVE_ASSETS.join(', ')}`);
-console.log(` Duration: ${CONFIG.DURATION} ${CONFIG.DURATION_UNIT === 't' ? 'ticks' : 'seconds'}`);
-console.log('='.repeat(70) + '\n');
+console.log('\n' + '═'.repeat(80));
+console.log('  🤖 DERIV HEDGED BOT v3.3 - ENHANCED NOTIFICATIONS');
+console.log('═'.repeat(80));
+console.log(`  💰 Capital: $${CONFIG.INITIAL_CAPITAL}`);
+console.log(`  📊 Base Stake: $${CONFIG.BASE_STAKE} (D'Alembert: +$${CONFIG.DALEMBERT_UNIT}/level)`);
+console.log(`  📈 Assets: ${CONFIG.ACTIVE_ASSETS.join(', ')}`);
+console.log(`  ⏱️  Duration: ${CONFIG.DURATION} ${CONFIG.DURATION_UNIT === 't' ? 'ticks' : 'seconds'}`);
+console.log(`  📱 Telegram: ${CONFIG.TELEGRAM_ENABLED ? 'ENABLED ✅' : 'DISABLED ❌'}`);
+console.log(`  🔔 Entry Notifications: ${CONFIG.NOTIFY_ALL_ENTRIES ? 'ALL' : 'DISABLED'}`);
+console.log(`  🔔 Result Notifications: ${CONFIG.NOTIFY_ALL_RESULTS ? 'ALL' : `P/L > $${CONFIG.NOTIFY_MIN_PROFIT}`}`);
+console.log('═'.repeat(80) + '\n');
 
 new HedgedBot();
 
 // Status updates every minute
 setInterval(() => {
-    const totalAnalyses = Object.values(state.assets)
-        .reduce((sum, a) => sum + (a.lastAnalysis ? 1 : 0), 0);
-    
-    const winRate = state.tradesToday > 0 
-        ? ((tradeHistory.dailyHistory[TradeHistoryManager.getDateKey()]?.winsCount || 0) / state.tradesToday * 100).toFixed(1)
-        : 0;
+    const stats = TradeHistoryManager.getTodayStats();
     
     LOGGER.info(
         `📊 Capital:$${state.capital.toFixed(2)} | ` +
-        `Daily:$${state.dailyPL.toFixed(2)} | ` +
-        `Trades:${state.tradesToday} (${winRate}% win) | ` +
+        `Daily:${state.dailyPL >= 0 ? '+' : ''}$${state.dailyPL.toFixed(2)} | ` +
+        `Trades:${stats.trades} (${stats.winRate}% win) | ` +
         `Active:${state.activeHedges.size} | ` +
-        `D'Alembert:+${state.dalembertLevel} | ` +
-        `Candles:${state.candlesReceived}`
+        `D'Alembert:+${state.dalembertLevel}`
     );
     
-    // Show latest analysis for each asset
     CONFIG.ACTIVE_ASSETS.forEach(sym => {
         const asset = state.assets[sym];
         if (asset.lastAnalysis) {
@@ -739,3 +878,20 @@ setInterval(() => {
         }
     });
 }, 60000);
+
+// Hourly summary via Telegram
+setInterval(() => {
+    const stats = TradeHistoryManager.getTodayStats();
+    const msg = 
+        `📊 <b>HOURLY SUMMARY</b>\n` +
+        `${'─'.repeat(30)}\n\n` +
+        `💼 <b>Balance:</b> $${state.capital.toFixed(2)}\n` +
+        `📈 <b>Daily P/L:</b> ${stats.netPL >= 0 ? '+' : ''}$${stats.netPL.toFixed(2)}\n` +
+        `📊 <b>Trades:</b> ${stats.trades} | W/L: ${stats.wins}/${stats.losses}\n` +
+        `🎯 <b>Win Rate:</b> ${stats.winRate}%\n` +
+        `🔄 <b>Active Trades:</b> ${state.activeHedges.size}\n` +
+        `📉 <b>Streak:</b> ${state.consecutiveLosses > 0 ? `${state.consecutiveLosses} losses` : 'No losses'}\n\n` +
+        `⏰ ${new Date().toLocaleString('en-US', { timeZone: 'GMT' })} GMT`;
+    
+    TelegramService.sendMessage(msg, true); // Silent notification
+}, 3600000); // Every hour
