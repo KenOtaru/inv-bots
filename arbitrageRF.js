@@ -23,8 +23,8 @@ const CONFIG = {
     ACTIVE_ASSETS: ['R_10'], //['R_10', 'R_25', 'R_50', 'stpRNG']
     
     HEDGE_MIN_SCORE: 3,
-    HEDGE_MAX_DIFF: 3,
-    MIN_SCORE_TO_TRADE: 7,
+    HEDGE_MAX_DIFF: 9,
+    MIN_SCORE_TO_TRADE: 9,
     
     DALEMBERT_UNIT: 0.5,
     MAX_DALEMBERT_STEPS: 5,
@@ -86,7 +86,7 @@ const LOGGER = {
 };
 
 // ============================================
-const HISTORY_FILE = path.join(__dirname, 'HedgedBot-history.json');
+const HISTORY_FILE = path.join(__dirname, 'HedgedBot_01-history.json');
 let tradeHistory = {
     overall: { tradesCount: 0, winsCount: 0, lossesCount: 0, profit: 0, loss: 0, netPL: 0, hedges: 0, firstTradeDate: null, lastTradeDate: null },
     dailyHistory: {},
