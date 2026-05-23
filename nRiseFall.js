@@ -1,7 +1,9 @@
 /**
- * DERIV HEDGED BOT v3.2 - WITH FULL ANALYSIS LOGGING
- * - Adds detailed trade analysis visibility
- * - Fixes API 'end' error
+ * DERIV HEDGED BOT v3.3 - FIXED & OPTIMIZED
+ * - Fixed API 'end' validation error
+ * - Fixed OHLC subscription for live data
+ * - Corrected history message type handling
+ * - Cleaned syntax artifacts
  */
 
 const WebSocket = require('ws');
@@ -42,7 +44,7 @@ const CONFIG = {
     TELEGRAM_CHAT_ID: '752497117',
     
     DEBUG_MODE: true,
-    ANALYSIS_LOGGING: true, // NEW: Always show analysis
+    ANALYSIS_LOGGING: true, 
 };
 
 // ============================================
@@ -137,30 +139,24 @@ class ConfluenceScorer {
         let rise = 0, fall = 0;
         let reasonsRise = [], reasonsFall = [];
         
-        // TREND
         if (ema5 > ema20 && ema20 > ema50) { rise += 4; reasonsRise.push('Strong uptrend'); }
         else if (ema5 < ema20 && ema20 < ema50) { fall += 4; reasonsFall.push('Strong downtrend'); }
         else if (ema5 > ema20) { rise += 2; reasonsRise.push('EMA5>EMA20'); }
         else if (ema5 < ema20) { fall += 2; reasonsFall.push('EMA5<EMA20'); }
         
-        // RSI
         if (rsi < 30) { rise += 3; reasonsRise.push(`RSI oversold ${rsi.toFixed(1)}`); }
         else if (rsi < 40) { rise += 2; reasonsRise.push(`RSI low ${rsi.toFixed(1)}`); }
         else if (rsi > 70) { fall += 3; reasonsFall.push(`RSI overbought ${rsi.toFixed(1)}`); }
         else if (rsi > 60) { fall += 2; reasonsFall.push(`RSI high ${rsi.toFixed(1)}`); }
         else if (rsi >= 45 && rsi <= 55) { rise += 1; fall += 1; reasonsRise.push('RSI neutral'); reasonsFall.push('RSI neutral'); }
         
-        // Bollinger
         if (current <= bb.lower) { rise += 3; reasonsRise.push('Price at lower BB'); }
         else if (current < bb.middle) { rise += 1; reasonsRise.push('Below mid BB'); }
-        
         if (current >= bb.upper) { fall += 3; reasonsFall.push('Price at upper BB'); }
         else if (current > bb.middle) { fall += 1; reasonsFall.push('Above mid BB'); }
         
-        // Squeeze
         if (bbWidth < 0.15) { rise += 2; fall += 2; reasonsRise.push(`BB squeeze ${bbWidth.toFixed(3)}%`); reasonsFall.push(`BB squeeze`); }
         else if (bbWidth < 0.3) { rise += 1; fall += 1; }
-        
         if (atr > 0.0008) { rise += 1; fall += 1; }
         
         return { 
@@ -194,7 +190,6 @@ const state = {
     hourlyStats: { trades: 0, wins: 0, losses: 0, pnl: 0 },
     candlesReceived: 0,
 };
-
 CONFIG.ACTIVE_ASSETS.forEach(s => state.assets[s] = { closedCandles: [], lastTradeTime: 0, lastAnalysis: null });
 
 // ============================================
@@ -232,7 +227,6 @@ class HedgedBot {
     }
     
     onMessage(res) {
-        // LOG EVERYTHING FOR DEBUGGING
         if (res.error) {
             LOGGER.error(`API Error [${res.msg_type}]: ${res.error.message} | Details: ${JSON.stringify(res.error)}`);
             return;
@@ -245,7 +239,8 @@ class HedgedBot {
             CONFIG.ACTIVE_ASSETS.forEach(s => this.subscribe(s));
         }
         
-        if (res.msg_type === 'candles') {
+        // FIXED: Changed 'candles' to 'history' (the correct API response type)
+        if (res.msg_type === 'history') {
             const sym = res.echo_req.ticks_history;
             state.assets[sym].closedCandles = res.candles.map(c => ({ 
                 open: +c.open, close: +c.close, high: +c.high, low: +c.low, epoch: +c.epoch 
@@ -302,18 +297,20 @@ class HedgedBot {
     
     subscribe(s) {
         LOGGER.info(`→ Subscribing ${s}...`);
-        // FIXED: Removed 'end: latest' which caused validation error
+        
+        // FIXED: Re-added 'end: latest' as required by API
         this.send({ 
             ticks_history: s, 
             count: CONFIG.CANDLES_TO_LOAD, 
+            end: 'latest', 
             style: 'candles', 
             granularity: CONFIG.GRANULARITY 
         });
-        // Subscribe to live candles
+
+        // FIXED: Using 'ohlc' for live streaming instead of ticks_history subscribe
         this.send({ 
-            ticks_history: s, 
+            ohlc: s, 
             subscribe: 1, 
-            style: 'candles', 
             granularity: CONFIG.GRANULARITY 
         });
     }
@@ -327,13 +324,11 @@ class HedgedBot {
         asset.closedCandles.push(candle);
         if (asset.closedCandles.length > 200) asset.closedCandles.shift();
         
-        // ALWAYS LOG ANALYSIS
         const score = ConfluenceScorer.calculateScore(asset.closedCandles);
         asset.lastAnalysis = score;
         
         LOGGER.analysis(`${ohlc.symbol} | Price:${score.price} | R:${score.rise} (${score.reasonsRise.join(', ') || 'none'}) | F:${score.fall} (${score.reasonsFall.join(', ') || 'none'}) | RSI:${score.rsi} ${score.trend} BBw:${score.bbWidth}%`);
         
-        // DECISION LOGIC WITH EXPLANATION
         if (state.isPaused) {
             LOGGER.analysis(`⏸️ ${ohlc.symbol} SKIPPED - Bot paused (${state.consecutiveLosses} losses)`);
             return;
@@ -418,21 +413,18 @@ class HedgedBot {
 
 // START
 console.log('\n' + '='.repeat(70));
-console.log(' HEDGED BOT v3.2 - FULL ANALYSIS LOGGING');
+console.log(' HEDGED BOT v3.3 - FIXED & OPTIMIZED');
 console.log('='.repeat(70) + '\n');
-
 new HedgedBot();
-
 setInterval(() => {
     const totalAnalyses = Object.values(state.assets).reduce((sum, a) => sum + (a.lastAnalysis ? 1 : 0), 0);
     LOGGER.info(`📊 Capital:$${state.capital.toFixed(2)} | Daily:$${state.dailyPL.toFixed(2)} | Trades:${state.tradesToday} | Active:${state.activeHedges.size} | Candles:${state.candlesReceived} | Analyses:${totalAnalyses}`);
     
-    // Show last analysis for each asset
     CONFIG.ACTIVE_ASSETS.forEach(sym => {
         const asset = state.assets[sym];
         if (asset.lastAnalysis) {
             const s = asset.lastAnalysis;
-            LOGGER.info(`   ${sym}: R${s.rise}/F${s.fall} | ${s.trend} | RSI${s.rsi}`);
+            LOGGER.info(`${sym}: R${s.rise}/F${s.fall} | ${s.trend} | RSI${s.rsi}`);
         }
     });
 }, 60000);
