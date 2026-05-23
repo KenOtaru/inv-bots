@@ -225,7 +225,7 @@ class HedgedBot {
         this.ws.send(JSON.stringify(data)); 
         return data.req_id; 
     }
-    
+
     onMessage(res) {
         if (res.error) {
             LOGGER.error(`API Error [${res.msg_type}]: ${res.error.message} | Details: ${JSON.stringify(res.error)}`);
@@ -239,7 +239,7 @@ class HedgedBot {
             CONFIG.ACTIVE_ASSETS.forEach(s => this.subscribe(s));
         }
         
-        // FIXED: Changed 'candles' to 'history' (the correct API response type)
+        // This handles the INITIAL historical data load
         if (res.msg_type === 'history') {
             const sym = res.echo_req.ticks_history;
             state.assets[sym].closedCandles = res.candles.map(c => ({ 
@@ -248,11 +248,13 @@ class HedgedBot {
             LOGGER.info(`📈 ${sym} | Loaded ${res.candles.length} historical candles | Latest: ${state.assets[sym].closedCandles.slice(-1)[0].close}`);
         }
         
+        // This handles the LIVE streaming candles (even when requested via ticks_history)
         if (res.msg_type === 'ohlc') {
             state.candlesReceived++;
             this.onCandle(res.ohlc);
         }
         
+        // ... rest of the onMessage handler (buy, proposal_open_contract, etc.) stays the same ...
         if (res.msg_type === 'buy') {
             const pending = this.pendingTrades.get(res.echo_req.req_id);
             if (pending) {
@@ -268,18 +270,14 @@ class HedgedBot {
             if (c.is_sold) {
                 const h = state.activeHedges.get(c.contract_id);
                 if (!h) return;
-                
                 const profit = c.profit;
                 state.capital += profit; 
                 state.dailyPL += profit; 
                 state.tradesToday++;
-                
                 const result = profit >= 0 ? 'WIN' : 'LOSS';
                 LOGGER.trade(`[${h.symbol}] ${h.direction} ${result} $${profit.toFixed(2)} | Entry:${h.entrySpot} Exit:${c.exit_tick} | Balance: $${state.capital.toFixed(2)}`);
-                
                 TradeHistoryManager.recordTrade(h.symbol, profit, h.isHedge);
                 state.activeHedges.delete(c.contract_id);
-                
                 if (profit > 0) { 
                     state.dalembertLevel = Math.max(0, state.dalembertLevel-1); 
                     state.consecutiveLosses = 0; 
@@ -293,6 +291,27 @@ class HedgedBot {
         if (res.msg_type === 'ping') {
             LOGGER.debug('🏓 Pong received');
         }
+    }
+    
+    subscribe(s) {
+        LOGGER.info(`→ Subscribing ${s}...`);
+        
+        // 1. Request Historical Candles (Required to prime the indicators)
+        this.send({ 
+            ticks_history: s, 
+            count: CONFIG.CANDLES_TO_LOAD, 
+            end: 'latest', 
+            style: 'candles', 
+            granularity: CONFIG.GRANULARITY 
+        });
+
+        // 2. Request Live Candle Stream (Using the most compatible method)
+        this.send({ 
+            ticks_history: s, 
+            subscribe: 1, 
+            style: 'candles', 
+            granularity: CONFIG.GRANULARITY 
+        });
     }
     
     subscribe(s) {
