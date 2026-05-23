@@ -9,6 +9,7 @@ const WebSocket = require('ws');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const { Logger } = require('winston');
 
 // ============================================
 // CONFIGURATION
@@ -449,6 +450,7 @@ class HedgedBot {
         if (state.isPaused || state.activeHedges.size >= 4) return;
         
         const score = ConfluenceScorer.calculateScore(asset.closedCandles);
+        Logger.debug(`[${ohlc.symbol}] Score R:${score.rise} F:${score.fall} | RSI:${score.rsi} Trend:${score.trend}`);
         const shouldHedge = score.rise >= CONFIG.HEDGE_MIN_SCORE && score.fall >= CONFIG.HEDGE_MIN_SCORE && Math.abs(score.rise - score.fall) <= CONFIG.HEDGE_MAX_DIFF;
         
         if (shouldHedge) this.executeHedge(ohlc.symbol, score);
