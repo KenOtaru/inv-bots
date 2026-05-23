@@ -449,7 +449,7 @@ class HedgedBot {
                 LOGGER.trade(`${result} | ${h.symbol} ${h.direction} | P/L: $${profit.toFixed(2)} | Entry:${h.entrySpot} Exit:${c.exit_tick} | Duration:${duration}s | Balance: $${state.capital.toFixed(2)}`);
                 
                 // Telegram notification for significant trades
-                if (Math.abs(profit) > 2) {
+                if (Math.abs(profit) > 0) {
                     TelegramService.sendMessage(
                         `<b>${result}</b>\n` +
                         `${h.symbol} ${h.direction}\n` +
@@ -592,13 +592,13 @@ class HedgedBot {
             asset.lastTradeTime = Date.now();
             this.executeHedge(ohlc.symbol, score, candle.close);
         } else if (shouldRise) {
-            LOGGER.analysis(`✅ ${ohlc.symbol} DECISION: CALL (Rise dominant R:${score.rise} > F:${score.fall})`);
+            LOGGER.analysis(`✅ ${ohlc.symbol} DECISION: CALLE (Rise dominant R:${score.rise} > F:${score.fall})`);
             asset.lastTradeTime = Date.now();
-            this.executeSingle(ohlc.symbol, 'CALL', score, candle.close);
+            this.executeSingle(ohlc.symbol, 'CALLE', score, candle.close);
         } else if (shouldFall) {
-            LOGGER.analysis(`✅ ${ohlc.symbol} DECISION: PUT (Fall dominant F:${score.fall} > R:${score.rise})`);
+            LOGGER.analysis(`✅ ${ohlc.symbol} DECISION: PUTE (Fall dominant F:${score.fall} > R:${score.rise})`);
             asset.lastTradeTime = Date.now();
-            this.executeSingle(ohlc.symbol, 'PUT', score, candle.close);
+            this.executeSingle(ohlc.symbol, 'PUTE', score, candle.close);
         } else {
             LOGGER.analysis(`❌ ${ohlc.symbol} NO TRADE - Scores too low (R:${score.rise}/F:${score.fall} min:${CONFIG.MIN_SCORE_TO_TRADE})`);
         }
@@ -650,12 +650,12 @@ class HedgedBot {
             `Score R:${score.rise}/F:${score.fall}`
         );
         
-        // Place CALL
+        // Place CALLE
         const callReq = this.send({ 
             buy: 1, 
             price: stake.toFixed(2), 
             parameters: { 
-                contract_type: 'CALL', 
+                contract_type: 'CALLE', 
                 symbol, 
                 duration: CONFIG.DURATION, 
                 duration_unit: CONFIG.DURATION_UNIT, 
@@ -665,20 +665,20 @@ class HedgedBot {
         });
         this.pendingTrades.set(callReq, { 
             symbol, 
-            direction: 'CALL', 
+            direction: 'CALLE', 
             stake, 
             score, 
             isHedge: true, 
             entrySpot: entryPrice.toFixed(5) 
         });
         
-        // Place PUT (slight delay)
+        // Place PUTE (slight delay)
         setTimeout(() => {
             const putReq = this.send({ 
                 buy: 1, 
                 price: stake.toFixed(2), 
                 parameters: { 
-                    contract_type: 'PUT', 
+                    contract_type: 'PUTE', 
                     symbol, 
                     duration: CONFIG.DURATION, 
                     duration_unit: CONFIG.DURATION_UNIT, 
@@ -688,7 +688,7 @@ class HedgedBot {
             });
             this.pendingTrades.set(putReq, { 
                 symbol, 
-                direction: 'PUT', 
+                direction: 'PUTE', 
                 stake, 
                 score, 
                 isHedge: true, 
