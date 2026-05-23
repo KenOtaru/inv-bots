@@ -14,7 +14,7 @@ const path = require('path');
 // CONFIGURATION
 // ============================================
 const CONFIG = {
-    API_TOKEN: 'rgNedekYXvCaPeP', // 
+    API_TOKEN: 'rgNedekYXvCaPeP', //
     APP_ID: '1089',
     WS_URL: 'wss://ws.derivws.com/websockets/v3',
     
