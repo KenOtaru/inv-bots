@@ -14,7 +14,7 @@ const path = require('path');
 // CONFIGURATION
 // ============================================
 const CONFIG = {
-    API_TOKEN: 'rgNedekYXvCaPeP', // ⚠️ REGENERATE THIS AFTER TESTING
+    API_TOKEN: 'rgNedekYXvCaPeP', // 
     APP_ID: '1089',
     WS_URL: 'wss://ws.derivws.com/websockets/v3',
     
@@ -22,7 +22,7 @@ const CONFIG = {
     BASE_STAKE: 3.75,
     RISK_PERCENT: 1.5,
     
-    ACTIVE_ASSETS: ['R_10', 'R_25', 'R_50'], // Added R_50 for more opportunities
+    ACTIVE_ASSETS: ['R_10', 'R_25', 'R_50'], 
     
     HEDGE_MIN_SCORE: 3,  // FIXED: lowered from 4
     HEDGE_MAX_DIFF: 1,   // FIXED: tighter diff

@@ -758,6 +758,7 @@ class DerivDigitDiffMergedBot {
     if (!canTrade.can) return;
 
     const analysis = this.analyzer.analyze(this.digitHistories[asset]);
+    console.log(asset, 'Analysis:', analysis, null, canTrade.reason);
     if (!analysis.shouldRequestProposal) return;
 
     this.pendingProposals[asset] = { analysis, requestedAt: nowMs() };
