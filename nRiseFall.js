@@ -239,7 +239,7 @@ class TelegramService {
     // NEW: Format trade result notification
     static formatTradeResult(resultInfo) {
         const { symbol, direction, profit, entrySpot, exitSpot, duration, isHedge, stake, buyPrice, sellPrice } = resultInfo;
-        const stats = TradeHistoryManager.getTodayStats();
+        
         const isWin = profit >= 0;
         
         let msg = `${isWin ? '✅' : '❌'} <b>${isWin ? 'WIN' : 'LOSS'}${isHedge ? ' (HEDGE)' : ''}</b>\n`;
@@ -264,6 +264,8 @@ class TelegramService {
         msg += `   Trades: ${stats.trades} | W/L: ${stats.wins}/${stats.losses} (${stats.winRate}%)\n`;
         msg += `   Daily P/L: ${stats.netPL >= 0 ? '+' : ''}$${stats.netPL.toFixed(2)}\n`;
         msg += `   Streak: ${state.consecutiveLosses > 0 ? `${state.consecutiveLosses} losses` : 'No losses'}\n\n`;
+
+        const stats = TradeHistoryManager.getTodayStats();
         
         msg += `⏰ ${new Date().toLocaleString('en-US', { timeZone: 'GMT', hour12: false })} GMT`;
         
