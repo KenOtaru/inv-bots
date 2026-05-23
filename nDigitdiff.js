@@ -94,7 +94,7 @@ const BOT_CONFIG = {
   oneTradeGlobally: ('true').toLowerCase() !== 'false',
   maxProposalAgeMs: Number(4000),
 
-  telegramToken: '8306232249:AAGMwjFngs68Lcq27oGmqewQgthXTJJRxP0',
+  telegramToken: '8106601008:AAEMyCma6mvPYIHEvw3RHQX2tkD5-wUe1o0',
   telegramChatId: '752497117',
 
   maxReconnectAttempts: Number(50),
@@ -864,13 +864,13 @@ class DerivDigitDiffMergedBot {
       stored.analysis.conservativeLoseProb < requiredMaxLoseProb &&
       conservativeEV > 0;
 
-    concole.log(`
-      Proposal for ${asset}: ask $${askPrice.toFixed(2)} 
-      Payout $${payout.toFixed(2)}, break-even WR ${(breakeven * 100).toFixed(2)}% 
-      Required max lose prob ${(requiredMaxLoseProb * 100).toFixed(2)}%
-      Conservative EV $${conservativeEV.toFixed(4)}
-      Decision: ${approved ? 'APPROVED' : 'REJECTED'}
-    `);
+    // concole.log(`
+    //   Proposal for ${asset}: ask $${askPrice.toFixed(2)} 
+    //   Payout $${payout.toFixed(2)}, break-even WR ${(breakeven * 100).toFixed(2)}% 
+    //   Required max lose prob ${(requiredMaxLoseProb * 100).toFixed(2)}% < ${(stored.analysis.conservativeLoseProb * 100).toFixed(2)}% && Conservative EV $${conservativeEV.toFixed(4)} > 0
+    //   Conservative EV $${conservativeEV.toFixed(4)}
+    //   Decision: ${approved ? 'APPROVED' : 'REJECTED'}
+    // `);
     
     if (!approved) {
       this._logSignal(asset, stored.analysis, proposalInfo, 'skip_no_ev');
