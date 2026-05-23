@@ -760,16 +760,16 @@ class DerivDigitDiffMergedBot {
     const analysis = this.analyzer.analyze(this.digitHistories[asset]);
     console.log(`asset: ${asset} 
       Analysis:
-      Reason: &{analysis.reason}
-      Current Digit: &{analysis.currentDigit}
-      Predicted Digit: &{analysis.predictedDigit}
-      Signal Score: &{(analysis.signalScore * 100).toFixed(2)}%
-      Est. Lose Prob: &{(analysis.estimatedLoseProb * 100).toFixed(2)}%
-      Cons. Lose Prob: &{(analysis.conservativeLoseProb * 100).toFixed(2)}% | this.cfg.preProposalMaxLoseProb
-      Est. Win Prob: &{(analysis.estimatedWinProb * 100).toFixed(2)}%
-      Cons. Win Prob: &{(analysis.conservativeWinProb * 100).toFixed(2)}%
-      Gap vs Runner-Up: &{(analysis.gapVsRunnerUp * 100).toFixed(4)}% | this.cfg.minDigitGapVsRunnerUp
-      Streak: Digit &{analysis.streak.digit} for &{analysis.streak.streak} ticks
+      Reason: ${analysis.reason}
+      Current Digit: ${analysis.currentDigit}
+      Predicted Digit: ${analysis.predictedDigit}
+      Signal Score: ${(analysis.signalScore * 100).toFixed(2)}%
+      Est. Lose Prob: ${(analysis.estimatedLoseProb * 100).toFixed(2)}%
+      Cons. Lose Prob: ${(analysis.conservativeLoseProb * 100).toFixed(2)}% | this.cfg.preProposalMaxLoseProb
+      Est. Win Prob: ${(analysis.estimatedWinProb * 100).toFixed(2)}%
+      Cons. Win Prob: ${(analysis.conservativeWinProb * 100).toFixed(2)}%
+      Gap vs Runner-Up: ${(analysis.gapVsRunnerUp * 100).toFixed(4)}% | this.cfg.minDigitGapVsRunnerUp
+      Streak: Digit ${analysis.streak.digit} for &{analysis.streak.streak} ticks
       `);
     
     if (!analysis.shouldRequestProposal) return;
