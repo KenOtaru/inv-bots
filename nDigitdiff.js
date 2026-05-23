@@ -867,7 +867,7 @@ class DerivDigitDiffMergedBot {
     concole.log(`
       Proposal for ${asset}: ask $${askPrice.toFixed(2)} 
       Payout $${payout.toFixed(2)}, break-even WR ${(breakeven * 100).toFixed(2)}% 
-      Required max lose prob ${(requiredMaxLoseProb * 100).toFixed(2)}% < ${(stored.analysis.conservativeLoseProb * 100).toFixed(2)}% && Conservative EV $${conservativeEV.toFixed(4)} > 0
+      Required max lose prob ${(requiredMaxLoseProb * 100).toFixed(2)}%
       Conservative EV $${conservativeEV.toFixed(4)}
       Decision: ${approved ? 'APPROVED' : 'REJECTED'}
     `);
