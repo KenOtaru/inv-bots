@@ -83,7 +83,7 @@ const BOT_CONFIG = {
     minTransitionSamples: Number(80),
 
     preProposalMaxLoseProb: Number(0.11), //Number(0.0925)
-    requiredEdgeMargin: Number(0.0040),
+    requiredEdgeMargin: Number(0.0000001),
     minDigitGapVsRunnerUp: Number(0.0015),
   },
 
@@ -860,8 +860,9 @@ class DerivDigitDiffMergedBot {
       conservativeEV: round(conservativeEV, 6),
     };
 
-    const approved =
-      stored.analysis.conservativeLoseProb < requiredMaxLoseProb 
+    const conservativeProb = (stored.analysis.conservativeLoseProb).toFixed(4)
+    const approved = //conservativeProb < 0.15
+      stored.analysis.conservativeLoseProb < 0.1060
       // &&
       // conservativeEV > 0;
     
@@ -871,7 +872,7 @@ class DerivDigitDiffMergedBot {
           Decision: ${approved ? 'APPROVED' : 'REJECTED'}
           Proposal for: ${asset}: ask $${askPrice.toFixed(2)} 
           Payout: $${payout.toFixed(2)}, break-even WR ${(breakeven * 100).toFixed(2)}% 
-          Required max lose prob: ${(stored.analysis.conservativeLoseProb * 100).toFixed(2)}% < ${(requiredMaxLoseProb * 100).toFixed(2)}%
+          Required max lose prob: ${(stored.analysis.conservativeLoseProb).toFixed(4)}% < ${0.1060}%
           Conservative EV: $${conservativeEV.toFixed(4)}
         `);
       return;
