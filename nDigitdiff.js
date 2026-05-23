@@ -765,10 +765,10 @@ class DerivDigitDiffMergedBot {
       Predicted Digit: ${analysis.predictedDigit}
       Signal Score: ${(analysis.signalScore * 100).toFixed(2)}%
       Est. Lose Prob: ${(analysis.estimatedLoseProb * 100).toFixed(2)}%
-      Cons. Lose Prob: ${(analysis.conservativeLoseProb * 100).toFixed(2)}% <= ${BOT_CONFIG.analysis.preProposalMaxLoseProb}
+      Cons. Lose Prob: ${analysis.conservativeLoseProb.toFixed(2)}% <= ${BOT_CONFIG.analysis.preProposalMaxLoseProb}
       Est. Win Prob: ${(analysis.estimatedWinProb * 100).toFixed(2)}%
       Cons. Win Prob: ${(analysis.conservativeWinProb * 100).toFixed(2)}%
-      Gap vs Runner-Up: ${(analysis.gapVsRunnerUp * 100).toFixed(4)}% >= ${BOT_CONFIG.analysis.minDigitGapVsRunnerUp}
+      Gap vs Runner-Up: ${analysis.gapVsRunnerUp.toFixed(4)}% >= ${BOT_CONFIG.analysis.minDigitGapVsRunnerUp}
       Streak: Digit ${analysis.streak.digit} for ${analysis.streak.streak} ticks
       `);
     
