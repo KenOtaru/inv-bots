@@ -20,7 +20,7 @@ const CONFIG = {
     BASE_STAKE: 1.0,
     RISK_PERCENT: 1.5,
     
-    ACTIVE_ASSETS: ['R_10', 'R_25', 'R_50'],
+    ACTIVE_ASSETS: ['R_10'], //['R_10', 'R_25', 'R_50']
     
     HEDGE_MIN_SCORE: 3,
     HEDGE_MAX_DIFF: 1,
