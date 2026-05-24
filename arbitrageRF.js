@@ -24,7 +24,7 @@ const CONFIG = {
     
     HEDGE_MIN_SCORE: 10,
     HEDGE_MAX_DIFF: 10,
-    MIN_SCORE_TO_TRADE: 7,
+    MIN_SCORE_TO_TRADE: 3,
     
     DALEMBERT_UNIT: 0.5,
     MAX_DALEMBERT_STEPS: 5,
@@ -35,7 +35,7 @@ const CONFIG = {
     
     GRANULARITY: 60,
     CANDLES_TO_LOAD: 100,
-    DURATION: 5,
+    DURATION: 1,
     DURATION_UNIT: 't',
     
     TELEGRAM_ENABLED: true,
@@ -737,11 +737,11 @@ class HedgedBot {
         
         const shouldRise = 
             score.rise >= CONFIG.MIN_SCORE_TO_TRADE && 
-            score.rise <= 0;
+            score.rise <= 1;
         
         const shouldFall = 
             score.fall >= CONFIG.MIN_SCORE_TO_TRADE && 
-            score.fall <= 0;
+            score.fall <= 1;
         
         if (shouldHedge) {
             LOGGER.analysis(`✅ ${ohlc.symbol} DECISION: HEDGE (R:${score.rise}/F:${score.fall})`);
