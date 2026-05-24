@@ -107,9 +107,9 @@ const BOT_CONFIG = {
   },
 
   files: {
-    state: path.join(__dirname, 'digitdiff_merged_state_04.json'),
-    signals: path.join(__dirname, 'digitdiff_merged_signals_04.csv'),
-    trades: path.join(__dirname, 'digitdiff_merged_trades_04.csv'),
+    state: path.join(__dirname, 'digitdiff_merged_state_05.json'),
+    signals: path.join(__dirname, 'digitdiff_merged_signals_05.csv'),
+    trades: path.join(__dirname, 'digitdiff_merged_trades_05.csv'),
   },
 };
 
@@ -862,7 +862,9 @@ class DerivDigitDiffMergedBot {
 
     const conservativeProb = (stored.analysis.conservativeLoseProb).toFixed(3)
     
-    const approved = stored.analysis.conservativeLoseProb < requiredMaxLoseProb 
+    const signalScore = (stored.analysis.signalScore * 100).toFixed(2); 
+    const approved = signalScore >= 35
+    //stored.analysis.conservativeLoseProb < requiredMaxLoseProb 
       // &&
       // conservativeEV > 0;
     
