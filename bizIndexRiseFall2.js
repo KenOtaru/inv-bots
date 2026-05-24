@@ -74,7 +74,7 @@ const LOGGER = {
 // ============================================================
 const CONFIG = {
     // ── Deriv API ─────────────────────────────────────────────
-    API_TOKEN:  'YOUR_API_TOKEN_HERE',   // ← Replace before running
+    API_TOKEN:  'hsj0tA0XJoIzJG5',   // 
     APP_ID:     '1089',
     WS_URL:     'wss://ws.derivws.com/websockets/v3',
 
@@ -191,14 +191,14 @@ const CONFIG = {
         'stpRNG4',
         'stpRNG5',
         // Uncomment to add volatility indices:
-        // 'R_10', 'R_25', 'R_50', 'R_75', 'R_100',
+        'R_10', 'R_25', 'R_50', 'R_75', 'R_100',
     ],
 
     // ── Misc ──────────────────────────────────────────────────
     DEBUG_MODE:                 true,
     TELEGRAM_ENABLED:           true,
-    TELEGRAM_BOT_TOKEN:         'YOUR_BOT_TOKEN',   // ← Replace
-    TELEGRAM_CHAT_ID:           'YOUR_CHAT_ID',     // ← Replace
+    TELEGRAM_BOT_TOKEN: '8565754902:AAHS6UQWEgLJ0DO-JTpAGQhZLs-UDVVNAQc',
+    TELEGRAM_CHAT_ID: '752497117',
 };
 
 // ============================================================
