@@ -50,7 +50,7 @@ const BOT_CONFIG = {
   appId: Number(1089),
   token: 'rgNedekYXvCaPeP', // process.env.DERIV_TOKEN || 'rg
   tradeMode: ('live').toLowerCase(), // paper | live
-  assets: ('R_10,R_25,R_50,R_75')
+  assets: ('R_10,R_25,R_50')
     .split(',')
     .map(v => v.trim())
     .filter(Boolean),
@@ -861,8 +861,8 @@ class DerivDigitDiffMergedBot {
     };
 
     const conservativeProb = (stored.analysis.conservativeLoseProb).toFixed(3)
-    const approved = conservativeProb <= 0.103
-      // stored.analysis.conservativeLoseProb < requiredMaxLoseProb 
+    
+    const approved = stored.analysis.conservativeLoseProb < requiredMaxLoseProb 
       // &&
       // conservativeEV > 0;
     
@@ -870,9 +870,10 @@ class DerivDigitDiffMergedBot {
       this._logSignal(asset, stored.analysis, proposalInfo, 'skip_no_ev');
         console.log(`
           Decision: ${approved ? 'APPROVED' : 'REJECTED'}
+          breakEvenWinRate: ${(breakeven * 100).toFixed(2)}%
           Proposal for: ${asset}: ask $${askPrice.toFixed(2)} 
           Payout: $${payout.toFixed(2)}, break-even WR ${(breakeven * 100).toFixed(2)}% 
-          Required max lose prob: ${(stored.analysis.conservativeLoseProb).toFixed(3)}% < ${0.103}%
+          Required max lose prob: ${(stored.analysis.conservativeLoseProb).toFixed(3)}% < ${requiredMaxLoseProb.toFixed(3)}%
           Conservative EV: $${conservativeEV.toFixed(4)}
         `);
       return;
