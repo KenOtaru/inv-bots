@@ -24,7 +24,7 @@ const CONFIG = {
     
     HEDGE_MIN_SCORE: 10,
     HEDGE_MAX_DIFF: 10,
-    MIN_SCORE_TO_TRADE: 3,
+    MIN_SCORE_TO_TRADE: 5,
     
     DALEMBERT_UNIT: 0.5,
     MAX_DALEMBERT_STEPS: 5,
@@ -35,7 +35,7 @@ const CONFIG = {
     
     GRANULARITY: 60,
     CANDLES_TO_LOAD: 100,
-    DURATION: 1,
+    DURATION: 5,
     DURATION_UNIT: 't',
     
     TELEGRAM_ENABLED: true,
