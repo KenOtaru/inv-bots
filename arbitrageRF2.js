@@ -535,12 +535,12 @@ class HedgedBot {
         const isTrending = parseFloat(score.adx) > CONFIG.ADX_TRENDING;
         const isRanging = parseFloat(score.adx) < CONFIG.ADX_RANGING;
 
-        const shouldFall = score.rise >= CONFIG.MIN_SCORE_TO_TRADE && score.fall <= 1;
-        const shouldRise = score.fall >= CONFIG.MIN_SCORE_TO_TRADE && score.rise <= 1;
+        const shouldRise = score.rise >= CONFIG.MIN_SCORE_TO_TRADE && score.fall === 1;
+        const shouldFall = score.fall >= CONFIG.MIN_SCORE_TO_TRADE && score.rise === 1;
 
         if (isTrending) {
-            // if (shouldRise) this.executeSingle(ohlc.symbol, 'CALLE', score, candle.close);
-            // else if (shouldFall) this.executeSingle(ohlc.symbol, 'PUTE', score, candle.close);
+            if (shouldRise) this.executeSingle(ohlc.symbol, 'CALLE', score, candle.close);
+            else if (shouldFall) this.executeSingle(ohlc.symbol, 'PUTE', score, candle.close);
         } else if (isRanging) {
             // In ranging markets, we can use Biased Hedging
             // if (shouldRise && shouldFall && Math.abs(score.rise - score.fall) <= CONFIG.HEDGE_BIAS_THRESHOLD) {
@@ -550,8 +550,8 @@ class HedgedBot {
             // } else if (shouldFall) {
             //     this.executeSingle(ohlc.symbol, 'PUTE', score, candle.close);
             // }
-            if (shouldRise) this.executeSingle(ohlc.symbol, 'CALLE', score, candle.close);
-            else if (shouldFall) this.executeSingle(ohlc.symbol, 'PUTE', score, candle.close);
+            // if (shouldRise) this.executeSingle(ohlc.symbol, 'CALLE', score, candle.close);
+            // else if (shouldFall) this.executeSingle(ohlc.symbol, 'PUTE', score, candle.close);
         } 
         // else {
         //     // Neutral/Transition zone

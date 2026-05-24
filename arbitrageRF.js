@@ -736,12 +736,14 @@ class HedgedBot {
             Math.abs(score.rise - score.fall) <= CONFIG.HEDGE_MAX_DIFF;
         
         const shouldRise = 
-            score.rise >= CONFIG.MIN_SCORE_TO_TRADE && 
-            score.rise <= 1;
+            score.rise === CONFIG.MIN_SCORE_TO_TRADE 
+            && 
+            score.rise === 2;
         
         const shouldFall = 
-            score.fall >= CONFIG.MIN_SCORE_TO_TRADE && 
-            score.fall <= 1;
+            score.fall === CONFIG.MIN_SCORE_TO_TRADE 
+            && 
+            score.fall === 2;
         
         if (shouldHedge) {
             LOGGER.analysis(`✅ ${ohlc.symbol} DECISION: HEDGE (R:${score.rise}/F:${score.fall})`);
