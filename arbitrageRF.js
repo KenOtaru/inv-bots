@@ -20,11 +20,11 @@ const CONFIG = {
     BASE_STAKE: 1.0,
     RISK_PERCENT: 1.0, // Percentage of capital to risk per trade (1% = 0.01)
     
-    ACTIVE_ASSETS: ['R_10', 'R_25', 'R_50', 'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4' , 'stpRNG5'], //['R_10', 'R_25', 'R_50', 'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4' , 'stpRNG5']
+    ACTIVE_ASSETS: ['stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4' , 'stpRNG5'], //['R_10', 'R_25', 'R_50', 'stpRNG', 'stpRNG2', 'stpRNG3', 'stpRNG4' , 'stpRNG5']
     
     HEDGE_MIN_SCORE: 10,
     HEDGE_MAX_DIFF: 10,
-    MIN_SCORE_TO_TRADE: 10,
+    MIN_SCORE_TO_TRADE: 7,
     
     DALEMBERT_UNIT: 0.5,
     MAX_DALEMBERT_STEPS: 5,
@@ -737,11 +737,11 @@ class HedgedBot {
         
         const shouldRise = 
             score.rise >= CONFIG.MIN_SCORE_TO_TRADE && 
-            score.rise > score.fall + 2;
+            score.rise <= 0;
         
         const shouldFall = 
             score.fall >= CONFIG.MIN_SCORE_TO_TRADE && 
-            score.fall > score.rise + 2;
+            score.fall <= 0;
         
         if (shouldHedge) {
             LOGGER.analysis(`✅ ${ohlc.symbol} DECISION: HEDGE (R:${score.rise}/F:${score.fall})`);
