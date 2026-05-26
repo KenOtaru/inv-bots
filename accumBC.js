@@ -1082,7 +1082,7 @@ class EnhancedDerivTradingBot {
 
         // Entry condition: current digit count is in appearedOnceArray
         // and not already traded, and stayedIn value >= 0
-        const condition = (this.currentTick < 2 && this.currentTick2 < 15 && this.currentTick3 < 15 &&  this.currentTick4 < 15);
+        const condition = (this.currentTick < 2 && this.currentTick2 < 15 && this.currentTick3 < 15 &&  this.currentTick4 < 15 || this.consecutiveLosses > 0);
         
         // const condition = appearedOnceArray.includes(currentDigitCount)
         //     && !this.tradedDigitArray.includes(stayedInArray[99])
@@ -1134,7 +1134,7 @@ class EnhancedDerivTradingBot {
         // if (analysis.scores.volTrend < 0.5) return;
 
         // Check if we should place trade
-        if (condition || this.consecutiveLosses > 0) {
+        if (condition) {
             this.tradedDigitArray.push(stayedInArray[99]);
             this.filteredArray = appearedOnceArray;
             
@@ -1576,8 +1576,10 @@ class EnhancedDerivTradingBot {
 
         // Send Trade result notification
         this.sendTelegramMessage(
-            `${won ? '✅' : '❌'} <b>Accum BOOM/CRASH</b>\n\n` +
+            `<b>Accum BOOM/CRASH</b>\n` +
             `Asset: <b>${asset}</b>\n` +
+            `${won ? '✅ WON' : '❌ LOSS'}\n` +
+            `stayedInArray: [${this.entryTick}|${this.currentTick2}|${this.currentTick3}|${this.currentTick4}|${this.stayedInArray[95]}|${this.stayedInArray[94]}]\n` +
             `P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(3)}\n` +
             `Consecutive Losses: ${this.consecutiveLosses}\n` +
             `Trades: ${this.totalTrades} (${this.totalWins}W/${this.totalLosses}L)\n` +
