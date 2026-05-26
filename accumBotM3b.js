@@ -29,7 +29,7 @@ const path = require('path');
 // ══════════════════════════════════════════════════════════════════════════════
 // STATE PERSISTENCE MANAGER
 // ══════════════════════════════════════════════════════════════════════════════
-const STATE_FILE = path.join(__dirname, 'accumBotM3a_06_state.json');
+const STATE_FILE = path.join(__dirname, 'accumBC_01_state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -607,7 +607,7 @@ class EnhancedDerivTradingBot {
         });
         console.log(`🔒 SUSPENDED: All assets except ${lossAsset}. Focusing on loss asset.`);
         this.sendTelegramMessage(
-            `🔒 <b>Asset Suspension (accumBotM3b)</b>\n\n` +
+            `🔒 <b>Asset Suspension (Accum BOOM/CRASH)</b>\n\n` +
             `Loss on: <b>${lossAsset}</b>\n` +
             `Suspended: ${this.assets.filter(a => a !== lossAsset).join(', ')}\n` +
             `Focusing on ${lossAsset} until win`
@@ -620,7 +620,7 @@ class EnhancedDerivTradingBot {
         this.focusAsset = null;
         console.log(`✅ RESUMED: All assets active again (was focused on ${prevFocus})`);
         this.sendTelegramMessage(
-            `✅ <b>All Assets Resumed (accumBotM3b)</b>\n\n` +
+            `✅ <b>All Assets Resumed (Accum BOOM/CRASH)</b>\n\n` +
             `Won on: <b>${prevFocus}</b>\n` +
             `All assets now active for trading`
         );
@@ -891,7 +891,7 @@ class EnhancedDerivTradingBot {
         const pnlStr = (this.totalProfitLoss >= 0 ? '+' : '') + '$' + Math.abs(this.totalProfitLoss).toFixed(2);
 
         await this.sendTelegramMessage(
-            `📊 <b>Session Summary (accumBotM3b)</b>\n\n` +
+            `📊 <b>Session Summary Accum BOOM/CRASH</b>\n\n` +
             `Trades: ${this.totalTrades}\n` +
             `W/L: ${this.totalWins}/${this.totalLosses}\n` +
             `Losses x2-x6: ${this.consecutiveLosses2} | ${this.consecutiveLosses3} | ${this.consecutiveLosses4} | ${this.consecutiveLosses5} | ${this.consecutiveLosses6}\n` +
@@ -905,7 +905,7 @@ class EnhancedDerivTradingBot {
 
     async sendDisconnectSummary() {
         await this.sendTelegramMessage(
-            `⚠️ <b>accumBotM3b Disconnected</b>\n\n` +
+            `⚠️ <b>Accum BOOM/CRASH Disconnected</b>\n\n` +
             `Trading Summary:\n` +
             `Total Trades: ${this.totalTrades}\n` +
             `Wins: ${this.totalWins} | Losses: ${this.totalLosses}\n` +
@@ -1072,10 +1072,14 @@ class EnhancedDerivTradingBot {
 
         console.log(`   Digits that appeared ${this.filterNum} times: [${appearedOnceArray.join(', ')}]`);
 
+        this.currentTick2 = stayedInArray[98];
+        this.currentTick3 = stayedInArray[97];
+        this.currentTick4 = stayedInArray[96];
+
         // Entry condition: current digit count is in appearedOnceArray
         // and not already traded, and stayedIn value >= 0
-        const condition = stayedInArray[99] < 2 && stayedInArray[98] < 15 && stayedInArray[97] < 15 &&  stayedInArray[96] < 15;
-
+        const condition = this.currentTick < 2 && this.currentTick2 < 15 && this.currentTick3 < 15 &&  this.currentTick4 < 15;
+        
         // const condition = appearedOnceArray.includes(currentDigitCount)
         //     && !this.tradedDigitArray.includes(stayedInArray[99])
         //     && stayedInArray[99] > 0;
@@ -1199,9 +1203,9 @@ class EnhancedDerivTradingBot {
 
         // Telegram notification
         this.sendTelegramMessage(
-            `🚀 <b>TRADE OPENED (accumBotM3b)</b>\n\n` +
+            `🚀 <b>TRADE OPENED (Accum BOOM/CRASH)</b>\n\n` +
             `Asset: <b>${asset}</b>\n` +
-            `Entry Tick: <b>${this.entryTick}</b>\n` +
+            `Entry Tick: <b>[${this.entryTick}|${this.currentTick2}|${this.currentTick3}|${this.currentTick4}]</b>\n` +
             `Stake: $${trade.stake.toFixed(2)}\n` +
             `Growth Rate: ${(this.config.growthRate * 100).toFixed(0)}%\n` +
             `Filter Number: ${this.filterNum}\n` +
@@ -1447,7 +1451,7 @@ class EnhancedDerivTradingBot {
         );
 
         this.sendTelegramMessage(
-            `🚨 <b>STUCK TRADE RECOVERED 3b[${reason}]</b>\n\n` +
+            `🚨 <b>STUCK TRADE RECOVERED Accum BOOM/CRASH[${reason}]</b>\n\n` +
             `Contract: ${contractId}\n` +
             `Asset: ${stuckAsset}\n` +
             `Stake: $${stake.toFixed(2)}\n` +
@@ -1566,12 +1570,12 @@ class EnhancedDerivTradingBot {
 
         // Send Trade result notification
         this.sendTelegramMessage(
-            `${won ? '✅' : '❌'} <b>accumBotM3b</b>\n\n` +
+            `${won ? '✅' : '❌'} <b>Accum BOOM/CRASH</b>\n\n` +
             `Asset: <b>${asset}</b>\n` +
             `P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(3)}\n` +
             `Consecutive Losses: ${this.consecutiveLosses}\n` +
             `Trades: ${this.totalTrades} (${this.totalWins}W/${this.totalLosses}L)\n` +
-            `Losses x2-x5: ${this.consecutiveLosses2} | ${this.consecutiveLosses3} | ${this.consecutiveLosses4} | ${this.consecutiveLosses5} | ${this.consecutiveLosses6}\n` +
+            `Losses x2-x6: ${this.consecutiveLosses2} | ${this.consecutiveLosses3} | ${this.consecutiveLosses4} | ${this.consecutiveLosses5} | ${this.consecutiveLosses6}\n` +
             `Win Rate: ${this.totalTrades > 0 ? ((this.totalWins / this.totalTrades) * 100).toFixed(2) : '0.00'}%\n` +
             `Stake: $${this.currentStake.toFixed(2)}\n` +
             `Total P&L: ${this.totalProfitLoss >= 0 ? '+' : ''}$${this.totalProfitLoss.toFixed(2)}`
@@ -1751,11 +1755,11 @@ const bot = new EnhancedDerivTradingBot('DMylfkyce6VyZt7', {
     takeProfitMultiplier: 1, //0.05,
     filterNum: 4,
     assets: [
-        // 'BOOM1000', 'CRASH1000'
-        'BOOM50',
-        'BOOM150N',  'BOOM300N',  'BOOM500',   'BOOM600',   'BOOM900',
-        'BOOM1000',  'RDBULL',    'CRASH50',   'CRASH150N', 'CRASH300N',
-        'CRASH500',  'CRASH600',  'CRASH900',  'CRASH1000',
+        'BOOM1000', 'BOOM900', 'CRASH1000', 'CRASH900', 
+        // 'BOOM50',
+        // 'BOOM150N',  'BOOM300N',  'BOOM500',   'BOOM600',   'BOOM900',
+        // 'BOOM1000',  'CRASH50',   'CRASH150N', 'CRASH300N',
+        // 'CRASH500',  'CRASH600',  'CRASH900',  'CRASH1000',
     ], //['R_10', 'R_25', 'R_50', 'R_75', 'R_100']
     telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
     telegramChatId: '752497117',
