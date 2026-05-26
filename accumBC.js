@@ -1750,13 +1750,13 @@ class EnhancedDerivTradingBot {
 const bot = new EnhancedDerivTradingBot('DMylfkyce6VyZt7', {
     initialStake: 1,
     initialStake2: 25,
-    multiplier: 4,
+    multiplier: 2,
     recoveryWinNum: 100,
-    maxConsecutiveLosses: 4,
+    maxConsecutiveLosses: 7,
     stopLoss: 127,
     takeProfit: 250,
     growthRate: 0.05,
-    takeProfitMultiplier: 1, //0.05,
+    takeProfitMultiplier: 1, //0.05, % of Stake Amount
     filterNum: 4,
     assets: [
         'BOOM1000', 'BOOM900', 'CRASH1000', 'CRASH900', 
