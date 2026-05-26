@@ -1134,7 +1134,7 @@ class EnhancedDerivTradingBot {
         // if (analysis.scores.volTrend < 0.5) return;
 
         // Check if we should place trade
-        if (condition) {
+        if (condition || this.consecutiveLosses > 0) {
             this.tradedDigitArray.push(stayedInArray[99]);
             this.filteredArray = appearedOnceArray;
             
