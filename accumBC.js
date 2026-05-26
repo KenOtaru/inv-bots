@@ -1082,7 +1082,7 @@ class EnhancedDerivTradingBot {
 
         // Entry condition: current digit count is in appearedOnceArray
         // and not already traded, and stayedIn value >= 0
-        const condition = this.currentTick < 5 && this.currentTick2 < 15 && this.currentTick3 < 15 &&  this.currentTick4 < 15;
+        const condition = (this.currentTick < 5 && this.currentTick2 < 15 && this.currentTick3 < 15 &&  this.currentTick4 < 15 || (this.currentTick + this.currentTick2 + this.currentTick3 + this.currentTick4 < 70));
         
         // const condition = appearedOnceArray.includes(currentDigitCount)
         //     && !this.tradedDigitArray.includes(stayedInArray[99])
