@@ -894,7 +894,7 @@ class EnhancedDerivTradingBot {
             `📊 <b>Session Summary (accumBotM3b)</b>\n\n` +
             `Trades: ${this.totalTrades}\n` +
             `W/L: ${this.totalWins}/${this.totalLosses}\n` +
-            `Losses x2-x6: ${this.consecutiveLosses2} | ${this.consecutiveLosses3} | ${this.consecutiveLosses4}\n` +
+            `Losses x2-x6: ${this.consecutiveLosses2} | ${this.consecutiveLosses3} | ${this.consecutiveLosses4} | ${this.consecutiveLosses5} | ${this.consecutiveLosses6}\n` +
             `Win Rate: ${winRate}%\n` +
             `${pnlEmoji} Total P&L: ${pnlStr}\n` +
             `Daily P&L: ${this.dailyProfitLoss >= 0 ? '+' : ''}$${this.dailyProfitLoss.toFixed(2)}\n` +
@@ -909,7 +909,7 @@ class EnhancedDerivTradingBot {
             `Trading Summary:\n` +
             `Total Trades: ${this.totalTrades}\n` +
             `Wins: ${this.totalWins} | Losses: ${this.totalLosses}\n` +
-            `x2-x6 Losses: ${this.consecutiveLosses2} | ${this.consecutiveLosses3} | ${this.consecutiveLosses4}\n\n` +
+            `x2-x6 Losses: ${this.consecutiveLosses2} | ${this.consecutiveLosses3} | ${this.consecutiveLosses4} | ${this.consecutiveLosses5} | ${this.consecutiveLosses6}\n\n` +
             `Total P&L: $${this.totalProfitLoss.toFixed(2)}\n` +
             `Win Rate: ${this.totalTrades > 0 ? ((this.totalWins / this.totalTrades) * 100).toFixed(2) : '0.00'}%\n` +
             `Current Stake: $${this.currentStake.toFixed(2)}\n\n` +
@@ -1007,7 +1007,7 @@ class EnhancedDerivTradingBot {
         if (this.tradeInProgress) return;
         if (!this.wsReady) return;
 
-        const takeProfitAmount = this.currentStake * this.config.takeProfitMultiplier;
+        const takeProfitAmount = this.currentStake; // this.currentStake * this.config.takeProfitMultiplier;
 
         const proposal = {
             proposal: 1,
@@ -1074,9 +1074,11 @@ class EnhancedDerivTradingBot {
 
         // Entry condition: current digit count is in appearedOnceArray
         // and not already traded, and stayedIn value >= 0
-        const condition = appearedOnceArray.includes(currentDigitCount)
-            && !this.tradedDigitArray.includes(stayedInArray[99])
-            && stayedInArray[99] > 0;
+        const condition = stayedInArray[99] < 2 && stayedInArray[98] < 15 && stayedInArray[97] < 15 &&  stayedInArray[96] < 15;
+
+        // const condition = appearedOnceArray.includes(currentDigitCount)
+        //     && !this.tradedDigitArray.includes(stayedInArray[99])
+        //     && stayedInArray[99] > 0;
 
         console.log(`   Entry condition: ${condition ? '✅ MET' : '❌ NOT MET'}`);
 
@@ -1087,9 +1089,9 @@ class EnhancedDerivTradingBot {
         const analysis = this.analyzer.analyzeEntry(prices);
 
         // 2. Log analysis periodically (every 30th check to avoid spam)
-        // if (this.tickCounts[asset] % (this.config.analysisInterval * 10) === 0) {
+        if (this.tickCounts[asset] % (this.config.analysisInterval * 10) === 0) {
         this.logAnalysis(asset, analysis);
-        // }
+        }
 
         this.overallScore = (analysis.overallScore * 100).toFixed(1);
         this.bbWidth = analysis.bb.width.toFixed(6);
@@ -1105,23 +1107,23 @@ class EnhancedDerivTradingBot {
         this.volTrend = (analysis.scores.volTrend * 100).toFixed(1);
 
         // 3. Decision
-        if (!analysis.shouldTrade) return;
+        // if (!analysis.shouldTrade) return;
 
-        if (analysis.overallScore < 0.80) return;
+        // if (analysis.overallScore < 0.80) return;
 
-        if (analysis.scores.bandWidth < 1) return;
+        // if (analysis.scores.bandWidth < 1) return;
 
         // if (analysis.scores.macdFlat < 0.5) return;
 
         // if (analysis.scores.pricePosition < 0.4) return;
 
-        if (!analysis.tickStability || analysis.tickStability === 'undefined' || analysis.tickStability === 'NaN' || analysis.tickStability < 1) return;
+        // if (!analysis.tickStability || analysis.tickStability === 'undefined' || analysis.tickStability === 'NaN' || analysis.tickStability < 1) return;
 
-        if (analysis.scores.macdConverging < 1) return;
+        // if (analysis.scores.macdConverging < 1) return;
 
         // if (this.maxTickMove < 0.03) return;
 
-        if (analysis.scores.volTrend < 0.5) return;
+        // if (analysis.scores.volTrend < 0.5) return;
 
         // Check if we should place trade
         if (condition) {
@@ -1132,7 +1134,7 @@ class EnhancedDerivTradingBot {
 
             // 6. Request proposal with appropriate growth rate
             const growthRate = this.config.growthRate;
-            const takeProfitAmount = this.currentStake * this.config.takeProfitMultiplier;
+            const takeProfitAmount = this.currentStake; // this.currentStake * this.config.takeProfitMultiplier;
 
             console.log(`\n🎯 ENTRY SIGNAL: ${asset}`);
             console.log(`   Score: ${(analysis.overallScore * 100).toFixed(1)}%`);
@@ -1498,16 +1500,17 @@ class EnhancedDerivTradingBot {
         if (won) {
             this.totalWins++;
             this.isWinTrade = true;
-            this.currentStake = this.Sys2 ? this.config.initialStake2 : this.config.initialStake;
+            // this.currentStake = this.Sys2 ? this.config.initialStake2 : this.config.initialStake;
+            this.currentStake = this.config.initialStake;
             this.consecutiveLosses = 0;
             this.filterNum = this.config.filterNum;
-            if (this.Sys2) {
-                this.kCountNum++;
-                if (this.kCountNum >= this.config.recoveryWinNum) {
-                    this.kCountNum = 0;
-                    this.Sys2 = false;
-                }
-            }
+            // if (this.Sys2) {
+            //     this.kCountNum++;
+            //     if (this.kCountNum >= this.config.recoveryWinNum) {
+            //         this.kCountNum = 0;
+            //         this.Sys2 = false;
+            //     }
+            // }
 
             if (this.assetMetrics[asset]) this.assetMetrics[asset].wins++;
             this.hourlyStats.wins++;
@@ -1533,20 +1536,20 @@ class EnhancedDerivTradingBot {
             else if (this.consecutiveLosses === 6) this.consecutiveLosses6++;
 
             // Original martingale
-            if (this.consecutiveLosses === 2) {
-                this.currentStake = this.config.initialStake2;
-                if (!this.Sys2) {
-                    this.Sys2 = true;
-                } else {
-                    this.consecutiveLosses = 4;
-                }
-            }
-            else {
-                this.currentStake = Math.ceil(this.currentStake * this.config.multiplier * 100) / 100;
-            }
+            // if (this.consecutiveLosses === 2) {
+            //     this.currentStake = this.config.initialStake2;
+            //     if (!this.Sys2) {
+            //         this.Sys2 = true;
+            //     } else {
+            //         this.consecutiveLosses = 4;
+            //     }
+            // }
+            // else {
+                // this.currentStake = Math.ceil(this.currentStake * this.config.multiplier * 100) / 100;
+            // }
 
             // Suspend all other assets, focus on loss asset
-            // this.suspendOtherAssets(asset);
+            this.suspendOtherAssets(asset);
         }
 
         // Keep traded digit array trimmed
@@ -1568,7 +1571,7 @@ class EnhancedDerivTradingBot {
             `P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(3)}\n` +
             `Consecutive Losses: ${this.consecutiveLosses}\n` +
             `Trades: ${this.totalTrades} (${this.totalWins}W/${this.totalLosses}L)\n` +
-            `Losses x2-x5: ${this.consecutiveLosses2} | ${this.consecutiveLosses3} | ${this.consecutiveLosses4} | ${this.consecutiveLosses5}\n` +
+            `Losses x2-x5: ${this.consecutiveLosses2} | ${this.consecutiveLosses3} | ${this.consecutiveLosses4} | ${this.consecutiveLosses5} | ${this.consecutiveLosses6}\n` +
             `Win Rate: ${this.totalTrades > 0 ? ((this.totalWins / this.totalTrades) * 100).toFixed(2) : '0.00'}%\n` +
             `Stake: $${this.currentStake.toFixed(2)}\n` +
             `Total P&L: ${this.totalProfitLoss >= 0 ? '+' : ''}$${this.totalProfitLoss.toFixed(2)}`
@@ -1737,17 +1740,18 @@ class EnhancedDerivTradingBot {
 // BOT INITIALIZATION
 // ══════════════════════════════════════════════════════════════════════════════
 const bot = new EnhancedDerivTradingBot('DMylfkyce6VyZt7', {
-    initialStake: 5,
+    initialStake: 1,
     initialStake2: 25,
-    multiplier: 21,
+    multiplier: 2,
     recoveryWinNum: 100,
-    maxConsecutiveLosses: 4,
-    stopLoss: 532,
+    maxConsecutiveLosses: 7,
+    stopLoss: 127,
     takeProfit: 25,
     growthRate: 0.05,
-    takeProfitMultiplier: 0.05,
+    takeProfitMultiplier: 1, //0.05,
     filterNum: 4,
     assets: [
+        // 'BOOM1000', 'CRASH1000'
         'BOOM50',
         'BOOM150N',  'BOOM300N',  'BOOM500',   'BOOM600',   'BOOM900',
         'BOOM1000',  'RDBULL',    'CRASH50',   'CRASH150N', 'CRASH300N',
