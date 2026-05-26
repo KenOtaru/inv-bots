@@ -29,7 +29,7 @@ const path = require('path');
 // ══════════════════════════════════════════════════════════════════════════════
 // STATE PERSISTENCE MANAGER
 // ══════════════════════════════════════════════════════════════════════════════
-const STATE_FILE = path.join(__dirname, 'accumBC_02_state.json');
+const STATE_FILE = path.join(__dirname, 'accumBC_03_state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -1075,6 +1075,7 @@ class EnhancedDerivTradingBot {
         this.currentTick2 = stayedInArray[98];
         this.currentTick3 = stayedInArray[97];
         this.currentTick4 = stayedInArray[96];
+        this.stayedInArray = stayedInArray;
 
         // Entry condition: current digit count is in appearedOnceArray
         // and not already traded, and stayedIn value >= 0
@@ -1205,7 +1206,7 @@ class EnhancedDerivTradingBot {
         this.sendTelegramMessage(
             `🚀 <b>TRADE OPENED (Accum BOOM/CRASH)</b>\n\n` +
             `Asset: <b>${asset}</b>\n` +
-            `Entry Tick: <b>[${this.entryTick}|${this.currentTick2}|${this.currentTick3}|${this.currentTick4}]</b>\n` +
+            `stayedInArray: <b>[${this.entryTick}|${this.currentTick2}|${this.currentTick3}|${this.currentTick4}|${this.stayedInArray[95]}|${this.stayedInArray[94]}]</b>\n` +
             `Stake: $${trade.stake.toFixed(2)}\n` +
             `Growth Rate: ${(this.config.growthRate * 100).toFixed(0)}%\n` +
             `Filter Number: ${this.filterNum}\n` +
