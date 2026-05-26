@@ -81,15 +81,16 @@ const CONFIG = {
     // ── Capital & Risk (Fixed-Fractional — replaces martingale) ──
     INITIAL_CAPITAL:            250,
     RISK_PERCENT_PER_TRADE:     0.50,    // % of capital per trade (1% = conservative)
-    MAX_STAKE:                  0.35,   // Hard cap per trade in USD
-    MIN_STAKE:                  0.35,   // Minimum stake allowed by Deriv
+    MAX_STAKE:                  1,   // Hard cap per trade in USD
+    MIN_STAKE:                  1,   // Minimum stake allowed by Deriv
 
     // Recovery staking (limited — max 2 steps)
-    RECOVERY_ENABLED:           false,
-    RECOVERY_MULTIPLIER:        1.5,    // Step 1 recovery multiplier
-    RECOVERY_MULTIPLIER2:       2.0,    // Step 2 recovery multiplier (final)
-    MAX_RECOVERY_STEPS:         2,      // Never go beyond 2 recovery steps
-    MAX_RECOVERY_STAKE_PCT:     2.5,    // Recovery stake never exceeds 2.5% of capital
+    RECOVERY_ENABLED:           true,
+    RECOVERY_MULTIPLIER:        1.48,    // Step 1 recovery multiplier
+    RECOVERY_MULTIPLIER2:       1.95,    // Step 2 recovery multiplier (final)
+    RECOVERY_MULTIPLIER2:       2.1,     // Step 3 recovery multiplier (final)
+    MAX_RECOVERY_STEPS:         9,      // Never go beyond 2 recovery steps
+    MAX_RECOVERY_STAKE_PCT:     75,    // Recovery stake never exceeds 75% of capital
 
     // Session profit/loss guards
     SESSION_PROFIT_TARGET:      5000,    // Stop after +$500 session gain
@@ -121,11 +122,11 @@ const CONFIG = {
         R_50:    { min: 0.02,  max: 0.5  },
         R_75:    { min: 5.0,   max: 50.0 },
         R_100:   { min: 0.20,  max: 2.0  },
-        stpRNG:  { min: 0.05,  max: 2.0  },
-        stpRNG2: { min: 0.05,  max: 2.0  },
-        stpRNG3: { min: 0.05,  max: 2.0  },
-        stpRNG4: { min: 0.05,  max: 2.0  },
-        stpRNG5: { min: 0.05,  max: 2.0  },
+        stpRNG:  { min: 0.05,  max: 10.0  },
+        stpRNG2: { min: 0.05,  max: 10.0  },
+        stpRNG3: { min: 0.05,  max: 10.0  },
+        stpRNG4: { min: 0.05,  max: 10.0  },
+        stpRNG5: { min: 0.05,  max: 10.0  },
     },
 
     ATR_PERIOD:                 14,
@@ -177,7 +178,7 @@ const CONFIG = {
     SESSIONS: [
         // { name: 'ASIA_OPEN',    start: 22, end: 6  },  // UTC: 22:00–06:00
         { name: 'LONDON_OPEN',  start: 7,  end: 17 },  // UTC: 07:00–17:00
-        { name: 'NY_OPEN',      start: 12, end: 22 },  // UTC: 12:00–23:00
+        { name: 'NY_OPEN',      start: 12, end: 23 },  // UTC: 12:00–23:00
     ],
 
     // ── Position Management ───────────────────────────────────
@@ -835,6 +836,7 @@ class StakeCalculator {
 
         let stake = baseStake;
         if (recoveryStep === 1) stake = baseStake * CONFIG.RECOVERY_MULTIPLIER;
+        if (recoveryStep >= 2)  stake = baseStake * CONFIG.RECOVERY_MULTIPLIER2;
         if (recoveryStep >= 2)  stake = baseStake * CONFIG.RECOVERY_MULTIPLIER2;
 
         // Cap recovery stake at MAX_RECOVERY_STAKE_PCT of capital

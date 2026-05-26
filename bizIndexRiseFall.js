@@ -433,26 +433,6 @@ class Indicators {
 }
 
 // ============================================
-// CANDLE ANALYSIS UTILITY
-// ============================================
-class CandleAnalyzer {
-    static isBullish(candle)  { return candle.close > candle.open; }
-    static isBearish(candle)  { return candle.close < candle.open; }
-
-    static getLastClosedCandle(symbol) {
-        const assetState = state.assets[symbol];
-        if (!assetState?.closedCandles?.length) return null;
-        return assetState.closedCandles[assetState.closedCandles.length - 1];
-    }
-
-    static getCandleDirection(candle) {
-        if (this.isBullish(candle)) return 'BULLISH';
-        if (this.isBearish(candle)) return 'BEARISH';
-        return 'DOJI';
-    }
-}
-
-// ============================================
 // SIGNAL ANALYZER
 // ============================================
 /**
