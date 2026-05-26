@@ -1044,9 +1044,11 @@ class EnhancedDerivTradingBot {
         const proposal = message.proposal;
         const stayedInArray = proposal.contract_details.ticks_stayed_in;
 
+        if (!stayedInArray) return;
+
         this.stayedInArray = stayedInArray;
 
-        if (!stayedInArray) return;
+        if (this.tradeInProgress) return;
 
         // Current digit count of the running accumulator
         const currentDigitCount = stayedInArray[99] + 1;
@@ -1077,7 +1079,7 @@ class EnhancedDerivTradingBot {
 
         // Entry condition: current digit count is in appearedOnceArray
         // and not already traded, and stayedIn value >= 0
-        const condition = (this.currentTick < 1 && this.stayedInArray[98] < 15 && this.stayedInArray[97] < 15 &&  this.stayedInArray[96] < 15 || this.consecutiveLosses > 0);
+        const condition = (this.stayedInArray[99] < 1 && this.stayedInArray[98] < 15 && this.stayedInArray[97] < 15 &&  this.stayedInArray[96] < 15 || this.consecutiveLosses > 0);
         
         // const condition = appearedOnceArray.includes(currentDigitCount)
         //     && !this.tradedDigitArray.includes(stayedInArray[99])
@@ -1130,7 +1132,7 @@ class EnhancedDerivTradingBot {
 
         // Check if we should place trade
         if (condition) {
-            this.tradedDigitArray.push(stayedInArray[99]);
+            this.tradedDigitArray.push(this.stayedInArray[99]);
             this.filteredArray = appearedOnceArray;
             
             console.log(`   Traded Digit Array: [${this.tradedDigitArray.join(', ')}]`);
@@ -1204,7 +1206,7 @@ class EnhancedDerivTradingBot {
         this.sendTelegramMessage(
             `🚀 <b>TRADE OPENED (Accum BOOM/CRASH)</b>\n\n` +
             `Asset: <b>${asset}</b>\n` +
-            `stayedInArray: <b>[${stayedInArray[99]}|${this.stayedInArray[98]}|${this.stayedInArray[97]}|${this.stayedInArray[96]}|${this.stayedInArray[95]}|${this.stayedInArray[94]}]</b>\n` +
+            `stayedInArray: <b>[${this.stayedInArray[99]}|${this.stayedInArray[98]}|${this.stayedInArray[97]}|${this.stayedInArray[96]}|${this.stayedInArray[95]}|${this.stayedInArray[94]}]</b>\n` +
             `Stake: $${trade.stake.toFixed(2)}\n` +
             `Growth Rate: ${(this.config.growthRate * 100).toFixed(0)}%\n` +
             `Filter Number: ${this.filterNum}\n` +
@@ -1574,7 +1576,7 @@ class EnhancedDerivTradingBot {
             `<b>Accum BOOM/CRASH</b>\n` +
             `Asset: <b>${asset}</b>\n` +
             `${won ? '✅ WON' : '❌ LOSS'}\n` +
-            `stayedInArray: [${stayedInArray[99]}|${this.stayedInArray[98]}|${this.stayedInArray[97]}|${this.stayedInArray[96]}|${this.stayedInArray[95]}|${this.stayedInArray[94]}]\n` +
+            `stayedInArray: [${this.stayedInArray[99]}|${this.stayedInArray[98]}|${this.stayedInArray[97]}|${this.stayedInArray[96]}|${this.stayedInArray[95]}|${this.stayedInArray[94]}]\n` +
             `P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(3)}\n` +
             `Consecutive Losses: ${this.consecutiveLosses}\n` +
             `Trades: ${this.totalTrades} (${this.totalWins}W/${this.totalLosses}L)\n` +
