@@ -29,7 +29,7 @@ const path = require('path');
 // ══════════════════════════════════════════════════════════════════════════════
 // STATE PERSISTENCE MANAGER
 // ══════════════════════════════════════════════════════════════════════════════
-const STATE_FILE = path.join(__dirname, 'accumBC_04_state.json');
+const STATE_FILE = path.join(__dirname, 'accumBC_07_state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -1006,7 +1006,7 @@ class EnhancedDerivTradingBot {
         if (this.tradeInProgress) return;
         if (!this.wsReady) return;
 
-        const takeProfitAmount = this.currentStake; // this.currentStake * this.config.takeProfitMultiplier;
+        this.takeProfitAmount = this.currentStake; // this.currentStake * this.config.takeProfitMultiplier;
 
         const proposal = {
             proposal: 1,
@@ -1017,7 +1017,7 @@ class EnhancedDerivTradingBot {
             symbol: asset,
             growth_rate: this.config.growthRate,
             limit_order: {
-                take_profit: takeProfitAmount.toFixed(2)
+                take_profit: this.takeProfitAmount.toFixed(2)
             }
         };
 
@@ -1078,7 +1078,7 @@ class EnhancedDerivTradingBot {
 
         // Entry condition: current digit count is in appearedOnceArray
         // and not already traded, and stayedIn value >= 0
-        const condition = (this.stayedInArray[99] < 1 && this.stayedInArray[98] < 15 && this.stayedInArray[97] < 15 &&  this.stayedInArray[96] < 15 || this.consecutiveLosses > 0);
+        const condition = (this.stayedInArray[99] < 1 && this.stayedInArray[98] < 11 && this.stayedInArray[97] < 12 && this.stayedInArray[96] < 13 && this.stayedInArray[95] < 14 && this.stayedInArray[94] < 15 || this.consecutiveLosses > 0);
         
         // const condition = appearedOnceArray.includes(currentDigitCount)
         //     && !this.tradedDigitArray.includes(stayedInArray[99])
@@ -1138,7 +1138,6 @@ class EnhancedDerivTradingBot {
 
             // 6. Request proposal with appropriate growth rate
             const growthRate = this.config.growthRate;
-            const takeProfitAmount = this.currentStake; // this.currentStake * this.config.takeProfitMultiplier;
 
             console.log(`\n🎯 ENTRY SIGNAL: ${asset}`);
             console.log(`   Score: ${(analysis.overallScore * 100).toFixed(1)}%`);
@@ -1154,7 +1153,7 @@ class EnhancedDerivTradingBot {
             console.log(`   MACD Converging: ${(analysis.scores.macdConverging * 100).toFixed(1)}%`);
             console.log(`   Vol Trend: ${(analysis.scores.volTrend * 100).toFixed(1)}%`);
             console.log(`   Reason: ${analysis.reason}`);
-            console.log(`   Take Profit: $${takeProfitAmount.toFixed(2)}`);
+            console.log(`   Take Profit: $${this.takeProfitAmount.toFixed(2)}`);
 
             // Place trade
             this.placeTrade(asset);
@@ -1218,7 +1217,7 @@ class EnhancedDerivTradingBot {
             `Tick Stability: ${this.tickStability}%\n` +
             `Max Tick Move: ${this.maxTickMove}%\n` +
             `Vol Trend: ${this.volTrend}%\n` +
-            `Take Profit: $${(trade.stake * this.config.takeProfitMultiplier).toFixed(2)}`
+            `Take Profit: $${this.takeProfitAmount.toFixed(2)}`
         );
 
         this.lastTradeTime[asset] = Date.now();
