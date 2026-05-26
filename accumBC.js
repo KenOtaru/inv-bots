@@ -606,12 +606,12 @@ class EnhancedDerivTradingBot {
             }
         });
         console.log(`🔒 SUSPENDED: All assets except ${lossAsset}. Focusing on loss asset.`);
-        this.sendTelegramMessage(
-            `🔒 <b>Asset Suspension (Accum BOOM/CRASH)</b>\n\n` +
-            `Loss on: <b>${lossAsset}</b>\n` +
-            `Suspended: ${this.assets.filter(a => a !== lossAsset).join(', ')}\n` +
-            `Focusing on ${lossAsset} until win`
-        );
+        // this.sendTelegramMessage(
+        //     `🔒 <b>Asset Suspension (Accum BOOM/CRASH)</b>\n\n` +
+        //     `Loss on: <b>${lossAsset}</b>\n` +
+        //     `Suspended: ${this.assets.filter(a => a !== lossAsset).join(', ')}\n` +
+        //     `Focusing on ${lossAsset} until win`
+        // );
     }
 
     resumeAllAssets() {
@@ -619,11 +619,11 @@ class EnhancedDerivTradingBot {
         this.suspendedAssets.clear();
         this.focusAsset = null;
         console.log(`✅ RESUMED: All assets active again (was focused on ${prevFocus})`);
-        this.sendTelegramMessage(
-            `✅ <b>All Assets Resumed (Accum BOOM/CRASH)</b>\n\n` +
-            `Won on: <b>${prevFocus}</b>\n` +
-            `All assets now active for trading`
-        );
+        // this.sendTelegramMessage(
+        //     `✅ <b>All Assets Resumed (Accum BOOM/CRASH)</b>\n\n` +
+        //     `Won on: <b>${prevFocus}</b>\n` +
+        //     `All assets now active for trading`
+        // );
     }
 
     isAssetAllowed(asset) {
@@ -1070,12 +1070,15 @@ class EnhancedDerivTradingBot {
             .filter(digit => digitFrequency[digit] === this.filterNum)
             .map(Number);
 
-        console.log(`   Digits that appeared ${this.filterNum} times: [${appearedOnceArray.join(', ')}]`);
-
+        this.entryTick = stayedInArray[99];
         this.currentTick2 = stayedInArray[98];
         this.currentTick3 = stayedInArray[97];
         this.currentTick4 = stayedInArray[96];
         this.stayedInArray = stayedInArray;
+
+        console.log(`   Digits that appeared ${this.filterNum} times: [${appearedOnceArray.join(', ')}]
+            StayedInArray: [${this.entryTick}|${this.currentTick2}|${this.currentTick3}|${this.currentTick4}|${this.stayedInArray[95]}|${this.stayedInArray[94]}]
+        `);
 
         // Entry condition: current digit count is in appearedOnceArray
         // and not already traded, and stayedIn value >= 0
@@ -1134,7 +1137,7 @@ class EnhancedDerivTradingBot {
         if (condition) {
             this.tradedDigitArray.push(stayedInArray[99]);
             this.filteredArray = appearedOnceArray;
-            this.entryTick = stayedInArray[99];
+            
             console.log(`   Traded Digit Array: [${this.tradedDigitArray.join(', ')}]`);
 
             // 6. Request proposal with appropriate growth rate
