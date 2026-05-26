@@ -1651,15 +1651,15 @@ class EnhancedDerivTradingBot {
             //     (currentDay === 1 && currentHours < 8);    // Monday before 8am
 
             // Afternoon stop: after 1:00 PM following a win
-            if (this.isWinTrade && !this.endOfDay) {
-                if (currentHours === 13 && currentMinutes >= 0 && currentMinutes < 1) {
-                    console.log("It's past 1:00 PM after a win trade, disconnecting.");
-                    this.sendDisconnectSummary();
-                    this.Pause = true;
-                    this.disconnect();
-                    this.endOfDay = true;
-                }
-            }
+            // if (this.isWinTrade && !this.endOfDay) {
+            //     if (currentHours === 13 && currentMinutes >= 0 && currentMinutes < 1) {
+            //         console.log("It's past 1:00 PM after a win trade, disconnecting.");
+            //         this.sendDisconnectSummary();
+            //         this.Pause = true;
+            //         this.disconnect();
+            //         this.endOfDay = true;
+            //     }
+            // }
 
             // Afternoon resume: 3:00 PM
             if (this.endOfDay && currentHours === 15 && currentMinutes >= 0) {
