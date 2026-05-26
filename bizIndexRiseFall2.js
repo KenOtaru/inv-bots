@@ -120,13 +120,13 @@ const CONFIG = {
         R_10:    { min: 0.20,  max: 3.0  },
         R_25:    { min: 0.50,  max: 5.0  },
         R_50:    { min: 0.02,  max: 0.5  },
-        R_75:    { min: 5.0,   max: 50.0 },
+        R_75:    { min: 5.00,   max: 50.0 },
         R_100:   { min: 0.20,  max: 2.0  },
-        stpRNG:  { min: 0.05,  max: 10.0  },
-        stpRNG2: { min: 0.05,  max: 10.0  },
-        stpRNG3: { min: 0.05,  max: 10.0  },
-        stpRNG4: { min: 0.05,  max: 10.0  },
-        stpRNG5: { min: 0.05,  max: 10.0  },
+        stpRNG:  { min: 0.50,  max: 10.0  },
+        stpRNG2: { min: 1.00,  max: 10.0  },
+        stpRNG3: { min: 1.00,  max: 10.0  },
+        stpRNG4: { min: 1.00,  max: 10.0  },
+        stpRNG5: { min: 1.00,  max: 10.0  },
     },
 
     ATR_PERIOD:                 14,
@@ -169,7 +169,7 @@ const CONFIG = {
     STOCH_SMOOTH:               3,
 
     // Minimum Layer 3 confluence score (out of 4 possible)
-    MIN_CONFLUENCE_SCORE:       3,
+    MIN_CONFLUENCE_SCORE:       1,
 
     // ── Trading Sessions (Synthetics trade 24/7 — sessions optional) ─
     // Research shows synthetics have peak pattern clarity at specific hours.
