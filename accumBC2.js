@@ -29,7 +29,7 @@ const path = require('path');
 // ══════════════════════════════════════════════════════════════════════════════
 // STATE PERSISTENCE MANAGER
 // ══════════════════════════════════════════════════════════════════════════════
-const STATE_FILE = path.join(__dirname, 'accumBC2_08_state.json');
+const STATE_FILE = path.join(__dirname, 'accumBC2_09_state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -629,10 +629,10 @@ class EnhancedDerivTradingBot {
         // Check individual thresholds for recent values
         const recentThresholds = (
             stayedInArray[99] < 1 &&
-            stayedInArray[98] < 11 &&
-            stayedInArray[97] < 12 &&
-            stayedInArray[96] < 13 
+            stayedInArray[98] < 11 
             // &&
+            // stayedInArray[97] < 12 &&
+            // stayedInArray[96] < 13 &&
             // stayedInArray[95] < 14 &&
             // stayedInArray[94] < 15
         );
@@ -645,6 +645,25 @@ class EnhancedDerivTradingBot {
         
         // Return true if: (recent thresholds AND total within range) OR in recovery mode
         return (recentThresholds && totalWithinRange) || inRecoveryMode;
+    }
+
+    checkTradeCondition2(stayedInArray, consecutiveLosses, maxTotalStayedIn) {
+        // Calculate total sum of all stayedInArray values
+        const totalStayedInArray = this.calculateTotalStayedIn(stayedInArray);
+        
+        // Log the calculation for debugging
+        console.log(`   📊 Total StayedIn2 Sum: ${totalStayedInArray} (Max: ${maxTotalStayedIn})`);
+        this.totalStayedInArray = totalStayedInArray;
+        this.maxTotalStayedIn = maxTotalStayedIn;
+        
+        // Check if total sum is within acceptable range
+        const totalWithinRange = totalStayedInArray < maxTotalStayedIn;
+        
+        // Check if we have consecutive losses (recovery mode)
+        const inRecoveryMode = consecutiveLosses > 0;
+        
+        // Return true if: (recent thresholds AND total within range) OR in recovery mode
+        return (totalWithinRange) || inRecoveryMode;
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -1059,7 +1078,7 @@ class EnhancedDerivTradingBot {
         if (this.tradeInProgress) return;
         if (!this.wsReady) return;
 
-        this.takeProfitAmount = this.consecutiveLosses <= 1 ? this.currentStake/2 : this.currentStake/6; // this.currentStake * this.config.takeProfitMultiplier;
+        this.takeProfitAmount = this.consecutiveLosses < 1 ? this.currentStake/4 : this.consecutiveLosses === 1 ? this.currentStake/6 : this.currentStake/7; // this.currentStake * this.config.takeProfitMultiplier;
 
         const proposal = {
             proposal: 1,
@@ -1099,6 +1118,7 @@ class EnhancedDerivTradingBot {
 
         // Always update stayedInArray - this keeps it current even during active trades
         this.stayedInArray = stayedInArray;
+        const stayedInArray2 = stayedInArray.slice(-6)
         
         // Store per-asset stayedInArray for multi-asset support
         if (!this.assetStayedInArrays) this.assetStayedInArrays = {};
@@ -1137,12 +1157,13 @@ class EnhancedDerivTradingBot {
         // and not already traded, and stayedIn value >= 0
         // const condition = (this.stayedInArray[99] < 1 && this.stayedInArray[98] < 9 && this.stayedInArray[97] < 10 && this.stayedInArray[96] < 11 && this.stayedInArray[95] < 12 && this.stayedInArray[94] < 13 || this.consecutiveLosses > 0);
         const condition = this.checkTradeCondition(stayedInArray, this.consecutiveLosses, 1600);
+        const condition2 = this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 50);
 
         // const condition = appearedOnceArray.includes(currentDigitCount)
         //     && !this.tradedDigitArray.includes(stayedInArray[99])
         //     && stayedInArray[99] > 0;
 
-        console.log(`   Entry condition: ${condition ? '✅ MET' : '❌ NOT MET'}`);
+        console.log(`   Entry condition: ${(condition && condition2) ? '✅ MET' : '❌ NOT MET'}`);
 
         // if (!this.isAssetAllowed(asset)) return;
 
@@ -1188,7 +1209,7 @@ class EnhancedDerivTradingBot {
         // if (analysis.scores.volTrend < 0.5) return;
 
         // Check if we should place trade
-        if (condition) {
+        if (condition && condition2) {
             this.tradedDigitArray.push(this.stayedInArray[99]);
             this.filteredArray = appearedOnceArray;
             
@@ -1816,11 +1837,11 @@ class EnhancedDerivTradingBot {
 const bot = new EnhancedDerivTradingBot('rgNedekYXvCaPeP', {
     initialStake: 1,
     initialStake2: 25,
-    multiplier: 4,
+    multiplier: 8,
     multiplier2: 8,
     recoveryWinNum: 100,
     maxConsecutiveLosses: 3,
-    stopLoss: 127,
+    stopLoss: 73,
     takeProfit: 250,
     growthRate: 0.05,
     takeProfitMultiplier: 1, //0.05, % of Stake Amount

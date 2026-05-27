@@ -29,7 +29,7 @@ const path = require('path');
 // ══════════════════════════════════════════════════════════════════════════════
 // STATE PERSISTENCE MANAGER
 // ══════════════════════════════════════════════════════════════════════════════
-const STATE_FILE = path.join(__dirname, 'accumBC_001_state.json');
+const STATE_FILE = path.join(__dirname, 'accumBC_002_state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -1171,17 +1171,17 @@ class EnhancedDerivTradingBot {
         // 3. Decision
         // if (!analysis.shouldTrade) return;
 
-        // if (analysis.overallScore < 0.80) return;
+        if (analysis.overallScore < 0.60) return; //0.8
 
-        // if (analysis.scores.bandWidth < 1) return;
+        if (analysis.scores.bandWidth < 0.6) return; // 1
 
-        // if (analysis.scores.macdFlat < 0.5) return;
+        if (analysis.scores.macdFlat < 0.5) return;
 
         // if (analysis.scores.pricePosition < 0.4) return;
 
         // if (!analysis.tickStability || analysis.tickStability === 'undefined' || analysis.tickStability === 'NaN' || analysis.tickStability < 1) return;
 
-        // if (analysis.scores.macdConverging < 1) return;
+        // if (analysis.scores.macdConverging < 0.7) return; // 1 
 
         // if (this.maxTickMove < 0.03) return;
 
@@ -1537,7 +1537,7 @@ class EnhancedDerivTradingBot {
         const profit = parseFloat(contract.profit);
 
         // Get the final stayedInArray for this asset (updated continuously via proposal stream)
-        const finalStayedInArray = this.assetStayedInArrays?.[asset] || this.stayedInArray || [];
+        const finalStayedInArray = this.assetStayedInArrays?.[asset] || [];
 
         // Unsubscribe from contract
         if (this.contractSubscriptions[asset]) {
