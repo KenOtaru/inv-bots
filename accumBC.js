@@ -29,7 +29,7 @@ const path = require('path');
 // ══════════════════════════════════════════════════════════════════════════════
 // STATE PERSISTENCE MANAGER
 // ══════════════════════════════════════════════════════════════════════════════
-const STATE_FILE = path.join(__dirname, 'accumBC_003_state.json');
+const STATE_FILE = path.join(__dirname, 'accumBC_004_state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -295,7 +295,7 @@ class EnhancedDerivTradingBot {
         const inRecoveryMode = consecutiveLosses > 0;
         
         // Return true if: (recent thresholds AND total within range) OR in recovery mode
-        return (recentThresholds && totalWithinRange) || inRecoveryMode;
+        return (recentThresholds && totalWithinRange);
     }
 
     checkTradeCondition2(stayedInArray, consecutiveLosses, maxTotalStayedIn) {
@@ -314,7 +314,7 @@ class EnhancedDerivTradingBot {
         const inRecoveryMode = consecutiveLosses > 0;
         
         // Return true if: (recent thresholds AND total within range) OR in recovery mode
-        return (totalWithinRange) || inRecoveryMode;
+        return (totalWithinRange);
     }
 
     checkTradeCondition3(stayedInArray, consecutiveLosses, maxTotalStayedIn) {
@@ -344,7 +344,7 @@ class EnhancedDerivTradingBot {
         const inRecoveryMode = consecutiveLosses > 0;
         
         // Return true if: (recent thresholds AND total within range) OR in recovery mode
-        return (recentThresholds && totalWithinRange) || inRecoveryMode;
+        return (recentThresholds && totalWithinRange);
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -1265,6 +1265,7 @@ class EnhancedDerivTradingBot {
             if (this.focusAsset) {
                 this.resumeAllAssets();
             }
+            this.disconnect();
         } else {
             this.totalLosses++;
             this.consecutiveLosses++;
