@@ -280,9 +280,10 @@ class EnhancedDerivTradingBot {
         const recentThresholds = (
             stayedInArray[99] < 1 &&
             stayedInArray[98] < 11 
+            &&
+            stayedInArray[97] < 12 &&
+            stayedInArray[96] < 13 
             // &&
-            // stayedInArray[97] < 12 &&
-            // stayedInArray[96] < 13 &&
             // stayedInArray[95] < 14 &&
             // stayedInArray[94] < 15
         );
