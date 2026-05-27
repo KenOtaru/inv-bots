@@ -316,6 +316,36 @@ class EnhancedDerivTradingBot {
         return (totalWithinRange) || inRecoveryMode;
     }
 
+    checkTradeCondition3(stayedInArray, consecutiveLosses, maxTotalStayedIn) {
+        // Calculate total sum of all stayedInArray values
+        const totalStayedInArray = this.calculateTotalStayedIn(stayedInArray);
+        
+        // Log the calculation for debugging
+        console.log(`   📊 Total StayedIn Sum: ${totalStayedInArray} (Max: ${maxTotalStayedIn})`);
+        this.totalStayedInArray2 = totalStayedInArray;
+        this.maxTotalStayedIn2 = maxTotalStayedIn;
+        
+        // Check individual thresholds for recent values
+        const recentThresholds = (
+            stayedInArray[99] < 2 &&
+            stayedInArray[98] < 11 
+            // &&
+            // stayedInArray[97] < 12 &&
+            // stayedInArray[96] < 13 &&
+            // stayedInArray[95] < 14 &&
+            // stayedInArray[94] < 15
+        );
+        
+        // Check if total sum is within acceptable range
+        const totalWithinRange = totalStayedInArray < maxTotalStayedIn;
+        
+        // Check if we have consecutive losses (recovery mode)
+        const inRecoveryMode = consecutiveLosses > 0;
+        
+        // Return true if: (recent thresholds AND total within range) OR in recovery mode
+        return (recentThresholds && totalWithinRange) || inRecoveryMode;
+    }
+
     // ══════════════════════════════════════════════════════════════════════════
     // ASSET SUSPENSION LOGIC
     // ══════════════════════════════════════════════════════════════════════════
@@ -820,7 +850,7 @@ class EnhancedDerivTradingBot {
         `);
 
         // Entry condition
-        const condition = this.consecutiveLosses < 1 ? (this.checkTradeCondition(stayedInArray, this.consecutiveLosses, 1600) && this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 50)) : this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 50);
+        const condition = this.consecutiveLosses < 1 ? (this.checkTradeCondition(stayedInArray, this.consecutiveLosses, 1600) && this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 50)) : this.checkTradeCondition3(stayedInArray2, this.consecutiveLosses, 50);
         
         console.log(`   Entry condition: ${condition ? '✅ MET' : '❌ NOT MET'}`);
 
