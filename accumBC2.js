@@ -596,6 +596,55 @@ class EnhancedDerivTradingBot {
     }
 
     // ══════════════════════════════════════════════════════════════════════════
+    // UTILITY FUNCTIONS
+    // ══════════════════════════════════════════════════════════════════════════
+    /**
+     * Calculate the total sum of all values in stayedInArray (indices 0-99)
+     * @param {Array} stayedInArray - Array of stayed-in values
+     * @returns {number} Total sum of all array elements
+     */
+    calculateTotalStayedIn(stayedInArray) {
+        if (!stayedInArray || !Array.isArray(stayedInArray)) {
+            return 0;
+        }
+        return stayedInArray.reduce((sum, value) => sum + (value || 0), 0);
+    }
+
+    /**
+     * Check if trading conditions are met based on stayedInArray values
+     * @param {Array} stayedInArray - Array of stayed-in values
+     * @param {number} consecutiveLosses - Current consecutive losses count
+     * @param {number} maxTotalStayedIn - Maximum allowed total sum (default: 600)
+     * @returns {boolean} True if conditions are met for trading
+     */
+    checkTradeCondition(stayedInArray, consecutiveLosses, maxTotalStayedIn) {
+        // Calculate total sum of all stayedInArray values
+        const totalStayedInArray = this.calculateTotalStayedIn(stayedInArray);
+        
+        // Log the calculation for debugging
+        console.log(`   📊 Total StayedIn Sum: ${totalStayedInArray} (Max: ${maxTotalStayedIn})`);
+        
+        // Check individual thresholds for recent values
+        const recentThresholds = (
+            stayedInArray[99] < 1 &&
+            stayedInArray[98] < 11 &&
+            stayedInArray[97] < 12 &&
+            stayedInArray[96] < 13 &&
+            stayedInArray[95] < 14 &&
+            stayedInArray[94] < 15
+        );
+        
+        // Check if total sum is within acceptable range
+        const totalWithinRange = totalStayedInArray < maxTotalStayedIn;
+        
+        // Check if we have consecutive losses (recovery mode)
+        const inRecoveryMode = consecutiveLosses > 0;
+        
+        // Return true if: (recent thresholds AND total within range) OR in recovery mode
+        return (recentThresholds && totalWithinRange) || inRecoveryMode;
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
     // ASSET SUSPENSION LOGIC
     // ══════════════════════════════════════════════════════════════════════════
     suspendOtherAssets(lossAsset) {
@@ -1079,8 +1128,9 @@ class EnhancedDerivTradingBot {
 
         // Entry condition: current digit count is in appearedOnceArray
         // and not already traded, and stayedIn value >= 0
-        const condition = (this.stayedInArray[99] < 1 && this.stayedInArray[98] < 9 && this.stayedInArray[97] < 10 && this.stayedInArray[96] < 11 && this.stayedInArray[95] < 12 && this.stayedInArray[94] < 13 || this.consecutiveLosses > 0);
-        
+        // const condition = (this.stayedInArray[99] < 1 && this.stayedInArray[98] < 9 && this.stayedInArray[97] < 10 && this.stayedInArray[96] < 11 && this.stayedInArray[95] < 12 && this.stayedInArray[94] < 13 || this.consecutiveLosses > 0);
+        const condition = this.checkTradeCondition(stayedInArray, this.consecutiveLosses, 1600);
+
         // const condition = appearedOnceArray.includes(currentDigitCount)
         //     && !this.tradedDigitArray.includes(stayedInArray[99])
         //     && stayedInArray[99] > 0;
