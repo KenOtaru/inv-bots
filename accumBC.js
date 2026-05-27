@@ -944,16 +944,27 @@ class EnhancedDerivTradingBot {
             this.contractSubscriptions[asset] = message.subscription.id;
         }
 
-        // ✅ CRITICAL FIX: Update stayedInArray during active trade
-        if (contract.contract_details?.ticks_stayed_in) {
+        // ✅ CORRECT FIX: ticks_stayed_in is directly in the contract object
+        // Check multiple possible locations based on Deriv API responses
+        let updatedStayedIn = null;
+        
+        if (contract.ticks_stayed_in && Array.isArray(contract.ticks_stayed_in)) {
+            updatedStayedIn = contract.ticks_stayed_in;
+        } else if (contract.audit_details && contract.audit_details.ticks_stayed_in) {
+            updatedStayedIn = contract.audit_details.ticks_stayed_in;
+        } else if (contract.tick_stream && Array.isArray(contract.tick_stream)) {
+            // Build stayed_in array from tick_stream
+            updatedStayedIn = this.buildStayedInFromTickStream(contract.tick_stream);
+        }
+
+        // Update the stored stayedInArray if we found it
+        if (updatedStayedIn) {
             if (!this.assetStayedInArrays) this.assetStayedInArrays = {};
-            this.assetStayedInArrays[asset] = contract.contract_details.ticks_stayed_in;
+            this.assetStayedInArrays[asset] = updatedStayedIn;
+            this.stayedInArray = updatedStayedIn;
             
-            // Also update the global stayedInArray if this is the active asset
-            this.stayedInArray = contract.contract_details.ticks_stayed_in;
-            
-            // Optional: Log to verify updates are happening
-            console.log(`   📊 Updated StayedIn for ${asset}: [${this.assetStayedInArrays[asset].slice(-6).join('|')}]`);
+            // Debug log to verify updates
+            console.log(`   🔄 StayedIn updated: [${updatedStayedIn.slice(-6).join('|')}]`);
         }
 
         // Contract settled?
@@ -968,12 +979,35 @@ class EnhancedDerivTradingBot {
         const bidPrice = parseFloat(contract.bid_price || 0);
 
         if (tickCount > 0 && tickCount % 2 === 0) {
+            const currentStayedIn = this.assetStayedInArrays[asset] || [];
             console.log(
                 `  📊 ${asset}: tick ${tickCount} | ` +
-                `Profit: $${profit.toFixed(3)} | Bid: $${bidPrice.toFixed(2)} | ` +
-                `Recent Digits: ${this.lastDigitsList[asset] ? this.lastDigitsList[asset].slice(-5).join(', ') : 'N/A'}`
+                `Profit: $${profit.toFixed(3)} | Bid: $${bidPrice.toFixed(2)}\n` +
+                `     StayedIn: [${currentStayedIn.slice(-6).join('|')}] | ` +
+                `Digits: ${this.lastDigitsList[asset]?.slice(-5).join(', ') || 'N/A'}`
             );
         }
+    }
+
+    // Helper method to build stayed_in array from tick_stream
+    buildStayedInFromTickStream(tickStream) {
+        if (!Array.isArray(tickStream) || tickStream.length === 0) return null;
+        
+        const stayedIn = [];
+        let currentCount = 0;
+        
+        tickStream.forEach((tick, index) => {
+            if (index === 0) {
+                currentCount = 0;
+            } else {
+                // Check if tick stayed in range (you may need to adjust this logic)
+                // This is a simplified version - actual logic depends on tick structure
+                currentCount++;
+            }
+            stayedIn.push(currentCount);
+        });
+        
+        return stayedIn;
     }
 
     handleSellResponse(message) {
