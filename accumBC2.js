@@ -627,11 +627,12 @@ class EnhancedDerivTradingBot {
         // Check individual thresholds for recent values
         const recentThresholds = (
             stayedInArray[99] < 1 &&
-            stayedInArray[98] < 11 &&
-            stayedInArray[97] < 12 &&
-            stayedInArray[96] < 13 &&
-            stayedInArray[95] < 14 &&
-            stayedInArray[94] < 15
+            stayedInArray[98] < 11 
+            // &&
+            // stayedInArray[97] < 12 &&
+            // stayedInArray[96] < 13 &&
+            // stayedInArray[95] < 14 &&
+            // stayedInArray[94] < 15
         );
         
         // Check if total sum is within acceptable range
