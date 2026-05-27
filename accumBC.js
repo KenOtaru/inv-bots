@@ -328,8 +328,9 @@ class EnhancedDerivTradingBot {
         
         // Check individual thresholds for recent values
         const recentThresholds = (
-            stayedInArray[99] < 2 &&
-            stayedInArray[98] < 11 
+            stayedInArray[99] < 2 
+            // &&
+            // stayedInArray[98] < 11 
             // &&
             // stayedInArray[97] < 12 &&
             // stayedInArray[96] < 13 &&
@@ -344,7 +345,7 @@ class EnhancedDerivTradingBot {
         const inRecoveryMode = consecutiveLosses > 0;
         
         // Return true if: (recent thresholds AND total within range) OR in recovery mode
-        return (recentThresholds && totalWithinRange);
+        return (recentThresholds);
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -851,7 +852,7 @@ class EnhancedDerivTradingBot {
         `);
 
         // Entry condition
-        const condition = this.consecutiveLosses < 1 ? (this.checkTradeCondition(stayedInArray, this.consecutiveLosses, 1600) && this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 50)) : this.checkTradeCondition3(stayedInArray2, this.consecutiveLosses, 50);
+        const condition = this.consecutiveLosses < 1 ? (this.checkTradeCondition(stayedInArray, this.consecutiveLosses, 1600) && this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 40)) : this.checkTradeCondition3(stayedInArray2, this.consecutiveLosses, 50);
         
         console.log(`   Entry condition: ${condition ? '✅ MET' : '❌ NOT MET'}`);
 
@@ -1361,7 +1362,7 @@ class EnhancedDerivTradingBot {
                 if (!this.endOfDay && !this.Pause) {
                     this.connect();
                 }
-            }, 20000);
+            }, 350000);
         }
 
         // ═══════════════════════════════════════════════════════════════════

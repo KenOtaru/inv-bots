@@ -1367,7 +1367,7 @@ class EnhancedDerivTradingBot {
                 if (!this.endOfDay) {
                     this.connect();
                 }
-            }, 20000);
+            }, 350000);
         }
 
         // ═══════════════════════════════════════════════════════════════════
