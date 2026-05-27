@@ -304,8 +304,8 @@ class EnhancedDerivTradingBot {
         
         // Log the calculation for debugging
         console.log(`   📊 Total StayedIn2 Sum: ${totalStayedInArray} (Max: ${maxTotalStayedIn})`);
-        this.totalStayedInArray = totalStayedInArray;
-        this.maxTotalStayedIn = maxTotalStayedIn;
+        this.totalStayedInArray2 = totalStayedInArray;
+        this.maxTotalStayedIn2 = maxTotalStayedIn;
         
         // Check if total sum is within acceptable range
         const totalWithinRange = totalStayedInArray < maxTotalStayedIn;
@@ -865,19 +865,9 @@ class EnhancedDerivTradingBot {
             `🚀 <b>TRADE OPENED (Accum BOOM/CRASH2)</b>\n\n` +
             `Asset: <b>${asset}</b>\n` +
             `stayedInArray: <b>[${this.stayedInArray[99]}|${this.stayedInArray[98]}|${this.stayedInArray[97]}|${this.stayedInArray[96]}|${this.stayedInArray[95]}|${this.stayedInArray[94]}]</b>\n` +
-            `totalStayedInArray: ${this.totalStayedInArray}/${this.maxTotalStayedIn}\n` +
+            `totalStayedInArray: ${this.totalStayedInArray}/${this.maxTotalStayedIn} (${this.totalStayedInArray2}/${this.maxTotalStayedIn2})\n` +
             `Stake: $${trade.stake.toFixed(2)}\n` +
             `Growth Rate: ${(this.config.growthRate * 100).toFixed(0)}%\n` +
-            `Filter Number: ${this.filterNum}\n` +
-            `Filtered Digits: [${this.filteredArray.join(', ')}]\n` +
-            `Overall Score: ${this.overallScore}%\n` +
-            `BB Width: ${this.bbWidth}%\n` +
-            `MACD Flat: ${this.macdFlat}%\n` +
-            `MACD Converging: ${this.macdConverging}%\n` +
-            `Price Position: ${this.pricePosition}%\n` +
-            `Tick Stability: ${this.tickStability}%\n` +
-            `Max Tick Move: ${this.maxTickMove}%\n` +
-            `Vol Trend: ${this.volTrend}%\n` +
             `Take Profit: $${this.takeProfitAmount.toFixed(2)}`
         );
 

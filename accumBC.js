@@ -303,8 +303,8 @@ class EnhancedDerivTradingBot {
         
         // Log the calculation for debugging
         console.log(`   📊 Total StayedIn2 Sum: ${totalStayedInArray} (Max: ${maxTotalStayedIn})`);
-        this.totalStayedInArray = totalStayedInArray;
-        this.maxTotalStayedIn = maxTotalStayedIn;
+        this.totalStayedInArray2 = totalStayedInArray;
+        this.maxTotalStayedIn2 = maxTotalStayedIn;
         
         // Check if total sum is within acceptable range
         const totalWithinRange = totalStayedInArray < maxTotalStayedIn;
@@ -728,7 +728,7 @@ class EnhancedDerivTradingBot {
         if (this.tradeInProgress) return;
         if (!this.wsReady) return;
 
-        this.takeProfitAmount = this.consecutiveLosses < 1 ? this.currentStake/2 : this.currentStake; ; // this.currentStake * this.config.takeProfitMultiplier;
+        this.takeProfitAmount = this.consecutiveLosses < 1 ? this.currentStake/4 : this.consecutiveLosses === 1 ? this.currentStake/2.5 : this.currentStake; ; // this.currentStake * this.config.takeProfitMultiplier;
 
         const proposal = {
             proposal: 1,
@@ -870,7 +870,7 @@ class EnhancedDerivTradingBot {
             `🚀 <b>TRADE OPENED (Accum BOOM/CRASH)</b>\n\n` +
             `Asset: <b>${asset}</b>\n` +
             `stayedInArray: <b>[${this.stayedInArray[99]}|${this.stayedInArray[98]}|${this.stayedInArray[97]}|${this.stayedInArray[96]}|${this.stayedInArray[95]}|${this.stayedInArray[94]}]</b>\n` +
-            `totalStayedInArray: ${this.totalStayedInArray}/${this.maxTotalStayedIn}\n` +
+            `totalStayedInArray: ${this.totalStayedInArray}/${this.maxTotalStayedIn} (${this.totalStayedInArray2}/${this.maxTotalStayedIn2})\n` +
             `Stake: $${trade.stake.toFixed(2)}\n` +
             `Growth Rate: ${(this.config.growthRate * 100).toFixed(0)}%\n` +
             `Take Profit: $${this.takeProfitAmount.toFixed(2)}`
