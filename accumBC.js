@@ -761,16 +761,36 @@ class EnhancedDerivTradingBot {
 
         if (!stayedInArray) return;
 
-        // Always update stayedInArray - this keeps it current even during active trades
+        // ✅ Check if this is a request for final stayedInArray (after contract settled)
+        const passthrough = message.echo_req?.passthrough;
+        if (passthrough && passthrough.action === 'get_final_stayed_in') {
+            // This is the final stayedInArray after contract settlement
+            console.log(`✅ Final stayedInArray received for ${asset}: [${stayedInArray.slice(-6).join('|')}]`);
+            
+            // Update stored arrays
+            if (!this.assetStayedInArrays) this.assetStayedInArrays = {};
+            this.assetStayedInArrays[asset] = stayedInArray;
+            this.stayedInArray = stayedInArray;
+
+            // Now handle the trade result with the updated stayedInArray
+            const trade = this.activeTrades[asset];
+            if (trade && trade.awaitingFinalStayedIn && trade.settledContract) {
+                trade.awaitingFinalStayedIn = false;
+                this.handleTradeResult(asset, trade.settledContract);
+            }
+            return;
+        }
+
+        // ✅ Regular proposal handling (for new trades)
+        // Always update stayedInArray
         this.stayedInArray = stayedInArray;
-        const stayedInArray2 = stayedInArray.slice(-6)
+        const stayedInArray2 = stayedInArray.slice(-6);
         
-        // Store per-asset stayedInArray for multi-asset support
+        // Store per-asset stayedInArray
         if (!this.assetStayedInArrays) this.assetStayedInArrays = {};
         this.assetStayedInArrays[asset] = stayedInArray;
 
         if (this.tradeInProgress) return;
-
 
         // Current digit count of the running accumulator
         const currentDigitCount = stayedInArray[99] + 1;
@@ -783,7 +803,7 @@ class EnhancedDerivTradingBot {
         // Store proposal ID
         this.assetStates[asset].proposalId = proposal.id;
 
-        // ── Original frequency analysis logic ──────────────────────────────
+        // ── Original frequency analysis logic ──────────────────────────────────
         // Create frequency map of digits
         const digitFrequency = {};
         stayedInArray.forEach(digit => {
@@ -799,19 +819,10 @@ class EnhancedDerivTradingBot {
             StayedInArray: [${stayedInArray[99]}|${this.stayedInArray[98]}|${this.stayedInArray[97]}|${this.stayedInArray[96]}|${this.stayedInArray[95]}|${this.stayedInArray[94]}]
         `);
 
-        // Entry condition: current digit count is in appearedOnceArray
-        // and not already traded, and stayedIn value >= 0
-        // ✅ NEW: Use the checkTradeCondition function that includes total sum check
-        const condition = this.checkTradeCondition(stayedInArray, this.consecutiveLosses, 1600);
-        const condition2 = this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 50);
+        // Entry condition
+        const condition = this.consecutiveLosses < 1 ? (this.checkTradeCondition(stayedInArray, this.consecutiveLosses, 1600) && this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 50)) : this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 50);
         
-        // const condition = appearedOnceArray.includes(currentDigitCount)
-        //     && !this.tradedDigitArray.includes(stayedInArray[99])
-        //     && stayedInArray[99] > 0;
-
         console.log(`   Entry condition: ${condition ? '✅ MET' : '❌ NOT MET'}`);
-
-        // if (!this.isAssetAllowed(asset)) return;
 
         // Check if we should place trade
         if (condition) {
@@ -820,7 +831,6 @@ class EnhancedDerivTradingBot {
             
             console.log(`   Traded Digit Array: [${this.tradedDigitArray.join(', ')}]`);
 
-            // 6. Request proposal with appropriate growth rate
             const growthRate = this.config.growthRate;
 
             console.log(`\n🎯 ENTRY SIGNAL: ${asset}`);
@@ -944,32 +954,13 @@ class EnhancedDerivTradingBot {
             this.contractSubscriptions[asset] = message.subscription.id;
         }
 
-        // ✅ CORRECT FIX: ticks_stayed_in is directly in the contract object
-        // Check multiple possible locations based on Deriv API responses
-        let updatedStayedIn = null;
-        
-        if (contract.ticks_stayed_in && Array.isArray(contract.ticks_stayed_in)) {
-            updatedStayedIn = contract.ticks_stayed_in;
-        } else if (contract.audit_details && contract.audit_details.ticks_stayed_in) {
-            updatedStayedIn = contract.audit_details.ticks_stayed_in;
-        } else if (contract.tick_stream && Array.isArray(contract.tick_stream)) {
-            // Build stayed_in array from tick_stream
-            updatedStayedIn = this.buildStayedInFromTickStream(contract.tick_stream);
-        }
-
-        // Update the stored stayedInArray if we found it
-        if (updatedStayedIn) {
-            if (!this.assetStayedInArrays) this.assetStayedInArrays = {};
-            this.assetStayedInArrays[asset] = updatedStayedIn;
-            this.stayedInArray = updatedStayedIn;
-            
-            // Debug log to verify updates
-            console.log(`   🔄 StayedIn updated: [${updatedStayedIn.slice(-6).join('|')}]`);
-        }
-
         // Contract settled?
         if (contract.is_sold) {
-            this.handleTradeResult(asset, contract);
+            // ✅ Store the settled contract data
+            trade.settledContract = contract;
+            
+            // ✅ Request a fresh proposal to get the CURRENT ticks_stayed_in
+            this.requestFinalStayedInArray(asset);
             return;
         }
 
@@ -979,35 +970,53 @@ class EnhancedDerivTradingBot {
         const bidPrice = parseFloat(contract.bid_price || 0);
 
         if (tickCount > 0 && tickCount % 2 === 0) {
-            const currentStayedIn = this.assetStayedInArrays[asset] || [];
             console.log(
                 `  📊 ${asset}: tick ${tickCount} | ` +
-                `Profit: $${profit.toFixed(3)} | Bid: $${bidPrice.toFixed(2)}\n` +
-                `     StayedIn: [${currentStayedIn.slice(-6).join('|')}] | ` +
-                `Digits: ${this.lastDigitsList[asset]?.slice(-5).join(', ') || 'N/A'}`
+                `Profit: $${profit.toFixed(3)} | Bid: $${bidPrice.toFixed(2)} | ` +
+                `Ticks Passed: ${contract.tick_passed || 0}`
             );
         }
     }
 
-    // Helper method to build stayed_in array from tick_stream
-    buildStayedInFromTickStream(tickStream) {
-        if (!Array.isArray(tickStream) || tickStream.length === 0) return null;
-        
-        const stayedIn = [];
-        let currentCount = 0;
-        
-        tickStream.forEach((tick, index) => {
-            if (index === 0) {
-                currentCount = 0;
-            } else {
-                // Check if tick stayed in range (you may need to adjust this logic)
-                // This is a simplified version - actual logic depends on tick structure
-                currentCount++;
+    requestFinalStayedInArray(asset) {
+        const trade = this.activeTrades[asset];
+        if (!trade) return;
+
+        // Mark that we're waiting for final data
+        trade.awaitingFinalStayedIn = true;
+
+        console.log(`🔍 Requesting final stayedInArray for ${asset}...`);
+
+        // Request a fresh proposal to get the current ticks_stayed_in
+        const proposal = {
+            proposal: 1,
+            amount: this.currentStake.toFixed(2),
+            basis: 'stake',
+            contract_type: 'ACCU',
+            currency: 'USD',
+            symbol: asset,
+            growth_rate: this.config.growthRate,
+            limit_order: {
+                take_profit: this.takeProfitAmount.toFixed(2)
+            },
+            passthrough: {
+                action: 'get_final_stayed_in',
+                asset: asset,
+                timestamp: Date.now()
             }
-            stayedIn.push(currentCount);
-        });
-        
-        return stayedIn;
+        };
+
+        this.sendRequest(proposal);
+
+        // Safety timeout: if no response in 3 seconds, proceed with empty array
+        setTimeout(() => {
+            const currentTrade = this.activeTrades[asset];
+            if (currentTrade && currentTrade.awaitingFinalStayedIn) {
+                console.warn(`⚠️ Timeout waiting for final stayedInArray for ${asset}`);
+                currentTrade.awaitingFinalStayedIn = false;
+                this.handleTradeResult(asset, currentTrade.settledContract);
+            }
+        }, 3000);
     }
 
     handleSellResponse(message) {
