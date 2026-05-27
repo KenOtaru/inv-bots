@@ -623,6 +623,8 @@ class EnhancedDerivTradingBot {
         
         // Log the calculation for debugging
         console.log(`   📊 Total StayedIn Sum: ${totalStayedInArray} (Max: ${maxTotalStayedIn})`);
+        this.totalStayedInArray = totalStayedInArray;
+        this.maxTotalStayedIn = maxTotalStayedIn;
         
         // Check individual thresholds for recent values
         const recentThresholds = (
@@ -1090,8 +1092,6 @@ class EnhancedDerivTradingBot {
         if (!message.proposal) return;
         if (!asset) return;
 
-        // if (this.tradeInProgress) return;
-
         const proposal = message.proposal;
         const stayedInArray = proposal.contract_details.ticks_stayed_in;
 
@@ -1099,7 +1099,8 @@ class EnhancedDerivTradingBot {
 
         this.stayedInArray = stayedInArray;
 
-
+        if (this.tradeInProgress) return;
+        
         // Current digit count of the running accumulator
         const currentDigitCount = stayedInArray[99] + 1;
 
@@ -1257,6 +1258,7 @@ class EnhancedDerivTradingBot {
             `🚀 <b>TRADE OPENED (Accum BOOM/CRASH2)</b>\n\n` +
             `Asset: <b>${asset}</b>\n` +
             `stayedInArray: <b>[${this.stayedInArray[99]}|${this.stayedInArray[98]}|${this.stayedInArray[97]}|${this.stayedInArray[96]}|${this.stayedInArray[95]}|${this.stayedInArray[94]}]</b>\n` +
+            `totalStayedInArray: ${this.totalStayedInArray}/${this.maxTotalStayedIn}\n` +
             `Stake: $${trade.stake.toFixed(2)}\n` +
             `Growth Rate: ${(this.config.growthRate * 100).toFixed(0)}%\n` +
             `Filter Number: ${this.filterNum}\n` +
