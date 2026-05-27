@@ -328,8 +328,9 @@ class EnhancedDerivTradingBot {
         
         // Check individual thresholds for recent values
         const recentThresholds = (
-            stayedInArray[99] < 2 &&
-            stayedInArray[98] < 11 
+            stayedInArray[99] < 2 
+            // &&
+            // stayedInArray[98] < 11 
             // &&
             // stayedInArray[97] < 12 &&
             // stayedInArray[96] < 13 &&
@@ -851,7 +852,7 @@ class EnhancedDerivTradingBot {
         `);
 
         // Entry condition
-        const condition = this.consecutiveLosses < 1 ? (this.checkTradeCondition(stayedInArray, this.consecutiveLosses, 1600) && this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 50)) : this.checkTradeCondition3(stayedInArray2, this.consecutiveLosses, 50);
+        const condition = this.consecutiveLosses < 1 ? (this.checkTradeCondition(stayedInArray, this.consecutiveLosses, 1600) && this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 50)) : this.checkTradeCondition3(stayedInArray2, this.consecutiveLosses, 30);
         
         console.log(`   Entry condition: ${condition ? '✅ MET' : '❌ NOT MET'}`);
 
@@ -1266,6 +1267,11 @@ class EnhancedDerivTradingBot {
                 this.resumeAllAssets();
             }
             this.disconnect();
+            
+            setInterval(() => {
+                this.connect();
+            }, 20000);
+            
         } else {
             this.totalLosses++;
             this.consecutiveLosses++;
