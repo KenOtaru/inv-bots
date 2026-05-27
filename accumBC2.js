@@ -1269,7 +1269,9 @@ class EnhancedDerivTradingBot {
             this.disconnect();
             
             setInterval(() => {
-                this.connect();
+                if (!this.endOfDay) {
+                    this.connect();
+                }
             }, 20000);
             
         } else {
