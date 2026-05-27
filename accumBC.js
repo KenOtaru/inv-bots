@@ -632,13 +632,8 @@ class EnhancedDerivTradingBot {
             `Wins: ${this.totalWins} | Losses: ${this.totalLosses}\n` +
             `x2-x6 Losses: ${this.consecutiveLosses2} | ${this.consecutiveLosses3} | ${this.consecutiveLosses4} | ${this.consecutiveLosses5} | ${this.consecutiveLosses6}\n\n` +
             `Total P&L: $${this.totalProfitLoss.toFixed(2)}\n` +
-            `Win Rate: ${this.totalTrades > 0 ? ((this.totalWins / this.totalTrades) * 100).toFixed(2) : '0.00'}%\n` +
-            `Current Stake: $${this.currentStake.toFixed(2)}\n\n` +
-            `Traded Digits: [${this.tradedDigitArray.join(', ')}]\n` +
-            `Filtered Digits: [${this.filteredArray.join(', ')}]\n` +
-            `Filter Number: ${this.filterNum}\n` +
-            `Sys2: ${this.Sys2}\n` +
-            `kCountNum: ${this.kCountNum}`
+            `Win Rate: ${this.totalTrades > 0 ? ((this.totalWins / this.totalTrades) * 100).toFixed(2) : '0.00'}%\n
+            `
         );
     }
 
@@ -728,7 +723,7 @@ class EnhancedDerivTradingBot {
         if (this.tradeInProgress) return;
         if (!this.wsReady) return;
 
-        this.takeProfitAmount = this.consecutiveLosses < 1 ? this.currentStake/4 : this.consecutiveLosses === 1 ? this.currentStake/2.5 : this.currentStake; ; // this.currentStake * this.config.takeProfitMultiplier;
+        this.takeProfitAmount = this.consecutiveLosses < 1 ? this.currentStake/4 : this.consecutiveLosses === 1 ? this.currentStake/1.8 : this.currentStake; ; // this.currentStake * this.config.takeProfitMultiplier;
 
         const proposal = {
             proposal: 1,
@@ -947,6 +942,18 @@ class EnhancedDerivTradingBot {
         // Store subscription ID
         if (message.subscription?.id) {
             this.contractSubscriptions[asset] = message.subscription.id;
+        }
+
+        // ✅ CRITICAL FIX: Update stayedInArray during active trade
+        if (contract.contract_details?.ticks_stayed_in) {
+            if (!this.assetStayedInArrays) this.assetStayedInArrays = {};
+            this.assetStayedInArrays[asset] = contract.contract_details.ticks_stayed_in;
+            
+            // Also update the global stayedInArray if this is the active asset
+            this.stayedInArray = contract.contract_details.ticks_stayed_in;
+            
+            // Optional: Log to verify updates are happening
+            console.log(`   📊 Updated StayedIn for ${asset}: [${this.assetStayedInArrays[asset].slice(-6).join('|')}]`);
         }
 
         // Contract settled?

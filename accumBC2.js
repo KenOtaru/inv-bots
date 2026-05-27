@@ -944,6 +944,18 @@ class EnhancedDerivTradingBot {
             this.contractSubscriptions[asset] = message.subscription.id;
         }
 
+        // ✅ CRITICAL FIX: Update stayedInArray during active trade
+        if (contract.contract_details?.ticks_stayed_in) {
+            if (!this.assetStayedInArrays) this.assetStayedInArrays = {};
+            this.assetStayedInArrays[asset] = contract.contract_details.ticks_stayed_in;
+            
+            // Also update the global stayedInArray if this is the active asset
+            this.stayedInArray = contract.contract_details.ticks_stayed_in;
+            
+            // Optional: Log to verify updates are happening
+            console.log(`   📊 Updated StayedIn for ${asset}: [${this.assetStayedInArrays[asset].slice(-6).join('|')}]`);
+        }
+
         // Contract settled?
         if (contract.is_sold) {
             this.handleTradeResult(asset, contract);
@@ -1129,7 +1141,7 @@ class EnhancedDerivTradingBot {
         const profit = parseFloat(contract.profit);
 
         // Get the final stayedInArray for this asset (updated continuously via proposal stream)
-        const finalStayedInArray = this.assetStayedInArrays?.[asset] || this.stayedInArray || [];
+        const finalStayedInArray = this.assetStayedInArrays?.[asset] || [];
 
         // Unsubscribe from contract
         if (this.contractSubscriptions[asset]) {
