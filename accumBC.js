@@ -29,7 +29,7 @@ const path = require('path');
 // ══════════════════════════════════════════════════════════════════════════════
 // STATE PERSISTENCE MANAGER
 // ══════════════════════════════════════════════════════════════════════════════
-const STATE_FILE = path.join(__dirname, 'accumBC_002_state.json');
+const STATE_FILE = path.join(__dirname, 'accumBC_003_state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -109,353 +109,6 @@ class StatePersistence {
             console.error('Uncaught Exception:', err);
             exitHandler();
         });
-    }
-}
-
-// ============================================================================
-// TECHNICAL INDICATORS — Bollinger Bands + MACD on raw tick prices
-// ============================================================================
-class TechnicalIndicators {
-    /**
-     * Simple Moving Average
-     */
-    static SMA(data, period) {
-        if (data.length < period) return null;
-        const slice = data.slice(-period);
-        return slice.reduce((sum, v) => sum + v, 0) / period;
-    }
-
-    /**
-     * Exponential Moving Average
-     */
-    static EMA(data, period) {
-        if (data.length < period) return null;
-        const k = 2 / (period + 1);
-        let ema = data.slice(0, period).reduce((s, v) => s + v, 0) / period;
-        for (let i = period; i < data.length; i++) {
-            ema = data[i] * k + ema * (1 - k);
-        }
-        return ema;
-    }
-
-    /**
-     * Standard Deviation
-     */
-    static stdDev(data, period) {
-        if (data.length < period) return null;
-        const slice = data.slice(-period);
-        const mean = slice.reduce((s, v) => s + v, 0) / period;
-        const variance = slice.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / period;
-        return Math.sqrt(variance);
-    }
-
-    /**
-     * Bollinger Bands (20-period SMA, 2 std devs)
-     * Returns: { upper, middle, lower, width, percentB }
-     */
-    static bollingerBands(prices, period = 20, multiplier = 2.0) {
-        if (prices.length < period) return null;
-
-        const middle = this.SMA(prices, period);
-        const sd = this.stdDev(prices, period);
-        const upper = middle + multiplier * sd;
-        const lower = middle - multiplier * sd;
-        const currentPrice = prices[prices.length - 1];
-
-        // Band width (normalized) — lower = less volatile
-        const width = (upper - lower) / middle;
-
-        // %B — where price sits relative to bands (0 = lower, 1 = upper)
-        const percentB = (upper - lower) !== 0 ? (currentPrice - lower) / (upper - lower) : 0.5;
-
-        return { upper, middle, lower, width, percentB, stdDev: sd };
-    }
-
-    /**
-     * MACD (12, 26, 9)
-     * Returns: { macdLine, signalLine, histogram }
-     */
-    static MACD(prices, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
-        if (prices.length < slowPeriod + signalPeriod) return null;
-
-        // Calculate MACD line for recent history
-        const macdValues = [];
-        for (let i = slowPeriod; i <= prices.length; i++) {
-            const slice = prices.slice(0, i);
-            const fastEMA = this.EMA(slice, fastPeriod);
-            const slowEMA = this.EMA(slice, slowPeriod);
-            if (fastEMA !== null && slowEMA !== null) {
-                macdValues.push(fastEMA - slowEMA);
-            }
-        }
-
-        if (macdValues.length < signalPeriod) return null;
-
-        const macdLine = macdValues[macdValues.length - 1];
-        const signalLine = this.EMA(macdValues, signalPeriod);
-        const histogram = macdLine - signalLine;
-
-        // Get previous histogram for trend detection
-        const prevMacdValues = macdValues.slice(0, -1);
-        const prevSignal = prevMacdValues.length >= signalPeriod ? this.EMA(prevMacdValues, signalPeriod) : signalLine;
-        const prevHistogram = prevMacdValues[prevMacdValues.length - 1] - prevSignal;
-
-        return {
-            macdLine,
-            signalLine,
-            histogram,
-            prevHistogram,
-            isConverging: Math.abs(histogram) < Math.abs(prevHistogram),
-            histogramTrend: histogram - prevHistogram,
-        };
-    }
-
-    /**
-     * Average True Range approximation for tick data
-     * Uses absolute tick-to-tick differences
-     */
-    static ATR(prices, period = 14) {
-        if (prices.length < period + 1) return null;
-        const ranges = [];
-        for (let i = prices.length - period; i < prices.length; i++) {
-            ranges.push(Math.abs(prices[i] - prices[i - 1]));
-        }
-        return ranges.reduce((s, v) => s + v, 0) / period;
-    }
-
-    /**
-     * Bollinger Band Width percentile (how tight are bands vs recent history)
-     * Lower percentile = tighter bands = lower volatility = better for accumulators
-     */
-    static bandWidthPercentile(prices, bbPeriod = 20, lookback = 100) {
-        if (prices.length < lookback + bbPeriod) return null;
-
-        const widths = [];
-        for (let i = bbPeriod; i <= Math.min(lookback, prices.length - bbPeriod); i++) {
-            const slice = prices.slice(0, prices.length - i + bbPeriod);
-            const bb = this.bollingerBands(slice, bbPeriod);
-            if (bb) widths.push(bb.width);
-        }
-
-        if (widths.length < 10) return null;
-
-        const currentWidth = widths[0];
-        const sorted = [...widths].sort((a, b) => a - b);
-        const rank = sorted.findIndex(w => w >= currentWidth);
-        return rank / sorted.length;
-    }
-}
-
-// ============================================================================
-// ACCUMULATOR MARKET ANALYZER — Bollinger + MACD Strategy
-// ============================================================================
-class AccumulatorAnalyzer {
-    constructor() {
-        this.tradeResults = {};   // Per-asset trade outcome history
-    }
-
-    /**
-     * Record a completed trade for learning
-     */
-    recordTradeResult(asset, result) {
-        if (!this.tradeResults[asset]) this.tradeResults[asset] = [];
-        this.tradeResults[asset].push({
-            ...result,
-            timestamp: Date.now()
-        });
-        // Keep last 200
-        if (this.tradeResults[asset].length > 200) this.tradeResults[asset].shift();
-    }
-
-    /**
-     * Get historical win rate for asset
-     */
-    getAssetWinRate(asset) {
-        const results = this.tradeResults[asset] || [];
-        if (results.length < 5) return 0.5;
-        const wins = results.filter(r => r.won).length;
-        return wins / results.length;
-    }
-
-    /**
-     * CORE: Analyze if conditions are favorable for an accumulator entry.
-     * 
-     * Accumulators profit when price STAYS IN RANGE. We need:
-     * 1. Bollinger Bands contracted (low volatility = wide barrier relative to movement)
-     * 2. MACD histogram near zero / flat (no strong momentum that could spike price)
-     * 3. Price near middle of bands (not near edges where breakout is likely)
-     */
-    analyzeEntry(prices) {
-        if (!prices || prices.length < 50) {
-            return { shouldTrade: false, reason: 'insufficient_data' };
-        }
-
-        // --- Bollinger Bands Analysis ---
-        const bb = TechnicalIndicators.bollingerBands(prices, 20, 2.0);
-        if (!bb) return { shouldTrade: false, reason: 'bb_calc_failed' };
-
-        // --- MACD Analysis ---
-        const macd = TechnicalIndicators.MACD(prices, 12, 26, 9);
-        if (!macd) return { shouldTrade: false, reason: 'macd_calc_failed' };
-
-        // --- ATR for volatility context ---
-        const atr = TechnicalIndicators.ATR(prices, 14);
-        const currentPrice = prices[prices.length - 1];
-
-        // --- Band Width Percentile ---
-        const bwPercentile = TechnicalIndicators.bandWidthPercentile(prices, 20, 100);
-
-        // ═══════════════════════════════════════════
-        // SCORING SYSTEM — Each factor scores 0-1
-        // ═══════════════════════════════════════════
-
-        const scores = {};
-
-        // 1. BOLLINGER BAND WIDTH — Contracted bands = low volatility = GOOD
-        //    We want band width to be in the lower 50th percentile
-        if (bwPercentile !== null) {
-            if (bwPercentile <= 0.20) scores.bandWidth = 1.0;        // Very tight — excellent
-            else if (bwPercentile <= 0.40) scores.bandWidth = 0.85;  // Tight — good
-            else if (bwPercentile <= 0.55) scores.bandWidth = 0.65;  // Average — okay
-            else if (bwPercentile <= 0.70) scores.bandWidth = 0.40;  // Wide — poor
-            else scores.bandWidth = 0.15;                             // Very wide — avoid
-        } else {
-            // Fallback: use raw width
-            scores.bandWidth = 0.0;
-        }
-
-        // 2. MACD HISTOGRAM — Flat/near-zero histogram = no momentum = GOOD
-        //    Normalize histogram by price to make it comparable across assets
-        const normalizedHist = Math.abs(macd.histogram) / currentPrice;
-        if (normalizedHist < 0.00005) scores.macdFlat = 1.0;         // Dead flat — excellent
-        else if (normalizedHist < 0.00015) scores.macdFlat = 0.85;
-        else if (normalizedHist < 0.00035) scores.macdFlat = 0.60;
-        else if (normalizedHist < 0.00060) scores.macdFlat = 0.35;
-        else scores.macdFlat = 0.10;                                  // Strong momentum — avoid
-
-        // 3. MACD CONVERGENCE — Histogram getting smaller = momentum fading = GOOD
-        if (macd.isConverging) scores.macdConverging = 1.0;
-        else scores.macdConverging = 0.35;
-
-        // 4. %B POSITION — Price near middle band (0.3-0.7) = less likely to breach barrier
-        if (bb.percentB >= 0.40 && bb.percentB <= 0.60) scores.pricePosition = 1.0;   // Sweet spot
-        else if (bb.percentB >= 0.20 && bb.percentB <= 0.80) scores.pricePosition = 0.70;
-        else if (bb.percentB >= 0.10 && bb.percentB <= 0.90) scores.pricePosition = 0.40;
-        else scores.pricePosition = 0.10;  // Price at band edge — high breakout risk
-
-        // 5. RECENT TICK STABILITY — Check last 10 ticks for erratic movement
-        const recentPrices = prices.slice(-10);
-        let maxTickMove = 0;
-        for (let i = 1; i < recentPrices.length; i++) {
-            const move = Math.abs(recentPrices[i] - recentPrices[i - 1]) / recentPrices[i - 1];
-            maxTickMove = Math.max(maxTickMove, move);
-        }
-        // For accumulators, the barrier at 1% growth rate is ±0.045% of previous spot
-        // At 5% it's ±0.0065%. We want max tick move to be well under the barrier.
-        if (maxTickMove < 0.0003) scores.tickStability = 1.0;
-        else if (maxTickMove < 0.0008) scores.tickStability = 0.80;
-        else if (maxTickMove < 0.0015) scores.tickStability = 0.55;
-        else if (maxTickMove < 0.0025) scores.tickStability = 0.30;
-        else scores.tickStability = 0.05;
-
-        // 6. VOLATILITY TREND — Is ATR declining? (= getting calmer = GOOD)
-        const atrRecent = TechnicalIndicators.ATR(prices, 7);
-        const atrLonger = TechnicalIndicators.ATR(prices.slice(0, -7), 14);
-        if (atrRecent && atrLonger && atrLonger > 0) {
-            const atrRatio = atrRecent / atrLonger;
-            if (atrRatio < 0.70) scores.volTrend = 1.0;        // Volatility dropping fast
-            else if (atrRatio < 0.85) scores.volTrend = 0.80;
-            else if (atrRatio < 1.0) scores.volTrend = 0.60;
-            else if (atrRatio < 1.15) scores.volTrend = 0.40;
-            else scores.volTrend = 0.15;                        // Volatility rising — avoid
-        } else {
-            scores.volTrend = 0.5;
-        }
-
-        // ═══════════════════════════════════════════
-        // WEIGHTED COMPOSITE SCORE
-        // ═══════════════════════════════════════════
-        const weights = {
-            bandWidth: 0.25,       // Most important — overall volatility state
-            macdFlat: 0.20,        // Momentum neutrality
-            macdConverging: 0.10,  // Momentum direction
-            pricePosition: 0.20,   // Position safety
-            tickStability: 0.15,   // Recent stability
-            volTrend: 0.10,        // Volatility trajectory
-        };
-
-        let overallScore = 0;
-        for (const [key, weight] of Object.entries(weights)) {
-            overallScore += (scores[key] || 0) * weight;
-        }
-
-        // ═══════════════════════════════════════════
-        // DETERMINE OPTIMAL GROWTH RATE
-        // ═══════════════════════════════════════════
-        let recommendedGrowthRate;
-        if (overallScore >= 0.85) recommendedGrowthRate = 0.05;    // High confidence → 3%
-        else if (overallScore >= 0.75) recommendedGrowthRate = 0.05; // Good → 2%
-        else if (overallScore >= 0.65) recommendedGrowthRate = 0.05; // Moderate → safest 1%
-        else recommendedGrowthRate = 0.05;                          // Default safest
-
-        // ═══════════════════════════════════════════
-        // HARD REJECTION FILTERS
-        // ═══════════════════════════════════════════
-
-        // REJECT: Bollinger Bands expanding (volatility increasing)
-        if (scores.bandWidth < 0.30) {
-            return {
-                shouldTrade: false,
-                reason: 'bands_expanding_high_volatility',
-                scores, overallScore, bb, macd, recommendedGrowthRate
-            };
-        }
-
-        // REJECT: Strong momentum (MACD histogram large)
-        if (scores.macdFlat < 0.25) {
-            return {
-                shouldTrade: false,
-                reason: 'strong_momentum_detected',
-                scores, overallScore, bb, macd, recommendedGrowthRate
-            };
-        }
-
-        // REJECT: Price at band edge (breakout imminent)
-        if (scores.pricePosition < 0.25) {
-            return {
-                shouldTrade: false,
-                reason: 'price_at_band_edge',
-                scores, overallScore, bb, macd, recommendedGrowthRate
-            };
-        }
-
-        // REJECT: Recent tick spike (erratic movement)
-        if (scores.tickStability < 0.20) {
-            return {
-                shouldTrade: false,
-                reason: 'erratic_tick_movement',
-                scores, overallScore, bb, macd, recommendedGrowthRate
-            };
-        }
-
-        // ═══════════════════════════════════════════
-        // FINAL DECISION
-        // ═══════════════════════════════════════════
-        const minScore = 0.80; // Minimum composite score to trade
-
-        return {
-            shouldTrade: overallScore >= minScore,
-            reason: overallScore >= minScore ? 'conditions_favorable' : `score_below_threshold (${(overallScore * 100).toFixed(1)}% < ${minScore * 100}%)`,
-            scores,
-            overallScore,
-            bb,
-            macd,
-            recommendedGrowthRate,
-            tickStability: scores.tickStability,
-            atr,
-            maxTickMove,
-            volTrend: scores.volTrend
-        };
     }
 }
 
@@ -539,8 +192,6 @@ class EnhancedDerivTradingBot {
         this.predictedDigit = null;
         this.currentTick = 0;
         this.Sys2 = false;
-        // Components
-        this.analyzer = new AccumulatorAnalyzer();
 
         // ── Multi-asset active trades ────────────────────────────────────────
         this.activeTrades = {};          // { asset: { contractId, status, ... } }
@@ -644,6 +295,25 @@ class EnhancedDerivTradingBot {
         
         // Return true if: (recent thresholds AND total within range) OR in recovery mode
         return (recentThresholds && totalWithinRange) || inRecoveryMode;
+    }
+
+    checkTradeCondition2(stayedInArray, consecutiveLosses, maxTotalStayedIn) {
+        // Calculate total sum of all stayedInArray values
+        const totalStayedInArray = this.calculateTotalStayedIn(stayedInArray);
+        
+        // Log the calculation for debugging
+        console.log(`   📊 Total StayedIn2 Sum: ${totalStayedInArray} (Max: ${maxTotalStayedIn})`);
+        this.totalStayedInArray = totalStayedInArray;
+        this.maxTotalStayedIn = maxTotalStayedIn;
+        
+        // Check if total sum is within acceptable range
+        const totalWithinRange = totalStayedInArray < maxTotalStayedIn;
+        
+        // Check if we have consecutive losses (recovery mode)
+        const inRecoveryMode = consecutiveLosses > 0;
+        
+        // Return true if: (recent thresholds AND total within range) OR in recovery mode
+        return (totalWithinRange) || inRecoveryMode;
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -1098,6 +768,7 @@ class EnhancedDerivTradingBot {
 
         // Always update stayedInArray - this keeps it current even during active trades
         this.stayedInArray = stayedInArray;
+        const stayedInArray2 = stayedInArray.slice(-6)
         
         // Store per-asset stayedInArray for multi-asset support
         if (!this.assetStayedInArrays) this.assetStayedInArrays = {};
@@ -1137,6 +808,7 @@ class EnhancedDerivTradingBot {
         // and not already traded, and stayedIn value >= 0
         // ✅ NEW: Use the checkTradeCondition function that includes total sum check
         const condition = this.checkTradeCondition(stayedInArray, this.consecutiveLosses, 1600);
+        const condition2 = this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 50);
         
         // const condition = appearedOnceArray.includes(currentDigitCount)
         //     && !this.tradedDigitArray.includes(stayedInArray[99])
@@ -1145,47 +817,6 @@ class EnhancedDerivTradingBot {
         console.log(`   Entry condition: ${condition ? '✅ MET' : '❌ NOT MET'}`);
 
         // if (!this.isAssetAllowed(asset)) return;
-
-        // 1. Technical analysis
-        const prices = this.priceHistories[asset];
-        const analysis = this.analyzer.analyzeEntry(prices);
-
-        // 2. Log analysis periodically (every 30th check to avoid spam)
-        if (this.tickCounts[asset] % (this.config.analysisInterval * 10) === 0) {
-        this.logAnalysis(asset, analysis);
-        }
-
-        this.overallScore = (analysis.overallScore * 100).toFixed(1);
-        this.bbWidth = analysis.bb.width.toFixed(6);
-        this.percentB = (analysis.bb.percentB * 100).toFixed(1);
-        this.macdHist = analysis.macd.histogram.toFixed(6);
-        this.macdConverging = analysis.macd.isConverging;
-        this.maxTickMove = (analysis.maxTickMove * 100).toFixed(2);
-        this.tickStability = (analysis.tickStability * 100).toFixed(1);
-        this.bbWidth = (analysis.scores.bandWidth * 100).toFixed(1);
-        this.macdFlat = (analysis.scores.macdFlat * 100).toFixed(1);
-        this.pricePosition = (analysis.scores.pricePosition * 100).toFixed(1);
-        this.macdConverging = (analysis.scores.macdConverging * 100).toFixed(1);
-        this.volTrend = (analysis.scores.volTrend * 100).toFixed(1);
-
-        // 3. Decision
-        // if (!analysis.shouldTrade) return;
-
-        if (analysis.overallScore < 0.60) return; //0.8
-
-        if (analysis.scores.bandWidth < 0.6) return; // 1
-
-        if (analysis.scores.macdFlat < 0.5) return;
-
-        // if (analysis.scores.pricePosition < 0.4) return;
-
-        // if (!analysis.tickStability || analysis.tickStability === 'undefined' || analysis.tickStability === 'NaN' || analysis.tickStability < 1) return;
-
-        // if (analysis.scores.macdConverging < 0.7) return; // 1 
-
-        // if (this.maxTickMove < 0.03) return;
-
-        // if (analysis.scores.volTrend < 0.5) return;
 
         // Check if we should place trade
         if (condition) {
@@ -1198,36 +829,12 @@ class EnhancedDerivTradingBot {
             const growthRate = this.config.growthRate;
 
             console.log(`\n🎯 ENTRY SIGNAL: ${asset}`);
-            console.log(`   Score: ${(analysis.overallScore * 100).toFixed(1)}%`);
-            console.log(`   BB Width: ${analysis.bb.width.toFixed(6)} | %B: ${(analysis.bb.percentB * 100).toFixed(1)}%`);
-            console.log(`   MACD Hist: ${analysis.macd.histogram.toFixed(6)} | Converging: ${analysis.macd.isConverging}`);
             console.log(`   Growth Rate: ${(growthRate * 100).toFixed(0)}% | Stake: $${this.currentStake.toFixed(2)}`);
-            console.log(`   Max Tick Move: ${(analysis.maxTickMove * 100).toFixed(2)}%`);
-            console.log(`   Tick Stability: ${(analysis.tickStability * 100).toFixed(1)}%`);
-
-            console.log(`   BB Width: ${(analysis.scores.bandWidth * 100).toFixed(1)}%`);
-            console.log(`   MACD Flat: ${(analysis.scores.macdFlat * 100).toFixed(1)}%`);
-            console.log(`   Price Position: ${(analysis.scores.pricePosition * 100).toFixed(1)}%`);
-            console.log(`   MACD Converging: ${(analysis.scores.macdConverging * 100).toFixed(1)}%`);
-            console.log(`   Vol Trend: ${(analysis.scores.volTrend * 100).toFixed(1)}%`);
-            console.log(`   Reason: ${analysis.reason}`);
             console.log(`   Take Profit: $${this.takeProfitAmount.toFixed(2)}`);
 
             // Place trade
             this.placeTrade(asset);
         }
-    }
-
-    logAnalysis(asset, analysis) {
-        const s = analysis.scores || {};
-        console.log(
-            `📈 ${asset} | Score: ${(analysis.overallScore * 100 || 0).toFixed(0)}% | ` +
-            `BW:${(s.bandWidth * 100 || 0).toFixed(0)} MACD:${(s.macdFlat * 100 || 0).toFixed(0)} ` +
-            `Pos:${(s.pricePosition * 100 || 0).toFixed(0)} Stab:${(s.tickStability * 100 || 0).toFixed(0)} ` +
-            `Conv:${(s.macdConverging * 100 || 0).toFixed(0)} Vol:${(s.volTrend * 100 || 0).toFixed(0)} ` +
-            `Ticks: ${this.currentTick} | ` +
-            `| ${analysis.shouldTrade ? '✅' : '❌'} ${analysis.reason}`
-        );
     }
 
     placeTrade(asset) {
@@ -1266,16 +873,6 @@ class EnhancedDerivTradingBot {
             `totalStayedInArray: ${this.totalStayedInArray}/${this.maxTotalStayedIn}\n` +
             `Stake: $${trade.stake.toFixed(2)}\n` +
             `Growth Rate: ${(this.config.growthRate * 100).toFixed(0)}%\n` +
-            `Filter Number: ${this.filterNum}\n` +
-            `Filtered Digits: [${this.filteredArray.join(', ')}]\n` +
-            `Overall Score: ${this.overallScore}%\n` +
-            `BB Width: ${this.bbWidth}%\n` +
-            `MACD Flat: ${this.macdFlat}%\n` +
-            `MACD Converging: ${this.macdConverging}%\n` +
-            `Price Position: ${this.pricePosition}%\n` +
-            `Tick Stability: ${this.tickStability}%\n` +
-            `Max Tick Move: ${this.maxTickMove}%\n` +
-            `Vol Trend: ${this.volTrend}%\n` +
             `Take Profit: $${this.takeProfitAmount.toFixed(2)}`
         );
 
@@ -1776,11 +1373,11 @@ class EnhancedDerivTradingBot {
         console.log(`  x2 Losses: ${this.consecutiveLosses2}`);
         console.log(`  x3 Losses: ${this.consecutiveLosses3}`);
         console.log(`  x4 Losses: ${this.consecutiveLosses4}`);
+        console.log(`  x5 Losses: ${this.consecutiveLosses5}`);
+        console.log(`  x6 Losses: ${this.consecutiveLosses6}`);
         console.log(`  Total Profit/Loss: $${this.totalProfitLoss.toFixed(2)}`);
         console.log(`  Win Rate: ${this.totalTrades > 0 ? ((this.totalWins / this.totalTrades) * 100).toFixed(2) : '0.00'}%`);
         console.log(`  Current Stake: $${this.currentStake.toFixed(2)}`);
-        console.log(`  Filtered Digits: [${this.filteredArray.join(', ')}]`);
-        console.log(`  Traded Digits: [${this.tradedDigitArray.join(', ')}]`);
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -1794,7 +1391,6 @@ class EnhancedDerivTradingBot {
         console.log(`  Initial Stake: $${this.config.initialStake}`);
         console.log(`  Multiplier:    x${this.config.multiplier}`);
         console.log(`  Growth Rate:   ${(this.config.growthRate * 100)}%`);
-        console.log(`  Filter Num:    ${this.filterNum}`);
         console.log(`  Take Profit:   $${this.config.takeProfit}`);
         console.log(`  Stop Loss:     $${this.config.stopLoss}`);
         console.log('═══════════════════════════════════════════════════════════\n');
