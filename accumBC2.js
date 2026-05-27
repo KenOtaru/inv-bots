@@ -989,6 +989,8 @@ class EnhancedDerivTradingBot {
         if (contract.is_sold) {
             // ✅ Store the settled contract data
             trade.settledContract = contract;
+
+            this.tickPassed = contract.tick_passed;
             
             // ✅ Request a fresh proposal to get the CURRENT ticks_stayed_in
             this.requestFinalStayedInArray(asset);
@@ -1319,6 +1321,7 @@ class EnhancedDerivTradingBot {
             `<b>Accum BOOM/CRASH2</b>\n` +
             `${won ? '✅ WON' : '❌ LOSS'}\n` +
             `Asset: <b>${asset}</b>\n` +
+            `Tick Passed: <b>${this.tickPassed}</b>\n` +
             `Final stayedInArray: [${finalStayedInArray[99]}|${finalStayedInArray[98]}|${finalStayedInArray[97]}|${finalStayedInArray[96]}|${finalStayedInArray[95]}|${finalStayedInArray[94]}]\n` +
             `P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(3)}\n` +
             `Consecutive Losses: ${this.consecutiveLosses}\n` +
