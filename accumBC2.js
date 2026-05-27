@@ -1266,13 +1266,6 @@ class EnhancedDerivTradingBot {
             if (this.focusAsset) {
                 this.resumeAllAssets();
             }
-            this.disconnect();
-            
-            setInterval(() => {
-                if (!this.endOfDay) {
-                    this.connect();
-                }
-            }, 20000);
             
         } else {
             this.totalLosses++;
@@ -1364,6 +1357,18 @@ class EnhancedDerivTradingBot {
         }
 
         StatePersistence.saveState(this);
+
+        if(won) {
+            if (!this.endOfDay) {
+                this.disconnect();
+            }
+            
+            setInterval(() => {
+                if (!this.endOfDay) {
+                    this.connect();
+                }
+            }, 20000);
+        }
 
         // ═══════════════════════════════════════════════════════════════════
         // IMMEDIATE RE-EVALUATION — Don't wait for the next tick
