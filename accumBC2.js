@@ -1100,7 +1100,7 @@ class EnhancedDerivTradingBot {
         this.stayedInArray = stayedInArray;
 
         if (this.tradeInProgress) return;
-        
+
         // Current digit count of the running accumulator
         const currentDigitCount = stayedInArray[99] + 1;
 
@@ -1531,6 +1531,9 @@ class EnhancedDerivTradingBot {
         const won = contract.status === 'won';
         const profit = parseFloat(contract.profit);
 
+        // Extract the final stayedInArray from the contract
+        const finalStayedInArray = contract.contract_details?.ticks_stayed_in || this.stayedInArray || [];
+
         // Unsubscribe from contract
         if (this.contractSubscriptions[asset]) {
             this.sendRequest({ forget: this.contractSubscriptions[asset] });
@@ -1627,12 +1630,12 @@ class EnhancedDerivTradingBot {
         this.tradeStartTime = null;
         delete this.activeTrades[asset];
 
-        // Send Trade result notification
+        // Send Trade result notification with final stayedInArray
         this.sendTelegramMessage(
             `<b>Accum BOOM/CRASH2</b>\n` +
             `${won ? '✅ WON' : '❌ LOSS'}\n` +
             `Asset: <b>${asset}</b>\n` +
-            `stayedInArray: [${this.stayedInArray[99]}|${this.stayedInArray[98]}|${this.stayedInArray[97]}|${this.stayedInArray[96]}|${this.stayedInArray[95]}|${this.stayedInArray[94]}]\n` +
+            `Final stayedInArray: [${finalStayedInArray[99]}|${finalStayedInArray[98]}|${finalStayedInArray[97]}|${finalStayedInArray[96]}|${finalStayedInArray[95]}|${finalStayedInArray[94]}]\n` +
             `P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(3)}\n` +
             `Consecutive Losses: ${this.consecutiveLosses}\n` +
             `Trades: ${this.totalTrades} (${this.totalWins}W/${this.totalLosses}L)\n` +
