@@ -322,7 +322,7 @@ class EnhancedDerivTradingBot {
         const totalStayedInArray = this.calculateTotalStayedIn(stayedInArray);
         
         // Log the calculation for debugging
-        console.log(`   📊 Total StayedIn Sum: ${totalStayedInArray} (Max: ${maxTotalStayedIn})`);
+        console.log(`   📊 Total StayedIn3 Sum: ${totalStayedInArray} (Max: ${maxTotalStayedIn})`);
         this.totalStayedInArray2 = totalStayedInArray;
         this.maxTotalStayedIn2 = maxTotalStayedIn;
         
@@ -852,9 +852,9 @@ class EnhancedDerivTradingBot {
         `);
 
         // Entry condition
-        const condition = this.checkTradeCondition(stayedInArray, this.consecutiveLosses, 1600) && this.consecutiveLosses < 1; 
-        const condition2 = this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 40) && this.consecutiveLosses < 1;
-        const condition3 = this.checkTradeCondition3(stayedInArray2, this.consecutiveLosses, 50) && this.consecutiveLosses >= 1;
+        const condition =  this.consecutiveLosses < 1 && this.checkTradeCondition(stayedInArray, this.consecutiveLosses, 1600); 
+        const condition2 = this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 40);
+        const condition3 = this.consecutiveLosses >= 1 && this.checkTradeCondition3(stayedInArray2, this.consecutiveLosses, 50);
         
         // Check if we should place trade
         if (condition && condition2) {
