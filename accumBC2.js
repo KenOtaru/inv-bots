@@ -875,7 +875,7 @@ class EnhancedDerivTradingBot {
             // Place trade
             this.placeTrade(asset);
         } else if (condition3) {
-            console.log(`   Entry condition: ${condition ? '✅ MET' : '❌ NOT MET'}`);
+            console.log(`   Entry condition: ${condition3 ? '✅ MET' : '❌ NOT MET'}`);
 
            this.tradedDigitArray.push(this.stayedInArray[99]);
             this.filteredArray = appearedOnceArray;
