@@ -309,7 +309,7 @@ class EnhancedDerivTradingBot {
 
         // Check individual thresholds for recent values
         const recentThresholds = (
-            stayedInArray[99] < 2 
+            stayedInArray[5] < 1 
         );
         
         // Check if total sum is within acceptable range
@@ -334,7 +334,7 @@ class EnhancedDerivTradingBot {
         });
         console.log(`🔒 SUSPENDED: All assets except ${lossAsset}. Focusing on loss asset.`);
         // this.sendTelegramMessage(
-        //     `🔒 <b>Asset Suspension (Accum BOOM/CRASH)</b>\n\n` +
+        //     `🔒 <b>Asset Suspension (Accum BOOM)</b>\n\n` +
         //     `Loss on: <b>${lossAsset}</b>\n` +
         //     `Suspended: ${this.assets.filter(a => a !== lossAsset).join(', ')}\n` +
         //     `Focusing on ${lossAsset} until win`
@@ -347,7 +347,7 @@ class EnhancedDerivTradingBot {
         this.focusAsset = null;
         console.log(`✅ RESUMED: All assets active again (was focused on ${prevFocus})`);
         // this.sendTelegramMessage(
-        //     `✅ <b>All Assets Resumed (Accum BOOM/CRASH)</b>\n\n` +
+        //     `✅ <b>All Assets Resumed (Accum BOOM)</b>\n\n` +
         //     `Won on: <b>${prevFocus}</b>\n` +
         //     `All assets now active for trading`
         // );
@@ -617,7 +617,7 @@ class EnhancedDerivTradingBot {
         const pnlStr = (this.totalProfitLoss >= 0 ? '+' : '') + '$' + Math.abs(this.totalProfitLoss).toFixed(2);
 
         await this.sendTelegramMessage(
-            `📊 <b>Session Summary Accum BOOM/CRASH</b>\n\n` +
+            `📊 <b>Session Summary Accum BOOM</b>\n\n` +
             `Trades: ${this.totalTrades}\n` +
             `W/L: ${this.totalWins}/${this.totalLosses}\n` +
             `Losses x2-x6: ${this.consecutiveLosses2} | ${this.consecutiveLosses3} | ${this.consecutiveLosses4} | ${this.consecutiveLosses5} | ${this.consecutiveLosses6}\n` +
@@ -631,7 +631,7 @@ class EnhancedDerivTradingBot {
 
     async sendDisconnectSummary() {
         await this.sendTelegramMessage(
-            `⚠️ <b>Accum BOOM/CRASH Disconnected</b>\n\n` +
+            `⚠️ <b>Accum BOOM Disconnected</b>\n\n` +
             `Trading Summary:\n` +
             `Total Trades: ${this.totalTrades}\n` +
             `Wins: ${this.totalWins} | Losses: ${this.totalLosses}\n` +
@@ -826,33 +826,13 @@ class EnhancedDerivTradingBot {
         console.log(`StayedInArray: [${stayedInArray[99]}|${this.stayedInArray[98]}|${this.stayedInArray[97]}|${this.stayedInArray[96]}|${this.stayedInArray[95]}|${this.stayedInArray[94]}]`);
 
         // Entry condition
-        // Entry condition
-        // const condition =  this.consecutiveLosses < 1 && this.checkTradeCondition(stayedInArray, this.consecutiveLosses, 1600); 
-        // const condition2 = condition && this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 40);
-        const condition3 = this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 1000);
+        const condition =  this.consecutiveLosses < 1 ? this.checkTradeCondition(stayedInArray, this.consecutiveLosses, 1600) && this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 30) : this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 40); 
         
         // Check if we should place trade
-        // if (condition && condition2) {
-        //     console.log(`   Entry condition: ${condition ? '✅ MET' : '❌ NOT MET'}`);
+        if (condition) {
+            console.log(`   Entry condition: ${condition ? '✅ MET' : '❌ NOT MET'}`);
 
-        //     this.tradedDigitArray.push(this.stayedInArray[99]);
-        //     this.filteredArray = appearedOnceArray;
-            
-        //     console.log(`   Traded Digit Array: [${this.tradedDigitArray.join(', ')}]`);
-
-        //     const growthRate = this.config.growthRate;
-
-        //     console.log(`\n🎯 ENTRY SIGNAL: ${asset}`);
-        //     console.log(`   Growth Rate: ${(growthRate * 100).toFixed(0)}% | Stake: $${this.currentStake.toFixed(2)}`);
-        //     console.log(`   Take Profit: $${this.takeProfitAmount.toFixed(2)}`);
-
-        //     // Place trade
-        //     this.placeTrade(asset);
-        // } else 
-            // if (condition3) {
-            console.log(`   Entry condition: ${condition3 ? '✅ MET' : '❌ NOT MET'}`);
-
-           this.tradedDigitArray.push(this.stayedInArray[99]);
+            this.tradedDigitArray.push(this.stayedInArray[99]);
             this.filteredArray = appearedOnceArray;
             
             console.log(`   Traded Digit Array: [${this.tradedDigitArray.join(', ')}]`);
@@ -864,8 +844,8 @@ class EnhancedDerivTradingBot {
             console.log(`   Take Profit: $${this.takeProfitAmount.toFixed(2)}`);
 
             // Place trade
-            this.placeTrade(asset); 
-        // }
+            this.placeTrade(asset);
+        }
     }
 
     placeTrade(asset) {
@@ -898,7 +878,7 @@ class EnhancedDerivTradingBot {
 
         // Telegram notification
         this.sendTelegramMessage(
-            `🚀 <b>TRADE OPENED (Accum BOOM/CRASH)</b>\n\n` +
+            `🚀 <b>TRADE OPENED (Accum BOOM)</b>\n\n` +
             `Asset: <b>${asset}</b>\n` +
             `stayedInArray: <b>[${this.stayedInArray[99]}|${this.stayedInArray[98]}|${this.stayedInArray[97]}|${this.stayedInArray[96]}|${this.stayedInArray[95]}|${this.stayedInArray[94]}]</b>\n` +
             `totalStayedInArray: ${this.totalStayedInArray}/${this.maxTotalStayedIn} (${this.totalStayedInArray2}/${this.maxTotalStayedIn2})\n` +
@@ -1184,7 +1164,7 @@ class EnhancedDerivTradingBot {
         );
 
         this.sendTelegramMessage(
-            `🚨 <b>STUCK TRADE RECOVERED Accum BOOM/CRASH[${reason}]</b>\n\n` +
+            `🚨 <b>STUCK TRADE RECOVERED Accum BOOM[${reason}]</b>\n\n` +
             `Contract: ${contractId}\n` +
             `Asset: ${stuckAsset}\n` +
             `Stake: $${stake.toFixed(2)}\n` +
@@ -1309,7 +1289,7 @@ class EnhancedDerivTradingBot {
 
         // Send Trade result notification with final stayedInArray
         this.sendTelegramMessage(
-            `<b>Accum BOOM/CRASH</b>\n` +
+            `<b>Accum BOOM</b>\n` +
             `${won ? '✅ WON' : '❌ LOSS'}\n` +
             `Asset: <b>${asset}</b>\n` +
             `Tick Passed: <b>${this.tickPassed}</b>\n` +
@@ -1505,10 +1485,9 @@ const bot = new EnhancedDerivTradingBot('DMylfkyce6VyZt7', {
     takeProfitMultiplier: 1, //0.05, % of Stake Amount
     filterNum: 4,
     assets: [
-        'R_25'
-        // 'BOOM500', 'BOOM600', 'BOOM900', 'BOOM1000',
-        // 'CRASH500', 'CRASH600', 'CRASH900', 'CRASH1000',
-        // 'R_10', 'R_25', 'R_50', 'R_75'
+        'BOOM300N', 'BOOM500', 'BOOM600', 'BOOM900', 'BOOM1000',
+        // 'CRASH300N', 'CRASH500', 'CRASH600', 'CRASH900', 'CRASH1000',
+        // 'R_10', 'R_25', 'R_50', 'R_75', 'R_100'
     ],
     telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
     telegramChatId: '752497117',
