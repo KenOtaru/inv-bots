@@ -1,0 +1,64 @@
+{
+  "savedAt": 1779956408565,
+  "trading": {
+    "currentStake": 1,
+    "consecutiveLosses": 0,
+    "totalTrades": 2,
+    "totalWins": 1,
+    "totalLosses": 1,
+    "totalProfitLoss": 0.72,
+    "dailyProfitLoss": 0.72,
+    "consecutiveLosses2": 0,
+    "consecutiveLosses3": 0,
+    "consecutiveLosses4": 0,
+    "consecutiveLosses5": 0,
+    "consecutiveLosses6": 0,
+    "kCountNum": 0,
+    "tradedDigitArray": [
+      0,
+      0
+    ],
+    "tradedDigitArray2": [],
+    "Sys1": 0,
+    "Sys2": false,
+    "filterNum": 4
+  },
+  "assetMetrics": {
+    "BOOM300N": {
+      "trades": 2,
+      "wins": 1,
+      "losses": 1,
+      "profitLoss": 0.72
+    },
+    "BOOM500": {
+      "trades": 0,
+      "wins": 0,
+      "losses": 0,
+      "profitLoss": 0
+    },
+    "BOOM600": {
+      "trades": 0,
+      "wins": 0,
+      "losses": 0,
+      "profitLoss": 0
+    },
+    "BOOM900": {
+      "trades": 0,
+      "wins": 0,
+      "losses": 0,
+      "profitLoss": 0
+    },
+    "BOOM1000": {
+      "trades": 0,
+      "wins": 0,
+      "losses": 0,
+      "profitLoss": 0
+    }
+  },
+  "hourlyStats": {
+    "trades": 2,
+    "wins": 1,
+    "losses": 1,
+    "pnl": 0.72
+  }
+}
