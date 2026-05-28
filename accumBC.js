@@ -322,7 +322,7 @@ class EnhancedDerivTradingBot {
         const totalStayedInArray = this.calculateTotalStayedIn(stayedInArray);
         
         // Log the calculation for debugging
-        console.log(`   📊 Total StayedIn Sum: ${totalStayedInArray} (Max: ${maxTotalStayedIn})`);
+        console.log(`   📊 Total StayedIn3 Sum: ${totalStayedInArray} (Max: ${maxTotalStayedIn})`);
         this.totalStayedInArray2 = totalStayedInArray;
         this.maxTotalStayedIn2 = maxTotalStayedIn;
         
@@ -852,12 +852,13 @@ class EnhancedDerivTradingBot {
         // `);
 
         // Entry condition
-        const condition = this.consecutiveLosses < 1 ? (this.checkTradeCondition(stayedInArray, this.consecutiveLosses, 1600) && this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 40)) : this.checkTradeCondition3(stayedInArray2, this.consecutiveLosses, 50);
+        const condition = this.checkTradeCondition(stayedInArray, this.consecutiveLosses, 1600) && this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 40)
+        const condition2 = this.checkTradeCondition3(stayedInArray2, this.consecutiveLosses, 50);
         
-        console.log(`   Entry condition: ${condition ? '✅ MET' : '❌ NOT MET'}`);
-
         // Check if we should place trade
-        if (condition) {
+        if (condition && this.consecutiveLosses < 1) {
+            console.log(`   Entry condition: ${condition ? '✅ MET' : '❌ NOT MET'}`);
+
             this.tradedDigitArray.push(this.stayedInArray[99]);
             this.filteredArray = appearedOnceArray;
             
@@ -871,6 +872,22 @@ class EnhancedDerivTradingBot {
 
             // Place trade
             this.placeTrade(asset);
+        } else if (condition2 && this.consecutiveLosses >= 1) {
+            console.log(`   Entry condition: ${condition ? '✅ MET' : '❌ NOT MET'}`);
+
+           this.tradedDigitArray.push(this.stayedInArray[99]);
+            this.filteredArray = appearedOnceArray;
+            
+            console.log(`   Traded Digit Array: [${this.tradedDigitArray.join(', ')}]`);
+
+            const growthRate = this.config.growthRate;
+
+            console.log(`\n🎯 ENTRY SIGNAL: ${asset}`);
+            console.log(`   Growth Rate: ${(growthRate * 100).toFixed(0)}% | Stake: $${this.currentStake.toFixed(2)}`);
+            console.log(`   Take Profit: $${this.takeProfitAmount.toFixed(2)}`);
+
+            // Place trade
+            this.placeTrade(asset); 
         }
     }
 

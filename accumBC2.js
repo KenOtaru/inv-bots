@@ -847,17 +847,19 @@ class EnhancedDerivTradingBot {
             .filter(digit => digitFrequency[digit] === this.filterNum)
             .map(Number);
 
-        // console.log(`   Digits that appeared ${this.filterNum} times: [${appearedOnceArray.join(', ')}]
-        //     StayedInArray: [${stayedInArray[99]}|${this.stayedInArray[98]}|${this.stayedInArray[97]}|${this.stayedInArray[96]}|${this.stayedInArray[95]}|${this.stayedInArray[94]}]
-        // `);
+        console.log(`   Digits that appeared ${this.filterNum} times: [${appearedOnceArray.join(', ')}]
+            StayedInArray: [${stayedInArray[99]}|${this.stayedInArray[98]}|${this.stayedInArray[97]}|${this.stayedInArray[96]}|${this.stayedInArray[95]}|${this.stayedInArray[94]}]
+        `);
 
         // Entry condition
-        const condition = this.consecutiveLosses < 1 ? (this.checkTradeCondition(stayedInArray, this.consecutiveLosses, 1600) && this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 40)) : this.checkTradeCondition3(stayedInArray2, this.consecutiveLosses, 50);
+        const condition = this.checkTradeCondition(stayedInArray, this.consecutiveLosses, 1600) && this.consecutiveLosses < 1; 
+        const condition2 = this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 40) && this.consecutiveLosses < 1;
+        const condition3 = this.checkTradeCondition3(stayedInArray2, this.consecutiveLosses, 50) && this.consecutiveLosses >= 1;
         
-        console.log(`   Entry condition: ${condition ? '✅ MET' : '❌ NOT MET'}`);
-
         // Check if we should place trade
-        if (condition) {
+        if (condition && condition2) {
+            console.log(`   Entry condition: ${condition ? '✅ MET' : '❌ NOT MET'}`);
+
             this.tradedDigitArray.push(this.stayedInArray[99]);
             this.filteredArray = appearedOnceArray;
             
@@ -871,6 +873,22 @@ class EnhancedDerivTradingBot {
 
             // Place trade
             this.placeTrade(asset);
+        } else if (condition3) {
+            console.log(`   Entry condition: ${condition ? '✅ MET' : '❌ NOT MET'}`);
+
+           this.tradedDigitArray.push(this.stayedInArray[99]);
+            this.filteredArray = appearedOnceArray;
+            
+            console.log(`   Traded Digit Array: [${this.tradedDigitArray.join(', ')}]`);
+
+            const growthRate = this.config.growthRate;
+
+            console.log(`\n🎯 ENTRY SIGNAL: ${asset}`);
+            console.log(`   Growth Rate: ${(growthRate * 100).toFixed(0)}% | Stake: $${this.currentStake.toFixed(2)}`);
+            console.log(`   Take Profit: $${this.takeProfitAmount.toFixed(2)}`);
+
+            // Place trade
+            this.placeTrade(asset); 
         }
     }
 
