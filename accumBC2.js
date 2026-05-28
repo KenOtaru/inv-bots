@@ -179,7 +179,7 @@ class EnhancedDerivTradingBot {
         this.confidenceThreshold = 0.5;
         this.kTradeCount = 0;
         this.isWinTrade = false;
-        this.waitTime = 0;
+        this.waitTime = 50000;
         this.LossDigitsList = [];
         this.threeConsecutiveDigits = 0;
         this.predictedType = '';
@@ -526,7 +526,6 @@ class EnhancedDerivTradingBot {
     disconnect() {
         console.log('🛑 Disconnecting...');
         StatePersistence.saveState(this);
-        this.endOfDay = true;
         this.cleanup();
         console.log('✅ Bot disconnected');
     }
@@ -1375,15 +1374,16 @@ class EnhancedDerivTradingBot {
             return;
         }
 
-        StatePersistence.saveState(this);
-
         if(won && !this.endOfDay) {
             this.disconnect();
+            console.log("Bot Disconnected, will Restart in", (this.waitTime / 1000).toFixed(0), 'Seconds' );
             
-            setInterval(() => {
+            setTimeout(() => {
                 this.connect();
-            }, 35000);
+            }, this.waitTime);
         }
+
+        StatePersistence.saveState(this);
 
         // ═══════════════════════════════════════════════════════════════════
         // IMMEDIATE RE-EVALUATION — Don't wait for the next tick

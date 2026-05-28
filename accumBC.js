@@ -1351,7 +1351,7 @@ class EnhancedDerivTradingBot {
             this.disconnect();
             console.log("Bot Disconnected, will Restart in", (this.waitTime / 1000).toFixed(0), 'Seconds' );
             
-            setInterval(() => {
+            setTimeout(() => {
                 this.connect();
             }, this.waitTime);
         }
