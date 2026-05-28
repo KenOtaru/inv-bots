@@ -830,7 +830,7 @@ class EnhancedDerivTradingBot {
         this.currentTick = stayedInArray[99];
 
         console.log(`📋 Proposal for ${asset}: Current StayIN Digit Count: ${stayedInArray[99]} (${currentDigitCount})`);
-        console.log(`   Filter Number: ${this.filterNum}`);
+        // console.log(`   Filter Number: ${this.filterNum}`);
 
         // Store proposal ID
         this.assetStates[asset].proposalId = proposal.id;
@@ -847,9 +847,9 @@ class EnhancedDerivTradingBot {
             .filter(digit => digitFrequency[digit] === this.filterNum)
             .map(Number);
 
-        console.log(`   Digits that appeared ${this.filterNum} times: [${appearedOnceArray.join(', ')}]
-            StayedInArray: [${stayedInArray[99]}|${this.stayedInArray[98]}|${this.stayedInArray[97]}|${this.stayedInArray[96]}|${this.stayedInArray[95]}|${this.stayedInArray[94]}]
-        `);
+        // console.log(`   Digits that appeared ${this.filterNum} times: [${appearedOnceArray.join(', ')}]
+        //     StayedInArray: [${stayedInArray[99]}|${this.stayedInArray[98]}|${this.stayedInArray[97]}|${this.stayedInArray[96]}|${this.stayedInArray[95]}|${this.stayedInArray[94]}]
+        // `);
 
         // Entry condition
         const condition = this.consecutiveLosses < 1 ? (this.checkTradeCondition(stayedInArray, this.consecutiveLosses, 1600) && this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 40)) : this.checkTradeCondition3(stayedInArray2, this.consecutiveLosses, 50);
