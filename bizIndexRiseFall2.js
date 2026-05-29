@@ -2032,7 +2032,7 @@ class IndexBot {
             );
         }
 
-        if (!signal.shouldTrade || !signal.direction) {
+        if (a.recoveryStep < 1 && !signal.shouldTrade || !signal.direction) {
             a.canTrade = false;
 
             // If in recovery and signal is flat — log but don't force trade
