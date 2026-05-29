@@ -49,8 +49,8 @@ const path      = require('path');
 // ============================================================
 // FILE PATHS
 // ============================================================
-const STATE_FILE        = path.join(__dirname, 'IndexBot2_02-state_v2.json');
-const HISTORY_FILE      = path.join(__dirname, 'IndexBot2_02-history_v2.json');
+const STATE_FILE        = path.join(__dirname, 'IndexBot2_03-state_v2.json');
+const HISTORY_FILE      = path.join(__dirname, 'IndexBot2_03-history_v2.json');
 const STATE_SAVE_INTERVAL = 5000;  // ms
 
 // ============================================================
@@ -2033,15 +2033,13 @@ class IndexBot {
         }
 
         if (!signal.shouldTrade || !signal.direction) {
-            if(a.recoveryStep < 1) { 
-                a.canTrade = false;
+            a.canTrade = false;
 
-                // If in recovery and signal is flat — log but don't force trade
-                if (a.recoveryStep > 0) {
-                    LOGGER.warn(`[${symbol}] Recovery step ${a.recoveryStep} but no signal — waiting for next candle`);
-                }
-                return;
+            // If in recovery and signal is flat — log but don't force trade
+            if (a.recoveryStep > 0) {
+                LOGGER.warn(`[${symbol}] Recovery step ${a.recoveryStep} but no signal — waiting for next candle`);
             }
+            return;
         }
 
         // ── LOCK mutex and execute ─────────────────────────
