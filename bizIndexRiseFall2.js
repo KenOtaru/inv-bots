@@ -49,8 +49,8 @@ const path      = require('path');
 // ============================================================
 // FILE PATHS
 // ============================================================
-const STATE_FILE        = path.join(__dirname, 'IndexBot_008-state_v2.json');
-const HISTORY_FILE      = path.join(__dirname, 'IndexBot_008-history_v2.json');
+const STATE_FILE        = path.join(__dirname, 'IndexBot2_01-state_v2.json');
+const HISTORY_FILE      = path.join(__dirname, 'IndexBot2_01-history_v2.json');
 const STATE_SAVE_INTERVAL = 5000;  // ms
 
 // ============================================================
@@ -74,7 +74,7 @@ const LOGGER = {
 // ============================================================
 const CONFIG = {
     // ── Deriv API ─────────────────────────────────────────────
-    API_TOKEN:  'hsj0tA0XJoIzJG5',   // 
+    API_TOKEN:  '0P94g4WdSrSrzir',   // 
     APP_ID:     '1089',
     WS_URL:     'wss://ws.derivws.com/websockets/v3',
 
@@ -1158,7 +1158,7 @@ class TelegramService {
         const today   = TradeHistoryManager.getTodayStats();
         const ind     = details.indicators || {};
         const lines   = [
-            `${emoji} <b>INDEX BOT v2 — ${type}</b>`,
+            `${emoji} <b>INDEX BOT2 v2 — ${type}</b>`,
             `Pair: <b>${symbol}</b>  Direction: <b>${direction === 'CALLE' ? '📈 CALLE' : '📉 PUTE'}</b>`,
             `Stake: $${stake.toFixed(2)} | Duration: ${duration}${durationUnit.toUpperCase()}`,
             `Recovery Step: ${a?.recoveryStep ?? 0} | ${TradingSessionManager.getStatusString()}`,
@@ -1206,7 +1206,7 @@ class TelegramService {
             }
         });
         await this.sendMessage([
-            `⏰ <b>Index Bot v2 Hourly</b>`,
+            `⏰ <b>Index Bot2 v2 Hourly</b>`,
             `Last Hour: ${h.trades}t ${h.wins}W/${h.losses}L ${wr}% ${h.pnl >= 0 ? '🟢' : '🔴'} $${h.pnl.toFixed(2)}`,
             `Today: ${today.tradesCount}t P/L: $${(today.netPL || 0).toFixed(2)}`,
             `Capital: $${state.capital.toFixed(2)}`,
@@ -1230,7 +1230,7 @@ class TelegramService {
             }
         });
         await this.sendMessage([
-            `📊 <b>INDEX BOT v2 SESSION SUMMARY</b>`,
+            `📊 <b>INDEX BOT2 v2 SESSION SUMMARY</b>`,
             `Duration: ${stats.duration} | Trades: ${stats.trades}`,
             `W: ${stats.wins} | L: ${stats.losses} | Win Rate: ${stats.winRate}`,
             `Session P/L: $${stats.netPL.toFixed(2)}`,
@@ -1250,7 +1250,7 @@ class TelegramService {
             pairInfo += `\n  ${sym}: ${CONFIG.TIMEFRAME_LABEL} | ${CONFIG.DURATION}${CONFIG.DURATION_UNIT}`;
         });
         await this.sendMessage([
-            `🤖 <b>DERIV INDEX BOT v2 STARTED</b>`,
+            `🤖 <b>DERIV INDEX BOT2 v2 STARTED</b>`,
             `Strategy: 3-Layer Volatility-Regime Adaptive Confluence`,
             `L1: ATR+ADX+BB | L2: Supertrend+EMA+Donchian | L3: RSI+MACD+Stoch+Pattern (${CONFIG.MIN_CONFLUENCE_SCORE}/4)`,
             `Risk: ${CONFIG.RISK_PERCENT_PER_TRADE}% per trade | Max: $${CONFIG.MAX_STAKE}`,
