@@ -930,7 +930,7 @@ class EnhancedDerivTradingBot {
 
         // ✅ Check if this is a scan-only request (from pending asset scanner)
         const passthrough = message.echo_req?.passthrough;
-        if (passthrough && passthrough.action === 'scan_only') {
+        if (!this.tradeInProgress && passthrough && passthrough.action === 'scan_only') {
             // This is just a scan to update asset status, don't proceed with trading
             const totalStayedIn = this.calculateTotalStayedIn(stayedInArray);
             console.log(`   🔍 Scan result for ${asset}: stayedIn=${totalStayedIn} (${totalStayedIn < this.config.STAYED_IN_THRESHOLD ? 'READY' : 'WAITING'})`);
@@ -938,7 +938,7 @@ class EnhancedDerivTradingBot {
         }
 
         // ✅ Check if this is a request for final stayedInArray (after contract settled)
-        if (passthrough && passthrough.action === 'get_final_stayed_in') {
+        if (!this.tradeInProgress && passthrough && passthrough.action === 'get_final_stayed_in') {
             // This is the final stayedInArray after contract settlement
             console.log(`✅ Final stayedInArray received for ${asset}: [${stayedInArray.slice(-6).join('|')}]`);
             
@@ -1680,7 +1680,7 @@ const bot = new EnhancedDerivTradingBot('0P94g4WdSrSrzir', {
         'BOOM50','BOOM150N', 'BOOM300N', 'BOOM500', 'BOOM600', 'BOOM900', 'BOOM1000',
         'CRASH50', 'CRASH150N', 'CRASH300N', 'CRASH500', 'CRASH600', 'CRASH900', 'CRASH1000',
         'R_10', 'R_25', 'R_50', 'R_75', 'R_100',
-        '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75', '1HZ100V',
+        '1HZ10V', '1HZ25V', '1HZ50V', '1HZ100V',
     ],
     telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
     telegramChatId: '752497117',
