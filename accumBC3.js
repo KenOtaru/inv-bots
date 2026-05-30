@@ -1674,7 +1674,7 @@ const bot = new EnhancedDerivTradingBot('0P94g4WdSrSrzir', {
     growthRate: 0.05,
     takeProfitMultiplier: 1, //0.05, % of Stake Amount
     filterNum: 4,
-    scanTimer: 60000,
+    scanTimer: 60000, //Set Timer for Bot to Re-scan for Assets that are ready for Trade execution.
     assets: [
         'BOOM50','BOOM150N', 'BOOM300N', 'BOOM500', 'BOOM600', 'BOOM900', 'BOOM1000',
         'CRASH50', 'CRASH150N', 'CRASH300N', 'CRASH500', 'CRASH600', 'CRASH900', 'CRASH1000',
