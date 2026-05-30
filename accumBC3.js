@@ -1003,7 +1003,7 @@ class EnhancedDerivTradingBot {
 
         // Entry condition
         // const condition =  this.consecutiveLosses < 1 ? this.checkTradeCondition(stayedInArray, this.consecutiveLosses, 1600) && this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 30) : this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 100); 
-        const condition =  this.checkTradeCondition(stayedInArray, this.consecutiveLosses, 1550) && this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 11); 
+        const condition =  this.checkTradeCondition(stayedInArray, this.consecutiveLosses, this.config.STAYED_IN_THRESHOLD) && this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 11); 
         
         // Check if we should place trade
         if (condition) {
@@ -1680,7 +1680,7 @@ const bot = new EnhancedDerivTradingBot('0P94g4WdSrSrzir', {
         'BOOM50','BOOM150N', 'BOOM300N', 'BOOM500', 'BOOM600', 'BOOM900', 'BOOM1000',
         'CRASH50', 'CRASH150N', 'CRASH300N', 'CRASH500', 'CRASH600', 'CRASH900', 'CRASH1000',
         'R_10', 'R_25', 'R_50', 'R_75', 'R_100',
-        // '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75', '1HZ100V',
+        '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75', '1HZ100V',
     ],
     telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
     telegramChatId: '752497117',
