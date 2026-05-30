@@ -978,7 +978,7 @@ class EnhancedDerivTradingBot {
 
         this.currentTick = stayedInArray[99];
 
-        console.log(`📋 Proposal for ${asset}: Current StayIN Digit Count: ${stayedInArray[99]} (${currentDigitCount})`);
+        // console.log(`📋 Proposal for ${asset}: Current StayIN Digit Count: ${stayedInArray[99]} (${currentDigitCount})`);
         // console.log(`   Filter Number: ${this.filterNum}`);
 
         // Store proposal ID
