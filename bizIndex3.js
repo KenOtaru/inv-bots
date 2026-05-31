@@ -1,9 +1,10 @@
 'use strict';
 /**
  * ╔══════════════════════════════════════════════════════════════════════════╗
- * ║         DERIV SYNTHETIC INDICES CALLE/PUTE BOT  —  v2.0                  ║
+ * ║         DERIV SYNTHETIC INDICES MULTIPLIER BOT  —  v3.0                  ║
  * ║                                                                          ║
  * ║  Strategy: Volatility-Regime Adaptive Multi-Confluence System           ║
+ * ║  Market Type: MULTIPLIERS (MULTUP/MULTDOWN)                             ║
  * ║  ─────────────────────────────────────────────────────────────────────  ║
  * ║  LAYER 1 — REGIME GATE (hard gate, no score)                            ║
  * ║    • ATR Volatility Band   — only trade inside valid ATR range           ║
@@ -23,21 +24,24 @@
  * ║                                                                          ║
  * ║  ENTRY: All Layer 1 gates pass + Layer 2 agree + Layer 3 score ≥ 3      ║
  * ║                                                                          ║
+ * ║  MULTIPLIER SETTINGS:                                                    ║
+ * ║    • CALLE signal → MULTUP (multiplier UP trade)                        ║
+ * ║    • PUTE signal → MULTDOWN (multiplier DOWN trade)                     ║
+ * ║    • User-configurable take_profit and stop_loss amounts                ║
+ * ║    • Minimum multiplier per asset (typically x2-x5)                     ║
+ * ║                                                                          ║
  * ║  RISK MANAGEMENT: Fixed-Fractional (1% of capital per trade)            ║
  * ║    • Conservative base: 1% per trade (replaces martingale)              ║
  * ║    • Optional limited recovery: max 2 steps, capped at 2.5% capital     ║
  * ║    • Hard daily stop-loss drawer protection                              ║
  * ║    • Three-consecutive-loss pause (cool-down before re-entry)            ║
  * ║                                                                          ║
- * ║  BUG FIXES vs v1:                                                        ║
- * ║    ✔ All LOGGER calls fixed (proper parentheses, not tagged templates)   ║
- * ║    ✔ All .map() calls fixed (removed Markdown link encoding)             ║
- * ║    ✔ Trade mutex/lock added (prevents race-condition double-trades)      ║
- * ║    ✔ getDayStats() method added to TradeHistoryManager                   ║
- * ║    ✔ Recovery direction logic fixed (signal-driven, not same-direction)  ║
- * ║    ✔ Martingale replaced with fractional fixed staking + 2-step recovery ║
- * ║    ✔ Session filter made optional and correct for synthetics (24/7)      ║
- * ║    ✔ State file age threshold raised to 120 min                          ║
+ * ║  v3.0 CHANGES:                                                           ║
+ * ║    ✔ Changed from CALLE/PUTE to MULTUP/MULTDOWN (Multipliers)          ║
+ * ║    ✔ Added take_profit and stop_loss parameters                         ║
+ * ║    ✔ Removed duration (multipliers stay open until closed)              ║
+ * ║    ✔ Added multiplier value configuration per asset                     ║
+ * ║    ✔ Trade analysis logic preserved (3-layer system unchanged)          ║
  * ╚══════════════════════════════════════════════════════════════════════════╝
  */
 
@@ -49,8 +53,8 @@ const path      = require('path');
 // ============================================================
 // FILE PATHS
 // ============================================================
-const STATE_FILE        = path.join(__dirname, 'IndexBot2_03-state_v2.json');
-const HISTORY_FILE      = path.join(__dirname, 'IndexBot2_03-history_v2.json');
+const STATE_FILE        = path.join(__dirname, 'IndexBot3_01-state_v2.json');
+const HISTORY_FILE      = path.join(__dirname, 'IndexBot3_01-history_v2.json');
 const STATE_SAVE_INTERVAL = 5000;  // ms
 
 // ============================================================
@@ -74,22 +78,51 @@ const LOGGER = {
 // ============================================================
 const CONFIG = {
     // ── Deriv API ─────────────────────────────────────────────
-    API_TOKEN:  '0P94g4WdSrSrzir',   // 
+    API_TOKEN:  'Dz2V2KvRf4Uukt3',   // 
     APP_ID:     '1089',
     WS_URL:     'wss://ws.derivws.com/websockets/v3',
 
     // ── Capital & Risk (Fixed-Fractional — replaces martingale) ──
     INITIAL_CAPITAL:            250,
     RISK_PERCENT_PER_TRADE:     0.50,    // % of capital per trade (1% = conservative)
-    MIN_STAKE:                  0.35,   // Minimum stake allowed by Deriv
+    MIN_STAKE:                  1,   // Minimum stake allowed by Deriv
     MAX_STAKE:                  150,   // Hard cap per trade in USD
+
+    // ── MULTIPLIER SETTINGS (NEW for v3.0) ────────────────────
+    // Take Profit and Stop Loss amounts (in USD)
+    TAKE_PROFIT_AMOUNT:         50,     // Close trade when profit reaches this amount
+    STOP_LOSS_AMOUNT:           25,     // Close trade when loss reaches this amount
+    
+    // Multiplier values per asset (minimum multiplier for each)
+    MULTIPLIER_VALUES: {
+        // Standard volatility indices
+        R_10:    2,    // x2 multiplier
+        R_25:    2,
+        R_50:    2,
+        R_75:    2,
+        R_100:   2,
+        
+        // Step indices
+        stpRNG:  2,
+        stpRNG2: 2,
+        stpRNG3: 2,
+        stpRNG4: 2,
+        stpRNG5: 2,
+        
+        // 1HZ series
+        '1HZ10V':  2,
+        '1HZ25V':  2,
+        '1HZ50V':  2,
+        '1HZ75V':  2,
+        '1HZ100V': 2,
+    },
 
     // Recovery staking (limited — max 2 steps)
     RECOVERY_ENABLED:           true,
-    RECOVERY_MULTIPLIER:        1.48,    // Step 1 recovery multiplier
+    RECOVERY_MULTIPLIER:        2.0,    // Step 1 recovery multiplier
     RECOVERY_MULTIPLIER2:       2.0,    // Step 2 recovery multiplier (final)
-    RECOVERY_MULTIPLIER3:       2.1,     // Step 3 recovery multiplier (final)
-    MAX_RECOVERY_STEPS:         9,      // Never go beyond 2 recovery steps
+    RECOVERY_MULTIPLIER3:       2.0,     // Step 3 recovery multiplier (final)
+    MAX_RECOVERY_STEPS:         5,      // Never go beyond 2 recovery steps
     MAX_RECOVERY_STAKE_PCT:     75,    // Recovery stake never exceeds 75% of capital
 
     // Session profit/loss guards
@@ -98,7 +131,7 @@ const CONFIG = {
     DAILY_STOP_LOSS:            -2000,   // Hard daily stop, resets at UTC midnight
 
     // Cool-down after consecutive losses
-    MAX_CONSECUTIVE_LOSSES:     9,      // Pause trading after 3 straight losses
+    MAX_CONSECUTIVE_LOSSES:     5,      // Pause trading after 3 straight losses
     COOLDOWN_CANDLES:           3,      // Wait 3 candles before re-entry
 
     // ── Candle / Contract Settings ────────────────────────────
@@ -107,9 +140,11 @@ const CONFIG = {
     CANDLES_TO_LOAD:            150,    // History for indicator warmup
     MAX_CANDLES_STORED:         250,    // Rolling window
 
-    // Contract duration (slightly less than granularity to close on candle)
-    DURATION:                   56,
-    DURATION_UNIT:              's',
+    // NOTE: Duration removed for multipliers (they stay open until closed)
+    // Multipliers don't use duration - they stay open until:
+    // 1. Take profit is hit
+    // 2. Stop loss is hit
+    // 3. Manually closed
 
     // Minimum candles before analysis begins
     MIN_CANDLES_REQUIRED:       60,
@@ -811,7 +846,7 @@ class SignalAnalyzer {
 
         // ── Final decision ────────────────────────────────
         if (score >= CONFIG.MIN_CONFLUENCE_SCORE) {
-            result.direction  = trendDirection === 'BULL' ? 'CALLE' : 'PUTE';
+            result.direction  = trendDirection === 'BULL' ? 'MULTUP' : 'MULTDOWN';
             result.shouldTrade = true;
             result.reason = (
                 `${result.direction}: L1✅ L2(ST:${l2.supertrend} EMA:${l2.ema?.split(' ')[0]} DON:${l2.donchian}) ` +
@@ -1151,16 +1186,17 @@ class TelegramService {
         } catch (e) { LOGGER.error(`Telegram exception: ${e.message}`); }
     }
 
-    static async sendTradeAlert(type, symbol, direction, stake, duration, durationUnit, details = {}) {
+    async sendTradeAlert(type, symbol, direction, stake, multiplier, details = {}) {
         const emoji   = type === 'OPEN' ? '🚀' : type === 'WIN' ? '✅' : '❌';
         const a       = state.assets[symbol];
         const overall = TradeHistoryManager.getOverallStats();
         const today   = TradeHistoryManager.getTodayStats();
         const ind     = details.indicators || {};
         const lines   = [
-            `${emoji} <b>INDEX BOT2 v2 — ${type}</b>`,
-            `Pair: <b>${symbol}</b>  Direction: <b>${direction === 'CALLE' ? '📈 CALLE' : '📉 PUTE'}</b>`,
-            `Stake: $${stake.toFixed(2)} | Duration: ${duration}${durationUnit.toUpperCase()}`,
+            `${emoji} <b>MULTIPLIER BOT v3 — ${type}</b>`,
+            `Pair: <b>${symbol}</b>  Direction: <b>${direction === 'MULTUP' ? '📈 UP' : '📉 DOWN'}</b>`,
+            `Stake: $${stake.toFixed(2)} | Multiplier: x${multiplier}`,
+            `Take Profit: $${CONFIG.TAKE_PROFIT_AMOUNT} | Stop Loss: $${CONFIG.STOP_LOSS_AMOUNT}`,
             `Recovery Step: ${a?.recoveryStep ?? 0} | ${TradingSessionManager.getStatusString()}`,
             ``,
         ];
@@ -1247,13 +1283,16 @@ class TelegramService {
         const overall = TradeHistoryManager.getOverallStats();
         let pairInfo  = '';
         CONFIG.ACTIVE_ASSETS.forEach(sym => {
-            pairInfo += `\n  ${sym}: ${CONFIG.TIMEFRAME_LABEL} | ${CONFIG.DURATION}${CONFIG.DURATION_UNIT}`;
+            const multiplier = CONFIG.MULTIPLIER_VALUES[sym] || 2;
+            pairInfo += `\n  ${sym}: ${CONFIG.TIMEFRAME_LABEL} | x${multiplier} multiplier`;
         });
         await this.sendMessage([
-            `🤖 <b>DERIV INDEX BOT2 v2 STARTED</b>`,
+            `🤖 <b>DERIV MULTIPLIER BOT v3 STARTED</b>`,
             `Strategy: 3-Layer Volatility-Regime Adaptive Confluence`,
             `L1: ATR+ADX+BB | L2: Supertrend+EMA+Donchian | L3: RSI+MACD+Stoch+Pattern (${CONFIG.MIN_CONFLUENCE_SCORE}/4)`,
+            `Market Type: MULTIPLIERS (MULTUP/MULTDOWN)`,
             `Risk: ${CONFIG.RISK_PERCENT_PER_TRADE}% per trade | Max: $${CONFIG.MAX_STAKE}`,
+            `Take Profit: $${CONFIG.TAKE_PROFIT_AMOUNT} | Stop Loss: $${CONFIG.STOP_LOSS_AMOUNT}`,
             `Recovery: ${CONFIG.RECOVERY_ENABLED ? `Enabled (max ${CONFIG.MAX_RECOVERY_STEPS} steps)` : 'Disabled'}`,
             `Capital: $${state.capital.toFixed(2)}`,
             TradingSessionManager.getStatusString(),
@@ -1897,12 +1936,13 @@ class IndexBot {
 
     async start() {
         console.log('\n' + '═'.repeat(72));
-        console.log(' DERIV SYNTHETIC INDICES BOT v2 — Volatility-Regime Adaptive System');
+        console.log(' DERIV SYNTHETIC INDICES MULTIPLIER BOT v3 — Volatility-Regime Adaptive');
         console.log('═'.repeat(72));
         console.log(`Assets    : ${CONFIG.ACTIVE_ASSETS.join(', ')}`);
-        console.log(`Timeframe : ${CONFIG.TIMEFRAME_LABEL} candles | Duration: ${CONFIG.DURATION}${CONFIG.DURATION_UNIT}`);
+        console.log(`Timeframe : ${CONFIG.TIMEFRAME_LABEL} candles | Market Type: MULTIPLIERS`);
         console.log(`Strategy  : L1(ATR+ADX+BB) + L2(ST+EMA+Donchian) + L3(RSI+MACD+Stoch+Pattern ≥${CONFIG.MIN_CONFLUENCE_SCORE}/4)`);
-        console.log(`Risk      : ${CONFIG.RISK_PERCENT_PER_TRADE}%/trade | Max: $${CONFIG.MAX_STAKE} | Recovery: ${CONFIG.MAX_RECOVERY_STEPS} steps max`);
+        console.log(`Risk      : ${CONFIG.RISK_PERCENT_PER_TRADE}%/trade | Max: $${CONFIG.MAX_STAKE}`);
+        console.log(`Multiplier: Take Profit: $${CONFIG.TAKE_PROFIT_AMOUNT} | Stop Loss: $${CONFIG.STOP_LOSS_AMOUNT}`);
         console.log(`Capital   : $${state.capital.toFixed(2)}`);
         console.log(`Sessions  : ${TradingSessionManager.getStatusString()}`);
         console.log('═'.repeat(72) + '\n');
@@ -1918,7 +1958,7 @@ class IndexBot {
         TelegramService.startHourlyTimer();
         TelegramService.startDailyTimer();
         this.startSessionTimeChecker();
-        LOGGER.info('✅ Index Bot v2 fully started!');
+        LOGGER.info('✅ Multiplier Bot v3 fully started!');
     }
 
     subscribeToCandles(symbol) {
@@ -2023,70 +2063,77 @@ class IndexBot {
         // ══════════════════════════════════════════════════════════════
         // NEW: CHECK FOR FORCE TRADE AFTER LOSS (bypass signal analysis)
         // ══════════════════════════════════════════════════════════════
-        if (a.forceTradeOnLoss && a.lastTradeDirection) {
-            LOGGER.trade(`🔄 [${symbol}] FORCE TRADE AFTER LOSS — Same direction: ${a.lastTradeDirection}`);
+        // if (a.forceTradeOnLoss && a.lastTradeDirection) {
+        //     LOGGER.trade(`🔄 [${symbol}] FORCE TRADE AFTER LOSS — Same direction: ${a.lastTradeDirection}`);
             
-            // Lock mutex and execute immediately in same direction
-            this._tradeLocked = true;
-            a.canTrade = false;
+        //     // Lock mutex and execute immediately in same direction
+        //     this._tradeLocked = true;
+        //     a.canTrade = false;
             
-            const recoveryNote = a.recoveryStep > 0 ? ` [RECOVERY STEP ${a.recoveryStep}]` : '';
-            LOGGER.trade(
-                `🎯 [${symbol}]${recoveryNote} ${a.lastTradeDirection === 'CALLE' ? '📈 CALLE' : '📉 PUTE'} | ` +
-                `Stake: $${stake.toFixed(2)} | FORCED AFTER LOSS`
-            );
+        //     const recoveryNote = a.recoveryStep > 0 ? ` [RECOVERY STEP ${a.recoveryStep}]` : '';
+        //     LOGGER.trade(
+        //         `🎯 [${symbol}]${recoveryNote} ${a.lastTradeDirection === 'MULTUP' ? '📈 MULTUP' : '📉 MULTDOWN'} | ` +
+        //         `Stake: $${stake.toFixed(2)} | FORCED AFTER LOSS`
+        //     );
 
-            const pos = {
-                symbol,
-                direction:    a.lastTradeDirection,
-                stake,
-                duration:     CONFIG.DURATION,
-                durationUnit: CONFIG.DURATION_UNIT,
-                entryTime:    Date.now(),
-                contractId:   null,
-                reqId:        null,
-                currentProfit: 0,
-                buyPrice:     0,
-                signal:       {
-                    score:    0,
-                    maxScore: 4,
-                    reason:   'FORCED TRADE AFTER LOSS - Same direction recovery',
-                    layer1:   { forced: true },
-                    layer2:   { forced: true },
-                    layer3:   { forced: true },
-                    warnings: ['FORCED_TRADE'],
-                },
-                indicators:   { forced: true },
-            };
+        //     // Get multiplier value for this asset
+        //     const multiplier = CONFIG.MULTIPLIER_VALUES[symbol] || 2;
 
-            a.activePositions.push(pos);
+        //     const pos = {
+        //         symbol,
+        //         direction:    a.lastTradeDirection,
+        //         stake,
+        //         multiplier,
+        //         takeProfit:   CONFIG.TAKE_PROFIT_AMOUNT,
+        //         stopLoss:     CONFIG.STOP_LOSS_AMOUNT,
+        //         entryTime:    Date.now(),
+        //         contractId:   null,
+        //         reqId:        null,
+        //         currentProfit: 0,
+        //         buyPrice:     0,
+        //         signal:       {
+        //             score:    0,
+        //             maxScore: 4,
+        //             reason:   'FORCED TRADE AFTER LOSS - Same direction recovery',
+        //             layer1:   { forced: true },
+        //             layer2:   { forced: true },
+        //             layer3:   { forced: true },
+        //             warnings: ['FORCED_TRADE'],
+        //         },
+        //         indicators:   { forced: true },
+        //     };
 
-            const reqId = this.connection.send({
-                buy: 1, subscribe: 1, price: stake.toFixed(2),
-                parameters: {
-                    contract_type: a.lastTradeDirection,
-                    symbol,
-                    currency:      'USD',
-                    amount:        stake.toFixed(2),
-                    duration:      CONFIG.DURATION,
-                    duration_unit: CONFIG.DURATION_UNIT,
-                    basis:         'stake',
-                },
-            });
+        //     a.activePositions.push(pos);
 
-            pos.reqId = reqId;
+        //     const reqId = this.connection.send({
+        //         buy: 1, subscribe: 1, price: stake.toFixed(2),
+        //         parameters: {
+        //             contract_type: a.lastTradeDirection,
+        //             symbol,
+        //             currency:      'USD',
+        //             amount:        stake.toFixed(2),
+        //             multiplier:    multiplier,
+        //             basis:         'stake',
+        //             limit_order: {
+        //                 take_profit: CONFIG.TAKE_PROFIT_AMOUNT,
+        //                 stop_loss:   CONFIG.STOP_LOSS_AMOUNT,
+        //             },
+        //         },
+        //     });
 
-            // Safety: release lock after 5s if buy response hasn't come
-            setTimeout(() => {
-                if (this._tradeLocked) {
-                    LOGGER.warn(`[${symbol}] Trade lock auto-released after timeout`);
-                    this._tradeLocked = false;
-                }
-            }, 5000);
+        //     pos.reqId = reqId;
 
-            StatePersistence.saveState();
-            return;  // Exit early - no signal analysis needed
-        }
+        //     // Safety: release lock after 5s if buy response hasn't come
+        //     setTimeout(() => {
+        //         if (this._tradeLocked) {
+        //             LOGGER.warn(`[${symbol}] Trade lock auto-released after timeout`);
+        //             this._tradeLocked = false;
+        //         }
+        //     }, 5000);
+
+        //     StatePersistence.saveState();
+        //     return;  // Exit early - no signal analysis needed
+        // }
 
         // ══════════════════════════════════════════════════════════════
         // NORMAL FLOW: Run 3-Layer Signal Analysis
@@ -2123,10 +2170,13 @@ class IndexBot {
         a.canTrade = false;
         a.lastTradeDirection = signal.direction;
 
+        // Get multiplier value for this asset
+        const multiplier = CONFIG.MULTIPLIER_VALUES[symbol] || 2;
+
         const recoveryNote = a.recoveryStep > 0 ? ` [RECOVERY STEP ${a.recoveryStep}]` : '';
         LOGGER.trade(
-            `🎯 [${symbol}]${recoveryNote} ${signal.direction === 'CALLE' ? '📈 CALLE' : '📉 PUTE'} | ` +
-            `Stake: $${stake.toFixed(2)} | Score: ${signal.score}/${signal.maxScore} | ADX: ${signal.indicators?.adx}`
+            `🎯 [${symbol}]${recoveryNote} ${signal.direction === 'MULTUP' ? '📈 MULTUP' : '📉 MULTDOWN'} | ` +
+            `Stake: $${stake.toFixed(2)} | Multiplier: x${multiplier} | Score: ${signal.score}/${signal.maxScore} | ADX: ${signal.indicators?.adx}`
         );
         LOGGER.trade(`   ${signal.reason}`);
 
@@ -2134,8 +2184,9 @@ class IndexBot {
             symbol,
             direction:    signal.direction,
             stake,
-            duration:     CONFIG.DURATION,
-            durationUnit: CONFIG.DURATION_UNIT,
+            multiplier,
+            takeProfit:   CONFIG.TAKE_PROFIT_AMOUNT,
+            stopLoss:     CONFIG.STOP_LOSS_AMOUNT,
             entryTime:    Date.now(),
             contractId:   null,
             reqId:        null,
@@ -2162,9 +2213,12 @@ class IndexBot {
                 symbol,
                 currency:      'USD',
                 amount:        stake.toFixed(2),
-                duration:      CONFIG.DURATION,
-                duration_unit: CONFIG.DURATION_UNIT,
+                multiplier:    multiplier,
                 basis:         'stake',
+                limit_order: {
+                    take_profit: CONFIG.TAKE_PROFIT_AMOUNT,
+                    stop_loss:   CONFIG.STOP_LOSS_AMOUNT,
+                },
             },
         });
 
@@ -2319,7 +2373,7 @@ if (CONFIG.API_TOKEN === 'YOUR_API_TOKEN_HERE') {
     process.exit(1);
 }
 
-console.log('\n🚀 Starting Deriv Index Bot v2...\n');
+console.log('\n🚀 Starting Deriv Multiplier Bot v3...\n');
 bot.connection.connect();
 
 // ── Status display every 60s ──────────────────────────────────
