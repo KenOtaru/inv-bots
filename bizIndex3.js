@@ -90,48 +90,48 @@ const CONFIG = {
 
     // ── MULTIPLIER SETTINGS (NEW for v3.0) ────────────────────
     // Take Profit and Stop Loss amounts (in USD)
-    TAKE_PROFIT_AMOUNT:         50,     // Close trade when profit reaches this amount
-    STOP_LOSS_AMOUNT:           25,     // Close trade when loss reaches this amount
+    TAKE_PROFIT_AMOUNT:         3,     // Close trade when profit reaches this amount
+    STOP_LOSS_AMOUNT:           1,     // Close trade when loss reaches this amount
     
     // Multiplier values per asset (minimum multiplier for each)
     MULTIPLIER_VALUES: {
         // Standard volatility indices
-        R_10:    2,    // x2 multiplier
-        R_25:    2,
-        R_50:    2,
-        R_75:    2,
-        R_100:   2,
+        R_10:    400,    // x2 multiplier
+        R_25:    160,
+        R_50:    80,
+        R_75:    50,
+        R_100:   40,
         
         // Step indices
-        stpRNG:  2,
-        stpRNG2: 2,
-        stpRNG3: 2,
-        stpRNG4: 2,
-        stpRNG5: 2,
+        stpRNG:  750,
+        stpRNG2: 400,
+        stpRNG3: 300,
+        stpRNG4: 200,
+        stpRNG5: 100,
         
         // 1HZ series
-        '1HZ10V':  2,
-        '1HZ25V':  2,
-        '1HZ50V':  2,
-        '1HZ75V':  2,
-        '1HZ100V': 2,
+        '1HZ10V':  400,
+        '1HZ25V':  160,
+        '1HZ50V':  80,
+        '1HZ75V':  50,
+        '1HZ100V': 40,
     },
 
     // Recovery staking (limited — max 2 steps)
     RECOVERY_ENABLED:           true,
-    RECOVERY_MULTIPLIER:        2.0,    // Step 1 recovery multiplier
-    RECOVERY_MULTIPLIER2:       2.0,    // Step 2 recovery multiplier (final)
+    RECOVERY_MULTIPLIER:        1.5,    // Step 1 recovery multiplier
+    RECOVERY_MULTIPLIER2:       1.5,    // Step 2 recovery multiplier (final)
     RECOVERY_MULTIPLIER3:       2.0,     // Step 3 recovery multiplier (final)
-    MAX_RECOVERY_STEPS:         5,      // Never go beyond 2 recovery steps
+    MAX_RECOVERY_STEPS:         7,      // Never go beyond 2 recovery steps
     MAX_RECOVERY_STAKE_PCT:     75,    // Recovery stake never exceeds 75% of capital
 
     // Session profit/loss guards
-    SESSION_PROFIT_TARGET:      5000,    // Stop after +$500 session gain
-    SESSION_STOP_LOSS:          -1500,   // Stop after -$150 session loss
-    DAILY_STOP_LOSS:            -2000,   // Hard daily stop, resets at UTC midnight
+    SESSION_PROFIT_TARGET:      50000,    // Stop after +$500 session gain
+    SESSION_STOP_LOSS:          -15000,   // Stop after -$150 session loss
+    DAILY_STOP_LOSS:            -20000,   // Hard daily stop, resets at UTC midnight
 
     // Cool-down after consecutive losses
-    MAX_CONSECUTIVE_LOSSES:     5,      // Pause trading after 3 straight losses
+    MAX_CONSECUTIVE_LOSSES:     7,      // Pause trading after 3 straight losses
     COOLDOWN_CANDLES:           3,      // Wait 3 candles before re-entry
 
     // ── Candle / Contract Settings ────────────────────────────
@@ -1469,7 +1469,7 @@ class SessionManager {
             a.consecutiveLosses++;
             a.consecutiveWins  = 0;
             a.lastTradeWasWin  = false;
-            a.forceTradeOnLoss = true;  // NEW: Set flag to force immediate trade in same direction
+            // a.forceTradeOnLoss = true;  // NEW: Set flag to force immediate trade in same direction
 
             // Recovery step (max MAX_RECOVERY_STEPS)
             if (a.recoveryStep < CONFIG.MAX_RECOVERY_STEPS) {
