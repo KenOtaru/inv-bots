@@ -56,8 +56,8 @@ const path      = require('path');
 // ============================================================
 // FILE PATHS
 // ============================================================
-const STATE_FILE        = path.join(__dirname, 'IndexBot3_01-state_v2.json');
-const HISTORY_FILE      = path.join(__dirname, 'IndexBot3_01-history_v2.json');
+const STATE_FILE        = path.join(__dirname, 'IndexMultplierBot_01-state_v2.json');
+const HISTORY_FILE      = path.join(__dirname, 'IndexMultplierBot_01-history_v2.json');
 const STATE_SAVE_INTERVAL = 5000;  // ms
 
 // ============================================================
