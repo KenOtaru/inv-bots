@@ -27,7 +27,9 @@
  * ║  MULTIPLIER SETTINGS:                                                    ║
  * ║    • CALLE signal → MULTUP (multiplier UP trade)                        ║
  * ║    • PUTE signal → MULTDOWN (multiplier DOWN trade)                     ║
- * ║    • User-configurable take_profit and stop_loss amounts                ║
+ * ║    • Dynamic take_profit and stop_loss based on stake amount            ║
+ * ║    • Stop Loss = current stake (max loss in multipliers)                ║
+ * ║    • Take Profit = current stake × TAKE_PROFIT_MULTIPLIER (default 3x)  ║
  * ║    • Minimum multiplier per asset (typically x2-x5)                     ║
  * ║                                                                          ║
  * ║  RISK MANAGEMENT: Fixed-Fractional (1% of capital per trade)            ║
@@ -38,7 +40,8 @@
  * ║                                                                          ║
  * ║  v3.0 CHANGES:                                                           ║
  * ║    ✔ Changed from CALLE/PUTE to MULTUP/MULTDOWN (Multipliers)          ║
- * ║    ✔ Added take_profit and stop_loss parameters                         ║
+ * ║    ✔ Dynamic take_profit and stop_loss based on stake amount            ║
+ * ║    ✔ Stop Loss = stake (1x), Take Profit = stake × multiplier (3x)     ║
  * ║    ✔ Removed duration (multipliers stay open until closed)              ║
  * ║    ✔ Added multiplier value configuration per asset                     ║
  * ║    ✔ Trade analysis logic preserved (3-layer system unchanged)          ║
@@ -90,8 +93,13 @@ const CONFIG = {
 
     // ── MULTIPLIER SETTINGS (NEW for v3.0) ────────────────────
     // Take Profit and Stop Loss amounts (in USD)
-    TAKE_PROFIT_AMOUNT:         3,     // Close trade when profit reaches this amount
-    STOP_LOSS_AMOUNT:           1,     // Close trade when loss reaches this amount
+    // NOTE: These are now calculated dynamically based on stake amount
+    // STOP_LOSS_AMOUNT = currentStake (max loss in multipliers)
+    // TAKE_PROFIT_AMOUNT = currentStake * TAKE_PROFIT_MULTIPLIER
+    TAKE_PROFIT_MULTIPLIER:     2,     // Multiplier for take profit (e.g., 3x stake = take profit)
+    // Legacy fixed amounts (not used when dynamic calculation is enabled)
+    TAKE_PROFIT_AMOUNT:         3,     // [DEPRECATED] Use TAKE_PROFIT_MULTIPLIER instead
+    STOP_LOSS_AMOUNT:           1,     // [DEPRECATED] Now equals currentStake automatically
     
     // Multiplier values per asset (minimum multiplier for each)
     MULTIPLIER_VALUES: {
@@ -119,8 +127,8 @@ const CONFIG = {
 
     // Recovery staking (limited — max 2 steps)
     RECOVERY_ENABLED:           true,
-    RECOVERY_MULTIPLIER:        1.5,    // Step 1 recovery multiplier
-    RECOVERY_MULTIPLIER2:       1.5,    // Step 2 recovery multiplier (final)
+    RECOVERY_MULTIPLIER:        2.0,    // Step 1 recovery multiplier
+    RECOVERY_MULTIPLIER2:       2.0,    // Step 2 recovery multiplier (final)
     RECOVERY_MULTIPLIER3:       2.0,     // Step 3 recovery multiplier (final)
     MAX_RECOVERY_STEPS:         7,      // Never go beyond 2 recovery steps
     MAX_RECOVERY_STAKE_PCT:     75,    // Recovery stake never exceeds 75% of capital
@@ -1192,11 +1200,16 @@ class TelegramService {
         const overall = TradeHistoryManager.getOverallStats();
         const today   = TradeHistoryManager.getTodayStats();
         const ind     = details.indicators || {};
+        
+        // Calculate dynamic TP/SL for display
+        const dynamicStopLoss = parseFloat(stake.toFixed(2));
+        const dynamicTakeProfit = parseFloat((stake * CONFIG.TAKE_PROFIT_MULTIPLIER).toFixed(2));
+        
         const lines   = [
             `${emoji} <b>MULTIPLIER BOT v3 — ${type}</b>`,
             `Pair: <b>${symbol}</b>  Direction: <b>${direction === 'MULTUP' ? '📈 UP' : '📉 DOWN'}</b>`,
             `Stake: $${stake.toFixed(2)} | Multiplier: x${multiplier}`,
-            `Take Profit: $${CONFIG.TAKE_PROFIT_AMOUNT} | Stop Loss: $${CONFIG.STOP_LOSS_AMOUNT}`,
+            `Take Profit: $${dynamicTakeProfit} (${CONFIG.TAKE_PROFIT_MULTIPLIER}x) | Stop Loss: $${dynamicStopLoss} (1x)`,
             `Recovery Step: ${a?.recoveryStep ?? 0} | ${TradingSessionManager.getStatusString()}`,
             ``,
         ];
@@ -1292,7 +1305,7 @@ class TelegramService {
             `L1: ATR+ADX+BB | L2: Supertrend+EMA+Donchian | L3: RSI+MACD+Stoch+Pattern (${CONFIG.MIN_CONFLUENCE_SCORE}/4)`,
             `Market Type: MULTIPLIERS (MULTUP/MULTDOWN)`,
             `Risk: ${CONFIG.RISK_PERCENT_PER_TRADE}% per trade | Max: $${CONFIG.MAX_STAKE}`,
-            `Take Profit: $${CONFIG.TAKE_PROFIT_AMOUNT} | Stop Loss: $${CONFIG.STOP_LOSS_AMOUNT}`,
+            `Take Profit: ${CONFIG.TAKE_PROFIT_MULTIPLIER}x stake | Stop Loss: 1x stake (dynamic)`,
             `Recovery: ${CONFIG.RECOVERY_ENABLED ? `Enabled (max ${CONFIG.MAX_RECOVERY_STEPS} steps)` : 'Disabled'}`,
             `Capital: $${state.capital.toFixed(2)}`,
             TradingSessionManager.getStatusString(),
@@ -1942,7 +1955,7 @@ class IndexBot {
         console.log(`Timeframe : ${CONFIG.TIMEFRAME_LABEL} candles | Market Type: MULTIPLIERS`);
         console.log(`Strategy  : L1(ATR+ADX+BB) + L2(ST+EMA+Donchian) + L3(RSI+MACD+Stoch+Pattern ≥${CONFIG.MIN_CONFLUENCE_SCORE}/4)`);
         console.log(`Risk      : ${CONFIG.RISK_PERCENT_PER_TRADE}%/trade | Max: $${CONFIG.MAX_STAKE}`);
-        console.log(`Multiplier: Take Profit: $${CONFIG.TAKE_PROFIT_AMOUNT} | Stop Loss: $${CONFIG.STOP_LOSS_AMOUNT}`);
+        console.log(`Multiplier: Take Profit: ${CONFIG.TAKE_PROFIT_MULTIPLIER}x stake | Stop Loss: 1x stake (dynamic based on stake)`);
         console.log(`Capital   : $${state.capital.toFixed(2)}`);
         console.log(`Sessions  : ${TradingSessionManager.getStatusString()}`);
         console.log('═'.repeat(72) + '\n');
@@ -2173,11 +2186,19 @@ class IndexBot {
         // Get multiplier value for this asset
         const multiplier = CONFIG.MULTIPLIER_VALUES[symbol] || 2;
 
+        // ── DYNAMIC STOP LOSS & TAKE PROFIT CALCULATION ──
+        // In Deriv Multipliers, the staked amount is the maximum loss
+        // Stop Loss = current stake (max possible loss)
+        // Take Profit = current stake × TAKE_PROFIT_MULTIPLIER (e.g., 3x stake)
+        const dynamicStopLoss = parseFloat(stake.toFixed(2));
+        const dynamicTakeProfit = parseFloat((stake * CONFIG.TAKE_PROFIT_MULTIPLIER).toFixed(2));
+
         const recoveryNote = a.recoveryStep > 0 ? ` [RECOVERY STEP ${a.recoveryStep}]` : '';
         LOGGER.trade(
             `🎯 [${symbol}]${recoveryNote} ${signal.direction === 'MULTUP' ? '📈 MULTUP' : '📉 MULTDOWN'} | ` +
             `Stake: $${stake.toFixed(2)} | Multiplier: x${multiplier} | Score: ${signal.score}/${signal.maxScore} | ADX: ${signal.indicators?.adx}`
         );
+        LOGGER.trade(`   Take Profit: $${dynamicTakeProfit} | Stop Loss: $${dynamicStopLoss}`);
         LOGGER.trade(`   ${signal.reason}`);
 
         const pos = {
@@ -2185,8 +2206,8 @@ class IndexBot {
             direction:    signal.direction,
             stake,
             multiplier,
-            takeProfit:   CONFIG.TAKE_PROFIT_AMOUNT,
-            stopLoss:     CONFIG.STOP_LOSS_AMOUNT,
+            takeProfit:   dynamicTakeProfit,
+            stopLoss:     dynamicStopLoss,
             entryTime:    Date.now(),
             contractId:   null,
             reqId:        null,
@@ -2216,8 +2237,8 @@ class IndexBot {
                 multiplier:    multiplier,
                 basis:         'stake',
                 limit_order: {
-                    take_profit: CONFIG.TAKE_PROFIT_AMOUNT,
-                    stop_loss:   CONFIG.STOP_LOSS_AMOUNT,
+                    take_profit: dynamicTakeProfit,
+                    stop_loss:   dynamicStopLoss,
                 },
             },
         });
