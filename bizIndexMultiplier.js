@@ -1194,7 +1194,7 @@ class TelegramService {
         } catch (e) { LOGGER.error(`Telegram exception: ${e.message}`); }
     }
 
-    async sendTradeAlert(type, symbol, direction, stake, multiplier, details = {}) {
+    static async sendTradeAlert(type, symbol, direction, stake, multiplier, details = {}) {
         const emoji   = type === 'OPEN' ? '🚀' : type === 'WIN' ? '✅' : '❌';
         const a       = state.assets[symbol];
         const overall = TradeHistoryManager.getOverallStats();
