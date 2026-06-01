@@ -1717,6 +1717,8 @@ class ConnectionManager {
         state.tradeStartTime    = null;
         state.pendingTradeInfo  = null;
 
+        bot._tradeLocked = false;
+
         if (r.subscription?.id) this.send({ forget: r.subscription.id });
 
         SessionManager.checkSessionTargets();
