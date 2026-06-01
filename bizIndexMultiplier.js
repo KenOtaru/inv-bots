@@ -1696,7 +1696,7 @@ class ConnectionManager {
                     bot._startTradeWatchdog(contract.contract_id);
                     TelegramService.sendTradeAlert(
                         'OPEN', pos.symbol, pos.direction, pos.stake,
-                        CONFIG.DURATION, CONFIG.DURATION_UNIT,
+                        a.multiplier,
                         { signal: pos.signal, indicators: pos.indicators }
                     );
                     break;
@@ -1764,7 +1764,7 @@ class ConnectionManager {
         TelegramService.sendTradeAlert(
             profit >= 0 ? 'WIN' : 'LOSS',
             ownerSym, pos.direction, pos.stake,
-            CONFIG.DURATION, CONFIG.DURATION_UNIT,
+            a.multiplier,
             { profit }
         );
 
