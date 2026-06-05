@@ -242,9 +242,8 @@ const CONFIG = {
         'stpRNG3',
         'stpRNG4',
         'stpRNG5',
-        // Uncomment to add volatility indices:
-        'R_10', 'R_25', 'R_75', //'R_05', 'R_100'
-        '1HZ10V', '1HZ25V', '1HZ50V', // '1HZ75', '1HZ100V'
+        'R_10', 'R_25', 'R_75','R_50', 'R_100',
+        '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75', '1HZ100V'
 
     ],
 
@@ -1252,7 +1251,7 @@ class TelegramService {
             }
         });
         await this.sendMessage([
-            `⏰ <b>Index Bot2 v2 Hourly</b>`,
+            `⏰ <b>Index MULTIPLIER BOT v3 Hourly</b>`,
             `Last Hour: ${h.trades}t ${h.wins}W/${h.losses}L ${wr}% ${h.pnl >= 0 ? '🟢' : '🔴'} $${h.pnl.toFixed(2)}`,
             `Today: ${today.tradesCount}t P/L: $${(today.netPL || 0).toFixed(2)}`,
             `Capital: $${state.capital.toFixed(2)}`,
@@ -1276,7 +1275,7 @@ class TelegramService {
             }
         });
         await this.sendMessage([
-            `📊 <b>INDEX BOT2 v2 SESSION SUMMARY</b>`,
+            `📊 <b>INDEX MULTIPLIER BOT v3 SESSION SUMMARY</b>`,
             `Duration: ${stats.duration} | Trades: ${stats.trades}`,
             `W: ${stats.wins} | L: ${stats.losses} | Win Rate: ${stats.winRate}`,
             `Session P/L: $${stats.netPL.toFixed(2)}`,
