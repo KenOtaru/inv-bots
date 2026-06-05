@@ -785,7 +785,7 @@ class SignalAnalyzer {
         result.layer2 = l2;
 
         // Layer 2 decision: all 3 signals must agree (no mixed signals)
-        const trendDirection = trendBull >= 2 ? 'BULL' : trendBear === 3 ? 'BEAR' : null;
+        const trendDirection = trendBull === 3 ? 'BULL' : trendBear === 3 ? 'BEAR' : null;
         if (!trendDirection) {
             result.reason = `L2 FAIL: Trend not aligned (bull:${trendBull} bear:${trendBear}) — waiting for confluence`;
             return result;
