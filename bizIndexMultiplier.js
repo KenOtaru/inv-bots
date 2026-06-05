@@ -156,27 +156,52 @@ const CONFIG = {
 
     // ── LAYER 1: Regime Gate Parameters ──────────────────────
     // ATR per-asset thresholds (must be inside range to trade)
+    // ATR_THRESHOLDS: {
+    //     // Standard 2-second tick volatility indices
+    //     R_10:    { min: 0.20,  max: 3.0  },
+    //     R_25:    { min: 0.50,  max: 5.0  },
+    //     R_50:    { min: 0.02,  max: 0.5  },
+    //     R_75:    { min: 5.00,   max: 50.0 },
+    //     R_100:   { min: 0.20,  max: 2.0  },
+        
+    //     // Step indices (range-based synthetic indices)
+    //     stpRNG:  { min: 1.00,  max: 10.0  },
+    //     stpRNG2: { min: 1.00,  max: 10.0  },
+    //     stpRNG3: { min: 1.00,  max: 10.0  },
+    //     stpRNG4: { min: 1.00,  max: 10.0  }, 
+    //     stpRNG5: { min: 1.00,  max: 10.0  },
+        
+    //     // 1-second tick volatility indices (1HZ series) - faster tick rate
+    //     '1HZ10V':  { min: 0.15,  max: 2.5  },   // 10% annualized volatility
+    //     '1HZ25V':  { min: 0.40,  max: 4.0  },   // 25% annualized volatility
+    //     '1HZ50V':  { min: 0.80,  max: 8.0  },   // 50% annualized volatility
+    //     '1HZ75V':  { min: 4.00,  max: 40.0 },   // 75% annualized volatility
+    //     '1HZ100V': { min: 0.15,  max: 1.8  },   // 100% annualized volatility
+    // },
+
     ATR_THRESHOLDS: {
         // Standard 2-second tick volatility indices
-        R_10:    { min: 0.20,  max: 3.0  },
-        R_25:    { min: 0.50,  max: 5.0  },
-        R_50:    { min: 0.02,  max: 0.5  },
-        R_75:    { min: 5.00,   max: 50.0 },
-        R_100:   { min: 0.20,  max: 2.0  },
+        // Higher volatility % → wider ATR band
+        R_10:    { min: 0.50,  max: 8.0  },
+        R_25:    { min: 1.00,  max: 15.0 },
+        R_50:    { min: 2.00,  max: 30.0 },
+        R_75:    { min: 4.00,  max: 60.0 },
+        R_100:   { min: 6.00,  max: 90.0 },
         
         // Step indices (range-based synthetic indices)
-        stpRNG:  { min: 1.00,  max: 10.0  },
-        stpRNG2: { min: 1.00,  max: 10.0  },
-        stpRNG3: { min: 1.00,  max: 10.0  },
-        stpRNG4: { min: 1.00,  max: 10.0  }, 
-        stpRNG5: { min: 1.00,  max: 10.0  },
+        // Larger step size → higher ATR
+        stpRNG:  { min: 0.40,  max: 6.0  },
+        stpRNG2: { min: 0.70,  max: 10.0 },
+        stpRNG3: { min: 1.00,  max: 15.0 },
+        stpRNG4: { min: 1.50,  max: 20.0 },
+        stpRNG5: { min: 2.00,  max: 25.0 },
         
-        // 1-second tick volatility indices (1HZ series) - faster tick rate
-        '1HZ10V':  { min: 0.15,  max: 2.5  },   // 10% annualized volatility
-        '1HZ25V':  { min: 0.40,  max: 4.0  },   // 25% annualized volatility
-        '1HZ50V':  { min: 0.80,  max: 8.0  },   // 50% annualized volatility
-        '1HZ75V':  { min: 4.00,  max: 40.0 },   // 75% annualized volatility
-        '1HZ100V': { min: 0.15,  max: 1.8  },   // 100% annualized volatility
+        // 1-second tick volatility indices (1HZ series)
+        '1HZ10V':  { min: 0.60,  max: 10.0 },
+        '1HZ25V':  { min: 1.20,  max: 18.0 },
+        '1HZ50V':  { min: 2.50,  max: 35.0 },
+        '1HZ75V':  { min: 5.00,  max: 70.0 },
+        '1HZ100V': { min: 7.00,  max: 100.0 },
     },
 
     ATR_PERIOD:                 14,
@@ -243,7 +268,7 @@ const CONFIG = {
         'stpRNG4',
         'stpRNG5',
         'R_10', 'R_25', 'R_75','R_50', 'R_100',
-        '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75', '1HZ100V'
+        '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75', //'1HZ100V'
 
     ],
 
@@ -760,7 +785,7 @@ class SignalAnalyzer {
         result.layer2 = l2;
 
         // Layer 2 decision: all 3 signals must agree (no mixed signals)
-        const trendDirection = trendBull === 3 ? 'BULL' : trendBear === 3 ? 'BEAR' : null;
+        const trendDirection = trendBull >= 2 ? 'BULL' : trendBear === 3 ? 'BEAR' : null;
         if (!trendDirection) {
             result.reason = `L2 FAIL: Trend not aligned (bull:${trendBull} bear:${trendBear}) — waiting for confluence`;
             return result;
