@@ -57,8 +57,8 @@ const path      = require('path');
 // ============================================================
 // FILE PATHS
 // ============================================================
-const STATE_FILE        = path.join(__dirname, 'IndexMultplierBot2_03-state_v2.json');
-const HISTORY_FILE      = path.join(__dirname, 'IndexMultplierBot2_03-history_v2.json');
+const STATE_FILE        = path.join(__dirname, 'IndexMultplierBot2_04-state_v2.json');
+const HISTORY_FILE      = path.join(__dirname, 'IndexMultplierBot2_04-history_v2.json');
 const STATE_SAVE_INTERVAL = 5000;  // ms
 
 // ============================================================
@@ -124,7 +124,7 @@ const CONFIG = {
     RECOVERY_MULTIPLIER:        2.0,    // Step 1 recovery multiplier
     RECOVERY_MULTIPLIER2:       2.0,    // Step 2 recovery multiplier
     RECOVERY_MULTIPLIER3:       2.0,    // Step 3 recovery multiplier (final)
-    MAX_RECOVERY_STEPS:         3,      // NEVER go beyond 3 recovery steps
+    MAX_RECOVERY_STEPS:         7,      // NEVER go beyond 3 recovery steps
     MAX_RECOVERY_STAKE_PCT:     75,     // Recovery stake never exceeds 75% of capital
 
     // Session profit/loss guards
@@ -137,8 +137,8 @@ const CONFIG = {
     COOLDOWN_CANDLES:           3,      // Wait 3 candles before re-entry
 
     // ── Candle / Contract Settings ────────────────────────────
-    GRANULARITY:                60,     // 1-minute candles
-    TIMEFRAME_LABEL:            '1m',
+    GRANULARITY:                300,     // 1-minute candles
+    TIMEFRAME_LABEL:            '5m',
     CANDLES_TO_LOAD:            150,    // History for indicator warmup
     MAX_CANDLES_STORED:         250,    // Rolling window
 
@@ -239,7 +239,7 @@ const CONFIG = {
     ],
 
     // ── Misc ──────────────────────────────────────────────────
-    DEBUG_MODE:                 false,
+    DEBUG_MODE:                 true,
     TELEGRAM_ENABLED:           true,
     TELEGRAM_BOT_TOKEN: '8565754902:AAHS6UQWEgLJ0DO-JTpAGQhZLs-UDVVNAQc',
     TELEGRAM_CHAT_ID: '752497117',
@@ -704,7 +704,7 @@ class SignalAnalyzer {
         result.layer2 = l2;
 
         // FIXED v3.1: Require 2 out of 3 instead of 3/3
-        const trendDirection = trendBull >= 2 ? 'BULL' : trendBear >= 2 ? 'BEAR' : null;
+        const trendDirection = trendBull >= 3 ? 'BULL' : trendBear >= 2 ? 'BEAR' : null;
 
         if (!trendDirection) {
             result.reason = `L2 FAIL: Trend not aligned (bull:${trendBull} bear:${trendBear}) — waiting for confluence`;
@@ -1588,7 +1588,7 @@ class ConnectionManager {
                     state.currentContractId = contract.contract_id;
                     state.tradeStartTime    = Date.now();
                     state.pendingTradeInfo  = { stake: pos.stake, direction: pos.direction, symbol: pos.symbol };
-                    bot._startTradeWatchdog(contract.contract_id);
+                    // bot._startTradeWatchdog(contract.contract_id);
                     TelegramService.sendTradeAlert(
                         'OPEN', pos.symbol, pos.direction, pos.stake,
                         a.multiplier,
@@ -1794,7 +1794,7 @@ class IndexBot {
     constructor() {
         this.connection              = new ConnectionManager();
         this._processedContracts     = new Set();
-        this._tradeLocked            = false;
+        this._tradeLocked            = false; 
         this.tradeWatchdogMs         = 80000;
         this.timeCheckStarted        = false;
         this.sessionTimeCheckerId    = null;
