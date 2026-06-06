@@ -57,8 +57,8 @@ const path      = require('path');
 // ============================================================
 // FILE PATHS
 // ============================================================
-const STATE_FILE        = path.join(__dirname, 'IndexMultplierBot2_02-state_v2.json');
-const HISTORY_FILE      = path.join(__dirname, 'IndexMultplierBot2_02-history_v2.json');
+const STATE_FILE        = path.join(__dirname, 'IndexMultplierBot2_03-state_v2.json');
+const HISTORY_FILE      = path.join(__dirname, 'IndexMultplierBot2_03-history_v2.json');
 const STATE_SAVE_INTERVAL = 5000;  // ms
 
 // ============================================================
@@ -239,7 +239,7 @@ const CONFIG = {
     ],
 
     // ── Misc ──────────────────────────────────────────────────
-    DEBUG_MODE:                 false,
+    DEBUG_MODE:                 true,
     TELEGRAM_ENABLED:           true,
     TELEGRAM_BOT_TOKEN: '8565754902:AAHS6UQWEgLJ0DO-JTpAGQhZLs-UDVVNAQc',
     TELEGRAM_CHAT_ID: '752497117',
