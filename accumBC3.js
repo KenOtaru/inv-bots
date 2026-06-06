@@ -1586,16 +1586,16 @@ class EnhancedDerivTradingBot {
             // }
 
             // Afternoon resume: 3:00 PM
-            if (this.endOfDay && currentHours === 15 && currentMinutes >= 0) {
-                console.log("It's 3:00 PM, reconnecting the bot.");
-                this.endOfDay = false;
-                this.Pause = false;
-                this.tradeInProgress = false;
-                this.tradedDigitArray = [];
-                this.tradedDigitArray2 = [];
-                this.tradeNum = Math.floor(Math.random() * (40 - 21 + 1)) + 21;
-                this.connect();
-            }
+            // if (this.endOfDay && currentHours === 15 && currentMinutes >= 0) {
+            //     console.log("It's 3:00 PM, reconnecting the bot.");
+            //     this.endOfDay = false;
+            //     this.Pause = false;
+            //     this.tradeInProgress = false;
+            //     this.tradedDigitArray = [];
+            //     this.tradedDigitArray2 = [];
+            //     this.tradeNum = Math.floor(Math.random() * (40 - 21 + 1)) + 21;
+            //     this.connect();
+            // }
 
             // Evening stop: after 11:00 PM following a win
             if (this.isWinTrade && !this.endOfDay) {
