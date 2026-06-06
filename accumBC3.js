@@ -35,7 +35,7 @@ const path = require('path');
 // ══════════════════════════════════════════════════════════════════════════════
 // STATE PERSISTENCE MANAGER
 // ══════════════════════════════════════════════════════════════════════════════
-const STATE_FILE = path.join(__dirname, 'accumBC3_13_state.json');
+const STATE_FILE = path.join(__dirname, 'accumBC3_14_state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -974,7 +974,7 @@ class EnhancedDerivTradingBot {
         if (this.tradeInProgress) return;
 
         // ✅ NEW: Only proceed if asset is in active list
-        if (!this.isAssetReady(asset)) {
+        if (!this.isAssetReady(asset) && this.consecutiveLosses <= 0) {
             console.log(`⏸️  ${asset} is in pending list, skipping trade analysis`);
             return;
         }
