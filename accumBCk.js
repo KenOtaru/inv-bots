@@ -1111,7 +1111,7 @@ class AccumulatorBot {
 
     _startContractWatchdog(contractId, asset) {
         if (this.contractWatchdogTimer) clearTimeout(this.contractWatchdogTimer);
-        // 3-minute watchdog for accumulators
+        // 1-minute watchdog for accumulators
         this.contractWatchdogTimer = setTimeout(() => {
             const a = state.assets[asset];
             const pos = a?.activePositions?.find(p => p.contractId === contractId);
@@ -1131,7 +1131,7 @@ class AccumulatorBot {
                     this.connection.send({ sell: contractId, price: 0 });
                 }
             }, 30000);
-        }, 180000);
+        }, 60000);
     }
 
     _clearContractWatchdog() {
