@@ -2,23 +2,8 @@
 
 /**
  * ╔══════════════════════════════════════════════════════════════════════════╗
- * ║         DERIV ACCUMULATOR BOT  —  v1.0                                  ║
- * ║                                                                          ║
- * ║  Based on: accumBotM (Multi-Asset Accumulator) + v3 Architecture         ║
- * ║  Strategy: stayedInArray analysis + Active/Pending Asset Filtering       ║
- * ║  Market Type: ACCUMULATORS (ACCU)                                        ║
- * ║  Data Feed: Tick streams + Proposal responses                            ║
- * ║  ─────────────────────────────────────────────────────────────────────  ║
- * ║  LAYER 1 — ASSET FILTERING                                               ║
- * ║    • Total stayedIn sum < STAYED_IN_THRESHOLD → ACTIVE                   ║
- * ║    • Total stayedIn sum >= STAYED_IN_THRESHOLD → PENDING (scanning)     ║
- * ║                                                                          ║
- * ║  LAYER 2 — ENTRY CONDITIONS (from accumBotM)                             ║
- * ║    • checkTradeCondition: total sum < max + recent indices bounds       ║
- * ║    • checkTradeCondition2: last-6-values bounds (recovery aware)          ║
- * ║                                                                          ║
- * ║  RISK: Session profit target, daily stop loss, cooldown, martingale cap  ║
- * ║  TIME: Optional 11PM-2AM disconnect/resume (from example)                ║
+ * ║         DERIV ACCUMULATOR BOT  —  v1.1 (HOTFIX)                         ║
+ * ║  FIX: Buy-response matching, contract lookup by ID, settlement guard    ║
  * ╚══════════════════════════════════════════════════════════════════════════╝
  */
 
@@ -30,8 +15,8 @@ const path      = require('path');
 // ============================================================
 // FILE PATHS
 // ============================================================
-const STATE_FILE        = path.join(__dirname, 'accumulator_bot-01_v1_state.json');
-const HISTORY_FILE      = path.join(__dirname, 'accumulator_bot_v1-01_history.json');
+const STATE_FILE        = path.join(__dirname, 'accumulator_bot_v1_state.json');
+const HISTORY_FILE      = path.join(__dirname, 'accumulator_bot_v1_history.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================================
@@ -118,11 +103,10 @@ const CONFIG = {
 
     // ── Active Assets ───────────────────────────────────────────
     ACTIVE_ASSETS: [
-        // 'BOOM50', 
-        'BOOM150N', 'BOOM300N', 'BOOM500', 'BOOM600', 'BOOM900'
-        // 'CRASH50', 'CRASH150N', 'CRASH300N', 'CRASH500', 'CRASH600', 'CRASH900'
-        // 'R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'BOOM1000'
-        // '1HZ10V', '1HZ25V', '1HZ50V', '1HZ100V', 'CRASH1000'
+        'BOOM50', 'BOOM150N', 'BOOM300N', 'BOOM500', 'BOOM600', 'BOOM900', 'BOOM1000',
+        // 'CRASH300N', 'CRASH500', 'CRASH600', 'CRASH900', 'CRASH1000'
+        // 'R_10', 'R_25', 'R_50', 'R_75', 'R_100', 
+        // '1HZ10V', '1HZ25V', '1HZ50V', '1HZ100V', 'CRASH50', 'CRASH150N', 
     ],
 
     // ── Misc ──────────────────────────────────────────────────
@@ -133,7 +117,7 @@ const CONFIG = {
 };
 
 // ============================================================
-// ACCUMULATOR ANALYZER (from accumBotM)
+// ACCUMULATOR ANALYZER
 // ============================================================
 class AccumulatorAnalyzer {
     static calculateTotalStayedIn(arr) {
@@ -141,7 +125,6 @@ class AccumulatorAnalyzer {
         return arr.reduce((sum, v) => sum + (v || 0), 0);
     }
 
-    // Overall condition: total sum + recent indices
     static checkTradeCondition(stayedInArray, consecutiveLosses, maxTotal) {
         const total = this.calculateTotalStayedIn(stayedInArray);
         const recentOk = (
@@ -152,9 +135,7 @@ class AccumulatorAnalyzer {
         return { passed: recentOk && totalOk, total, recentOk, totalOk };
     }
 
-    // Last-6 condition (recovery aware)
     static checkTradeCondition2(last6Array, consecutiveLosses) {
-        // last6Array is stayedInArray.slice(-6); index 5 = last element
         const threshold = consecutiveLosses > 0
             ? CONFIG.STAYED_IN_LAST6_RECOVERY
             : CONFIG.STAYED_IN_LAST6_NORMAL;
@@ -533,7 +514,6 @@ class SessionManager {
                 a.cooldownTicks = CONFIG.COOLDOWN_TICKS;
                 LOGGER.warn(`❄️ [${symbol}] ${CONFIG.MAX_CONSECUTIVE_LOSSES} consecutive losses — cooling down for ${CONFIG.COOLDOWN_TICKS} ticks`);
             }
-            // Martingale
             if (a.consecutiveLosses >= 2) {
                 a.currentStake = Math.ceil(a.currentStake * CONFIG.MULTIPLIER2 * 100) / 100;
             } else {
@@ -558,6 +538,7 @@ const state = {
         profit: 0, loss: 0, netPL: 0,
         tradesCount: 0, winsCount: 0, lossesCount: 0,
         isActive: true, startTime: Date.now(), startCapital: CONFIG.INITIAL_CAPITAL,
+        endedByTime: false,
     },
     isConnected:  false,
     isAuthorized: false,
@@ -622,7 +603,6 @@ class ConnectionManager {
                 };
                 LOGGER.info(`📊 Initialized asset: ${symbol}`);
             }
-            // Subscribe to tick stream
             this.send({ ticks: symbol, subscribe: 1 });
             this.activeSubscriptions.add(symbol);
         });
@@ -676,7 +656,6 @@ class ConnectionManager {
         if (a.cooldownTicks > 0) return;
         if (a.activePositions.length >= CONFIG.MAX_OPEN_POSITIONS_PER_ASSET) return;
         if (Date.now() - (a.lastTradeTime || 0) < CONFIG.MIN_TIME_BETWEEN_TRADES) return;
-        // Throttle total positions
         const totalPos = CONFIG.ACTIVE_ASSETS.reduce((sum, s) => sum + (state.assets[s]?.activePositions?.length ?? 0), 0);
         if (totalPos >= CONFIG.MAX_TOTAL_POSITIONS) return;
         bot.requestProposal(symbol);
@@ -697,7 +676,6 @@ class ConnectionManager {
         const isScanOnly = passthrough?.action === 'scan_only';
         const isFinalStayedIn = passthrough?.action === 'get_final_stayed_in';
 
-        // Update asset filtering status
         bot.updateAssetStatus(asset, stayedInArray);
 
         if (isScanOnly) {
@@ -715,78 +693,165 @@ class ConnectionManager {
             return;
         }
 
-        // Normal proposal flow — evaluate for trade
         bot.evaluateProposal(asset, proposal, stayedInArray);
     }
 
+    // ════════════════════════════════════════════════════════
+    // CRITICAL FIX 1: Match buy response by proposal ID (echo_req.buy)
+    // NOT by numeric req_id. The position stores proposalId.
+    // ════════════════════════════════════════════════════════
     handleBuyResponse(r) {
         if (r.error) {
             LOGGER.error(`Buy error: ${r.error.message}`);
-            if (bot) bot._forceReleaseTradeLock();
+            const proposalId = r.echo_req?.buy;
+            // Remove the stuck 'buying' position
+            if (proposalId) {
+                for (const sym of CONFIG.ACTIVE_ASSETS) {
+                    const a = state.assets[sym];
+                    if (a?.activePositions) {
+                        const idx = a.activePositions.findIndex(p => p.proposalId === proposalId && p.status === 'buying');
+                        if (idx >= 0) {
+                            a.activePositions.splice(idx, 1);
+                            LOGGER.warn(`Removed buying position from ${sym} after buy error`);
+                            break;
+                        }
+                    }
+                }
+            }
+            bot._forceReleaseTradeLock();
             return;
         }
-        const contract = r.buy;
-        LOGGER.trade(`📋 Contract opened: ${contract.contract_id} | Buy Price: $${contract.buy_price}`);
-        const reqId = r.echo_req?.req_id;
-        // Find asset by reqId matching
+
+        const proposalId = r.echo_req?.buy;
+        if (!proposalId) {
+            LOGGER.error('Buy response missing proposal ID in echo_req');
+            bot._forceReleaseTradeLock();
+            return;
+        }
+
+        // Find the matching position across ALL assets
+        let foundAsset = null;
+        let foundPos = null;
         for (const sym of CONFIG.ACTIVE_ASSETS) {
             const a = state.assets[sym];
             if (a?.activePositions) {
-                const pos = a.activePositions.find(p => p.reqId === reqId);
-                if (pos) {
-                    pos.contractId = contract.contract_id;
-                    pos.buyPrice = contract.buy_price;
-                    bot._startContractWatchdog(contract.contract_id, sym);
-                    TelegramService.sendTradeAlert('OPEN', sym, pos.stake, {
-                        stayedIn: pos.stayedInData,
-                    });
-                    this.send({ proposal_open_contract: 1, contract_id: contract.contract_id, subscribe: 1 });
+                const idx = a.activePositions.findIndex(p => p.proposalId === proposalId && p.status === 'buying');
+                if (idx >= 0) {
+                    foundAsset = sym;
+                    foundPos = a.activePositions[idx];
                     break;
                 }
             }
         }
-    }
 
-    handleOpenContract(r) {
-        if (r.error) {
-            LOGGER.error(`Contract error: ${r.error.message}`);
+        if (!foundPos) {
+            LOGGER.warn(`Buy response for proposal ${proposalId} but no matching position found`);
             bot._forceReleaseTradeLock();
             return;
         }
+
+        // Activate the position
+        foundPos.status = 'active';
+        foundPos.contractId = r.buy.contract_id;
+        foundPos.buyPrice = r.buy.buy_price;
+
+        LOGGER.trade(`📋 Contract opened: ${r.buy.contract_id} on ${foundAsset} | Buy Price: $${r.buy.buy_price}`);
+
+        // Subscribe to contract updates
+        this.send({
+            proposal_open_contract: 1,
+            contract_id: r.buy.contract_id,
+            subscribe: 1
+        });
+
+        bot._startContractWatchdog(r.buy.contract_id, foundAsset);
+
+        TelegramService.sendTradeAlert('OPEN', foundAsset, foundPos.stake, {
+            stayedIn: foundPos.stayedInData,
+        });
+    }
+
+    // ════════════════════════════════════════════════════════
+    // CRITICAL FIX 2: Search by contractId across ALL assets
+    // instead of relying on contract.underlying (often missing).
+    // CRITICAL FIX 3: Settlement guard checks 'won' / 'lost' status.
+    // ════════════════════════════════════════════════════════
+    handleOpenContract(r) {
+        if (r.error) {
+            LOGGER.error(`Contract error: ${r.error.message}`);
+            return;
+        }
+
         const contract = r.proposal_open_contract;
         const contractId = contract.contract_id;
-        const asset = contract.underlying;
-        if (!asset || !state.assets[asset]) return;
+        if (!contractId) return;
 
-        // Live P&L updates
-        if (!contract.is_sold && !contract.is_expired && contract.status !== 'sold') {
-            const pos = state.assets[asset].activePositions.find(p => p.contractId === contractId);
-            if (pos) pos.currentProfit = contract.profit;
+        // Search every asset for this contractId
+        let foundAsset = null;
+        let foundPos = null;
+        let foundIdx = -1;
+        for (const sym of CONFIG.ACTIVE_ASSETS) {
+            const a = state.assets[sym];
+            if (a?.activePositions) {
+                const idx = a.activePositions.findIndex(p => p.contractId === contractId);
+                if (idx >= 0) {
+                    foundAsset = sym;
+                    foundPos = a.activePositions[idx];
+                    foundIdx = idx;
+                    break;
+                }
+            }
+        }
+
+        if (!foundPos) {
+            // Contract not tracked (already processed or unknown)
             return;
         }
 
-        // Contract settled
+        // Store subscription ID for cleanup
+        if (r.subscription?.id) {
+            this._subscriptionIds.set(contractId, r.subscription.id);
+        }
+
+        // Live update (contract still open)
+        const status = contract.status;
+        const isSold = contract.is_sold === 1 || contract.is_sold === true;
+        const isExpired = contract.is_expired === 1 || contract.is_expired === true;
+        const isFinal = isSold || isExpired || status === 'sold' || status === 'won' || status === 'lost';
+
+        if (!isFinal) {
+            foundPos.currentProfit = contract.profit;
+            return;
+        }
+
+        // ════════════════════════════════════════════════════════
+        // CONTRACT SETTLED
+        // ════════════════════════════════════════════════════════
+        LOGGER.trade(`📋 Contract settled: ${contractId} on ${foundAsset} | Status: ${status} | is_sold: ${contract.is_sold}`);
+
+        // Remove from active positions
+        state.assets[foundAsset].activePositions.splice(foundIdx, 1);
+
+        // Clear watchdog
         bot._clearContractWatchdog();
+
+        // Only release global lock if NOTHING is active anymore
+        const totalPositions = CONFIG.ACTIVE_ASSETS.reduce((sum, s) => sum + (state.assets[s]?.activePositions?.length ?? 0), 0);
+        if (totalPositions === 0) {
+            bot._tradeLocked = false;
+        }
+
+        // Forget the subscription stream
+        const subId = this._subscriptionIds.get(contractId);
+        if (subId) {
+            this.send({ forget: subId });
+            this._subscriptionIds.delete(contractId);
+        }
+
+        // Record result
         const profit = parseFloat(contract.profit || 0);
-        const pos = state.assets[asset].activePositions.find(p => p.contractId === contractId);
-        if (!pos) {
-            LOGGER.warn(`Contract ${contractId} settled but not found in ${asset}`);
-            return;
-        }
-
-        // Request final stayedInArray for logging (optional)
-        if (!pos.finalStayedIn) {
-            bot.requestFinalStayedInArray(asset);
-            // We proceed with settlement using known profit; final array is for logs only
-        }
-
-        state.assets[asset].activePositions = state.assets[asset].activePositions.filter(p => p.contractId !== contractId);
-        bot._tradeLocked = false;
-        SessionManager.recordTradeResult(asset, profit);
-        TelegramService.sendTradeAlert(profit >= 0 ? 'WIN' : 'LOSS', asset, pos.stake, {
-            profit,
-            stayedIn: pos.stayedInData,
-        });
+        SessionManager.recordTradeResult(foundAsset, profit);
+        TelegramService.sendTradeAlert(profit >= 0 ? 'WIN' : 'LOSS', foundAsset, foundPos.stake, { profit });
         SessionManager.checkSessionTargets();
         StatePersistence.saveState();
     }
@@ -848,7 +913,7 @@ class AccumulatorBot {
 
     async start() {
         console.log('\n' + '═'.repeat(72));
-        console.log(' DERIV ACCUMULATOR BOT v1 — Multi-Asset stayedInArray Filter');
+        console.log(' DERIV ACCUMULATOR BOT v1.1 — Multi-Asset stayedInArray Filter');
         console.log('═'.repeat(72));
         console.log(`Assets     : ${CONFIG.ACTIVE_ASSETS.join(', ')}`);
         console.log(`Growth Rate: ${(CONFIG.GROWTH_RATE * 100)}%`);
@@ -865,7 +930,7 @@ class AccumulatorBot {
         this.startTimeChecker();
 
         await TelegramService.sendMessage(
-            `🤖 <b>ACCUMULATOR BOT v1 STARTED</b>\n` +
+            `🤖 <b>ACCUMULATOR BOT v1.1 STARTED</b>\n` +
             `Assets: ${CONFIG.ACTIVE_ASSETS.length}\n` +
             `Growth: ${(CONFIG.GROWTH_RATE * 100)}% | Stake: $${CONFIG.INITIAL_STAKE}\n` +
             `Capital: $${state.capital.toFixed(2)}`
@@ -873,7 +938,6 @@ class AccumulatorBot {
         LOGGER.info('✅ Accumulator Bot fully started!');
     }
 
-    // ── Asset Filtering (from example) ─────────────────────────
     updateAssetStatus(asset, stayedInArray) {
         const total = AccumulatorAnalyzer.calculateTotalStayedIn(stayedInArray);
         const a = state.assets[asset];
@@ -910,7 +974,6 @@ class AccumulatorBot {
         LOGGER.info(`🔍 Pending asset scanner started (${CONFIG.SCAN_TIMER / 1000}s)`);
     }
 
-    // ── Proposal Requests ──────────────────────────────────────
     requestProposal(asset) {
         if (this._tradeLocked) return;
         const a = state.assets[asset];
@@ -963,18 +1026,11 @@ class AccumulatorBot {
         });
     }
 
-    // ── Entry Logic ────────────────────────────────────────────
     evaluateProposal(asset, proposal, stayedInArray) {
         const a = state.assets[asset];
         if (!a || a.activePositions.length > 0) return;
-        if (!this.isAssetReady(asset) && a.consecutiveLosses <= 0) return;
+        if (!this.isAssetReady(asset) && a.consecutiveLosses === 0) return;
         if (!SessionManager.isSessionActive()) return;
-
-        // Asset filtering for entry (only active assets unless in recovery)
-        if (a.activeStatus !== 'active' && a.consecutiveLosses === 0) {
-            LOGGER.debug(`${asset} not active, skipping trade`);
-            return;
-        }
 
         const c1 = AccumulatorAnalyzer.checkTradeCondition(stayedInArray, a.consecutiveLosses, CONFIG.STAYED_IN_MAX_TOTAL);
         const last6 = stayedInArray.slice(-6);
@@ -985,16 +1041,14 @@ class AccumulatorBot {
             `last6=${c2.value} < ${c2.threshold}=${c2.passed} | losses=${a.consecutiveLosses}`
         );
 
-        if (!c2.passed) return; // Primary entry condition from example
+        if (!c2.passed) return;
 
-        // Check capital
         const stake = Math.min(a.currentStake, CONFIG.MAX_STAKE);
         if (state.capital < stake) {
             LOGGER.error(`[${asset}] Insufficient capital: $${state.capital.toFixed(2)} < $${stake.toFixed(2)}`);
             return;
         }
 
-        // Lock and place trade
         this._tradeLocked = true;
         a.lastTradeTime = Date.now();
 
@@ -1006,6 +1060,9 @@ class AccumulatorBot {
             `StayedIn: ${c1.total} | last6: ${c2.value} | Losses: ${a.consecutiveLosses}`
         );
 
+        // ════════════════════════════════════════════════════════
+        // FIX: Store proposalId (not req_id) and status='buying'
+        // ════════════════════════════════════════════════════════
         const pos = {
             symbol: asset,
             direction: 'ACCU',
@@ -1014,7 +1071,8 @@ class AccumulatorBot {
             takeProfit,
             entryTime: Date.now(),
             contractId: null,
-            reqId: proposal.id,
+            proposalId: proposal.id,   // <-- proposal.id for buy-response matching
+            status: 'buying',           // <-- track status explicitly
             currentProfit: 0,
             buyPrice: 0,
             stayedInData: { total: c1.total, recentOk: c1.recentOk, last6Ok: c2.passed, last6Val: c2.value },
@@ -1029,11 +1087,16 @@ class AccumulatorBot {
             price: stake.toFixed(2),
         });
 
-        // Safety release
+        // Safety: release lock after 5s if buy response never arrives
         setTimeout(() => {
             if (this._tradeLocked) {
-                LOGGER.warn(`[${asset}] Trade lock auto-released after timeout`);
-                this._tradeLocked = false;
+                const stillBuying = CONFIG.ACTIVE_ASSETS.some(sym =>
+                    state.assets[sym]?.activePositions?.some(p => p.status === 'buying')
+                );
+                if (!stillBuying) {
+                    LOGGER.warn('Trade lock auto-released (no buying positions)');
+                    this._tradeLocked = false;
+                }
             }
         }, 5000);
 
@@ -1046,16 +1109,29 @@ class AccumulatorBot {
         return stake / CONFIG.TP_DIVISOR_2_PLUS_LOSS;
     }
 
-    // ── Watchdogs ──────────────────────────────────────────────
     _startContractWatchdog(contractId, asset) {
         if (this.contractWatchdogTimer) clearTimeout(this.contractWatchdogTimer);
+        // 3-minute watchdog for accumulators
         this.contractWatchdogTimer = setTimeout(() => {
             const a = state.assets[asset];
-            if (a?.activePositions?.find(p => p.contractId === contractId)) {
-                LOGGER.warn(`⏰ Contract watchdog fired for ${contractId}`);
-                this.connection.send({ proposal_open_contract: 1, contract_id: contractId, subscribe: 1 });
+            const pos = a?.activePositions?.find(p => p.contractId === contractId);
+            if (!pos) {
+                // Already settled
+                return;
             }
-        }, 120000);
+            LOGGER.warn(`⏰ Contract watchdog fired for ${contractId} on ${asset}`);
+            // Attempt to re-poll
+            this.connection.send({ proposal_open_contract: 1, contract_id: contractId, subscribe: 1 });
+
+            // Second-level watchdog: if still stuck after 30s, force sell attempt
+            setTimeout(() => {
+                const stillPos = state.assets[asset]?.activePositions?.find(p => p.contractId === contractId);
+                if (stillPos) {
+                    LOGGER.error(`🚨 Force-selling stuck contract ${contractId}`);
+                    this.connection.send({ sell: contractId, price: 0 });
+                }
+            }, 30000);
+        }, 180000);
     }
 
     _clearContractWatchdog() {
@@ -1067,7 +1143,6 @@ class AccumulatorBot {
         LOGGER.warn('⚠️ Trade lock force-released');
     }
 
-    // ── Time Checker (from example) ────────────────────────────
     startTimeChecker() {
         if (!CONFIG.USE_TIME_BASED_DISCONNECT) return;
         setInterval(() => {
@@ -1075,9 +1150,16 @@ class AccumulatorBot {
             const gmtPlus1 = new Date(now.getTime() + 60 * 60 * 1000);
             const hour = gmtPlus1.getUTCHours();
             const mins = gmtPlus1.getUTCMinutes();
-            const a = this._getAnyActiveAsset();
-            // 11 PM disconnect after win
-            if (a && a.lastTradeWasWin && !state.session.endedByTime) {
+            // Find any asset that recently won
+            let lastWinAsset = null;
+            for (const sym of CONFIG.ACTIVE_ASSETS) {
+                const a = state.assets[sym];
+                if (a && a.activePositions.length === 0 && a.lastTradeWasWin && Date.now() - (a.lastTradeTime || 0) < 300000) {
+                    lastWinAsset = sym;
+                    break;
+                }
+            }
+            if (lastWinAsset && !state.session.endedByTime) {
                 if (hour >= CONFIG.DISCONNECT_HOUR && mins >= 0) {
                     LOGGER.info(`🌙 Past ${CONFIG.DISCONNECT_HOUR}:00 after win — disconnecting`);
                     state.session.endedByTime = true;
@@ -1085,7 +1167,6 @@ class AccumulatorBot {
                     this.stop();
                 }
             }
-            // 2 AM reconnect
             if (state.session.endedByTime && hour === CONFIG.RECONNECT_HOUR && mins >= 0 && mins < 2) {
                 LOGGER.info(`🌅 ${CONFIG.RECONNECT_HOUR}:00 — reconnecting`);
                 state.session.endedByTime = false;
@@ -1095,15 +1176,6 @@ class AccumulatorBot {
         }, 20000);
     }
 
-    _getAnyActiveAsset() {
-        for (const sym of CONFIG.ACTIVE_ASSETS) {
-            const a = state.assets[sym];
-            if (a && a.activePositions.length > 0) return a;
-        }
-        return null;
-    }
-
-    // ── Hourly Timer ───────────────────────────────────────────
     startHourlyTimer() {
         const now = new Date();
         const nextHour = new Date(now);
@@ -1168,7 +1240,7 @@ if (CONFIG.API_TOKEN === 'YOUR_API_TOKEN_HERE') {
     process.exit(1);
 }
 
-console.log('\n🚀 Starting Deriv Accumulator Bot v1...\n');
+console.log('\n🚀 Starting Deriv Accumulator Bot v1.1...\n');
 bot.connection.connect();
 
 // ── Status display every 60s ──────────────────────────────────
