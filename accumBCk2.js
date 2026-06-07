@@ -353,7 +353,7 @@ class TelegramService {
         const overall = TradeHistoryManager.getOverallStats();
         const today   = TradeHistoryManager.getTodayStats();
         const lines = [
-            `${emoji} <b>ACCUMULATOR BOT v1 — ${type}</b>`,
+            `${emoji} <b>ACCUMULATOR BOT2 v1 — ${type}</b>`,
             `Asset: <b>${symbol}</b>`,
             `Stake: $${stake.toFixed(2)} | Growth: ${(CONFIG.GROWTH_RATE * 100).toFixed(0)}%`,
             `Consecutive Losses: ${a?.consecutiveLosses ?? 0} | Recovery: ${a?.recoveryStep ?? 0}`,
@@ -392,7 +392,7 @@ class TelegramService {
             }
         });
         await this.sendMessage([
-            `⏰ <b>Accumulator Bot Hourly</b>`,
+            `⏰ <b>Accumulator Bot2 Hourly</b>`,
             `Last Hour: ${h.trades}t ${h.wins}W/${h.losses}L ${wr}% ${h.pnl >= 0 ? '🟢' : '🔴'} $${h.pnl.toFixed(2)}`,
             `Today: ${today.tradesCount}t P/L: $${(today.netPL || 0).toFixed(2)}`,
             `Capital: $${state.capital.toFixed(2)}`,
@@ -871,11 +871,11 @@ class ConnectionManager {
             this.reconnectAttempts++;
             const delay = Math.min(this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1), 30000);
             LOGGER.info(`🔄 Reconnecting in ${(delay / 1000).toFixed(1)}s (attempt ${this.reconnectAttempts})`);
-            TelegramService.sendMessage(`⚠️ <b>CONNECTION LOST</b> — Reconnecting (attempt ${this.reconnectAttempts})`);
+            TelegramService.sendMessage(`⚠️ <b>BOT2 CONNECTION LOST</b> — Reconnecting (attempt ${this.reconnectAttempts})`);
             setTimeout(() => { this.isReconnecting = false; this.connect(); }, delay);
         } else {
             LOGGER.error('Max reconnection attempts reached — giving up');
-            TelegramService.sendMessage(`🛑 <b>BOT STOPPED</b> — Max reconnections\nFinal P/L: $${state.session.netPL.toFixed(2)}`);
+            TelegramService.sendMessage(`🛑 <b>BOT2 STOPPED</b> — Max reconnections\nFinal P/L: $${state.session.netPL.toFixed(2)}`);
             process.exit(1);
         }
     }
@@ -931,7 +931,7 @@ class AccumulatorBot {
         this.startTimeChecker();
 
         await TelegramService.sendMessage(
-            `🤖 <b>ACCUMULATOR BOT v1.1 STARTED</b>\n` +
+            `🤖 <b>ACCUMULATOR BOT2 v1.1 STARTED</b>\n` +
             `Assets: ${CONFIG.ACTIVE_ASSETS.length}\n` +
             `Growth: ${(CONFIG.GROWTH_RATE * 100)}% | Stake: $${CONFIG.INITIAL_STAKE}\n` +
             `Capital: $${state.capital.toFixed(2)}`
@@ -1164,7 +1164,7 @@ class AccumulatorBot {
                 if (hour >= CONFIG.DISCONNECT_HOUR && mins >= 0) {
                     LOGGER.info(`🌙 Past ${CONFIG.DISCONNECT_HOUR}:00 after win — disconnecting`);
                     state.session.endedByTime = true;
-                    TelegramService.sendMessage(`🌙 <b>Time Stop</b> — ${CONFIG.DISCONNECT_HOUR}:00 reached after win. Bot paused.`);
+                    TelegramService.sendMessage(`🌙 <b>BOT2 Time Stop</b> — ${CONFIG.DISCONNECT_HOUR}:00 reached after win. Bot paused.`);
                     this.stop();
                 }
             }
