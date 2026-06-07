@@ -106,8 +106,8 @@ const CONFIG = {
         // 'BOOM50', 'BOOM500', 'BOOM600', 'BOOM900', 'BOOM1000',
         // 'CRASH150N', 'CRASH300N',
         // 'CRASH50', 'CRASH500', 'CRASH600', 'CRASH900', 'CRASH1000',
-        // 'R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'BOOM150N', 'BOOM300N',
-        '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V', 'CRASH150N', 'CRASH300N',
+        'R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'BOOM150N', 'BOOM300N', 'CRASH150N', 'CRASH300N',
+        // '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V',
     ],
 
     // ── Misc ──────────────────────────────────────────────────
