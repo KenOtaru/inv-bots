@@ -15,8 +15,8 @@ const path      = require('path');
 // ============================================================
 // FILE PATHS
 // ============================================================
-const STATE_FILE        = path.join(__dirname, 'accumulator_bot-01_v1_state.json');
-const HISTORY_FILE      = path.join(__dirname, 'accumulator_bot-01_v1_history.json');
+const STATE_FILE        = path.join(__dirname, 'accumulator_bot4-01_v1_state.json');
+const HISTORY_FILE      = path.join(__dirname, 'accumulator_bot4-01_v1_history.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================================
@@ -39,7 +39,7 @@ const LOGGER = {
 // ============================================================
 const CONFIG = {
     // ── Deriv API ─────────────────────────────────────────────
-    API_TOKEN:  'Dz2V2KvRf4Uukt3',   
+    API_TOKEN:  '0P94g4WdSrSrzir',   
     APP_ID:     '1089',
     WS_URL:     'wss://ws.derivws.com/websockets/v3',
 

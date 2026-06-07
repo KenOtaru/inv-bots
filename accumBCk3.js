@@ -15,8 +15,8 @@ const path      = require('path');
 // ============================================================
 // FILE PATHS
 // ============================================================
-const STATE_FILE        = path.join(__dirname, 'accumulator_bot-01_v1_state.json');
-const HISTORY_FILE      = path.join(__dirname, 'accumulator_bot-01_v1_history.json');
+const STATE_FILE        = path.join(__dirname, 'accumulator_bot3-01_v1_state.json');
+const HISTORY_FILE      = path.join(__dirname, 'accumulator_bot3-01_v1_history.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================================
@@ -39,7 +39,7 @@ const LOGGER = {
 // ============================================================
 const CONFIG = {
     // ── Deriv API ─────────────────────────────────────────────
-    API_TOKEN:  'Dz2V2KvRf4Uukt3',   
+    API_TOKEN:  'rgNedekYXvCaPeP',   
     APP_ID:     '1089',
     WS_URL:     'wss://ws.derivws.com/websockets/v3',
 
@@ -107,8 +107,8 @@ const CONFIG = {
         // 'BOOM300N', 'BOOM500', 'BOOM600', 'BOOM900', 'BOOM1000',
         // 'CRASH50', 'CRASH150N', 
         // 'CRASH300N', 'CRASH500', 'CRASH600', 'CRASH900', 'CRASH1000',
-        // 'R_10', 'R_25', 'R_50', 'R_75', 'R_100', 
-        '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V', 
+        'R_10', 'R_25', 'R_50', 'R_75', 'R_100', 
+        // '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V', 
     ],
 
     // ── Misc ──────────────────────────────────────────────────
