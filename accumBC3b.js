@@ -35,7 +35,7 @@ const path = require('path');
 // ══════════════════════════════════════════════════════════════════════════════
 // STATE PERSISTENCE MANAGER
 // ══════════════════════════════════════════════════════════════════════════════
-const STATE_FILE = path.join(__dirname, 'accumBC3b_01_state.json');
+const STATE_FILE = path.join(__dirname, 'accumBC3b_02_state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -328,11 +328,11 @@ class EnhancedDerivTradingBot {
 
         // Check individual thresholds for recent values
         const recentThresholds = (
-           stayedInArray[5] < 150
+           stayedInArray[5] < 2
         );
 
         const recentThreshold2s = (
-            stayedInArray[5] < 150 
+            stayedInArray[5] < 10 
         );
         
         // Check if total sum is within acceptable range
@@ -342,7 +342,7 @@ class EnhancedDerivTradingBot {
         const inRecoveryMode = consecutiveLosses > 0;
         
         // Return true if: (recent thresholds AND total within range) OR in recovery mode
-        return this.consecutiveLosses > 0 ? (recentThreshold2s) : (recentThresholds);
+        return inRecoveryMode ? (recentThreshold2s) : (recentThresholds);
         //  return this.consecutiveLosses > 0 ? (recentThreshold2s) : (recentThresholds && totalWithinRange);
     }
 
@@ -1013,7 +1013,7 @@ class EnhancedDerivTradingBot {
         const condition2 =  this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 20, asset); 
         
         // Check if we should place trade
-        if (condition2 || this.consecutiveLosses > 0) {
+        if (condition2) {
             console.log(`   Entry condition: ${condition ? '✅ MET' : '❌ NOT MET'}`);
 
             this.tradedDigitArray.push(this.stayedInArray[99]);
