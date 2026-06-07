@@ -15,8 +15,8 @@ const path      = require('path');
 // ============================================================
 // FILE PATHS
 // ============================================================
-const STATE_FILE        = path.join(__dirname, 'accumulator_bot4-01_v1_state.json');
-const HISTORY_FILE      = path.join(__dirname, 'accumulator_bot4-01_v1_history.json');
+const STATE_FILE        = path.join(__dirname, 'accumulator_bot4-03_v1_state.json');
+const HISTORY_FILE      = path.join(__dirname, 'accumulator_bot4-03_v1_history.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================================
