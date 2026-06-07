@@ -39,8 +39,8 @@ const LOGGER = {
 // ============================================================
 const CONFIG = {
     // ── Deriv API ─────────────────────────────────────────────
-    API_TOKEN:  'DMylfkyce6VyZt7',   
-    APP_ID:     '1089',
+    API_TOKEN:  'DMylfkyce6VyZt7', //'pat_cf44a0699f283ac7a575f3e8e9d777c68ad4970e63de0c88b3ea66186e0567a5',   //pat_10c64b5b5b237322fc810c66f1b68c2371a4af2af398badc4cd5f5a0e0195e7c
+    APP_ID:     '1089', //'33uslPtthXBEkQOdfKfoY', //1089
     WS_URL:     'wss://ws.derivws.com/websockets/v3',
 
     // ── Capital & Risk ─────────────────────────────────────────
