@@ -54,7 +54,7 @@ const LOGGER = {
 // ============================================================
 const CONFIG = {
     // ── Deriv API ─────────────────────────────────────────────
-    API_TOKEN:  'Dz2V2KvRf4Uukt3',   
+    API_TOKEN:  'DMylfkyce6VyZt7',   
     APP_ID:     '1089',
     WS_URL:     'wss://ws.derivws.com/websockets/v3',
 
