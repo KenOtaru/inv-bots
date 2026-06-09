@@ -292,7 +292,7 @@ class EnhancedDerivTradingBot {
         const totalStayedInArray = this.calculateTotalStayedIn(stayedInArray);
         
         // Log the calculation for debugging
-        // console.log(`   📊 Total StayedIn Sum: ${totalStayedInArray} (Max: ${maxTotalStayedIn})`);
+        console.log(`   📊 Total StayedIn Sum: ${stayedInArray[99]} (${totalStayedInArray}/${maxTotalStayedIn})`);
         this.totalStayedInArray = totalStayedInArray;
         this.maxTotalStayedIn = maxTotalStayedIn;
         
@@ -322,7 +322,7 @@ class EnhancedDerivTradingBot {
         const totalStayedInArray = this.calculateTotalStayedIn(stayedInArray);
         
         // Log the calculation for debugging
-        console.log(`   📊 ${asset} Total StayedIn2 Sum: ${totalStayedInArray} (Max: ${maxTotalStayedIn})`);
+        // console.log(`   📊 ${asset} Total StayedIn2 Sum: ${totalStayedInArray} (Max: ${maxTotalStayedIn})`);
         this.totalStayedInArray2 = totalStayedInArray;
         this.maxTotalStayedIn2 = maxTotalStayedIn;
 
