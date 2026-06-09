@@ -73,7 +73,7 @@ const CONFIG = {
     STAYED_IN_MAX_TOTAL:        6500,      // Max total sum for condition1
 
     // Recent value thresholds (indices 98, 99 of 100-element array)
-    STAYED_IN_IDX_99_MAX:       10,
+    STAYED_IN_IDX_99_MAX:       1,
     STAYED_IN_IDX_98_MAX:       10,
 
     // Last-6-values threshold (index 5 of sliced array = last element)
@@ -103,7 +103,7 @@ const CONFIG = {
 
     // ── Active Assets ───────────────────────────────────────────
     ACTIVE_ASSETS: [
-        'R_10', '1HZ10V', 'R_25', '1HZ25V', 'BOOM1000', 'CRASH1000'
+        'R_10', '1HZ10V', 'BOOM1000', 'CRASH1000'
         // 'R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'BOOM150N', 'BOOM300N',
         // '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V',
         // 'BOOM50', 'BOOM500', 'BOOM600', 'BOOM900', 'BOOM1000',
