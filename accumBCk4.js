@@ -50,7 +50,7 @@ const CONFIG = {
 
     // ── Accumulator Contract Settings ────────────────────────
     CONTRACT_TYPE:              'ACCU',
-    GROWTH_RATE:                0.01,      // 5% growth rate
+    GROWTH_RATE:                0.01,      // 1% growth rate
     ACCU_TICKS:                 100,       // Default accumulator length
 
     // Take Profit multiplier for limit_order (fallback)
@@ -75,7 +75,7 @@ const CONFIG = {
     // Recent value thresholds (indices 98, 99 of 100-element array)
     STAYED_IN_IDX_99_MAX:       1,
     STAYED_IN_IDX_98_MAX:       20,
-    STAYED_IN_IDX_97_MAX:       20,
+    STAYED_IN_IDX_97_MAX:       100,
 
     // Last-6-values threshold (index 5 of sliced array = last element)
     STAYED_IN_LAST6_NORMAL:      1,
