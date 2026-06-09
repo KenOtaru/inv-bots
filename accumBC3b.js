@@ -298,10 +298,10 @@ class EnhancedDerivTradingBot {
         
         // Check individual thresholds for recent values
         const recentThresholds = (
-            stayedInArray[99] < 1 &&
-            stayedInArray[98] < 11 
+            stayedInArray[99] < 20 &&
+            stayedInArray[98] < 29 &&
+            stayedInArray[97] < 29 
             // &&
-            // stayedInArray[97] < 12 &&
             // stayedInArray[96] < 13 &&
             // stayedInArray[95] < 14 &&
             // stayedInArray[94] < 15
@@ -328,7 +328,7 @@ class EnhancedDerivTradingBot {
 
         // Check individual thresholds for recent values
         const recentThresholds = (
-           stayedInArray[5] < 1
+           stayedInArray[5] < 10
            && stayedInArray[4] < 10
         );
 
@@ -1012,11 +1012,11 @@ class EnhancedDerivTradingBot {
 
         // Entry condition
         // const condition =  this.consecutiveLosses < 1 ? this.checkTradeCondition(stayedInArray, this.consecutiveLosses, 1600) && this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 30) : this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 100); 
-        const condition =  this.checkTradeCondition(stayedInArray, this.consecutiveLosses, this.config.STAYED_IN_THRESHOLD) && this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 11); 
+        const condition =  this.checkTradeCondition(stayedInArray, this.consecutiveLosses, this.config.STAYED_IN_THRESHOLD); 
         const condition2 =  this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 20, asset); 
         
         // Check if we should place trade
-        if (condition2) {
+        if (condition) {
             console.log(`   Entry condition: ${condition ? '✅ MET' : '❌ NOT MET'}`);
 
             this.tradedDigitArray.push(this.stayedInArray[99]);
