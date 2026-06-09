@@ -94,8 +94,8 @@ const CONFIG = {
 
     // ── Time-based Disconnect (from example) ─────────────────
     USE_TIME_BASED_DISCONNECT:  true,
-    DISCONNECT_HOUR:            23,        // GMT+1 hour to disconnect after win
-    RECONNECT_HOUR:             2,         // GMT+1 hour to reconnect
+    DISCONNECT_HOUR:            22,        // GMT+1 hour to disconnect after win
+    RECONNECT_HOUR:             1,         // GMT+1 hour to reconnect
 
     // ── Position Management ───────────────────────────────────
     MAX_OPEN_POSITIONS_PER_ASSET: 1,
