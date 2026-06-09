@@ -69,12 +69,13 @@ const CONFIG = {
     INITIAL_STAKE_2:            25,        // Base after certain conditions (optional)
 
     // ── stayedInArray Entry Conditions ───────────────────────
-    STAYED_IN_THRESHOLD:        6500,      // Asset active if total < this
-    STAYED_IN_MAX_TOTAL:        6500,      // Max total sum for condition1
+    STAYED_IN_THRESHOLD:        7500,      // Asset active if total < this
+    STAYED_IN_MAX_TOTAL:        7500,      // Max total sum for condition1
 
     // Recent value thresholds (indices 98, 99 of 100-element array)
     STAYED_IN_IDX_99_MAX:       1,
-    STAYED_IN_IDX_98_MAX:       10,
+    STAYED_IN_IDX_98_MAX:       20,
+    STAYED_IN_IDX_97_MAX:       20,
 
     // Last-6-values threshold (index 5 of sliced array = last element)
     STAYED_IN_LAST6_NORMAL:      1,
@@ -131,7 +132,8 @@ class AccumulatorAnalyzer {
         const total = this.calculateTotalStayedIn(stayedInArray);
         const recentOk = (
             stayedInArray[99] < CONFIG.STAYED_IN_IDX_99_MAX &&
-            stayedInArray[98] < CONFIG.STAYED_IN_IDX_98_MAX
+            stayedInArray[98] < CONFIG.STAYED_IN_IDX_98_MAX &&
+            stayedInArray[97] < CONFIG.STAYED_IN_IDX_97_MAX 
         );
         const totalOk = total < maxTotal;
         return { passed: recentOk && totalOk, total, recentOk, totalOk };
@@ -1043,7 +1045,7 @@ class AccumulatorBot {
             `last6=${c2.value} < ${c2.threshold}=${c2.passed} | losses=${a.consecutiveLosses}`
         );
 
-        if (!c2.passed) return;
+        if (!c1.passed || !c2.passed) return;
 
         const stake = Math.min(a.currentStake, CONFIG.MAX_STAKE);
         if (state.capital < stake) {
