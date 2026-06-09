@@ -73,8 +73,8 @@ const CONFIG = {
     STAYED_IN_MAX_TOTAL:        6500,      // Max total sum for condition1
 
     // Recent value thresholds (indices 98, 99 of 100-element array)
-    STAYED_IN_IDX_99_MAX:       1,
-    STAYED_IN_IDX_98_MAX:       11,
+    STAYED_IN_IDX_99_MAX:       10,
+    STAYED_IN_IDX_98_MAX:       10,
 
     // Last-6-values threshold (index 5 of sliced array = last element)
     STAYED_IN_LAST6_NORMAL:      2,
