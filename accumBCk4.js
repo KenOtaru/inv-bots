@@ -57,14 +57,14 @@ const CONFIG = {
     TAKE_PROFIT_MULTIPLIER:     0.20,
 
     // Dynamic take-profit amounts (stake / divisor)
-    TP_DIVISOR_NORMAL:          4,         // stake / 4
-    TP_DIVISOR_1_LOSS:          6,         // stake / 6
-    TP_DIVISOR_2_PLUS_LOSS:     7,         // stake / 7
+    TP_DIVISOR_NORMAL:          5,         // stake / 4
+    TP_DIVISOR_1_LOSS:          5,         // stake / 6
+    TP_DIVISOR_2_PLUS_LOSS:     5,         // stake / 7
 
     // ── Martingale Recovery (from example) ───────────────────
     RECOVERY_ENABLED:           true,
-    MULTIPLIER:                 8,         // First loss multiplier
-    MULTIPLIER2:                8,         // 2nd+ loss multiplier
+    MULTIPLIER:                 10,         // First loss multiplier
+    MULTIPLIER2:                10,         // 2nd+ loss multiplier
     INITIAL_STAKE:              1,
     INITIAL_STAKE_2:            25,        // Base after certain conditions (optional)
 
@@ -77,7 +77,7 @@ const CONFIG = {
     STAYED_IN_IDX_98_MAX:       10,
 
     // Last-6-values threshold (index 5 of sliced array = last element)
-    STAYED_IN_LAST6_NORMAL:      2,
+    STAYED_IN_LAST6_NORMAL:      1,
     STAYED_IN_LAST6_RECOVERY:   10,
 
     // ── Asset Filtering & Scanning ───────────────────────────
