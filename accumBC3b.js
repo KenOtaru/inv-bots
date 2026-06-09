@@ -331,7 +331,6 @@ class EnhancedDerivTradingBot {
            stayedInArray[5] < 1
            && stayedInArray[4] < 5
            && stayedInArray[3] < 10
-           && stayedInArray[2] < 12
         );
 
         const recentThreshold2s = (
@@ -345,8 +344,8 @@ class EnhancedDerivTradingBot {
         const inRecoveryMode = consecutiveLosses > 0;
         
         // Return true if: (recent thresholds AND total within range) OR in recovery mode
-        return inRecoveryMode ? (recentThreshold2s) : (recentThresholds);
-        //  return this.consecutiveLosses > 0 ? (recentThreshold2s) : (recentThresholds && totalWithinRange);
+        // return inRecoveryMode ? (recentThreshold2s) : (recentThresholds);
+         return this.consecutiveLosses > 0 ? (recentThreshold2s) : (recentThresholds && totalWithinRange);
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -939,30 +938,32 @@ class EnhancedDerivTradingBot {
 
         // ✅ Check if this is a scan-only request (from pending asset scanner)
         const passthrough = message.echo_req?.passthrough;
-        if (this.consecutiveLosses <= 0 && !this.tradeInProgress && passthrough && passthrough.action === 'scan_only') {
-            // This is just a scan to update asset status, don't proceed with trading
-            const totalStayedIn = this.calculateTotalStayedIn(stayedInArray);
-            console.log(`   🔍 Scan result for ${asset}: stayedIn=${totalStayedIn} (${totalStayedIn < this.config.STAYED_IN_THRESHOLD ? 'READY' : 'WAITING'})`);
-            return;
-        }
-
-        // ✅ Check if this is a request for final stayedInArray (after contract settled)
-        if (this.consecutiveLosses <= 0 && !this.tradeInProgress && passthrough && passthrough.action === 'get_final_stayed_in') {
-            // This is the final stayedInArray after contract settlement
-            console.log(`✅ Final stayedInArray received for ${asset}: [${stayedInArray.slice(-6).join('|')}]`);
-            
-            // Update stored arrays
-            if (!this.assetStayedInArrays) this.assetStayedInArrays = {};
-            this.assetStayedInArrays[asset] = stayedInArray;
-            this.stayedInArray = stayedInArray;
-
-            // Now handle the trade result with the updated stayedInArray
-            const trade = this.activeTrades[asset];
-            if (trade && trade.awaitingFinalStayedIn && trade.settledContract) {
-                trade.awaitingFinalStayedIn = false;
-                this.handleTradeResult(asset, trade.settledContract);
+        if (this.consecutiveLosses <= 0) {
+            if (passthrough && passthrough.action === 'scan_only') {
+                // This is just a scan to update asset status, don't proceed with trading
+                const totalStayedIn = this.calculateTotalStayedIn(stayedInArray);
+                console.log(`   🔍 Scan result for ${asset}: stayedIn=${totalStayedIn} (${totalStayedIn < this.config.STAYED_IN_THRESHOLD ? 'READY' : 'WAITING'})`);
+                return;
             }
-            return;
+
+            // ✅ Check if this is a request for final stayedInArray (after contract settled)
+            if (passthrough && passthrough.action === 'get_final_stayed_in') {
+                // This is the final stayedInArray after contract settlement
+                console.log(`✅ Final stayedInArray received for ${asset}: [${stayedInArray.slice(-6).join('|')}]`);
+                
+                // Update stored arrays
+                if (!this.assetStayedInArrays) this.assetStayedInArrays = {};
+                this.assetStayedInArrays[asset] = stayedInArray;
+                this.stayedInArray = stayedInArray;
+
+                // Now handle the trade result with the updated stayedInArray
+                const trade = this.activeTrades[asset];
+                if (trade && trade.awaitingFinalStayedIn && trade.settledContract) {
+                    trade.awaitingFinalStayedIn = false;
+                    this.handleTradeResult(asset, trade.settledContract);
+                }
+                return;
+            }
         }
 
         // ✅ Regular proposal handling (for new trades)
@@ -977,7 +978,7 @@ class EnhancedDerivTradingBot {
         if (this.tradeInProgress) return;
 
         // ✅ NEW: Only proceed if asset is in active list
-        if (!this.isAssetReady(asset) && this.consecutiveLosses <= 0) {
+        if ((!this.isAssetReady(asset) && this.consecutiveLosses <= 0)) {
             console.log(`⏸️  ${asset} is in pending list, skipping trade analysis`);
             return;
         }
@@ -1517,14 +1518,14 @@ class EnhancedDerivTradingBot {
             return;
         }
 
-        if(won && !this.endOfDay) {
-            this.disconnect();
-            console.log("Bot Disconnected, will Restart in", (this.waitTime / 1000).toFixed(0), 'Seconds' );
+        // if(won && !this.endOfDay) {
+        //     this.disconnect();
+        //     console.log("Bot Disconnected, will Restart in", (this.waitTime / 1000).toFixed(0), 'Seconds' );
             
-            setTimeout(() => {
-                this.connect();
-            }, this.waitTime);
-        }
+        //     setTimeout(() => {
+        //         this.connect();
+        //     }, this.waitTime);
+        // }
 
         StatePersistence.saveState(this);
 
@@ -1684,7 +1685,7 @@ const bot = new EnhancedDerivTradingBot('rgNedekYXvCaPeP', {
     growthRate: 0.05,
     takeProfitMultiplier: 0.9, //0.05, % of Stake Amount
     filterNum: 4,
-    STAYED_IN_THRESHOLD: 1300, // Threshold for asset filtering
+    STAYED_IN_THRESHOLD: 1500, // Threshold for asset filtering
     scanTimer: 60000, //Set Timer for Bot to Re-scan for Assets that are ready for Trade execution.
     assets: [
         'BOOM50','BOOM150N', 'BOOM300N', 'BOOM500', 'BOOM600', 'BOOM900', 'BOOM1000',
