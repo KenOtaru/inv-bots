@@ -35,7 +35,7 @@ const path = require('path');
 // ══════════════════════════════════════════════════════════════════════════════
 // STATE PERSISTENCE MANAGER
 // ══════════════════════════════════════════════════════════════════════════════
-const STATE_FILE = path.join(__dirname, 'accumBC3b_001_state.json');
+const STATE_FILE = path.join(__dirname, 'accumBC3b_003_state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -893,8 +893,8 @@ class EnhancedDerivTradingBot {
         if (this.tradeInProgress) return;
         if (!this.wsReady) return;
 
-        this.takeProfitAmount = this.consecutiveLosses < 1 ? this.currentStake/4 : this.consecutiveLosses === 1 ? this.currentStake/6 : this.currentStake/7; 
-        // this.takeProfitAmount = this.currentStake * this.config.takeProfitMultiplier;
+        // this.takeProfitAmount = this.consecutiveLosses < 1 ? this.currentStake/4 : this.consecutiveLosses === 1 ? this.currentStake/6 : this.currentStake/7; 
+        this.takeProfitAmount = this.currentStake * this.config.takeProfitMultiplier;
 
         const proposal = {
             proposal: 1,
@@ -1675,16 +1675,16 @@ class EnhancedDerivTradingBot {
 const bot = new EnhancedDerivTradingBot('rgNedekYXvCaPeP', {
     initialStake: 1,
     initialStake2: 25,
-    multiplier: 8,
-    multiplier2: 8,
+    multiplier: 10,
+    multiplier2: 10,
     recoveryWinNum: 100,
     maxConsecutiveLosses: 3,
     stopLoss: 173,
     takeProfit: 2500,
-    growthRate: 0.05,
-    takeProfitMultiplier: 0.9, //0.05, % of Stake Amount
+    growthRate: 0.01,
+    takeProfitMultiplier: 0.20, //0.20, 20% of Stake Amount
     filterNum: 4,
-    STAYED_IN_THRESHOLD: 1200, // Threshold for asset filtering
+    STAYED_IN_THRESHOLD: 1600, // Threshold for asset filtering
     scanTimer: 60000, //Set Timer for Bot to Re-scan for Assets that are ready for Trade execution.
     assets: [
         'BOOM50','BOOM150N', 'BOOM300N', 'BOOM500', 'BOOM600', 'BOOM900', 'BOOM1000',
