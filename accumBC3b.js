@@ -287,12 +287,12 @@ class EnhancedDerivTradingBot {
      * @param {number} maxTotalStayedIn - Maximum allowed total sum (default: 600)
      * @returns {boolean} True if conditions are met for trading
      */
-    checkTradeCondition(stayedInArray, consecutiveLosses, maxTotalStayedIn) {
+    checkTradeCondition(stayedInArray, consecutiveLosses, maxTotalStayedIn, asset) {
         // Calculate total sum of all stayedInArray values
         const totalStayedInArray = this.calculateTotalStayedIn(stayedInArray);
         
         // Log the calculation for debugging
-        console.log(`   📊 Total StayedIn Sum: ${stayedInArray[99]} (${totalStayedInArray}/${maxTotalStayedIn})`);
+        console.log(`   📊 ${asset} | Total StayedIn Sum: ${stayedInArray[99]} (${totalStayedInArray}/${maxTotalStayedIn})`);
         this.totalStayedInArray = totalStayedInArray;
         this.maxTotalStayedIn = maxTotalStayedIn;
         
@@ -1012,7 +1012,7 @@ class EnhancedDerivTradingBot {
 
         // Entry condition
         // const condition =  this.consecutiveLosses < 1 ? this.checkTradeCondition(stayedInArray, this.consecutiveLosses, 1600) && this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 30) : this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 100); 
-        const condition =  this.checkTradeCondition(stayedInArray, this.consecutiveLosses, this.config.STAYED_IN_THRESHOLD); 
+        const condition =  this.checkTradeCondition(stayedInArray, this.consecutiveLosses, this.config.STAYED_IN_THRESHOLD, asset); 
         const condition2 =  this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 20, asset); 
         
         // Check if we should place trade
