@@ -15,8 +15,8 @@ const path      = require('path');
 // ============================================================
 // FILE PATHS
 // ============================================================
-const STATE_FILE        = path.join(__dirname, 'accumulator_bot4-04_v1_state.json');
-const HISTORY_FILE      = path.join(__dirname, 'accumulator_bot4-04_v1_history.json');
+const STATE_FILE        = path.join(__dirname, 'accumulator_bot4-001_v1_state.json');
+const HISTORY_FILE      = path.join(__dirname, 'accumulator_bot4-001_v1_history.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ============================================================
@@ -50,7 +50,7 @@ const CONFIG = {
 
     // ── Accumulator Contract Settings ────────────────────────
     CONTRACT_TYPE:              'ACCU',
-    GROWTH_RATE:                0.05,      // 5% growth rate
+    GROWTH_RATE:                0.01,      // 5% growth rate
     ACCU_TICKS:                 100,       // Default accumulator length
 
     // Take Profit multiplier for limit_order (fallback)
@@ -103,11 +103,12 @@ const CONFIG = {
 
     // ── Active Assets ───────────────────────────────────────────
     ACTIVE_ASSETS: [
+        'R_10', '1HZ10V', 'R_25', '1HZ25V', 'BOOM1000', 'CRASH1000'
         // 'R_10', 'R_25', 'R_50', 'R_75', 'R_100', 'BOOM150N', 'BOOM300N',
         // '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V',
         // 'BOOM50', 'BOOM500', 'BOOM600', 'BOOM900', 'BOOM1000',
         // 'CRASH150N', 'CRASH300N',
-        'CRASH50', 'CRASH500', 'CRASH600', 'CRASH900', 'CRASH1000',
+        // 'CRASH50', 'CRASH500', 'CRASH600', 'CRASH900', 'CRASH1000',
     ],
 
     // ── Misc ──────────────────────────────────────────────────
