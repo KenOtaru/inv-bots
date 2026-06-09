@@ -328,7 +328,10 @@ class EnhancedDerivTradingBot {
 
         // Check individual thresholds for recent values
         const recentThresholds = (
-           stayedInArray[5] < 2
+           stayedInArray[5] < 1
+           && stayedInArray[4] < 5
+           && stayedInArray[3] < 10
+           && stayedInArray[2] < 12
         );
 
         const recentThreshold2s = (
@@ -1677,7 +1680,7 @@ const bot = new EnhancedDerivTradingBot('rgNedekYXvCaPeP', {
     recoveryWinNum: 100,
     maxConsecutiveLosses: 3,
     stopLoss: 173,
-    takeProfit: 250,
+    takeProfit: 2500,
     growthRate: 0.05,
     takeProfitMultiplier: 0.9, //0.05, % of Stake Amount
     filterNum: 4,
@@ -1686,8 +1689,8 @@ const bot = new EnhancedDerivTradingBot('rgNedekYXvCaPeP', {
     assets: [
         'BOOM50','BOOM150N', 'BOOM300N', 'BOOM500', 'BOOM600', 'BOOM900', 'BOOM1000',
         'CRASH50', 'CRASH150N', 'CRASH300N', 'CRASH500', 'CRASH600', 'CRASH900', 'CRASH1000',
-        'R_10', 'R_25', 'R_50', 'R_75', 'R_100',
-        '1HZ10V', '1HZ25V', '1HZ50V', '1HZ100V',
+        // 'R_10', 'R_25', 'R_50', 'R_75', 'R_100',
+        // '1HZ10V', '1HZ25V', '1HZ50V', '1HZ100V',
     ],
     telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
     telegramChatId: '752497117',
