@@ -304,8 +304,8 @@ class EnhancedDerivTradingBot {
             stayedInArray[97] < 20 
             &&
             stayedInArray[96] < 20 
-            // stayedInArray[95] < 14 &&
-            // stayedInArray[94] < 15
+            // stayedInArray[95] < 20 &&
+            // stayedInArray[94] < 20
         );
         
         // Check if total sum is within acceptable range
