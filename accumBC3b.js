@@ -207,6 +207,7 @@ class EnhancedDerivTradingBot {
         this.predictedDigit = null;
         this.currentTick = 0;
         this.Sys2 = false;
+        this.TP_SL = false;
         this.scanningTimer = this.config.scanTimer;
 
         // ── Multi-asset active trades ────────────────────────────────────────
@@ -1502,6 +1503,7 @@ class EnhancedDerivTradingBot {
         if (this.totalProfitLoss >= this.config.takeProfit) {
             console.log('🎯 Take Profit Reached... Stopping trading.');
             this.endOfDay = true;
+            this.TP_SL = true;
             this.sendDisconnectSummary();
             this.disconnect();
             return;
@@ -1512,6 +1514,7 @@ class EnhancedDerivTradingBot {
             this.totalProfitLoss <= -this.config.stopLoss) {
             console.log('🛑 Stopping condition met. Disconnecting...');
             this.endOfDay = true;
+            this.TP_SL = true;
             this.sendDisconnectSummary();
             this.disconnect();
             return;
@@ -1612,7 +1615,7 @@ class EnhancedDerivTradingBot {
             }
 
             // Morning Resumption: 2:00 AM
-            if (this.endOfDay && currentHours === 2 && currentMinutes >= 0) {
+            if (!this.TP_SL && this.endOfDay && currentHours === 2 && currentMinutes >= 0) {
                 console.log("It's 2:00 AM, reconnecting the bot.");
                 this.endOfDay = false;
                 this.Pause = false;
