@@ -35,7 +35,7 @@ const path = require('path');
 // ══════════════════════════════════════════════════════════════════════════════
 // STATE PERSISTENCE MANAGER
 // ══════════════════════════════════════════════════════════════════════════════
-const STATE_FILE = path.join(__dirname, 'accumBC3_15_state.json');
+const STATE_FILE = path.join(__dirname, 'accumBC3_18_state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -1517,14 +1517,14 @@ class EnhancedDerivTradingBot {
             return;
         }
 
-        if(won && !this.endOfDay) {
-            this.disconnect();
-            console.log("Bot Disconnected, will Restart in", (this.waitTime / 1000).toFixed(0), 'Seconds' );
+        // if(won && !this.endOfDay) {
+        //     this.disconnect();
+        //     console.log("Bot Disconnected, will Restart in", (this.waitTime / 1000).toFixed(0), 'Seconds' );
             
-            setTimeout(() => {
-                this.connect();
-            }, this.waitTime);
-        }
+        //     setTimeout(() => {
+        //         this.connect();
+        //     }, this.waitTime);
+        // }
 
         StatePersistence.saveState(this);
 
