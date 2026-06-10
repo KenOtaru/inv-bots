@@ -1,6 +1,6 @@
 /**
  * ╔══════════════════════════════════════════════════════════════╗
- * ║         accumBotM — Enhanced Multi-Asset Accumulator Bot    ║
+ * ║         accumBotM — Enhanced Multi-Asset Accumulator Bot     ║
  * ╠══════════════════════════════════════════════════════════════╣
  * ║  ORIGINAL STRATEGY (preserved):                              ║
  * ║  • Digit-frequency analysis on StayIN sequence               ║
@@ -16,7 +16,7 @@
  * ║  • Robust reconnection with exponential backoff              ║
  * ║  • WebSocket ping keep-alive                                 ║
  * ║  • INTELLIGENT ASSET FILTERING (NEW):                        ║
- * ║    - Active Assets: stayedInArray < 1600 (ready to trade)   ║
+ * ║    - Active Assets: stayedInArray < 1600 (ready to trade)    ║
  * ║    - Pending Assets: stayedInArray >= 1600 (waiting)         ║
  * ║    - Dynamic asset management between lists                  ║
  * ║    - Periodic scanning of pending assets (30s interval)      ║
@@ -299,8 +299,8 @@ class EnhancedDerivTradingBot {
         // Check individual thresholds for recent values
         const recentThresholds = (
             stayedInArray[99] < 20 &&
-            stayedInArray[98] < 29 &&
-            stayedInArray[97] < 29 
+            stayedInArray[98] < 20 &&
+            stayedInArray[97] < 20 
             // &&
             // stayedInArray[96] < 13 &&
             // stayedInArray[95] < 14 &&
@@ -1672,7 +1672,7 @@ class EnhancedDerivTradingBot {
 // ══════════════════════════════════════════════════════════════════════════════
 // BOT INITIALIZATION
 // ══════════════════════════════════════════════════════════════════════════════
-const bot = new EnhancedDerivTradingBot('0P94g4WdSrSrzir', {
+const bot = new EnhancedDerivTradingBot('rgNedekYXvCaPeP', {
     initialStake: 1,
     initialStake2: 25,
     multiplier: 10,
@@ -1684,7 +1684,7 @@ const bot = new EnhancedDerivTradingBot('0P94g4WdSrSrzir', {
     growthRate: 0.01,
     takeProfitMultiplier: 0.2, //0.20, % of Stake Amount
     filterNum: 4,
-    STAYED_IN_THRESHOLD: 6000, // Threshold for asset filtering
+    STAYED_IN_THRESHOLD: 7000, // Threshold for asset filtering
     scanTimer: 60000, //Set Timer for Bot to Re-scan for Assets that are ready for Trade execution.
     assets: [
         // 'BOOM50','BOOM150N', 'BOOM300N', 'BOOM500', 'BOOM600', 'BOOM900', 'BOOM1000',
