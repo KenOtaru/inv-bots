@@ -299,7 +299,7 @@ class EnhancedDerivTradingBot {
         
         // Check individual thresholds for recent values
         const recentThresholds = (
-            stayedInArray[99] < 20 &&
+            stayedInArray[99] < 3 &&
             stayedInArray[98] < 20 &&
             stayedInArray[97] < 20 
             // &&
