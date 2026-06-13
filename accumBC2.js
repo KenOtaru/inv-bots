@@ -35,7 +35,7 @@ const path = require('path');
 // ══════════════════════════════════════════════════════════════════════════════
 // STATE PERSISTENCE MANAGER
 // ══════════════════════════════════════════════════════════════════════════════
-const STATE_FILE = path.join(__dirname, 'accumBC2_0001_state.json');
+const STATE_FILE = path.join(__dirname, 'accumBC2_0009_state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -300,17 +300,19 @@ class EnhancedDerivTradingBot {
         // Check individual thresholds for recent values
         const recentThresholds = (
             stayedInArray[99] < 3 &&
-            stayedInArray[98] < 20 &&
-            stayedInArray[97] < 20 
+            stayedInArray[98] > 30 
             &&
-            stayedInArray[96] < 20 
-            // &&
-            // stayedInArray[95] < 20 &&
-            // stayedInArray[94] < 20
+            stayedInArray[97] > 30 
+            &&
+            stayedInArray[96] > 30 
+            &&
+            stayedInArray[95] > 30 
+            &&
+            stayedInArray[94] > 30
         );
         
         // Check if total sum is within acceptable range
-        const totalWithinRange = totalStayedInArray < maxTotalStayedIn;
+        const totalWithinRange = totalStayedInArray > maxTotalStayedIn;
         
         // Check if we have consecutive losses (recovery mode)
         const inRecoveryMode = consecutiveLosses > 0;
@@ -364,7 +366,7 @@ class EnhancedDerivTradingBot {
         const wasActive = this.activeAssets.has(asset);
         const wasPending = this.pendingAssets.has(asset);
 
-        if (totalStayedIn < this.config.STAYED_IN_THRESHOLD) {
+        if (totalStayedIn > this.config.STAYED_IN_THRESHOLD) {
             // Asset is ready for trading
             if (!wasActive) {
                 this.activeAssets.add(asset);
@@ -943,7 +945,7 @@ class EnhancedDerivTradingBot {
             if (passthrough && passthrough.action === 'scan_only') {
                 // This is just a scan to update asset status, don't proceed with trading
                 const totalStayedIn = this.calculateTotalStayedIn(stayedInArray);
-                console.log(`   🔍 Scan result for ${asset}: stayedIn=${totalStayedIn} (${totalStayedIn < this.config.STAYED_IN_THRESHOLD ? 'READY' : 'WAITING'})`);
+                console.log(`   🔍 Scan result for ${asset}: stayedIn=${totalStayedIn} (${totalStayedIn > this.config.STAYED_IN_THRESHOLD ? 'READY' : 'WAITING'})`);
                 return;
             }
 
@@ -1688,7 +1690,7 @@ const bot = new EnhancedDerivTradingBot('rgNedekYXvCaPeP', {
     growthRate: 0.01,
     takeProfitMultiplier: 0.2, //0.20, % of Stake Amount
     filterNum: 4,
-    STAYED_IN_THRESHOLD: 6400, // Threshold for asset filtering
+    STAYED_IN_THRESHOLD: 7100, // Threshold for asset filtering
     scanTimer: 60000, //Set Timer for Bot to Re-scan for Assets that are ready for Trade execution.
     assets: [
         // 'BOOM50','BOOM150N', 'BOOM300N', 'BOOM500', 'BOOM600', 'BOOM900', 'BOOM1000',
