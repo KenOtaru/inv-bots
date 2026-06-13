@@ -35,7 +35,7 @@ const path = require('path');
 // ══════════════════════════════════════════════════════════════════════════════
 // STATE PERSISTENCE MANAGER
 // ══════════════════════════════════════════════════════════════════════════════
-const STATE_FILE = path.join(__dirname, 'accumBC_0001_state.json');
+const STATE_FILE = path.join(__dirname, 'accumBC_0002_state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -1676,7 +1676,7 @@ class EnhancedDerivTradingBot {
 // ══════════════════════════════════════════════════════════════════════════════
 // BOT INITIALIZATION
 // ══════════════════════════════════════════════════════════════════════════════
-const bot = new EnhancedDerivTradingBot('hsj0tA0XJoIzJG5', {
+const bot = new EnhancedDerivTradingBot('Dz2V2KvRf4Uukt3', {
     initialStake: 1,
     initialStake2: 25,
     multiplier: 10,
