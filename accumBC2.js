@@ -1523,14 +1523,15 @@ class EnhancedDerivTradingBot {
             return;
         }
 
-        // if(won && !this.endOfDay) {
-        //     this.disconnect();
-        //     console.log("Bot Disconnected, will Restart in", (this.waitTime / 1000).toFixed(0), 'Seconds' );
+        //Disconnect and Reconnect after WaitTime
+        if(won && !this.endOfDay) {
+            this.disconnect();
+            console.log("Bot Disconnected, will Restart in", (this.waitTime / 1000).toFixed(0), 'Seconds' );
             
-        //     setTimeout(() => {
-        //         this.connect();
-        //     }, this.waitTime);
-        // }
+            setTimeout(() => {
+                this.connect();
+            }, this.waitTime);
+        }
 
         StatePersistence.saveState(this);
 
