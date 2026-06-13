@@ -193,7 +193,7 @@ class EnhancedDerivTradingBot {
         this.confidenceThreshold = 0.5;
         this.kTradeCount = 0;
         this.isWinTrade = false;
-        this.waitTime = 50000;
+        this.waitTime = 150000;
         this.LossDigitsList = [];
         this.threeConsecutiveDigits = 0;
         this.predictedType = '';
