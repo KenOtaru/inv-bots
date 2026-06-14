@@ -939,11 +939,11 @@ class EnhancedDerivTradingBot {
         if (!stayedInArray) return;
 
         if (this.consecutiveLosses <= 0) {
-        // ✅ NEW: Update asset status based on stayedInArray
-        this.updateAssetStatus(asset, stayedInArray);
+            // ✅ NEW: Update asset status based on stayedInArray
+            this.updateAssetStatus(asset, stayedInArray);
 
-        // ✅ Check if this is a scan-only request (from pending asset scanner)
-        const passthrough = message.echo_req?.passthrough;
+            // ✅ Check if this is a scan-only request (from pending asset scanner)
+            const passthrough = message.echo_req?.passthrough;
         // if (this.consecutiveLosses <= 0) {
             if (passthrough && passthrough.action === 'scan_only') {
                 // This is just a scan to update asset status, don't proceed with trading
