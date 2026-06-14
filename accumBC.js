@@ -395,7 +395,7 @@ class EnhancedDerivTradingBot {
      * Periodically scan pending assets to check if they're ready to become active
      */
     startPendingAssetScan() {
-        if(this.consecutiveLosses < 1) {
+        if(this.consecutiveLosses < 1 && !this.tradeInProgress) {
             // Clear any existing scan interval
             if (this.pendingScanInterval) {
                 clearInterval(this.pendingScanInterval);
