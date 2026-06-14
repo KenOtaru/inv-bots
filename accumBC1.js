@@ -899,7 +899,8 @@ class EnhancedDerivTradingBot {
         if (!this.wsReady) return;
 
         // this.takeProfitAmount = this.consecutiveLosses < 1 ? this.currentStake/4 : this.consecutiveLosses === 1 ? this.currentStake/6 : this.currentStake/7; 
-        this.takeProfitAmount = this.currentStake * this.config.takeProfitMultiplier;
+        // this.takeProfitAmount = this.currentStake * this.config.takeProfitMultiplier;
+        this.takeProfitAmount = this.consecutiveLosses < 1 ? this.currentStake * this.config.takeProfitMultiplier : this.currentStake * this.config.takeProfitMultiplier2;
 
         const proposal = {
             proposal: 1,
@@ -1681,7 +1682,7 @@ class EnhancedDerivTradingBot {
 // ══════════════════════════════════════════════════════════════════════════════
 // BOT INITIALIZATION
 // ══════════════════════════════════════════════════════════════════════════════
-const bot = new EnhancedDerivTradingBot('0P94g4WdSrSrzir', {
+const bot = new EnhancedDerivTradingBot('hsj0tA0XJoIzJG5', {
     initialStake: 1,
     initialStake2: 25,
     multiplier: 2,
