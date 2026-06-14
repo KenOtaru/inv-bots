@@ -938,12 +938,13 @@ class EnhancedDerivTradingBot {
 
         if (!stayedInArray) return;
 
+        if (this.consecutiveLosses <= 0) {
         // ✅ NEW: Update asset status based on stayedInArray
         this.updateAssetStatus(asset, stayedInArray);
 
         // ✅ Check if this is a scan-only request (from pending asset scanner)
         const passthrough = message.echo_req?.passthrough;
-        if (this.consecutiveLosses <= 0) {
+        // if (this.consecutiveLosses <= 0) {
             if (passthrough && passthrough.action === 'scan_only') {
                 // This is just a scan to update asset status, don't proceed with trading
                 const totalStayedIn = this.calculateTotalStayedIn(stayedInArray);
@@ -1694,7 +1695,7 @@ const bot = new EnhancedDerivTradingBot('0P94g4WdSrSrzir', {
     takeProfitMultiplier: 0.5, //50% of Stake Amount
     takeProfitMultiplier2: 1, //100% of Stake Amount
     filterNum: 4,
-    STAYED_IN_THRESHOLD: 7400, // Threshold for asset filtering
+    STAYED_IN_THRESHOLD: 6400, // Threshold for asset filtering
     scanTimer: 60000, //Set Timer for Bot to Re-scan for Assets that are ready for Trade execution.
     assets: [
         'BOOM50','BOOM150N', 'BOOM300N', 'BOOM500', 'BOOM600', 'BOOM900', 'BOOM1000',
