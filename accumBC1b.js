@@ -245,7 +245,7 @@ class EnhancedDerivTradingBot {
         // ── Trade Watchdog ───────────────────────────────────────────────────
         this.tradeWatchdogTimer = null;
         this.tradeWatchdogPollTimer = null;
-        this.tradeWatchdogMs = 120000;
+        this.tradeWatchdogMs = 300000;
         this.tradeStartTime = null;
 
         // ── Initialize per-asset structures ──────────────────────────────────
@@ -301,11 +301,11 @@ class EnhancedDerivTradingBot {
         // Check individual thresholds for recent values
         const recentThresholds = (
             stayedInArray[99] < 3 &&
-            stayedInArray[98] < 30 
-            // &&
-            // stayedInArray[97] < 30 
-            // &&
-            // stayedInArray[96] < 30 
+            stayedInArray[98] < 100 
+            &&
+            stayedInArray[97] < 100 
+            &&
+            stayedInArray[96] < 100 
             // &&
             // stayedInArray[95] < 30 
             // &&
