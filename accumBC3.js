@@ -942,7 +942,7 @@ class EnhancedDerivTradingBot {
         if (!stayedInArray) return;
 
         // ✅ NEW: Update asset status based on stayedInArray
-        if (this.consecutiveLosses <= 0) {
+        if (this.consecutiveLosses < 1 && !this.tradeInProgress) {
             this.updateAssetStatus(asset, stayedInArray);
         }
 
