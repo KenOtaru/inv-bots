@@ -397,7 +397,7 @@ class EnhancedDerivTradingBot {
      * Periodically scan pending assets to check if they're ready to become active
      */
     startPendingAssetScan() {
-        // if(this.consecutiveLosses < 1) {
+        if(this.consecutiveLosses < 1) {
             // Clear any existing scan interval
             if (this.pendingScanInterval) {
                 clearInterval(this.pendingScanInterval);
@@ -422,7 +422,7 @@ class EnhancedDerivTradingBot {
             }, scanningTimer); // Scan every 30 seconds
 
             console.log('🔄 Pending asset scanner started (30s interval)');
-        // }
+        }
     }
 
     /**
@@ -1432,9 +1432,9 @@ class EnhancedDerivTradingBot {
             this.hourlyStats.wins++;
 
             // Resume all assets after win
-            if (this.focusAsset) {
-                this.resumeAllAssets();
-            }
+            // if (this.focusAsset) {
+            //     this.resumeAllAssets();
+            // }
             this.assets = config.assets;
             
         } else {
@@ -1473,7 +1473,7 @@ class EnhancedDerivTradingBot {
             }
 
             // Suspend all other assets, focus on loss asset
-            this.suspendOtherAssets(asset);
+            // this.suspendOtherAssets(asset);
             this.assets = asset;
         }
 
