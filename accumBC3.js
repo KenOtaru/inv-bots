@@ -1682,14 +1682,14 @@ class EnhancedDerivTradingBot {
 const bot = new EnhancedDerivTradingBot('0P94g4WdSrSrzir', {
     initialStake: 1,
     initialStake2: 25,
-    multiplier: 10,
-    multiplier2: 10,
+    multiplier: 2,
+    multiplier2: 2,
     recoveryWinNum: 100,
-    maxConsecutiveLosses: 3,
+    maxConsecutiveLosses: 7,
     stopLoss: 173,
     takeProfit: 2500,
     growthRate: 0.01,
-    takeProfitMultiplier: 0.20, //0.20, 20% of Stake Amount
+    takeProfitMultiplier: 0.75, //0.20, 20% of Stake Amount
     filterNum: 4,
     STAYED_IN_THRESHOLD: 7400, // Threshold for asset filtering
     scanTimer: 60000, //Set Timer for Bot to Re-scan for Assets that are ready for Trade execution.
