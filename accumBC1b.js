@@ -313,7 +313,7 @@ class EnhancedDerivTradingBot {
         );
         
         // Check if total sum is within acceptable range
-        const totalWithinRange = totalStayedInArray > maxTotalStayedIn;
+        const totalWithinRange = totalStayedInArray < maxTotalStayedIn;
         
         // Check if we have consecutive losses (recovery mode)
         const inRecoveryMode = consecutiveLosses > 0;
@@ -1695,7 +1695,7 @@ const bot = new EnhancedDerivTradingBot('Dz2V2KvRf4Uukt3', {
     takeProfitMultiplier: 0.5, //50% of Stake Amount
     takeProfitMultiplier2: 1, //100% of Stake Amount
     filterNum: 4,
-    STAYED_IN_THRESHOLD: 6200, // Threshold for asset filtering
+    STAYED_IN_THRESHOLD: 6000, // Threshold for asset filtering
     scanTimer: 60000, //Set Timer for Bot to Re-scan for Assets that are ready for Trade execution.
     assets: [
         // 'BOOM50','BOOM150N', 'BOOM300N', 'BOOM500', 'BOOM600', 'BOOM900', 'BOOM1000',
