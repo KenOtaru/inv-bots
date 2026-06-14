@@ -1041,6 +1041,7 @@ class EnhancedDerivTradingBot {
             console.log(`   Growth Rate: ${(growthRate * 100).toFixed(0)}% | Stake: $${this.currentStake.toFixed(2)}`);
             console.log(`   Take Profit: $${this.takeProfitAmount.toFixed(2)}`);
 
+            this.assets = asset;
             // Place trade
             this.placeTrade(asset);
         }
