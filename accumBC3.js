@@ -398,7 +398,7 @@ class EnhancedDerivTradingBot {
      * Periodically scan pending assets to check if they're ready to become active
      */
     startPendingAssetScan() {
-        if(this.consecutiveLosses < 1 && !this.tradeInProgress) {
+        if(this.consecutiveLosses <= 0 && !this.tradeInProgress) {
             // Clear any existing scan interval
             if (this.pendingScanInterval) {
                 clearInterval(this.pendingScanInterval);
@@ -1041,7 +1041,6 @@ class EnhancedDerivTradingBot {
             console.log(`   Growth Rate: ${(growthRate * 100).toFixed(0)}% | Stake: $${this.currentStake.toFixed(2)}`);
             console.log(`   Take Profit: $${this.takeProfitAmount.toFixed(2)}`);
 
-            this.assets = asset;
             // Place trade
             this.placeTrade(asset);
         }
@@ -1074,6 +1073,8 @@ class EnhancedDerivTradingBot {
         };
 
         const trade = this.activeTrades[asset];
+
+        this.assets = asset;
 
         // Telegram notification
         this.sendTelegramMessage(
@@ -1440,7 +1441,7 @@ class EnhancedDerivTradingBot {
             //     this.resumeAllAssets();
             // }
 
-            this.assets = this.config.assets;
+            // this.assets = this.config.assets;
             
         } else {
             this.totalLosses++;
@@ -1478,8 +1479,8 @@ class EnhancedDerivTradingBot {
             }
 
             // Suspend all other assets, focus on loss asset
-            // this.suspendOtherAssets(asset);
-            this.assets = asset;
+            this.suspendOtherAssets(asset);
+            // this.assets = asset;
         }
 
         // Keep traded digit array trimmed
