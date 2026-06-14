@@ -138,6 +138,7 @@ class EnhancedDerivTradingBot {
         this.pendingScanInterval = null;    // Timer for periodic pending asset scan
 
         this.config = {
+            assets: config.assets,
             initialStake: config.initialStake || 1,
             initialStake2: config.initialStake2 || 1,
             multiplier: config.multiplier || 6,
@@ -937,11 +938,13 @@ class EnhancedDerivTradingBot {
         if (!stayedInArray) return;
 
         // ✅ NEW: Update asset status based on stayedInArray
-        this.updateAssetStatus(asset, stayedInArray);
+        if (this.consecutiveLosses <= 0) {
+            this.updateAssetStatus(asset, stayedInArray);
+        }
 
         // ✅ Check if this is a scan-only request (from pending asset scanner)
         const passthrough = message.echo_req?.passthrough;
-        if (this.consecutiveLosses <= 0) {
+        // if (this.consecutiveLosses <= 0) {
             if (passthrough && passthrough.action === 'scan_only') {
                 // This is just a scan to update asset status, don't proceed with trading
                 const totalStayedIn = this.calculateTotalStayedIn(stayedInArray);
@@ -967,7 +970,7 @@ class EnhancedDerivTradingBot {
                 }
                 return;
             }
-        }
+        // }
 
         // ✅ Regular proposal handling (for new trades)
         // Always update stayedInArray
@@ -1432,7 +1435,7 @@ class EnhancedDerivTradingBot {
             //     this.resumeAllAssets();
             // }
 
-            this.assets = config.assets;
+            this.assets = this.config.assets;
             
         } else {
             this.totalLosses++;
