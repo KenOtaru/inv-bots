@@ -35,7 +35,7 @@ const path = require('path');
 // ══════════════════════════════════════════════════════════════════════════════
 // STATE PERSISTENCE MANAGER
 // ══════════════════════════════════════════════════════════════════════════════
-const STATE_FILE = path.join(__dirname, 'accumBC2_0015_state.json');
+const STATE_FILE = path.join(__dirname, 'accumBC2_0016_state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -1695,7 +1695,7 @@ const bot = new EnhancedDerivTradingBot('rgNedekYXvCaPeP', {
     takeProfitMultiplier: 0.5, //50% of Stake Amount
     takeProfitMultiplier2: 1, //100% of Stake Amount
     filterNum: 4,
-    STAYED_IN_THRESHOLD: 6100, // Threshold for asset filtering
+    STAYED_IN_THRESHOLD: 6800, // Threshold for asset filtering
     scanTimer: 60000, //Set Timer for Bot to Re-scan for Assets that are ready for Trade execution.
     assets: [
         // 'BOOM50','BOOM150N', 'BOOM300N', 'BOOM500', 'BOOM600', 'BOOM900', 'BOOM1000',
