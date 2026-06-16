@@ -1068,6 +1068,9 @@ class EnhancedDerivTradingBot {
             entryTime: Date.now(),
         };
 
+        // ✅ Suspend all other assets immediately on trade open
+        this.suspendOtherAssets(asset);
+
         const trade = this.activeTrades[asset];
 
         // Telegram notification
@@ -1469,9 +1472,6 @@ class EnhancedDerivTradingBot {
             } else {
                 this.currentStake = Math.ceil(this.currentStake * this.config.multiplier * 100) / 100;
             }
-
-            // Suspend all other assets, focus on loss asset
-            this.suspendOtherAssets(asset);
         }
 
         // Keep traded digit array trimmed
