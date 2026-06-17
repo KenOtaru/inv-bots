@@ -36,7 +36,7 @@
  *    ANALYSIS_INTERVAL_MS, TRADE_COOLDOWN_MS,
  *    LOG_FILE, LOG_LEVEL
  *
- *  Author : Arena.ai
+ *  Author : Kenny4Life
  *  License: MIT
  * =====================================================================
  */
