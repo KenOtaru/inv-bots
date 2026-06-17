@@ -35,7 +35,7 @@ const path = require('path');
 // ══════════════════════════════════════════════════════════════════════════════
 // STATE PERSISTENCE MANAGER
 // ══════════════════════════════════════════════════════════════════════════════
-const STATE_FILE = path.join(__dirname, 'accumBC3_0016_state.json');
+const STATE_FILE = path.join(__dirname, 'accumBC3_0017_state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -1027,7 +1027,7 @@ class EnhancedDerivTradingBot {
     const condition  = this.checkTradeCondition(stayedInArray, this.consecutiveLosses, this.config.STAYED_IN_THRESHOLD, asset);
     const condition2 = this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 160, asset);
 
-    if (condition || this.consecutiveLosses > 0) {
+    if ((condition && condition2 ) || this.consecutiveLosses > 0) {
         console.log(`   Entry condition: ${condition ? '✅ MET' : '❌ NOT MET'}`);
 
         this.tradedDigitArray.push(this.stayedInArray[99]);
