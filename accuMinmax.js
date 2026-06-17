@@ -47,7 +47,9 @@ const CONFIG = {
     TELEGRAM_API: 'https://api.telegram.org',
     
     // Trading assets (Volatility & Crash/Boom indices that support Accumulator)
-    ASSETS: (process.env.ASSETS || 'R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V').split(','),
+    // ASSETS: (process.env.ASSETS || 'R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V').split(','),
+    ASSETS: (process.env.ASSETS || '1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V').split(','),
+
     
     // Trading parameters
     STAKE: parseFloat(process.env.STAKE || '1'),
@@ -71,9 +73,9 @@ const CONFIG = {
     DAILY_SUMMARY_INTERVAL: 24 * 60 * 60 * 1000, // 24 hours
     
     // API Token
-    DERIV_API_TOKEN: process.env.DERIV_API_TOKEN || '',
-    TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || '',
-    TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID || '',
+    DERIV_API_TOKEN: process.env.DERIV_API_TOKEN || '0P94g4WdSrSrzir',
+    TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
+    TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID || '752497117',
 };
 
 // ============================================
