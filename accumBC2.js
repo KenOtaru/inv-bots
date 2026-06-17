@@ -337,7 +337,7 @@ class EnhancedDerivTradingBot {
         );
 
         // Check if total sum is within acceptable range
-        const totalWithinRange = totalStayedInArray > maxTotalStayedIn;
+        const totalWithinRange = totalStayedInArray < maxTotalStayedIn;
 
         // Check if we have consecutive losses (recovery mode)
         const inRecoveryMode = consecutiveLosses > 0;
@@ -470,7 +470,7 @@ class EnhancedDerivTradingBot {
         const wasActive = this.activeAssets.has(asset);
         const wasPending = this.pendingAssets.has(asset);
 
-        if (totalStayedIn > this.config.STAYED_IN_THRESHOLD) {
+        if (totalStayedIn < this.config.STAYED_IN_THRESHOLD) {
             // Asset is ready for trading
             if (!wasActive) {
                 this.activeAssets.add(asset);
@@ -1060,7 +1060,7 @@ class EnhancedDerivTradingBot {
             if (this.consecutiveLosses <= 0) {
                 this.updateAssetStatus(asset, stayedInArray);
             }
-            console.log(`   🔍 Scan result for ${asset}: stayedIn=${totalStayedInSample} (${totalStayedInSample > this.config.STAYED_IN_THRESHOLD ? 'READY' : 'WAITING'})`);
+            console.log(`   🔍 Scan result for ${asset}: stayedIn=${totalStayedInSample} (${totalStayedInSample < this.config.STAYED_IN_THRESHOLD ? 'READY' : 'WAITING'})`);
             return;
         }
 
@@ -1133,7 +1133,7 @@ class EnhancedDerivTradingBot {
         // asset itself has rolled over and is declining, the bot waits for
         // it to resume an upward trend rather than firing into a likely-
         // exhausted run.
-        const entrySignal = (condition && condition2) || this.consecutiveLosses > 0;
+        const entrySignal = condition;
         const trendingUp = this.config.enableTrendFilter ? this.isStayedInTrendingUp(asset) : true;
         const trendDirection = this.getStayedInTrendDirection(asset);
 
