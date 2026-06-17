@@ -1,0 +1,64 @@
+[2026-06-17 17:39:16] [INFO] ===== Deriv Accumulator Bot starting =====
+[2026-06-17 17:39:16] [INFO] config: stake=1 mult=11.3 step=0 SL=70 TP=1000
+[2026-06-17 17:39:16] [INFO] assets: R_10, R_25, R_50, R_75, R_100, RDBULL, RDBEAR
+[2026-06-17 17:39:16] [INFO] telegram: disabled
+[2026-06-17 17:39:16] [INFO] connecting → wss://ws.derivws.com/websockets/v3?app_id=***
+[2026-06-17 17:39:17] [INFO] ws connected ✔
+[2026-06-17 17:39:17] [INFO] connection open
+[2026-06-17 17:39:18] [INFO] authorized VRTC4981383 (DEMO) balance=60898.8 USD
+[2026-06-17 17:39:18] [INFO] start-of-day balance: 60898.8 USD
+[2026-06-17 17:39:18] [INFO] loaded 92 active symbols
+[2026-06-17 17:39:20] [INFO] subscribed ticks: RDBULL (sub=dd872022-c1e3-f448-4aae-f7b3ca47549e)
+[2026-06-17 17:39:20] [INFO] subscribed ticks: R_25 (sub=94dfaf6b-0a4d-354c-6376-56b0e848d6ca)
+[2026-06-17 17:39:20] [INFO] subscribed ticks: R_50 (sub=145c46d9-7337-dc4b-ba06-f4bce60922d3)
+[2026-06-17 17:39:20] [INFO] subscribed ticks: RDBEAR (sub=c01ee282-e414-7718-9351-81c6e4f2507f)
+[2026-06-17 17:39:20] [INFO] subscribed ticks: R_75 (sub=eac7d394-bdbd-90aa-279e-9fafcbe55d41)
+[2026-06-17 17:39:20] [INFO] subscribed ticks: R_100 (sub=07225a82-351d-3523-ce8c-ab8cb1272b5f)
+[2026-06-17 17:39:20] [INFO] subscribed ticks: R_10 (sub=dd7d695d-1910-ff60-a7f8-811ab724955b)
+[2026-06-17 17:39:20] [INFO] best=RDBEAR score=0.60 cv=1.23e-3 trend=0.00 mom=-0.79 mrev=-0.95
+[2026-06-17 17:39:21] [ERROR] api error: ContractCreationFailure – Cannot create contract
+[2026-06-17 17:39:21] [ERROR] buy(RDBEAR) failed: Cannot create contract
+[2026-06-17 17:39:21] [ERROR] analyse/trade error: Cannot create contract
+[2026-06-17 17:39:52] [INFO] best=R_100 score=0.48 cv=1.57e-3 trend=0.01 mom=1.17 mrev=-0.98
+[2026-06-17 17:40:20] [INFO] best=R_100 score=0.60 cv=1.34e-3 trend=0.01 mom=0.74 mrev=-0.98
+[2026-06-17 17:40:25] [INFO] proposal id=7586ca7f-d0ad-e6d1-200e-b5618789ac16 ask=1 payout=0 spot=325.79
+[2026-06-17 17:40:25] [INFO] bought ACCU #315734637768 for 1
+[2026-06-17 17:40:26] [INFO] trade placed #315734637768 R_100 growth=11.3
+[2026-06-17 17:41:50] [INFO] best=R_50 score=0.70 cv=5.01e-4 trend=0.01 mom=0.07 mrev=-0.94
+[2026-06-17 17:41:51] [INFO] proposal id=18569235-9aec-a65d-817c-38d9307ba450 ask=1 payout=0 spot=96.9295
+[2026-06-17 17:41:51] [INFO] bought ACCU #315734646948 for 1
+[2026-06-17 17:41:53] [INFO] trade placed #315734646948 R_50 growth=11.3
+[2026-06-17 17:42:20] [INFO] stopping (signal: SIGINT)
+[2026-06-17 17:42:21] [WARN] ws closed code=1005 reason=(none)
+[2026-06-17 20:06:10] [INFO] ===== Deriv Accumulator Bot starting =====
+[2026-06-17 20:06:10] [INFO] config: stake=1 mult=11.3 step=0 SL=70 TP=1000
+[2026-06-17 20:06:10] [INFO] assets: R_10, R_25, R_50, R_75, R_100, RDBULL, RDBEAR
+[2026-06-17 20:06:10] [INFO] telegram: disabled
+[2026-06-17 20:06:10] [INFO] connecting → wss://ws.derivws.com/websockets/v3?app_id=***
+[2026-06-17 20:06:11] [INFO] ws connected ✔
+[2026-06-17 20:06:11] [INFO] connection open
+[2026-06-17 20:06:13] [INFO] authorized VRTC4981383 (DEMO) balance=60906.69 USD
+[2026-06-17 20:06:13] [INFO] start-of-day balance: 60906.69 USD
+[2026-06-17 20:06:15] [INFO] loaded 92 active symbols
+[2026-06-17 20:06:19] [INFO] subscribed ticks: R_100 (sub=eda81cfa-dbc1-628d-c923-287c03f65148)
+[2026-06-17 20:06:20] [INFO] subscribed ticks: R_10 (sub=a3d166d3-ccd3-9785-9fea-b361c7c3fb98)
+[2026-06-17 20:06:20] [INFO] subscribed ticks: R_25 (sub=d40c110f-262b-24aa-16cc-9cffda6a4cbe)
+[2026-06-17 20:06:20] [INFO] subscribed ticks: R_50 (sub=70a27212-8fb2-5140-2f0b-4f8229d96f6c)
+[2026-06-17 20:06:20] [INFO] subscribed ticks: RDBEAR (sub=b767bb33-336c-1a58-4987-fa22fac03ec7)
+[2026-06-17 20:06:20] [INFO] subscribed ticks: R_75 (sub=224a0bd6-7e3c-7173-be7b-c276003d0074)
+[2026-06-17 20:06:20] [INFO] subscribed ticks: RDBULL (sub=f3420e0e-116a-0ed3-59b5-97b1703b42a8)
+[2026-06-17 20:06:20] [INFO] best=R_25 score=0.70 cv=3.65e-4 trend=0.01 mom=0.46 mrev=-0.98
+[2026-06-17 20:06:22] [INFO] proposal id=81e2eac9-cb0c-d95f-aa67-1d57e4b01b0e ask=1 payout=0 spot=2700.321
+[2026-06-17 20:06:22] [ERROR] api error: RateLimit – You have reached the rate limit for buy.
+[2026-06-17 20:06:22] [ERROR] buy(R_25) failed: You have reached the rate limit for buy.
+[2026-06-17 20:06:22] [ERROR] analyse/trade error: You have reached the rate limit for buy.
+[2026-06-17 20:06:50] [INFO] best=R_75 score=0.70 cv=6.15e-4 trend=0.01 mom=-0.10 mrev=-0.95
+[2026-06-17 20:06:51] [ERROR] api error: RateLimit – You have reached the rate limit for proposal.
+[2026-06-17 20:06:51] [ERROR] buy(R_75) failed: You have reached the rate limit for proposal.
+[2026-06-17 20:06:51] [ERROR] analyse/trade error: You have reached the rate limit for proposal.
+[2026-06-17 20:07:20] [INFO] best=R_75 score=0.70 cv=6.06e-4 trend=0.01 mom=-0.19 mrev=-0.96
+[2026-06-17 20:07:21] [ERROR] api error: RateLimit – You have reached the rate limit for proposal.
+[2026-06-17 20:07:22] [ERROR] buy(R_75) failed: You have reached the rate limit for proposal.
+[2026-06-17 20:07:22] [ERROR] analyse/trade error: You have reached the rate limit for proposal.
+[2026-06-17 20:07:22] [INFO] stopping (signal: SIGINT)
+[2026-06-17 20:07:22] [WARN] ws closed code=1005 reason=(none)
