@@ -97,19 +97,19 @@ const CONFIG = Object.freeze({
   takeProfit     : parseFloat(process.env.TAKE_PROFIT     ?? '5.0'),
 
   // ─ Assets (Deriv synthetic indices) ─
+  // assets: (process.env.ASSETS
+  //   || '1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,R_10,R_25,R_50,R_75,R_100')
+  //   .split(',').map(s => s.trim()).filter(Boolean),
   assets: (process.env.ASSETS
-    || '1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,R_10,R_25,R_50,R_75,R_100')
+    || 'R_10,R_25,R_50,R_75,R_100')
     .split(',').map(s => s.trim()).filter(Boolean),
 
   // ─ Telegram ─
-  // telegram: {
-  //   enabled : true, //!!(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
-  //   botToken: process.env.TELEGRAM_BOT_TOKEN || '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
-  //   chatId  : process.env.TELEGRAM_CHAT_ID   || '752497117',
-  // },
-  assets: (process.env.ASSETS
-    || '1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V')
-    .split(',').map(s => s.trim()).filter(Boolean),
+  telegram: {
+    enabled : true, //!!(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
+    botToken: process.env.TELEGRAM_BOT_TOKEN || '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
+    chatId  : process.env.TELEGRAM_CHAT_ID   || '752497117',
+  },
 
   // ─ Strategy ─
   tickWindow          : parseInt(process.env.TICK_WINDOW          ?? '200',  10),
