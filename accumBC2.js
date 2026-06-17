@@ -1757,7 +1757,7 @@ const bot = new EnhancedDerivTradingBot('0P94g4WdSrSrzir', {
     takeProfitMultiplier: 0.25, //25% of Stake Amount
     takeProfitMultiplier2: 0.15, //15% of Stake Amount
     filterNum: 4,
-    STAYED_IN_THRESHOLD: 7100, // Threshold for asset filtering
+    STAYED_IN_THRESHOLD: 6400, // Threshold for asset filtering
     scanTimer: 60000, //Set Timer for Bot to Re-scan for Assets that are ready for Trade execution.
 
     // ── StayedIn trend filter (NEW) ──────────────────────────────────────────
