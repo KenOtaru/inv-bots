@@ -62,3 +62,31 @@
 [2026-06-17 20:07:22] [ERROR] analyse/trade error: You have reached the rate limit for proposal.
 [2026-06-17 20:07:22] [INFO] stopping (signal: SIGINT)
 [2026-06-17 20:07:22] [WARN] ws closed code=1005 reason=(none)
+[2026-06-17 20:09:36] [INFO] ===== Deriv Accumulator Bot starting =====
+[2026-06-17 20:09:36] [INFO] config: stake=1 mult=11.3 step=0 SL=70 TP=1000
+[2026-06-17 20:09:36] [INFO] assets: R_10, R_25, R_50, R_75, R_100, RDBULL, RDBEAR
+[2026-06-17 20:09:36] [INFO] telegram: disabled
+[2026-06-17 20:09:36] [INFO] connecting → wss://ws.derivws.com/websockets/v3?app_id=***
+[2026-06-17 20:09:38] [INFO] ws connected ✔
+[2026-06-17 20:09:38] [INFO] connection open
+[2026-06-17 20:09:38] [INFO] authorized VRTC4981383 (DEMO) balance=60906.69 USD
+[2026-06-17 20:09:38] [INFO] start-of-day balance: 60906.69 USD
+[2026-06-17 20:09:39] [INFO] loaded 92 active symbols
+[2026-06-17 20:09:43] [INFO] subscribed ticks: R_25 (sub=867fdb98-9375-bae0-79bf-1f252954f8f1)
+[2026-06-17 20:09:43] [INFO] subscribed ticks: R_50 (sub=55b61d5f-d603-1142-7397-294f133ebef5)
+[2026-06-17 20:09:43] [INFO] subscribed ticks: RDBEAR (sub=91e5d666-0ee4-f432-5f7a-a90aeb945e38)
+[2026-06-17 20:09:43] [INFO] subscribed ticks: R_75 (sub=de58011c-dc21-4a03-a640-362899273123)
+[2026-06-17 20:09:43] [INFO] subscribed ticks: R_100 (sub=bca1dd4a-571d-f44d-ccff-536d427b2b79)
+[2026-06-17 20:09:43] [INFO] subscribed ticks: R_10 (sub=162edbb8-0ba3-33fd-ed2f-24df6d298df7)
+[2026-06-17 20:09:43] [INFO] subscribed ticks: RDBULL (sub=5a6fa368-12de-9eaf-a86b-85650cd7afda)
+[2026-06-17 20:09:44] [INFO] best=R_10 score=0.70 cv=1.09e-4 trend=0.00 mom=0.11 mrev=-0.97
+[2026-06-17 20:09:44] [INFO] proposal id=94a44b84-e846-3492-8db1-17b4c6288899 ask=1 payout=0 spot=4848.467
+[2026-06-17 20:09:44] [ERROR] api error: RateLimit – You have reached the rate limit for buy.
+[2026-06-17 20:09:44] [ERROR] buy(R_10) failed: You have reached the rate limit for buy.
+[2026-06-17 20:09:44] [ERROR] analyse/trade error: You have reached the rate limit for buy.
+[2026-06-17 20:10:14] [INFO] best=R_10 score=0.70 cv=1.16e-4 trend=0.00 mom=-0.24 mrev=-0.97
+[2026-06-17 20:10:14] [ERROR] api error: RateLimit – You have reached the rate limit for proposal.
+[2026-06-17 20:10:15] [ERROR] buy(R_10) failed: You have reached the rate limit for proposal.
+[2026-06-17 20:10:15] [ERROR] analyse/trade error: You have reached the rate limit for proposal.
+[2026-06-17 20:10:32] [INFO] stopping (signal: SIGINT)
+[2026-06-17 20:10:32] [WARN] ws closed code=1005 reason=(none)
