@@ -129,7 +129,7 @@ const CONFIG = Object.freeze({
   },
 
   // ─ Logging ─
-  logFile : 'deriv_bot2.log',
+  logFile : 'deriv_bot3.log',
   logLevel: ('INFO').toUpperCase(),
 });
 
@@ -804,7 +804,7 @@ class MarketAnalyzer {
           suggestedGrowth = g;
           break;
         }
-        suggestedGrowth = g;  // last fallback
+        // suggestedGrowth = g;  // last fallback
       }
     }
 
@@ -834,7 +834,7 @@ class MarketAnalyzer {
       // Decision
       score,
       reasons: reasonParts,
-      recommendTrade: score >= 0.60,
+      recommendTrade: score >= 0.80,
       // Sizing
       suggestedGrowth,
       recommendedTp,
