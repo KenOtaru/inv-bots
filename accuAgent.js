@@ -834,7 +834,7 @@ class MarketAnalyzer {
       // Decision
       score,
       reasons: reasonParts,
-      recommendTrade: score >= 0.65,
+      recommendTrade: score >= 0.80,
       // Sizing
       suggestedGrowth,
       recommendedTp,
