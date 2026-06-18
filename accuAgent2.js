@@ -92,7 +92,7 @@ const CONFIG = Object.freeze({
   // ─ Trade parameters ─
   stake          : parseFloat('1.0'),
   multiplier     : parseFloat('0.02'),  // 2 % growth rate
-  multiplierStep : parseFloat('0.0'),   // grow after wins
+  multiplierStep : parseFloat('0.1'),   // grow after wins
   stopLoss       : parseFloat('110.0'),
   takeProfit     : parseFloat('5000.0'),
 
@@ -129,7 +129,7 @@ const CONFIG = Object.freeze({
   },
 
   // ─ Logging ─
-  logFile : 'deriv_bot.log',
+  logFile : 'deriv_bot2.log',
   logLevel: ('INFO').toUpperCase(),
 });
 
