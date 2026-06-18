@@ -97,11 +97,10 @@ const CONFIG = Object.freeze({
   takeProfit     : parseFloat('5000.0'),
 
   // ─ Assets (Deriv synthetic indices) ─
-  // assets: (process.env.ASSETS
-  //   || '1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,R_10,R_25,R_50,R_75,R_100')
+  assets: ('1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,R_10,R_25,R_50,R_75,R_100,BOOM50,BOOM150N,BOOM300N,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH50,CRASH150N,CRASH300N,CRASH500,CRASH600,CRASH900,CRASH1000')
+      .split(',').map(s => s.trim()).filter(Boolean),
+  // assets: ('R_10,R_25,R_50,R_75,R_100')
   //   .split(',').map(s => s.trim()).filter(Boolean),
-  assets: ('R_10,R_25,R_50,R_75,R_100')
-    .split(',').map(s => s.trim()).filter(Boolean),
 
   // ─ Telegram ─
   telegram: {
@@ -119,7 +118,7 @@ const CONFIG = Object.freeze({
 
   // ─ Daily limits ─
   dailyMaxLoss  : parseFloat('100'),
-  dailyMaxTrades: parseInt  ('200'),
+  dailyMaxTrades: parseInt  ('20000000000'),
 
   // ─ Reconnect ─
   reconnect: {
