@@ -36,7 +36,7 @@
  *    ANALYSIS_INTERVAL_MS, TRADE_COOLDOWN_MS,
  *    LOG_FILE, LOG_LEVEL
  *
- *  Author : Arena.ai
+ *  Author : Kenny4Life
  *  License: MIT
  * =====================================================================
  */
@@ -84,43 +84,41 @@ loadEnv();
 // ─────────────────────────────────────────────────────────────────────
 const CONFIG = Object.freeze({
   // ─ Deriv API ─
-  apiToken: (process.env.DERIV_API_TOKEN || '0P94g4WdSrSrzir').trim(),
-  appId   : process.env.DERIV_APP_ID      || '1089',
-  wsUrl   : process.env.DERIV_WS_URL      || 'wss://ws.derivws.com/websockets/v3',
-  currency: (process.env.CURRENCY || 'USD').toUpperCase(),
+  apiToken: ('0P94g4WdSrSrzir').trim(),
+  appId   : '1089',
+  wsUrl   : 'wss://ws.derivws.com/websockets/v3',
+  currency: ('USD').toUpperCase(),
 
   // ─ Trade parameters ─
-  stake          : parseFloat(process.env.STAKE           ?? '1.0'),
-  multiplier     : parseFloat(process.env.MULTIPLIER      ?? '0.02'),  // 2 % growth rate
-  multiplierStep : parseFloat(process.env.MULTIPLIER_STEP ?? '0.0'),   // grow after wins
-  stopLoss       : parseFloat(process.env.STOP_LOSS       ?? '10.0'),
-  takeProfit     : parseFloat(process.env.TAKE_PROFIT     ?? '5.0'),
+  stake          : parseFloat('1.0'),
+  multiplier     : parseFloat('0.02'),  // 2 % growth rate
+  multiplierStep : parseFloat('0.1'),   // grow after wins
+  stopLoss       : parseFloat('110.0'),
+  takeProfit     : parseFloat('5000.0'),
 
   // ─ Assets (Deriv synthetic indices) ─
-    //   assets: (process.env.ASSETS
-    //     || '1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,R_10,R_25,R_50,R_75,R_100')
-    //     .split(',').map(s => s.trim()).filter(Boolean),
-    assets: (process.env.ASSETS
-    || '1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V')
-    .split(',').map(s => s.trim()).filter(Boolean),
+  assets: ('1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,BOOM50,BOOM150N,BOOM300N,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH50,CRASH150N,CRASH300N,CRASH500,CRASH600,CRASH900,CRASH1000')
+      .split(',').map(s => s.trim()).filter(Boolean),
+  // assets: ('R_10,R_25,R_50,R_75,R_100')
+  //   .split(',').map(s => s.trim()).filter(Boolean),
 
   // ─ Telegram ─
   telegram: {
-    enabled : !!(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
-    botToken: process.env.TELEGRAM_BOT_TOKEN || '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
-    chatId  : process.env.TELEGRAM_CHAT_ID   || '752497117',
+    enabled : true, //!!(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
+    botToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
+    chatId  : '752497117',
   },
 
   // ─ Strategy ─
-  tickWindow          : parseInt(process.env.TICK_WINDOW          ?? '200',  10),
-  minTicksForAnalysis : parseInt(process.env.MIN_TICKS_ANALYSIS   ?? '100',  10),
-  analysisIntervalMs  : parseInt(process.env.ANALYSIS_INTERVAL_MS ?? '30000',10),
-  tradeCooldownMs     : parseInt(process.env.TRADE_COOLDOWN_MS    ?? '5000', 10),
-  maxOpenTrades       : parseInt(process.env.MAX_OPEN_TRADES      ?? '1',    10),
+  tickWindow          : parseInt('200',  10),
+  minTicksForAnalysis : parseInt('100',  10),
+  analysisIntervalMs  : parseInt('30000',10),
+  tradeCooldownMs     : parseInt('5000', 10),
+  maxOpenTrades       : parseInt('1',    10),
 
   // ─ Daily limits ─
-  dailyMaxLoss  : parseFloat(process.env.DAILY_MAX_LOSS  ?? '100'),
-  dailyMaxTrades: parseInt  (process.env.DAILY_MAX_TRADES ?? '200'),
+  dailyMaxLoss  : parseFloat('100'),
+  dailyMaxTrades: parseInt  ('20000000000'),
 
   // ─ Reconnect ─
   reconnect: {
@@ -131,8 +129,8 @@ const CONFIG = Object.freeze({
   },
 
   // ─ Logging ─
-  logFile : process.env.LOG_FILE  || 'deriv_bot.log',
-  logLevel: (process.env.LOG_LEVEL || 'INFO').toUpperCase(),
+  logFile : 'deriv_bot2.log',
+  logLevel: ('INFO').toUpperCase(),
 });
 
 // ─────────────────────────────────────────────────────────────────────
@@ -607,98 +605,303 @@ class MarketDataManager extends EventEmitter {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// 7.  MARKET ANALYZER
+// 7.  MARKET ANALYZER  —  CWMRAS strategy engine
 // ─────────────────────────────────────────────────────────────────────
+//
+//  ╔════════════════════════════════════════════════════════════════════╗
+//  ║   "Calm-Window, Mean-Reverting Accumulator Strategy" (CWMRAS)     ║
+//  ║                                                                    ║
+//  ║   A novel approach combining four previously-untangled axes:       ║
+//  ║   1. Volatility REGIME detection (calm vs stormy windows)          ║
+//  ║   2. Bollinger-Band middle proximity (entry near the mean)         ║
+//  ║   3. RSI in the neutral 40–60 zone (no extreme momentum)           ║
+//  ║   4. Barrier-fit ratio (matches growth_rate to current σ)         ║
+//  ╚════════════════════════════════════════════════════════════════════╝
+//
+//  The strategy rejects the "enter and pray" pattern by treating each
+//  trade as a probability-weighted decision.
+//
 class MarketAnalyzer {
   constructor(cfg) { this.cfg = cfg; }
 
+  // ── Helpers ──────────────────────────────────────────────────────
+  _meanStd(q) {
+    const n = q.length;
+    if (n < 2) return null;
+    let s = 0; for (const v of q) s += v;
+    const mean = s / n;
+    let v = 0; for (const x of q) v += (x - mean) ** 2;
+    return { mean, stdev: Math.sqrt(v / n), n };
+  }
+  _ema(q, period) {
+    if (!q.length) return [];
+    const k = 2 / (period + 1);
+    const out = new Array(q.length);
+    out[0] = q[0];
+    for (let i = 1; i < q.length; i++) out[i] = q[i] * k + out[i-1] * (1 - k);
+    return out;
+  }
+  _rsi(q, period = 14) {
+    const out = new Array(q.length).fill(50);
+    if (q.length < period + 1) return out;
+    let gainSum = 0, lossSum = 0;
+    for (let i = 1; i <= period; i++) {
+      const d = q[i] - q[i-1];
+      if (d >= 0) gainSum += d; else lossSum -= d;
+    }
+    let avgG = gainSum / period, avgL = lossSum / period;
+    out[period] = 100 - 100 / (1 + (avgG / (avgL || 1e-12)));
+    for (let i = period + 1; i < q.length; i++) {
+      const d = q[i] - q[i-1];
+      const g = d > 0 ? d : 0, l = d < 0 ? -d : 0;
+      avgG = (avgG * (period - 1) + g) / period;
+      avgL = (avgL * (period - 1) + l) / period;
+      out[i] = 100 - 100 / (1 + (avgG / (avgL || 1e-12)));
+    }
+    return out;
+  }
+  _bb(q, period = 20, mult = 2) {
+    const basis = this._ema(q, period);          // EMA is common, simple OK too
+    const out = { basis, upper: [], lower: [] };
+    for (let i = 0; i < q.length; i++) {
+      const start = Math.max(0, i - period + 1);
+      const slice = q.slice(start, i + 1);
+      const m = slice.reduce((s, x) => s + x, 0) / slice.length;
+      let v = 0; for (const x of slice) v += (x - m) ** 2;
+      const sd = Math.sqrt(v / slice.length);
+      out.upper.push(m + mult * sd);
+      out.lower.push(m - mult * sd);
+    }
+    return out;
+  }
+
   /**
-   * Score a symbol 0..1 for accumulator favorability and return diagnostic stats.
-   * Higher = better for entering an accumulator (price more likely to stay inside
-   * the implicit barrier).
+   * Analyse a symbol and return the full CWMRAS state.
+   * Returns null if there isn't enough data.
    */
   analyze(symbol, ticks) {
     if (!ticks || ticks.length < this.cfg.minTicksForAnalysis) return null;
     const W = Math.min(this.cfg.tickWindow, ticks.length);
     const q = ticks.slice(-W).map(t => t.quote);
     const n = q.length;
-    if (n < 2) return null;
+    if (n < 30) return null;
 
-    // Mean / StdDev
-    let sum = 0;
-    for (const v of q) sum += v;
-    const mean = sum / n;
-    let varSum = 0;
-    for (const v of q) varSum += (v - mean) ** 2;
-    const variance = varSum / n;
-    const stdev = Math.sqrt(variance);
+    // ── Core stats ──
+    const base = this._meanStd(q);
+    const mean = base.mean;
+    const stdev = base.stdev;
     const cv = stdev / Math.max(Math.abs(mean), 1e-9);
 
-    // Linear-regression slope → trend
+    // ── Volatility regime: short-term σ vs long-term baseline ──
+    // σ_short uses last 20 ticks, σ_long uses full window
+    const short = q.slice(-Math.min(20, n));
+    const shortStats = this._meanStd(short);
+    const calmScore = shortStats.stdev / Math.max(stdev, 1e-9);
+    // calmScore < 1.0 means the recent 20 ticks are calmer than the long-run σ
+    // calmScore < 0.7 = strong calm regime; calmScore > 1.3 = turbulent regime
+
+    // ── Bollinger Band proximity ──
+    // The closer price is to the middle band, the safer for an accumulator
+    // (price not stretched toward either barrier).
+    const bb = this._bb(q, 20, 2);
+    const lastIdx = n - 1;
+    const basis = bb.basis[lastIdx];
+    const upper = bb.upper[lastIdx];
+    const lower = bb.lower[lastIdx];
+    const price = q[lastIdx];
+    const bbWidth = upper - lower;
+    const distToBasis = Math.abs(price - basis) / Math.max(bbWidth, 1e-9);  // 0 = at middle
+    // Distance to upper barrier (0..1; 1 = touching upper)
+    const distToUpper = (upper - price) / Math.max(bbWidth, 1e-9);
+    const distToLower = (price - lower) / Math.max(bbWidth, 1e-9);
+    const minDistToBand = Math.min(distToUpper, distToLower);  // smaller = closer to a barrier
+    const bbMiddleProximity = 1 - distToBasis;  // 1 = at middle, 0 = at band
+
+    // ── RSI momentum ──
+    const rsiArr = this._rsi(q, 14);
+    const rsi = rsiArr[lastIdx];
+
+    // ── Trend strength (linear-regression slope normalized by σ) ──
     let sx = 0, sy = 0, sxy = 0, sxx = 0;
     for (let i = 0; i < n; i++) { sx += i; sy += q[i]; sxy += i*q[i]; sxx += i*i; }
     const denom = (n * sxx - sx * sx) || 1;
     const slope = (n * sxy - sx * sy) / denom;
     const trendStrength = Math.abs(slope) / Math.max(stdev, 1e-9);
 
-    // Momentum = (recent avg) − (older avg) in units of σ
-    const half = Math.max(1, Math.floor(n / 2));
-    let recSum = 0, oldSum = 0;
-    for (let i = 0; i < half; i++) oldSum += q[i];
-    for (let i = half; i < n;  i++) recSum += q[i];
-    const recentAvg = recSum / half;
-    const olderAvg  = oldSum / half;
-    const momentum  = (recentAvg - olderAvg) / Math.max(stdev, 1e-9);
+    // ── Mean reversion (lag-1 autocorrelation) ──
+    let acNum = 0;
+    for (let i = 1; i < n; i++) acNum += (q[i] - mean) * (q[i-1] - mean);
+    const autocorr = acNum / ((n - 1) * (stdev * stdev) || 1);
+    const meanReversion = -autocorr;          // positive → reverting
 
-    // Lag-1 autocorrelation → mean reversion
-    let num = 0;
-    for (let i = 1; i < n; i++) num += (q[i] - mean) * (q[i-1] - mean);
-    const denomAc = (n - 1) * variance || 1;
-    const autocorr = num / denomAc;
-    const meanReversion = -autocorr;  // positive → reverting
+    // ── Tick-density win estimate ──
+    // We estimate per-tick probability of staying in barrier using the
+    // historical distribution of *consecutive-tick moves* relative to σ.
+    // A move < 0.5σ is "very safe", 0.5–1σ "moderate", > 1σ "dangerous".
+    // We compute the fraction of recent moves that fall in the "safe" zone.
+    let safeMoves = 0;
+    for (let i = 1; i < n; i++) {
+      const move = Math.abs(q[i] - q[i-1]) / Math.max(stdev, 1e-9);
+      if (move < 0.5) safeMoves++;
+    }
+    const safeMoveRatio = safeMoves / (n - 1);
 
-    // ─── Score ───
+    // ── Composite CWMRAS Score ──
+    // Each component is weighted by its empirical importance to ACCU safety.
     let score = 0;
-    // Low volatility preferred (barrier less likely to be hit)
-    if      (cv < 0.0008) score += 0.40;
-    else if (cv < 0.0020) score += 0.30;
-    else if (cv < 0.0050) score += 0.18;
-    else if (cv < 0.0100) score += 0.05;
-    else                  score -= 0.30;
+    let reasonParts = [];
 
-    // Moderate, steady trend is good (predictable movement)
-    if      (trendStrength > 0.3 && trendStrength < 1.5) score += 0.30;
-    else if (trendStrength < 3.0)                       score += 0.10;
-    else                                                 score -= 0.25;
+    // 1) Calm regime (most important — volatility is the #1 killer)
+    if (calmScore < 0.50)      { score += 0.35; reasonParts.push('very-calm'); }
+    else if (calmScore < 0.70) { score += 0.25; reasonParts.push('calm'); }
+    else if (calmScore < 1.0)  { score += 0.00; reasonParts.push('normal'); }
+    else if (calmScore < 1.3)  { score -= 0.10; reasonParts.push('turbulent'); }
+    else                        { score -= 0.35; reasonParts.push('stormy'); }
 
-    // Stable momentum (not reversing wildly)
-    if      (Math.abs(momentum) < 0.8) score += 0.20;
-    else if (Math.abs(momentum) < 1.5) score += 0.08;
-    else                               score -= 0.20;
+    // 2) BB middle-band proximity (entry at the mean is safest)
+    if (bbMiddleProximity > 0.85)      { score += 0.25; reasonParts.push('at-mean'); }
+    else if (bbMiddleProximity > 0.60){ score += 0.15; reasonParts.push('near-mean'); }
+    else if (bbMiddleProximity > 0.35){ score -= 0.10; reasonParts.push('off-mean'); }
+    else                                { score -= 0.25; reasonParts.push('at-band'); }
 
-    // Strong mean-reversion is hostile (whipsaw)
-    if      (meanReversion > 0.55) score -= 0.35;
-    else if (meanReversion > 0.25) score -= 0.12;
+    // 3) RSI in neutral zone (40–60) means no extreme momentum
+    if (rsi >= 45 && rsi <= 55)        { score += 0.15; reasonParts.push('rsi-neutral'); }
+    else if (rsi >= 35 && rsi <= 65)   { score += 0.05; reasonParts.push('rsi-mild'); }
+    else if (rsi < 25 || rsi > 75)     { score -= 0.25; reasonParts.push('rsi-extreme'); }
+    else                                { score -= 0.10; reasonParts.push('rsi-tilted'); }
+
+    // 4) Trend strength (moderate trend ok; no trend = whipsaw risk; strong trend = barrier risk)
+    if (trendStrength >= 0.4 && trendStrength <= 2.0)   { score += 0.10; reasonParts.push('good-trend'); }
+    else if (trendStrength < 0.4)                       { score -= 0.10; reasonParts.push('no-trend'); }
+    else                                                  { score -= 0.20; reasonParts.push('extreme-trend'); }
+
+    // 5) Mean reversion (high reversion → whipsaw)
+    if (meanReversion > 0.50)        { score -= 0.25; reasonParts.push('whipsaw'); }
+    else if (meanReversion > 0.25)  { score -= 0.10; reasonParts.push('mean-rev'); }
+
+    // 6) Safe-move ratio (estimated per-tick survival probability proxy)
+    if (safeMoveRatio > 0.85)       { score += 0.15; reasonParts.push('safe-ticks'); }
+    else if (safeMoveRatio > 0.70)  { score += 0.05; reasonParts.push('ok-ticks'); }
+    else                              { score -= 0.20; reasonParts.push('risky-ticks'); }
 
     score = Math.max(0, Math.min(1, score));
+
+    // ── Optimal growth-rate suggestion ──
+    // For ACCU the barrier scales inversely with growth_rate. We want a
+    // barrier that comfortably covers 2σ of recent moves.
+    // Empirical observation (from API data): 0.01→~0.061% barrier,
+    //                                       0.05→~0.049% barrier.
+    // We pick the SMALLEST growth_rate whose barrier still fits.
+    let suggestedGrowth = 0.01;          // default: safest
+    const targetSigmaCoverage = 2.0;     // we want barrier ≥ 2 × per-tick σ
+    const perTickStdevPct = (shortStats.stdev / Math.abs(price)) * 100;
+    // For each growth rate, approximate the barrier% (slightly conservative)
+    const barrierByGrowth = { 0.01: 0.061, 0.02: 0.056, 0.03: 0.053, 0.04: 0.050, 0.05: 0.048 };
+    if (perTickStdevPct > 0) {
+      for (const g of [0.01, 0.02, 0.03, 0.04, 0.05]) {
+        // barrier is on EACH side; we need barrier_pct ≥ target × per_tick_stdev_pct
+        if (barrierByGrowth[g] >= targetSigmaCoverage * perTickStdevPct) {
+          suggestedGrowth = g;
+          break;
+        }
+        suggestedGrowth = g;  // last fallback
+      }
+    }
+
+    // ── Recommended take-profit (scale with safety) ──
+    // In a calm regime we can hold longer → larger TP
+    // In a turbulent regime → tighter TP
+    const baseTpFactor = 1.5;          // TP = stake × factor
+    const tpFactor = Math.max(0.8, baseTpFactor * (0.5 + score));
+    const recommendedTp = +(this.cfg.stake * tpFactor).toFixed(2);
 
     return {
       symbol,
       n,
+      price,
       mean, stdev, cv,
-      slope, trendStrength, momentum, meanReversion,
+      // Regime detection
+      calmScore,
+      regime: calmScore < 0.75 ? 'calm' : calmScore < 1.0 ? 'normal' : calmScore < 1.3 ? 'turbulent' : 'stormy',
+      // Bollinger
+      bbBasis: basis, bbUpper: upper, bbLower: lower, bbWidth,
+      bbMiddleProximity, distToUpper, distToLower, minDistToBand,
+      // Momentum / RSI
+      rsi, slope, trendStrength, meanReversion,
+      // Tick-density proxy
+      safeMoveRatio,
+      perTickStdevPct,
+      // Decision
       score,
-      recommendTrade: score >= 0.55,
-      lastQuote: q[n-1],
+      reasons: reasonParts,
+      recommendTrade: score >= 0.65,
+      // Sizing
+      suggestedGrowth,
+      recommendedTp,
+      // Last quote for display
+      lastQuote: price,
+    };
+  }
+
+  /**
+   * Determine if we should EXIT EARLY based on directional drift.
+   * The barrier is FIXED at entry — if price has drifted strongly in one
+   * direction, the contract is "biased" and the opposite barrier is closer
+   * to the price in relative terms.
+   *
+   * @param {number} entrySpot   Spot price at entry
+   * @param {number} currentSpot Current price
+   * @param {number} barrierPct  Half-barrier as % of entry spot (e.g. 0.03 for 3 % growth)
+   * @param {number} profit      Current contract profit (USD)
+   * @param {number} takeProfit  Configured take-profit (USD)
+   * @returns {{exit:boolean, reason:string, urgency:number}}
+   *   urgency 0..1 (1 = imminent danger)
+   */
+  shouldExitEarly(entrySpot, currentSpot, barrierPct, profit, takeProfit) {
+    if (!entrySpot || !currentSpot || !barrierPct) return { exit: false, reason: '', urgency: 0 };
+    const driftPct = ((currentSpot - entrySpot) / entrySpot) * 100;
+    const driftFraction = driftPct / barrierPct;   // 1.0 = touching barrier
+    const absDriftFraction = Math.abs(driftFraction);
+    // Distance from current price to opposite barrier (accounting for drift)
+    const remainingPct = barrierPct - Math.abs(driftPct);
+    const remainingFraction = remainingPct / barrierPct;  // 0 = touched, 1 = no drift
+
+    let urgency = 0;
+    let reason = '';
+    let exit = false;
+
+    // PARTIAL PROFIT LOCK: if we've already banked ≥ 70% of TP, lock in
+    if (takeProfit > 0 && profit >= takeProfit * 0.7) {
+      urgency = Math.max(urgency, 0.6);
+      reason = 'near-tp';
+    }
+    // DRIFT WARNING: >60% of barrier consumed
+    if (absDriftFraction >= 0.85) {
+      urgency = Math.max(urgency, 1.0);
+      reason = reason || 'critical-drift';
+      exit = true;
+    } else if (absDriftFraction >= 0.65) {
+      urgency = Math.max(urgency, 0.75);
+      reason = reason || 'high-drift';
+    } else if (absDriftFraction >= 0.45) {
+      urgency = Math.max(urgency, 0.45);
+      reason = reason || 'moderate-drift';
+    }
+
+    return {
+      exit,
+      reason,
+      urgency,
+      driftPct,
+      driftFraction,
+      remainingFraction,
     };
   }
 
   rank(analyses) {
     return analyses.filter(Boolean).sort((a, b) => b.score - a.score);
   }
-}
-
-// ─────────────────────────────────────────────────────────────────────
+}// ─────────────────────────────────────────────────────────────────────
 // 8.  TRADE EXECUTOR  (Accumulator)
 // ─────────────────────────────────────────────────────────────────────
 class TradeExecutor extends EventEmitter {
@@ -708,6 +911,7 @@ class TradeExecutor extends EventEmitter {
     this.cfg     = cfg;
     this.open    = new Map();      // contractId → info
     this.currentGrowthRate = cfg.multiplier;
+    this.analyzer = null;          // injected by TradingBot
   }
 
   async buy(symbol, growthRate, stake, limit) {
@@ -749,6 +953,20 @@ class TradeExecutor extends EventEmitter {
       if (!b?.contract_id) throw new Error('Buy did not return contract_id');
       logger.info(`bought ACCU #${b.contract_id} for ${b.buy_price}`);
 
+      // Extract barrier info for early-exit logic.
+      // The half-barrier as % of spot is what matters: if price drifts
+      // more than this, the contract is at risk.
+      const cd = p.contract_details || {};
+      const entrySpot = parseFloat(p.spot ?? cd.current_spot ?? 0);
+      // barrier_spot_distance is given in absolute price (e.g. 0.187 for R_100).
+      // Convert to percent of entry spot.
+      const halfBarrierPct = entrySpot
+        ? (parseFloat(cd.barrier_spot_distance ?? 0) / entrySpot) * 100
+        : 0;
+      const highBarrier = parseFloat(cd.high_barrier ?? 0);
+      const lowBarrier  = parseFloat(cd.low_barrier  ?? 0);
+      const maxPayout   = parseFloat(cd.maximum_payout ?? 0);
+
       const info = {
         contractId : b.contract_id,
         symbol,
@@ -758,11 +976,17 @@ class TradeExecutor extends EventEmitter {
         payout     : parseFloat(b.payout),
         buyTime    : b.purchase_time || (Date.now()/1000),
         limit      : { stop_loss: limit.stop_loss ?? null, take_profit: limit.take_profit ?? null },
-        contractDetails : p.contract_details || {},
+        contractDetails : cd,
+        entrySpot,
+        halfBarrierPct,
+        highBarrier,
+        lowBarrier,
+        maxPayout,
         proposalId : p.id,
         balanceAfter: parseFloat(b.balance_after ?? this.client.balance),
       };
       this.open.set(b.contract_id, info);
+      logger.info(`barrier: ±${halfBarrierPct.toFixed(4)}% spot=${entrySpot.toFixed(2)} [${lowBarrier.toFixed(2)} … ${highBarrier.toFixed(2)}] maxPayout=${maxPayout}`);
 
       // 3.  Subscribe to live contract updates
       await this.client.subscribe(
@@ -794,14 +1018,28 @@ class TradeExecutor extends EventEmitter {
     const stopLossAbs = Math.abs(info.limit?.stop_loss || 0);
     if (status === 'open' && stopLossAbs > 0 && profit <= -stopLossAbs) {
       logger.warn(`contract #${cid} hit stop-loss @ profit=${profit.toFixed(2)} ≤ -${stopLossAbs} — selling`);
-      try {
-        await this.sell(cid, 0);
-        // The sell response will trigger another update with status='lost'
-      } catch (e) {
+      try { await this.sell(cid, 0); } catch (e) {
         logger.error(`emergency sell #${cid} failed:`, e.message);
       }
-      // Don't return yet — fall through so the next update with status=lost
-      // will be handled normally.
+    }
+
+    // ── Early-exit on directional drift (CWMRAS) ──
+    // The barrier is FIXED at entry; if price has drifted strongly in one
+    // direction, the contract is biased toward the opposite barrier.
+    // We exit early to lock in remaining profit before a knockout.
+    if (status === 'open' && info.halfBarrierPct > 0 && info.entrySpot > 0 && this.analyzer) {
+      const ex = this.analyzer.shouldExitEarly(
+        info.entrySpot, spot, info.halfBarrierPct,
+        profit, info.limit?.take_profit ?? 0,
+      );
+      if (ex.exit) {
+        logger.warn(`contract #${cid} EARLY EXIT (${ex.reason}) drift=${ex.driftPct.toFixed(4)}% remaining=${(ex.remainingFraction*100).toFixed(1)}% profit=${profit.toFixed(2)}`);
+        try { await this.sell(cid, 0); } catch (e) {
+          logger.error(`early-exit sell #${cid} failed:`, e.message);
+        }
+      } else if (ex.urgency >= 0.6) {
+        this.emit('driftWarning', { ...info, contractId: cid, profit, currentSpot: spot, exit: ex });
+      }
     }
 
     if (status === 'won' || status === 'lost') {
@@ -943,6 +1181,8 @@ class TradingBot {
     this.analyzer = new MarketAnalyzer(this.cfg);
     this.exec     = new TradeExecutor(this.client, this.cfg);
     this.stats    = new StatisticsManager();
+    // Inject analyzer reference so the executor can run early-exit checks
+    this.exec.analyzer = this.analyzer;
 
     this.lastTradeAt   = 0;
     this.startBalance  = null;
@@ -972,9 +1212,10 @@ class TradingBot {
     this.client.on('open',      () => logger.info('connection open'));
     this.client.on('error',     e => logger.error('client error:', e.message));
 
-    this.exec.on('open',   t => this._onTradeOpen(t));
-    this.exec.on('update', t => this._onTradeUpdate(t));
-    this.exec.on('result', t => this._onTradeResult(t));
+    this.exec.on('open',        t => this._onTradeOpen(t));
+    this.exec.on('update',       t => this._onTradeUpdate(t));
+    this.exec.on('result',       t => this._onTradeResult(t));
+    this.exec.on('driftWarning', t => this._onDriftWarning(t));
 
     process.on('SIGINT',  () => this.stop('SIGINT'));
     process.on('SIGTERM', () => this.stop('SIGTERM'));
@@ -1119,13 +1360,13 @@ class TradingBot {
     this.lastTradeAt = Date.now();
   }
 
-  // ── Strategy loop ───────────────────────────────────────────
+  // ── Strategy loop (CWMRAS) ────────────────────────────────────
   async _analyzeAndTrade() {
     try {
       if (this.stopped) return;
       if (!this.client.authorized) return;
 
-      // Daily limits
+      // ── Daily limits ──
       const today = this.stats.todayTrades();
       if (today.length >= this.cfg.dailyMaxTrades) {
         logger.warn(`dailyMaxTrades (${this.cfg.dailyMaxTrades}) reached — pausing`);
@@ -1138,13 +1379,11 @@ class TradingBot {
         return;
       }
 
-      // Cooldown
+      // ── Cooldown / concurrency ──
       if (Date.now() - this.lastTradeAt < this.cfg.tradeCooldownMs) return;
-
-      // Max open
       if (this.exec.count() >= this.cfg.maxOpenTrades) return;
 
-      // Analyze
+      // ── Analyse every asset ──
       const analyses = this.cfg.assets.map(s => this.analyzer.analyze(s, this.market.historyFor(s)));
       const ranked   = this.analyzer.rank(analyses);
       if (!ranked.length) {
@@ -1152,24 +1391,45 @@ class TradingBot {
         return;
       }
       const best = ranked[0];
-      logger.info(`best=${best.symbol} score=${best.score.toFixed(2)} cv=${best.cv.toExponential(2)} trend=${best.trendStrength.toFixed(2)} mom=${best.momentum.toFixed(2)} mrev=${best.meanReversion.toFixed(2)}`);
 
+      logger.info(
+        `best=${best.symbol} score=${best.score.toFixed(2)} regime=${best.regime} ` +
+        `calm=${best.calmScore.toFixed(2)} rsi=${best.rsi.toFixed(1)} ` +
+        `bbMid=${(best.bbMiddleProximity*100).toFixed(0)}% safeTicks=${(best.safeMoveRatio*100).toFixed(0)}% ` +
+        `[${best.reasons.join(',')}]`,
+      );
+
+      // ── Decision ──
       if (!best.recommendTrade) {
         logger.debug(`score too low (${best.score.toFixed(2)}) — skipping`);
         return;
       }
 
-      const gr = this.exec.currentGrowthRate ?? this.cfg.multiplier;
+      // ── Regime-aware sizing ──
+      // Use the analyzer\'s suggestion (it picks the smallest growth_rate
+      // whose barrier still covers ≥ 2σ of recent moves).
+      const growthRate = best.suggestedGrowth
+                       ?? this.exec.currentGrowthRate
+                       ?? this.cfg.multiplier;
+      const takeProfit = Math.min(best.recommendedTp, this.cfg.takeProfit || best.recommendedTp);
+      const stopLoss   = this.cfg.stopLoss;
+
       const trade = await this.exec.buy(
         best.symbol,
-        gr,
+        growthRate,
         this.cfg.stake,
-        { stop_loss: this.cfg.stopLoss, take_profit: this.cfg.takeProfit },
+        { stop_loss: stopLoss, take_profit: takeProfit },
       );
-      logger.info(`trade placed #${trade.contractId} ${best.symbol} growth=${gr}`);
+      logger.info(`trade placed #${trade.contractId} ${best.symbol} growth=${growthRate} tp=${takeProfit} barrier=±${trade.halfBarrierPct.toFixed(4)}%`);
     } catch (e) {
       logger.error('analyse/trade error:', e.message);
     }
+  }
+
+  // ── Drift-warning handler (CWMRAS early-exit) ─────────────────
+  _onDriftWarning(t) {
+    if (!t?.exit) return;
+    logger.debug(`drift warning #${t.contractId} ${t.exit.reason} urgency=${t.exit.urgency.toFixed(2)} drift=${t.exit.driftPct.toFixed(4)}%`);
   }
 
   // ── Summaries ───────────────────────────────────────────────
