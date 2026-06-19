@@ -91,10 +91,10 @@ const CONFIG = Object.freeze({
 
   // ─ Trade parameters ─
   stake          : parseFloat('1.0'),
-  multiplier     : parseFloat('0.02'),  // 2 % growth rate
+  multiplier     : parseFloat('0.05'),  // 2 % growth rate
   multiplierStep : parseFloat('0.0'),   // grow after wins
-  stopLoss       : parseFloat('10.0'),
-  takeProfit     : parseFloat('5.0'),
+  stopLoss       : parseFloat('110.0'),
+  takeProfit     : parseFloat('500000.0'),
 
   // ─ Assets (Deriv synthetic indices) ─
   // assets: ('BOOM50,BOOM150N,BOOM300N,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH50,CRASH150N,CRASH300N,CRASH500,CRASH600,CRASH900,CRASH1000')
