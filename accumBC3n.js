@@ -415,10 +415,10 @@ class EnhancedDerivTradingBot {
         //    matters and it doesn't need a scan proposal to re-enter.
         //    Without this, the scanner floods the API with proposals for
         //    suspended assets that then race against recovery logic.
-        if (this.focusAsset) {
-            console.log(`⏸️  Pending scan skipped — recovery mode (focus: ${this.focusAsset})`);
-            return;
-        }
+        // if (this.focusAsset) {
+        //     console.log(`⏸️  Pending scan skipped — recovery mode (focus: ${this.focusAsset})`);
+        //     return;
+        // }
 
         console.log(`\n🔍 Scanning ${this.pendingAssets.size} pending assets...`);
 
@@ -1071,7 +1071,7 @@ class EnhancedDerivTradingBot {
         };
 
         // ✅ Suspend all other assets immediately on trade open
-        this.suspendOtherAssets(asset);
+        // this.suspendOtherAssets(asset);
 
         const trade = this.activeTrades[asset];
 
