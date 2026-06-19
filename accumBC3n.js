@@ -956,9 +956,9 @@ class EnhancedDerivTradingBot {
     const passthrough = message.echo_req?.passthrough;
 
     if (passthrough?.action === 'scan_only') {
-        if (this.consecutiveLosses <= 0) {
+        // if (this.consecutiveLosses <= 0) {
             this.updateAssetStatus(asset, stayedInArray);
-        }
+        // }
         const totalStayedIn = this.calculateTotalStayedIn(stayedInArray);
         console.log(`   🔍 Scan result for ${asset}: stayedIn=${totalStayedIn} (${totalStayedIn > this.config.STAYED_IN_THRESHOLD ? 'READY' : 'WAITING'})`);
         return;
@@ -988,9 +988,9 @@ class EnhancedDerivTradingBot {
     }
 
     // Update asset status only in normal (non-recovery) mode
-    if (this.consecutiveLosses <= 0) {
+    // if (this.consecutiveLosses <= 0) {
         this.updateAssetStatus(asset, stayedInArray);
-    }
+    // }
 
     // ── Regular proposal handling (for new trades) ──────────────────────────
     this.stayedInArray = stayedInArray;
@@ -1004,7 +1004,7 @@ class EnhancedDerivTradingBot {
     // Enforce active/pending filter only outside recovery mode.
     // In recovery the focus asset must be allowed through regardless of
     // its current stayedInArray total.
-    if (!this.isAssetReady(asset) && this.consecutiveLosses <= 0) {
+    if (!this.isAssetReady(asset)) {
         console.log(`⏸️  ${asset} is in pending list, skipping trade analysis`);
         return;
     }
@@ -1027,7 +1027,7 @@ class EnhancedDerivTradingBot {
     const condition  = this.checkTradeCondition(stayedInArray, this.consecutiveLosses, this.config.STAYED_IN_THRESHOLD, asset);
     const condition2 = this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 160, asset);
 
-    if ((condition && condition2 ) || this.consecutiveLosses > 0) {
+    if ((condition && condition2 )) {
         console.log(`   Entry condition: ${condition ? '✅ MET' : '❌ NOT MET'}`);
 
         this.tradedDigitArray.push(this.stayedInArray[99]);

@@ -1061,7 +1061,7 @@ class EnhancedDerivTradingBot {
             // if (this.consecutiveLosses <= 0) {
                 this.updateAssetStatus(asset, stayedInArray);
             // }
-            console.log(`   🔍 Scan result for ${asset}: stayedIn=${totalStayedInSample} (${totalStayedInSample < this.config.STAYED_IN_THRESHOLD ? 'READY' : 'WAITING'})`);
+            console.log(`   🔍 Scan result for ${asset}: stayedIn=${totalStayedInSample} (${totalStayedInSample > this.config.STAYED_IN_THRESHOLD ? 'READY' : 'WAITING'})`);
             return;
         }
 
