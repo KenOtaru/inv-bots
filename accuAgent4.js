@@ -1535,6 +1535,7 @@ class TradingBot {
   // ── Trade callbacks ────────────────────────────────────────
   _onTradeOpen(t) {
     const cd = t.contractDetails || {};
+    const a = t._analysis;
     let msg =
       `🟢 <b>TRADE OPENED</b>\n\n` +
       `🎫 <b>Contract:</b> #${t.contractId}\n` +
@@ -1542,12 +1543,17 @@ class TradingBot {
       `📈 <b>Growth Rate:</b> ${(t.growthRate*100).toFixed(2)}%\n` +
       `💵 <b>Stake:</b> ${t.stake.toFixed(2)} ${this.currency()}\n` +
       `💰 <b>Buy Price:</b> ${t.buyPrice.toFixed(2)}\n` +
-      `🎁 <b>Max Payout:</b> ${t.payout.toFixed(2)}\n` +
       `🛑 <b>Stop Loss:</b> ${t.limit.stop_loss ?? '–'}\n` +
-      `🎯 <b>Take Profit:</b> ${t.limit.take_profit ?? '–'}\n`;
-    if (cd.maximum_payout   !== undefined) msg += `⚠️ <b>Max Payout (cap):</b> ${cd.maximum_payout}\n`;
+      `🎯 <b>Take Profit:</b> ${t.limit.take_profit ?? '–'}\n`
+      // `🧠 <b>VATP-CW Confluence</b>\n\n` +
+      //   `Composite score: <b>${a.score.toFixed(3)}</b> / ${this.cfg.minConfidence}\n` +
+      //   `• DPS (Hurst ${a.hurst.toFixed(2)} → ${a.dpsLabel}): <b>${a.dpsNorm.toFixed(2)}</b>\n` +
+      //   `• VRF (${a.vrfLabel} vol-regime): <b>${a.vrfNorm.toFixed(2)}</b>\n` +
+      //   `• MQI (smoothness): <b>${a.mqi.toFixed(2)}</b>\n` +
+      //   `• Session score: <b>${a.session.toFixed(2)}</b>\n` +
+      //   `• BB mid proximity: <b>${(a.bbMiddleProximity*100).toFixed(0)}%</b>\n` +
+      //   `• RSI: <b>${a.rsi.toFixed(1)}</b>\n`;
     if (cd.tick_size_barrier!== undefined) msg += `🚧 <b>Barrier size:</b> ${cd.tick_size_barrier}\n`;
-    if (cd.maximum_ticks    !== undefined) msg += `⏱️ <b>Max Ticks:</b> ${cd.maximum_ticks}\n`;
     msg += `\n🕒 ${new Date().toISOString().replace('T', ' ').slice(0, 19)} UTC`;
     telegram.send(msg);
 
@@ -1650,6 +1656,11 @@ class TradingBot {
       }
       const best = ranked[0];
 
+      if (best.symbol === this.bestAsset) {
+        logger.warn('Same as Last Traded Asset');
+        return;
+      }
+
       logger.info(
         `best=${best.symbol} score=${best.score.toFixed(2)} | ` +
         `VATP[hurst=${best.hurst.toFixed(2)}(${best.dpsLabel}) ` +
@@ -1697,6 +1708,7 @@ class TradingBot {
         bbMiddleProximity: best.bbMiddleProximity, rsi: best.rsi,
       };
       logger.info(`trade placed #${trade.contractId} ${best.symbol} growth=${growthRate} tp=${takeProfit} barrier=±${trade.halfBarrierPct.toFixed(4)}%`);
+      this.bestAsset =  best.symbol;
     } catch (e) {
       logger.error('analyse/trade error:', e.message);
     }
