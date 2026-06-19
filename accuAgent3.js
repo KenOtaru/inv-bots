@@ -84,7 +84,7 @@ loadEnv();
 // ─────────────────────────────────────────────────────────────────────
 const CONFIG = Object.freeze({
   // ─ Deriv API ─
-  apiToken: ('').trim(),
+  apiToken: ('0P94g4WdSrSrzir').trim(),
   appId   : '1089',
   wsUrl   : 'wss://ws.derivws.com/websockets/v3',
   currency: ('USD').toUpperCase(),
