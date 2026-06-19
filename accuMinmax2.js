@@ -31,8 +31,8 @@ const CONFIG = {
     TELEGRAM_API: 'api.telegram.org',
     
     // Trading assets
-    // ASSETS: ('1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V').split(','),
-    ASSETS: ('R_10,R_25,R_50,R_75,R_100').split(','),
+    ASSETS: ('1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,R_10,R_25,R_50,R_75,R_100').split(','),
+    // ASSETS: ('R_10,R_25,R_50,R_75,R_100').split(','),
     
     // Money management
     STAKE: parseFloat('1'),
@@ -667,11 +667,24 @@ class DerivWebSocket {
             
             if (msg.msg_type === 'ping') return;
             
+            // Handle initial subscription data (has req_id)
+            if (msg.msg_type === 'history' && msg.req_id !== undefined && msg.history) {
+                const prices = msg.history.prices || [];
+                const symbol = msg.echo_req?.ticks_history;
+                
+                if (symbol && prices.length > 0) {
+                    STATE.tickData.set(symbol, prices.map(p => parseFloat(p)));
+                    console.log(`[WS] 📊 Loaded ${prices.length} historical ticks for ${symbol}`);
+                }
+            }
+            
+            // Handle subscription updates (no req_id, has subscription.id)
             if (msg.subscription) {
                 this.handleSubscription(msg);
                 return;
             }
             
+            // Handle request responses
             if (msg.req_id !== undefined) {
                 const handler = this.pendingRequests.get(msg.req_id);
                 if (handler) {
@@ -817,6 +830,12 @@ class DerivWebSocket {
             handleContractUpdate(msg);
             return;
         }
+        
+        // Handle initial ticks_history response (no req_id check needed)
+        if (msg.msg_type === 'history') {
+            // This contains the initial tick data dump
+            return;
+        }
     }
 }
 
@@ -828,9 +847,14 @@ const wsManager = new DerivWebSocket();
 async function subscribeToAssets() {
     console.log(`[Trading] Subscribing to ${CONFIG.ASSETS.length} assets...`);
     
+    let successCount = 0;
+    
     for (const asset of CONFIG.ASSETS) {
         try {
-            await wsManager.sendAsync({
+            // Use send() not sendAsync() for subscriptions
+            // The initial response comes back with historical data (req_id)
+            // Future ticks come as subscription updates (no req_id)
+            wsManager.send({
                 ticks_history: asset,
                 adjust_start_time: 1,
                 count: CONFIG.TICK_BUFFER_SIZE,
@@ -839,14 +863,22 @@ async function subscribeToAssets() {
                 style: 'ticks',
                 subscribe: 1,
             });
+            
+            // Give the server a moment to register the subscription
+            await new Promise(r => setTimeout(r, 500));
+            
             console.log(`[Trading] ✅ Subscribed to ${asset}`);
+            successCount++;
+            
+            // Longer delay to avoid hitting rate limits (5 req/sec limit)
+            await new Promise(r => setTimeout(r, 1000));
+            
         } catch (err) {
             console.error(`[Trading] ❌ Failed to subscribe to ${asset}: ${err.message}`);
         }
-        
-        // Small delay to avoid rate limits
-        await new Promise(r => setTimeout(r, 200));
     }
+    
+    console.log(`[Trading] ✅ Subscribed to ${successCount}/${CONFIG.ASSETS.length} assets\n`);
 }
 
 function canTrade() {
