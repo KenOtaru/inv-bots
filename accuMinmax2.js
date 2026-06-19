@@ -31,26 +31,26 @@ const CONFIG = {
     TELEGRAM_API: 'api.telegram.org',
     
     // Trading assets
-    ASSETS: (process.env.ASSETS || 'R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V').split(','),
+    ASSETS: ('1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V').split(','),
     
     // Money management
-    STAKE: parseFloat(process.env.STAKE || '1'),
-    MULTIPLIER: parseFloat(process.env.MULTIPLIER || '5'),
-    MULTIPLIER_STEP: parseFloat(process.env.MULTIPLIER_STEP || '1'),
-    STOP_LOSS: parseFloat(process.env.STOP_LOSS || '15'),
-    TAKE_PROFIT: parseFloat(process.env.TAKE_PROFIT || '30'),
-    GROWTH_RATE: parseFloat(process.env.GROWTH_RATE || '0.05'),
+    STAKE: parseFloat('1'),
+    MULTIPLIER: parseFloat('5'),
+    MULTIPLIER_STEP: parseFloat('1'),
+    STOP_LOSS: parseFloat('15'),
+    TAKE_PROFIT: parseFloat('30'),
+    GROWTH_RATE: parseFloat('0.05'),
     
     // Strategy parameters
-    MIN_CONFIDENCE: parseFloat(process.env.MIN_CONFIDENCE || '0.65'),
-    MIN_DPS_SCORE: parseFloat(process.env.MIN_DPS_SCORE || '0.55'),
-    MAX_VOLATILITY_REGIME: parseInt(process.env.MAX_VOL_REGIME || '2'), // 0=Low, 1=Normal, 2=High (skip above)
-    MIN_HURST_EXPONENT: parseFloat(process.env.MIN_HURST || '0.52'),
+    MIN_CONFIDENCE: parseFloat('0.65'),
+    MIN_DPS_SCORE: parseFloat('0.55'),
+    MAX_VOLATILITY_REGIME: parseInt('2'), // 0=Low, 1=Normal, 2=High (skip above)
+    MIN_HURST_EXPONENT: parseFloat('0.52'),
     
     // Rate limiting
-    MAX_TRADES_PER_HOUR: parseInt(process.env.MAX_TRADES_PER_HOUR || '20'),
-    MAX_ACTIVE_TRADES: parseInt(process.env.MAX_ACTIVE_TRADES || '5'),
-    MIN_SECONDS_BETWEEN_TRADES: parseInt(process.env.MIN_TRADE_INTERVAL || '30'),
+    MAX_TRADES_PER_HOUR: parseInt('20'),
+    MAX_ACTIVE_TRADES: parseInt('5'),
+    MIN_SECONDS_BETWEEN_TRADES: parseInt('30'),
     
     // Analysis windows
     SHORT_WINDOW: 10,
@@ -66,10 +66,12 @@ const CONFIG = {
     // Summary intervals
     HOURLY_SUMMARY_INTERVAL: 60 * 60 * 1000,
     
+    // API Token
+    DERIV_API_TOKEN: '0P94g4WdSrSrzir',
+
     // Notifications
-    DERIV_API_TOKEN: process.env.DERIV_API_TOKEN || '',
-    TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || '',
-    TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID || '',
+    TELEGRAM_BOT_TOKEN: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
+    TELEGRAM_CHAT_ID: '752497117',
     
     // Strategy weights (must sum to 1.0)
     WEIGHTS: {
