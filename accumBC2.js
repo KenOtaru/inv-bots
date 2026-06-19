@@ -321,8 +321,8 @@ class EnhancedDerivTradingBot {
         // Check individual thresholds for recent values
         const recentThresholds = (
             stayedInArray[99] >= 0 
-            // &&
-            // stayedInArray[98] > 50
+            &&
+            stayedInArray[98] > 50
             // &&
             // stayedInArray[97] < 20
             // &&
@@ -338,7 +338,7 @@ class EnhancedDerivTradingBot {
         );
 
         // Check if total sum is within acceptable range
-        const totalWithinRange = totalStayedInArray < maxTotalStayedIn;
+        const totalWithinRange = totalStayedInArray > maxTotalStayedIn;
 
         // Check if we have consecutive losses (recovery mode)
         const inRecoveryMode = consecutiveLosses > 0;
@@ -471,7 +471,7 @@ class EnhancedDerivTradingBot {
         const wasActive = this.activeAssets.has(asset);
         const wasPending = this.pendingAssets.has(asset);
 
-        if (totalStayedIn < this.config.STAYED_IN_THRESHOLD) {
+        if (totalStayedIn > this.config.STAYED_IN_THRESHOLD) {
             // Asset is ready for trading
             if (!wasActive) {
                 this.activeAssets.add(asset);
@@ -1058,9 +1058,9 @@ class EnhancedDerivTradingBot {
         const passthrough = message.echo_req?.passthrough;
 
         if (passthrough?.action === 'scan_only') {
-            if (this.consecutiveLosses <= 0) {
+            // if (this.consecutiveLosses <= 0) {
                 this.updateAssetStatus(asset, stayedInArray);
-            }
+            // }
             console.log(`   🔍 Scan result for ${asset}: stayedIn=${totalStayedInSample} (${totalStayedInSample < this.config.STAYED_IN_THRESHOLD ? 'READY' : 'WAITING'})`);
             return;
         }
@@ -1088,9 +1088,9 @@ class EnhancedDerivTradingBot {
         }
 
         // Update asset status only in normal (non-recovery) mode
-        if (this.consecutiveLosses <= 0) {
+        // if (this.consecutiveLosses <= 0) {
             this.updateAssetStatus(asset, stayedInArray);
-        }
+        // }
 
         // ── Regular proposal handling (for new trades) ──────────────────────────
         this.stayedInArray = stayedInArray;
@@ -1104,7 +1104,12 @@ class EnhancedDerivTradingBot {
         // Enforce active/pending filter only outside recovery mode. In
         // recovery the focus asset must be allowed through regardless of
         // its current stayedInArray total.
-        if (!this.isAssetReady(asset) && this.consecutiveLosses <= 0) {
+        // if (!this.isAssetReady(asset) && this.consecutiveLosses <= 0) {
+        //     console.log(`⏸️  ${asset} is in pending list, skipping trade analysis`);
+        //     return;
+        // }
+
+        if (!this.isAssetReady(asset)) {
             console.log(`⏸️  ${asset} is in pending list, skipping trade analysis`);
             return;
         }
