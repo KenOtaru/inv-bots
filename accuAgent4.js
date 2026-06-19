@@ -139,7 +139,7 @@ const CONFIG = Object.freeze({
   // ── VATP (Volatility-Adjusted Trend Persistence) strategy tunables ──
   // 4-factor composite score, normalized to [0,1]. The bot enters a trade
   // iff score >= minConfidence AND hurst <= maxHurst AND volRegime <= maxVolRegime.
-  minConfidence: parseFloat('0.55'),
+  minConfidence: parseFloat('0.65'),
   maxHurst     : parseFloat('0.65'),  // 0.5 = random; >0.65 = strong trend (risky)
   maxVolRegime : parseInt  ('1',    10), // 0=low 1=normal 2=high 3=extreme
   sessionWeighting: ('true').toLowerCase() !== 'false',
