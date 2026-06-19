@@ -1779,7 +1779,7 @@ const bot = new EnhancedDerivTradingBot('0P94g4WdSrSrzir', {
         'R_10', 'R_25', 'R_50', 'R_75', 'R_100',
         // '1HZ10V', '1HZ25V', '1HZ75V', '1HZ100V',
     ],
-    telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
+    telegramToken: '8106601008:AAEMyCma6mvPYIHEvw3RHQX2tkD5-wUe1o0',
     telegramChatId: '752497117',
 });
 
