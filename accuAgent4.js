@@ -91,20 +91,20 @@ const CONFIG = Object.freeze({
 
   // ─ Trade parameters ─
   stake          : parseFloat('1.0'),
-  multiplier     : parseFloat('0.02'),  // 2 % growth rate
+  multiplier     : parseFloat('0.05'),  // 2 % growth rate
   multiplierStep : parseFloat('0.0'),   // grow after wins
   stopLoss       : parseFloat('110.0'),
   takeProfit     : parseFloat('500.0'),
 
   // ─ Assets (Deriv synthetic indices) ─
-  // assets: ('BOOM50,BOOM150N,BOOM300N,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH50,CRASH150N,CRASH300N,CRASH500,CRASH600,CRASH900,CRASH1000')
-  //     .split(',').map(s => s.trim()).filter(Boolean),
+  assets: ('BOOM50,BOOM150N,BOOM300N,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH50,CRASH150N,CRASH300N,CRASH500,CRASH600,CRASH900,CRASH1000')
+      .split(',').map(s => s.trim()).filter(Boolean),
   // assets: ('1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,R_10,R_25,R_50,R_75,R_100')
   //   .split(',').map(s => s.trim()).filter(Boolean),
   // assets: ('1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V')
   //   .split(',').map(s => s.trim()).filter(Boolean),
-  assets: ('R_10,R_25,R_50,R_75,R_100')
-    .split(',').map(s => s.trim()).filter(Boolean),
+  // assets: ('R_10,R_25,R_50,R_75,R_100')
+  //   .split(',').map(s => s.trim()).filter(Boolean),
 
   // ─ Telegram ─
   telegram: {
@@ -139,7 +139,7 @@ const CONFIG = Object.freeze({
   // ── VATP (Volatility-Adjusted Trend Persistence) strategy tunables ──
   // 4-factor composite score, normalized to [0,1]. The bot enters a trade
   // iff score >= minConfidence AND hurst <= maxHurst AND volRegime <= maxVolRegime.
-  minConfidence: parseFloat('0.55'),
+  minConfidence: parseFloat('0.75'),
   maxHurst     : parseFloat('0.65'),  // 0.5 = random; >0.65 = strong trend (risky)
   maxVolRegime : parseInt  ('1',    10), // 0=low 1=normal 2=high 3=extreme
   sessionWeighting: ('true').toLowerCase() !== 'false',
@@ -853,9 +853,9 @@ class MarketAnalyzer {
     const hurst = this._hurst(q);
     let dpsNorm;
     if (hurst >= 0.45 && hurst <= 0.58)      dpsNorm = 1.0;          // sweet spot
-    else if (hurst < 0.45)                   dpsNorm = 0.6;          // mean-reverting (whipsaw risk)
-    else if (hurst <= 0.65)                  dpsNorm = 0.7;          // mildly trending
-    else                                      dpsNorm = 0.2;          // strong trend (barrier risk)
+    else if (hurst < 0.45)                   dpsNorm = 0.1;          // mean-reverting (whipsaw risk)
+    else if (hurst <= 0.65)                  dpsNorm = 0.2;          // mildly trending
+    else                                      dpsNorm = 0.0;          // strong trend (barrier risk)
     const dpsLabel = hurst < 0.45 ? 'mean-reverting' :
                      hurst <= 0.58 ? 'calm-persistent' :
                      hurst <= 0.65 ? 'trending' : 'strong-trend';
@@ -941,9 +941,9 @@ class MarketAnalyzer {
     const targetSigmaCoverage = 2.0;     // we want barrier ≥ 2 × per-tick σ
     const perTickStdevPct = (shortStats.stdev / Math.abs(price)) * 100;
     // For each growth rate, approximate the barrier% (slightly conservative)
-    const barrierByGrowth = { 0.01: 0.061, 0.02: 0.056, 0.03: 0.053, 0.04: 0.050, 0.05: 0.048 };
+    const barrierByGrowth = { 0.04: 0.050, 0.05: 0.048 };
     if (perTickStdevPct > 0) {
-      for (const g of [0.01, 0.02, 0.03, 0.04, 0.05]) {
+      for (const g of [0.04, 0.05]) {
         // barrier is on EACH side; we need barrier_pct ≥ target × per_tick_stdev_pct
         if (barrierByGrowth[g] >= targetSigmaCoverage * perTickStdevPct) {
           suggestedGrowth = g;
