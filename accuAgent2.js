@@ -98,7 +98,7 @@ const CONFIG = Object.freeze({
   takeProfit     : parseFloat('500.0'),
 
   // ─ Assets (Deriv synthetic indices) ─
-  assets: ('1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,BOOM50,BOOM300N,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH50,CRASH300N,CRASH500,CRASH600,CRASH900,CRASH1000')
+  assets: ('R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH500,CRASH600,CRASH900,CRASH1000')
       .split(',').map(s => s.trim()).filter(Boolean),
   // assets: ('1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,R_10,R_25,R_50,R_75,R_100')
   //   .split(',').map(s => s.trim()).filter(Boolean),
@@ -109,7 +109,7 @@ const CONFIG = Object.freeze({
 
   // ─ Telegram ─
   telegram: {
-    enabled : false, //!!(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
+    enabled : true, //!!(process.env.TELEGRAM_BOT_TOKEN && process.env.TELEGRAM_CHAT_ID),
     botToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
     chatId  : '752497117',
   },
