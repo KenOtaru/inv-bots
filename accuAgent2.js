@@ -1171,9 +1171,20 @@ class MarketAnalyzer {
     const targetSigmaCoverage = 2.0;     // we want barrier ≥ 2 × per-tick σ
     const perTickStdevPct = (shortStats.stdev / Math.abs(price)) * 100;
     // For each growth rate, approximate the barrier% (slightly conservative)
-    const barrierByGrowth = { 0.01: 0.061, 0.02: 0.056, 0.03: 0.053, 0.04: 0.050, 0.05: 0.048 };
+    // const barrierByGrowth = { 0.01: 0.061, 0.02: 0.056, 0.03: 0.053, 0.04: 0.050, 0.05: 0.048 };
+    // if (perTickStdevPct > 0) {
+    //   for (const g of [0.01, 0.02, 0.03, 0.04, 0.05]) {
+    //     // barrier is on EACH side; we need barrier_pct ≥ target × per_tick_stdev_pct
+    //     if (barrierByGrowth[g] >= targetSigmaCoverage * perTickStdevPct) {
+    //       suggestedGrowth = g;
+    //       break;
+    //     }
+    //     suggestedGrowth = g;  // last fallback
+    //   }
+    // }
+    const barrierByGrowth = { 0.04: 0.050, 0.05: 0.048 };
     if (perTickStdevPct > 0) {
-      for (const g of [0.01, 0.02, 0.03, 0.04, 0.05]) {
+      for (const g of [0.04, 0.05]) {
         // barrier is on EACH side; we need barrier_pct ≥ target × per_tick_stdev_pct
         if (barrierByGrowth[g] >= targetSigmaCoverage * perTickStdevPct) {
           suggestedGrowth = g;
