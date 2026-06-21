@@ -94,8 +94,8 @@ const CONFIG = Object.freeze({
   stake          : parseFloat('1.0'),
   multiplier     : parseFloat('0.05'),  // 2 % growth rate
   multiplierStep : parseFloat('0.0'),   // grow after wins
-  stopLoss       : parseFloat('110.0'),
-  takeProfit     : parseFloat('500.0'),
+  stopLoss       : parseFloat('10.0'),
+  takeProfit     : parseFloat('5000.0'),
 
   // ── Martingale (loss-recovery stake multiplier) ──
   // Set MARTINGALE=0 to disable. After `lossesBeforeMartingale` consecutive
@@ -103,7 +103,7 @@ const CONFIG = Object.freeze({
   // loss adds `martingaleStep` to the multiplier. A win resets to 1.0.
   martingale          : parseFloat('100'),    // base multiplier when active (0 = off)
   martingaleStep      : parseFloat('0.5'),  // added per extra consecutive loss
-  lossesBeforeMartingale: parseInt('1'),  // N losses before martingale kicks in
+  lossesBeforeMartingale: parseInt('0'),  // N losses before martingale kicks in
 
   // ─ Assets (Deriv synthetic indices) ─
   // assets: ('1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH500,CRASH600,CRASH900,CRASH1000')
