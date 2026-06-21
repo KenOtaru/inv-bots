@@ -97,15 +97,23 @@ const CONFIG = Object.freeze({
   stopLoss       : parseFloat('110.0'),
   takeProfit     : parseFloat('500.0'),
 
+  // ── Martingale (loss-recovery stake multiplier) ──
+  // Set MARTINGALE=0 to disable. After `lossesBeforeMartingale` consecutive
+  // losses the next stake is multiplied by `martingale`. Each subsequent
+  // loss adds `martingaleStep` to the multiplier. A win resets to 1.0.
+  martingale          : parseFloat('100'),    // base multiplier when active (0 = off)
+  martingaleStep      : parseFloat('0.5'),  // added per extra consecutive loss
+  lossesBeforeMartingale: parseInt('1'),  // N losses before martingale kicks in
+
   // ─ Assets (Deriv synthetic indices) ─
-  // assets: ('1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH500,CRASH600,CRASH900,CRASH1000')
-  //     .split(',').map(s => s.trim()).filter(Boolean),
+  assets: ('1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH500,CRASH600,CRASH900,CRASH1000')
+      .split(',').map(s => s.trim()).filter(Boolean),
   // assets: ('1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,R_10,R_25,R_50,R_75,R_100')
   //   .split(',').map(s => s.trim()).filter(Boolean),
   // assets: ('1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V')
   //   .split(',').map(s => s.trim()).filter(Boolean),
-  assets: ('R_10,R_25,R_50,R_75,R_100')
-    .split(',').map(s => s.trim()).filter(Boolean),
+  // assets: ('R_10,R_25,R_50,R_75,R_100')
+  //   .split(',').map(s => s.trim()).filter(Boolean),
 
   // ─ Telegram ─
   telegram: {
@@ -134,13 +142,13 @@ const CONFIG = Object.freeze({
   },
 
   // ─ Logging ─
-  logFile : 'deriv_bot2b_01.log',
+  logFile : 'deriv_bot2b_04.log',
   logLevel: ('INFO').toUpperCase(),
 
   // ── VATP (Volatility-Adjusted Trend Persistence) strategy tunables ──
   // 4-factor composite score, normalized to [0,1]. The bot enters a trade
   // iff score >= minConfidence AND hurst <= maxHurst AND volRegime <= maxVolRegime.
-  minConfidence: parseFloat('0.75'),
+  minConfidence: parseFloat('0.65'),
   maxHurst     : parseFloat('0.65'),  // 0.5 = random; >0.65 = strong trend (risky)
   maxVolRegime : parseInt  ('0',    10), // 0=low 1=normal 2=high 3=extreme
   sessionWeighting: true,
@@ -163,20 +171,12 @@ const CONFIG = Object.freeze({
   stayRefreshMs : parseInt  ('60000',10), // how often to refresh stay cache
   minRisingStreak: parseInt('2',   10), // require N consecutive rising stays
 
-  // ── Martingale (loss-recovery stake multiplier) ──
-  // Set MARTINGALE=0 to disable. After `lossesBeforeMartingale` consecutive
-  // losses the next stake is multiplied by `martingale`. Each subsequent
-  // loss adds `martingaleStep` to the multiplier. A win resets to 1.0.
-  martingale          : parseFloat('20'),    // base multiplier when active (0 = off)
-  martingaleStep      : parseFloat('0.5'),  // added per extra consecutive loss
-  lossesBeforeMartingale: parseInt('1'),  // N losses before martingale kicks in
-
   // ── Growth-rate filter (barrierByGrowth analysis gate) ──
   // Only trade when the analyzer's suggestedGrowth falls inside this range.
   // The analyzer maps per-tick σ to the smallest growth_rate whose barrier
   // still covers ≥ 2σ of recent moves. Restricting to a narrow band means:
   // we only enter when the market is calm enough to safely use higher rates.
-  minGrowth : parseFloat('0.04'),
+  minGrowth : parseFloat('0.01'),
   maxGrowth : parseFloat('0.05'),
 });
 
