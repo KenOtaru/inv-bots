@@ -40,6 +40,70 @@ const WebSocket = require('ws');
 const TelegramBot = require('node-telegram-bot-api');
 const fs = require('fs');
 const path = require('path');
+const https = require('https');
+const http = require('http');
+const { URL } = require('url');
+
+// ══════════════════════════════════════════════════════════════════════════════
+// DERIV REST CLIENT  (for the new PAT / OAuth OTP-based auth flow)
+// ──────────────────────────────────────────────────────────────────────────────
+//  The new Deriv API uses two complementary components:
+//    • REST API  (https://api.derivws.com)  — Account list + OTP minting
+//    • WebSocket (wss://api.derivws.com/...) — Real-time trading, pre-authed
+//  Personal Access Tokens start with "pat_".
+// ══════════════════════════════════════════════════════════════════════════════
+class RestClient {
+    constructor(baseUrl, appId, token) {
+        this.baseUrl = baseUrl || 'https://api.derivws.com';
+        this.appId = appId || '1089';
+        this.token = token || '';
+    }
+
+    static isPat(token) {
+        return typeof token === 'string'
+            && /^pat_[a-z0-9_\-]{16,}$/i.test(token.trim());
+    }
+
+    _request(method, urlPath, body = null) {
+        return new Promise((resolve, reject) => {
+            let url;
+            try { url = new URL(urlPath, this.baseUrl); }
+            catch (e) { return reject(new Error(`Invalid URL: ${urlPath}`)); }
+            const isHttps = url.protocol === 'https:';
+            const lib = isHttps ? https : http;
+            const opts = {
+                method,
+                hostname: url.hostname,
+                port: url.port || (isHttps ? 443 : 80),
+                path: url.pathname + url.search,
+                headers: {
+                    'Deriv-App-ID': this.appId,
+                    'Authorization': 'Bearer ' + this.token,
+                    'Accept': 'application/json',
+                    ...(body ? { 'Content-Type': 'application/json' } : {}),
+                },
+                timeout: 15000,
+            };
+            const req = lib.request(opts, res => {
+                let data = '';
+                res.on('data', d => data += d);
+                res.on('end', () => {
+                    let parsed = data;
+                    try { parsed = JSON.parse(data); } catch (_) {}
+                    resolve({ status: res.statusCode, body: parsed });
+                });
+            });
+            req.on('timeout', () => { req.destroy(new Error('REST request timeout')); });
+            req.on('error', reject);
+            if (body) req.write(JSON.stringify(body));
+            req.end();
+        });
+    }
+
+    get(p)       { return this._request('GET',  p); }
+    post(p, b)   { return this._request('POST', p, b); }
+    delete(p)    { return this._request('DELETE', p); }
+}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // STATE PERSISTENCE MANAGER
@@ -136,6 +200,17 @@ class EnhancedDerivTradingBot {
         this.ws = null;
         this.connected = false;
         this.wsReady = false;
+
+        // ── New Deriv API (PAT / OAuth OTP) auth state ────────────────────
+        this.appId = config.appId || '1089';
+        this.accountType = (config.accountType || 'demo').toLowerCase();
+        this._isPat = RestClient.isPat(token);
+        this._rest = this._isPat
+            ? new RestClient('https://api.derivws.com', this.appId, token)
+            : null;
+        this._otpUrl = null;          // wss URL returned by REST OTP step
+        this._targetAccount = null;   // account record selected by accountType
+        this.accountInfo = null;      // populated after authorization
 
         // ── Multi-asset support ──────────────────────────────────────────────
         this.assets = config.assets;
@@ -532,6 +607,15 @@ class EnhancedDerivTradingBot {
     }
 
     /**
+     * The new API (api.derivws.com) expects `underlying_symbol` in proposal
+     * payloads; the legacy v3 endpoint expects `symbol`. Sending the wrong
+     * one yields InputValidationFailed.
+     */
+    _proposalSymbolKey() {
+        return this._isPat ? 'underlying_symbol' : 'symbol';
+    }
+
+    /**
      * Request a proposal specifically for scanning (not for trading)
      * @param {string} asset - Asset symbol to scan
      */
@@ -544,7 +628,7 @@ class EnhancedDerivTradingBot {
             basis: 'stake',
             contract_type: 'ACCU',
             currency: 'USD',
-            symbol: asset,
+            [this._proposalSymbolKey()]: asset,
             growth_rate: this.config.growthRate,
             limit_order: {
                 take_profit: (this.currentStake * this.config.takeProfitMultiplier).toFixed(2)
@@ -665,20 +749,62 @@ class EnhancedDerivTradingBot {
 
     // ══════════════════════════════════════════════════════════════════════════
     // WEBSOCKET CONNECTION + PING KEEP-ALIVE
+    // ──────────────────────────────────────────────────────────────────────────
+    // Dual-mode connect:
+    //   • PAT token (pat_…)   → new API: REST OTP flow, then open WS to the
+    //     pre-authenticated URL. No `authorize` message is sent.
+    //   • Legacy token        → old WS endpoint + `authorize` message.
     // ══════════════════════════════════════════════════════════════════════════
     connect() {
         if (this.ws && this.ws.readyState === WebSocket.OPEN) return;
+        if (!this.token) {
+            console.error('❌ DERIV_API_TOKEN is empty — aborting');
+            return;
+        }
         console.log('🔌 Connecting to Deriv API...');
         this.cleanup();
 
-        this.ws = new WebSocket('wss://ws.derivws.com/websockets/v3?app_id=1089');
+        if (this._isPat) {
+            console.log('🔑 PAT token detected → using NEW Deriv API (OTP flow)');
+            this._newApiConnect().catch(err => {
+                console.error('❌ New API connect failed:', err.message);
+                this.handleDisconnect();
+            });
+        } else {
+            console.log('🔑 Using legacy Deriv API (token authorize flow)');
+            const url = `wss://ws.derivws.com/websockets/v3?app_id=${encodeURIComponent(this.appId)}`;
+            this._openWs(url);
+        }
+    }
+
+    /**
+     * Open a WebSocket to an arbitrary URL and wire up handlers. Shared by
+     * both the legacy and PAT connect paths.
+     */
+    _openWs(url) {
+        try {
+            this.ws = new WebSocket(url, {
+                headers: { 'User-Agent': 'AccumBC2n2/2.0 (+Node.js)' },
+                handshakeTimeout: 15000,
+            });
+        } catch (e) {
+            console.error('❌ WS construct failed:', e.message);
+            this.handleDisconnect();
+            return;
+        }
 
         this.ws.on('open', () => {
             console.log('✅ WebSocket connected');
             this.connected = true;
             this.reconnectAttempts = 0;
             this.startPingKeepAlive();
-            this.authenticate();
+
+            // PAT flow: WS URL itself authenticates — skip `authorize`.
+            if (this._isPat) {
+                this._newApiMarkAuthorized();
+            } else {
+                this.authenticate();
+            }
         });
 
         this.ws.on('message', (data) => {
@@ -698,6 +824,86 @@ class EnhancedDerivTradingBot {
             this.stopPingKeepAlive();
             this.handleDisconnect();
         });
+
+        this.ws.on('unexpected-response', (_req, res) => {
+            console.error(`❌ WS handshake failed: ${res.statusCode} ${res.statusMessage}`);
+            try { res.destroy(); } catch (_) {}
+            this.handleDisconnect();
+        });
+    }
+
+    /**
+     * NEW API flow:
+     *   1. REST GET  /trading/v1/options/accounts          → list accounts
+     *   2. REST POST /trading/v1/options/accounts/{id}/otp → mint WS URL
+     *   3. Open WebSocket to the OTP-pre-authenticated URL
+     *   4. _newApiMarkAuthorized() runs on 'open' (no `authorize` message)
+     */
+    async _newApiConnect() {
+        // Step 1: list Options accounts available to this PAT
+        console.log('🌐 REST: GET /trading/v1/options/accounts');
+        const accRes = await this._rest.get('/trading/v1/options/accounts');
+        if (accRes.status !== 200) {
+            const msg = accRes.body?.errors?.[0]?.message
+                || accRes.body?.message
+                || JSON.stringify(accRes.body);
+            let hint = '';
+            if (accRes.status === 401) {
+                hint = ' — check (1) PAT validity, (2) appId matches a registered app at https://developers.deriv.com/';
+            } else if (accRes.status === 403) {
+                hint = ' — PAT may lack the required "trade" scope (regenerate at https://app.deriv.com/account/api-token)';
+            } else if (accRes.status === 404) {
+                hint = ' — accounts endpoint not found; token may be legacy';
+            }
+            throw new Error(`Account list failed (${accRes.status}): ${msg}${hint}`);
+        }
+        const accounts = Array.isArray(accRes.body?.data) ? accRes.body.data : [];
+        if (!accounts.length) throw new Error('No Options accounts found for this token');
+
+        const acct = accounts.find(a => (a.account_type || '').toLowerCase() === this.accountType)
+                  || accounts[0];
+        this._targetAccount = acct;
+        this.accountInfo = {
+            loginid    : acct.account_id,
+            email      : acct.email,
+            isVirtual  : (acct.account_type || '').toLowerCase() === 'demo',
+            accountType: acct.account_type,
+            currency   : acct.currency,
+            balance    : parseFloat(acct.balance),
+            group      : acct.group,
+        };
+        console.log(`👤 Selected account ${acct.account_id} (${acct.account_type}, ${acct.currency}, balance=${acct.balance})`);
+
+        // Step 2: mint an OTP-authenticated WebSocket URL for this account
+        const otpPath = `/trading/v1/options/accounts/${encodeURIComponent(acct.account_id)}/otp`;
+        console.log(`🌐 REST: POST ${otpPath}`);
+        const otpRes = await this._rest.post(otpPath);
+        if (otpRes.status !== 200) {
+            const msg = otpRes.body?.errors?.[0]?.message || JSON.stringify(otpRes.body);
+            throw new Error(`OTP request failed (${otpRes.status}): ${msg}`);
+        }
+        const wsUrl = otpRes.body?.data?.url;
+        if (!wsUrl || !/^wss?:/i.test(wsUrl)) {
+            throw new Error(`OTP response missing .data.url: ${JSON.stringify(otpRes.body)}`);
+        }
+        this._otpUrl = wsUrl;
+        // Step 3: open the pre-authenticated WS
+        this._openWs(wsUrl);
+    }
+
+    /**
+     * Finalise PAT-mode auth: mark authorized and run the normal post-auth
+     * subscription bootstrap. The legacy 'authorize' response is not used.
+     */
+    _newApiMarkAuthorized() {
+        if (!this.accountInfo) return;
+        console.log(
+            `✅ Authenticated ${this.accountInfo.loginid} ` +
+            `(${this.accountInfo.isVirtual ? 'DEMO' : 'REAL'}) ` +
+            `balance=${this.accountInfo.balance} ${this.accountInfo.currency} via PAT/new-API`
+        );
+        this.wsReady = true;
+        this.initializeSubscriptions();
     }
 
     startPingKeepAlive() {
@@ -1017,7 +1223,7 @@ class EnhancedDerivTradingBot {
             basis: 'stake',
             contract_type: 'ACCU',
             currency: 'USD',
-            symbol: asset,
+            [this._proposalSymbolKey()]: asset,
             growth_rate: this.config.growthRate,
             limit_order: {
                 take_profit: this.takeProfitAmount.toFixed(2)
@@ -1028,7 +1234,7 @@ class EnhancedDerivTradingBot {
     }
 
     handleProposal(message) {
-        const asset = message.echo_req?.symbol;
+        const asset = message.echo_req?.symbol || message.echo_req?.underlying_symbol;
 
         if (message.error) {
             if (asset && this.activeTrades[asset]?.status === 'requesting_proposal') {
@@ -1326,7 +1532,7 @@ class EnhancedDerivTradingBot {
             basis: 'stake',
             contract_type: 'ACCU',
             currency: 'USD',
-            symbol: asset,
+            [this._proposalSymbolKey()]: asset,
             growth_rate: this.config.growthRate,
             limit_order: {
                 take_profit: this.takeProfitAmount.toFixed(2)
@@ -1750,7 +1956,18 @@ class EnhancedDerivTradingBot {
 // ══════════════════════════════════════════════════════════════════════════════
 // BOT INITIALIZATION
 // ══════════════════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────────────
+// Token can be either:
+//   • Legacy Deriv API token (short alphanumeric, e.g. '0P94g4WdSrSrzir')
+//   • New Personal Access Token (PAT) prefixed with 'pat_' — triggers the
+//     new REST + OTP WebSocket flow automatically.
+// appId / accountType only apply to the new (PAT) API. Generate a PAT at
+// https://app.deriv.com/account/api-token and register an app at
+// https://developers.deriv.com/.
+// ─────────────────────────────────────────────────────────────────────────
 const bot = new EnhancedDerivTradingBot('0P94g4WdSrSrzir', {
+    appId: '1089',           // override with your registered Deriv app_id
+    accountType: 'demo',     // 'demo' | 'real' (PAT mode only)
     initialStake: 1,
     initialStake2: 25,
     multiplier: 1,
