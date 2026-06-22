@@ -102,8 +102,9 @@ const CONFIG = Object.freeze({
   // losses the next stake is multiplied by `martingale`. Each subsequent
   // loss adds `martingaleStep` to the multiplier. A win resets to 1.0.
   martingale          : parseFloat('10'),    // base multiplier when active (0 = off)
-  martingaleStep      : parseFloat('100.0'),  // added per extra consecutive loss
+  martingaleStep      : parseFloat('100'),  // added per extra consecutive loss
   lossesBeforeMartingale: parseInt('0'),  // N losses before martingale kicks in
+  maxMartingaleStep   : parseFloat('3'),    // HARD CAP on the multiplier (e.g. 5 = never stake more than 5x base)
 
   // ─ Assets (Deriv synthetic indices) ─
   // assets: ('1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH500,CRASH600,CRASH900,CRASH1000')
@@ -142,7 +143,7 @@ const CONFIG = Object.freeze({
   },
 
   // ─ Logging ─
-  logFile : 'deriv_bot1a_05.log',
+  logFile : 'deriv_bot1a_001.log',
   logLevel: ('INFO').toUpperCase(),
 
   // ── VATP (Volatility-Adjusted Trend Persistence) strategy tunables ──
@@ -170,15 +171,6 @@ const CONFIG = Object.freeze({
   srasMin       : parseFloat('0.40'),  // min SRAS score to enter
   stayRefreshMs : parseInt  ('60000',10), // how often to refresh stay cache
   minRisingStreak: parseInt('2',   10), // require N consecutive rising stays
-
-  // ── Martingale (loss-recovery stake multiplier) ──
-  // Set MARTINGALE=0 to disable. After `lossesBeforeMartingale` consecutive
-  // losses the next stake is multiplied by `martingale`. Each subsequent
-  // loss adds `martingaleStep` to the multiplier. A win resets to 1.0.
-  martingale          : parseFloat('10'),    // base multiplier when active (0 = off)
-  martingaleStep      : parseFloat('100'),  // added per extra consecutive loss
-  lossesBeforeMartingale: parseInt('0'),  // N losses before martingale kicks in
-  maxMartingaleStep   : parseFloat('3'),    // HARD CAP on the multiplier (e.g. 5 = never stake more than 5x base)
 
   // ── State persistence ──
   stateFile           : 'accuAgentBot_state.json',  // path to JSON state file
