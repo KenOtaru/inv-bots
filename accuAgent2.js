@@ -104,7 +104,7 @@ const CONFIG = Object.freeze({
   martingale          : parseFloat('100'),    // base multiplier when active (0 = off)
   martingaleStep      : parseFloat('0.5'),  // added per extra consecutive loss
   lossesBeforeMartingale: parseInt('1'),  // N losses before martingale kicks in
-  maxMartingaleStep   : parseFloat('3'),    // HARD CAP on the multiplier (e.g. 5 = never stake more than 5x base)
+  maxMartingaleStep   : parseFloat('100'),    // HARD CAP on the multiplier (e.g. 5 = never stake more than 5x base)
 
   // ─ Assets (Deriv synthetic indices) ─
   // assets: ('1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH500,CRASH600,CRASH900,CRASH1000')
