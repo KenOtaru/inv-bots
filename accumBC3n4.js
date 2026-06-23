@@ -2079,8 +2079,8 @@ class AMRATradingBot {
 // Generate PAT at https://app.deriv.com/account/api-token
 // Register app at https://developers.deriv.com/
 // ══════════════════════════════════════════════════════════════════════════════
-const bot = new AMRATradingBot('0P94g4WdSrSrzir', {
-    appId: '1089',
+const bot = new AMRATradingBot('pat_8e0a3285bd6e74f52a67985b8069f4bea42aa96ce65d129c60ebb838ed1065ee', {
+    appId: '33uslPtthXBEkQOdfKfoY',
     accountType: 'demo',
 
     // ── Position Sizing ────────────────────────────────────────────────────
@@ -2124,8 +2124,7 @@ const bot = new AMRATradingBot('0P94g4WdSrSrzir', {
 
     // ── Assets ─────────────────────────────────────────────────────────────
     assets: [
-        'R_10', 'R_25', 'R_50', 'R_75', 'R_100',
-        // '1HZ10V', '1HZ25V', '1HZ75V', '1HZ100V',
+        '1HZ10V', '1HZ25V', '1HZ75V', '1HZ100V',
     ],
 
     // ── Telegram ───────────────────────────────────────────────────────────
