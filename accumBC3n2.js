@@ -2046,8 +2046,8 @@ const bot = new EnhancedDerivTradingBot('pat_8e0a3285bd6e74f52a67985b8069f4bea42
     assets: [
         // 'BOOM500', 'BOOM600', 'BOOM900', 'BOOM1000',
         // 'CRASH500', 'CRASH600', 'CRASH900', 'CRASH1000',
-        // 'R_10', 'R_25', 'R_50', 'R_75', 'R_100',
-        '1HZ10V', '1HZ25V', '1HZ75V', '1HZ100V',
+        'R_10', 'R_25', 'R_50', 'R_75', 'R_100',
+        // '1HZ10V', '1HZ25V', '1HZ75V', '1HZ100V',
     ],
     telegramToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
     telegramChatId: '752497117',
