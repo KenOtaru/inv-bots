@@ -99,7 +99,7 @@ class RestClient {
 // ══════════════════════════════════════════════════════════════════════════════
 // STATE PERSISTENCE MANAGER
 // ══════════════════════════════════════════════════════════════════════════════
-const STATE_FILE = path.join(__dirname, 'accumBC3n_01_state.json');
+const STATE_FILE = path.join(__dirname, 'accumBC3n2_01_state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -1102,7 +1102,7 @@ class EnhancedDerivTradingBot {
         const pnlStr = (this.totalProfitLoss >= 0 ? '+' : '') + '$' + Math.abs(this.totalProfitLoss).toFixed(2);
 
         await this.sendTelegramMessage(
-            `📊 <b>Session Summary Accum Boom/Crash</b>\n\n` +
+            `📊 <b>Session Summary Accum Boom/Crash2</b>\n\n` +
             `Trades: ${this.totalTrades}\n` +
             `W/L: ${this.totalWins}/${this.totalLosses}\n` +
             `Losses x2-x6: ${this.consecutiveLosses2} | ${this.consecutiveLosses3} | ${this.consecutiveLosses4} | ${this.consecutiveLosses5} | ${this.consecutiveLosses6}\n` +
@@ -1116,7 +1116,7 @@ class EnhancedDerivTradingBot {
 
     async sendDisconnectSummary() {
         await this.sendTelegramMessage(
-            `⚠️ <b>Accum Boom/Crash Disconnected</b>\n\n` +
+            `⚠️ <b>Accum Boom/Crash Disconnected2</b>\n\n` +
             `Trading Summary:\n` +
             `Total Trades: ${this.totalTrades}\n` +
             `Wins: ${this.totalWins} | Losses: ${this.totalLosses}\n` +
@@ -1402,7 +1402,7 @@ class EnhancedDerivTradingBot {
 
         // Telegram notification
         this.sendTelegramMessage(
-            `🚀 <b>TRADE OPENED (Accum Boom/Crash)</b>\n\n` +
+            `🚀 <b>TRADE OPENED (Accum Boom/Crash)2</b>\n\n` +
             `Asset: <b>${asset}</b>\n` +
             `stayedInArray: <b>[${this.stayedInArray[99]}|${this.stayedInArray[98]}|${this.stayedInArray[97]}|${this.stayedInArray[96]}|${this.stayedInArray[95]}|${this.stayedInArray[94]}]</b>\n` +
             `totalStayedInArray: ${this.totalStayedInArray}/${this.maxTotalStayedIn} (${this.totalStayedInArray2}/${this.maxTotalStayedIn2})\n` +
@@ -1689,7 +1689,7 @@ class EnhancedDerivTradingBot {
         );
 
         this.sendTelegramMessage(
-            `🚨 <b>STUCK TRADE RECOVERED Accum Boom/Crash[${reason}]</b>\n\n` +
+            `🚨 <b>STUCK TRADE RECOVERED Accum Boom/Crash2[${reason}]</b>\n\n` +
             `Contract: ${contractId}\n` +
             `Asset: ${stuckAsset}\n` +
             `Stake: $${stake.toFixed(2)}\n` +
@@ -1823,7 +1823,7 @@ class EnhancedDerivTradingBot {
 
         // Send Trade result notification with final stayedInArray
         this.sendTelegramMessage(
-            `<b>Accum Boom/Crash</b>\n` +
+            `<b>Accum Boom/Crash2</b>\n` +
             `${won ? '✅ WON' : '❌ LOSS'}\n` +
             `Asset: <b>${asset}</b>\n` +
             `Tick Passed: <b>${this.tickPassed}</b>\n` +
