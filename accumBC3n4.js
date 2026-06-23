@@ -352,6 +352,7 @@ class AMRATradingBot {
         this.stayInStats = {};           // { asset: { median, p25, p75, mean, greenFlow } }
         this.priceVelocity = {};         // { asset: moving average of abs(price change) }
         this.recentTradeOutcomes = {};   // { asset: [{ticksSurvived, won}] }
+        this.assetMetrics = {};          // { asset: { trades, wins, losses, profitLoss } }
 
         // ── Asset suspension ───────────────────────────────────────────────
         this.suspendedAssets = new Set();
