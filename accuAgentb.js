@@ -152,6 +152,7 @@ const CONFIG = Object.freeze({
   minConfidence: parseFloat('0.75'),
   maxHurst     : parseFloat('0.58'),  // 0.5 = random; >0.65 = strong trend (risky)
   maxVolRegime : parseInt  ('0',    10), // 0=low 1=normal 2=high 3=extreme
+  bbMiddleProximity: parseFloat('0.85'), // Bollinger Middle Band Proximity > 0.85 = Safest
   sessionWeighting: true,
 
   // Weights for the 4 VATP factors + CWMRAS components.
@@ -2216,6 +2217,10 @@ class TradingBot {
       // Hard gates: reject if any factor is outside the configured envelope.
       if (best.hurst > this.cfg.maxHurst) {
         logger.debug(`hurst too high (${best.hurst.toFixed(2)} > ${this.cfg.maxHurst}) — skipping`);
+        return;
+      }
+      if (best.bbMiddleProximity < this.cfg.bbMiddleProximity) {
+        logger.debug(`bbMiddleProximity too low (${best.bbMiddleProximity.toFixed(2)} > ${this.cfg.bbMiddleProximity}) — skipping`);
         return;
       }
       if (best.volRegime > this.cfg.maxVolRegime) {
