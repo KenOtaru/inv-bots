@@ -227,7 +227,18 @@ class EnhancedDerivTradingBot {
             takeProfitMultiplier2: config.takeProfitMultiplier2 || 0.20,
             filterNum: config.filterNum || 5,
             scanTimer: config.scanTimer || 60000,
-            STAYED_IN_THRESHOLD: config.STAYED_IN_THRESHOLD, 
+            STAYED_IN_THRESHOLD: config.STAYED_IN_THRESHOLD || 2400,
+            scanStake: config.scanStake || 1,
+            recoveryGrowthRate: config.recoveryGrowthRate || Math.min(config.growthRate || 0.02, 0.02),
+            recoveryStakeMultiplier: config.recoveryStakeMultiplier || 1.35,
+            maxStake: config.maxStake || 25,
+            signalMinScore: config.signalMinScore || 78,
+            recoverySignalMinScore: config.recoverySignalMinScore || 86,
+            minResetReservoir: config.minResetReservoir || 2400,
+            maxRecentSixStayedIn: config.maxRecentSixStayedIn || 160,
+            maxEntryHeat: config.maxEntryHeat || 2,
+            minRecentEntropy: config.minRecentEntropy || 2.05,
+            maxTickStdDev: config.maxTickStdDev || 4.5,
 
             // Reconnection
             maxReconnectAttempts: 50,
@@ -241,8 +252,8 @@ class EnhancedDerivTradingBot {
             analysisInterval: 1,
 
             // Telegram
-            telegramToken: '8218636914:AAGvaKFh8MT769-_9eOEiU4XKufL0aHRhZ4',
-            telegramChatId: '752497117',
+            telegramToken: config.telegramToken || process.env.TELEGRAM_BOT_TOKEN || '',
+            telegramChatId: config.telegramChatId || process.env.TELEGRAM_CHAT_ID || '',
         };
 
         // ── Trading state (original logic preserved) ─────────────────────────
@@ -357,6 +368,99 @@ class EnhancedDerivTradingBot {
         return stayedInArray.reduce((sum, value) => sum + (value || 0), 0);
     }
 
+    calculateStdDev(values) {
+        if (!Array.isArray(values) || values.length < 2) return 0;
+        const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+        const variance = values.reduce((sum, value) => {
+            const diff = value - mean;
+            return sum + diff * diff;
+        }, 0) / values.length;
+        return Math.sqrt(variance);
+    }
+
+    calculateDigitEntropy(digits) {
+        if (!Array.isArray(digits) || digits.length === 0) return 0;
+        const counts = {};
+        digits.forEach(digit => {
+            counts[digit] = (counts[digit] || 0) + 1;
+        });
+        return Object.values(counts).reduce((entropy, count) => {
+            const probability = count / digits.length;
+            return entropy - probability * Math.log2(probability);
+        }, 0);
+    }
+
+    clamp(value, min, max) {
+        return Math.max(min, Math.min(max, value));
+    }
+
+    getActiveGrowthRate() {
+        if (this.consecutiveLosses <= 0) return this.config.growthRate;
+        return this.config.recoveryGrowthRate;
+    }
+
+    getNextStake() {
+        const cappedStake = Math.min(this.currentStake, this.config.maxStake);
+        return Math.max(this.config.initialStake, cappedStake);
+    }
+
+    getAccumulatorSignal(asset, stayedInArray) {
+        if (!Array.isArray(stayedInArray) || stayedInArray.length < 100) {
+            return { pass: false, score: 0, reason: 'insufficient stayed-in telemetry' };
+        }
+
+        const totalStayedIn = this.calculateTotalStayedIn(stayedInArray);
+        const recentSix = stayedInArray.slice(-6);
+        const recentSixTotal = this.calculateTotalStayedIn(recentSix);
+        const resetAge = stayedInArray[99] || 0;
+        const previousAge = stayedInArray[98] || 0;
+        const prePreviousAge = stayedInArray[97] || 0;
+        const olderAge = stayedInArray[96] || 0;
+        const resetCompression = resetAge <= this.config.maxEntryHeat
+            && previousAge > prePreviousAge
+            && prePreviousAge > olderAge;
+
+        const digits = (this.tickHistory[asset] || []).slice(-60);
+        const entropy = this.calculateDigitEntropy(digits);
+        const prices = (this.priceHistories[asset] || []).slice(-40);
+        const returns = [];
+        for (let i = 1; i < prices.length; i++) {
+            returns.push(Math.abs(prices[i] - prices[i - 1]));
+        }
+        const tickStdDev = this.calculateStdDev(returns);
+
+        let score = 0;
+        score += this.clamp((totalStayedIn - this.config.minResetReservoir) / 20, 0, 35);
+        score += this.clamp((this.config.maxRecentSixStayedIn - recentSixTotal) / 2, 0, 20);
+        score += resetCompression ? 20 : -20;
+        score += this.clamp((entropy - this.config.minRecentEntropy) * 14, -18, 18);
+        score += this.clamp((this.config.maxTickStdDev - tickStdDev) * 4, -15, 15);
+
+        const minScore = this.consecutiveLosses > 0
+            ? this.config.recoverySignalMinScore
+            : this.config.signalMinScore;
+
+        const pass = score >= minScore
+            && totalStayedIn >= this.config.minResetReservoir
+            && recentSixTotal <= this.config.maxRecentSixStayedIn
+            && resetCompression
+            && entropy >= this.config.minRecentEntropy
+            && tickStdDev <= this.config.maxTickStdDev;
+
+        return {
+            pass,
+            score,
+            minScore,
+            totalStayedIn,
+            recentSixTotal,
+            resetAge,
+            entropy,
+            tickStdDev,
+            resetCompression,
+            reason: pass ? 'QCE pressure setup' : 'score or guardrail failed'
+        };
+    }
+
     /**
      * Check if trading conditions are met based on stayedInArray values
      * @param {Array} stayedInArray - Array of stayed-in values
@@ -376,7 +480,7 @@ class EnhancedDerivTradingBot {
         // Check individual thresholds for recent values
         const recentThresholds = (
             // stayedInArray[99] >= stayedInArray[98] && stayedInArray[99] <= (stayedInArray[98] + 1) &&
-            stayedInArray[99] <= 0 &&
+            stayedInArray[99] <= this.config.maxEntryHeat &&
             stayedInArray[98] > stayedInArray[97]  
             &&
             stayedInArray[97] > stayedInArray[96] 
@@ -524,16 +628,17 @@ class EnhancedDerivTradingBot {
     requestProposalForScan(asset) {
         if (!this.wsReady) return;
 
+        const scanStake = Math.max(this.config.scanStake, this.config.initialStake);
         const proposal = {
             proposal: 1,
-            amount: this.currentStake.toFixed(2),
+            amount: scanStake.toFixed(2),
             basis: 'stake',
             contract_type: 'ACCU',
             currency: 'USD',
             [this._proposalSymbolKey()]: asset,
-            growth_rate: this.config.growthRate,
+            growth_rate: this.getActiveGrowthRate(),
             limit_order: {
-                take_profit: (this.currentStake * this.config.takeProfitMultiplier).toFixed(2)
+                take_profit: (scanStake * this.config.takeProfitMultiplier).toFixed(2)
             },
             passthrough: {
                 action: 'scan_only',
@@ -638,7 +743,7 @@ class EnhancedDerivTradingBot {
                 this.Sys1 = state.trading.Sys1 || 0;
                 this.Sys2 = state.trading.Sys2 || 0;
                 this.kCountNum = state.trading.kCountNum || 0;
-                this.filterNum = state.trading.filterNum || 0;
+                this.filterNum = state.trading.filterNum || this.config.filterNum;
             }
             if (state.assetMetrics) this.assetMetrics = state.assetMetrics;
             if (state.hourlyStats) this.hourlyStats = state.hourlyStats;
@@ -1115,18 +1220,19 @@ class EnhancedDerivTradingBot {
     // ✅ FIX 4: Belt-and-suspenders — never send a proposal for a suspended asset
     if (!this.isAssetAllowed(asset)) return;
 
+    const stake = this.getNextStake();
     this.takeProfitAmount = this.consecutiveLosses < 1
-        ? this.currentStake * this.config.takeProfitMultiplier
-        : this.currentStake * this.config.takeProfitMultiplier2;
+        ? stake * this.config.takeProfitMultiplier
+        : stake * this.config.takeProfitMultiplier2;
 
     const proposal = {
         proposal: 1,
-        amount: this.currentStake.toFixed(2),
+        amount: stake.toFixed(2),
         basis: 'stake',
         contract_type: 'ACCU',
         currency: 'USD',
         [this._proposalSymbolKey()]: asset,
-        growth_rate: this.config.growthRate,
+        growth_rate: this.getActiveGrowthRate(),
         limit_order: {
             take_profit: this.takeProfitAmount.toFixed(2)
         }
@@ -1231,20 +1337,28 @@ class EnhancedDerivTradingBot {
         .filter(digit => digitFrequency[digit] === this.filterNum)
         .map(Number);
 
+    const signal = this.getAccumulatorSignal(asset, stayedInArray);
     const condition  = this.checkTradeCondition(stayedInArray, this.consecutiveLosses, this.config.STAYED_IN_THRESHOLD, asset);
-    const condition2 = this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 160, asset);
+    const condition2 = this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, this.config.maxRecentSixStayedIn, asset);
 
-    if ((condition && condition2 )) {
+    console.log(
+        `   QCE Score: ${signal.score.toFixed(1)}/${signal.minScore} | ` +
+        `Reservoir: ${signal.totalStayedIn} | Recent6: ${signal.recentSixTotal} | ` +
+        `Entropy: ${signal.entropy.toFixed(2)} | Vol: ${signal.tickStdDev.toFixed(4)}`
+    );
+
+    if (signal.pass && condition && condition2) {
         console.log(`   Entry condition: ${condition ? '✅ MET' : '❌ NOT MET'}`);
 
         this.tradedDigitArray.push(this.stayedInArray[99]);
         this.filteredArray = appearedOnceArray;
+        this.lastSignalReport = signal;
 
         console.log(`   Traded Digit Array: [${this.tradedDigitArray.join(', ')}]`);
 
-        const growthRate = this.config.growthRate;
+        const growthRate = this.getActiveGrowthRate();
         console.log(`\n🎯 ENTRY SIGNAL: ${asset}`);
-        console.log(`   Growth Rate: ${(growthRate * 100).toFixed(0)}% | Stake: $${this.currentStake.toFixed(2)}`);
+        console.log(`   Growth Rate: ${(growthRate * 100).toFixed(0)}% | Stake: $${this.getNextStake().toFixed(2)}`);
         console.log(`   Take Profit: $${this.takeProfitAmount.toFixed(2)}`);
 
         this.placeTrade(asset);
@@ -1255,6 +1369,8 @@ class EnhancedDerivTradingBot {
         if (this.tradeInProgress) return;
 
         const proposalId = this.assetStates[asset]?.proposalId;
+        const stake = this.getNextStake();
+        const growthRate = this.getActiveGrowthRate();
         if (!proposalId) {
             console.error(`❌ No valid proposal ID for ${asset}`);
             return;
@@ -1262,18 +1378,20 @@ class EnhancedDerivTradingBot {
 
         console.log(`\n🚀 PLACING TRADE: ${asset}`);
         console.log(`   Proposal ID: ${proposalId}`);
-        console.log(`   Stake: $${this.currentStake.toFixed(2)}`);
+        console.log(`   Stake: $${stake.toFixed(2)}`);
 
         this.sendRequest({
             buy: proposalId,
-            price: this.currentStake.toFixed(2)
+            price: stake.toFixed(2)
         });
 
         this.tradeInProgress = true;
         this.activeTrades[asset] = {
             status: 'buying',
             proposalId,
-            stake: this.currentStake,
+            stake,
+            growthRate,
+            signal: this.lastSignalReport || null,
             entryTime: Date.now(),
         };
 
@@ -1288,8 +1406,9 @@ class EnhancedDerivTradingBot {
             `Asset: <b>${asset}</b>\n` +
             `stayedInArray: <b>[${this.stayedInArray[99]}|${this.stayedInArray[98]}|${this.stayedInArray[97]}|${this.stayedInArray[96]}|${this.stayedInArray[95]}|${this.stayedInArray[94]}]</b>\n` +
             `totalStayedInArray: ${this.totalStayedInArray}/${this.maxTotalStayedIn} (${this.totalStayedInArray2}/${this.maxTotalStayedIn2})\n` +
+            `QCE Score: <b>${trade.signal ? trade.signal.score.toFixed(1) : 'N/A'}</b>\n` +
             `Stake: $${trade.stake.toFixed(2)}\n` +
-            `Growth Rate: ${(this.config.growthRate * 100).toFixed(0)}%\n` +
+            `Growth Rate: ${(trade.growthRate * 100).toFixed(0)}%\n` +
             `Take Profit: $${this.takeProfitAmount.toFixed(2)}`
         );
 
@@ -1404,12 +1523,12 @@ class EnhancedDerivTradingBot {
         // Request a fresh proposal to get the current ticks_stayed_in
         const proposal = {
             proposal: 1,
-            amount: this.currentStake.toFixed(2),
+            amount: trade.stake.toFixed(2),
             basis: 'stake',
             contract_type: 'ACCU',
             currency: 'USD',
             [this._proposalSymbolKey()]: asset,
-            growth_rate: this.config.growthRate,
+            growth_rate: trade.growthRate || this.getActiveGrowthRate(),
             limit_order: {
                 take_profit: this.takeProfitAmount.toFixed(2)
             },
@@ -1679,7 +1798,14 @@ class EnhancedDerivTradingBot {
             // if (this.consecutiveLosses >= 2) {
                 // this.currentStake = Math.ceil(this.currentStake * this.config.multiplier2 * 100) / 100;
             // } else {
-                this.currentStake = Math.ceil(this.currentStake * this.config.multiplier * 100) / 100;
+                const recoveryStake = Math.max(
+                    this.currentStake * this.config.multiplier,
+                    this.currentStake * this.config.recoveryStakeMultiplier
+                );
+                this.currentStake = Math.min(
+                    this.config.maxStake,
+                    Math.ceil(recoveryStake * 100) / 100
+                );
             // }
         }
 
