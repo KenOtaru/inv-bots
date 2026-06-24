@@ -1469,7 +1469,8 @@ class AMRATradingBot {
         // ── Decision ────────────────────────────────────────────────────────
         const primaryConditions = conditionA && conditionB;
         const confirmationConditions = conditionC && conditionE;
-        const finalEntry = primaryConditions && (confirmationConditions || conditionD);
+        // const finalEntry = primaryConditions && (confirmationConditions || conditionD);
+        const finalEntry = primaryConditions && confirmationConditions && conditionD;
 
         if (finalEntry) {
             console.log(`\n   AMRA Entry Signal: ${asset}`);
