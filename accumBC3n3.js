@@ -2115,8 +2115,8 @@ const bot = new AMRATradingBot('0P94g4WdSrSrzir', {
     takeProfitMultiplierBase: 0.12,
 
     // ── Confidence Scoring ─────────────────────────────────────────────────
-    minConfidenceThreshold: 0.55,
-    recoveryConfidenceThreshold: 0.50,
+    minConfidenceThreshold: 0.85,
+    recoveryConfidenceThreshold: 0.80,
 
     // ── Dynamic Filter ─────────────────────────────────────────────────────
     minFilterNum: 3,
