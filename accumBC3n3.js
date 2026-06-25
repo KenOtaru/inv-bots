@@ -1464,7 +1464,7 @@ class AMRATradingBot {
         const conditionC = stats && stats.greenFlow >= this.config.greenFlowThreshold;
 
         // Condition D: Confidence score exceeds threshold
-        const conditionD = confidenceScore >= threshold;
+        const conditionD = confidenceScore >= this.config.minConfidenceThreshold;
 
         // Condition E: Last 6 stayed-in values sum < 160 (short-term range check)
         const totalLast6 = stayedInArray2.reduce((a, b) => a + b, 0);
@@ -1484,7 +1484,7 @@ class AMRATradingBot {
         console.log(`   stayIn trend: ${stats?.trend?.toFixed(2) || '?'} | p25: ${stats?.p25 || '?'} | greenFlow: ${stats?.greenFlow?.toFixed(2) || '?'}`);
 
 
-        if (this.trade && confirmationConditions) {
+        if (this.trade && conditionD) {
             console.log(`\n   AMRA Entry Signal: ${asset}`);
             console.log(`   Regime: ${regime} | Confidence: ${confidenceScore.toFixed(2)} | Filter: ${this.filterNum}`);
             console.log(`   A(stayIn pattern): ${conditionA} | B(total>${this.config.STAYED_IN_THRESHOLD}): ${conditionB}`);
