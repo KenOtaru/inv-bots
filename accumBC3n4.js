@@ -507,10 +507,10 @@ class AMRATradingBot {
         const p75 = sorted[p75Index];
         const mean = stayedInArray.reduce((a, b) => a + b, 0) / n;
 
-        // Green flow: fraction of values above the median of their local window
+        // Green flow: fraction of recent ticks where the price stayed within the barrier (v > 0)
+        // Low = volatile/breached market, High = calm/staying market
         const recentWindow = stayedInArray.slice(-this.config.tickFlowLookback);
-        const windowMedian = [...recentWindow].sort((a, b) => a - b)[Math.floor(recentWindow.length / 2)];
-        const greenCount = recentWindow.filter(v => v >= windowMedian).length;
+        const greenCount = recentWindow.filter(v => v > 0).length;
         const greenFlow = greenCount / recentWindow.length;
 
         // Trend: are recent values rising or falling?
@@ -526,7 +526,6 @@ class AMRATradingBot {
             mean,
             greenFlow,
             trend: newerMean - olderMean,
-            windowMedian,
         };
     }
 
