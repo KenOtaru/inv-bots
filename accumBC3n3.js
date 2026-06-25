@@ -479,7 +479,8 @@ class AMRATradingBot {
         if (prevRegime !== newRegime) {
             const emoji = newRegime === 'calm' ? '🟢' : newRegime === 'normal' ? '🟡' : '🔴';
             console.log(`${emoji} ${asset} regime: ${prevRegime} → ${newRegime} (velocity: ${this.priceVelocity[asset]?.toExponential(3)})`);
-            if(prevRegime === 'normal' && newRegime === 'calm') {
+            // if(prevRegime === 'normal' && newRegime === 'calm') {
+            if(newRegime === 'normal' && prevRegime !== 'normal' && prevRegime !== 'calm') {
                 this.trade = true;
             }
         }
@@ -1476,7 +1477,7 @@ class AMRATradingBot {
         const confirmationConditions = conditionC && conditionE;
         const finalEntry = primaryConditions && confirmationConditions && conditionD && this.trade;
 
-        if (finalEntry) {
+        if (this.trade) {
             console.log(`\n   AMRA Entry Signal: ${asset}`);
             console.log(`   Regime: ${regime} | Confidence: ${confidenceScore.toFixed(2)} | Filter: ${this.filterNum}`);
             console.log(`   A(stayIn pattern): ${conditionA} | B(total>${this.config.STAYED_IN_THRESHOLD}): ${conditionB}`);
