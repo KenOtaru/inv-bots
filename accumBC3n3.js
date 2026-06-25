@@ -479,8 +479,8 @@ class AMRATradingBot {
         if (prevRegime !== newRegime) {
             const emoji = newRegime === 'calm' ? '🟢' : newRegime === 'normal' ? '🟡' : '🔴';
             console.log(`${emoji} ${asset} regime: ${prevRegime} → ${newRegime} (velocity: ${this.priceVelocity[asset]?.toExponential(3)})`);
-            // if(prevRegime === 'normal' && newRegime === 'calm') {
-            if(newRegime === 'normal' && prevRegime !== 'normal' && prevRegime !== 'calm') {
+            if(prevRegime === 'normal' && newRegime === 'calm') {
+            // if(newRegime === 'normal' && prevRegime !== 'normal' && prevRegime !== 'calm') {
                 this.trade = true;
             }
         }
