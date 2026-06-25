@@ -2100,7 +2100,7 @@ const bot = new AMRATradingBot('0P94g4WdSrSrzir', {
     // ── Position Sizing ────────────────────────────────────────────────────
     initialStake: 1,
     maxRecoveryMultiplier: 8,
-    maxConsecutiveLosses: 10,
+    maxConsecutiveLosses: 3,
     stopLoss: 127,
     takeProfit: 2500,
 
@@ -2115,7 +2115,7 @@ const bot = new AMRATradingBot('0P94g4WdSrSrzir', {
     takeProfitMultiplierBase: 0.12,
 
     // ── Confidence Scoring ─────────────────────────────────────────────────
-    minConfidenceThreshold: 0.85,
+    minConfidenceThreshold: 0.80,
     recoveryConfidenceThreshold: 0.80,
 
     // ── Dynamic Filter ─────────────────────────────────────────────────────
