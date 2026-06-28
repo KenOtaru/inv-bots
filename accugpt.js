@@ -319,13 +319,14 @@ function nextStake() {
 async function openAccumulator(candidate) {
   const stake = nextStake();
   const analysis = candidate.stats;
+  const symbolKey = _isPat ? 'underlying_symbol' : 'symbol';
   const proposalPayload = {
     proposal: 1,
     amount: stake,
     basis: 'stake',
     contract_type: 'ACCU',
     currency: CONFIG.currency,
-    symbol: candidate.symbol,
+    [symbolKey]: candidate.symbol,
     growth_rate: CONFIG.growthRate,
   };
 
