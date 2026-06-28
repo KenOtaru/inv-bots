@@ -24,7 +24,9 @@ const CONFIG = {
   telegramChatId: '752497117',
   currency: 'USD',
   stake: Number(1),
-  maxStake: Number(110),
+  multiplier: Number(10),
+  multiplier2: Number(110),
+  maxStake: Number(120),
   growthRate: Number(0.01),
   maxOpenSeconds: Number(240),
   targetProfitPct: Number(0.12),
@@ -36,6 +38,8 @@ const CONFIG = {
   tradeWatchdogMs: Number(180000),
   pollTimeoutMs: Number(90000),
   tickWindow: Number(80),
+  confidence: Number(0.76),
+  momentum: Number(0.0012),
   reconnectBaseMs: Number(1000),
   reconnectMaxMs: Number(60000),
   stateFile: path.join(__dirname, 'bot-state1.json'),
@@ -305,7 +309,7 @@ async function evaluateMarket() {
 
   const ranked = CONFIG.symbols
     .map((symbol) => ({ symbol, stats: indicators(tickBooks.get(symbol) || []) }))
-    .filter((x) => x.stats && x.stats.score >= 0.72 && Math.abs(x.stats.drift) < 0.00025 && Math.abs(x.stats.momentum5) < 0.0012)
+    .filter((x) => x.stats && x.stats.score >= CONFIG.confidence && Math.abs(x.stats.drift) < 0.00025 && Math.abs(x.stats.momentum5) < CONFIG.momentum)
     .sort((a, b) => b.stats.score - a.stats.score);
 
   if (!ranked.length) return;
@@ -317,7 +321,7 @@ function hourTradeCount() {
 }
 
 function nextStake() {
-  const base = CONFIG.stake * (state.consecutiveLosses >= 1 ? 10 : 1);
+  const base = CONFIG.stake * (state.consecutiveLosses === 1 ? CONFIG.multiplier : state.consecutiveLosses === 2 ? CONFIG.multiplier2 : 1);
   return Math.min(CONFIG.maxStake, Math.max(0.35, Number(base.toFixed(2))));
 }
 
