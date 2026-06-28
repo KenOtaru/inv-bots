@@ -319,33 +319,35 @@ function nextStake() {
 async function openAccumulator(candidate) {
   const stake = nextStake();
   const analysis = candidate.stats;
+  const growthRate = Math.max(0.01, Math.min(0.05, +(+CONFIG.growthRate).toFixed(4)));
   const symbolKey = _isPat ? 'underlying_symbol' : 'symbol';
-  const proposalPayload = {
-    proposal: 1,
-    amount: stake,
-    basis: 'stake',
-    contract_type: 'ACCU',
-    currency: CONFIG.currency,
-    [symbolKey]: candidate.symbol,
-    growth_rate: CONFIG.growthRate,
-  };
 
   try {
-    const proposal = await api(proposalPayload);
-    const proposalId = proposal.proposal && proposal.proposal.id;
-    if (!proposalId) throw new Error('No proposal id returned');
-    proposals.set(proposalId, { candidate, stake, analysis });
-    const buy = await api({ buy: proposalId, price: stake });
-    const contractId = buy.buy.contract_id;
+    const pres = await api({
+      proposal: 1,
+      amount: stake,
+      basis: 'stake',
+      contract_type: 'ACCU',
+      currency: CONFIG.currency,
+      [symbolKey]: candidate.symbol,
+      growth_rate: growthRate,
+    }, 20000);
+    const p = pres.proposal;
+    if (!p?.id) throw new Error('No proposal id returned');
+    proposals.set(p.id, { candidate, stake, analysis });
+    const bres = await api({ buy: p.id, price: p.ask_price }, 20000);
+    const b = bres.buy;
+    if (!b?.contract_id) throw new Error('Buy did not return contract_id');
+    const contractId = b.contract_id;
     currentContract = {
       id: contractId,
       symbol: candidate.symbol,
       stake,
       openedAt: Date.now(),
       analysis,
-      buyPrice: Number(buy.buy.buy_price || stake),
+      buyPrice: Number(b.buy_price || stake),
     };
-    await notify(`📈 Trade opened\nSymbol: ${candidate.symbol}\nStake: ${stake} ${CONFIG.currency}\nGrowth: ${(CONFIG.growthRate * 100).toFixed(2)}%\nScore: ${analysis.score.toFixed(3)} Vol: ${analysis.vol.toExponential(2)}\nOverall P/L: ${state.overallProfit.toFixed(2)} ${CONFIG.currency}\nConsecutive losses: ${state.consecutiveLosses}`);
+    await notify(`📈 Trade opened\nSymbol: ${candidate.symbol}\nStake: ${stake} ${CONFIG.currency}\nGrowth: ${(growthRate * 100).toFixed(2)}%\nScore: ${analysis.score.toFixed(3)} Vol: ${analysis.vol.toExponential(2)}\nOverall P/L: ${state.overallProfit.toFixed(2)} ${CONFIG.currency}\nConsecutive losses: ${state.consecutiveLosses}`);
     await api({ proposal_open_contract: 1, contract_id: contractId, subscribe: 1 });
     startWatchdog(contractId);
   } catch (error) {
