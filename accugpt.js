@@ -12,6 +12,8 @@
 
 const fs = require('fs');
 const path = require('path');
+const https = require('https');
+const { URL } = require('url');
 const WebSocket = require('ws');
 
 const CONFIG = {
@@ -43,6 +45,74 @@ const CONFIG = {
 
 const sep = CONFIG.endpoint.includes('?') ? '&' : '?';
 CONFIG.endpoint = `${CONFIG.endpoint}${sep}app_id=${CONFIG.appId}`;
+
+const _isPat = /^pat_[a-z0-9_\-]{16,}$/i.test(CONFIG.token.trim());
+
+async function restApi(method, path, body) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(path, 'https://api.derivws.com');
+    const payload = body != null ? JSON.stringify(body) : null;
+    const req = https.request({
+      method, hostname: url.hostname, path: url.pathname + url.search,
+      headers: {
+        'Authorization': `Bearer ${CONFIG.token}`,
+        'Deriv-App-ID': CONFIG.appId,
+        'Accept': 'application/json',
+        ...(payload ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) } : {}),
+      },
+      timeout: 15000,
+    }, res => {
+      let data = '';
+      res.on('data', d => data += d);
+      res.on('end', () => { try { resolve({ status: res.statusCode, body: JSON.parse(data) }); } catch { resolve({ status: res.statusCode, body: data }); } });
+    });
+    req.on('timeout', () => req.destroy(new Error('REST timeout')));
+    req.on('error', reject);
+    if (payload) req.write(payload);
+    req.end();
+  });
+}
+
+async function patConnect() {
+  try {
+    console.log('PAT token detected — using OTP flow');
+    const accRes = await restApi('GET', '/trading/v1/options/accounts');
+    if (accRes.status !== 200) throw new Error(`Account list failed (${accRes.status})`);
+    const accounts = Array.isArray(accRes.body?.data) ? accRes.body.data : [];
+    if (!accounts.length) throw new Error('No Options accounts found');
+    const acct = accounts.find(a => (a.account_type || '').toLowerCase() === 'demo') || accounts[0];
+    console.log(`Account: ${acct.account_id} (${acct.account_type})`);
+
+    const otpRes = await restApi('POST', `/trading/v1/options/accounts/${encodeURIComponent(acct.account_id)}/otp`);
+    if (otpRes.status !== 200) throw new Error(`OTP failed (${otpRes.status})`);
+    const wsUrl = otpRes.body?.data?.url;
+    if (!wsUrl) throw new Error('OTP response missing data.url');
+
+    console.log('Connecting via PAT OTP...');
+    ws = new WebSocket(wsUrl);
+    ws.on('open', async () => {
+      connected = true;
+      reconnectAttempt = 0;
+      console.log('Connected and authorized via PAT');
+      await notify('✅ Deriv bot connected and authorized (PAT).');
+      for (const symbol of CONFIG.symbols) subscribeTicks(symbol);
+    });
+    ws.on('message', (raw) => handleMessage(raw));
+    ws.on('error', async (error) => {
+      console.error('WebSocket error:', error.message);
+      await notify(`⚠️ Network/server error: ${error.message}`);
+    });
+    ws.on('close', () => {
+      connected = false;
+      console.error('Disconnected. Reconnecting...');
+      setTimeout(connect, reconnectDelay());
+    });
+  } catch (error) {
+    console.error('PAT connection failed:', error.message);
+    await notify(`❌ PAT connection failed: ${error.message}. Reconnecting...`);
+    setTimeout(connect, reconnectDelay());
+  }
+}
 
 const state = loadState();
 let ws;
@@ -113,6 +183,8 @@ function ensureHour(day, hour = gmtHourKey()) {
 }
 
 function connect() {
+  if (_isPat) { patConnect(); return; }
+
   ws = new WebSocket(CONFIG.endpoint);
 
   ws.on('open', async () => {
