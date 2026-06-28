@@ -27,7 +27,10 @@ const CONFIG = {
   multiplier: Number(10),
   multiplier2: Number(110),
   maxStake: Number(120),
-  growthRate: Number(0.01),
+  confidence: Number(0.76), //0.72
+  momentum: Number(0.0008), //0.0012
+  drift: Number(0.00020), //0.00025
+  growthRate: Number(0.02),
   maxOpenSeconds: Number(240),
   targetProfitPct: Number(0.12),
   stopLossPct: Number(0.99),
@@ -38,8 +41,6 @@ const CONFIG = {
   tradeWatchdogMs: Number(180000),
   pollTimeoutMs: Number(90000),
   tickWindow: Number(80),
-  confidence: Number(0.76),
-  momentum: Number(0.0012),
   reconnectBaseMs: Number(1000),
   reconnectMaxMs: Number(60000),
   stateFile: path.join(__dirname, 'bot-state1.json'),
@@ -309,7 +310,7 @@ async function evaluateMarket() {
 
   const ranked = CONFIG.symbols
     .map((symbol) => ({ symbol, stats: indicators(tickBooks.get(symbol) || []) }))
-    .filter((x) => x.stats && x.stats.score >= CONFIG.confidence && Math.abs(x.stats.drift) < 0.00025 && Math.abs(x.stats.momentum5) < CONFIG.momentum)
+    .filter((x) => x.stats && x.stats.score >= CONFIG.confidence && Math.abs(x.stats.drift) < CONFIG.drift && Math.abs(x.stats.momentum5) < CONFIG.momentum)
     .sort((a, b) => b.stats.score - a.stats.score);
 
   if (!ranked.length) return;
