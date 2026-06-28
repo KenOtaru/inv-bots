@@ -15,9 +15,9 @@ const path = require('path');
 const WebSocket = require('ws');
 
 const CONFIG = {
-  appId: Number(1089),
-  token: '0P94g4WdSrSrzir',
-  endpoint: 'https://api.derivws.com',
+  appId: '33uslPtthXBEkQOdfKfoY',
+  token: 'pat_8e0a3285bd6e74f52a67985b8069f4bea42aa96ce65d129c60ebb838ed1065ee',
+  endpoint: 'wss://ws.derivws.com/websockets/v3',
   telegramBotToken: '8218636914:AAGvaKFh8MT769-_9eOEiU4XKufL0aHRhZ4',
   telegramChatId: '752497117',
   currency: 'USD',
@@ -41,7 +41,8 @@ const CONFIG = {
   dryRun: false,
 };
 
-if (!CONFIG.endpoint) CONFIG.endpoint = `wss://ws.derivws.com/websockets/v3?app_id=${CONFIG.appId}`;
+const sep = CONFIG.endpoint.includes('?') ? '&' : '?';
+CONFIG.endpoint = `${CONFIG.endpoint}${sep}app_id=${CONFIG.appId}`;
 
 const state = loadState();
 let ws;

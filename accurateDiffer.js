@@ -120,7 +120,7 @@ function listEnv(name, def) {
 const CONFIG = Object.freeze({
   // Deriv API
   apiToken : strEnv('DERIV_API_TOKEN', 'pat_8e0a3285bd6e74f52a67985b8069f4bea42aa96ce65d129c60ebb838ed1065ee'),
-  appId    : strEnv('DERIV_APP_ID', '10833uslPtthXBEkQOdfKfoY9'),//1089
+  appId    : strEnv('DERIV_APP_ID', '33uslPtthXBEkQOdfKfoY'),//1089
   accountId: strEnv('DERIV_ACCOUNT_ID', ''), // recommended/required for PAT new API
   accountType: strEnv('DERIV_ACCOUNT_TYPE', 'demo').toLowerCase(), // demo | real
   legacyWsUrl: strEnv('DERIV_LEGACY_WS_URL', 'wss://ws.derivws.com/websockets/v3'),
