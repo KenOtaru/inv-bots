@@ -134,6 +134,7 @@ let currentContract = null;
 let contractSubscriptionId = null;
 let watchdogTimer = null;
 let hourlyTimer = null;
+let hourlyBootTimer = null;
 let endDayTimer = null;
 let tradingPausedUntil = 0;
 let proposalPending = false;
@@ -485,8 +486,16 @@ function formatTradeResult(trade, day) {
 }
 
 function scheduleReports() {
-  hourlyTimer = setInterval(() => sendHourlyReport().catch(console.error), 60 * 60 * 1000);
+  const now = new Date();
+  const nextHour = new Date(now);
+  nextHour.setUTCHours(nextHour.getUTCHours() + 1, 0, 0, 0);
+  const msToNextHour = nextHour.getTime() - now.getTime();
+  hourlyBootTimer = setTimeout(() => {
+    sendHourlyReport();
+    hourlyTimer = setInterval(() => sendHourlyReport(), 3600_000);
+  }, msToNextHour);
   scheduleEndOfDayReport();
+  console.log(`Hourly report: first in ${(msToNextHour / 60000).toFixed(1)}m, then every 60m`);
 }
 
 function scheduleEndOfDayReport() {
@@ -500,10 +509,45 @@ function scheduleEndOfDayReport() {
   }, next.getTime() - now.getTime());
 }
 
+function money(n) {
+  const x = Number(n || 0);
+  return `${x >= 0 ? '+' : ''}${x.toFixed(2)} ${CONFIG.currency}`;
+}
+function pad(n) { return String(n).padStart(2, '0'); }
+
 async function sendHourlyReport() {
-  const day = ensureDay();
-  const hour = ensureHour(gmtDateKey());
-  await notify(`🕐 Hourly Telegram Trade notification (Tr) ${gmtHourKey()}\nTrades: ${hour.trades}\nWins/Losses: ${hour.wins}/${hour.losses}\nHour P/L: ${hour.profit.toFixed(2)} ${CONFIG.currency}\nDay P/L: ${day.profit.toFixed(2)} ${CONFIG.currency}\nOverall P/L: ${state.overallProfit.toFixed(2)} ${CONFIG.currency}`);
+  const now = new Date();
+  const prev = new Date(now.getTime() - 3600_000);
+  const hour = prev.getUTCHours();
+  const date = prev.toISOString().slice(0, 10);
+  const trades = (state.trades || []).filter(t => {
+    const d = new Date(t.closedAt || t.openedAt);
+    return d.getUTCHours() === hour && d.toISOString().slice(0, 10) === date;
+  });
+  const wins = trades.filter(t => t.won);
+  const losses = trades.filter(t => !t.won);
+  const total = trades.reduce((s, t) => s + Number(t.profit || 0), 0);
+  const gw = wins.reduce((s, t) => s + Number(t.profit || 0), 0);
+  const gl = Math.abs(losses.reduce((s, t) => s + Number(t.profit || 0), 0));
+  const pf = gl > 0 ? gw / gl : (gw > 0 ? Infinity : 0);
+
+  if (!trades.length) {
+    await notify(`⏰ Hourly summary (${pad(hour)}:00 – ${pad(hour)}:59)\n\nNo trades this hour.`);
+    return;
+  }
+
+  let msg =
+    `⏰ Hourly Summary (${pad(hour)}:00 – ${pad(hour)}:59)\n\n` +
+    `📊 Trades: ${trades.length}  ✅${wins.length}  ❌${losses.length}\n` +
+    `📈 Win rate: ${trades.length ? ((wins.length / trades.length) * 100).toFixed(1) : 0}%\n` +
+    `💰 P/L: ${money(total)}\n` +
+    `🏆 Profit factor: ${pf === Infinity ? '∞' : pf.toFixed(2)}\n` +
+    `📋 Detail:\n`;
+  trades.forEach((t, i) => {
+    const e = t.won ? '✅' : '❌';
+    msg += `  ${i + 1}. ${e} #${t.contractId} ${t.symbol} ${money(t.profit)}\n`;
+  });
+  await notify(msg);
 }
 
 async function sendEndOfDayReport() {
