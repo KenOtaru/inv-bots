@@ -28,8 +28,8 @@ const CONFIG = {
   multiplier2: Number(110),
   multiplier3: Number(1110),
   maxStake: Number(1220),
-  confidence: Number(0.76), //0.72
-  confidence2: Number(0.84), 
+  confidence: Number(0.77), //0.72
+  confidence2: Number(0.77), 
   momentum: Number(0.0008), //0.0012
   drift: Number(0.00020), //0.00025 
   volume: Number(0.00020),
@@ -369,7 +369,7 @@ async function openAccumulator(candidate) {
       buyPrice: Number(b.buy_price || stake),
     };
     proposalPending = false;
-    await notify(`📈 Trade opened\nSymbol: ${candidate.symbol}\nStake: ${stake} ${CONFIG.currency}\nGrowth: ${(growthRate * 100).toFixed(2)}%\nScore: ${analysis.score.toFixed(3)} Vol: ${analysis.vol.toExponential(2)}\nOverall P/L: ${state.overallProfit.toFixed(2)} ${CONFIG.currency}\nConsecutive losses: ${state.consecutiveLosses}`);
+    await notify(`📈 Trade opened\nSymbol: ${candidate.symbol}\nStake: ${stake} ${CONFIG.currency}\nGrowth: ${(growthRate * 100).toFixed(2)}%\nScore: ${analysis.score.toFixed(3)} Vol: ${analysis.vol.toExponential(2)}\nDrift: ${analysis.drift}\nMomentum: ${analysis.momentum5}\nRange: ${analysis.rangePosition}\nOverall P/L: ${state.overallProfit.toFixed(2)} ${CONFIG.currency}\nConsecutive losses: ${state.consecutiveLosses}`);
     await api({ proposal_open_contract: 1, contract_id: contractId, subscribe: 1 });
     startWatchdog(contractId);
   } catch (error) {
@@ -460,6 +460,7 @@ async function finalizeTrade(contract, profit) {
   if (won) {
     state.wins += 1; day.wins += 1; hour.wins += 1;
     state.consecutiveLosses = 0; day.consecutiveLosses = 0;
+    CONFIG.confidence = CONFIG.confidence2;
   } else {
     state.losses += 1; day.losses += 1; hour.losses += 1;
     state.consecutiveLosses += 1; day.consecutiveLosses += 1;
@@ -470,6 +471,7 @@ async function finalizeTrade(contract, profit) {
     if (day.consecutiveLosses === 3) day.lossStreakBuckets.x3 += 1;
     if (day.consecutiveLosses === 4) day.lossStreakBuckets.x4 += 1;
     tradingPausedUntil = Date.now() + CONFIG.cooldownAfterLossMs * Math.min(state.consecutiveLosses, 4);
+    CONFIG.confidence += 3;
   }
 
   currentContract = null;
@@ -479,7 +481,7 @@ async function finalizeTrade(contract, profit) {
 }
 
 function formatTradeResult(trade, day) {
-  return `🏁 Trade result\nContract: ${trade.contractId}\nSymbol: ${trade.symbol}\nResult: ${trade.won ? 'WIN' : 'LOSS'}\nP/L: ${trade.profit.toFixed(2)} ${CONFIG.currency}\nDay P/L: ${day.profit.toFixed(2)} ${CONFIG.currency}\n W/L: ${day.wins}/${day.losses}\nOverall P/L: ${state.overallProfit.toFixed(2)} ${CONFIG.currency}\nConsecutive losses: ${state.consecutiveLosses}\nLoss streaks x2/x3/x4: ${state.lossStreakBuckets.x2}/${state.lossStreakBuckets.x3}/${state.lossStreakBuckets.x4}`;
+  return `🏁 Trade result\nContract: ${trade.contractId}\nSymbol: ${trade.symbol}\nResult: ${trade.won ? 'WIN' : 'LOSS'}\nP/L: ${trade.profit.toFixed(2)} ${CONFIG.currency}\nDay P/L: ${day.profit.toFixed(2)} ${CONFIG.currency}\nDay W/L: ${day.wins}/${day.losses}\nOverall P/L: ${state.overallProfit.toFixed(2)} ${CONFIG.currency}\nConsecutive losses: ${state.consecutiveLosses}\nLoss streaks x2/x3/x4: ${state.lossStreakBuckets.x2}/${state.lossStreakBuckets.x3}/${state.lossStreakBuckets.x4}`;
 }
 
 function scheduleReports() {
