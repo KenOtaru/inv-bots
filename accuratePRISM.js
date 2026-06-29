@@ -205,8 +205,8 @@ const CONFIG = Object.freeze({
   hourlySummary: boolEnv('HOURLY_SUMMARY', true),
 
   // Persistence/logging
-  stateFile: strEnv('STATE_FILE', 'deriv_digit_differ5_state.json'),
-  logFile: strEnv('LOG_FILE', 'deriv_digit_differ5_bot.log'),
+  stateFile: strEnv('STATE_FILE', 'deriv_prism_differ_state.json'),
+  logFile: strEnv('LOG_FILE', 'deriv_rism_differ_bot.log'),
   logLevel: strEnv('LOG_LEVEL', 'INFO').toUpperCase(),
 
   // Telegram
@@ -1134,12 +1134,12 @@ class DigitAnalyzer {
     };
     const rankPost = rankOf(post.probs);
     const rankMark = rankOf(markov.probs);
-    const rankMom  = rankOf(momentum.probs);
+    const rankMom  = rankOf(momentum);
 
     const candidates = [];
     const K = cfg.agreementK; // bottom-K "least likely" set per source
     for (let d = 0; d < 10; d++) {
-      const blended = wPost * post.probs[d] + wMark * markov.probs[d] + wMom * momentum.probs[d];
+      const blended = wPost * post.probs[d] + wMark * markov.probs[d] + wMom * momentum[d];
 
       // Effective sample for the upper bound: blend long-run effectiveN and Markov n.
       const nEff = Math.max(40, Math.min(post.effectiveN, Math.max(post.effectiveN, markov.n || post.effectiveN)));
@@ -1472,7 +1472,7 @@ class TradingBot {
   }
 
   async start() {
-    logger.info('===== Deriv Digit Differ Bot starting =====');
+    logger.info('===== Deriv PRISM Differ Bot starting =====');
     logger.info(`config: stake=${this.cfg.stake} duration=${this.cfg.durationTicks}t assets=${this.cfg.assets.join(',')}`);
     if (!this.cfg.apiToken) {
       logger.error('DERIV_API_TOKEN missing. Put it in .env or environment.');
@@ -1504,7 +1504,7 @@ class TradingBot {
     await this.market.loadSymbols();
 
     telegram.send(
-      `🤖 <b>Digit Differ Bot Online</b>\n\n` +
+      `🤖 <b>PRISM-Δ Differ Bot Online</b>\n\n` +
       `👤 Account: <code>${htmlEscape(info.loginid || '?')}</code>\n` +
       `💼 Type: ${info.isVirtual ? '🟡 DEMO' : '🔴 REAL'}\n` +
       `💰 Balance: ${(this.client.balance ?? 0).toFixed(2)} ${this.currency()}\n` +
@@ -1682,7 +1682,7 @@ class TradingBot {
   _onTradeOpen(t) {
     const a = t.analysis || {};
     telegram.send(
-      `🟢 <b>TRADE OPENED — DIGIT DIFFER</b>\n\n` +
+      `🟢 <b>TRADE OPENED — PRISM-Δ DIFFER</b>\n\n` +
       `🎫 Contract: <code>#${t.contractId}</code>\n` +
       `📊 Symbol: <code>${t.symbol}</code>\n` +
       `🔢 Prediction/barrier: final digit <b>DIFFERS from ${t.digit}</b>\n` +
@@ -1714,7 +1714,7 @@ class TradingBot {
     const todayStats = this.stats.stats(this.stats.todayTrades(rec.date));
 
     telegram.send(
-      `${emoji} <b>TRADE ${label} — DIGIT DIFFER</b>\n\n` +
+      `${emoji} <b>TRADE ${label} — PRISM-Δ DIFFER</b>\n\n` +
       `🎫 Contract: <code>#${t.contractId}</code>\n` +
       `📊 Symbol: <code>${t.symbol}</code> | differs <b>${t.digit}</b> | ${t.durationTicks}t\n` +
       `💵 Stake: ${t.stake.toFixed(2)} ${this.currency()}\n` +
@@ -1779,10 +1779,10 @@ class TradingBot {
     const list = this.stats.tradesForHour(date, hour);
     const s = this.stats.stats(list);
     if (!list.length) {
-      telegram.send(`⏰ <b>Hourly Summary GMT (${date} ${pad(hour)}:00-${pad(hour)}:59)</b>\n\nNo trades this hour.\n\n💼 Overall Profit: ${money(this.stats.overallProfit, this.currency())}`);
+      telegram.send(`⏰ <b>PRISM-Δ Hourly Summary GMT (${date} ${pad(hour)}:00-${pad(hour)}:59)</b>\n\nNo trades this hour.\n\n💼 Overall Profit: ${money(this.stats.overallProfit, this.currency())}`);
       return;
     }
-    let msg = `⏰ <b>Hourly Summary GMT (${date} ${pad(hour)}:00-${pad(hour)}:59)</b>\n\n` +
+    let msg = `⏰ <b>PRISM-Δ Hourly Summary GMT (${date} ${pad(hour)}:00-${pad(hour)}:59)</b>\n\n` +
       `📊 Trades: ${s.count} (✅${s.wins} ❌${s.losses})\n` +
       `📈 Win rate: ${s.winRate.toFixed(1)}%\n` +
       `💰 P/L: <b>${money(s.totalProfit, this.currency())}</b>\n` +
@@ -1803,7 +1803,7 @@ class TradingBot {
     const summary = this.stats.archiveDate(date);
     const ds = summary.stats;
 
-    let msg = `🌙 <b>END OF TRADE DAY — GMT</b>\n` +
+    let msg = `🌙 <b>PRISM-Δ END OF TRADE DAY — GMT</b>\n` +
               `📅 Trade day ended: <b>${date}</b>\n\n` +
               `<b>── Current Day Stats ──</b>\n`;
     if (ds.count) {
@@ -1819,14 +1819,14 @@ class TradingBot {
       msg += `No trades recorded for this GMT trade day.\n\n`;
     }
 
-    msg += `<b>── Overall / Stored Stats ──</b>\n` +
+    msg += `<b>PRISM-Δ ── Overall / Stored Stats ──</b>\n` +
            `💼 Overall Profit: <b>${money(this.stats.overallProfit, this.currency())}</b>\n` +
            `❌ Consecutive losses: current ${this.stats.currentLossStreak} | max ${this.stats.maxLossStreak}\n` +
            `   x2=${this.stats.lossStreakEvents.x2}  x3=${this.stats.lossStreakEvents.x3}  x4=${this.stats.lossStreakEvents.x4}\n\n`;
 
     const rows = this.stats.allDailyRows(date);
     if (rows.length) {
-      msg += `<b>── All Trade Days By Date ──</b>\n`;
+      msg += `<b>PRISM-Δ ── All Trade Days By Date ──</b>\n`;
       for (const row of rows.slice(-60)) {
         const s = row.stats;
         msg += `${row.date}: ${s.count} trades (✅${s.wins}/❌${s.losses}) | WR ${s.winRate.toFixed(1)}% | P/L ${money(s.totalProfit, this.currency())}\n`;
@@ -1880,7 +1880,7 @@ class TradingBot {
     if (this.stopped) return;
     this.stopped = true;
     logger.info(`stopping (${signal})`);
-    telegram.send(`🛑 <b>Digit Differ Bot stopped</b>\nSignal: ${htmlEscape(signal)}\n💼 Overall Profit: ${money(this.stats.overallProfit, this.currency())}`);
+    telegram.send(`🛑 <b>PRISM-Δ Differ Bot stopped</b>\nSignal: ${htmlEscape(signal)}\n💼 Overall Profit: ${money(this.stats.overallProfit, this.currency())}`);
     if (this._analysisT) clearInterval(this._analysisT);
     if (this._hourlyBoot) clearTimeout(this._hourlyBoot);
     if (this._hourlyT) clearInterval(this._hourlyT);
@@ -1897,7 +1897,7 @@ class TradingBot {
 // ─────────────────────────────────────────────────────────────────────
 function printBanner() {
   console.log('╔════════════════════════════════════════════════════╗');
-  console.log('║   Deriv Digit Differ Trading Bot v2.0             ║');
+  console.log('║   Deriv PRISM-Δ Differ Trading Bot v2.0             ║');
   console.log('║   DIGITDIFF • PRISM-Δ • GMT EOD • Stateful Stats  ║');
   console.log('╚════════════════════════════════════════════════════╝');
   console.log('');
