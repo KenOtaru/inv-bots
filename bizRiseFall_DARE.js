@@ -144,8 +144,8 @@ const LOGGER = {
 // ============================================================
 const CONFIG = {
     // ── Deriv API [RETAINED credentials] ─────────────────────
-    API_TOKEN:    'pat_8e0a3285bd6e74f52a67985b8069f4bea42aa96ce65d129c60ebb838ed1065ee',
-    APP_ID:       '33uslPtthXBEkQOdfKfoY',
+    API_TOKEN:    '0P94g4WdSrSrzir',
+    APP_ID:       '1089',
     ACCOUNT_TYPE: 'demo',          // 'demo' | 'real' (PAT mode only)
     WS_URL:       'wss://ws.derivws.com/websockets/v3',
     // ── Capital & Risk ────────────────────────────────────────
@@ -1406,6 +1406,8 @@ class ConnectionManager {
         this.pingInterval         = null;
         this.autoSaveStarted      = false;
         this.isReconnecting       = false;
+        this.isShuttingDown       = false;
+        this.reconnectTimer       = null;
         this.activeSubscriptions  = new Set();
         this._subscriptionIds     = new Map();
         this._isPat         = RestClient.isPat(CONFIG.API_TOKEN);
@@ -1421,6 +1423,7 @@ class ConnectionManager {
         if (!CONFIG.API_TOKEN) { LOGGER.error('API_TOKEN is empty — aborting'); return; }
         LOGGER.info('🔌 Connecting to Deriv API...');
         this.cleanup();
+        this.isShuttingDown = false;
         if (this._isPat) {
             LOGGER.info('🔑 PAT token detected → using NEW Deriv API (OTP flow)');
             this._newApiConnect().catch(err => {
@@ -1552,6 +1555,10 @@ class ConnectionManager {
     }
     cleanup() {
         this.stopPing();
+        if (this.reconnectTimer) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
         if (this.ws) {
             this.ws.removeAllListeners();
             try { if (this.ws.readyState <= 1) this.ws.close(); } catch {}
@@ -1821,6 +1828,7 @@ class ConnectionManager {
         state.isAuthorized = false;
         this.stopPing();
         StatePersistence.saveState();
+        if (this.isShuttingDown) return;
         if (this.isReconnecting) return;
         if (this.reconnectAttempts < this.maxReconnectAttempts) {
             this.isReconnecting = true;
@@ -1828,7 +1836,12 @@ class ConnectionManager {
             const delay = Math.min(this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1), 30000);
             LOGGER.info(`🔄 Reconnecting in ${(delay / 1000).toFixed(1)}s (attempt ${this.reconnectAttempts})`);
             TelegramService.sendMessage(`⚠️ <b>CONNECTION LOST</b> — Reconnecting (attempt ${this.reconnectAttempts})`);
-            setTimeout(() => { this.isReconnecting = false; this.connect(); }, delay);
+            this.reconnectTimer = setTimeout(() => {
+                this.reconnectTimer = null;
+                if (this.isShuttingDown) return;
+                this.isReconnecting = false;
+                this.connect();
+            }, delay);
         } else {
             LOGGER.error('Max reconnection attempts reached — giving up');
             TelegramService.sendMessage(`🛑 <b>BOT STOPPED</b> — Max reconnections\nFinal P/L: $${state.session.netPL.toFixed(2)}`);
@@ -1843,6 +1856,11 @@ class ConnectionManager {
     }
     stopPing() {
         if (this.pingInterval) { clearInterval(this.pingInterval); this.pingInterval = null; }
+    }
+    shutdown() {
+        this.isShuttingDown = true;
+        this.isReconnecting = false;
+        this.cleanup();
     }
     send(data) {
         if (this.ws?.readyState !== WebSocket.OPEN) { LOGGER.error('Cannot send: WebSocket not open'); return null; }
@@ -2185,8 +2203,8 @@ class IndexBot {
 // ============================================================
 tradeHistory  = TradeHistoryManager.loadHistory();
 const bot     = new IndexBot();
-process.on('SIGINT',  () => { bot.stop(); setTimeout(() => process.exit(0), 3000); });
-process.on('SIGTERM', () => { bot.stop(); setTimeout(() => process.exit(0), 3000); });
+process.on('SIGINT',  () => { bot.stop(); bot.connection.shutdown(); setTimeout(() => process.exit(0), 3000); });
+process.on('SIGTERM', () => { bot.stop(); bot.connection.shutdown(); setTimeout(() => process.exit(0), 3000); });
 process.on('uncaughtException',  (err)    => { LOGGER.error(`UNCAUGHT: ${err.message}\n${err.stack}`); try { StatePersistence.saveState(); } catch {} });
 process.on('unhandledRejection', (reason) => { LOGGER.error(`UNHANDLED: ${reason}`);                   try { StatePersistence.saveState(); } catch {} });
 const stateLoaded = StatePersistence.loadState();
