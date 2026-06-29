@@ -124,8 +124,8 @@ loadEnv();
 // ─────────────────────────────────────────────────────────────────────
 const CONFIG = Object.freeze({
   // ─ Deriv API ─ (credentials retained from reference bot) ─
-  apiToken: ('pat_8e0a3285bd6e74f52a67985b8069f4bea42aa96ce65d129c60ebb838ed1065ee').trim(),
-  appId   : '33uslPtthXBEkQOdfKfoY',
+  apiToken: ('0P94g4WdSrSrzir').trim(),
+  appId   : '1089',
   wsUrl   : 'wss://ws.derivws.com/websockets/v3',
   currency: ('USD').toUpperCase(),
   accountType: ('demo').toLowerCase(),  // 'demo' | 'real'
