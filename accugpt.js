@@ -319,7 +319,7 @@ async function evaluateMarket() {
 
 const ranked = CONFIG.symbols
     .map((symbol) => ({ symbol, stats: indicators(tickBooks.get(symbol) || []) }))
-    .filter((x) => x.stats && state.consecutiveLosses <= 0 ? x.stats.score >= CONFIG.confidence : x.stats.score >= CONFIG.confidence2 && Math.abs(x.stats.drift) < CONFIG.drift && Math.abs(x.stats.momentum5) < CONFIG.momentum)
+    .filter((x) => x.stats && x.stats.score >= CONFIG.confidence2 && Math.abs(x.stats.drift) < CONFIG.drift && Math.abs(x.stats.momentum5) < CONFIG.momentum)
     .sort((a, b) => b.stats.score - a.stats.score);
 
 if (!ranked.length) return;
@@ -479,7 +479,7 @@ async function finalizeTrade(contract, profit) {
 }
 
 function formatTradeResult(trade, day) {
-  return `🏁 Trade result\nContract: ${trade.contractId}\nSymbol: ${trade.symbol}\nResult: ${trade.won ? 'WIN' : 'LOSS'}\nP/L: ${trade.profit.toFixed(2)} ${CONFIG.currency}\nDay P/L: ${day.profit.toFixed(2)} ${CONFIG.currency}\nOverall P/L: ${state.overallProfit.toFixed(2)} ${CONFIG.currency}\nConsecutive losses: ${state.consecutiveLosses}\nLoss streaks x2/x3/x4: ${state.lossStreakBuckets.x2}/${state.lossStreakBuckets.x3}/${state.lossStreakBuckets.x4}`;
+  return `🏁 Trade result\nContract: ${trade.contractId}\nSymbol: ${trade.symbol}\nResult: ${trade.won ? 'WIN' : 'LOSS'}\nP/L: ${trade.profit.toFixed(2)} ${CONFIG.currency}\nDay P/L: ${day.profit.toFixed(2)} ${CONFIG.currency}\n W/L: ${day.wins}/${day.losses}\nOverall P/L: ${state.overallProfit.toFixed(2)} ${CONFIG.currency}\nConsecutive losses: ${state.consecutiveLosses}\nLoss streaks x2/x3/x4: ${state.lossStreakBuckets.x2}/${state.lossStreakBuckets.x3}/${state.lossStreakBuckets.x4}`;
 }
 
 function scheduleReports() {
