@@ -471,7 +471,7 @@ async function finalizeTrade(contract, profit) {
     if (day.consecutiveLosses === 3) day.lossStreakBuckets.x3 += 1;
     if (day.consecutiveLosses === 4) day.lossStreakBuckets.x4 += 1;
     tradingPausedUntil = Date.now() + CONFIG.cooldownAfterLossMs * Math.min(state.consecutiveLosses, 4);
-    CONFIG.confidence += 3;
+    CONFIG.confidence += 0.03;
   }
 
   currentContract = null;
