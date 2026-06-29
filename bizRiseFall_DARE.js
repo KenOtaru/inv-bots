@@ -437,7 +437,7 @@ class Indicators {
         const low = Math.min(...window.map(c => c.low));
         const close = candles[candles.length - 1].close;
         return {
-            upper, lower, mid: (high + low) / 2,
+            upper: high, lower: low, mid: (high + low) / 2,
             bullBreakout: close > high, bearBreakout: close < low,
         };
     }
