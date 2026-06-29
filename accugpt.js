@@ -321,7 +321,9 @@ const ranked = CONFIG.symbols
     .map((symbol) => ({ symbol, stats: indicators(tickBooks.get(symbol) || []) }))
     .filter((x) => x.stats && state.consecutiveLosses <= 0 ? x.stats.score >= CONFIG.confidence : x.stats.score >= CONFIG.confidence2 && Math.abs(x.stats.drift) < CONFIG.drift && Math.abs(x.stats.momentum5) < CONFIG.momentum)
     .sort((a, b) => b.stats.score - a.stats.score);
-
+console.log(`
+    Stats: ${x.stats}
+    `)
 if (!ranked.length) return;
   await openAccumulator(ranked[0]);
 }
