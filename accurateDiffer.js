@@ -148,7 +148,7 @@ const CONFIG = Object.freeze({
   frequencyWindows: listEnv('FREQUENCY_WINDOWS', '30,60,120,300,600').map(x => parseInt(x, 10)).filter(Number.isFinite),
   transitionLookback: intEnv('TRANSITION_LOOKBACK', 900),
   ewmaAlpha: numEnv('EWMA_ALPHA', 0.045),
-  minEdge: numEnv('MIN_EDGE', 0.0040),          //0.0040 absolute probability gap, e.g. 0.4 percentage point
+  minEdge: numEnv('MIN_EDGE', 0.0050),          //0.0040 absolute probability gap, e.g. 0.4 percentage point
   safetyMargin: numEnv('SAFETY_MARGIN', 0.0025),
   modelRiskMargin: numEnv('MODEL_RISK_MARGIN', 0.0020),
   zScore: numEnv('EDGE_ZSCORE', 1.15),          // conservative upper bound
