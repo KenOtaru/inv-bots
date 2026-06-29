@@ -319,7 +319,7 @@ async function evaluateMarket() {
 
 const ranked = CONFIG.symbols
     .map((symbol) => ({ symbol, stats: indicators(tickBooks.get(symbol) || []) }))
-    .filter((x) => x.stats && x.stats.score >= CONFIG.confidence2 && Math.abs(x.stats.drift) < CONFIG.drift && Math.abs(x.stats.momentum5) < CONFIG.momentum)
+    .filter((x) => x.stats && x.stats.score >= CONFIG.confidence && Math.abs(x.stats.drift) < CONFIG.drift && Math.abs(x.stats.momentum5) < CONFIG.momentum)
     .sort((a, b) => b.stats.score - a.stats.score);
 
 if (!ranked.length) return;
