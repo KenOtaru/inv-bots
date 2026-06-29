@@ -398,11 +398,455 @@ class DerivClient extends EventEmitter {
                             : null;
     this._otpUrl          = null;
     this._targetAccount   = null;
-    // Diff preview truncated: 1210 lines omitted to keep UI responsive.
+
+    // Bot state fields (initialized later in start())
+    this.market           = null;
+    this.analyzer         = null;
+    this.exec             = null;
+    this.stats            = null;
+    this.lastTradeAt      = 0;
+    this.startBalance     = null;
+    this.lastBalance      = null;
+    this.stopped          = false;
+    this.overallProfit    = 0;
+    this.consecutiveLosses= 0;
+    this.lossesStreak     = 0;
+    this.activeStakeMult  = 1.0;
+    this._analysisT       = null;
+    this._hourlyT         = null;
+    this._eodT            = null;
+    this._hourlyBoot      = null;
+    this._eodBoot         = null;
+    this._barrierT        = null;
+    this.tradeWatchdogMs  = cfg.tradeWatchdogMs;
+    this.tradeStartTime   = null;
+    this._tradeWatchdogTimer  = null;
+    this._tradeWatchdogPollTimer = null;
+    this.dailyHistory     = {};
+    this._lastDayISODate  = null;
+  }
+
+  start() {
+    logger.info('===== PULSE Bot starting =====');
+    logger.info(`assets: ${this.cfg.assets.join(', ')}`);
+    logger.info(`telegram: ${this.cfg.telegram.enabled ? 'ENABLED ✔' : 'disabled'}`);
+
+    this.market   = new MarketDataManager(this, this.cfg);
+    this.analyzer = new PulseAnalyzer(this.cfg);
+    this.exec     = new TradeExecutor(this, this.cfg);
+    this.exec.bot = this;
+    this.stats    = new StatisticsManager();
+
+    this.on('authorized', info => this._onAuthorized(info));
+    this.on('close', (c, r, was) => this._onDisconnected(c, r, was));
+    this.on('open',  () => logger.info('connection open'));
+    this.on('error', e => logger.error('client error:', e.message));
+
+    this.exec.on('open',    t => this._onTradeOpen(t));
+    this.exec.on('update',   t => this._onTradeUpdate(t));
+    this.exec.on('result',   t => this._onTradeResult(t));
+    this.exec.on('driftWarning', t => this._onPulseDrift(t));
+
+    process.on('SIGINT',  () => this.stop('SIGINT'));
+    process.on('SIGTERM', () => this.stop('SIGTERM'));
+
+    this._loadState();
+    this._scheduleSummaries();
+    this.connect();
+  }
+
+  _onAuthorized(info) {
+    this.startBalance = this.balance;
+    this.lastBalance  = this.balance;
+    logger.info(`start-of-day balance: ${this.startBalance} ${this.currencyStr()}`);
+
+    telegram.send(
+      `🤖 <b>PULSE Bot Online</b>\n\n` +
+      `👤 <b>Account:</b> ${info.loginid}\n` +
+      `💼 <b>Type:</b> ${info.isVirtual ? '🟡 DEMO' : '🔴 REAL'}\n` +
+      `💰 <b>Balance:</b> ${this.startBalance.toFixed(2)} ${this.currencyStr()}\n` +
+      `📊 <b>Assets:</b> ${this.cfg.assets.length}\n` +
+      `💵 <b>Stake:</b> ${this.cfg.stake}\n` +
+      `📈 <b>Growth rates:</b> ${this.cfg.pulseGrowthRates.map(g => (g*100).toFixed(0)+'%').join(', ')}\n` +
+      `🎯 <b>Edge threshold:</b> ${((this.cfg.pulseEdgeThreshold-1)*100).toFixed(1)}%\n\n` +
+      `⚡ <b>PULSE engine active</b>\n` +
+      `MC trials: ${this.cfg.pulseTrials} · Horizon: ${this.cfg.pulseHorizon} ticks`,
+    );
+
+    Promise.all([
+      this.market.loadSymbols(),
+      this.market.bootstrap(this.cfg.assets),
+      this._refreshBarriers(),
+    ]).then(() => {
+      if (this._analysisT) clearInterval(this._analysisT);
+      this._analyzeAndTrade();
+      this._analysisT = setInterval(() => this._analyzeAndTrade(), this.cfg.analysisIntervalMs);
+      if (this._barrierT) clearInterval(this._barrierT);
+      this._barrierT = setInterval(() => this._refreshBarriers(), this.cfg.barrierRefreshMs);
+    });
+  }
+
+  _onDisconnected(code, reason, wasAuthorized) {
+    this._clearWatchdogTimers();
+    telegram.send(
+      `⚠️ <b>Connection lost</b>\n` +
+      `code: <code>${code}</code>\n` +
+      `was authorised: ${wasAuthorized ? 'yes' : 'no'}\n` +
+      `🔄 reconnecting…`,
+    );
+    if (this._analysisT) { clearInterval(this._analysisT); this._analysisT = null; }
+    if (this.exec) this.exec.open.clear();
+  }
+
+  _scheduleSummaries() {
+    const now = new Date();
+    const nextHour = new Date(now);
+    nextHour.setUTCHours(nextHour.getUTCHours() + 1, 0, 0, 0);
+    const msToNextHour = nextHour.getTime() - now.getTime();
+    this._hourlyBoot = setTimeout(() => {
+      this._sendHourly();
+      this._hourlyT = setInterval(() => this._sendHourly(), 3600_000);
+    }, msToNextHour);
+
+    const nextMidnight = new Date(now);
+    nextMidnight.setUTCDate(nextMidnight.getUTCDate() + 1);
+    nextMidnight.setUTCHours(0, 0, 0, 0);
+    const msToMidnight = nextMidnight.getTime() - now.getTime();
+    this._eodBoot = setTimeout(() => {
+      this._sendEod();
+      this._eodT = setInterval(() => this._sendEod(), 86_400_000);
+    }, msToMidnight);
+
+    logger.info(
+      `GMT timers scheduled: next hourly in ${(msToNextHour/60000).toFixed(1)}m, ` +
+      `next EOD in ${(msToMidnight/3600000).toFixed(2)}h`,
+    );
+  }
+
+  _nextReqId() { return ++this._reqId; }
+
+  _url() {
+    const sep = this.cfg.wsUrl.includes('?') ? '&' : '?';
+    return `${this.cfg.wsUrl}${sep}app_id=${encodeURIComponent(this.cfg.appId)}`;
+  }
+
+  _redact(url) {
+    return url
+      .replace(/([?&])(otp|app_id|token)=[^&]+/g, '$1$2=***')
+      .replace(/wss:\/\/[^/]+/, m => m);
+  }
+
+  _openWs(url) {
+    try {
+      this.ws = new WebSocket(url, {
+        headers: { 'User-Agent': 'DerivAccumulatorBot/2.0 (+Node.js)' },
+        handshakeTimeout: 15000,
+      });
+    } catch (e) {
+      logger.error('ws construct failed:', e.message);
+      this._scheduleReconnect();
+      return false;
+    }
+    this.ws.on('open',     () => this._onOpen());
+    this.ws.on('message',  d  => this._onMessage(d));
+    this.ws.on('error',    e  => this._onError(e));
+    this.ws.on('close',    (c, r) => this._onClose(c, r));
+    this.ws.on('unexpected-response', (_, res) => {
+      logger.error('ws handshake failed:', res.statusCode, res.statusMessage);
+      try { res.destroy(); } catch (_) {}
+      this._scheduleReconnect();
+    });
+    return true;
+  }
+
+  connect() {
+    if (this.ws &&
+        (this.ws.readyState === WebSocket.OPEN ||
+         this.ws.readyState === WebSocket.CONNECTING)) return;
+
+    if (!this.cfg.apiToken) {
+      logger.error('DERIV_API_TOKEN is empty — aborting');
+      this._stopped = true;
+      return;
+    }
+
+    if (this._isPat) {
+      logger.info('detected PAT token → using NEW Deriv API (OTP flow)');
+      this._newApiConnect().catch(e => {
+        logger.error('new API connect failed:', e.message);
+        this._scheduleReconnect();
+      });
+    } else {
+      logger.info('using legacy Deriv API (token authorize flow)');
+      const url = this._url();
+      logger.info(`connecting → ${this._redact(url)}`);
+      this._openWs(url);
+    }
+  }
+
+  async _newApiConnect() {
+    const desiredType = (this.cfg.accountType || 'demo').toLowerCase();
+    logger.info('REST: GET /trading/v1/options/accounts');
+    const accRes = await this._rest.get('/trading/v1/options/accounts');
+    if (accRes.status !== 200) {
+      const msg = accRes.body?.errors?.[0]?.message
+        || accRes.body?.message
+        || JSON.stringify(accRes.body);
+      let hint = '';
+      if (accRes.status === 401) {
+        hint = ' — check that (1) your PAT is valid and not expired, and (2) DERIV_APP_ID matches a registered app at https://developers.deriv.com/';
+      } else if (accRes.status === 403) {
+        hint = ' — your PAT may lack the required "trade" scope; regenerate at https://app.deriv.com/account/api-token';
+      } else if (accRes.status === 404) {
+        hint = ' — account endpoint not found; you may be using a legacy token with the new API';
+      }
+      throw new Error(`account list failed (${accRes.status}): ${msg}${hint}`);
+    }
+    const accounts = Array.isArray(accRes.body?.data) ? accRes.body.data : [];
+    if (!accounts.length) throw new Error('no Options accounts found for this token');
+
+    const acct = accounts.find(a => (a.account_type || '').toLowerCase() === desiredType)
+              || accounts[0];
+    this._targetAccount = acct;
+    this.accountInfo = {
+      loginid    : acct.account_id,
+      email      : acct.email,
+      isVirtual  : (acct.account_type || '').toLowerCase() === 'demo',
+      accountType: acct.account_type,
+      currency   : acct.currency,
+      balance    : parseFloat(acct.balance),
+      group      : acct.group,
+    };
+    logger.info(`selected account ${acct.account_id} (${acct.account_type}, ${acct.currency}, balance=${acct.balance})`);
+
+    const otpPath = `/trading/v1/options/accounts/${encodeURIComponent(acct.account_id)}/otp`;
+    logger.info(`REST: POST ${otpPath}`);
+    const otpRes = await this._rest.post(otpPath);
+    if (otpRes.status !== 200) {
+      const msg = otpRes.body?.errors?.[0]?.message
+        || JSON.stringify(otpRes.body);
+      throw new Error(`OTP request failed (${otpRes.status}): ${msg}`);
+    }
+    const wsUrl = otpRes.body?.data?.url;
+    if (!wsUrl || !/^wss?:/i.test(wsUrl)) {
+      throw new Error(`OTP response missing .data.url: ${JSON.stringify(otpRes.body)}`);
+    }
+    this._otpUrl = wsUrl;
+    logger.info(`connecting → ${this._redact(wsUrl)}`);
+    this._openWs(wsUrl);
+  }
+
+  _onOpen() {
+    logger.info('ws connected ✔');
+    this.connected     = true;
+    this._reconnecting = false;
+    this._reconnectAttempt = 0;
+    this.emit('open');
+
+    if (this._isPat) {
+      this._newApiMarkAuthorized();
+    } else {
+      this._authorize();
+    }
+  }
+
+  _newApiMarkAuthorized() {
+    if (!this.accountInfo) return;
+    this.authorized = true;
+    this.balance    = this.accountInfo.balance ?? null;
+    this.currency   = this.accountInfo.currency || this.cfg.currency;
+    logger.info(
+      `authorized ${this.accountInfo.loginid} ` +
+      `(${this.accountInfo.isVirtual ? 'DEMO' : 'REAL'}) ` +
+      `balance=${this.balance} ${this.currency} ` +
+      `via PAT/new-API`,
+    );
+    this.emit('authorized', this.accountInfo);
+  }
+
+  async _authorize() {
+    try {
+      const res = await this._send({ authorize: this.cfg.apiToken }, 20000);
+      this.authorized = true;
+      this.balance    = parseFloat(res.authorize.balance);
+      this.currency   = res.authorize.currency || this.cfg.currency;
+      this.accountInfo = {
+        loginid    : res.authorize.loginid,
+        email      : res.authorize.email,
+        isVirtual  : !!res.authorize.is_virtual,
+        accountType: res.authorize.account_type,
+        country    : res.authorize.country,
+      };
+      logger.info(
+        `authorized ${res.authorize.loginid} ` +
+        `(${this.accountInfo.isVirtual ? 'DEMO' : 'REAL'}) ` +
+        `balance=${this.balance} ${this.currency}`
+      );
+      this.emit('authorized', this.accountInfo);
+    } catch (e) {
+      logger.error('authorize failed:', e.message);
+      this.authorized = false;
+      this._scheduleReconnect();
+    }
+  }
+
+  _onMessage(data) {
+    let msg;
+    try { msg = JSON.parse(data.toString()); } catch { return; }
+
+    if (msg.error) {
+      const code = msg.error.code;
+      const RACE_CONDITION_CODES = new Set([
+        'BetExpired',
+        'TradingDurationNotAllowed',
+        'ContractNotFound',
+        'InvalidContract',
+      ]);
+      if (RACE_CONDITION_CODES.has(code)) {
+        logger.debug(`(race) api error: ${code} – ${msg.error.message} req=${msg.req_id || '?'}`);
+      } else {
+        logger.error(`api error: ${code} – ${msg.error.message} (req=${msg.req_id || '?'})`);
+      }
+      if (msg.req_id && this._pending.has(msg.req_id)) {
+        const p = this._pending.get(msg.req_id);
+        clearTimeout(p.timer);
+        this._pending.delete(msg.req_id);
+        p.reject(new Error(msg.error.message || code));
+      }
+      if (['AuthorizationRequired','InvalidToken','InvalidAppID'].includes(code)) {
+        this._closeAndReconnect();
+      }
+      return;
+    }
+
+    if (msg.req_id && this._pending.has(msg.req_id)) {
+      const p = this._pending.get(msg.req_id);
+      clearTimeout(p.timer);
+      this._pending.delete(msg.req_id);
+      p.resolve(msg);
+      return;
+    }
+
+    if (msg.subscription?.id && this._subs.has(msg.subscription.id)) {
+      const cb = this._subs.get(msg.subscription.id);
+      try { cb(msg); } catch (e) { logger.error('sub handler error:', e.message); }
+      return;
+    }
+  }
+
+  _onError(err) {
+    logger.error('ws error:', err.message, err.code || '');
+    this.emit('error', err);
+  }
+
+  _onClose(code, reason) {
+    const reasonStr = (() => { try { return reason?.toString(); } catch { return ''; } })();
+    logger.warn(`ws closed code=${code} reason=${reasonStr || '(none)'}`);
+    const wasAuthorized = this.authorized;
+    this.connected  = false;
+    this.authorized = false;
+    for (const [, p] of this._pending) {
+      clearTimeout(p.timer);
+      p.reject(new Error('Connection closed'));
+    }
+    this._pending.clear();
+    this._subs.clear();
+    this.emit('close', code, reason, wasAuthorized);
+    if (!this._stopped) this._scheduleReconnect();
+  }
+
+  _scheduleReconnect() {
+    if (this._stopped || this._reconnecting) return;
+    this._reconnecting = true;
+    this._reconnectAttempt++;
+    const base = Math.min(
+      this.cfg.reconnect.initialDelayMs *
+        Math.pow(this.cfg.reconnect.backoffFactor, this._reconnectAttempt - 1),
+      this.cfg.reconnect.maxDelayMs,
+    );
+    const jitter = Math.random() * this.cfg.reconnect.jitterMs;
+    const delay  = base + jitter;
+    logger.info(`reconnect #${this._reconnectAttempt} in ${(delay/1000).toFixed(1)}s`);
+    setTimeout(() => {
+      this._reconnecting = false;
+      this.connect();
+    }, delay);
+  }
+
+  _closeAndReconnect() {
+    try { this.ws?.close(); } catch (_) {}
+  }
+
+  _send(payload, timeoutMs = 30000) {
+    return new Promise((resolve, reject) => {
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+        return reject(new Error('Not connected'));
+      }
+      const reqId = this._nextReqId();
+      const text  = JSON.stringify({ ...payload, req_id: reqId });
+      const timer = setTimeout(() => {
+        if (this._pending.has(reqId)) {
+          this._pending.delete(reqId);
+          reject(new Error(`Request timeout (${payload.proposal ?? payload.buy ?? payload.ticks ?? 'req'})`));
+        }
+      }, timeoutMs);
+      this._pending.set(reqId, { resolve, reject, timer });
+      try { this.ws.send(text); }
+      catch (e) {
+        clearTimeout(timer);
+        this._pending.delete(reqId);
+        reject(e);
+      }
+    });
+  }
+
+  subscribe(payload, callback, timeoutMs = 30000) {
+    return new Promise((resolve, reject) => {
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+        return reject(new Error('Not connected'));
+      }
+      const reqId = this._nextReqId();
+      const text  = JSON.stringify({ ...payload, req_id: reqId, subscribe: 1 });
+      const timer = setTimeout(() => {
+        if (this._pending.has(reqId)) {
+          this._pending.delete(reqId);
+          reject(new Error('Subscribe timeout'));
+        }
+      }, timeoutMs);
+      this._pending.set(reqId, {
+        resolve: msg => {
+          const subId = msg.subscription?.id;
+          if (subId) {
+            this._subs.set(subId, callback);
+            resolve(subId);
+          } else {
+            reject(new Error('No subscription id in response'));
+          }
+        },
+        reject,
+        timer,
+      });
+      try { this.ws.send(text); }
+      catch (e) {
+        clearTimeout(timer);
+        this._pending.delete(reqId);
+        reject(e);
+      }
+    });
+  }
+
+  forget(subId) {
+    if (!subId) return Promise.resolve();
+    this._subs.delete(subId);
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return Promise.resolve();
+    return this._send({ forget: subId }, 8000).catch(e => logger.debug('forget:', e.message));
+  }
+
+  _onTradeResult(t) {
     const emoji = t.status === 'won' ? '✅' : '❌';
     const label = t.status === 'won' ? 'WIN' : 'LOSS';
     const dur = Math.max(0, (t.sellTime || Date.now()/1000) - (t.buyTime || 0));
-    this.lastBalance = (this.lastBalance ?? this.client.balance ?? 0) + t.profit;
+    this.lastBalance = (this.lastBalance ?? this.balance ?? 0) + t.profit;
  
     this.overallProfit += t.profit;
     this._recordDay(t);
@@ -416,11 +860,11 @@ class DerivClient extends EventEmitter {
       `🎫 <b>Contract:</b> #${t.contractId}\n` +
       `📊 <b>Symbol:</b> <code>${t.symbol}</code>\n` +
       `📈 <b>Growth:</b> ${(t.growthRate*100).toFixed(0)}%\n` +
-      `💵 <b>Stake:</b> ${t.stake.toFixed(2)} ${this.currency()}\n` +
+      `💵 <b>Stake:</b> ${t.stake.toFixed(2)} ${this.currencyStr()}\n` +
       `💰 <b>Sell:</b> ${t.sellPrice.toFixed(2)}\n` +
-      `${t.profit >= 0 ? '📈' : '📉'} <b>Profit:</b> ${t.profit >= 0 ? '+' : ''}${t.profit.toFixed(2)} ${this.currency()}\n` +
+      `${t.profit >= 0 ? '📈' : '📉'} <b>Profit:</b> ${t.profit >= 0 ? '+' : ''}${t.profit.toFixed(2)} ${this.currencyStr()}\n` +
       `⏱️ <b>Duration:</b> ${dur.toFixed(1)}s\n` +
-      `💼 <b>Balance:</b> ${this.lastBalance.toFixed(2)} ${this.currency()}\n\n`;
+      `💼 <b>Balance:</b> ${this.lastBalance.toFixed(2)} ${this.currencyStr()}\n\n`;
  
     const today = this.stats.todayTrades();
     const s = this.stats.stats(today);
@@ -428,15 +872,37 @@ class DerivClient extends EventEmitter {
       `📊 <b>Today</b>\n` +
       `• Trades: ${s.count} (✅${s.wins} ❌${s.losses})\n` +
       `• Win rate: ${s.winRate.toFixed(1)}%\n` +
-      `• Net P/L: ${s.totalProfit >= 0 ? '+' : ''}${s.totalProfit.toFixed(2)} ${this.currency()}\n` +
+      `• Net P/L: ${s.totalProfit >= 0 ? '+' : ''}${s.totalProfit.toFixed(2)} ${this.currencyStr()}\n` +
       `• Profit factor: ${s.profitFactor === Infinity ? '∞' : s.profitFactor.toFixed(2)}\n\n` +
-      `🏦 <b>Overall:</b> ${this.overallProfit >= 0 ? '+' : ''}${this.overallProfit.toFixed(2)} ${this.currency()}\n` +
+      `🏦 <b>Overall:</b> ${this.overallProfit >= 0 ? '+' : ''}${this.overallProfit.toFixed(2)} ${this.currencyStr()}\n` +
       `🔻 <b>Consec. losses:</b> ${this.consecutiveLosses}`;
     telegram.send(msg);
     this.lastTradeAt = Date.now();
     this._saveState('after-trade');
   }
  
+  _onTradeOpen(t) {
+    let msg =
+      `🟢 <b>PULSE TRADE OPENED</b>\n\n` +
+      `🎫 <b>Contract:</b> #${t.contractId}\n` +
+      `📊 <b>Symbol:</b> <code>${t.symbol}</code>\n` +
+      `📈 <b>Growth Rate:</b> ${(t.growthRate*100).toFixed(2)}%\n` +
+      `💵 <b>Stake:</b> ${t.stake.toFixed(2)} ${this.currencyStr()}\n` +
+      `🎯 <b>Take Profit:</b> ${t.limit?.take_profit ?? '–'}\n` +
+      `🏦 <b>Overall Profit:</b> ${this.overallProfit >= 0 ? '+' : ''}${this.overallProfit.toFixed(2)} ${this.currencyStr()}\n\n` +
+      `🧠 <b>PULSE Analysis</b>\n` +
+      `• Edge: ${((t._analysis?.edge ?? 0)*100).toFixed(2)}%\n` +
+      `• EV: ${((t._analysis?.ev ?? 0)*100).toFixed(2)}%\n` +
+      `• N*: ${t._analysis?.bestN ?? '?'}\n` +
+      `• Regime: ${t._analysis?.regime ?? '?'}\n` +
+      `• σ: ${((t._analysis?.sigma ?? 0)*1e4).toFixed(2)}e-4`;
+    telegram.send(msg);
+  }
+
+  _onTradeUpdate(t) {
+    logger.debug(`update #${t.contractId}: profit=${t.profit.toFixed(3)} spot=${t.currentSpot}`);
+  }
+
   _onPulseDrift(t) {
     logger.debug(`pulse-drift #${t.contractId} urg=${t.dec.urgency.toFixed(2)} ${t.dec.reason}`);
   }
@@ -479,8 +945,8 @@ class DerivClient extends EventEmitter {
       const hasActiveTrade = this.exec.openTrades().some(t => t.contractId);
       if (!hasActiveTrade) { this._clearWatchdogTimers(); return; }
       logger.warn(`WATCHDOG FIRED — #${contractId} open ${timeoutMs/1000}s no settlement`);
-      if (contractId && this.client.authorized && this.client.connected) {
-        this.client._send({ proposal_open_contract: 1, contract_id: contractId, subscribe: 1 })
+      if (contractId && this.authorized && this.connected) {
+        this._send({ proposal_open_contract: 1, contract_id: contractId, subscribe: 1 })
           .catch(e => { logger.warn(`watchdog poll failed: ${e.message}`); this._recoverStuckTrade('watchdog-poll-failed'); });
         this._tradeWatchdogPollTimer = setTimeout(() => {
           if (this.exec.count() > 0) this._recoverStuckTrade('watchdog-force');
@@ -507,7 +973,7 @@ class DerivClient extends EventEmitter {
     const entryTime = this.tradeStartTime || (stuck.buyTime ? stuck.buyTime * 1000 : Date.now());
     const openSeconds = Math.round((Date.now() - entryTime) / 1000);
     logger.error(`STUCK TRADE [${reason}] #${contractId} ${symbol} ${openSeconds}s`);
-    if (contractId !== 'unknown' && this.client.authorized && this.client.connected) {
+    if (contractId !== 'unknown' && this.authorized && this.connected) {
       try { await this.exec.sell(contractId, 0); } catch (e) { logger.warn(`emergency sell failed: ${e.message}`); }
     }
     this.exec.open.delete(contractId);
@@ -530,7 +996,7 @@ class DerivClient extends EventEmitter {
   async _analyzeAndTrade() {
     try {
       if (this.stopped) return;
-      if (!this.client.authorized) return;
+      if (!this.authorized) return;
  
       // Daily limits
       const today = this.stats.todayTrades();
@@ -540,7 +1006,7 @@ class DerivClient extends EventEmitter {
       const pl = today.reduce((s, t) => s + (t.profit || 0), 0);
       if (pl <= -this.cfg.dailyMaxLoss) {
         logger.warn(`dailyMaxLoss reached — pausing`);
-        telegram.send(`🛑 <b>Daily loss limit</b>\nNet P/L: ${pl.toFixed(2)} ${this.currency()}`);
+        telegram.send(`🛑 <b>Daily loss limit</b>\nNet P/L: ${pl.toFixed(2)} ${this.currencyStr()}`);
         return;
       }
  
@@ -612,7 +1078,7 @@ class DerivClient extends EventEmitter {
   // ── Barrier refresh ─────────────────────────────────────────
   async _refreshBarriers() {
     try {
-      if (!this.client.authorized) return;
+      if (!this.authorized) return;
       await this.market.refreshBarriers(this.cfg.assets, this.cfg.pulseGrowthRates);
       logger.debug('barrier cache refreshed');
     } catch (e) {
@@ -699,7 +1165,7 @@ class DerivClient extends EventEmitter {
       `⏰ <b>Hourly (${pad(s.hour)}:00–${pad(s.hour)}:59)</b>\n\n` +
       `📊 Trades: ${s.stats.count}  ✅${s.stats.wins}  ❌${s.stats.losses}\n` +
       `📈 Win rate: ${s.stats.winRate.toFixed(1)}%\n` +
-      `💰 P/L: ${s.stats.totalProfit >= 0 ? '+' : ''}${s.stats.totalProfit.toFixed(2)} ${this.currency()}\n` +
+      `💰 P/L: ${s.stats.totalProfit >= 0 ? '+' : ''}${s.stats.totalProfit.toFixed(2)} ${this.currencyStr()}\n` +
       `🏆 PF: ${s.stats.profitFactor === Infinity ? '∞' : s.stats.profitFactor.toFixed(2)}\n`;
     s.trades.forEach((t, i) => {
       const e = t.status === 'won' ? '✅' : '❌';
@@ -725,7 +1191,7 @@ class DerivClient extends EventEmitter {
       msg += `<b>── Today ──</b>\n` +
              `📊 Trades: ${todayStats.count} (✅${todayStats.wins} ❌${todayStats.losses})\n` +
              `📈 Win rate: ${todayStats.winRate.toFixed(1)}%\n` +
-             `💼 <b>Net P/L: ${todayStats.totalProfit >= 0 ? '+' : ''}${todayStats.totalProfit.toFixed(2)} ${this.currency()}</b>\n` +
+             `💼 <b>Net P/L: ${todayStats.totalProfit >= 0 ? '+' : ''}${todayStats.totalProfit.toFixed(2)} ${this.currencyStr()}</b>\n` +
              `🏆 PF: ${todayStats.profitFactor === Infinity ? '∞' : todayStats.profitFactor.toFixed(2)}\n\n`;
     } else {
       msg += `<b>── Today ──</b>\nNo trades today.\n\n`;
@@ -739,14 +1205,14 @@ class DerivClient extends EventEmitter {
       const totalW  = recent.reduce((s, d) => s + (d.stats?.wins || 0), 0);
       msg += `<b>── Last ${recent.length}d ──</b>\n` +
              `📊 ${totalTr} (✅${totalW} ❌${totalTr - totalW})  ` +
-             `💼 ${totalPL >= 0 ? '+' : ''}${totalPL.toFixed(2)} ${this.currency()}\n`;
+             `💼 ${totalPL >= 0 ? '+' : ''}${totalPL.toFixed(2)} ${this.currencyStr()}\n`;
     }
     telegram.send(msg);
     this._saveState('eod-archive');
-    this.startBalance = this.client.balance ?? this.lastBalance ?? this.startBalance;
+    this.startBalance = this.balance ?? this.lastBalance ?? this.startBalance;
   }
  
-  currency() { return this.client.currency || this.cfg.currency; }
+  currencyStr() { return this.currency || this.cfg.currency; }
  
   stop(signal) {
     if (this.stopped) return;
@@ -761,13 +1227,592 @@ class DerivClient extends EventEmitter {
     if (this._eodBoot)    clearTimeout(this._eodBoot);
     if (this._barrierT)   clearInterval(this._barrierT);
     this._saveState('shutdown');
-    this.client.stop();
+    try { this.ws?.close(); } catch (_) {}
     setTimeout(() => process.exit(0), 2500);
   }
 }
  
 // ─────────────────────────────────────────────────────────────────────
-// 11. BOOTSTRAP
+// 6.  MARKET DATA MANAGER
+// ─────────────────────────────────────────────────────────────────────
+class MarketDataManager {
+  constructor(client, cfg) {
+    this.client      = client;
+    this.cfg         = cfg;
+    this.history     = new Map();
+    this.subs        = new Map();
+    this.lastQuote   = new Map();
+    this._bootstrapping = false;
+    this.stayCache   = new Map();
+    this._refreshInFlight = false;
+    this._barrierCache = new Map();
+
+    client.on('close', () => { this.subs.clear(); });
+  }
+
+  cacheStays(symbol, growthRate, contractDetails) {
+    if (!contractDetails) return;
+    const arr = contractDetails.ticks_stayed_in;
+    if (!Array.isArray(arr) || !arr.length) return;
+    const key = +(+growthRate).toFixed(4);
+    if (!this.stayCache.has(symbol)) this.stayCache.set(symbol, new Map());
+    const sub = this.stayCache.get(symbol);
+    sub.set(key, {
+      ticks_stayed_in: arr,
+      maxTicks : +contractDetails.maximum_ticks || 0,
+      maxPayout: +contractDetails.maximum_payout || 0,
+      barrier  : +contractDetails.tick_size_barrier_percentage || 0,
+      ts       : Date.now(),
+    });
+  }
+
+  getStays(symbol, growthRate) {
+    const sub = this.stayCache.get(symbol);
+    if (!sub) return null;
+    const key = +(+growthRate).toFixed(4);
+    return sub.get(key) || null;
+  }
+
+  async refreshStays(assets, growthRate) {
+    if (this._refreshInFlight) return;
+    if (!this.client.authorized) return;
+    this._refreshInFlight = true;
+    try {
+      for (const sym of assets) {
+        try {
+          const symbolKey = this.client._isPat ? 'underlying_symbol' : 'symbol';
+          const res = await this.client._send({
+            proposal: 1,
+            amount  : this.cfg.stake,
+            basis   : 'stake',
+            contract_type: 'ACCU',
+            currency: this.cfg.currency,
+            [symbolKey]: sym,
+            growth_rate: growthRate,
+          }, 8000);
+          if (res?.proposal?.contract_details) {
+            this.cacheStays(sym, growthRate, res.proposal.contract_details);
+          }
+        } catch (e) {
+          logger.debug(`refreshStays(${sym}) failed:`, e.message);
+        }
+      }
+    } finally {
+      this._refreshInFlight = false;
+    }
+  }
+
+  async refreshBarriers(assets, growthRates) {
+    for (const sym of assets) {
+      for (const gr of growthRates) {
+        try {
+          const symbolKey = this.client._isPat ? 'underlying_symbol' : 'symbol';
+          const res = await this.client._send({
+            proposal: 1,
+            amount  : this.cfg.stake,
+            basis   : 'stake',
+            contract_type: 'ACCU',
+            currency: this.cfg.currency,
+            [symbolKey]: sym,
+            growth_rate: gr,
+          }, 8000);
+          if (res?.proposal?.contract_details) {
+            const cd = res.proposal.contract_details;
+            const key = `${sym}:${gr}`;
+            this._barrierCache.set(key, {
+              halfBarrierPct: parseFloat(cd.tick_size_barrier_percentage || 0),
+              highBarrier: parseFloat(cd.high_barrier || 0),
+              lowBarrier: parseFloat(cd.low_barrier || 0),
+              maxPayout: parseFloat(cd.maximum_payout || 0),
+            });
+          }
+        } catch (e) {
+          logger.debug(`refreshBarriers(${sym},${gr}) failed:`, e.message);
+        }
+      }
+    }
+  }
+
+  getBarrier(symbol, growthRate) {
+    return this._barrierCache.get(`${symbol}:${growthRate}`);
+  }
+
+  async loadSymbols() {
+    try {
+      const res = await this.client._send({ active_symbols: 'brief' }, 15000);
+      const list = res.active_symbols || [];
+      for (const s of list) {
+        const key = s.underlying_symbol || s.symbol;
+        if (key) this.client.symbols.set(key, s);
+      }
+      logger.info(`loaded ${this.client.symbols.size} active symbols`);
+    } catch (e) {
+      logger.error('loadSymbols failed:', e.message);
+    }
+  }
+
+  async backfill(symbol, count = 1000) {
+    try {
+      const res = await this.client._send({
+        ticks_history: symbol,
+        count,
+        end   : 'latest',
+        style : 'ticks',
+      }, 20000);
+      const prices = res.history?.prices || [];
+      const times  = res.history?.times  || [];
+      const arr    = times.map((t, i) => ({ epoch: +t, quote: parseFloat(prices[i]) }));
+      this.history.set(symbol, arr);
+      if (arr.length) this.lastQuote.set(symbol, arr[arr.length - 1].quote);
+      logger.debug(`backfilled ${symbol}: ${arr.length} ticks`);
+      return arr;
+    } catch (e) {
+      logger.error(`backfill(${symbol}) failed:`, e.message);
+      return [];
+    }
+  }
+
+  async subscribe(symbol) {
+    if (this.subs.has(symbol)) return this.subs.get(symbol);
+    const subId = await this.client.subscribe(
+      { ticks: symbol },
+      msg => {
+        const t = msg.tick;
+        if (!t) return;
+        const tick = { epoch: +t.epoch, quote: parseFloat(t.quote) };
+        this.lastQuote.set(symbol, tick.quote);
+        const arr = this.history.get(symbol);
+        if (arr) {
+          arr.push(tick);
+          const cap = Math.max(this.cfg.tickWindow * 8, 2000);
+          if (arr.length > cap) arr.splice(0, arr.length - cap);
+          this.history.set(symbol, arr);
+        } else {
+          this.history.set(symbol, [tick]);
+        }
+      },
+    );
+    this.subs.set(symbol, subId);
+    logger.info(`subscribed ticks: ${symbol} (sub=${subId})`);
+    return subId;
+  }
+
+  async unsubscribe(symbol) {
+    const subId = this.subs.get(symbol);
+    if (!subId) return;
+    await this.client.forget(subId).catch(() => {});
+    this.subs.delete(symbol);
+    logger.info(`unsubscribed ticks: ${symbol}`);
+  }
+
+  async subscribeAll(symbols) {
+    await Promise.all(symbols.map(s =>
+      this.subscribe(s).catch(e => logger.warn(`subscribe(${s}) failed:`, e.message)),
+    ));
+  }
+
+  async bootstrap(symbols) {
+    if (this._bootstrapping) return;
+    this._bootstrapping = true;
+    try {
+      await this.subscribeAll(symbols);
+      const fetches = symbols.map(async s => {
+        const hist = this.history.get(s) || [];
+        if (hist.length < this.cfg.minTicksForAnalysis) {
+          await this.backfill(s, Math.max(this.cfg.tickWindow * 5, 1000));
+        }
+      });
+      await Promise.all(fetches);
+    } finally {
+      this._bootstrapping = false;
+    }
+  }
+
+  historyFor(symbol) { return this.history.get(symbol) || []; }
+  last(symbol)       { return this.lastQuote.get(symbol); }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// 7.  PULSE ANALYZER  (Monte-Carlo Survival Engine)
+// ─────────────────────────────────────────────────────────────────────
+class PulseAnalyzer {
+  constructor(cfg) {
+    this.cfg = cfg;
+  }
+
+  /**
+   * Bootstrap log-return distribution from recent ticks, then Monte-Carlo
+   * simulate barrier survival for each growth rate and horizon.
+   * Returns the best (asset, growth, N*) candidate or null.
+   */
+  analyze(symbol, ticks, market) {
+    if (!ticks || ticks.length < this.cfg.minTicksForAnalysis) return null;
+
+    const window = Math.min(this.cfg.pulseReturnWindow, ticks.length);
+    const q = ticks.slice(-window).map(t => t.quote);
+    if (q.length < 10) return null;
+
+    // Per-tick log returns
+    const returns = [];
+    for (let i = 1; i < q.length; i++) {
+      if (q[i-1] > 0) returns.push(Math.log(q[i] / q[i-1]));
+    }
+    if (returns.length < 5) return null;
+
+    const price = q[q.length - 1];
+    const n = returns.length;
+    const mean = returns.reduce((s, v) => s + v, 0) / n;
+    let variance = 0;
+    for (const v of returns) variance += (v - mean) ** 2;
+    const sigma = Math.sqrt(variance / n);
+
+    // Volatility regime check: ratio of recent σ to long σ
+    const longReturns = [];
+    for (let i = 1; i < q.length; i++) {
+      if (q[i-1] > 0) longReturns.push(Math.log(q[i] / q[i-1]));
+    }
+    const longSigma = longReturns.length > 20
+      ? Math.sqrt(longReturns.reduce((s, v) => s + v, 0) ** 2 / longReturns.length) || sigma
+      : sigma;
+
+    const vrRatio = sigma / Math.max(longSigma, 1e-12);
+    const regime = vrRatio < this.cfg.pulseCalmMaxRatio ? 'calm'
+                 : vrRatio < this.cfg.pulseStormyMinRatio ? 'normal'
+                 : 'stormy';
+
+    // Estimate barrier from market data (or cached proposal)
+    const barrierInfo = market ? market.getBarrier(symbol, this.cfg.pulseGrowthRates[2] || 0.03) : null;
+    const halfBarrierFrac = barrierInfo ? barrierInfo.halfBarrierPct / 100 : 0.0005;
+
+    // Number of MC trials
+    const trials = this.cfg.pulseTrials;
+
+    // Evaluate each growth rate
+    let best = null;
+    let bestEdge = 0;
+
+    for (const growthRate of this.cfg.pulseGrowthRates) {
+      // Get barrier for this growth rate
+      const grBarrier = market ? market.getBarrier(symbol, growthRate) : null;
+      const barrierFrac = grBarrier ? grBarrier.halfBarrierPct / 100
+                         : halfBarrierFrac * (1 + (growthRate - 0.03) * 2);
+
+      if (barrierFrac <= 0) continue;
+
+      // Simulate survival
+      const horizon = Math.min(this.cfg.pulseHorizon, this.cfg.pulseMaxHorizon + 5);
+      const survivalCounts = new Array(horizon + 1).fill(0);
+      let survivedAll = 0;
+
+      for (let t = 0; t < trials; t++) {
+        let pos = 0;
+        let survived = true;
+        for (let tick = 1; tick <= horizon; tick++) {
+          // Bootstrap: pick a random return from history
+          const r = returns[Math.floor(Math.random() * returns.length)];
+          pos += r;
+          const logBarrier = Math.log(1 + barrierFrac);
+          if (Math.abs(pos) >= logBarrier) {
+            survived = false;
+            break;
+          }
+          if (survived) survivalCounts[tick]++;
+        }
+        if (survived) survivedAll++;
+      }
+
+      // Compute p_t for each t, find EV-optimal horizon
+      let bestN = 0;
+      let bestPayout = 0;
+      const minEV = this.cfg.pulseMinEV;
+      const edgeThreshold = this.cfg.pulseEdgeThreshold;
+
+      for (let n = 1; n <= Math.min(horizon, this.cfg.pulseMaxHorizon); n++) {
+        const pN = survivalCounts[n] / trials;
+        const grossReturn = Math.pow(1 + growthRate, n);
+        const edge = grossReturn * pN;
+        const ev = edge - 1;
+
+        if (edge >= edgeThreshold && ev >= minEV && edge > bestEdge) {
+          bestEdge = edge;
+          bestN = n;
+          bestPayout = edge;
+        }
+      }
+
+      if (bestN > 0) {
+        const pN = survivalCounts[bestN] / trials;
+        const p1 = survivalCounts[1] / trials;
+        const suggestedTakeProfit = Math.pow(1 + growthRate, bestN) - 1;
+
+        best = {
+          symbol,
+          growthRate,
+          edge: bestEdge,
+          ev: bestPayout - 1,
+          bestN,
+          pN,
+          p1: p1 || 0.5,
+          regime,
+          vrRatio,
+          sigma,
+          halfBarrierFrac,
+          suggestedTakeProfit: Math.max(suggestedTakeProfit, 0.005),
+          recommend: true,
+          edgeOK: true,
+          evOK: true,
+          survOK: pN >= this.cfg.pulseMinSurvival,
+          calmOK: regime === 'calm',
+        };
+      }
+    }
+
+    return best;
+  }
+
+  rank(analyses) {
+    return analyses.filter(Boolean).sort((a, b) => b.edge - a.edge);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// 8.  TRADE EXECUTOR  (Accumulator)
+// ─────────────────────────────────────────────────────────────────────
+class TradeExecutor extends EventEmitter {
+  constructor(client, cfg) {
+    super();
+    this.client  = client;
+    this.cfg     = cfg;
+    this.open    = new Map();
+    this.analyzer = null;
+    this._selling = new Set();
+  }
+
+  async buy(symbol, growthRate, stake, limit, analysis = null) {
+    growthRate = Math.max(0.01, Math.min(0.05, +growthRate.toFixed(4)));
+    try {
+      const symbolKey = this.client._isPat ? 'underlying_symbol' : 'symbol';
+      const pres = await this.client._send({
+        proposal    : 1,
+        amount      : stake,
+        basis       : 'stake',
+        contract_type: 'ACCU',
+        currency    : this.cfg.currency,
+        [symbolKey] : symbol,
+        growth_rate : growthRate,
+        ...((limit.take_profit != null && limit.take_profit > 0)
+            ? { limit_order: { take_profit: limit.take_profit } }
+            : {}),
+      }, 20000);
+      const p = pres.proposal;
+      if (!p?.id) throw new Error('No proposal id returned');
+      logger.info(`proposal id=${p.id} ask=${p.ask_price} payout=${p.payout} spot=${p.spot}`);
+      if (pres.error) throw new Error(pres.error.message);
+
+      const bres = await this.client._send({
+        buy  : p.id,
+        price: p.ask_price,
+      }, 20000);
+      const b = bres.buy;
+      if (!b?.contract_id) throw new Error('Buy did not return contract_id');
+      logger.info(`bought ACCU #${b.contract_id} for ${b.buy_price}`);
+
+      const cd = p.contract_details || {};
+      const entrySpot = parseFloat(p.spot ?? cd.current_spot ?? 0);
+      const halfBarrierPct = entrySpot
+        ? (parseFloat(cd.barrier_spot_distance ?? 0) / entrySpot) * 100
+        : 0;
+      const highBarrier = parseFloat(cd.high_barrier ?? 0);
+      const lowBarrier  = parseFloat(cd.low_barrier  ?? 0);
+      const maxPayout   = parseFloat(cd.maximum_payout ?? 0);
+
+      const info = {
+        contractId : b.contract_id,
+        symbol,
+        growthRate,
+        stake,
+        buyPrice   : parseFloat(b.buy_price),
+        payout     : parseFloat(b.payout),
+        buyTime    : b.purchase_time || (Date.now()/1000),
+        limit      : { stop_loss: limit.stop_loss ?? null, take_profit: limit.take_profit ?? null },
+        contractDetails : cd,
+        entrySpot,
+        halfBarrierPct,
+        highBarrier,
+        lowBarrier,
+        maxPayout,
+        proposalId : p.id,
+        balanceAfter: parseFloat(b.balance_after ?? this.client.balance),
+      };
+
+      if (analysis && typeof analysis === 'object') {
+        info._analysis = analysis;
+      }
+      this.open.set(b.contract_id, info);
+      logger.info(`barrier: ±${halfBarrierPct.toFixed(4)}% spot=${entrySpot.toFixed(2)} [${lowBarrier.toFixed(2)} … ${highBarrier.toFixed(2)}] maxPayout=${maxPayout}`);
+
+      if (this.bot?.market?.cacheStays) {
+        this.bot.market.cacheStays(symbol, growthRate, cd);
+      }
+
+      await this.client.subscribe(
+        { proposal_open_contract: 1, contract_id: b.contract_id },
+        msg => this._onUpdate(msg, info),
+      );
+      this.emit('open', info);
+      return info;
+    } catch (e) {
+      logger.error(`buy(${symbol}) failed:`, e.message);
+      throw e;
+    }
+  }
+
+  async _onUpdate(msg, info) {
+    const c = msg.proposal_open_contract;
+    if (!c) return;
+    const cid  = c.contract_id ?? info.contractId;
+    const profit = parseFloat(c.profit ?? 0);
+    const spot   = parseFloat(c.current_spot ?? 0);
+    const status = c.status;
+
+    logger.debug(`contract #${cid} status=${status} profit=${profit.toFixed(3)} spot=${spot}`);
+
+    const stopLossAbs = Math.abs(info.limit?.stop_loss || 0);
+    if (status === 'open' && stopLossAbs > 0 && profit <= -stopLossAbs && !this._selling.has(cid)) {
+      logger.warn(`contract #${cid} hit stop-loss @ profit=${profit.toFixed(2)} ≤ -${stopLossAbs} — selling`);
+      this._selling.add(cid);
+      try { await this.sell(cid, 0); } catch (e) {
+        logger.error(`emergency sell #${cid} failed:`, e.message);
+      } finally {
+        this._selling.delete(cid);
+      }
+    }
+
+    if (status === 'won' || status === 'lost') {
+      const finished = {
+        ...info,
+        contractId : cid,
+        profit,
+        status,
+        sellPrice  : parseFloat(c.sell_price ?? 0),
+        sellTime   : c.sell_time ?? (Date.now()/1000),
+        currentSpot: spot,
+      };
+      this.open.delete(cid);
+      this.emit('result', finished);
+      if (msg.subscription?.id) {
+        await this.client.forget(msg.subscription.id).catch(() => {});
+      }
+    } else {
+      this.emit('update', { ...info, contractId: cid, profit, currentSpot: spot, status });
+    }
+  }
+
+  async sell(contractId, minPrice = 0) {
+    try {
+      const res = await this.client._send({ sell: contractId, price: minPrice }, 15000);
+      logger.info(`sold #${contractId} for ${res.sell?.sold_for}`);
+      return res.sell;
+    } catch (e) {
+      logger.error(`sell(${contractId}) failed:`, e.message);
+      throw e;
+    }
+  }
+
+  openTrades() { return Array.from(this.open.values()); }
+  count()      { return this.open.size; }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// 9.  STATISTICS MANAGER
+// ─────────────────────────────────────────────────────────────────────
+class StatisticsManager {
+  constructor() {
+    this.trades = [];
+    this.dailySummaries = [];
+    this.today = this._todayStr();
+  }
+  _todayStr() { return new Date().toISOString().slice(0, 10); }
+  _now()      { return { date: this._todayStr(), hour: new Date().getUTCHours(), ts: Date.now() }; }
+
+  record(trade) {
+    const n = this._now();
+    this.trades.push({ ...trade, timestamp: n.ts, date: n.date, hour: n.hour });
+    if (n.date !== this.today) {
+      this._rollDay();
+      this.today = n.date;
+    }
+  }
+  _rollDay() {
+    const day = this.today;
+    const trades = this.trades.filter(t => t.date === day);
+    if (trades.length) this.dailySummaries.push({ date: day, trades, stats: this.stats(trades) });
+  }
+  todayTrades() {
+    const d = this._todayStr();
+    return this.trades.filter(t => t.date === d);
+  }
+  stats(list) {
+    const wins   = list.filter(t => t.status === 'won');
+    const losses = list.filter(t => t.status === 'lost');
+    const total  = list.reduce((s, t) => s + (t.profit || 0), 0);
+    const gw     = wins.reduce((s, t)   => s + (t.profit || 0), 0);
+    const gl     = Math.abs(losses.reduce((s, t) => s + (t.profit || 0), 0));
+    const stake  = list.reduce((s, t) => s + (t.stake || 0), 0);
+    return {
+      count       : list.length,
+      wins        : wins.length,
+      losses      : losses.length,
+      winRate     : list.length ? (wins.length / list.length) * 100 : 0,
+      grossWin    : gw,
+      grossLoss   : gl,
+      netPL       : gw - gl,
+      totalProfit : total,
+      profitFactor: gl > 0 ? gw / gl : (gw > 0 ? Infinity : 0),
+      avgProfit   : list.length ? total / list.length : 0,
+      stake,
+    };
+  }
+  _tradesForHour(hour, date = this._todayStr()) {
+    return this.trades.filter(t => t.date === date && t.hour === hour);
+  }
+  _tradesForDate(date) {
+    return this.trades.filter(t => t.date === date);
+  }
+  previousHourSummary() {
+    const now = new Date();
+    const prev = new Date(now.getTime() - 3600_000);
+    const hour = prev.getUTCHours();
+    const date = prev.toISOString().slice(0, 10);
+    const list = this._tradesForHour(hour, date);
+    return { hour, date, trades: list, stats: this.stats(list) };
+  }
+  previousDaySummary() {
+    const now = new Date();
+    const prev = new Date(now.getTime() - 86_400_000);
+    const date = prev.toISOString().slice(0, 10);
+    const list = this._tradesForDate(date);
+    return { date, trades: list, stats: this.stats(list) };
+  }
+  archiveOldDays() {
+    const today = this._todayStr();
+    const old = this.trades.filter(t => t.date !== today);
+    if (!old.length) return;
+    const byDate = {};
+    for (const t of old) (byDate[t.date] = byDate[t.date] || []).push(t);
+    for (const date of Object.keys(byDate)) {
+      this.dailySummaries.push({
+        date,
+        trades: byDate[date],
+        stats: this.stats(byDate[date]),
+      });
+    }
+    this.trades = this.trades.filter(t => t.date === today);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// 10. BOOTSTRAP
 // ─────────────────────────────────────────────────────────────────────
 function printBanner() {
   console.log('╔════════════════════════════════════════════════════╗');
@@ -792,7 +1837,7 @@ async function main() {
     ? '✅  Telegram notifications: ENABLED'
     : 'ℹ️   Telegram notifications: DISABLED');
  
-  const bot = new TradingBot();
+  const bot = new DerivClient(CONFIG);
   await bot.start();
 }
  
