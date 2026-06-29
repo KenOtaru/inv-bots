@@ -49,8 +49,8 @@ const path      = require('path');
 // ============================================================
 // FILE PATHS
 // ============================================================
-const STATE_FILE        = path.join(__dirname, 'IndexBot1_01-state_v2.json');
-const HISTORY_FILE      = path.join(__dirname, 'IndexBot1_01-history_v2.json');
+const STATE_FILE        = path.join(__dirname, 'IndexBot2_09-state_v2.json');
+const HISTORY_FILE      = path.join(__dirname, 'IndexBot2_09-history_v2.json');
 const STATE_SAVE_INTERVAL = 5000;  // ms
 
 // ============================================================
@@ -74,19 +74,19 @@ const LOGGER = {
 // ============================================================
 const CONFIG = {
     // ── Deriv API ─────────────────────────────────────────────
-    API_TOKEN:  'hsj0tA0XJoIzJG5',   // 
+    API_TOKEN:  '0P94g4WdSrSrzir',   // 
     APP_ID:     '1089',
     WS_URL:     'wss://ws.derivws.com/websockets/v3',
 
     // ── Capital & Risk (Fixed-Fractional — replaces martingale) ──
     INITIAL_CAPITAL:            250,
     RISK_PERCENT_PER_TRADE:     0.50,    // % of capital per trade (1% = conservative)
-    MIN_STAKE:                  0.35,   // Minimum stake allowed by Deriv
+    MIN_STAKE:                  1,   // Minimum stake allowed by Deriv
     MAX_STAKE:                  150,   // Hard cap per trade in USD
 
     // Recovery staking (limited — max 2 steps)
     RECOVERY_ENABLED:           true,
-    RECOVERY_MULTIPLIER:        1.48,    // Step 1 recovery multiplier
+    RECOVERY_MULTIPLIER:        1.78,    // Step 1 recovery multiplier
     RECOVERY_MULTIPLIER2:       2.0,    // Step 2 recovery multiplier (final)
     RECOVERY_MULTIPLIER3:       2.1,     // Step 3 recovery multiplier (final)
     MAX_RECOVERY_STEPS:         9,      // Never go beyond 2 recovery steps
@@ -102,8 +102,8 @@ const CONFIG = {
     COOLDOWN_CANDLES:           3,      // Wait 3 candles before re-entry
 
     // ── Candle / Contract Settings ────────────────────────────
-    GRANULARITY:                60,     // 1-minute candles
-    TIMEFRAME_LABEL:            '1m',
+    GRANULARITY:                300,     // 5-minute candles
+    TIMEFRAME_LABEL:            '5m',
     CANDLES_TO_LOAD:            150,    // History for indicator warmup
     MAX_CANDLES_STORED:         250,    // Rolling window
 
@@ -202,10 +202,8 @@ const CONFIG = {
         'stpRNG3',
         'stpRNG4',
         'stpRNG5',
-        // Uncomment to add volatility indices:
-        'R_10', 'R_25', 'R_75', //'R_05', 'R_100'
-        '1HZ10V', '1HZ25V', '1HZ50V', // '1HZ75', '1HZ100V'
-
+        'R_10', 'R_25', 'R_75','R_50', 'R_100',
+        '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75', // '1HZ100V'
     ],
 
     // ── Misc ──────────────────────────────────────────────────
@@ -1158,7 +1156,7 @@ class TelegramService {
         const today   = TradeHistoryManager.getTodayStats();
         const ind     = details.indicators || {};
         const lines   = [
-            `${emoji} <b>INDEX BOT v2 — ${type}</b>`,
+            `${emoji} <b>INDEX BOT2 v2 — ${type}</b>`,
             `Pair: <b>${symbol}</b>  Direction: <b>${direction === 'CALLE' ? '📈 CALLE' : '📉 PUTE'}</b>`,
             `Stake: $${stake.toFixed(2)} | Duration: ${duration}${durationUnit.toUpperCase()}`,
             `Recovery Step: ${a?.recoveryStep ?? 0} | ${TradingSessionManager.getStatusString()}`,
@@ -1206,7 +1204,7 @@ class TelegramService {
             }
         });
         await this.sendMessage([
-            `⏰ <b>Index Bot v2 Hourly</b>`,
+            `⏰ <b>Index Bot2 v2 Hourly</b>`,
             `Last Hour: ${h.trades}t ${h.wins}W/${h.losses}L ${wr}% ${h.pnl >= 0 ? '🟢' : '🔴'} $${h.pnl.toFixed(2)}`,
             `Today: ${today.tradesCount}t P/L: $${(today.netPL || 0).toFixed(2)}`,
             `Capital: $${state.capital.toFixed(2)}`,
@@ -1230,7 +1228,7 @@ class TelegramService {
             }
         });
         await this.sendMessage([
-            `📊 <b>INDEX BOT v2 SESSION SUMMARY</b>`,
+            `📊 <b>INDEX BOT2 v2 SESSION SUMMARY</b>`,
             `Duration: ${stats.duration} | Trades: ${stats.trades}`,
             `W: ${stats.wins} | L: ${stats.losses} | Win Rate: ${stats.winRate}`,
             `Session P/L: $${stats.netPL.toFixed(2)}`,
@@ -1250,7 +1248,7 @@ class TelegramService {
             pairInfo += `\n  ${sym}: ${CONFIG.TIMEFRAME_LABEL} | ${CONFIG.DURATION}${CONFIG.DURATION_UNIT}`;
         });
         await this.sendMessage([
-            `🤖 <b>DERIV INDEX BOT v2 STARTED</b>`,
+            `🤖 <b>DERIV INDEX BOT2 v2 STARTED</b>`,
             `Strategy: 3-Layer Volatility-Regime Adaptive Confluence`,
             `L1: ATR+ADX+BB | L2: Supertrend+EMA+Donchian | L3: RSI+MACD+Stoch+Pattern (${CONFIG.MIN_CONFLUENCE_SCORE}/4)`,
             `Risk: ${CONFIG.RISK_PERCENT_PER_TRADE}% per trade | Max: $${CONFIG.MAX_STAKE}`,
@@ -1414,6 +1412,7 @@ class SessionManager {
             a.cooldownCandles   = 0;
             a.currentStake      = StakeCalculator.calculate(state.capital);
             a.lastTradeWasWin   = true;
+            a.forceTradeOnLoss  = false;  // NEW: Clear force trade flag on win
             LOGGER.trade(`✅ [${symbol}] WIN +$${profit.toFixed(2)} | ${direction} | P/L: $${a.netPL.toFixed(2)}`);
         } else {
             // LOSS
@@ -1429,6 +1428,7 @@ class SessionManager {
             a.consecutiveLosses++;
             a.consecutiveWins  = 0;
             a.lastTradeWasWin  = false;
+            a.forceTradeOnLoss = true;  // NEW: Set flag to force immediate trade in same direction
 
             // Recovery step (max MAX_RECOVERY_STEPS)
             if (a.recoveryStep < CONFIG.MAX_RECOVERY_STEPS) {
@@ -1444,6 +1444,7 @@ class SessionManager {
             // Cool-down after MAX_CONSECUTIVE_LOSSES straight losses
             if (a.consecutiveLosses >= CONFIG.MAX_CONSECUTIVE_LOSSES) {
                 a.cooldownCandles = CONFIG.COOLDOWN_CANDLES;
+                a.forceTradeOnLoss = false;  // NEW: Disable force trade during cooldown
                 LOGGER.warn(`❄️ [${symbol}] ${CONFIG.MAX_CONSECUTIVE_LOSSES} consecutive losses — cooling down for ${CONFIG.COOLDOWN_CANDLES} candles`);
                 TelegramService.sendMessage(
                     `❄️ <b>[${symbol}] COOL-DOWN ACTIVATED</b>\n` +
@@ -1453,7 +1454,7 @@ class SessionManager {
                 );
             }
 
-            LOGGER.trade(`❌ [${symbol}] LOSS -$${Math.abs(profit).toFixed(2)} | ${direction} | Recovery:${a.recoveryStep} | Next Stake: $${a.currentStake.toFixed(2)}`);
+            LOGGER.trade(`❌ [${symbol}] LOSS -$${Math.abs(profit).toFixed(2)} | ${direction} | Recovery:${a.recoveryStep} | Next Stake: $${a.currentStake.toFixed(2)} | FORCE SAME DIRECTION`);
         }
 
         TradeHistoryManager.recordTrade(symbol, profit, a.recoveryStep);
@@ -1542,6 +1543,7 @@ class ConnectionManager {
                     consecutiveWins:             0,
                     consecutiveLosses:           0,
                     cooldownCandles:             0,   // candles remaining in cool-down
+                    forceTradeOnLoss:            false,  // NEW: flag to force immediate trade after loss
                     activePositions:             [],
                     tradesCount: 0, winsCount: 0, lossesCount: 0,
                     profit: 0, loss: 0, netPL: 0,
@@ -1880,7 +1882,7 @@ class IndexBot {
         this.connection              = new ConnectionManager();
         this._processedContracts     = new Set();
         this._tradeLocked            = false;   // BUG FIX: mutex added
-        this.tradeWatchdogMs         = 80000;   // 80s (58s duration + buffer)
+        this.tradeWatchdogMs         = 150000;   // 80s (58s duration + buffer)
         this.timeCheckStarted        = false;
         this.sessionTimeCheckerId    = null;
         this.statusDisplayIntervalId = null;
@@ -1956,6 +1958,7 @@ class IndexBot {
     // CORE TRADE EXECUTION — single entry path, all cases
     // BUG FIX: recovery no longer separate method with wrong direction logic
     // BUG FIX: trade mutex prevents race-condition double-trades
+    // NEW: Force trade in same direction after loss (bypass signal analysis)
     // ════════════════════════════════════════════════════════
     executeNextTrade(symbol, lastClosedCandle) {
         const a = state.assets[symbol];
@@ -2006,6 +2009,7 @@ class IndexBot {
             LOGGER.error(`[${symbol}] Insufficient capital: $${state.capital.toFixed(2)} < stake $${stake.toFixed(2)}`);
             a.recoveryStep = 0;
             a.currentStake = StakeCalculator.calculate(state.capital);
+            a.forceTradeOnLoss = false;  // NEW: Clear force flag on insufficient capital
             a.canTrade = false;
             return;
         }
@@ -2016,7 +2020,79 @@ class IndexBot {
             return;
         }
 
-        // ── Run 3-Layer Signal Analysis ────────────────────
+        // ══════════════════════════════════════════════════════════════
+        // NEW: CHECK FOR FORCE TRADE AFTER LOSS (bypass signal analysis)
+        // ══════════════════════════════════════════════════════════════
+        if (a.forceTradeOnLoss && a.lastTradeDirection) {
+            LOGGER.trade(`🔄 [${symbol}] FORCE TRADE AFTER LOSS — Same direction: ${a.lastTradeDirection}`);
+            
+            // Lock mutex and execute immediately in same direction
+            this._tradeLocked = true;
+            a.canTrade = false;
+            
+            const recoveryNote = a.recoveryStep > 0 ? ` [RECOVERY STEP ${a.recoveryStep}]` : '';
+            LOGGER.trade(
+                `🎯 [${symbol}]${recoveryNote} ${a.lastTradeDirection === 'CALLE' ? '📈 CALLE' : '📉 PUTE'} | ` +
+                `Stake: $${stake.toFixed(2)} | FORCED AFTER LOSS`
+            );
+
+            const direction = a.lastTradeDirection === 'CALLE' ? '📉 PUTE' : '📈 CALLE';
+
+            const pos = {
+                symbol,
+                direction:    direction, //a.lastTradeDirection,
+                stake,
+                duration:     CONFIG.DURATION,
+                durationUnit: CONFIG.DURATION_UNIT,
+                entryTime:    Date.now(),
+                contractId:   null,
+                reqId:        null,
+                currentProfit: 0,
+                buyPrice:     0,
+                signal:       {
+                    score:    0,
+                    maxScore: 4,
+                    reason:   'FORCED TRADE AFTER LOSS - Same direction recovery',
+                    layer1:   { forced: true },
+                    layer2:   { forced: true },
+                    layer3:   { forced: true },
+                    warnings: ['FORCED_TRADE'],
+                },
+                indicators:   { forced: true },
+            };
+
+            a.activePositions.push(pos);
+
+            const reqId = this.connection.send({
+                buy: 1, subscribe: 1, price: stake.toFixed(2),
+                parameters: {
+                    contract_type: a.lastTradeDirection,
+                    symbol,
+                    currency:      'USD',
+                    amount:        stake.toFixed(2),
+                    duration:      CONFIG.DURATION,
+                    duration_unit: CONFIG.DURATION_UNIT,
+                    basis:         'stake',
+                },
+            });
+
+            pos.reqId = reqId;
+
+            // Safety: release lock after 5s if buy response hasn't come
+            setTimeout(() => {
+                if (this._tradeLocked) {
+                    LOGGER.warn(`[${symbol}] Trade lock auto-released after timeout`);
+                    this._tradeLocked = false;
+                }
+            }, 5000);
+
+            StatePersistence.saveState();
+            return;  // Exit early - no signal analysis needed
+        }
+
+        // ══════════════════════════════════════════════════════════════
+        // NORMAL FLOW: Run 3-Layer Signal Analysis
+        // ══════════════════════════════════════════════════════════════
         const signal = SignalAnalyzer.analyze(a.closedCandles, symbol);
 
         LOGGER.signal(
@@ -2201,6 +2277,7 @@ class IndexBot {
                     currentStake:    a.currentStake,
                     activePositions: a.activePositions.length,
                     cooldownCandles: a.cooldownCandles,
+                    forceTradeOnLoss: a.forceTradeOnLoss,  // NEW: Show force trade status
                     trades:    a.tradesCount, wins:  a.winsCount,
                     losses:    a.lossesCount, netPL: a.netPL,
                     lastDirection: a.lastTradeDirection,
@@ -2275,7 +2352,8 @@ const statusInterval = setInterval(() => {
             const adx    = p.indicators?.adx  ? `ADX:${p.indicators.adx}` : '';
             const rsi    = p.indicators?.rsi  ? `RSI:${p.indicators.rsi}` : '';
             const cdwn   = p.cooldownCandles  > 0 ? ` ❄️CD:${p.cooldownCandles}` : '';
-            pairLines += `\n  ${sym}: Rec${p.recoveryStep} $${p.currentStake.toFixed(2)} | ${p.trades}t ${p.wins}W/${p.losses}L $${p.netPL.toFixed(2)} | Pos:${p.activePositions}${cdwn} | ${sig} | ${adx} ${rsi}`;
+            const force  = p.forceTradeOnLoss ? ` 🔄FORCE:${p.lastDirection}` : '';  // NEW: Show force trade indicator
+            pairLines += `\n  ${sym}: Rec${p.recoveryStep} $${p.currentStake.toFixed(2)} | ${p.trades}t ${p.wins}W/${p.losses}L $${p.netPL.toFixed(2)} | Pos:${p.activePositions}${cdwn}${force} | ${sig} | ${adx} ${rsi}`;
         }
     });
 
