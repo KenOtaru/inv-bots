@@ -26,24 +26,28 @@ const CONFIG = {
   stake: Number(1),
   multiplier: Number(10),
   multiplier2: Number(110),
-  maxStake: Number(120),
+  multiplier3: Number(1110),
+  maxStake: Number(1220),
   confidence: Number(0.76), //0.72
+  confidence2: Number(0.84), 
   momentum: Number(0.0008), //0.0012
-  drift: Number(0.00020), //0.00025
+  drift: Number(0.00020), //0.00025 
+  volume: Number(0.00020),
+  rangePosition: Number(0.00020),
   growthRate: Number(0.02),
   maxOpenSeconds: Number(240),
   targetProfitPct: Number(0.12),
   stopLossPct: Number(0.99),
   maxTradesPerHour: Number(8000),
   maxDailyLoss: Number(110),
-  dailyProfitTarget: Number(25000),
+  dailyProfitTarget: Number(10000),
   cooldownAfterLossMs: Number(180000),
   tradeWatchdogMs: Number(180000),
   pollTimeoutMs: Number(90000),
   tickWindow: Number(80),
   reconnectBaseMs: Number(1000),
   reconnectMaxMs: Number(60000),
-  stateFile: path.join(__dirname, 'bot-state_01.json'),
+  stateFile: path.join(__dirname, 'bot-state_03.json'),
   symbols: ('R_10,R_25,R_50,R_75,R_100').split(',').map((s) => s.trim()).filter(Boolean),
   dryRun: false,
 };
@@ -308,12 +312,17 @@ async function evaluateMarket() {
   if (day.profit <= -Math.abs(CONFIG.maxDailyLoss) || day.profit >= CONFIG.dailyProfitTarget) return;
   if (hourTradeCount() >= CONFIG.maxTradesPerHour) return;
 
-  const ranked = CONFIG.symbols
+//   const ranked = CONFIG.symbols
+//     .map((symbol) => ({ symbol, stats: indicators(tickBooks.get(symbol) || []) }))
+//     .filter((x) => x.stats && state.consecutiveLosses <= 0 ? x.stats.score >= CONFIG.confidence : x.stats.score >= CONFIG.confidence2 && Math.abs(x.stats.drift) < CONFIG.drift && Math.abs(x.stats.momentum5) < CONFIG.momentum && x.stats.vol > CONFIG.volume && x.stats.rangePosition > CONFIG.rangePosition)
+//     .sort((a, b) => b.stats.score - a.stats.score);
+
+const ranked = CONFIG.symbols
     .map((symbol) => ({ symbol, stats: indicators(tickBooks.get(symbol) || []) }))
-    .filter((x) => x.stats && x.stats.score >= CONFIG.confidence && Math.abs(x.stats.drift) < CONFIG.drift && Math.abs(x.stats.momentum5) < CONFIG.momentum)
+    .filter((x) => x.stats && state.consecutiveLosses <= 0 ? x.stats.score >= CONFIG.confidence : x.stats.score >= CONFIG.confidence2 && Math.abs(x.stats.drift) < CONFIG.drift && Math.abs(x.stats.momentum5) < CONFIG.momentum)
     .sort((a, b) => b.stats.score - a.stats.score);
 
-  if (!ranked.length) return;
+if (!ranked.length) return;
   await openAccumulator(ranked[0]);
 }
 
@@ -322,7 +331,7 @@ function hourTradeCount() {
 }
 
 function nextStake() {
-  const base = CONFIG.stake * (state.consecutiveLosses === 1 ? CONFIG.multiplier : state.consecutiveLosses === 2 ? CONFIG.multiplier2 : 1);
+  const base = CONFIG.stake * (state.consecutiveLosses === 1 ? CONFIG.multiplier : state.consecutiveLosses === 2 ? CONFIG.multiplier2 : state.consecutiveLosses === 3 ? CONFIG.multiplier3 : 1);
   return Math.min(CONFIG.maxStake, Math.max(0.35, Number(base.toFixed(2))));
 }
 
