@@ -843,6 +843,9 @@ class DerivClient extends EventEmitter {
   }
 
   _onTradeResult(t) {
+    this._clearWatchdogTimers();
+    this.tradeStartTime = null;
+    this.stats.record(t);
     const emoji = t.status === 'won' ? '✅' : '❌';
     const label = t.status === 'won' ? 'WIN' : 'LOSS';
     const dur = Math.max(0, (t.sellTime || Date.now()/1000) - (t.buyTime || 0));
