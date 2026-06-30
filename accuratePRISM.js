@@ -1625,10 +1625,13 @@ class TradingBot {
     proposalCandidates.sort((a, b) => b.valueEdge - a.valueEdge || b.stdEdge - a.stdEdge);
     const best = proposalCandidates[0];
 
+    console.log('valueEdge:', best.valueEdge, '|', this.cfg.minEdge)
     if (best.valueEdge < this.cfg.minEdge) {
       logger.info(`skip: edge ${best.valueEdge.toFixed(4)} < minEdge ${this.cfg.minEdge} (${best.analysis.symbol} d${best.candidate.digit})`);
       return;
     }
+
+    console.log('stdEdge:', best.stdEdge, '|', this.cfg.minStandardizedEdge);
     if (best.stdEdge < this.cfg.minStandardizedEdge) {
       logger.info(`skip: stdEdge ${best.stdEdge.toFixed(2)} < ${this.cfg.minStandardizedEdge} (${best.analysis.symbol} d${best.candidate.digit})`);
       return;
