@@ -188,13 +188,13 @@ const CONFIG = Object.freeze({
   // Monte-Carlo survival engine
   pulseReturnWindow   : parseInt('120',  10), // ticks used to bootstrap μ,σ
   pulseHorizon        : parseInt('20',   10), // max ticks simulated forward
-  pulseTrials         : parseInt('4000', 10), // MC paths per (asset,growth)
-  pulseMinTrials      : parseInt('800',  10), // adaptive: lower trials when many assets
+  pulseTrials         : parseInt('10000', 10), // MC paths per (asset,growth)
+  pulseMinTrials      : parseInt('4000',  10), //800 adaptive: lower trials when many assets
  
   // EV gates — the heart of "only positive-EV entries"
   pulseEdgeThreshold  : parseFloat('1.015'),  // (1+g)^N·p_N must clear this (≥1.015 = +1.5% gross EV)
   pulseMinEV          : parseFloat('0.004'),  // min EV as fraction of stake (+0.4%)
-  pulseMinSurvival    : parseFloat('0.65'),   // p_{N*} floor — never bet on a coin-flip-ish survival
+  pulseMinSurvival    : parseFloat('0.75'),   // p_{N*} floor — never bet on a coin-flip-ish survival
   pulseMaxHorizon     : parseInt('6',    10), // never hold longer than this many ticks even if "optimal"
  
   // Growth-rate candidates (Deriv supports 0.01–0.05)
