@@ -131,7 +131,7 @@ const CONFIG = Object.freeze({
   accountType: ('demo').toLowerCase(),  // 'demo' | 'real'
  
   // ─ Trade parameters ─
-  stake          : parseFloat('1.0'),
+  stake          : parseFloat('2.0'),
  
   // NOTE: PULSE does NOT use Martingale. These legacy knobs are kept
   // only so the saved-state file / Telegram messages stay compatible,
@@ -142,7 +142,7 @@ const CONFIG = Object.freeze({
   takeProfit     : parseFloat('10000.0'),
  
   // ─ Sizing (PULSE: flat stake, optional capped edge-scaled sizing) ─
-  sizingMode        : 'flat',            // 'flat' | 'edge'
+  sizingMode        : 'edge',            // 'flat' | 'edge'
   edgeScaleMax      : parseFloat('2.0'), // at edge-scaled mode, max multiplier on base stake
   edgeScaleEdgeRef  : parseFloat('0.05'),// edge (EV fraction) at which we hit the cap
   downscaleAfterLoss: true,              // shrink stake after a loss (anti-ruin)
@@ -178,7 +178,7 @@ const CONFIG = Object.freeze({
   },
  
   // ─ Logging ─
-  logFile : 'deriv_pulse_bot2.log',
+  logFile : 'deriv_pulse_bot3.log',
   logLevel: ('INFO').toUpperCase(),
  
   // ════════════════════════════════════════════════════════════════
@@ -194,7 +194,7 @@ const CONFIG = Object.freeze({
   // EV gates — the heart of "only positive-EV entries"
   pulseEdgeThreshold  : parseFloat('1.015'),  // (1+g)^N·p_N must clear this (≥1.015 = +1.5% gross EV)
   pulseMinEV          : parseFloat('0.004'),  // min EV as fraction of stake (+0.4%)
-  pulseMinSurvival    : parseFloat('0.75'),   // p_{N*} floor — never bet on a coin-flip-ish survival
+  pulseMinSurvival    : parseFloat('0.95'),   // p_{N*} floor — never bet on a coin-flip-ish survival
   pulseMaxHorizon     : parseInt('6',    10), // never hold longer than this many ticks even if "optimal"
  
   // Growth-rate candidates (Deriv supports 0.01–0.05)
@@ -216,7 +216,7 @@ const CONFIG = Object.freeze({
   tradeWatchdogMs: parseInt('90000', 10),
  
   // ─ State persistence ─
-  stateFile           : 'deriv_pulse_bot2_state.json',
+  stateFile           : 'deriv_pulse_bot3_state.json',
   stateSaveOnTrade    : true,
   stateSaveOnShutdown : true,
 });
@@ -925,10 +925,10 @@ class DerivClient extends EventEmitter {
       const scaled = 1 + (evFrac / this.cfg.edgeScaleEdgeRef) * (this.cfg.edgeScaleMax - 1);
       mult = Math.max(1, Math.min(this.cfg.edgeScaleMax, scaled));
     }
-    // if (this.cfg.downscaleAfterLoss && this.lossesStreak > 0) {
-    //   // shrink 15% per consecutive loss, floor at 0.5x
-    //   mult *= Math.max(0.5, Math.pow(0.85, this.lossesStreak));
-    // }
+    if (this.cfg.downscaleAfterLoss && this.lossesStreak > 0) {
+      // shrink 15% per consecutive loss, floor at 0.5x
+      mult *= Math.max(0.5, Math.pow(0.85, this.lossesStreak));
+    }
     this.activeStakeMult = mult;
     return +(base * mult).toFixed(2);
   }
