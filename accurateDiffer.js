@@ -172,8 +172,8 @@ const CONFIG = Object.freeze({
   hourlySummary: boolEnv('HOURLY_SUMMARY', true),
 
   // Persistence/logging
-  stateFile: strEnv('STATE_FILE', 'deriv_digit_differ8_state.json'),
-  logFile: strEnv('LOG_FILE', 'deriv_digit_differ8_bot.log'),
+  stateFile: strEnv('STATE_FILE', 'deriv_digit_differ9_state.json'),
+  logFile: strEnv('LOG_FILE', 'deriv_digit_differ9_bot.log'),
   logLevel: strEnv('LOG_LEVEL', 'INFO').toUpperCase(),
 
   // Telegram
