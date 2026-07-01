@@ -131,14 +131,14 @@ const CONFIG = Object.freeze({
   accountType: ('demo').toLowerCase(),  // 'demo' | 'real'
  
   // ─ Trade parameters ─
-  stake          : parseFloat('3.0'),
+  stake          : parseFloat('2.5'),
  
   // NOTE: PULSE does NOT use Martingale. These legacy knobs are kept
   // only so the saved-state file / Telegram messages stay compatible,
   // but martingale is forced OFF (see _updateSizing).
   multiplier     : parseFloat('0.04'),   // default growth rate hint (PULSE overrides per-trade)
   multiplierStep : parseFloat('0.0'),
-  stopLoss       : parseFloat('1000.0'),    // hard $ stop per contract (manual sell)
+  stopLoss       : parseFloat('110.0'),    // hard $ stop per contract (manual sell)
   takeProfit     : parseFloat('10000.0'),
  
   // ─ Sizing (PULSE: flat stake, optional capped edge-scaled sizing) ─
