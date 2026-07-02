@@ -153,7 +153,7 @@ const CONFIG = {
     BASE_RISK_PERCENT_PER_TRADE: 0.01, // % of capital per trade (Kelly-fractional base)
     MIN_STAKE:                  1,
     MAX_STAKE:                  150,
-    MAX_RISK_PCT:               50.00,  // Hard cap: never risk >1.5% of capital on a single trade
+    MAX_RISK_PCT:               100.00,  // Hard cap: never risk >1.5% of capital on a single trade
     // ── DARE Edge / EV gating (the real binary-options edge) ──
     ENABLE_EV_GATE:       true,   // Fetch live proposal, gate on EV before buying
     MIN_EDGE:             0.015,  // Require EV >= +1.5% net (after payout/ask)
@@ -162,8 +162,8 @@ const CONFIG = {
     // ── Single capped recoup step (NOT martingale) ────────────
     RECOVERY_ENABLED:       true,
     RECOVERY_MULTIPLIER:    2.00,   // ONE recoup step only
-    MAX_RECOVERY_STEPS:     5,      // Hard rule: never more than 1 recoup (no ladder)
-    MAX_RECOVERY_STAKE_PCT: 50.0,    // Recoup stake capped at 1.5% of capital
+    MAX_RECOVERY_STEPS:     6,      // Hard rule: never more than 1 recoup (no ladder)
+    MAX_RECOVERY_STAKE_PCT: 100.0,    // Recoup stake capped at 1.5% of capital
     // ── Session / daily guards [RETAINED structure] ───────────
     SESSION_PROFIT_TARGET:      5000,
     SESSION_STOP_LOSS:          -1500,
