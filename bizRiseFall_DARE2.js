@@ -1051,7 +1051,7 @@ class StatePersistence {
                         a.lastTradeWasWin             = saved.lastTradeWasWin     ?? null;
                         a.forceRecoverDirection       = saved.forceRecoverDirection ?? null;
                         a.recoveryStep                = saved.recoveryStep        || 0;
-                        a.currentStake                = saved.currentStake        || StakeCalculator.calculate(state.capital);
+                        a.currentStake                = saved.currentStake        || StakeCalculator.calculate(CONFIG.INITIAL_CAPITAL);
                         a.consecutiveWins             = saved.consecutiveWins     || 0;
                         a.consecutiveLosses           = saved.consecutiveLosses   || 0;
                         a.cooldownCandles             = saved.cooldownCandles      || 0;
@@ -1313,7 +1313,6 @@ class SessionManager {
             state.hourlyStats = { trades: 0, wins: 0, losses: 0, pnl: 0, lastHour: hour };
         }
         state.session.tradesCount++;
-        state.capital          += profit;
         state.hourlyStats.trades++;
         state.hourlyStats.pnl  += profit;
         a.tradesCount++;
@@ -1330,7 +1329,7 @@ class SessionManager {
             a.consecutiveLosses = 0;
             a.recoveryStep      = 0;       // win resets recoup
             a.cooldownCandles   = 0;
-            a.currentStake      = StakeCalculator.calculate(state.capital);
+            a.currentStake      = StakeCalculator.calculate(CONFIG.INITIAL_CAPITAL);
             a.lastTradeWasWin   = true;
             a.forceRecoverDirection = null;  // win exits forced recovery mode
             LOGGER.trade(`✅ [${symbol}] WIN +$${(profit || 0).toFixed(2)} | ${direction} | P/L: $${(a.netPL || 0).toFixed(2)}`);
@@ -1354,7 +1353,7 @@ class SessionManager {
             } else {
                 a.recoveryStep = 0; // recoup already used / disabled → reset to base stake
             }
-            a.currentStake = StakeCalculator.calculate(state.capital, a.recoveryStep);
+            a.currentStake = StakeCalculator.calculate(CONFIG.INITIAL_CAPITAL, a.recoveryStep);
             if (a.consecutiveLosses >= CONFIG.MAX_CONSECUTIVE_LOSSES) {
                 a.cooldownCandles = CONFIG.COOLDOWN_CANDLES;
                 a.forceRecoverDirection = null;
@@ -1507,7 +1506,6 @@ class ConnectionManager {
         );
         state.isAuthorized   = true;
         state.accountBalance = this.accountInfo.balance;
-        if (state.capital === CONFIG.INITIAL_CAPITAL) state.capital = this.accountInfo.balance;
         this.send({ balance: 1, subscribe: 1 });
         if (this.reconnectAttempts > 0 || this.hasAnyActivePositions()) {
             CONFIG.ACTIVE_ASSETS.forEach(sym => {
@@ -1595,7 +1593,6 @@ class ConnectionManager {
         LOGGER.info(`🔑 Authorized: ${r.authorize.loginid} | Balance: ${r.authorize.balance} ${r.authorize.currency}`);
         state.isAuthorized   = true;
         state.accountBalance = r.authorize.balance;
-        if (state.capital === CONFIG.INITIAL_CAPITAL) state.capital = r.authorize.balance;
         this.send({ balance: 1, subscribe: 1 });
         if (this.reconnectAttempts > 0 || this.hasAnyActivePositions()) {
             CONFIG.ACTIVE_ASSETS.forEach(sym => {
@@ -1978,11 +1975,11 @@ class IndexBot {
             }
         }
         const stake = a.currentStake;
-        if (state.capital < stake) {
-            LOGGER.error(`[${symbol}] Insufficient capital: $${state.capital.toFixed(2)} < stake $${stake.toFixed(2)}`);
+        if (CONFIG.INITIAL_CAPITAL < stake) {
+            LOGGER.error(`[${symbol}] Stake $${stake.toFixed(2)} exceeds INITIAL_CAPITAL $${CONFIG.INITIAL_CAPITAL.toFixed(2)}`);
             a.recoveryStep = 0;
             a.forceRecoverDirection = null;
-            a.currentStake = StakeCalculator.calculate(state.capital);
+            a.currentStake = StakeCalculator.calculate(CONFIG.INITIAL_CAPITAL);
             a.canTrade = false;
             return;
         }
@@ -2057,7 +2054,7 @@ class IndexBot {
         this._tradeLocked = true;
         a.canTrade = false;
         a.lastTradeDirection = signal.direction;
-        const finalStake = StakeCalculator.calculate(state.capital, a.recoveryStep, signal.pWin);
+        const finalStake = StakeCalculator.calculate(CONFIG.INITIAL_CAPITAL, a.recoveryStep, signal.pWin);
         a.currentStake = finalStake;
         LOGGER.trade(
             `🎯 [${symbol}] ${signal.direction === 'CALLE' ? '📈 CALLE' : '📉 PUTE'} | ` +
