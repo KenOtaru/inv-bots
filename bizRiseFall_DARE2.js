@@ -1357,6 +1357,7 @@ class SessionManager {
             a.currentStake = StakeCalculator.calculate(state.capital, a.recoveryStep);
             if (a.consecutiveLosses >= CONFIG.MAX_CONSECUTIVE_LOSSES) {
                 a.cooldownCandles = CONFIG.COOLDOWN_CANDLES;
+                a.forceRecoverDirection = null;
                 LOGGER.warn(`❄️ [${symbol}] ${CONFIG.MAX_CONSECUTIVE_LOSSES} consecutive losses — cooling down for ${CONFIG.COOLDOWN_CANDLES} candles`);
                 TelegramService.sendMessage(
                     `❄️ <b>[${symbol}] DARE2 COOL-DOWN ACTIVATED</b>\n` +
@@ -1783,6 +1784,7 @@ class ConnectionManager {
                     LOGGER.info(`${dir} [${symbol}] CANDLE CLOSED [${time}] O:${closed.open.toFixed(5)} H:${closed.high.toFixed(5)} L:${closed.low.toFixed(5)} C:${closed.close.toFixed(5)} | Total: ${a.closedCandles.length}`);
                     if (a.cooldownCandles > 0) {
                         a.cooldownCandles--;
+                        if (a.cooldownCandles === 0) a.forceRecoverDirection = null;
                         LOGGER.info(`❄️ [${symbol}] Cool-down: ${a.cooldownCandles} candles remaining`);
                     }
                     a.canTrade = true;
@@ -1979,6 +1981,7 @@ class IndexBot {
         if (state.capital < stake) {
             LOGGER.error(`[${symbol}] Insufficient capital: $${state.capital.toFixed(2)} < stake $${stake.toFixed(2)}`);
             a.recoveryStep = 0;
+            a.forceRecoverDirection = null;
             a.currentStake = StakeCalculator.calculate(state.capital);
             a.canTrade = false;
             return;
@@ -1988,44 +1991,72 @@ class IndexBot {
             a.canTrade = false;
             return;
         }
-        // ── Forced recovery check (bypass DARE analysis after a loss) ──
-        let signal;
-        if (a.forceRecoverDirection) {
-            signal = {
-                direction: a.forceRecoverDirection,
-                shouldTrade: true,
-                pWin: Math.max(CONFIG.MIN_WIN_PROB, 0.55),
-                conviction: Math.max(0, Math.min(1, CONFIG.MIN_WIN_PROB - 0.5)),
-                method: 'FORCE_RECOVERY',
-                reason: `Forced recovery: retrying ${a.forceRecoverDirection} after loss`,
-                warnings: [],
-                indicators: {},
-                components: ['FORCE_RECOVERY'],
-                regime: { persistence: 'UNKNOWN', volClass: 'NORMAL', ok: true, reasons: [] },
-                evNetOdds: null,
-            };
-            LOGGER.trade(`🔄 [${symbol}] Force recovery → ${a.forceRecoverDirection} (skipping DARE analysis)`);
-        } else {
-            // ── DARE analysis ──────────────────────────────────
-            signal = DAREAnalyzer.analyze(a.closedCandles, symbol);
-            LOGGER.signal(
-                `[${symbol}] ${signal.regime?.persistence}/${signal.regime?.volClass} ` +
-                `VR:${signal.indicators?.vr} ATRpctl:${signal.indicators?.atrPct} ` +
-                `${signal.direction ?? 'NO_TRADE'} | ${signal.reason}`
-            );
-            if (CONFIG.DEBUG_MODE && signal.components?.length) {
-                LOGGER.debug(`[${symbol}] components: ${signal.components.join(' ')}`);
-            }
-            if (!signal.shouldTrade || !signal.direction) {
-                a.canTrade = false;
-                return;
-            }
+        // ── Only trade the asset that is in recovery; skip all others ──
+        const recoveringAsset = CONFIG.ACTIVE_ASSETS.find(s => state.assets[s]?.forceRecoverDirection);
+        if (recoveringAsset && recoveringAsset !== symbol) {
+            LOGGER.debug(`[${symbol}] Skipping — ${recoveringAsset} is in forced recovery`);
+            return;
         }
-        // ── Lock and route through EV gate ──────────────────
+        // ── Forced recovery: bypass signal analysis + EV gate, buy immediately (like v2) ──
+        if (a.forceRecoverDirection) {
+            this._tradeLocked = true;
+            a.canTrade = false;
+            const dir = a.forceRecoverDirection;
+            a.forceRecoverDirection = null;
+            a.lastTradeDirection = dir;
+            const stake = a.currentStake;
+            const recNote = a.recoveryStep > 0 ? ` [RECOVERY STEP ${a.recoveryStep}]` : '';
+            LOGGER.trade(
+                `🔄 [${symbol}]${recNote} FORCE RECOVERY ${dir === 'CALLE' ? '📈 CALLE' : '📉 PUTE'} | ` +
+                `Stake: $${stake.toFixed(2)} | FORCED AFTER LOSS`
+            );
+            const pos = {
+                symbol, direction: dir, stake, duration: CONFIG.DURATION,
+                durationUnit: CONFIG.DURATION_UNIT, entryTime: Date.now(),
+                contractId: null, reqId: null, currentProfit: 0, buyPrice: 0,
+                signal: { reason: 'FORCED TRADE AFTER LOSS - Same direction recovery', warnings: ['FORCED_TRADE'] },
+                indicators: {},
+            };
+            a.activePositions.push(pos);
+            const reqId = this.connection.send({
+                buy: 1, subscribe: 1, price: stake.toFixed(2),
+                parameters: {
+                    contract_type: dir,
+                    [this.connection._isPat ? 'underlying_symbol' : 'symbol']: symbol,
+                    currency: 'USD', amount: stake.toFixed(2),
+                    duration: CONFIG.DURATION, duration_unit: CONFIG.DURATION_UNIT, basis: 'stake',
+                },
+            });
+            pos.reqId = reqId;
+            setTimeout(() => {
+                if (this._tradeLocked && !pos.contractId) {
+                    LOGGER.warn(`[${symbol}] Buy response timeout — releasing lock`);
+                    const idx = a.activePositions.indexOf(pos);
+                    if (idx >= 0) a.activePositions.splice(idx, 1);
+                    this._tradeLocked = false;
+                }
+            }, 5000);
+            StatePersistence.saveState();
+            return;
+        }
+        // ── DARE analysis ──
+        const signal = DAREAnalyzer.analyze(a.closedCandles, symbol);
+        LOGGER.signal(
+            `[${symbol}] ${signal.regime?.persistence}/${signal.regime?.volClass} ` +
+            `VR:${signal.indicators?.vr} ATRpctl:${signal.indicators?.atrPct} ` +
+            `${signal.direction ?? 'NO_TRADE'} | ${signal.reason}`
+        );
+        if (CONFIG.DEBUG_MODE && signal.components?.length) {
+            LOGGER.debug(`[${symbol}] components: ${signal.components.join(' ')}`);
+        }
+        if (!signal.shouldTrade || !signal.direction) {
+            a.canTrade = false;
+            return;
+        }
+        // ── Lock and route through EV gate ──
         this._tradeLocked = true;
         a.canTrade = false;
         a.lastTradeDirection = signal.direction;
-        // Recompute stake with calibrated pWin
         const finalStake = StakeCalculator.calculate(state.capital, a.recoveryStep, signal.pWin);
         a.currentStake = finalStake;
         LOGGER.trade(
@@ -2071,13 +2102,11 @@ class IndexBot {
                 [this.connection._isPat ? 'underlying_symbol' : 'symbol']: symbol,
             });
             if (!propReqId) {
-                // send failed → release lock
                 a.activePositions.pop();
                 this._tradeLocked = false;
                 return;
             }
             state.pendingProposals[propReqId] = { symbol, direction: signal.direction, signal: pos.signal, stake: finalStake, pos };
-            // Safety: if proposal never returns, release lock after 8s
             setTimeout(() => {
                 if (state.pendingProposals[propReqId]) {
                     LOGGER.warn(`[${symbol}] Proposal timeout — releasing lock`);
@@ -2088,7 +2117,6 @@ class IndexBot {
                 }
             }, 8000);
         } else {
-            // EV gate disabled → buy directly
             this._fireBuyFromProposal({ symbol, direction: signal.direction, signal: pos.signal, stake: finalStake, pos });
         }
         StatePersistence.saveState();
