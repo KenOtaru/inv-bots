@@ -141,7 +141,7 @@ const CONFIG = Object.freeze({
   accountType: ('demo').toLowerCase(),  // 'demo' | 'real'
  
   // ─ Trade parameters ─
-  stake          : parseFloat('2.0'),
+  stake          : parseFloat('1.0'),
  
   // NOTE: PULSE does NOT use Martingale. These legacy knobs are kept
   // only so the saved-state file / Telegram messages stay compatible,
@@ -445,6 +445,11 @@ class DerivClient extends EventEmitter {
     this._tradeWatchdogPollTimer = null;
     this.dailyHistory     = {};
     this._lastDayISODate  = null;
+
+    // ── Martingale state ──
+    this.lossesStreak = 0;
+    this.martingaleMultiplier = 1.0;
+    this._lastTradeWon = true;
   }
 
   start() {
@@ -481,6 +486,9 @@ class DerivClient extends EventEmitter {
     this.lastBalance  = this.balance;
     logger.info(`start-of-day balance: ${this.startBalance} ${this.currencyStr()}`);
 
+    const martingaleLine = (this.cfg.martingale && this.cfg.martingale > 0)
+      ? `♻️ <b>Martingale:</b> ×${this.cfg.martingale} (after ${this.cfg.lossesBeforeMartingale} losses, +${this.cfg.martingaleStep}/loss, cap ×${this.cfg.maxMartingaleStep})\n`
+      : '';
     telegram.send(
       `🤖 <b>PULSE Bot Online</b>\n\n` +
       `👤 <b>Account:</b> ${info.loginid}\n` +
@@ -489,6 +497,7 @@ class DerivClient extends EventEmitter {
       `📊 <b>Assets:</b> ${this.cfg.assets.length}\n` +
       `💵 <b>Stake:</b> ${this.cfg.stake}\n` +
       `📈 <b>Growth rates:</b> ${this.cfg.pulseGrowthRates.map(g => (g*100).toFixed(0)+'%').join(', ')}\n` +
+      martingaleLine +
       `🎯 <b>Edge threshold:</b> ${((this.cfg.pulseEdgeThreshold-1)*100).toFixed(1)}%\n\n` +
       `⚡ <b>PULSE engine active</b>\n` +
       `MC trials: ${this.cfg.pulseTrials} · Horizon: ${this.cfg.pulseHorizon} ticks\n\n` +
@@ -871,7 +880,11 @@ class DerivClient extends EventEmitter {
     this.lastBalance = (this.lastBalance ?? this.balance ?? 0) + t.profit;
  
     this.overallProfit += t.profit;
-    this._updateSizing(t.status);
+    this._updateMartingale(t.status);
+
+    const martingaleLine = this.martingaleMultiplier > 1
+      ? `♻️ <b>Martingale:</b> ×${this.martingaleMultiplier.toFixed(2)} (${this.lossesStreak} consecutive losses)\n`
+      : '';
  
     const todayStats = this.stats.stats(this.stats.todayTrades(rec.date));
  
@@ -891,6 +904,7 @@ class DerivClient extends EventEmitter {
       `• Net P/L: ${todayStats.totalProfit >= 0 ? '+' : ''}${todayStats.totalProfit.toFixed(2)} ${this.currencyStr()}\n` +
       `• Profit factor: ${todayStats.profitFactor === Infinity ? '∞' : todayStats.profitFactor.toFixed(2)}\n\n` +
       `💼 <b>Overall:</b> ${this.overallProfit >= 0 ? '+' : ''}${this.overallProfit.toFixed(2)} ${this.currencyStr()}\n` +
+      martingaleLine +
       `❌ <b>Consecutive Losses:</b> current ${this.stats.currentLossStreak} | max ${this.stats.maxLossStreak}\n` +
       `   x2=${this.stats.lossStreakEvents.x2}  x3=${this.stats.lossStreakEvents.x3}  x4=${this.stats.lossStreakEvents.x4}`;
     telegram.send(msg);
@@ -906,10 +920,13 @@ class DerivClient extends EventEmitter {
       `🎫 <b>Contract:</b> #${t.contractId}\n` +
       `📊 <b>Symbol:</b> <code>${t.symbol}</code>\n` +
       `📈 <b>Growth Rate:</b> ${(t.growthRate*100).toFixed(2)}%\n` +
-      `💵 <b>Stake:</b> ${t.stake.toFixed(2)} ${this.currencyStr()}\n` +
+      `💵 <b>Stake:</b> ${t.stake.toFixed(2)}${this.martingaleMultiplier > 1 ? ` (base ${(t._analysis?.baseStake ?? this.cfg.stake)} × ${this.martingaleMultiplier.toFixed(2)})` : ''} ${this.currencyStr()}\n` +
       `🎯 <b>Take Profit:</b> ${t.limit?.take_profit ?? '–'}\n` +
       `🏦 <b>Overall Profit:</b> ${this.overallProfit >= 0 ? '+' : ''}${this.overallProfit.toFixed(2)} ${this.currencyStr()}\n` +
-      `❌ <b>Loss streak:</b> ${this.stats.currentLossStreak}\n\n` +
+      `❌ <b>Loss streak:</b> ${this.stats.currentLossStreak}\n` +
+      (this.martingaleMultiplier > 1
+        ? `♻️ <b>Martingale:</b> ×${this.martingaleMultiplier.toFixed(2)} (${this.lossesStreak} losses)\n`
+        : '') + `\n` +
       `🧠 <b>PULSE Analysis</b>\n` +
       `• Edge: ${((t._analysis?.edge ?? 0)*100).toFixed(2)}%\n` +
       `• EV: ${((t._analysis?.ev ?? 0)*100).toFixed(2)}%\n` +
@@ -945,14 +962,43 @@ class DerivClient extends EventEmitter {
     if (this.cfg.downscaleAfterLoss && this.stats.currentLossStreak > 0) {
       mult *= Math.max(0.5, Math.pow(0.85, this.stats.currentLossStreak));
     }
+    // Martingale: multiply by martingaleMultiplier if active
+    const m = this.cfg.martingale || 0;
+    if (m > 0 && this.lossesStreak > (this.cfg.lossesBeforeMartingale || 0)) {
+      mult *= this.martingaleMultiplier;
+    }
     return +(base * mult).toFixed(2);
   }
  
-  _updateSizing(tradeResult) {
-    // State already updated in _onTradeResult; this hook exists for clarity
-    // and for any future regime-aware adjustment. PULSE never raises the
-    // stake as a loss-recovery mechanism.
-    if (tradeResult === 'won') { /* reset handled in _onTradeResult */ }
+  _updateMartingale(tradeResult) {
+    if (!this.cfg.martingale || this.cfg.martingale <= 0) {
+      this.lossesStreak = 0;
+      this.martingaleMultiplier = 1.0;
+      this._lastTradeWon = tradeResult === 'won';
+      return;
+    }
+    const threshold = this.cfg.lossesBeforeMartingale || 0;
+    const cap = this.cfg.maxMartingaleStep || Infinity;
+    if (tradeResult === 'won') {
+      this.lossesStreak = 0;
+      this.martingaleMultiplier = 1.0;
+    } else {
+      this.lossesStreak++;
+      if (this.lossesStreak > threshold) {
+        const stepNum = this.lossesStreak - threshold - 1;
+        const raw = this.cfg.martingale + this.cfg.martingaleStep * stepNum;
+        const capped = Math.min(raw, cap);
+        if (capped !== this.martingaleMultiplier) {
+          this.martingaleMultiplier = capped;
+          const note = raw > cap ? ` (raw ×${raw.toFixed(2)} capped at ×${cap})` : '';
+          logger.info(
+            `martingale: ${this.lossesStreak} losses streak → ` +
+            `stake × ${this.martingaleMultiplier.toFixed(2)}${note}`,
+          );
+        }
+      }
+    }
+    this._lastTradeWon = tradeResult === 'won';
   }
  
   // ── Trade Watchdog (stuck contract recovery) ─────────────────
@@ -1081,6 +1127,9 @@ class DerivClient extends EventEmitter {
         pN: best.pN, p1: best.p1, regime: best.regime,
         vrRatio: best.vrRatio, sigma: best.sigma,
         growthRate: best.growthRate, halfBarrierFrac: best.halfBarrierFrac,
+        martingaleMultiplier: this.martingaleMultiplier,
+        lossesStreak: this.lossesStreak,
+        baseStake: this.cfg.stake,
       };
  
       const trade = await this.exec.buy(
@@ -1088,9 +1137,12 @@ class DerivClient extends EventEmitter {
         { stop_loss: stopLoss, take_profit: takeProfit },
         analysis,
       );
+      const martingaleNote = this.martingaleMultiplier > 1
+        ? ` martingale × ${this.martingaleMultiplier.toFixed(2)} (${this.lossesStreak} losses)`
+        : '';
       logger.info(
         `trade placed #${trade.contractId} ${best.symbol} g=${best.growthRate} ` +
-        `stake=${stake} tp=${takeProfit} ` +
+        `stake=${stake}${martingaleNote} tp=${takeProfit} ` +
         `barrier=±${trade.halfBarrierPct.toFixed(4)}%`,
       );
     } catch (e) {
@@ -1112,7 +1164,7 @@ class DerivClient extends EventEmitter {
   // ── State persistence ──────────────────────────────────────
   _statePayload(reason) {
     return {
-      version: 2,
+      version: 3,
       engine: 'PULSE',
       savedAt: new Date().toISOString(),
       savedReason: reason,
@@ -1121,6 +1173,8 @@ class DerivClient extends EventEmitter {
       lastDayISODate: this._lastDayISODate || this._todayISO(),
       dailyHistory: this.dailyHistory || {},
       stats: this.stats.serialize(),
+      lossesStreak: this.lossesStreak ?? 0,
+      martingaleMultiplier: this.martingaleMultiplier ?? 1.0,
     };
   }
   _saveState(reason = 'checkpoint') {
@@ -1142,14 +1196,17 @@ class DerivClient extends EventEmitter {
     if (!fs.existsSync(file)) { logger.debug(`no state file (fresh start)`); return; }
     try {
       const data = JSON.parse(fs.readFileSync(file, 'utf8'));
-      if (data.startBalance != null)  this.startBalance  = data.startBalance;
-      if (data.lastBalance  != null)  this.lastBalance   = data.lastBalance;
-      if (data.lastDayISODate)        this._lastDayISODate = data.lastDayISODate;
-      if (data.dailyHistory)          this.dailyHistory  = data.dailyHistory;
+      if (data.startBalance != null)    this.startBalance  = data.startBalance;
+      if (data.lastBalance  != null)    this.lastBalance   = data.lastBalance;
+      if (data.lastDayISODate)          this._lastDayISODate = data.lastDayISODate;
+      if (data.dailyHistory)            this.dailyHistory  = data.dailyHistory;
+      if (data.lossesStreak != null)    this.lossesStreak = data.lossesStreak;
+      if (data.martingaleMultiplier != null) this.martingaleMultiplier = data.martingaleMultiplier;
       this.stats = new StatisticsManager(data.stats || data);
       logger.info(
         `state restored (PULSE): overallProfit=${this.stats.overallProfit.toFixed(2)} ` +
-        `lossStreak=${this.stats.currentLossStreak}`,
+        `lossStreak=${this.stats.currentLossStreak} ` +
+        `martingale=${this.martingaleMultiplier.toFixed(2)}`,
       );
     } catch (e) {
       logger.warn(`state load failed:`, e.message);
