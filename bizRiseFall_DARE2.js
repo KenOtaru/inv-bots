@@ -1008,6 +1008,7 @@ class StatePersistence {
                     candlesLoaded:               a.candlesLoaded,
                     lastTradeDirection:          a.lastTradeDirection,
                     lastTradeWasWin:             a.lastTradeWasWin,
+                    forceRecoverDirection:       a.forceRecoverDirection,
                     recoveryStep:                a.recoveryStep,
                     currentStake:                a.currentStake,
                     consecutiveWins:             a.consecutiveWins,
@@ -1048,6 +1049,7 @@ class StatePersistence {
                         a.candlesLoaded               = false;
                         a.lastTradeDirection          = saved.lastTradeDirection  || null;
                         a.lastTradeWasWin             = saved.lastTradeWasWin     ?? null;
+                        a.forceRecoverDirection       = saved.forceRecoverDirection ?? null;
                         a.recoveryStep                = saved.recoveryStep        || 0;
                         a.currentStake                = saved.currentStake        || StakeCalculator.calculate(state.capital);
                         a.consecutiveWins             = saved.consecutiveWins     || 0;
@@ -1104,7 +1106,7 @@ class TelegramService {
         const today   = TradeHistoryManager.getTodayStats();
         const ind     = details.indicators || {};
         const lines   = [
-            `${emoji} <b>DARE BOT v3 — ${type}</b>`,
+            `${emoji} <b>DARE2 BOT v3 — ${type}</b>`,
             `Pair: <b>${symbol}</b>  Direction: <b>${direction === 'CALLE' ? '📈 CALLE' : '📉 PUTE'}</b>`,
             `Stake: $${stake.toFixed(2)} | Duration: ${duration}${durationUnit.toUpperCase()}`,
             `Recovery Step: ${a?.recoveryStep ?? 0} | ${TradingSessionManager.getStatusString()}`,
@@ -1149,7 +1151,7 @@ class TelegramService {
             }
         });
         await this.sendMessage([
-            `⏰ <b>DARE v3 Hourly</b>`,
+            `⏰ <b>DARE2 v3 Hourly</b>`,
             `Last Hour: ${h.trades}t ${h.wins}W/${h.losses}L ${wr}% ${h.pnl >= 0 ? '🟢' : '🔴'} $${h.pnl.toFixed(2)}`,
             `Today: ${today.tradesCount}t P/L: $${(today.netPL || 0).toFixed(2)}`,
             `Capital: $${state.capital.toFixed(2)}`,
@@ -1172,7 +1174,7 @@ class TelegramService {
             }
         });
         await this.sendMessage([
-            `📊 <b>DARE v3 SESSION SUMMARY</b>`,
+            `📊 <b>DARE2 v3 SESSION SUMMARY</b>`,
             `Duration: ${stats.duration} | Trades: ${stats.trades}`,
             `W: ${stats.wins} | L: ${stats.losses} | Win Rate: ${stats.winRate}`,
             `Session P/L: $${(stats.netPL || 0).toFixed(2)}`,
@@ -1191,7 +1193,7 @@ class TelegramService {
             pairInfo += `\n  ${sym}: ${CONFIG.TIMEFRAME_LABEL} | ${CONFIG.DURATION}${CONFIG.DURATION_UNIT}`;
         });
         await this.sendMessage([
-            `🤖 <b>DARE BOT v3 STARTED</b>`,
+            `🤖 <b>DARE2 BOT v3 STARTED</b>`,
             `Strategy: Directional Adaptive Regime Engine`,
             `L1: VR(Lo-MacKinlay) + ATR-pctile + BB-squeeze | L2: regime-routed momentum/mean-reversion`,
             `L3: conviction-weighted P(win) | L4: EV payout gate + Kelly`,
@@ -1277,7 +1279,7 @@ class SessionManager {
             LOGGER.info(`🗓️ Day changed: ${state.currentTradeDay} → ${today}`);
             const dayStats = TradeHistoryManager.getDayStats(state.currentTradeDay);
             TelegramService.sendMessage(
-                `🌙 <b>END OF DAY ${state.currentTradeDay}</b>\nP/L: $${(dayStats?.netPL || 0).toFixed(2)}\nCapital: $${state.capital.toFixed(2)}`
+                `🌙 <b>DARE2 END OF DAY ${state.currentTradeDay}</b>\nP/L: $${(dayStats?.netPL || 0).toFixed(2)}\nCapital: $${state.capital.toFixed(2)}`
             );
             this._resetDailyStats();
             if (!state.session.isActive) {
@@ -1330,6 +1332,7 @@ class SessionManager {
             a.cooldownCandles   = 0;
             a.currentStake      = StakeCalculator.calculate(state.capital);
             a.lastTradeWasWin   = true;
+            a.forceRecoverDirection = null;  // win exits forced recovery mode
             LOGGER.trade(`✅ [${symbol}] WIN +$${(profit || 0).toFixed(2)} | ${direction} | P/L: $${(a.netPL || 0).toFixed(2)}`);
         } else {
             state.session.lossesCount++;
@@ -1344,6 +1347,7 @@ class SessionManager {
             a.consecutiveLosses++;
             a.consecutiveWins  = 0;
             a.lastTradeWasWin  = false;
+            a.forceRecoverDirection = a.lastTradeDirection;  // loss → force same direction on next candle
             // Single capped recoup step ONLY (no ladder, no force-trade)
             if (CONFIG.RECOVERY_ENABLED && a.recoveryStep < CONFIG.MAX_RECOVERY_STEPS) {
                 a.recoveryStep = 1;
@@ -1355,7 +1359,7 @@ class SessionManager {
                 a.cooldownCandles = CONFIG.COOLDOWN_CANDLES;
                 LOGGER.warn(`❄️ [${symbol}] ${CONFIG.MAX_CONSECUTIVE_LOSSES} consecutive losses — cooling down for ${CONFIG.COOLDOWN_CANDLES} candles`);
                 TelegramService.sendMessage(
-                    `❄️ <b>[${symbol}] COOL-DOWN ACTIVATED</b>\n` +
+                    `❄️ <b>[${symbol}] DARE2 COOL-DOWN ACTIVATED</b>\n` +
                     `${CONFIG.MAX_CONSECUTIVE_LOSSES} consecutive losses\n` +
                     `Pausing for ${CONFIG.COOLDOWN_CANDLES} candles\n` +
                     `Capital: $${state.capital.toFixed(2)}`
@@ -1539,6 +1543,7 @@ class ConnectionManager {
                     candlesLoaded:               false,
                     lastTradeDirection:          null,
                     lastTradeWasWin:             null,
+                    forceRecoverDirection:       null,
                     recoveryStep:                0,
                     currentStake:                StakeCalculator.calculate(CONFIG.INITIAL_CAPITAL),
                     canTrade:                    false,
@@ -1835,7 +1840,7 @@ class ConnectionManager {
             this.reconnectAttempts++;
             const delay = Math.min(this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1), 30000);
             LOGGER.info(`🔄 Reconnecting in ${(delay / 1000).toFixed(1)}s (attempt ${this.reconnectAttempts})`);
-            TelegramService.sendMessage(`⚠️ <b>CONNECTION LOST</b> — Reconnecting (attempt ${this.reconnectAttempts})`);
+            TelegramService.sendMessage(`⚠️ <b>DARE2 CONNECTION LOST</b> — Reconnecting (attempt ${this.reconnectAttempts})`);
             this.reconnectTimer = setTimeout(() => {
                 this.reconnectTimer = null;
                 if (this.isShuttingDown) return;
@@ -1844,7 +1849,7 @@ class ConnectionManager {
             }, delay);
         } else {
             LOGGER.error('Max reconnection attempts reached — giving up');
-            TelegramService.sendMessage(`🛑 <b>BOT STOPPED</b> — Max reconnections\nFinal P/L: $${(state.session.netPL || 0).toFixed(2)}`);
+            TelegramService.sendMessage(`🛑 <b>DARE2 BOT STOPPED</b> — Max reconnections\nFinal P/L: $${(state.session.netPL || 0).toFixed(2)}`);
             process.exit(1);
         }
     }
@@ -1983,19 +1988,38 @@ class IndexBot {
             a.canTrade = false;
             return;
         }
-        // ── DARE analysis ────────────────────────────────────
-        const signal = DAREAnalyzer.analyze(a.closedCandles, symbol);
-        LOGGER.signal(
-            `[${symbol}] ${signal.regime?.persistence}/${signal.regime?.volClass} ` +
-            `VR:${signal.indicators?.vr} ATRpctl:${signal.indicators?.atrPct} ` +
-            `${signal.direction ?? 'NO_TRADE'} | ${signal.reason}`
-        );
-        if (CONFIG.DEBUG_MODE && signal.components?.length) {
-            LOGGER.debug(`[${symbol}] components: ${signal.components.join(' ')}`);
-        }
-        if (!signal.shouldTrade || !signal.direction) {
-            a.canTrade = false;
-            return;
+        // ── Forced recovery check (bypass DARE analysis after a loss) ──
+        let signal;
+        if (a.forceRecoverDirection) {
+            signal = {
+                direction: a.forceRecoverDirection,
+                shouldTrade: true,
+                pWin: Math.max(CONFIG.MIN_WIN_PROB, 0.55),
+                conviction: Math.max(0, Math.min(1, CONFIG.MIN_WIN_PROB - 0.5)),
+                method: 'FORCE_RECOVERY',
+                reason: `Forced recovery: retrying ${a.forceRecoverDirection} after loss`,
+                warnings: [],
+                indicators: {},
+                components: ['FORCE_RECOVERY'],
+                regime: { persistence: 'UNKNOWN', volClass: 'NORMAL', ok: true, reasons: [] },
+                evNetOdds: null,
+            };
+            LOGGER.trade(`🔄 [${symbol}] Force recovery → ${a.forceRecoverDirection} (skipping DARE analysis)`);
+        } else {
+            // ── DARE analysis ──────────────────────────────────
+            signal = DAREAnalyzer.analyze(a.closedCandles, symbol);
+            LOGGER.signal(
+                `[${symbol}] ${signal.regime?.persistence}/${signal.regime?.volClass} ` +
+                `VR:${signal.indicators?.vr} ATRpctl:${signal.indicators?.atrPct} ` +
+                `${signal.direction ?? 'NO_TRADE'} | ${signal.reason}`
+            );
+            if (CONFIG.DEBUG_MODE && signal.components?.length) {
+                LOGGER.debug(`[${symbol}] components: ${signal.components.join(' ')}`);
+            }
+            if (!signal.shouldTrade || !signal.direction) {
+                a.canTrade = false;
+                return;
+            }
         }
         // ── Lock and route through EV gate ──────────────────
         this._tradeLocked = true;
@@ -2144,7 +2168,7 @@ class IndexBot {
         state.pendingTradeInfo  = null;
         state.tradeStartTime    = null;
         TelegramService.sendMessage(
-            `⚠️ <b>STUCK TRADE RECOVERED [${reason}]</b>\n` +
+            `⚠️ <b>DARE2 STUCK TRADE RECOVERED [${reason}]</b>\n` +
             `Contract: ${contractId}\n` +
             `⚠️ VERIFY OUTCOME MANUALLY ON DERIV\n` +
             `Capital: $${state.capital.toFixed(2)}`
