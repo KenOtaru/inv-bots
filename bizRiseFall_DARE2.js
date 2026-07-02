@@ -122,8 +122,8 @@ class RestClient {
 // ============================================================
 // FILE PATHS  [RETAINED]
 // ============================================================
-const STATE_FILE          = path.join(__dirname, 'dare2_01-state_v3.json');
-const HISTORY_FILE        = path.join(__dirname, 'dare2_01-history_v3.json');
+const STATE_FILE          = path.join(__dirname, 'dare2_02-state_v3.json');
+const HISTORY_FILE        = path.join(__dirname, 'dare2_02-history_v3.json');
 const STATE_SAVE_INTERVAL = 5000;  // ms
 // ============================================================
 // LOGGER  [RETAINED]

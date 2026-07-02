@@ -193,7 +193,7 @@ const CONFIG = Object.freeze({
   },
  
   // ─ Logging ─
-  logFile : 'deriv_pulse_bot8.log',
+  logFile : 'deriv_pulse_bot9.log',
   logLevel: ('INFO').toUpperCase(),
  
   // ════════════════════════════════════════════════════════════════
@@ -231,7 +231,7 @@ const CONFIG = Object.freeze({
   tradeWatchdogMs: parseInt('90000', 10),
  
   // ─ State persistence ─
-  stateFile           : 'deriv_pulse_bot8_state.json',
+  stateFile           : 'deriv_pulse_bot9_state.json',
   stateSaveOnTrade    : true,
   stateSaveOnShutdown : true,
 });
