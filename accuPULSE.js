@@ -178,7 +178,7 @@ const CONFIG = Object.freeze({
   },
  
   // ─ Logging ─
-  logFile : 'deriv_pulse_bot7.log',
+  logFile : 'deriv_pulse_bot8.log',
   logLevel: ('INFO').toUpperCase(),
  
   // ════════════════════════════════════════════════════════════════
@@ -216,7 +216,7 @@ const CONFIG = Object.freeze({
   tradeWatchdogMs: parseInt('90000', 10),
  
   // ─ State persistence ─
-  stateFile           : 'deriv_pulse_bot7_state.json',
+  stateFile           : 'deriv_pulse_bot8_state.json',
   stateSaveOnTrade    : true,
   stateSaveOnShutdown : true,
 });
@@ -1551,7 +1551,7 @@ class PulseAnalyzer {
         }
       }
 
-      if (bestN > 0 && regime === 'calm') {
+      if (bestN > 0 && regime === 'stormy') { 
         const pN = survivalCounts[bestN] / trials;
         const p1 = survivalCounts[1] / trials;
         const suggestedTakeProfit = Math.pow(1 + growthRate, bestN) - 1;
