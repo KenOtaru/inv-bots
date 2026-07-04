@@ -458,7 +458,7 @@ class DerivClient extends EventEmitter {
       : '';
 
     telegram.send(
-      `<b>PULSE Bot Online</b>\n\n` +
+      `<b>PULSE3 Bot Online</b>\n\n` +
       `<b>Account:</b> ${info.loginid}\n` +
       `<b>Type:</b> ${info.isVirtual ? 'DEMO' : 'REAL'}\n` +
       `<b>Balance:</b> ${this.startBalance.toFixed(2)} ${this.currencyStr()}\n` +
@@ -491,7 +491,7 @@ class DerivClient extends EventEmitter {
   _onDisconnected(code, reason, wasAuthorized) {
     this._clearWatchdogTimers();
     telegram.send(
-      `<b>Connection lost</b>\n` +
+      `<b>Pulse3 Connection lost</b>\n` +
       `code: <code>${code}</code>\n` +
       `was authorised: ${wasAuthorized ? 'yes' : 'no'}\n` +
       `reconnecting…`,
@@ -803,7 +803,7 @@ class DerivClient extends EventEmitter {
     const todayStats = this.stats.stats(this.stats.todayTrades(rec.date));
 
     let msg =
-      `${emoji} <b>PULSE TRADE ${label}</b>\n\n` +
+      `${emoji} <b>PULSE3 TRADE ${label}</b>\n\n` +
       `<b>Contract:</b> #${t.contractId}\n` +
       `<b>Symbol:</b> <code>${t.symbol}</code>\n` +
       `<b>Growth:</b> ${(t.growthRate*100).toFixed(0)}%\n` +
@@ -831,7 +831,7 @@ class DerivClient extends EventEmitter {
     this.tradeStartTime = Date.now();
     this._startTradeWatchdog(t.contractId);
     const msg =
-      `<b>PULSE TRADE OPENED</b>\n\n` +
+      `<b>PULSE3 TRADE OPENED</b>\n\n` +
       `<b>Contract:</b> #${t.contractId}\n` +
       `<b>Symbol:</b> <code>${t.symbol}</code>\n` +
       `<b>Growth Rate:</b> ${(t.growthRate*100).toFixed(2)}%\n` +
@@ -842,7 +842,7 @@ class DerivClient extends EventEmitter {
       (this.martingaleMultiplier > 1
         ? `<b>Martingale:</b> ×${this.martingaleMultiplier.toFixed(2)} (${this.lossesStreak} losses)\n`
         : '') + `\n` +
-      `<b>PULSE Analysis</b>\n` +
+      `<b>PULSE3 Analysis</b>\n` +
       `• Edge (net spread): ${((t._analysis?.edge ?? 0)*100).toFixed(2)}%\n` +
       `• EV: ${((t._analysis?.ev ?? 0)*100).toFixed(2)}%\n` +
       `• pN: ${((t._analysis?.pN ?? 0)*100).toFixed(2)}%\n` +
@@ -965,7 +965,7 @@ class DerivClient extends EventEmitter {
     this.tradeStartTime = null;
 
     telegram.send(
-      `<b>STUCK TRADE RECOVERED [${reason}]</b>\nContract: ${contractId}\n` +
+      `<b>Pulse3 STUCK TRADE RECOVERED [${reason}]</b>\nContract: ${contractId}\n` +
       `Asset: ${symbol}\nStake: $${stake.toFixed(2)}\nOpen: ${openSeconds}s\n` +
       `Loss streak now: ${this.stats.currentLossStreak}`,
     );
@@ -986,7 +986,7 @@ class DerivClient extends EventEmitter {
       const pl = today.reduce((s, t) => s + (t.profit || 0), 0);
       if (pl <= -this.cfg.dailyMaxLoss) {
         logger.warn(`dailyMaxLoss reached — pausing`);
-        telegram.send(`<b>Daily loss limit</b>\nNet P/L: ${pl.toFixed(2)} ${this.currencyStr()}`);
+        telegram.send(`<b>Pulse3 Daily loss limit</b>\nNet P/L: ${pl.toFixed(2)} ${this.currencyStr()}`);
         return;
       }
       if (Date.now() - this.lastTradeAt < this.cfg.tradeCooldownMs) return;
@@ -1135,11 +1135,11 @@ class DerivClient extends EventEmitter {
     const list = this.stats.tradesForHour(date, hour);
     const s    = this.stats.stats(list);
     if (!list.length) {
-      telegram.send(`<b>Hourly Summary GMT (${date} ${pad(hour)}:00-${pad(hour)}:59)</b>\n\nNo trades this hour.\n\nOverall Profit: ${money(this.stats.overallProfit, this.currencyStr())}`);
+      telegram.send(`<b>Pulse3 Hourly Summary GMT (${date} ${pad(hour)}:00-${pad(hour)}:59)</b>\n\nNo trades this hour.\n\nOverall Profit: ${money(this.stats.overallProfit, this.currencyStr())}`);
       return;
     }
     let msg =
-      `<b>Hourly Summary GMT (${date} ${pad(hour)}:00-${pad(hour)}:59)</b>\n\n` +
+      `<b>Pulse3 Hourly Summary GMT (${date} ${pad(hour)}:00-${pad(hour)}:59)</b>\n\n` +
       `Trades: ${s.count} (✅${s.wins} ❌${s.losses})\n` +
       `Win rate: ${s.winRate.toFixed(1)}%\n` +
       `P/L: <b>${money(s.totalProfit, this.currencyStr())}</b>\n` +
@@ -1224,7 +1224,7 @@ class DerivClient extends EventEmitter {
     this.stopped = true;
     this._clearWatchdogTimers();
     logger.info(`stopping (signal: ${signal})`);
-    telegram.send(`<b>PULSE Bot stopped</b>\nSignal: ${signal}`);
+    telegram.send(`<b>PULSE3 Bot stopped</b>\nSignal: ${signal}`);
     if (this._analysisT)  clearInterval(this._analysisT);
     if (this._hourlyT)    clearInterval(this._hourlyT);
     if (this._eodT)       clearInterval(this._eodT);
