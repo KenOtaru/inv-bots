@@ -96,7 +96,7 @@ const CONFIG = Object.freeze({
   accountType: ('demo').toLowerCase(), // 'demo'|'real'
 
   // ─ Trade parameters ─
-  stake:          parseFloat('1.0'),
+  stake:          parseFloat('5.0'),
   multiplier:     parseFloat('0.04'), // legacy hint
   multiplierStep: parseFloat('0.0'),
   stopLoss:       parseFloat('900.0'),
