@@ -1564,6 +1564,7 @@ class PulseAnalyzer {
     }
     if (returns.length < 5) return null;
 
+    const price = q[q.length - 1];
     const n = returns.length;
     const mean = returns.reduce((s, v) => s + v, 0) / n;
     let variance = 0;
@@ -1781,7 +1782,6 @@ class TradeExecutor extends EventEmitter {
 
     logger.debug(`contract #${cid} status=${status} profit=${profit.toFixed(3)} spot=${spot}`);
 
-    // Check stop-loss
     const stopLossAbs = Math.abs(info.limit?.stop_loss || 0);
     if (status === 'open' && stopLossAbs > 0 && profit <= -stopLossAbs && !this._selling.has(cid)) {
       logger.warn(`contract #${cid} hit stop-loss @ profit=${profit.toFixed(2)} ≤ -${stopLossAbs} — selling`);
@@ -1790,25 +1790,6 @@ class TradeExecutor extends EventEmitter {
         logger.error(`emergency sell #${cid} failed:`, e.message);
       } finally {
         this._selling.delete(cid);
-      }
-      return;
-    }
-
-    // Check adaptive early-exit conditions (only for open contracts with profit)
-    if (status === 'open' && profit > 0 && !this._selling.has(cid)) {
-      const exitDecision = await this._evaluateAdaptiveExit(info, profit, spot, c);
-      if (exitDecision.shouldExit) {
-        logger.info(`contract #${cid} adaptive exit: ${exitDecision.reason} — selling at profit=${profit.toFixed(2)}`);
-        this._selling.add(cid);
-        try { 
-          await this.sell(cid, 0); 
-          this.emit('driftWarning', { ...info, contractId: cid, dec: exitDecision });
-        } catch (e) {
-          logger.error(`adaptive sell #${cid} failed:`, e.message);
-        } finally {
-          this._selling.delete(cid);
-        }
-        return;
       }
     }
 
@@ -1830,123 +1811,6 @@ class TradeExecutor extends EventEmitter {
     } else {
       this.emit('update', { ...info, contractId: cid, profit, currentSpot: spot, status });
     }
-  }
-
-  /**
-   * Evaluate adaptive early-exit conditions based on PULSE methodology:
-   * 1. Profit-lock: realized profit exceeds best expected remaining payout
-   * 2. Drift-lock: price has drifted too close to the barrier
-   * 3. Edge-lock: next-tick survival × growth no longer clears breakeven
-   */
-  async _evaluateAdaptiveExit(info, profit, currentSpot, contractData) {
-    const decision = { shouldExit: false, reason: '', urgency: 0 };
-    
-    try {
-      // Get current market data for re-simulation
-      const ticks = this.bot?.market?.historyFor(info.symbol);
-      if (!ticks || ticks.length < 20) {
-        // Not enough data for adaptive exit decision
-        return decision;
-      }
-
-      // Re-bootstrap returns from latest ticks
-      const window = Math.min(this.cfg.pulseReturnWindow || 120, ticks.length);
-      const q = ticks.slice(-window).map(t => t.quote);
-      const returns = [];
-      for (let i = 1; i < q.length; i++) {
-        if (q[i-1] > 0) returns.push(Math.log(q[i] / q[i-1]));
-      }
-      if (returns.length < 10) return decision;
-
-      // Extract barrier information
-      const entrySpot = info.entrySpot || currentSpot;
-      const highBarrier = info.highBarrier || (entrySpot * (1 + (info.halfBarrierPct || 0.05) / 100));
-      const lowBarrier = info.lowBarrier || (entrySpot * (1 - (info.halfBarrierPct || 0.05) / 100));
-      const barrierFrac = info.halfBarrierPct ? info.halfBarrierPct / 100 : 0.0005;
-      
-      // === EXIT CONDITION 2: Drift-lock ===
-      // Check if current spot is too close to barriers
-      const driftFromEntry = Math.log(currentSpot / entrySpot);
-      const barrierDistance = Math.log(1 + barrierFrac);
-      const driftRatio = Math.abs(driftFromEntry) / barrierDistance;
-      
-      if (driftRatio >= this.cfg.pulseExitDriftFrac) {
-        decision.shouldExit = true;
-        decision.reason = `drift ${(driftRatio * 100).toFixed(1)}% of barrier (threshold ${(this.cfg.pulseExitDriftFrac * 100).toFixed(0)}%)`;
-        decision.urgency = Math.min(1.0, driftRatio / this.cfg.pulseExitDriftFrac);
-        return decision;
-      }
-
-      // === EXIT CONDITION 3: Edge-lock (next-tick survival check) ===
-      // Monte-Carlo simulate from current position
-      const trials = Math.min(this.cfg.pulseMinTrials || 4000, this.cfg.pulseTrials || 10000);
-      let nextTickSurvival = 0;
-      const currentLogPos = driftFromEntry;
-      
-      for (let t = 0; t < trials; t++) {
-        const r = returns[Math.floor(Math.random() * returns.length)];
-        const nextPos = currentLogPos + r;
-        if (Math.abs(nextPos) < barrierDistance) {
-          nextTickSurvival++;
-        }
-      }
-      
-      const p1 = nextTickSurvival / trials;
-      const growthRate = info.growthRate || this.cfg.multiplier || 0.03;
-      const nextTickEdge = (1 + growthRate) * p1;
-      
-      if (nextTickEdge < this.cfg.pulseExitNextTickEdge) {
-        decision.shouldExit = true;
-        decision.reason = `next-tick edge ${nextTickEdge.toFixed(3)} < ${this.cfg.pulseExitNextTickEdge} (p1=${(p1*100).toFixed(1)}%)`;
-        decision.urgency = Math.max(0, 1 - nextTickEdge);
-        return decision;
-      }
-
-      // === EXIT CONDITION 1: Profit-lock ===
-      // Calculate expected remaining payout vs. realized profit
-      // Simulate remaining ticks from current position
-      const analysis = info._analysis || {};
-      const plannedHorizon = analysis.bestN || this.cfg.pulseMaxHorizon || 3;
-      
-      // Estimate how many ticks have elapsed (rough approximation)
-      const elapsedTime = Date.now() / 1000 - (info.buyTime || 0);
-      const avgTickTime = 2; // Approximate 2 seconds per tick for synthetic indices
-      const estimatedTicksElapsed = Math.max(1, Math.floor(elapsedTime / avgTickTime));
-      const remainingTicks = Math.max(1, plannedHorizon - estimatedTicksElapsed);
-      
-      // Simulate survival for remaining ticks from current position
-      let survivalCount = 0;
-      for (let t = 0; t < trials; t++) {
-        let pos = currentLogPos;
-        let survived = true;
-        for (let tick = 0; tick < remainingTicks; tick++) {
-          const r = returns[Math.floor(Math.random() * returns.length)];
-          pos += r;
-          if (Math.abs(pos) >= barrierDistance) {
-            survived = false;
-            break;
-          }
-        }
-        if (survived) survivalCount++;
-      }
-      
-      const pRemaining = survivalCount / trials;
-      const expectedRemainingGain = info.stake * (Math.pow(1 + growthRate, remainingTicks) * pRemaining - 1);
-      const realizedProfit = profit;
-      
-      // Exit if we've already captured a significant fraction of the best expected outcome
-      if (realizedProfit >= expectedRemainingGain * this.cfg.pulseExitProfitLockFrac) {
-        decision.shouldExit = true;
-        decision.reason = `profit-lock: realized ${realizedProfit.toFixed(2)} ≥ ${(this.cfg.pulseExitProfitLockFrac*100).toFixed(0)}% of expected ${expectedRemainingGain.toFixed(2)}`;
-        decision.urgency = Math.min(1.0, realizedProfit / Math.max(expectedRemainingGain, 0.01));
-        return decision;
-      }
-
-    } catch (e) {
-      logger.debug(`adaptive exit evaluation error: ${e.message}`);
-    }
-    
-    return decision;
   }
 
   async sell(contractId, minPrice = 0) {
