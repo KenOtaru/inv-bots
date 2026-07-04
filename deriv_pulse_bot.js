@@ -89,24 +89,24 @@ const pad = n => String(n).padStart(2, '0');
 // ─────────────────────────────────────────────────────────────────────
 const CONFIG = Object.freeze({
   // ─ Deriv API ─
-  apiToken: ('pat_8e0a3285bd6e74f52a67985b8069f4bea42aa96ce65d129c60ebb838ed1065ee').trim(),
-  appId   : '33uslPtthXBEkQOdfKfoY', //1089
-  wsUrl:       'wss://ws.derivws.com/websockets/v3',
-  currency:    ('USD').toUpperCase(),
-  accountType: ('demo').toLowerCase(), // 'demo'|'real'
+  apiToken:    (process.env.DERIV_API_TOKEN || '0P94g4WdSrSrzir').trim(),
+  appId:       process.env.DERIV_APP_ID  || '1089',
+  wsUrl:       process.env.DERIV_WS_URL  || 'wss://ws.derivws.com/websockets/v3',
+  currency:    (process.env.DERIV_CURRENCY || 'USD').toUpperCase(),
+  accountType: (process.env.DERIV_ACCOUNT_TYPE || 'demo').toLowerCase(), // 'demo'|'real'
 
   // ─ Trade parameters ─
-  stake:          parseFloat('1.0'),
-  multiplier:     parseFloat('0.04'), // legacy hint
+  stake:          parseFloat(process.env.STAKE || '1.0'),
+  multiplier:     parseFloat(process.env.MULTIPLIER || '0.04'), // legacy hint
   multiplierStep: parseFloat('0.0'),
-  stopLoss:       parseFloat('900.0'),
-  takeProfit:     parseFloat('10000.0'),
+  stopLoss:       parseFloat(process.env.STOP_LOSS   || '900.0'),
+  takeProfit:     parseFloat(process.env.TAKE_PROFIT || '10000.0'),
 
   // ── Martingale ──
-  martingale:            parseFloat('0'),   // 0 = off
-  martingaleStep:        parseFloat('0'),
-  lossesBeforeMartingale:parseInt  ('0'),
-  maxMartingaleStep:     parseFloat('5'),
+  martingale:            parseFloat(process.env.MARTINGALE      || '0'),   // 0 = off
+  martingaleStep:        parseFloat(process.env.MARTINGALE_STEP || '0'),
+  lossesBeforeMartingale:parseInt  (process.env.LOSSES_BEFORE_M || '0'),
+  maxMartingaleStep:     parseFloat(process.env.MAX_MART_STEP   || '5'),
 
   // ─ Sizing ─
   sizingMode:        'flat',            // 'flat' | 'edge'
@@ -115,14 +115,17 @@ const CONFIG = Object.freeze({
   downscaleAfterLoss:false,
 
   // ─ Assets ─
-  assets: ('R_10,R_25,R_50,R_75,R_100')
+  // assets: (process.env.ASSETS || '1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,R_10,R_25,R_50,R_75,R_100')
+  //   .split(',').map(s => s.trim()).filter(Boolean),
+
+  assets: (process.env.ASSETS || 'R_10')
     .split(',').map(s => s.trim()).filter(Boolean),
 
   // ─ Telegram ─
   telegram: {
-    enabled : true,
-    botToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
-    chatId  : '752497117',
+    enabled : String(process.env.TELEGRAM_ENABLED || 'true').toLowerCase() === 'true',
+    botToken: process.env.TELEGRAM_BOT_TOKEN || '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
+    chatId  : process.env.TELEGRAM_CHAT_ID   || '752497117',
   },
 
   // ─ Strategy timing ─
@@ -150,8 +153,8 @@ const CONFIG = Object.freeze({
   },
 
   // ─ Logging ─
-  logFile : 'deriv_pulse_bot3_01.log',
-  logLevel: ('INFO').toUpperCase(),
+  logFile : process.env.LOG_FILE  || 'deriv_pulse_bot_04.log',
+  logLevel: (process.env.LOG_LEVEL || 'INFO').toUpperCase(),
 
   // ═══════════════════════════════════════════════════════════════════
   // PULSE STRATEGY TUNABLES
@@ -164,13 +167,13 @@ const CONFIG = Object.freeze({
   // ─ EV gates ─
   //   pulseEdgeThreshold: gross EV ratio floor. 1.05 = +5% expected return
   //   per unit stake AFTER spread cost. Anything below this is noise.
-  pulseEdgeThreshold  : parseFloat('1.05'),
-  pulseMinEV          : parseFloat('0.05'),   // ≥ +5% EV net of spread
+  pulseEdgeThreshold  : parseFloat(process.env.PULSE_EDGE || '1.015'),
+  pulseMinEV          : parseFloat('0.01'),   // ≥ +5% EV net of spread
   pulseMinSurvival    : parseFloat('0.90'),
-  pulseMaxHorizon     : parseInt  ('2', 10), // 1-2 tick holds
+  pulseMaxHorizon     : parseInt  (process.env.PULSE_MAX_HORIZON || '4', 10), // 1-2 tick holds
 
   // ─ Growth-rate candidates (Deriv supports 0.01-0.05) ─
-  pulseGrowthRates    : [0.01, 0.02, 0.03, 0.04, 0.05],
+  pulseGrowthRates    : [0.02], //[0.01, 0.02, 0.03, 0.04, 0.05]
 
   // ─ Volatility regime ─
   pulseCalmMaxRatio   : parseFloat('1.05'),
@@ -180,7 +183,7 @@ const CONFIG = Object.freeze({
   //   Round-trip bid/ask cost as a fraction of stake, deducted from
   //   every MC edge calculation so the reported EV is honest.
   //   0.002 = 0.2% round-trip (typical R_100 short-hold estimate).
-  pulseSpreadCost     : parseFloat('0.002'),
+  pulseSpreadCost     : parseFloat(process.env.PULSE_SPREAD || '0.002'),
 
   // ─ Barrier refresh ─
   barrierRefreshMs    : parseInt('45000', 10),
@@ -197,20 +200,40 @@ const CONFIG = Object.freeze({
   tradeWatchdogMs: parseInt('90000', 10),
 
   // ─ State persistence ─
-  stateFile          : 'deriv_pulse_bot3_01_state.json',
+  stateFile          : 'deriv_pulse_bot_04_state.json',
   stateSaveOnTrade   : true,
   stateSaveOnShutdown: true,
 
   // ═══════════════════════════════════════════════════════════════════
   // BACKTESTER (Fix #4)
   // ═══════════════════════════════════════════════════════════════════
-  //   Run with: BACKTEST=1 node deriv_pulse_bot.js
-  //   Optional: BACKTEST_ASSET=R_100 BACKTEST_TICKS=100000
-  backtestTicks       : parseInt('100000', 10),
-  backtestBatchSize   : parseInt('5000',   10),
-  backtestStepEvery   : parseInt('1',      10),
-  backtestReportEvery : parseInt('10000',  10),
-  backtestOutFile     : 'pulse_backtest_report.json',
+  //   Run with:  BACKTEST=1 node deriv_pulse_bot.js
+  //   Optional:  BACKTEST_ASSET=R_100 BACKTEST_TICKS=100000
+  //
+  //   NOTE on history depth: Deriv's ticks_history endpoint typically
+  //   only serves ~24 h of ticks (≈ 43K on R_10, ≈ 43K on R_100). Asking
+  //   for 100K just means "give me all you have" — the batcher stops
+  //   when a batch comes back short.
+  //
+  //   Diagnostic overrides — these do NOT affect live trading, only the
+  //   backtest run. Use them to see whether the strategy WOULD have
+  //   signalled at a lower threshold, without touching live safety gates.
+  //     BACKTEST_EDGE=1.015          (override pulseEdgeThreshold)
+  //     BACKTEST_MIN_EV=0.010        (override pulseMinEV)
+  //     BACKTEST_MAX_HORIZON=4       (override pulseMaxHorizon)
+  //     BACKTEST_MIN_SURV=0.85       (override pulseMinSurvival)
+  //     BACKTEST_CALM_MAX=1.20       (override pulseCalmMaxRatio)
+  backtestTicks       : parseInt(process.env.BACKTEST_TICKS      || '100000', 10),
+  backtestBatchSize   : parseInt(process.env.BACKTEST_BATCH_SIZE || '5000',   10),
+  backtestStepEvery   : parseInt(process.env.BACKTEST_STEP       || '1',      10),
+  backtestReportEvery : parseInt(process.env.BACKTEST_REPORT     || '10000',  10),
+  backtestOutFile     : process.env.BACKTEST_OUT || 'pulse_backtest_report.json',
+
+  backtestEdge        : process.env.BACKTEST_EDGE        ? parseFloat(process.env.BACKTEST_EDGE)        : null,
+  backtestMinEV       : process.env.BACKTEST_MIN_EV      ? parseFloat(process.env.BACKTEST_MIN_EV)      : null,
+  backtestMaxHorizon  : process.env.BACKTEST_MAX_HORIZON ? parseInt  (process.env.BACKTEST_MAX_HORIZON) : null,
+  backtestMinSurv     : process.env.BACKTEST_MIN_SURV    ? parseFloat(process.env.BACKTEST_MIN_SURV)    : null,
+  backtestCalmMax     : process.env.BACKTEST_CALM_MAX    ? parseFloat(process.env.BACKTEST_CALM_MAX)    : null,
 });
 
 // ─────────────────────────────────────────────────────────────────────
@@ -458,7 +481,7 @@ class DerivClient extends EventEmitter {
       : '';
 
     telegram.send(
-      `<b>PULSE3 Bot Online</b>\n\n` +
+      `<b>PULSE Bot Online</b>\n\n` +
       `<b>Account:</b> ${info.loginid}\n` +
       `<b>Type:</b> ${info.isVirtual ? 'DEMO' : 'REAL'}\n` +
       `<b>Balance:</b> ${this.startBalance.toFixed(2)} ${this.currencyStr()}\n` +
@@ -491,7 +514,7 @@ class DerivClient extends EventEmitter {
   _onDisconnected(code, reason, wasAuthorized) {
     this._clearWatchdogTimers();
     telegram.send(
-      `<b>Pulse3 Connection lost</b>\n` +
+      `<b>Connection lost</b>\n` +
       `code: <code>${code}</code>\n` +
       `was authorised: ${wasAuthorized ? 'yes' : 'no'}\n` +
       `reconnecting…`,
@@ -803,7 +826,7 @@ class DerivClient extends EventEmitter {
     const todayStats = this.stats.stats(this.stats.todayTrades(rec.date));
 
     let msg =
-      `${emoji} <b>PULSE3 TRADE ${label}</b>\n\n` +
+      `${emoji} <b>PULSE TRADE ${label}</b>\n\n` +
       `<b>Contract:</b> #${t.contractId}\n` +
       `<b>Symbol:</b> <code>${t.symbol}</code>\n` +
       `<b>Growth:</b> ${(t.growthRate*100).toFixed(0)}%\n` +
@@ -831,7 +854,7 @@ class DerivClient extends EventEmitter {
     this.tradeStartTime = Date.now();
     this._startTradeWatchdog(t.contractId);
     const msg =
-      `<b>PULSE3 TRADE OPENED</b>\n\n` +
+      `<b>PULSE TRADE OPENED</b>\n\n` +
       `<b>Contract:</b> #${t.contractId}\n` +
       `<b>Symbol:</b> <code>${t.symbol}</code>\n` +
       `<b>Growth Rate:</b> ${(t.growthRate*100).toFixed(2)}%\n` +
@@ -842,7 +865,7 @@ class DerivClient extends EventEmitter {
       (this.martingaleMultiplier > 1
         ? `<b>Martingale:</b> ×${this.martingaleMultiplier.toFixed(2)} (${this.lossesStreak} losses)\n`
         : '') + `\n` +
-      `<b>PULSE3 Analysis</b>\n` +
+      `<b>PULSE Analysis</b>\n` +
       `• Edge (net spread): ${((t._analysis?.edge ?? 0)*100).toFixed(2)}%\n` +
       `• EV: ${((t._analysis?.ev ?? 0)*100).toFixed(2)}%\n` +
       `• pN: ${((t._analysis?.pN ?? 0)*100).toFixed(2)}%\n` +
@@ -965,7 +988,7 @@ class DerivClient extends EventEmitter {
     this.tradeStartTime = null;
 
     telegram.send(
-      `<b>Pulse3 STUCK TRADE RECOVERED [${reason}]</b>\nContract: ${contractId}\n` +
+      `<b>STUCK TRADE RECOVERED [${reason}]</b>\nContract: ${contractId}\n` +
       `Asset: ${symbol}\nStake: $${stake.toFixed(2)}\nOpen: ${openSeconds}s\n` +
       `Loss streak now: ${this.stats.currentLossStreak}`,
     );
@@ -986,7 +1009,7 @@ class DerivClient extends EventEmitter {
       const pl = today.reduce((s, t) => s + (t.profit || 0), 0);
       if (pl <= -this.cfg.dailyMaxLoss) {
         logger.warn(`dailyMaxLoss reached — pausing`);
-        telegram.send(`<b>Pulse3 Daily loss limit</b>\nNet P/L: ${pl.toFixed(2)} ${this.currencyStr()}`);
+        telegram.send(`<b>Daily loss limit</b>\nNet P/L: ${pl.toFixed(2)} ${this.currencyStr()}`);
         return;
       }
       if (Date.now() - this.lastTradeAt < this.cfg.tradeCooldownMs) return;
@@ -1135,11 +1158,11 @@ class DerivClient extends EventEmitter {
     const list = this.stats.tradesForHour(date, hour);
     const s    = this.stats.stats(list);
     if (!list.length) {
-      telegram.send(`<b>Pulse3 Hourly Summary GMT (${date} ${pad(hour)}:00-${pad(hour)}:59)</b>\n\nNo trades this hour.\n\nOverall Profit: ${money(this.stats.overallProfit, this.currencyStr())}`);
+      telegram.send(`<b>Hourly Summary GMT (${date} ${pad(hour)}:00-${pad(hour)}:59)</b>\n\nNo trades this hour.\n\nOverall Profit: ${money(this.stats.overallProfit, this.currencyStr())}`);
       return;
     }
     let msg =
-      `<b>Pulse3 Hourly Summary GMT (${date} ${pad(hour)}:00-${pad(hour)}:59)</b>\n\n` +
+      `<b>Hourly Summary GMT (${date} ${pad(hour)}:00-${pad(hour)}:59)</b>\n\n` +
       `Trades: ${s.count} (✅${s.wins} ❌${s.losses})\n` +
       `Win rate: ${s.winRate.toFixed(1)}%\n` +
       `P/L: <b>${money(s.totalProfit, this.currencyStr())}</b>\n` +
@@ -1224,7 +1247,7 @@ class DerivClient extends EventEmitter {
     this.stopped = true;
     this._clearWatchdogTimers();
     logger.info(`stopping (signal: ${signal})`);
-    telegram.send(`<b>PULSE3 Bot stopped</b>\nSignal: ${signal}`);
+    telegram.send(`<b>PULSE Bot stopped</b>\nSignal: ${signal}`);
     if (this._analysisT)  clearInterval(this._analysisT);
     if (this._hourlyT)    clearInterval(this._hourlyT);
     if (this._eodT)       clearInterval(this._eodT);
@@ -1349,23 +1372,38 @@ class MarketDataManager {
     const out  = [];
     let remain = totalCount;
     let end    = 'latest';
+    let lastEpoch = null;
     while (remain > 0) {
       const count = Math.min(batchSize, remain);
-      const res   = await this.client._send({
-        ticks_history: symbol,
-        count, end, style: 'ticks',
-      }, 30000);
+      let res;
+      try {
+        res = await this.client._send({
+          ticks_history: symbol,
+          count, end, style: 'ticks',
+        }, 30000);
+      } catch (e) {
+        logger.warn(`deepBackfill(${symbol}) batch failed: ${e.message} — stopping`);
+        break;
+      }
       const prices = res.history?.prices || [];
       const times  = res.history?.times  || [];
-      if (!times.length) break;
+      if (!times.length) { logger.info(`  (server returned 0 more ticks — Deriv history exhausted)`); break; }
       const batch = times.map((t, i) => ({ epoch: +t, quote: parseFloat(prices[i]) }));
+      // Guard against server ignoring `end=` and re-serving the same window
+      if (lastEpoch !== null && batch[batch.length - 1].epoch >= lastEpoch) {
+        logger.info(`  (server did not honor pagination — history exhausted at ${out.length} ticks)`);
+        break;
+      }
+      lastEpoch = batch[0].epoch;
       out.unshift(...batch);
       remain -= batch.length;
       if (onProgress) onProgress(out.length, totalCount);
       end = String(batch[0].epoch - 1);
-      // rate limit courtesy pause
-      await new Promise(r => setTimeout(r, 200));
-      if (batch.length < count) break; // ran out of history
+      await new Promise(r => setTimeout(r, 200)); // rate-limit courtesy
+      if (batch.length < count) {
+        logger.info(`  (last batch short: ${batch.length}/${count} — Deriv history exhausted at ${out.length} ticks)`);
+        break;
+      }
     }
     return out;
   }
@@ -1545,15 +1583,33 @@ class PulseAnalyzer {
       }
 
       // EV-optimal horizon within cfg.pulseMaxHorizon (Fix #6 → 2 ticks)
+      // We also track the raw best edge/EV observed across all ticks
+      // BEFORE gate filtering — this is what the diagnostic reports.
       let bestN       = 0;
       let bestEvN     = -Infinity;
       let bestPayoutN = 0;
+
+      // Raw observations (pre-gate). Used ONLY when nothing passes.
+      let rawBestEdge = -Infinity;
+      let rawBestEV   = -Infinity;
+      let rawBestN    = 1;
+      let rawBestPN   = 0;
+
       for (let tick = 1; tick <= Math.min(horizon, this.cfg.pulseMaxHorizon); tick++) {
         const pTick       = survivalCounts[tick] / trials;
         const grossReturn = Math.pow(1 + growthRate, tick);
         // Fix #3 — spread deducted from gross edge.
         const edge = grossReturn * pTick - spread;
         const ev   = edge - 1;
+
+        // Track raw best regardless of gate
+        if (edge > rawBestEdge) {
+          rawBestEdge = edge;
+          rawBestEV   = ev;
+          rawBestN    = tick;
+          rawBestPN   = pTick;
+        }
+
         if (edge >= this.cfg.pulseEdgeThreshold && ev >= this.cfg.pulseMinEV) {
           if (ev > bestEvN) {
             bestEvN     = ev;
@@ -1595,24 +1651,31 @@ class PulseAnalyzer {
         };
         if (!best || candidate.edge > best.edge) best = candidate;
       } else {
-        // No positive-EV horizon at this growth rate; still emit a
-        // "diagnostic" candidate so the scan log can show why nothing
-        // qualified. We only overwrite `best` if we have nothing yet.
-        if (!best) {
-          const p1 = survivalCounts[1] / trials || 0.5;
-          const pAny = Math.max(...survivalCounts) / trials;
-          best = {
-            symbol, growthRate,
-            edge: 0, ev: -Infinity, bestN: 0,
-            pN: pAny, p1, regime, vrRatio, sigma, mu,
-            halfBarrierFrac: logBarrierHalf, price, logBarrierHalf,
-            survivalCounts, returns,
-            suggestedTakeProfit: 0.005,
-            spreadCost: spread,
-            edgeOK: false, evOK: false, survOK: false, calmOK,
-            recommend: false,
-          };
-        }
+        // ── DIAGNOSTIC CANDIDATE ───────────────────────────────────
+        // No horizon passed the gates. We emit a candidate whose
+        // `edge`, `ev`, `pN`, `bestN` reflect the RAW best-observed
+        // values so the backtester can honestly report "the closest
+        // we got was edge=X". Previously this branch reported edge:0
+        // which made diagnostics look broken.
+        const p1 = survivalCounts[1] / trials || 0;
+        const survOK = rawBestPN >= this.cfg.pulseMinSurvival;
+        const edgeOK = rawBestEdge >= this.cfg.pulseEdgeThreshold;
+        const evOK   = rawBestEV   >= this.cfg.pulseMinEV;
+        const candidate = {
+          symbol, growthRate,
+          edge : rawBestEdge === -Infinity ? 0     : rawBestEdge,
+          ev   : rawBestEV,
+          bestN: rawBestN,
+          pN   : rawBestPN,
+          p1, regime, vrRatio, sigma, mu,
+          halfBarrierFrac: logBarrierHalf, price, logBarrierHalf,
+          survivalCounts, returns,
+          suggestedTakeProfit: Math.max(Math.pow(1 + growthRate, rawBestN) - 1, 0.005),
+          spreadCost: spread,
+          edgeOK, evOK, survOK, calmOK,
+          recommend: false,  // diagnostic — never recommends
+        };
+        if (!best || candidate.edge > best.edge) best = candidate;
       }
     }
     return best;
@@ -2049,9 +2112,19 @@ class StatisticsManager {
  */
 class PulseBacktester {
   constructor(cfg, deriv) {
-    this.cfg   = cfg;
-    this.deriv = deriv;                // authorised DerivClient
-    this.analyzer = new PulseAnalyzer(cfg);
+    // Build an EFFECTIVE cfg that layers backtest overrides on top of
+    // the live cfg. Only the analyzer used by this backtester sees these
+    // overrides — live trading is untouched.
+    const overrides = {};
+    if (cfg.backtestEdge       != null) overrides.pulseEdgeThreshold = cfg.backtestEdge;
+    if (cfg.backtestMinEV      != null) overrides.pulseMinEV         = cfg.backtestMinEV;
+    if (cfg.backtestMaxHorizon != null) overrides.pulseMaxHorizon    = cfg.backtestMaxHorizon;
+    if (cfg.backtestMinSurv    != null) overrides.pulseMinSurvival   = cfg.backtestMinSurv;
+    if (cfg.backtestCalmMax    != null) overrides.pulseCalmMaxRatio  = cfg.backtestCalmMax;
+    this.cfg      = { ...cfg, ...overrides };
+    this.overrides = overrides;
+    this.deriv    = deriv;                // authorised DerivClient
+    this.analyzer = new PulseAnalyzer(this.cfg);
   }
 
   // A stub "market" for the analyzer. Uses barrier cache pre-populated
@@ -2064,6 +2137,17 @@ class PulseBacktester {
 
   async run(symbol) {
     logger.info(`── PULSE BACKTEST: ${symbol} ${this.cfg.backtestTicks} ticks ──`);
+    if (Object.keys(this.overrides).length) {
+      logger.info(`   overrides applied: ${JSON.stringify(this.overrides)}`);
+    }
+    logger.info(
+      `   gates: edgeThresh=${this.cfg.pulseEdgeThreshold}  ` +
+      `minEV=${this.cfg.pulseMinEV}  ` +
+      `minSurv=${this.cfg.pulseMinSurvival}  ` +
+      `maxHorizon=${this.cfg.pulseMaxHorizon}  ` +
+      `calmMax=${this.cfg.pulseCalmMaxRatio}  ` +
+      `spread=${this.cfg.pulseSpreadCost}`,
+    );
     const mdm = this.deriv.market;
 
     logger.info('fetching historical ticks (batched)…');
@@ -2120,6 +2204,83 @@ class PulseBacktester {
     for (const gr of this.cfg.pulseGrowthRates) results.byGrowth[gr] = { signals: 0, wins: 0, losses: 0, pnl: 0 };
     for (let n = 1; n <= this.cfg.pulseMaxHorizon; n++) results.byHold[n] = { signals: 0, wins: 0, losses: 0, pnl: 0 };
 
+    // Loss-streak tracking (mirrors StatisticsManager's live behaviour).
+    // We record every consecutive-loss "event" the first time the streak
+    // reaches a given length, so x2/x3/... count non-overlapping events.
+    const streak = {
+      current      : 0,
+      max          : 0,
+      currentWin   : 0,
+      maxWin       : 0,
+      events       : { x2: 0, x3: 0, x4: 0, x5: 0, x6: 0, x7: 0, x8plus: 0 },
+      lossSequences: [],   // full history of contiguous loss run lengths
+      winSequences : [],   // full history of contiguous win  run lengths
+    };
+    const bumpEvent = (n) => {
+      if (n === 2) streak.events.x2++;
+      else if (n === 3) streak.events.x3++;
+      else if (n === 4) streak.events.x4++;
+      else if (n === 5) streak.events.x5++;
+      else if (n === 6) streak.events.x6++;
+      else if (n === 7) streak.events.x7++;
+      else if (n >= 8)  streak.events.x8plus++;
+    };
+    const recordOutcome = (won) => {
+      if (won) {
+        if (streak.current > 0) streak.lossSequences.push(streak.current);
+        streak.current    = 0;
+        streak.currentWin += 1;
+        if (streak.currentWin > streak.maxWin) streak.maxWin = streak.currentWin;
+      } else {
+        if (streak.currentWin > 0) streak.winSequences.push(streak.currentWin);
+        streak.currentWin  = 0;
+        streak.current    += 1;
+        if (streak.current > streak.max) streak.max = streak.current;
+        // A "streak of length N" is counted once when the run first
+        // reaches N — matches how StatisticsManager reports x2/x3/x4.
+        bumpEvent(streak.current);
+      }
+    };
+
+    // Diagnostic counters — track WHY no signal fires.
+    const diag = {
+      scans        : 0,
+      nullAnalysis : 0,
+      rejEdge      : 0,
+      rejEV        : 0,
+      rejSurv      : 0,
+      rejStormy    : 0,
+      recommended  : 0,
+      bestEdgeSeen : -Infinity,
+      bestPNSeen   : 0,
+      bestEVSeen   : -Infinity,
+      calmScans    : 0,
+      stormyScans  : 0,
+      // Histogram buckets for edge distribution (calm scans only)
+      edgeBuckets  : {
+        '<0.98'      : 0,
+        '0.98-0.99'  : 0,
+        '0.99-1.00'  : 0,
+        '1.00-1.01'  : 0,
+        '1.01-1.02'  : 0,
+        '1.02-1.03'  : 0,
+        '1.03-1.05'  : 0,
+        '1.05-1.10'  : 0,
+        '>=1.10'     : 0,
+      },
+    };
+    const bucketize = (edge) => {
+      if (edge <  0.98) return '<0.98';
+      if (edge <  0.99) return '0.98-0.99';
+      if (edge <  1.00) return '0.99-1.00';
+      if (edge <  1.01) return '1.00-1.01';
+      if (edge <  1.02) return '1.01-1.02';
+      if (edge <  1.03) return '1.02-1.03';
+      if (edge <  1.05) return '1.03-1.05';
+      if (edge <  1.10) return '1.05-1.10';
+      return '>=1.10';
+    };
+
     let i = minWindow;
     const step = Math.max(1, this.cfg.backtestStepEvery);
     const t0 = Date.now();
@@ -2127,6 +2288,33 @@ class PulseBacktester {
     while (i < ticks.length - this.cfg.pulseMaxHorizon - 1) {
       const window   = ticks.slice(Math.max(0, i - this.cfg.pulseReturnWindow), i + 1);
       const analysis = this.analyzer.analyze(symbol, window, market, ticks[i].quote);
+      diag.scans++;
+
+      if (!analysis) {
+        diag.nullAnalysis++;
+        i += step;
+        continue;
+      }
+
+      // Track best-of, and rejection reasons — even for non-recommends
+      // so we can see how far off the gates are.
+      if (analysis.calmOK) diag.calmScans++; else diag.stormyScans++;
+      if (analysis.edge > diag.bestEdgeSeen) diag.bestEdgeSeen = analysis.edge;
+      if (analysis.pN   > diag.bestPNSeen)   diag.bestPNSeen   = analysis.pN;
+      if (analysis.ev   > diag.bestEVSeen)   diag.bestEVSeen   = analysis.ev;
+      // Only bucketize calm scans — that's where an entry would even
+      // be possible.
+      if (analysis.calmOK) {
+        diag.edgeBuckets[bucketize(analysis.edge)]++;
+      }
+      if (!analysis.recommend) {
+        if (!analysis.edgeOK) diag.rejEdge++;
+        if (!analysis.evOK)   diag.rejEV++;
+        if (!analysis.survOK) diag.rejSurv++;
+        if (!analysis.calmOK) diag.rejStormy++;
+      } else {
+        diag.recommended++;
+      }
 
       if (analysis && analysis.recommend) {
         const N          = analysis.bestN;
@@ -2156,6 +2344,7 @@ class PulseBacktester {
           results.byGrowth[g].pnl    += loss;
           results.byHold[N].losses   += 1;
           results.byHold[N].pnl      += loss;
+          recordOutcome(false);
         } else {
           const gross = stake * (Math.pow(1 + g, N) - 1);
           const spreadCost = stake * spread;
@@ -2168,6 +2357,7 @@ class PulseBacktester {
           results.byGrowth[g].pnl    += net;
           results.byHold[N].wins     += 1;
           results.byHold[N].pnl      += net;
+          recordOutcome(true);
         }
         i += (N + 1);
       } else {
@@ -2180,11 +2370,42 @@ class PulseBacktester {
       }
     }
 
+    // Flush trailing streak so the final run gets recorded.
+    if (streak.current    > 0) streak.lossSequences.push(streak.current);
+    if (streak.currentWin > 0) streak.winSequences.push(streak.currentWin);
+
     const dt = ((Date.now() - t0) / 1000).toFixed(1);
     const empiricalWR = results.signals ? results.wins / results.signals * 100 : 0;
     const predictedWR = results.signals ? (results.predictedSurvivalSum / results.signals) * 100 : 0;
     const predictedEV = results.signals ? (results.predictedEVSum / results.signals) * 100 : 0;
     const realizedEV  = results.signals ? (results.pnl / (results.signals * stake)) * 100 : 0;
+
+    // ── Consecutive-loss risk metrics ──────────────────────────────
+    // avgLossRun / avgWinRun: mean run length (excludes zero-length runs)
+    // p(≥N losses in a row) as % of all signals — probability estimate.
+    const avg = arr => arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : 0;
+    const streakMetrics = {
+      maxLossStreak : streak.max,
+      maxWinStreak  : streak.maxWin,
+      events        : streak.events,
+      // Probability of experiencing at least a given loss-streak length,
+      // as a fraction of total signals. Useful for sizing / drawdown.
+      probAtLeast   : (() => {
+        const total = results.signals || 1;
+        return {
+          x2: +((streak.events.x2 + streak.events.x3 + streak.events.x4 + streak.events.x5 + streak.events.x6 + streak.events.x7 + streak.events.x8plus) / total).toFixed(4),
+          x3: +((streak.events.x3 + streak.events.x4 + streak.events.x5 + streak.events.x6 + streak.events.x7 + streak.events.x8plus) / total).toFixed(4),
+          x4: +((streak.events.x4 + streak.events.x5 + streak.events.x6 + streak.events.x7 + streak.events.x8plus) / total).toFixed(4),
+          x5: +((streak.events.x5 + streak.events.x6 + streak.events.x7 + streak.events.x8plus) / total).toFixed(4),
+        };
+      })(),
+      avgLossRun    : +avg(streak.lossSequences).toFixed(2),
+      avgWinRun     : +avg(streak.winSequences).toFixed(2),
+      lossRuns      : streak.lossSequences.length,
+      winRuns       : streak.winSequences.length,
+      // Worst-case cash drawdown from the longest loss run at flat stake.
+      maxDrawdownFlatStake: +(streak.max * stake).toFixed(2),
+    };
 
     results.durationSec = +dt;
     results.empiricalWinRate  = +empiricalWR.toFixed(2);
@@ -2193,6 +2414,16 @@ class PulseBacktester {
     results.realizedEVPct     = +realizedEV.toFixed(3);
     results.calibrationGap    = +(empiricalWR - predictedWR).toFixed(2);
     results.profitFactor      = results.grossLoss > 0 ? +(results.grossWin / results.grossLoss).toFixed(3) : Infinity;
+    results.diagnostics       = diag;
+    results.streaks           = streakMetrics;
+    results.gatesUsed         = {
+      pulseEdgeThreshold: this.cfg.pulseEdgeThreshold,
+      pulseMinEV        : this.cfg.pulseMinEV,
+      pulseMinSurvival  : this.cfg.pulseMinSurvival,
+      pulseMaxHorizon   : this.cfg.pulseMaxHorizon,
+      pulseCalmMaxRatio : this.cfg.pulseCalmMaxRatio,
+      pulseSpreadCost   : this.cfg.pulseSpreadCost,
+    };
 
     // Pretty summary
     const line = '─'.repeat(66);
@@ -2225,6 +2456,97 @@ class PulseBacktester {
       const wr = r.signals ? (r.wins / r.signals * 100).toFixed(1) : '  - ';
       console.log(`    N=${n}   signals=${String(r.signals).padStart(4)}  ` +
                   `WR=${wr}%  pnl=${(r.pnl >= 0 ? '+' : '') + r.pnl.toFixed(2)}`);
+    }
+
+    // ── Consecutive-loss stats ────────────────────────────────────
+    console.log(line);
+    console.log('  Consecutive-loss stats (flat stake):');
+    console.log(`    Max loss streak       : ${streakMetrics.maxLossStreak}  ` +
+                `(worst drawdown at flat stake: -${streakMetrics.maxDrawdownFlatStake.toFixed(2)} ${this.cfg.currency})`);
+    console.log(`    Max win  streak       : ${streakMetrics.maxWinStreak}`);
+    console.log(`    Avg loss run length   : ${streakMetrics.avgLossRun}   (${streakMetrics.lossRuns} runs)`);
+    console.log(`    Avg win  run length   : ${streakMetrics.avgWinRun}   (${streakMetrics.winRuns} runs)`);
+    console.log(`    Streak events (times a loss run reached that length):`);
+    console.log(`      x2 (2 in a row) : ${String(streakMetrics.events.x2).padStart(4)}  ` +
+                `P(≥2) ≈ ${(streakMetrics.probAtLeast.x2*100).toFixed(2)}% of signals`);
+    console.log(`      x3 (3 in a row) : ${String(streakMetrics.events.x3).padStart(4)}  ` +
+                `P(≥3) ≈ ${(streakMetrics.probAtLeast.x3*100).toFixed(2)}% of signals`);
+    console.log(`      x4 (4 in a row) : ${String(streakMetrics.events.x4).padStart(4)}  ` +
+                `P(≥4) ≈ ${(streakMetrics.probAtLeast.x4*100).toFixed(2)}% of signals`);
+    console.log(`      x5 (5 in a row) : ${String(streakMetrics.events.x5).padStart(4)}  ` +
+                `P(≥5) ≈ ${(streakMetrics.probAtLeast.x5*100).toFixed(2)}% of signals`);
+    console.log(`      x6 (6 in a row) : ${String(streakMetrics.events.x6).padStart(4)}`);
+    console.log(`      x7 (7 in a row) : ${String(streakMetrics.events.x7).padStart(4)}`);
+    console.log(`      x8+ (≥8)        : ${String(streakMetrics.events.x8plus).padStart(4)}`);
+    // Expected loss-streak length under an i.i.d. Bernoulli assumption
+    // with the observed win rate — sanity-check the empirical streaks.
+    if (results.signals > 0 && empiricalWR > 0 && empiricalWR < 100) {
+      const q       = 1 - (empiricalWR / 100);         // loss probability
+      const nTrades = results.signals;
+      // Expected longest run of losses in n trials ≈ log_(1/q)(n·q)
+      // (classical Erdős–Rényi / Schilling result for streaks).
+      const expected = Math.log(nTrades * q) / Math.log(1 / q);
+      console.log(`    Expected longest loss run (iid @ WR=${empiricalWR.toFixed(1)}%): ~${expected.toFixed(1)} in ${nTrades} trades`);
+      if (streakMetrics.maxLossStreak > expected * 1.5) {
+        console.log(`    ⚠ Observed max streak ${streakMetrics.maxLossStreak} >> expected — losses may be autocorrelated (regime clustering).`);
+      }
+    }
+
+    // Diagnostic — shows why (almost) nothing fired, or what came closest.
+    const bestEdgeStr = diag.bestEdgeSeen === -Infinity ? 'n/a' : diag.bestEdgeSeen.toFixed(4);
+    const bestEVStr   = diag.bestEVSeen   === -Infinity ? 'n/a' : (diag.bestEVSeen*100).toFixed(3) + '%';
+    console.log(line);
+    console.log('  Diagnostics — why no/few signals fired:');
+    console.log(`    scans             : ${diag.scans}`);
+    console.log(`    null analyses     : ${diag.nullAnalysis}   (window too short)`);
+    console.log(`    regime split      : calm ${diag.calmScans}  vs  stormy ${diag.stormyScans}`);
+    console.log(`    recommend=true    : ${diag.recommended}`);
+    console.log(`    rejected by edge  : ${diag.rejEdge}   (needed ≥ ${this.cfg.pulseEdgeThreshold})`);
+    console.log(`    rejected by EV    : ${diag.rejEV}   (needed ≥ ${this.cfg.pulseMinEV})`);
+    console.log(`    rejected by surv  : ${diag.rejSurv}   (needed pN ≥ ${this.cfg.pulseMinSurvival})`);
+    console.log(`    rejected by regime: ${diag.rejStormy}   (calmMax ratio ${this.cfg.pulseCalmMaxRatio})`);
+    console.log(`    best edge seen    : ${bestEdgeStr}   (threshold ${this.cfg.pulseEdgeThreshold})`);
+    console.log(`    best pN seen      : ${(diag.bestPNSeen*100).toFixed(2)}%`);
+    console.log(`    best EV seen      : ${bestEVStr}`);
+
+    // Edge histogram (calm scans only) — this is the money chart. It
+    // tells you the actual distribution of achievable edges, which is
+    // the ONLY defensible way to pick a threshold.
+    const calmTotal = Object.values(diag.edgeBuckets).reduce((a, b) => a + b, 0);
+    if (calmTotal > 0) {
+      console.log('');
+      console.log('  Edge distribution (calm scans, spread-adjusted):');
+      const maxBar   = 40;
+      const maxCount = Math.max(...Object.values(diag.edgeBuckets));
+      for (const [bucket, count] of Object.entries(diag.edgeBuckets)) {
+        const pct  = (count / calmTotal * 100);
+        const bars = maxCount > 0 ? Math.round((count / maxCount) * maxBar) : 0;
+        console.log(`    ${bucket.padEnd(12)} ${String(count).padStart(6)}  ${pct.toFixed(1).padStart(5)}%  ${'█'.repeat(bars)}`);
+      }
+    }
+
+    if (diag.recommended === 0 && diag.scans > 0) {
+      console.log('');
+      console.log('  💡 No signals fired. Suggestions:');
+      if (diag.bestEdgeSeen !== -Infinity && diag.bestEdgeSeen < this.cfg.pulseEdgeThreshold) {
+        const suggEdge = Math.max(1.005, diag.bestEdgeSeen - 0.005);
+        const suggEV   = Math.max(0.005, (diag.bestEVSeen || 0) - 0.005);
+        console.log(`     • Best net-of-spread edge observed: ${diag.bestEdgeSeen.toFixed(4)}`);
+        console.log(`       PowerShell: $env:BACKTEST_EDGE=${suggEdge.toFixed(3)}; $env:BACKTEST_MIN_EV=${suggEV.toFixed(3)}`);
+      }
+      if (diag.stormyScans > diag.calmScans * 2) {
+        console.log(`     • Regime was mostly non-calm (${diag.stormyScans}/${diag.scans}).`);
+        console.log(`       PowerShell: $env:BACKTEST_CALM_MAX=1.20`);
+      }
+      if (this.cfg.pulseMaxHorizon <= 2) {
+        console.log(`     • Try longer holds:  $env:BACKTEST_MAX_HORIZON=4`);
+      }
+      // Only warn about survival if it's actually the binding constraint.
+      if (diag.bestPNSeen < this.cfg.pulseMinSurvival) {
+        const suggSurv = Math.max(0.5, diag.bestPNSeen - 0.05);
+        console.log(`     • Best survival observed: ${(diag.bestPNSeen*100).toFixed(1)}% (< ${(this.cfg.pulseMinSurvival*100).toFixed(0)}% floor).`);
+        console.log(`       PowerShell: $env:BACKTEST_MIN_SURV=${suggSurv.toFixed(2)}`);
+      }
     }
     console.log(line + '\n');
 
