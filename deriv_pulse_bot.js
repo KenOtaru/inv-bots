@@ -89,24 +89,24 @@ const pad = n => String(n).padStart(2, '0');
 // ─────────────────────────────────────────────────────────────────────
 const CONFIG = Object.freeze({
   // ─ Deriv API ─
-  apiToken:    (process.env.DERIV_API_TOKEN || '0P94g4WdSrSrzir').trim(),
-  appId:       process.env.DERIV_APP_ID  || '1089',
-  wsUrl:       process.env.DERIV_WS_URL  || 'wss://ws.derivws.com/websockets/v3',
-  currency:    (process.env.DERIV_CURRENCY || 'USD').toUpperCase(),
-  accountType: (process.env.DERIV_ACCOUNT_TYPE || 'demo').toLowerCase(), // 'demo'|'real'
+  apiToken:    ('0P94g4WdSrSrzir').trim(),
+  appId:       '1089',
+  wsUrl:       'wss://ws.derivws.com/websockets/v3',
+  currency:    ('USD').toUpperCase(),
+  accountType: ('demo').toLowerCase(), // 'demo'|'real'
 
   // ─ Trade parameters ─
-  stake:          parseFloat(process.env.STAKE || '1.0'),
-  multiplier:     parseFloat(process.env.MULTIPLIER || '0.04'), // legacy hint
+  stake:          parseFloat('1.0'),
+  multiplier:     parseFloat('0.04'), // legacy hint
   multiplierStep: parseFloat('0.0'),
-  stopLoss:       parseFloat(process.env.STOP_LOSS   || '900.0'),
-  takeProfit:     parseFloat(process.env.TAKE_PROFIT || '10000.0'),
+  stopLoss:       parseFloat('900.0'),
+  takeProfit:     parseFloat('10000.0'),
 
   // ── Martingale ──
-  martingale:            parseFloat(process.env.MARTINGALE      || '0'),   // 0 = off
-  martingaleStep:        parseFloat(process.env.MARTINGALE_STEP || '0'),
-  lossesBeforeMartingale:parseInt  (process.env.LOSSES_BEFORE_M || '0'),
-  maxMartingaleStep:     parseFloat(process.env.MAX_MART_STEP   || '5'),
+  martingale:            parseFloat('50'),   // 0 = off
+  martingaleStep:        parseFloat('2'),
+  lossesBeforeMartingale:parseInt  ('0'),
+  maxMartingaleStep:     parseFloat('5'),
 
   // ─ Sizing ─
   sizingMode:        'flat',            // 'flat' | 'edge'
@@ -115,17 +115,17 @@ const CONFIG = Object.freeze({
   downscaleAfterLoss:false,
 
   // ─ Assets ─
-  // assets: (process.env.ASSETS || '1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,R_10,R_50,R_75')
+  // assets: (process.env.ASSETS || '1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,R_10,R_25,R_50,R_75')
   //   .split(',').map(s => s.trim()).filter(Boolean),
 
-  assets: (process.env.ASSETS || '1HZ10V')
+  assets: ('1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V')
     .split(',').map(s => s.trim()).filter(Boolean),
 
   // ─ Telegram ─
   telegram: {
-    enabled : String(process.env.TELEGRAM_ENABLED || 'true').toLowerCase() === 'true',
-    botToken: process.env.TELEGRAM_BOT_TOKEN || '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
-    chatId  : process.env.TELEGRAM_CHAT_ID   || '752497117',
+    enabled : true,
+    botToken: '8356265372:AAF00emJPbomDw8JnmMEdVW5b7ISX9_WQjQ',
+    chatId  : '752497117',
   },
 
   // ─ Strategy timing ─
@@ -153,8 +153,8 @@ const CONFIG = Object.freeze({
   },
 
   // ─ Logging ─
-  logFile : process.env.LOG_FILE  || 'deriv_pulse_bot_04.log',
-  logLevel: (process.env.LOG_LEVEL || 'INFO').toUpperCase(),
+  logFile : 'deriv_pulse_bot4_01.log',
+  logLevel: ('INFO').toUpperCase(),
 
   // ═══════════════════════════════════════════════════════════════════
   // PULSE STRATEGY TUNABLES
@@ -167,10 +167,10 @@ const CONFIG = Object.freeze({
   // ─ EV gates ─
   //   pulseEdgeThreshold: gross EV ratio floor. 1.05 = +5% expected return
   //   per unit stake AFTER spread cost. Anything below this is noise.
-  pulseEdgeThreshold  : parseFloat(process.env.PULSE_EDGE || '1.015'),
+  pulseEdgeThreshold  : parseFloat('1.015'),
   pulseMinEV          : parseFloat('0.01'),   // ≥ +5% EV net of spread
   pulseMinSurvival    : parseFloat('0.90'),
-  pulseMaxHorizon     : parseInt  (process.env.PULSE_MAX_HORIZON || '4', 10), // 1-2 tick holds
+  pulseMaxHorizon     : parseInt  ('4', 10), // 1-2 tick holds
 
   // ─ Growth-rate candidates (Deriv supports 0.01-0.05) ─
   pulseGrowthRates    : [0.02], //[0.01, 0.02, 0.03, 0.04, 0.05]
@@ -183,7 +183,7 @@ const CONFIG = Object.freeze({
   //   Round-trip bid/ask cost as a fraction of stake, deducted from
   //   every MC edge calculation so the reported EV is honest.
   //   0.002 = 0.2% round-trip (typical R_100 short-hold estimate).
-  pulseSpreadCost     : parseFloat(process.env.PULSE_SPREAD || '0.002'),
+  pulseSpreadCost     : parseFloat('0.002'),
 
   // ─ Barrier refresh ─
   barrierRefreshMs    : parseInt('45000', 10),
@@ -200,7 +200,7 @@ const CONFIG = Object.freeze({
   tradeWatchdogMs: parseInt('90000', 10),
 
   // ─ State persistence ─
-  stateFile          : 'deriv_pulse_bot_04_state.json',
+  stateFile          : 'deriv_pulse_bot4_01_state.json',
   stateSaveOnTrade   : true,
   stateSaveOnShutdown: true,
 
@@ -223,11 +223,11 @@ const CONFIG = Object.freeze({
   //     BACKTEST_MAX_HORIZON=4       (override pulseMaxHorizon)
   //     BACKTEST_MIN_SURV=0.85       (override pulseMinSurvival)
   //     BACKTEST_CALM_MAX=1.20       (override pulseCalmMaxRatio)
-  backtestTicks       : parseInt(process.env.BACKTEST_TICKS      || '100000', 10),
-  backtestBatchSize   : parseInt(process.env.BACKTEST_BATCH_SIZE || '5000',   10),
-  backtestStepEvery   : parseInt(process.env.BACKTEST_STEP       || '1',      10),
-  backtestReportEvery : parseInt(process.env.BACKTEST_REPORT     || '10000',  10),
-  backtestOutFile     : process.env.BACKTEST_OUT || 'pulse_backtest_report.json',
+  backtestTicks       : parseInt('100000', 10),
+  backtestBatchSize   : parseInt('5000',   10),
+  backtestStepEvery   : parseInt('1',      10),
+  backtestReportEvery : parseInt('10000',  10),
+  backtestOutFile     : 'pulse_backtest_report.json',
 
   backtestEdge        : process.env.BACKTEST_EDGE        ? parseFloat(process.env.BACKTEST_EDGE)        : null,
   backtestMinEV       : process.env.BACKTEST_MIN_EV      ? parseFloat(process.env.BACKTEST_MIN_EV)      : null,
@@ -481,7 +481,7 @@ class DerivClient extends EventEmitter {
       : '';
 
     telegram.send(
-      `<b>PULSE Bot Online</b>\n\n` +
+      `<b>PULSE3 Bot Online</b>\n\n` +
       `<b>Account:</b> ${info.loginid}\n` +
       `<b>Type:</b> ${info.isVirtual ? 'DEMO' : 'REAL'}\n` +
       `<b>Balance:</b> ${this.startBalance.toFixed(2)} ${this.currencyStr()}\n` +
@@ -514,7 +514,7 @@ class DerivClient extends EventEmitter {
   _onDisconnected(code, reason, wasAuthorized) {
     this._clearWatchdogTimers();
     telegram.send(
-      `<b>Connection lost</b>\n` +
+      `<b>Connection3 lost</b>\n` +
       `code: <code>${code}</code>\n` +
       `was authorised: ${wasAuthorized ? 'yes' : 'no'}\n` +
       `reconnecting…`,
@@ -826,7 +826,7 @@ class DerivClient extends EventEmitter {
     const todayStats = this.stats.stats(this.stats.todayTrades(rec.date));
 
     let msg =
-      `${emoji} <b>PULSE TRADE ${label}</b>\n\n` +
+      `${emoji} <b>PULSE3 TRADE ${label}</b>\n\n` +
       `<b>Contract:</b> #${t.contractId}\n` +
       `<b>Symbol:</b> <code>${t.symbol}</code>\n` +
       `<b>Growth:</b> ${(t.growthRate*100).toFixed(0)}%\n` +
@@ -854,7 +854,7 @@ class DerivClient extends EventEmitter {
     this.tradeStartTime = Date.now();
     this._startTradeWatchdog(t.contractId);
     const msg =
-      `<b>PULSE TRADE OPENED</b>\n\n` +
+      `<b>PULSE3 TRADE OPENED</b>\n\n` +
       `<b>Contract:</b> #${t.contractId}\n` +
       `<b>Symbol:</b> <code>${t.symbol}</code>\n` +
       `<b>Growth Rate:</b> ${(t.growthRate*100).toFixed(2)}%\n` +
@@ -988,7 +988,7 @@ class DerivClient extends EventEmitter {
     this.tradeStartTime = null;
 
     telegram.send(
-      `<b>STUCK TRADE RECOVERED [${reason}]</b>\nContract: ${contractId}\n` +
+      `<b>STUCK3 TRADE RECOVERED [${reason}]</b>\nContract: ${contractId}\n` +
       `Asset: ${symbol}\nStake: $${stake.toFixed(2)}\nOpen: ${openSeconds}s\n` +
       `Loss streak now: ${this.stats.currentLossStreak}`,
     );
@@ -1009,7 +1009,7 @@ class DerivClient extends EventEmitter {
       const pl = today.reduce((s, t) => s + (t.profit || 0), 0);
       if (pl <= -this.cfg.dailyMaxLoss) {
         logger.warn(`dailyMaxLoss reached — pausing`);
-        telegram.send(`<b>Daily loss limit</b>\nNet P/L: ${pl.toFixed(2)} ${this.currencyStr()}`);
+        telegram.send(`<b>Daily3 loss limit</b>\nNet P/L: ${pl.toFixed(2)} ${this.currencyStr()}`);
         return;
       }
       if (Date.now() - this.lastTradeAt < this.cfg.tradeCooldownMs) return;
@@ -1158,11 +1158,11 @@ class DerivClient extends EventEmitter {
     const list = this.stats.tradesForHour(date, hour);
     const s    = this.stats.stats(list);
     if (!list.length) {
-      telegram.send(`<b>Hourly Summary GMT (${date} ${pad(hour)}:00-${pad(hour)}:59)</b>\n\nNo trades this hour.\n\nOverall Profit: ${money(this.stats.overallProfit, this.currencyStr())}`);
+      telegram.send(`<b>Hourly3 Summary GMT (${date} ${pad(hour)}:00-${pad(hour)}:59)</b>\n\nNo trades this hour.\n\nOverall Profit: ${money(this.stats.overallProfit, this.currencyStr())}`);
       return;
     }
     let msg =
-      `<b>Hourly Summary GMT (${date} ${pad(hour)}:00-${pad(hour)}:59)</b>\n\n` +
+      `<b>Hourly3 Summary GMT (${date} ${pad(hour)}:00-${pad(hour)}:59)</b>\n\n` +
       `Trades: ${s.count} (✅${s.wins} ❌${s.losses})\n` +
       `Win rate: ${s.winRate.toFixed(1)}%\n` +
       `P/L: <b>${money(s.totalProfit, this.currencyStr())}</b>\n` +
@@ -1202,7 +1202,7 @@ class DerivClient extends EventEmitter {
     const balDelta = balNow - balStart;
     const balPct   = balStart ? (balDelta / balStart) * 100 : 0;
 
-    let msg = `<b>PULSE END OF TRADE DAY — GMT</b>\n` +
+    let msg = `<b>PULSE3 END OF TRADE DAY — GMT</b>\n` +
       `Trade day ended: <b>${date}</b>\n\n` +
       `<b>── Current Day Stats ──</b>\n`;
     if (ds.count) {
@@ -1247,7 +1247,7 @@ class DerivClient extends EventEmitter {
     this.stopped = true;
     this._clearWatchdogTimers();
     logger.info(`stopping (signal: ${signal})`);
-    telegram.send(`<b>PULSE Bot stopped</b>\nSignal: ${signal}`);
+    telegram.send(`<b>PULSE3 Bot stopped</b>\nSignal: ${signal}`);
     if (this._analysisT)  clearInterval(this._analysisT);
     if (this._hourlyT)    clearInterval(this._hourlyT);
     if (this._eodT)       clearInterval(this._eodT);
