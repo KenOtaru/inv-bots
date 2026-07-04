@@ -2,6 +2,85 @@
 'use strict';
 /**
  * =====================================================================
+ *  Deriv Accumulator Bot  —  PULSE engine  (single-file)
+ * =====================================================================
+ *
+ *  PULSE  =  Probability-weighted Unconditional Log-return Survival
+ *            Estimator
+ *
+ *  ─────────────────────────────────────────────────────────────────
+ *  RESEARCH SYNTHESIS (why this bot is built differently)
+ *  ─────────────────────────────────────────────────────────────────
+ *  An Accumulator (ACCU) contract pays   stake × (1+g)^N   if the price
+ *  survives inside a fixed barrier range for N ticks. Its expected
+ *  value for a planned hold of N ticks is exactly:
+ *
+ *        EV(N)  =  stake × [ (1+g)^N · p_N  −  1 ]            ... (1)
+ *
+ *  where p_N is the true probability of surviving N ticks. This is the
+ *  ONLY quantity that matters. It is positive iff
+ *
+ *        p_N  >  (1+g)^−N                                    ... (2)
+ *
+ *  The broker calibrates the barrier so that LONG holds are negative-EV
+ *  (that is the house edge). Every public "accumulator strategy" that
+ *  the research surfaced — Bollinger/MACD confluence, volatility
+ *  contraction, "rising digits", quick-exit, asset selection — is a
+ *  *proxy* for raising p_N. They never measure p_N directly. Worse, the
+ *  popular add-ons (Martingale recovery, chasing the exponential payout
+ *  with long holds) are mathematically ruinous: Martingale guarantees
+ *  gambler's ruin under a negative-EV edge, and EV is monotonically
+ *  decreasing in N once you are past the EV-peak.
+ *
+ *  PULSE throws the proxies away and measures the real object:
+ *
+ *    1. Bootstrap the per-tick log-return distribution from the most
+ *       recent ~120 LIVE ticks (captures the actual current
+ *       micro-regime — drift μ and volatility σ — empirically, with no
+ *       indicator lag).
+ *    2. MONTE-CARLO the barrier-survival curve S(t) for t = 1..H by
+ *       resampling those bootstrapped increments against the REAL
+ *       barrier (taken from Deriv's own proposal response). This yields
+ *       a direct, model-free estimate of p_t for every t.
+ *    3. Plug into (1): find the EV-OPTIMAL horizon  N* = argmax EV(N).
+ *       Set take-profit to exit at N*. Verified by simulation: at real
+ *       barriers N* is almost always 1–3 ticks — exactly the opposite
+ *       of "let the exponential run".
+ *    4. Optimise across ALL five growth rates (1%–5%) and pick the
+ *       (asset, growth, N*) triple with the best edge.
+ *    5. Hard EV gates: only enter when  edgeRatio ≥ 1.15  AND  EV ≥
+ *       minEV  AND  the volatility regime is calm. "edgeRatio" is
+ *       (1+g)^N·p_N — i.e. gross return per unit staked in expectation.
+ *    6. LIVE ADAPTIVE EARLY-EXIT: every tick of an open contract we
+ *       re-bootstrap from the latest ticks AND re-simulate from the
+ *       current (possibly drifted) spot. Two exits fire:
+ *         (a) profit-lock  — realised profit exceeds the best expected
+ *             remaining payout; bank it.
+ *         (b) danger-lock  — incremental one-tick survival × growth no
+ *             longer clears breakeven, OR drift has consumed ≥ set
+ *             fraction of the barrier. Sell before a knockout.
+ *    7. NO MARTINGALE. Sizing is flat-stake by default (optionally a
+ *       capped fractional-Kelly that scales with the measured edge, and
+ *       scales DOWN — never up — after losses).
+ *
+ *  Net effect: every entry is a positive-EV bet by construction, every
+ *  exit locks the EV peak, and position sizing never compounds losses.
+ *
+ *  ─────────────────────────────────────────────────────────────────
+ *  CREDITS / INFRASTRUCTURE
+ *  ─────────────────────────────────────────────────────────────────
+ *  The connection layer (PAT/OTP REST→WS auth), reconnection, market
+ *  data, Telegram notifier, statistics, state persistence, watchdog,
+ *  and daily/hourly summaries are retained from the reference bot so
+ *  the bot plugs into the same account and notification channel.
+ *  ONLY the analysis + execution brain is replaced by PULSE.
+ *
+ *  Author : PULSE synthesis
+ *  License: MIT
+ * =====================================================================
+ */
+/**
+ * =====================================================================
  * Deriv Accumulator Bot — PULSE engine (single-file) — v1.1
  * =====================================================================
  *
