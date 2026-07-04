@@ -115,10 +115,10 @@ const CONFIG = Object.freeze({
   downscaleAfterLoss:false,
 
   // ─ Assets ─
-  // assets: (process.env.ASSETS || '1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,R_10,R_25,R_50,R_75,R_100')
+  // assets: (process.env.ASSETS || '1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,R_10,R_50,R_75')
   //   .split(',').map(s => s.trim()).filter(Boolean),
 
-  assets: (process.env.ASSETS || 'R_10')
+  assets: (process.env.ASSETS || '1HZ10V')
     .split(',').map(s => s.trim()).filter(Boolean),
 
   // ─ Telegram ─
