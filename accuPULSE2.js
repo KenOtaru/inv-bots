@@ -1645,7 +1645,7 @@ class PulseAnalyzer {
         }
       }
 
-      if (bestN > 0 && regime === 'stormy') { 
+      if (bestN > 0 && regime === 'calm') { 
         const pN = survivalCounts[bestN] / trials;
         const p1 = survivalCounts[1] / trials;
         const suggestedTakeProfit = Math.pow(1 + growthRate, bestN) - 1;
