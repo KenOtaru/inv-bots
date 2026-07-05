@@ -119,8 +119,8 @@ function listEnv(name, def) {
 // ─────────────────────────────────────────────────────────────────────
 const CONFIG = Object.freeze({
   // Deriv API
-  apiToken:    ('0P94g4WdSrSrzir').trim(),
-  appId:       '1089',
+  apiToken : 'pat_8e0a3285bd6e74f52a67985b8069f4bea42aa96ce65d129c60ebb838ed1065ee',
+  appId    : '33uslPtthXBEkQOdfKfoY',//1089
   accountId: '', // recommended/required for PAT new API
   accountType: 'demo', // demo | real
   legacyWsUrl: 'wss://ws.derivws.com/websockets/v3',
@@ -132,7 +132,7 @@ const CONFIG = Object.freeze({
   durationTicks: intEnv('DURATION_TICKS', 1), // Digit contracts normally 1-10 ticks
   minStake: numEnv('MIN_STAKE', 0.35),
   maxStake: numEnv('MAX_STAKE', 670.00),
-  assets: ['R_25'],
+  assets: ['R_10','R_25','R_50','R_75','R_100'],
 
   // Trading frequency / limits
   tickWindow: intEnv('TICK_WINDOW', 1000),
@@ -760,22 +760,39 @@ class MarketDataManager extends EventEmitter {
   }
   async loadSymbols() {
     try {
-      const res = await this.client._send({ active_symbols: 'brief' }, 15000);
+      // NOTE: use 'full' — 'brief' does NOT include pip_size, which
+      // silently forced every digit computation to fall back to pip=2.
+      // Deriv's R_10..R_100 all use pip_size=3, so 'brief' was reading
+      // the LAST digit of e.g. "9421.15" as "5" when it should have been
+      // "5" from "9421.153". Backwards compatible: if 'full' fails or
+      // pip_size is still missing we fall back to 2.
+      const res = await this.client._send({ active_symbols: 'full' }, 15000);
       const list = res.active_symbols || [];
+      let withPip = 0;
       for (const s of list) {
         const key = s.underlying_symbol || s.symbol;
         if (!key) continue;
         this.client.symbols.set(key, s);
-        const pip = Number.isFinite(Number(s.pip_size)) ? Number(s.pip_size) : undefined;
-        if (pip != null) this.pipSizes.set(key, pip);
+        const rawPip = Number(s.pip_size);
+        if (Number.isFinite(rawPip) && rawPip >= 0 && rawPip <= 8) {
+          this.pipSizes.set(key, rawPip);
+          withPip++;
+        }
       }
-      logger.info(`loaded ${this.client.symbols.size} active symbols`);
+      logger.info(`loaded ${this.client.symbols.size} active symbols (${withPip} with pip_size)`);
     } catch (e) {
       logger.error('loadSymbols failed:', e.message);
     }
   }
   pipSize(symbol) {
-    return this.pipSizes.get(symbol) ?? Number(this.client.symbols.get(symbol)?.pip_size) ?? 2;
+    // Priority: cached from loadSymbols → live client symbols map → 2 default.
+    // Use a helper because Number(undefined) is NaN, and `??` doesn't
+    // treat NaN as a nullish value — so we must guard explicitly.
+    const cached = this.pipSizes.get(symbol);
+    if (Number.isFinite(cached)) return cached;
+    const raw = Number(this.client.symbols.get(symbol)?.pip_size);
+    if (Number.isFinite(raw)) return raw;
+    return 2;
   }
   async backfill(symbol, count = 1000) {
     try {
@@ -2320,11 +2337,12 @@ class DifferBacktester {
       }
       if (analysis.allowedByModel) diag.allowedModel++;
 
-      // Compute the value edge exactly the way live code does, using
-      // the synthetic payout mult (proposal RPC not available offline).
+      // Compute the value edge exactly the way live code does. In the
+      // backtester ask == baseStake (we're not paying for a real RPC),
+      // and the payout is baseStake × payoutMult (probed live at start).
       const c = analysis.best;
-      const ask = stake;
-      const payoutFull = stake * payoutMult;
+      const ask = baseStake;
+      const payoutFull = baseStake * payoutMult;
       const breakEvenLossProb = 1 - ask / payoutFull;
       const valueEdge = breakEvenLossProb - c.pLossUpper - this.cfg.safetyMargin;
 
@@ -2665,95 +2683,3 @@ main().catch(e => {
   process.exit(1);
 });
 
-
-
-
-
-// CONSERVATIVE
-// # Longer measurement windows → more stable statistics, slower reaction
-// FREQUENCY_WINDOWS=60,120,300,600,1000
-// TRANSITION_LOOKBACK=1500          # ~25 min of data — more stable transition matrix
-// EWMA_ALPHA=0.025                  # slower to react (smoother probabilities)
-// # Model confidence — demand a real cushion above break-even
-// MIN_EDGE=0.010                    # 1.0pp edge required (baseline was 0.6pp — noise floor)
-// SAFETY_MARGIN=0.005               # broker-friction cushion doubled
-// MODEL_RISK_MARGIN=0.005           # additional humility on model output
-// EDGE_ZSCORE=1.96                  # 97.5% one-sided upper bound (was 87% — too loose)
-// MAX_LOSS_PROB=0.075               # never trade if upper-bound loss prob > 7.5% (well below 9.09% BE)
-// MIN_PROBABILITY_GAP=0.012         # best digit must beat 2nd-best by ≥1.2pp
-// # Sample stability — reject anything unstable or too small
-// MIN_ENTROPY=0.94                  # tighter — require near-uniform digits (imbalance must be subtle)
-// MAX_ENTROPY=0.9990
-// MIN_CHISQUARE=3.5                 # require measurable imbalance
-// MAX_CHISQUARE=20.0                # reject sharp bursts (regime transitions)
-// MAX_RECENT_DIGIT_HITS=1           # the barrier digit can't have hit in last 20 ticks
-// RECENT_LOOKBACK=20                # slightly longer memory
-// PROPOSAL_SCAN_TOP_N=2             # only test the strongest 2 candidates (fewer proposal RPCs)
-// # Sizing (already conservative by default)
-// KELLY_ENABLED=true
-// KELLY_FRACTION=0.15               # 6th-Kelly — extra safe
-// KELLY_MAX_STAKE_FRAC=0.01         # 1% bankroll cap per trade
-// CALIB_ENABLED=true
-// CALIB_DISABLE_GAP=0.015           # sideline symbols at just -1.5pp gap
-
-
-
-
-// BEST
-// # Balanced windows — enough samples for stability, not too slow to react
-// FREQUENCY_WINDOWS=45,90,180,360,720
-// TRANSITION_LOOKBACK=1200
-// EWMA_ALPHA=0.035                  # moderate reactivity
-// # Model confidence — meaningful edge, honest humility
-// MIN_EDGE=0.007                    # 0.7pp minimum — above the noise floor, not deep in it
-// SAFETY_MARGIN=0.0035
-// MODEL_RISK_MARGIN=0.003
-// EDGE_ZSCORE=1.65                  # 95% one-sided (standard "significant" threshold)
-// MAX_LOSS_PROB=0.085               # 0.6pp cushion below break-even
-// MIN_PROBABILITY_GAP=0.008
-// # Sample stability
-// MIN_ENTROPY=0.93
-// MAX_ENTROPY=0.9993
-// MIN_CHISQUARE=2.5
-// MAX_CHISQUARE=25.0
-// MAX_RECENT_DIGIT_HITS=2           # baseline
-// RECENT_LOOKBACK=15
-// PROPOSAL_SCAN_TOP_N=3
-// # Sizing
-// KELLY_ENABLED=true
-// KELLY_FRACTION=0.25               # quarter-Kelly — industry-standard growth/safety balance
-// KELLY_MAX_STAKE_FRAC=0.02         # 2% bankroll cap per trade
-// CALIB_ENABLED=true
-// CALIB_DISABLE_GAP=0.02            # standard 2pp gap
-
-
-
-
-// AGGRESSIVE
-// # Shorter windows → faster reaction to regime shifts, more signals
-// FREQUENCY_WINDOWS=20,45,90,180,360
-// TRANSITION_LOOKBACK=600
-// EWMA_ALPHA=0.055                  # more reactive to recent ticks
-// # Model confidence — still positive-EV but thinner cushion
-// MIN_EDGE=0.004                    # 0.4pp — the true noise floor; below this it's random
-// SAFETY_MARGIN=0.002
-// MODEL_RISK_MARGIN=0.0015
-// EDGE_ZSCORE=1.28                  # 90% one-sided bound (less humble than best)
-// MAX_LOSS_PROB=0.092               # very close to break-even 9.09% — accepts marginal trades
-// MIN_PROBABILITY_GAP=0.004
-// # Sample stability — accept more variable regimes
-// MIN_ENTROPY=0.90                  # allow slightly less-uniform digits (bigger imbalances OK)
-// MAX_ENTROPY=0.9997
-// MIN_CHISQUARE=1.5
-// MAX_CHISQUARE=40.0                # allow sharper bursts
-// MAX_RECENT_DIGIT_HITS=2
-// RECENT_LOOKBACK=12
-// PROPOSAL_SCAN_TOP_N=4             # test top 4 candidates per scan
-// # ⚠️ RISK LIVES HERE — Kelly + calibrator MUST be on
-// KELLY_ENABLED=true
-// KELLY_FRACTION=0.20               # slightly below quarter-Kelly (variance is higher)
-// KELLY_MAX_STAKE_FRAC=0.015        # 1.5% cap — tighter than "best" because more marginal edges
-// CALIB_ENABLED=true
-// CALIB_DISABLE_GAP=0.015           # bench symbols FASTER when they underperform
-// CALIB_WINDOW=150                  # shorter window → faster response to broken assets
-// CALIB_MIN_TRADES=30
