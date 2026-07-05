@@ -119,8 +119,8 @@ function listEnv(name, def) {
 // ─────────────────────────────────────────────────────────────────────
 const CONFIG = Object.freeze({
   // Deriv API
-  apiToken : 'pat_8e0a3285bd6e74f52a67985b8069f4bea42aa96ce65d129c60ebb838ed1065ee',
-  appId    : '33uslPtthXBEkQOdfKfoY',//1089
+  apiToken:    ('0P94g4WdSrSrzir').trim(),
+  appId:       '1089',
   accountId: '', // recommended/required for PAT new API
   accountType: 'demo', // demo | real
   legacyWsUrl: 'wss://ws.derivws.com/websockets/v3',
@@ -172,8 +172,8 @@ const CONFIG = Object.freeze({
   hourlySummary: boolEnv('HOURLY_SUMMARY', true),
 
   // Persistence/logging
-  stateFile: strEnv('STATE_FILE', 'deriv_digit_differ9_state.json'),
-  logFile: strEnv('LOG_FILE', 'deriv_digit_differ9_bot.log'),
+  stateFile: strEnv('STATE_FILE', 'deriv_digit_differ9_state_01.json'),
+  logFile: strEnv('LOG_FILE', 'deriv_digit_differ9_bot2_01.log'),
   logLevel: strEnv('LOG_LEVEL', 'INFO').toUpperCase(),
 
   // Telegram
@@ -223,7 +223,7 @@ const CONFIG = Object.freeze({
   // value per symbol and use that instead. This makes the "value edge"
   // computation match live trading exactly. Override the fallback with
   // BACKTEST_PAYOUT_MULT if the probe fails.
-  backtestPayoutMult  : numEnv('BACKTEST_PAYOUT_MULT', 1.10),
+  backtestPayoutMult  : numEnv('BACKTEST_PAYOUT_MULT', 1.09),
   backtestProbeLive   : boolEnv('BACKTEST_PROBE_LIVE', true),
   backtestAssetLock   : boolEnv('BACKTEST_ASSET_LOCK', true),
 
