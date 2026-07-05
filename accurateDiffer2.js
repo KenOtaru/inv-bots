@@ -52,22 +52,6 @@
  *
  *  If using a new PAT token, set DERIV_ACCOUNT_ID when possible:
  *    DERIV_API_TOKEN="pat_..." DERIV_APP_ID="..." DERIV_ACCOUNT_ID="VRTC..." node deriv_digit_differ_bot.js
- * 
- * * Backtesting:
- * $env:BACKTEST=1; $env:BACKTEST_ASSET="R_100"; node accurateDiffer.js  (Single asset)
- * 
- * $env:BACKTEST=1; $env:BACKTEST_ASSET="R_10,R_25,R_50,R_75,R_100"; node accurateDiffer.js (Multi-asset (comma-separated))
- * 
- * With gate overrides (live cfg stays untouched)
- * $env:BACKTEST_MIN_EDGE=0.002
- * $env:BACKTEST_MIN_ENTROPY=0.85
- * $env:BACKTEST_MAX_LOSS_PROB=0.11
- * node accurateDiffer.js
- * 
- * Clean up between runs:
- * Remove-Item Env:BACKTEST, Env:BACKTEST_ASSET, Env:BACKTEST_MIN_EDGE, Env:BACKTEST_MIN_ENTROPY, Env:BACKTEST_MAX_LOSS_PROB -ErrorAction SilentlyContinue
- * 
- * $env:BACKTEST_PAYOUT_MULT=8.75
  *
  * =====================================================================
  */
@@ -148,7 +132,7 @@ const CONFIG = Object.freeze({
   durationTicks: intEnv('DURATION_TICKS', 1), // Digit contracts normally 1-10 ticks
   minStake: numEnv('MIN_STAKE', 0.35),
   maxStake: numEnv('MAX_STAKE', 670.00),
-  assets: ['R_10'],
+  assets: ['R_50'],
 
   // Trading frequency / limits
   tickWindow: intEnv('TICK_WINDOW', 1000),
@@ -160,56 +144,55 @@ const CONFIG = Object.freeze({
   dailyMaxProfit: numEnv('DAILY_MAX_PROFIT', 0), // 0 disables profit target stop
   dailyMaxTrades: intEnv('DAILY_MAX_TRADES', 20000),
 
-  // AGGRESSIVE
-// # Shorter windows → faster reaction to regime shifts, more signals
-// FREQUENCY_WINDOWS=20,45,90,180,360
-// TRANSITION_LOOKBACK=600
-// EWMA_ALPHA=0.055                  # more reactive to recent ticks
-// # Model confidence — still positive-EV but thinner cushion
-// MIN_EDGE=0.004                    # 0.4pp — the true noise floor; below this it's random
-// SAFETY_MARGIN=0.002
-// MODEL_RISK_MARGIN=0.0015
-// EDGE_ZSCORE=1.28                  # 90% one-sided bound (less humble than best)
-// MAX_LOSS_PROB=0.092               # very close to break-even 9.09% — accepts marginal trades
-// MIN_PROBABILITY_GAP=0.004
-// # Sample stability — accept more variable regimes
-// MIN_ENTROPY=0.90                  # allow slightly less-uniform digits (bigger imbalances OK)
-// MAX_ENTROPY=0.9997
-// MIN_CHISQUARE=1.5
-// MAX_CHISQUARE=40.0                # allow sharper bursts
-// MAX_RECENT_DIGIT_HITS=2
-// RECENT_LOOKBACK=12
-// PROPOSAL_SCAN_TOP_N=4             # test top 4 candidates per scan
-// # ⚠️ RISK LIVES HERE — Kelly + calibrator MUST be on
-// KELLY_ENABLED=true
-// KELLY_FRACTION=0.20               # slightly below quarter-Kelly (variance is higher)
-// KELLY_MAX_STAKE_FRAC=0.015        # 1.5% cap — tighter than "best" because more marginal edges
-// CALIB_ENABLED=true
-// CALIB_DISABLE_GAP=0.015           # bench symbols FASTER when they underperform
-// CALIB_WINDOW=150                  # shorter window → faster response to broken assets
-// CALIB_MIN_TRADES=30
-
   // DIVER-9 edge filters
-  frequencyWindows: listEnv('FREQUENCY_WINDOWS', '20,45,90,180,360').map(x => parseInt(x, 10)).filter(Number.isFinite),
-  transitionLookback: intEnv('TRANSITION_LOOKBACK', 600),
-  ewmaAlpha: numEnv('EWMA_ALPHA', 0.055),
-  minEdge: numEnv('MIN_EDGE', 0.004),          //0.0040 absolute probability gap, e.g. 0.4 percentage point
-  safetyMargin: numEnv('SAFETY_MARGIN', 0.002),
-  modelRiskMargin: numEnv('MODEL_RISK_MARGIN', 0.0015),
-  zScore: numEnv('EDGE_ZSCORE', 1.28),          // conservative upper bound
-  maxLossProb: numEnv('MAX_LOSS_PROB', 0.092),  // never take if model says losing digit > 9.5%
-  minProbabilityGap: numEnv('MIN_PROBABILITY_GAP', 0.004),
-  minEntropy: numEnv('MIN_ENTROPY', 0.90),      // close to random; avoid broken/tiny samples
-  maxEntropy: numEnv('MAX_ENTROPY', 0.9997),    // if perfectly uniform, likely no exploitable imbalance
-  minChiSquare: numEnv('MIN_CHISQUARE', 1.5),   // require some measurable imbalance
-  maxChiSquare: numEnv('MAX_CHISQUARE', 40.0),  // reject extreme unstable bursts
+  frequencyWindows: listEnv('FREQUENCY_WINDOWS', '30,60,120,300,600').map(x => parseInt(x, 10)).filter(Number.isFinite),
+  transitionLookback: intEnv('TRANSITION_LOOKBACK', 900),
+  ewmaAlpha: numEnv('EWMA_ALPHA', 0.045),
+  minEdge: numEnv('MIN_EDGE', 0.0060),          //0.0040 absolute probability gap, e.g. 0.4 percentage point
+  safetyMargin: numEnv('SAFETY_MARGIN', 0.0025),
+  modelRiskMargin: numEnv('MODEL_RISK_MARGIN', 0.0020),
+  zScore: numEnv('EDGE_ZSCORE', 1.15),          // conservative upper bound
+  maxLossProb: numEnv('MAX_LOSS_PROB', 0.095),  // never take if model says losing digit > 9.5%
+  minProbabilityGap: numEnv('MIN_PROBABILITY_GAP', 0.006),
+  minEntropy: numEnv('MIN_ENTROPY', 0.92),      // close to random; avoid broken/tiny samples
+  maxEntropy: numEnv('MAX_ENTROPY', 0.9995),    // if perfectly uniform, likely no exploitable imbalance
+  minChiSquare: numEnv('MIN_CHISQUARE', 2.0),   // require some measurable imbalance
+  maxChiSquare: numEnv('MAX_CHISQUARE', 30.0),  // reject extreme unstable bursts
   maxRecentDigitHits: intEnv('MAX_RECENT_DIGIT_HITS', 2), // selected digit occurrences in last recentLookback
-  recentLookback: intEnv('RECENT_LOOKBACK', 12),
-  proposalScanTopN: intEnv('PROPOSAL_SCAN_TOP_N', 4),
+  recentLookback: intEnv('RECENT_LOOKBACK', 15),
+  proposalScanTopN: intEnv('PROPOSAL_SCAN_TOP_N', 3),
 
   // Optional limited loss recovery; disabled by default. Safer than the pasted 10x/100x martingale.
   recoveryEnabled: boolEnv('RECOVERY_ENABLED', true),
   recoveryMultipliers: listEnv('RECOVERY_MULTIPLIERS', '1,5.5,60.5').map(Number).filter(Number.isFinite),
+
+  // ── Kelly-fractional sizing ────────────────────────────────────────
+  //   kellySizingEnabled=true replaces flat/recovery stake with:
+  //       f* = (b·p - q) / b   (Kelly optimum;  b = payout-1, p = win prob, q = 1-p)
+  //       stake = clamp(bankroll × f* × kellyFraction, minStake, maxStake)
+  //   kellyFraction = 0.25 → "quarter-Kelly" (industry-standard safety
+  //   cushion; full Kelly is mathematically optimal for growth but has
+  //   ~40% drawdowns). Disable with KELLY_ENABLED=false to fall back
+  //   to the legacy flat/recovery sizing above.
+  kellySizingEnabled  : boolEnv('KELLY_ENABLED',         true),
+  kellyFraction       : numEnv ('KELLY_FRACTION',        0.25),
+  kellyBankrollFrac   : numEnv ('KELLY_BANKROLL_FRAC',   1.00),  // % of live balance to treat as risk bankroll
+  kellyBankrollFloor  : numEnv ('KELLY_BANKROLL_FLOOR',  100.0), // never scale below this bankroll
+  kellyMaxStakeFrac   : numEnv ('KELLY_MAX_STAKE_FRAC',  0.02),  // hard cap: ≤2% of bankroll per trade
+  kellyMinEdgeForScale: numEnv ('KELLY_MIN_EDGE_SCALE',  0.005), // no scaling unless edge > 0.5pp
+
+  // ── Per-symbol calibration tracker ─────────────────────────────────
+  //   Rolling per-symbol (predicted P(win), actual outcome). Auto-disables
+  //   a symbol when empirical WR trails predicted by > calibDisableGap
+  //   over ≥ calibMinTrades. Re-enters via low-stake probe after
+  //   calibProbeAfterMs; fully re-enabled when calibration re-converges.
+  calibEnabled        : boolEnv('CALIB_ENABLED',         true),
+  calibWindow         : intEnv ('CALIB_WINDOW',          200),
+  calibMinTrades      : intEnv ('CALIB_MIN_TRADES',      40),
+  calibDisableGap     : numEnv ('CALIB_DISABLE_GAP',     0.02),   // −2 pp below prediction → disable
+  calibReenableGap    : numEnv ('CALIB_REENABLE_GAP',    0.005),  // within ±0.5 pp → re-enable
+  calibProbeAfterMs   : intEnv ('CALIB_PROBE_AFTER_MS',  30 * 60_000),
+  calibProbeStakeFrac : numEnv ('CALIB_PROBE_STAKE_FRAC', 0.25),
 
   // GMT/UTC reporting
   eodTimeGmt: strEnv('TRADE_DAY_END_GMT', '00:00'), // default midnight GMT; report date is previous UTC day
@@ -217,8 +200,8 @@ const CONFIG = Object.freeze({
   hourlySummary: boolEnv('HOURLY_SUMMARY', true),
 
   // Persistence/logging
-  stateFile: strEnv('STATE_FILE', 'deriv_digit_differ9_state_01.json'),
-  logFile: strEnv('LOG_FILE', 'deriv_digit_differ9_bot2_01.log'),
+  stateFile: strEnv('STATE_FILE', 'deriv_digit_differ9_state.json'),
+  logFile: strEnv('LOG_FILE', 'deriv_digit_differ9_bot.log'),
   logLevel: strEnv('LOG_LEVEL', 'INFO').toUpperCase(),
 
   // Telegram
@@ -268,9 +251,19 @@ const CONFIG = Object.freeze({
   // value per symbol and use that instead. This makes the "value edge"
   // computation match live trading exactly. Override the fallback with
   // BACKTEST_PAYOUT_MULT if the probe fails.
-  backtestPayoutMult  : numEnv('BACKTEST_PAYOUT_MULT', 1.09),
+  backtestPayoutMult  : numEnv('BACKTEST_PAYOUT_MULT', 1.10),
   backtestProbeLive   : boolEnv('BACKTEST_PROBE_LIVE', true),
-  backtestAssetLock   : boolEnv('BACKTEST_ASSET_LOCK', false),
+  // In LIVE trading the tradedAsset lock forces multi-symbol rotation
+  // (don't hammer the same symbol twice in a row while other symbols
+  //  are available). In backtest we scan one symbol at a time, so
+  // the lock — if enabled — would fire exactly once and then block
+  // every subsequent scan indefinitely, resulting in a single trade.
+  // Default is therefore FALSE for backtests. Set BACKTEST_ASSET_LOCK=true
+  // only if you specifically want to see the effect of the live lock
+  // (the lock will self-clear after this many ticks so trades aren't
+  //  blocked forever).
+  backtestAssetLock       : boolEnv('BACKTEST_ASSET_LOCK',       false),
+  backtestAssetLockTicks  : intEnv ('BACKTEST_ASSET_LOCK_TICKS', 10),
 
   backtestMinEdge     : process.env.BACKTEST_MIN_EDGE      ? Number(process.env.BACKTEST_MIN_EDGE)      : null,
   backtestSafety      : process.env.BACKTEST_SAFETY_MARGIN ? Number(process.env.BACKTEST_SAFETY_MARGIN) : null,
@@ -777,22 +770,39 @@ class MarketDataManager extends EventEmitter {
   }
   async loadSymbols() {
     try {
-      const res = await this.client._send({ active_symbols: 'brief' }, 15000);
+      // NOTE: use 'full' — 'brief' does NOT include pip_size, which
+      // silently forced every digit computation to fall back to pip=2.
+      // Deriv's R_10..R_100 all use pip_size=3, so 'brief' was reading
+      // the LAST digit of e.g. "9421.15" as "5" when it should have been
+      // "5" from "9421.153". Backwards compatible: if 'full' fails or
+      // pip_size is still missing we fall back to 2.
+      const res = await this.client._send({ active_symbols: 'full' }, 15000);
       const list = res.active_symbols || [];
+      let withPip = 0;
       for (const s of list) {
         const key = s.underlying_symbol || s.symbol;
         if (!key) continue;
         this.client.symbols.set(key, s);
-        const pip = Number.isFinite(Number(s.pip_size)) ? Number(s.pip_size) : undefined;
-        if (pip != null) this.pipSizes.set(key, pip);
+        const rawPip = Number(s.pip_size);
+        if (Number.isFinite(rawPip) && rawPip >= 0 && rawPip <= 8) {
+          this.pipSizes.set(key, rawPip);
+          withPip++;
+        }
       }
-      logger.info(`loaded ${this.client.symbols.size} active symbols`);
+      logger.info(`loaded ${this.client.symbols.size} active symbols (${withPip} with pip_size)`);
     } catch (e) {
       logger.error('loadSymbols failed:', e.message);
     }
   }
   pipSize(symbol) {
-    return this.pipSizes.get(symbol) ?? Number(this.client.symbols.get(symbol)?.pip_size) ?? 2;
+    // Priority: cached from loadSymbols → live client symbols map → 2 default.
+    // Use a helper because Number(undefined) is NaN, and `??` doesn't
+    // treat NaN as a nullish value — so we must guard explicitly.
+    const cached = this.pipSizes.get(symbol);
+    if (Number.isFinite(cached)) return cached;
+    const raw = Number(this.client.symbols.get(symbol)?.pip_size);
+    if (Number.isFinite(raw)) return raw;
+    return 2;
   }
   async backfill(symbol, count = 1000) {
     try {
@@ -1292,6 +1302,185 @@ class StatisticsManager {
 }
 
 // ─────────────────────────────────────────────────────────────────────
+// 9b. SYMBOL CALIBRATOR  (rolling per-symbol edge tracker)
+// ─────────────────────────────────────────────────────────────────────
+/**
+ * Tracks, per symbol, a rolling window of (predictedPWin, wasWin) pairs.
+ *
+ *   • enabled      = symbol is trading normally
+ *   • disabled     = under-performing prediction; auto-benched
+ *   • probing      = post-cooldown probe; smaller stake until re-calibrated
+ *
+ * A symbol is disabled when it has ≥ calibMinTrades in its window AND
+ * empiricalWR < predictedWR − calibDisableGap.
+ * After calibProbeAfterMs elapsed since disable, it enters "probing" mode
+ * (traded at calibProbeStakeFrac × normal stake).  It becomes "enabled"
+ * again once |empiricalWR − predictedWR| < calibReenableGap over
+ * calibMinTrades fresh samples.
+ */
+class SymbolCalibrator {
+  constructor(cfg, saved = null) {
+    this.cfg     = cfg;
+    this.symbols = new Map();  // symbol -> { window:[], state, disabledAt, note }
+    if (saved && typeof saved === 'object') this.load(saved);
+  }
+  _slot(sym) {
+    if (!this.symbols.has(sym)) {
+      this.symbols.set(sym, {
+        window     : [],          // { pWin, won, ts }
+        state      : 'enabled',   // 'enabled' | 'disabled' | 'probing'
+        disabledAt : 0,
+        lastReason : '',
+      });
+    }
+    return this.symbols.get(sym);
+  }
+  record(symbol, predictedPWin, won) {
+    if (!this.cfg.calibEnabled) return;
+    const s = this._slot(symbol);
+    s.window.push({ pWin: Number(predictedPWin), won: !!won, ts: Date.now() });
+    if (s.window.length > this.cfg.calibWindow) {
+      s.window.splice(0, s.window.length - this.cfg.calibWindow);
+    }
+    this._reassess(symbol, s);
+  }
+  _reassess(symbol, s) {
+    const n = s.window.length;
+    if (n < this.cfg.calibMinTrades) return;
+    const wins       = s.window.reduce((acc, r) => acc + (r.won ? 1 : 0), 0);
+    const empirical  = wins / n;
+    const predicted  = s.window.reduce((acc, r) => acc + r.pWin, 0) / n;
+    const gap        = empirical - predicted;   // + means under-prediction (good); − means over-prediction (bad)
+    if (s.state === 'enabled' || s.state === 'probing') {
+      if (gap < -this.cfg.calibDisableGap) {
+        s.state      = 'disabled';
+        s.disabledAt = Date.now();
+        s.lastReason = `WR ${(empirical*100).toFixed(2)}% < predicted ${(predicted*100).toFixed(2)}% by ${(Math.abs(gap)*100).toFixed(2)}pp (n=${n})`;
+        logger.warn(`CALIB: ${symbol} DISABLED — ${s.lastReason}`);
+        return { symbol, transition: 'disabled', gap, empirical, predicted, n };
+      }
+      if (s.state === 'probing' && Math.abs(gap) < this.cfg.calibReenableGap) {
+        s.state      = 'enabled';
+        s.lastReason = `WR ${(empirical*100).toFixed(2)}% vs predicted ${(predicted*100).toFixed(2)}% (gap ${(gap*100).toFixed(2)}pp) — re-enabled`;
+        logger.info(`CALIB: ${symbol} RE-ENABLED — ${s.lastReason}`);
+        return { symbol, transition: 'enabled', gap, empirical, predicted, n };
+      }
+    }
+    return null;
+  }
+  status(symbol) {
+    const s = this._slot(symbol);
+    // Auto-transition disabled → probing after cooldown elapses.
+    if (s.state === 'disabled' &&
+        Date.now() - s.disabledAt >= this.cfg.calibProbeAfterMs) {
+      s.state      = 'probing';
+      s.lastReason = `cooldown elapsed (${Math.round((Date.now()-s.disabledAt)/60_000)}m)`;
+      logger.info(`CALIB: ${symbol} → PROBING at ${(this.cfg.calibProbeStakeFrac*100).toFixed(0)}% stake — ${s.lastReason}`);
+    }
+    return s.state;
+  }
+  summary() {
+    const out = {};
+    for (const [sym, s] of this.symbols) {
+      const n = s.window.length;
+      const wins = s.window.reduce((a, r) => a + (r.won ? 1 : 0), 0);
+      const emp  = n ? wins / n : 0;
+      const pred = n ? s.window.reduce((a, r) => a + r.pWin, 0) / n : 0;
+      out[sym] = {
+        state    : s.state,
+        n,
+        empirical: +(emp * 100).toFixed(2),
+        predicted: +(pred * 100).toFixed(2),
+        gap      : +((emp - pred) * 100).toFixed(2),
+        reason   : s.lastReason,
+      };
+    }
+    return out;
+  }
+  stakeMultiplier(symbol) {
+    // 1.0 for enabled, calibProbeStakeFrac for probing, 0 for disabled.
+    if (!this.cfg.calibEnabled) return 1.0;
+    const st = this.status(symbol);
+    if (st === 'disabled') return 0;
+    if (st === 'probing')  return this.cfg.calibProbeStakeFrac;
+    return 1.0;
+  }
+  isTradeable(symbol) { return this.stakeMultiplier(symbol) > 0; }
+
+  serialize() {
+    const out = {};
+    for (const [sym, s] of this.symbols) {
+      out[sym] = {
+        window     : s.window.slice(-this.cfg.calibWindow),
+        state      : s.state,
+        disabledAt : s.disabledAt,
+        lastReason : s.lastReason,
+      };
+    }
+    return out;
+  }
+  load(saved) {
+    for (const [sym, s] of Object.entries(saved)) {
+      if (!s || typeof s !== 'object') continue;
+      this.symbols.set(sym, {
+        window     : Array.isArray(s.window) ? s.window.slice(-this.cfg.calibWindow) : [],
+        state      : s.state       || 'enabled',
+        disabledAt : Number(s.disabledAt || 0),
+        lastReason : String(s.lastReason || ''),
+      });
+    }
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// 9c. KELLY SIZER
+// ─────────────────────────────────────────────────────────────────────
+/**
+ *  Kelly-fractional position sizer.
+ *
+ *  Optimal Kelly fraction of bankroll to stake:
+ *      f* = (b·p − q) / b     where  b = payout_mult − 1
+ *                                   p = win probability (from analyzer)
+ *                                   q = 1 − p
+ *
+ *  We stake  bankroll × f* × kellyFraction  (defaults to quarter-Kelly).
+ *  Hard-capped at kellyMaxStakeFrac of bankroll to survive tail streaks.
+ *  Returns null when the edge is non-positive (skip the trade).
+ */
+class KellySizer {
+  constructor(cfg) { this.cfg = cfg; }
+
+  /**
+   * @param {object} p
+   * @param {number} p.bankroll     current live balance
+   * @param {number} p.pWin         analyzer-predicted win probability
+   * @param {number} p.payoutMult   total payout per 1 stake (e.g. 1.10)
+   * @param {number} p.edgeValue    breakEven − pLossUpper − safetyMargin
+   * @returns {{stake:number, fStar:number, fApplied:number, reason:string}|null}
+   */
+  compute({ bankroll, pWin, payoutMult, edgeValue }) {
+    const cfg = this.cfg;
+    const b   = Math.max(0, payoutMult - 1);     // net-of-stake win multiplier
+    const p   = Math.max(0, Math.min(1, pWin));
+    const q   = 1 - p;
+    if (b <= 0) return null;
+    const fStar = (b * p - q) / b;
+    if (fStar <= 0) return null;                 // no Kelly recommendation
+    if (edgeValue < cfg.kellyMinEdgeForScale) {
+      // Trust the model less when the value-edge is marginal — take the
+      // MINIMUM stake in that regime, not a scaled-up Kelly stake.
+      return { stake: cfg.minStake, fStar, fApplied: 0, reason: 'edge<minEdgeForScale' };
+    }
+    const roll   = Math.max(cfg.kellyBankrollFloor, bankroll * cfg.kellyBankrollFrac);
+    const fApp   = fStar * cfg.kellyFraction;
+    const capF   = Math.min(fApp, cfg.kellyMaxStakeFrac);
+    let stake    = roll * capF;
+    stake        = Math.max(cfg.minStake, Math.min(cfg.maxStake, +stake.toFixed(2)));
+    return { stake, fStar, fApplied: capF, reason: fApp > cfg.kellyMaxStakeFrac ? 'capped' : 'ok' };
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
 // 10. TRADING BOT ORCHESTRATOR
 // ─────────────────────────────────────────────────────────────────────
 class TradingBot {
@@ -1302,6 +1491,9 @@ class TradingBot {
     this.analyzer = new DigitAnalyzer(this.cfg);
     this.exec = new TradeExecutor(this.client, this.cfg);
     this.stats = new StatisticsManager();
+    this.calibrator = new SymbolCalibrator(this.cfg);
+    this.kelly      = new KellySizer(this.cfg);
+    this.livePayoutMult = new Map();  // symbol → last observed payout/ask ratio
 
     this.startBalance = null;
     this.lastBalance = null;
@@ -1346,6 +1538,15 @@ class TradingBot {
     logger.info(`start balance: ${this.startBalance} ${this.currency()}`);
     await this.market.loadSymbols();
 
+    const sizingLine = this.cfg.kellySizingEnabled
+      ? `🧮 Sizing: <b>Kelly-fractional</b> (f=${this.cfg.kellyFraction}, cap=${(this.cfg.kellyMaxStakeFrac*100).toFixed(1)}% bankroll)`
+      : (this.cfg.recoveryEnabled
+          ? `🧮 Sizing: recovery ladder [${this.cfg.recoveryMultipliers.join(',')}]`
+          : `🧮 Sizing: flat`);
+    const calibLine = this.cfg.calibEnabled
+      ? `📐 Calibrator: <b>ON</b> (window=${this.cfg.calibWindow}, disableGap=${(this.cfg.calibDisableGap*100).toFixed(1)}pp)`
+      : `📐 Calibrator: off`;
+
     telegram.send(
       `🤖 <b>Digit Differ Bot Online</b>\n\n` +
       `👤 Account: <code>${htmlEscape(info.loginid || '?')}</code>\n` +
@@ -1353,7 +1554,9 @@ class TradingBot {
       `💰 Balance: ${(this.client.balance ?? 0).toFixed(2)} ${this.currency()}\n` +
       `📊 Assets: ${this.cfg.assets.join(', ')}\n` +
       `🎯 Contract: <b>DIGITDIFF</b>, duration <b>${this.cfg.durationTicks} tick(s)</b>\n` +
-      `💵 Stake: ${this.cfg.stake.toFixed(2)} ${this.currency()}\n` +
+      `💵 Base stake: ${this.cfg.stake.toFixed(2)} ${this.currency()}\n` +
+      `${sizingLine}\n` +
+      `${calibLine}\n` +
       `🧠 Method: <b>DIVER-9</b> conservative value-edge filter\n` +
       `🕒 Trade day clock: <b>GMT/UTC</b> | EOD: ${this.cfg.eodTimeGmt} GMT\n\n` +
       `💼 Overall Profit: <b>${money(this.stats.overallProfit, this.currency())}</b>\n` +
@@ -1372,13 +1575,48 @@ class TradingBot {
     this.exec.open.clear();
   }
 
-  currentStake() {
-    let mult = 1;
-    if (this.cfg.recoveryEnabled) {
-      const idx = Math.min(this.stats.currentLossStreak, this.cfg.recoveryMultipliers.length - 1);
-      mult = this.cfg.recoveryMultipliers[idx] || 1;
+  /**
+   * currentStake(ctx?) — returns the recommended stake for the *next* trade.
+   *
+   *   • When ctx = { pWin, payoutMult, edgeValue, symbol } and Kelly sizing
+   *     is enabled, use Kelly-fractional. Applied to bankroll = live
+   *     balance × kellyBankrollFrac, capped at kellyMaxStakeFrac.
+   *   • Otherwise fall back to the legacy flat/recovery-multiplier stake.
+   *   • In both modes, the per-symbol calibrator's stake-multiplier is
+   *     applied last (1.0 enabled, calibProbeStakeFrac probing, 0 disabled).
+   */
+  currentStake(ctx = null) {
+    let base = 0;
+    let src  = 'flat';
+    if (this.cfg.kellySizingEnabled && ctx && ctx.pWin > 0 && ctx.payoutMult > 1) {
+      const bankroll = Math.max(this.cfg.kellyBankrollFloor, this.lastBalance ?? this.client.balance ?? 0);
+      const k = this.kelly.compute({
+        bankroll,
+        pWin      : ctx.pWin,
+        payoutMult: ctx.payoutMult,
+        edgeValue : ctx.edgeValue ?? 0,
+      });
+      if (k) {
+        base = k.stake;
+        src  = `kelly(f*=${k.fStar.toFixed(4)}, applied=${k.fApplied.toFixed(4)}, ${k.reason})`;
+      } else {
+        // No positive-edge → refuse to size a trade.
+        return { stake: 0, source: 'kelly-negative', calibMult: 1 };
+      }
+    } else {
+      let mult = 1;
+      if (this.cfg.recoveryEnabled) {
+        const idx = Math.min(this.stats.currentLossStreak, this.cfg.recoveryMultipliers.length - 1);
+        mult = this.cfg.recoveryMultipliers[idx] || 1;
+      }
+      base = +(this.cfg.stake * mult).toFixed(2);
+      src  = `flat×${mult}`;
     }
-    return Math.max(this.cfg.minStake, Math.min(this.cfg.maxStake, +(this.cfg.stake * mult).toFixed(2)));
+    // Per-symbol calibrator scaling (0 = symbol disabled)
+    let calibMult = 1;
+    if (ctx?.symbol) calibMult = this.calibrator.stakeMultiplier(ctx.symbol);
+    const stake = Math.max(this.cfg.minStake, Math.min(this.cfg.maxStake, +(base * calibMult).toFixed(2)));
+    return { stake: calibMult === 0 ? 0 : stake, source: src, calibMult };
   }
 
   async _analyzeAndTrade() {
@@ -1402,7 +1640,19 @@ class TradingBot {
       return;
     }
 
-    const analyses = this.cfg.assets.map(s => this.analyzer.analyze(s, this.market.historyFor(s)));
+    // Per-symbol calibration filter — drop symbols the calibrator has
+    // sidelined before we waste any proposal RPCs on them.
+    const tradeableAssets = this.cfg.assets.filter(s => this.calibrator.isTradeable(s));
+    const disabledAssets  = this.cfg.assets.filter(s => !this.calibrator.isTradeable(s));
+    if (disabledAssets.length) {
+      logger.debug(`CALIB: sidelined [${disabledAssets.join(',')}]`);
+    }
+    if (!tradeableAssets.length) {
+      logger.warn(`CALIB: all symbols sidelined; will re-probe after cooldown`);
+      return;
+    }
+
+    const analyses = tradeableAssets.map(s => this.analyzer.analyze(s, this.market.historyFor(s)));
     const ranked = this.analyzer.rank(analyses);
     if (!ranked.length) {
       logger.debug('not enough digit data yet');
@@ -1412,7 +1662,10 @@ class TradingBot {
     const topLog = ranked.slice(0, 3).map(a => `${a.symbol}:d${a.best.digit} u=${a.best.pLossUpper.toFixed(4)} H=${a.entropy.toFixed(3)} X2=${a.chiSquare.toFixed(1)} ${a.gates.length ? 'skip(' + a.gates[0] + ')' : 'ok'}`).join(' | ');
     logger.info(`DIVER-9 scan ${topLog}`);
 
-    const stake = this.currentStake();
+    // For the initial proposal probe we use a MINIMAL stake (just to
+    // discover the live payout) — the real stake is decided *after* we
+    // know the payout, using Kelly + calibration.
+    const probeStake = this.cfg.minStake;
     const proposalCandidates = [];
 
     for (const a of ranked.slice(0, Math.max(1, this.cfg.proposalScanTopN))) {
@@ -1422,23 +1675,24 @@ class TradingBot {
         if (c.recentHits > this.cfg.maxRecentDigitHits) continue;
         if (c.pLossUpper > this.cfg.maxLossProb) continue;
         try {
-          const pres = await this.exec.proposal(a.symbol, c.digit, stake);
+          const pres = await this.exec.proposal(a.symbol, c.digit, probeStake);
           const p = pres.proposal;
           if (!p?.id) continue;
-          const ask = Number(p.ask_price || stake);
+          const ask = Number(p.ask_price || probeStake);
           const payout = Number(p.payout || 0);
           if (!(payout > ask)) continue;
+          const payoutMult      = payout / ask;
           const breakEvenLossProb = 1 - ask / payout;
-          const valueEdge = breakEvenLossProb - c.pLossUpper - this.cfg.safetyMargin;
+          const valueEdge       = breakEvenLossProb - c.pLossUpper - this.cfg.safetyMargin;
           proposalCandidates.push({
             analysis: a,
             candidate: c,
             proposal: p,
-            ask,
-            payout,
+            ask, payout, payoutMult,
             breakEvenLossProb,
             valueEdge,
           });
+          this.livePayoutMult.set(a.symbol, payoutMult);
         } catch (e) {
           logger.debug(`proposal ${a.symbol} d${c.digit}:`, e.message);
         }
@@ -1452,8 +1706,6 @@ class TradingBot {
       return;
     }
 
-    // console.log('valueEdge:', best.valueEdge, '|', this.cfg.minEdge)
-    
     if (best.valueEdge < this.cfg.minEdge) {
       logger.info(`skip: best edge ${best.valueEdge.toFixed(4)} < minEdge ${this.cfg.minEdge} (${best.analysis.symbol} d${best.candidate.digit})`);
       return;
@@ -1464,6 +1716,21 @@ class TradingBot {
       return;
     }
 
+    // ── Compute the ACTUAL stake using Kelly + calibrator ──────────
+    const pWin = 1 - best.candidate.pLossUpper;   // conservative win-prob (uses upper bound of loss prob)
+    const sizing = this.currentStake({
+      pWin,
+      payoutMult: best.payoutMult,
+      edgeValue : best.valueEdge,
+      symbol    : best.analysis.symbol,
+    });
+    if (!sizing.stake || sizing.stake <= 0) {
+      logger.info(`skip: sizing returned 0 (${sizing.source}, calibMult=${sizing.calibMult})`);
+      return;
+    }
+    const stake = sizing.stake;
+    logger.info(`sizing → stake=${stake.toFixed(2)} src=${sizing.source} calibMult=${sizing.calibMult}`);
+
     this.tradedAsset = best.analysis.symbol;
 
     const a = best.analysis;
@@ -1473,6 +1740,8 @@ class TradingBot {
       digit: c.digit,
       pLoss: c.pLoss,
       pLossUpper: c.pLossUpper,
+      predictedPWin: pWin,                         // ← calibrator input
+      payoutMult: best.payoutMult,
       breakEvenLossProb: best.breakEvenLossProb,
       valueEdge: best.valueEdge,
       entropy: a.entropy,
@@ -1483,6 +1752,10 @@ class TradingBot {
       gap: c.gap,
       score: a.score,
       weights: a.weights,
+      sizingSource: sizing.source,
+      calibStakeMultiplier: sizing.calibMult,
+      calibState: this.calibrator.status(a.symbol),
+      stakeStakeRatio: +(stake / this.cfg.stake).toFixed(2),   // legacy field name kept for messages
       recoveryStakeMultiplier: +(stake / this.cfg.stake).toFixed(2),
       currentLossStreak: this.stats.currentLossStreak,
     };
@@ -1519,16 +1792,38 @@ class TradingBot {
     this.lastBalance = (this.lastBalance ?? this.client.balance ?? 0) + Number(t.profit || 0);
     if (t.balanceAfter != null) this.lastBalance = Number(t.balanceAfter) + Number(t.profit || 0);
 
-    const emoji = t.status === 'won' ? '✅' : '❌';
-    const label = t.status === 'won' ? 'WIN' : 'LOSS';
+    // ── Feed the per-symbol calibrator ──────────────────────────────
+    // Uses the pWin we baked into the trade's analysis payload. Fall
+    // back to (1 − pLossUpper) if the field is missing (legacy trades).
+    const won        = t.status === 'won';
+    const pWinUsed   = Number(t.analysis?.predictedPWin
+                        ?? (t.analysis?.pLossUpper != null ? 1 - Number(t.analysis.pLossUpper) : null));
+    let calibNote = '';
+    if (this.cfg.calibEnabled && Number.isFinite(pWinUsed) && pWinUsed > 0 && pWinUsed < 1) {
+      this.calibrator.record(t.symbol, pWinUsed, won);
+      const cs = this.calibrator.summary()[t.symbol];
+      if (cs) {
+        calibNote = `\n📐 <b>Calib (${t.symbol}):</b> ` +
+          `state=${cs.state} n=${cs.n} WR=${cs.empirical.toFixed(2)}% ` +
+          `vs pred ${cs.predicted.toFixed(2)}% (gap ${cs.gap >= 0 ? '+' : ''}${cs.gap.toFixed(2)}pp)`;
+      }
+    }
+
+    const emoji = won ? '✅' : '❌';
+    const label = won ? 'WIN' : 'LOSS';
     const dur = Math.max(0, Number(t.sellTime || Date.now() / 1000) - Number(t.buyTime || 0));
     const todayStats = this.stats.stats(this.stats.todayTrades(rec.date));
+
+    // Kelly sizing metadata line (only shown when Kelly is on)
+    const kellyLine = this.cfg.kellySizingEnabled && t.analysis?.sizingSource
+      ? `\n🧮 Sizing: <code>${htmlEscape(String(t.analysis.sizingSource))}</code>`
+      : '';
 
     telegram.send(
       `${emoji} <b>TRADE ${label} — DIGIT DIFFER</b>\n\n` +
       `🎫 Contract: <code>#${t.contractId}</code>\n` +
       `📊 Symbol: <code>${t.symbol}</code> | differs <b>${t.digit}</b> | ${t.durationTicks}t\n` +
-      `💵 Stake: ${t.stake.toFixed(2)} ${this.currency()}\n` +
+      `💵 Stake: ${t.stake.toFixed(2)} ${this.currency()}${kellyLine}\n` +
       `💰 P/L: <b>${money(t.profit, this.currency())}</b>\n` +
       `⏱️ Duration: ${dur.toFixed(1)}s\n\n` +
       `📅 <b>GMT Day Stats (${rec.date})</b>\n` +
@@ -1538,7 +1833,8 @@ class TradingBot {
       `• Profit factor: ${todayStats.profitFactor === Infinity ? '∞' : todayStats.profitFactor.toFixed(2)}\n\n` +
       `💼 <b>Overall Profit:</b> ${money(this.stats.overallProfit, this.currency())}\n` +
       `❌ <b>Consecutive Losses:</b> current ${this.stats.currentLossStreak} | max ${this.stats.maxLossStreak}\n` +
-      `   x2=${this.stats.lossStreakEvents.x2}  x3=${this.stats.lossStreakEvents.x3}  x4=${this.stats.lossStreakEvents.x4}`
+      `   x2=${this.stats.lossStreakEvents.x2}  x3=${this.stats.lossStreakEvents.x3}  x4=${this.stats.lossStreakEvents.x4}` +
+      calibNote
     );
 
     this.lastTradeAt = Date.now();
@@ -1635,6 +1931,23 @@ class TradingBot {
            `❌ Consecutive losses: current ${this.stats.currentLossStreak} | max ${this.stats.maxLossStreak}\n` +
            `   x2=${this.stats.lossStreakEvents.x2}  x3=${this.stats.lossStreakEvents.x3}  x4=${this.stats.lossStreakEvents.x4}\n\n`;
 
+    // Per-symbol calibration snapshot
+    if (this.cfg.calibEnabled) {
+      const calib = this.calibrator.summary();
+      const keys  = Object.keys(calib);
+      if (keys.length) {
+        msg += `<b>── Symbol Calibration (rolling ${this.cfg.calibWindow}) ──</b>\n`;
+        for (const sym of keys) {
+          const c = calib[sym];
+          const emo = c.state === 'enabled'  ? '🟢'
+                    : c.state === 'probing'  ? '🟡'
+                    : c.state === 'disabled' ? '🔴' : '⚪';
+          msg += `${emo} <code>${sym}</code>: ${c.state} n=${c.n} WR ${c.empirical.toFixed(1)}% vs pred ${c.predicted.toFixed(1)}% (gap ${c.gap >= 0 ? '+' : ''}${c.gap.toFixed(2)}pp)\n`;
+        }
+        msg += `\n`;
+      }
+    }
+
     const rows = this.stats.allDailyRows(date);
     if (rows.length) {
       msg += `<b>── All Trade Days By Date ──</b>\n`;
@@ -1653,12 +1966,13 @@ class TradingBot {
 
   _statePayload(reason) {
     return {
-      version: 1,
+      version: 2,
       savedAt: new Date().toISOString(),
       savedReason: reason,
       startBalance: this.startBalance,
       lastBalance: this.lastBalance,
       stats: this.stats.serialize(),
+      calibrator: this.calibrator ? this.calibrator.serialize() : {},
     };
   }
   _saveState(reason = 'checkpoint') {
@@ -1680,6 +1994,11 @@ class TradingBot {
       this.startBalance = data.startBalance ?? null;
       this.lastBalance = data.lastBalance ?? null;
       this.stats = new StatisticsManager(data.stats || data);
+      if (data.calibrator && typeof data.calibrator === 'object') {
+        this.calibrator = new SymbolCalibrator(this.cfg, data.calibrator);
+        const savedSyms = Object.keys(data.calibrator).length;
+        logger.info(`calibrator restored: ${savedSyms} symbols`);
+      }
       logger.info(`state restored from ${file}: overallProfit=${this.stats.overallProfit.toFixed(2)} lossStreak=${this.stats.currentLossStreak}`);
     } catch (e) {
       logger.warn(`state load failed (${file}):`, e.message);
@@ -1889,7 +2208,33 @@ class DifferBacktester {
         if (got % 20000 < this.cfg.backtestBatchSize) logger.info(`  fetched ${got}/${tot}`);
       },
     );
-    const pip = this.market.pipSize(symbol);
+    let pip = this.market.pipSize(symbol);
+    // Belt-and-suspenders: if loadSymbols never populated pip_size for
+    // this symbol (e.g. the user is on an older version that requests
+    // active_symbols: 'brief'), infer it directly from the tick stream.
+    // Deriv volatility indices always use a fixed decimal count per
+    // symbol so this is a safe recovery.
+    if (!Number.isFinite(pip)) {
+      const sample = ticks.slice(-Math.min(50, ticks.length));
+      const decCounts = new Map();
+      for (const t of sample) {
+        const s = String(t.quote);
+        const dot = s.indexOf('.');
+        const dec = dot < 0 ? 0 : s.length - dot - 1;
+        decCounts.set(dec, (decCounts.get(dec) || 0) + 1);
+      }
+      let bestDec = 2, bestN = 0;
+      for (const [d, n] of decCounts) if (n > bestN) { bestDec = d; bestN = n; }
+      pip = bestDec;
+      logger.warn(`pipSize(${symbol}) not cached — inferred pip=${pip} from tick stream`);
+      // Push it into the market cache so downstream code (analyze,
+      // recomputes) uses the same value.
+      this.market.pipSizes.set(symbol, pip);
+      // Also patch every tick's digit field so it reflects the
+      // correct pip. Without this, the analyzer would use the old
+      // (wrong) digits and every empirical WR would be garbage.
+      for (const t of ticks) t.digit = quoteToDigit(t.quote, pip);
+    }
     if (ticks.length < this.cfg.minTicksForAnalysis + this.cfg.durationTicks + 10) {
       throw new Error(`insufficient history for ${symbol}: got ${ticks.length}`);
     }
@@ -1900,15 +2245,26 @@ class DifferBacktester {
     );
 
     // 2. Walk forward
-    const stake       = this.cfg.stake;
+    const baseStake   = this.cfg.stake;
     // `payoutMult` = total payout per 1 stake (includes returned stake),
     // probed live above. On DIGITDIFF this is typically ~1.10.
-    // profit_on_win = stake * payoutMult - stake
-    const winNet      = stake * payoutMult - stake;
-    const lossNet     = -stake;
-    logger.info(`sim: stake=${stake} payoutMult=×${payoutMult.toFixed(4)} winNet=+${winNet.toFixed(4)} lossNet=${lossNet}`);
     const duration    = Math.max(1, this.cfg.durationTicks);
     const minWindow   = Math.max(this.cfg.minTicksForAnalysis, 300);
+
+    // Local Kelly + calibrator instances so the backtest mirrors live logic.
+    const kelly       = new KellySizer(this.cfg);
+    const calib       = new SymbolCalibrator(this.cfg);
+    // Simulated bankroll: starts at 100× base stake unless the user sets
+    // KELLY_BANKROLL_FLOOR to something explicit.
+    let simBankroll   = Math.max(this.cfg.kellyBankrollFloor, baseStake * 100);
+    const startBankroll = simBankroll;
+
+    logger.info(
+      `sim: baseStake=${baseStake} payoutMult=×${payoutMult.toFixed(4)}  ` +
+      `kelly=${this.cfg.kellySizingEnabled ? 'ON' : 'off'}  ` +
+      `calib=${this.cfg.calibEnabled ? 'ON' : 'off'}  ` +
+      `startBankroll=${simBankroll.toFixed(2)}`
+    );
 
     const results = {
       symbol,
@@ -1997,7 +2353,8 @@ class DifferBacktester {
     };
 
     const t0 = Date.now();
-    let tradedAsset = null;   // mirrors bot.tradedAsset when assetLock=true
+    let tradedAsset    = null;   // mirrors bot.tradedAsset when assetLock=true
+    let lastTradeAtIdx = -Infinity;
     let i = minWindow;
 
     while (i < ticks.length - duration - 1) {
@@ -2017,11 +2374,12 @@ class DifferBacktester {
       }
       if (analysis.allowedByModel) diag.allowedModel++;
 
-      // Compute the value edge exactly the way live code does, using
-      // the synthetic payout mult (proposal RPC not available offline).
+      // Compute the value edge exactly the way live code does. In the
+      // backtester ask == baseStake (we're not paying for a real RPC),
+      // and the payout is baseStake × payoutMult (probed live at start).
       const c = analysis.best;
-      const ask = stake;
-      const payoutFull = stake * payoutMult;
+      const ask = baseStake;
+      const payoutFull = baseStake * payoutMult;
       const breakEvenLossProb = 1 - ask / payoutFull;
       const valueEdge = breakEvenLossProb - c.pLossUpper - this.cfg.safetyMargin;
 
@@ -2032,9 +2390,44 @@ class DifferBacktester {
       // Would this trade actually fire?
       let fire = analysis.allowedByModel;
       if (fire && valueEdge < this.cfg.minEdge)                     { fire = false; diag.gatedEdge++; }
-      if (fire && this.cfg.backtestAssetLock && tradedAsset === symbol) { fire = false; diag.gatedAssetLock++; }
+      // Asset-lock (opt-in only for single-symbol backtests). The live
+      // bot uses tradedAsset to force multi-symbol rotation; in a
+      // single-symbol backtest it would trigger once and then block
+      // every subsequent scan, so we only apply it within a short
+      // cooldown window (backtestAssetLockTicks) and never as a hard
+      // permanent lock.
+      if (fire && this.cfg.backtestAssetLock && tradedAsset === symbol
+          && (i - lastTradeAtIdx) < this.cfg.backtestAssetLockTicks) {
+        fire = false; diag.gatedAssetLock++;
+      }
+      // Per-symbol calibrator gate (0 = disabled) — only applied when calibEnabled
+      let calibMult = 1;
+      if (fire && this.cfg.calibEnabled) {
+        calibMult = calib.stakeMultiplier(symbol);
+        if (calibMult === 0) { fire = false; diag.gatedCalib = (diag.gatedCalib || 0) + 1; }
+      }
 
       if (!fire) { i++; continue; }
+
+      // ── Size the trade ─────────────────────────────────────────
+      // Match live currentStake(): Kelly + calibrator when enabled,
+      // otherwise flat.  All results below use this per-trade stake.
+      let stake = baseStake;
+      let sizingSrc = 'flat';
+      if (this.cfg.kellySizingEnabled) {
+        const pWin = 1 - c.pLossUpper;
+        const k    = kelly.compute({
+          bankroll  : Math.max(this.cfg.kellyBankrollFloor, simBankroll),
+          pWin, payoutMult, edgeValue: valueEdge,
+        });
+        if (k) { stake = k.stake; sizingSrc = `kelly(${k.reason})`; }
+        else   { i++; continue; }   // no positive-edge under Kelly → skip
+      }
+      stake = Math.max(this.cfg.minStake, Math.min(this.cfg.maxStake, +(stake * calibMult).toFixed(2)));
+      if (stake <= 0) { i++; continue; }
+
+      const winNet  = stake * payoutMult - stake;
+      const lossNet = -stake;
 
       // ── Simulate settlement ────────────────────────────────────
       const expiryTick = ticks[i + duration];
@@ -2053,29 +2446,36 @@ class DifferBacktester {
         results.pnl        += winNet;
         results.byDigit[c.digit].wins += 1;
         results.byDigit[c.digit].pnl  += winNet;
+        simBankroll += winNet;
       } else {
         results.losses     += 1;
         results.grossLoss  += Math.abs(lossNet);
         results.pnl        += lossNet;
         results.byDigit[c.digit].losses += 1;
         results.byDigit[c.digit].pnl    += lossNet;
+        simBankroll += lossNet;
       }
       recordOutcome(won);
 
-      // Mimic tradedAsset lock: on live code this is only cleared when
-      // a *different* symbol trades. Since this backtester runs one
-      // symbol at a time, effectively locks out consecutive same-asset
-      // trades — matching live "skip: previousAsset" behaviour.
-      tradedAsset = symbol;
+      // Feed the calibrator (only if enabled)
+      if (this.cfg.calibEnabled) calib.record(symbol, 1 - c.pLossUpper, won);
 
-      // Advance past the expiry so trades don't overlap
+      tradedAsset    = symbol;
+      lastTradeAtIdx = i;
       i += duration + 1;
 
       if (results.signals % 100 === 0) {
         const wr = (results.wins / results.signals * 100).toFixed(1);
-        logger.info(`  ...${i}/${ticks.length} signals=${results.signals} WR=${wr}% pnl=${results.pnl.toFixed(2)}`);
+        logger.info(`  ...${i}/${ticks.length} signals=${results.signals} WR=${wr}% pnl=${results.pnl.toFixed(2)} bank=${simBankroll.toFixed(2)}`);
       }
     }
+
+    results.endBankroll   = +simBankroll.toFixed(2);
+    results.startBankroll = +startBankroll.toFixed(2);
+    results.bankrollGrowthPct = startBankroll > 0
+      ? +(((simBankroll - startBankroll) / startBankroll) * 100).toFixed(2)
+      : 0;
+    results.calibSummary  = calib.summary();
 
     // Flush trailing streak
     if (streak.current    > 0) streak.lossSequences.push(streak.current);
@@ -2085,7 +2485,9 @@ class DifferBacktester {
     const empiricalWR = results.signals ? results.wins / results.signals * 100 : 0;
     const predictedWR = results.signals ? (results.predictedWinSum / results.signals) * 100 : 0;
     const avgEdge     = results.signals ? (results.valueEdgeSum / results.signals) * 100 : 0;
-    const realizedEV  = results.signals ? (results.pnl / (results.signals * stake)) * 100 : 0;
+    // Realized EV as % of *base* stake, so the number is comparable
+    // across Kelly/flat/calibration modes.
+    const realizedEV  = results.signals ? (results.pnl / (results.signals * baseStake)) * 100 : 0;
 
     // Loss-streak metrics
     const avg = arr => arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : 0;
@@ -2103,7 +2505,7 @@ class DifferBacktester {
       avgWinRun           : +avg(streak.winSequences).toFixed(2),
       lossRuns            : streak.lossSequences.length,
       winRuns             : streak.winSequences.length,
-      maxDrawdownFlatStake: +(streak.max * stake).toFixed(2),
+      maxDrawdownFlatStake: +(streak.max * baseStake).toFixed(2),
       // Simulated recovery-multiplier drawdown: what you'd lose in cash
       // through the WORST loss run using cfg.recoveryMultipliers.
       maxDrawdownRecovery : (() => {
@@ -2112,7 +2514,7 @@ class DifferBacktester {
         let sum = 0;
         for (let k = 0; k < streak.max; k++) {
           const idx = Math.min(k, mults.length - 1);
-          sum += stake * (mults[idx] || 1);
+          sum += baseStake * (mults[idx] || 1);
         }
         return +sum.toFixed(2);
       })(),
@@ -2186,6 +2588,31 @@ class DifferBacktester {
       console.log(`    Expected longest loss run (iid @ WR=${empiricalWR.toFixed(1)}%): ~${expected.toFixed(1)} in ${nTrades} trades`);
       if (streakMetrics.maxLossStreak > expected * 1.5) {
         console.log(`    ⚠ Observed max streak ${streakMetrics.maxLossStreak} >> expected — losses may be autocorrelated.`);
+      }
+    }
+
+    // ── Bankroll evolution (Kelly-sizing view) ────────────────
+    if (this.cfg.kellySizingEnabled) {
+      console.log(line);
+      console.log('  Kelly-sizing bankroll evolution:');
+      console.log(`    Start bankroll     : ${results.startBankroll.toFixed(2)} ${this.cfg.currency}`);
+      console.log(`    End   bankroll     : ${results.endBankroll.toFixed(2)} ${this.cfg.currency}`);
+      const dollarPl = results.endBankroll - results.startBankroll;
+      console.log(`    Δ                  : ${dollarPl >= 0 ? '+' : ''}${dollarPl.toFixed(2)} (${results.bankrollGrowthPct >= 0 ? '+' : ''}${results.bankrollGrowthPct}%)`);
+      console.log(`    Kelly fraction     : ${this.cfg.kellyFraction}  (cap ${(this.cfg.kellyMaxStakeFrac*100).toFixed(2)}% bankroll)`);
+    }
+
+    // ── Per-symbol calibrator snapshot ────────────────────────
+    if (this.cfg.calibEnabled) {
+      const cs = results.calibSummary || {};
+      if (Object.keys(cs).length) {
+        console.log(line);
+        console.log('  Calibration snapshot (rolling window):');
+        for (const [sym, c] of Object.entries(cs)) {
+          const dot = c.state === 'enabled' ? '🟢' : c.state === 'probing' ? '🟡' : '🔴';
+          console.log(`    ${dot} ${sym}  state=${c.state}  n=${c.n}  WR=${c.empirical.toFixed(2)}%  pred=${c.predicted.toFixed(2)}%  gap=${c.gap >= 0 ? '+' : ''}${c.gap.toFixed(2)}pp`);
+        }
+        if (diag.gatedCalib) console.log(`    scans skipped by calibrator: ${diag.gatedCalib}`);
       }
     }
 
@@ -2302,95 +2729,3 @@ main().catch(e => {
   console.error('fatal:', e);
   process.exit(1);
 });
-
-
-
-
-// CONSERVATIVE
-// # Longer measurement windows → more stable statistics, slower reaction
-// FREQUENCY_WINDOWS=60,120,300,600,1000
-// TRANSITION_LOOKBACK=1500          # ~25 min of data — more stable transition matrix
-// EWMA_ALPHA=0.025                  # slower to react (smoother probabilities)
-// # Model confidence — demand a real cushion above break-even
-// MIN_EDGE=0.010                    # 1.0pp edge required (baseline was 0.6pp — noise floor)
-// SAFETY_MARGIN=0.005               # broker-friction cushion doubled
-// MODEL_RISK_MARGIN=0.005           # additional humility on model output
-// EDGE_ZSCORE=1.96                  # 97.5% one-sided upper bound (was 87% — too loose)
-// MAX_LOSS_PROB=0.075               # never trade if upper-bound loss prob > 7.5% (well below 9.09% BE)
-// MIN_PROBABILITY_GAP=0.012         # best digit must beat 2nd-best by ≥1.2pp
-// # Sample stability — reject anything unstable or too small
-// MIN_ENTROPY=0.94                  # tighter — require near-uniform digits (imbalance must be subtle)
-// MAX_ENTROPY=0.9990
-// MIN_CHISQUARE=3.5                 # require measurable imbalance
-// MAX_CHISQUARE=20.0                # reject sharp bursts (regime transitions)
-// MAX_RECENT_DIGIT_HITS=1           # the barrier digit can't have hit in last 20 ticks
-// RECENT_LOOKBACK=20                # slightly longer memory
-// PROPOSAL_SCAN_TOP_N=2             # only test the strongest 2 candidates (fewer proposal RPCs)
-// # Sizing (already conservative by default)
-// KELLY_ENABLED=true
-// KELLY_FRACTION=0.15               # 6th-Kelly — extra safe
-// KELLY_MAX_STAKE_FRAC=0.01         # 1% bankroll cap per trade
-// CALIB_ENABLED=true
-// CALIB_DISABLE_GAP=0.015           # sideline symbols at just -1.5pp gap
-
-
-
-
-// BEST
-// # Balanced windows — enough samples for stability, not too slow to react
-// FREQUENCY_WINDOWS=45,90,180,360,720
-// TRANSITION_LOOKBACK=1200
-// EWMA_ALPHA=0.035                  # moderate reactivity
-// # Model confidence — meaningful edge, honest humility
-// MIN_EDGE=0.007                    # 0.7pp minimum — above the noise floor, not deep in it
-// SAFETY_MARGIN=0.0035
-// MODEL_RISK_MARGIN=0.003
-// EDGE_ZSCORE=1.65                  # 95% one-sided (standard "significant" threshold)
-// MAX_LOSS_PROB=0.085               # 0.6pp cushion below break-even
-// MIN_PROBABILITY_GAP=0.008
-// # Sample stability
-// MIN_ENTROPY=0.93
-// MAX_ENTROPY=0.9993
-// MIN_CHISQUARE=2.5
-// MAX_CHISQUARE=25.0
-// MAX_RECENT_DIGIT_HITS=2           # baseline
-// RECENT_LOOKBACK=15
-// PROPOSAL_SCAN_TOP_N=3
-// # Sizing
-// KELLY_ENABLED=true
-// KELLY_FRACTION=0.25               # quarter-Kelly — industry-standard growth/safety balance
-// KELLY_MAX_STAKE_FRAC=0.02         # 2% bankroll cap per trade
-// CALIB_ENABLED=true
-// CALIB_DISABLE_GAP=0.02            # standard 2pp gap
-
-
-
-
-// AGGRESSIVE
-// # Shorter windows → faster reaction to regime shifts, more signals
-// FREQUENCY_WINDOWS=20,45,90,180,360
-// TRANSITION_LOOKBACK=600
-// EWMA_ALPHA=0.055                  # more reactive to recent ticks
-// # Model confidence — still positive-EV but thinner cushion
-// MIN_EDGE=0.004                    # 0.4pp — the true noise floor; below this it's random
-// SAFETY_MARGIN=0.002
-// MODEL_RISK_MARGIN=0.0015
-// EDGE_ZSCORE=1.28                  # 90% one-sided bound (less humble than best)
-// MAX_LOSS_PROB=0.092               # very close to break-even 9.09% — accepts marginal trades
-// MIN_PROBABILITY_GAP=0.004
-// # Sample stability — accept more variable regimes
-// MIN_ENTROPY=0.90                  # allow slightly less-uniform digits (bigger imbalances OK)
-// MAX_ENTROPY=0.9997
-// MIN_CHISQUARE=1.5
-// MAX_CHISQUARE=40.0                # allow sharper bursts
-// MAX_RECENT_DIGIT_HITS=2
-// RECENT_LOOKBACK=12
-// PROPOSAL_SCAN_TOP_N=4             # test top 4 candidates per scan
-// # ⚠️ RISK LIVES HERE — Kelly + calibrator MUST be on
-// KELLY_ENABLED=true
-// KELLY_FRACTION=0.20               # slightly below quarter-Kelly (variance is higher)
-// KELLY_MAX_STAKE_FRAC=0.015        # 1.5% cap — tighter than "best" because more marginal edges
-// CALIB_ENABLED=true
-// CALIB_DISABLE_GAP=0.015           # bench symbols FASTER when they underperform
-// CALIB_WINDOW=150                  # shorter window → faster response to broken assets
-// CALIB_MIN_TRADES=30
