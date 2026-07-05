@@ -148,7 +148,7 @@ const CONFIG = Object.freeze({
   durationTicks: intEnv('DURATION_TICKS', 1), // Digit contracts normally 1-10 ticks
   minStake: numEnv('MIN_STAKE', 0.35),
   maxStake: numEnv('MAX_STAKE', 670.00),
-  assets: ['R_25'],
+  assets: ['R_10'],
 
   // Trading frequency / limits
   tickWindow: intEnv('TICK_WINDOW', 1000),
@@ -270,7 +270,7 @@ const CONFIG = Object.freeze({
   // BACKTEST_PAYOUT_MULT if the probe fails.
   backtestPayoutMult  : numEnv('BACKTEST_PAYOUT_MULT', 1.09),
   backtestProbeLive   : boolEnv('BACKTEST_PROBE_LIVE', true),
-  backtestAssetLock   : boolEnv('BACKTEST_ASSET_LOCK', true),
+  backtestAssetLock   : boolEnv('BACKTEST_ASSET_LOCK', false),
 
   backtestMinEdge     : process.env.BACKTEST_MIN_EDGE      ? Number(process.env.BACKTEST_MIN_EDGE)      : null,
   backtestSafety      : process.env.BACKTEST_SAFETY_MARGIN ? Number(process.env.BACKTEST_SAFETY_MARGIN) : null,
