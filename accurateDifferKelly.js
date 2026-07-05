@@ -119,8 +119,8 @@ function listEnv(name, def) {
 // ─────────────────────────────────────────────────────────────────────
 const CONFIG = Object.freeze({
   // Deriv API
-  apiToken : 'pat_8e0a3285bd6e74f52a67985b8069f4bea42aa96ce65d129c60ebb838ed1065ee',
-  appId    : '33uslPtthXBEkQOdfKfoY',//1089
+  apiToken:    ('0P94g4WdSrSrzir').trim(),
+  appId:       '1089',
   accountId: '', // recommended/required for PAT new API
   accountType: 'demo', // demo | real
   legacyWsUrl: 'wss://ws.derivws.com/websockets/v3',
@@ -132,7 +132,7 @@ const CONFIG = Object.freeze({
   durationTicks: intEnv('DURATION_TICKS', 1), // Digit contracts normally 1-10 ticks
   minStake: numEnv('MIN_STAKE', 0.35),
   maxStake: numEnv('MAX_STAKE', 670.00),
-  assets: ['R_25'],
+  assets: ['R_10',],
 
   // Trading frequency / limits
   tickWindow: intEnv('TICK_WINDOW', 1000),
@@ -143,6 +143,35 @@ const CONFIG = Object.freeze({
   dailyMaxLoss: numEnv('DAILY_MAX_LOSS', 570),
   dailyMaxProfit: numEnv('DAILY_MAX_PROFIT', 0), // 0 disables profit target stop
   dailyMaxTrades: intEnv('DAILY_MAX_TRADES', 20000),
+
+    // AGGRESSIVE
+// # Shorter windows → faster reaction to regime shifts, more signals
+// FREQUENCY_WINDOWS=20,45,90,180,360
+// TRANSITION_LOOKBACK=600
+// EWMA_ALPHA=0.055                  # more reactive to recent ticks
+// # Model confidence — still positive-EV but thinner cushion
+// MIN_EDGE=0.004                    # 0.4pp — the true noise floor; below this it's random
+// SAFETY_MARGIN=0.002
+// MODEL_RISK_MARGIN=0.0015
+// EDGE_ZSCORE=1.28                  # 90% one-sided bound (less humble than best)
+// MAX_LOSS_PROB=0.092               # very close to break-even 9.09% — accepts marginal trades
+// MIN_PROBABILITY_GAP=0.004
+// # Sample stability — accept more variable regimes
+// MIN_ENTROPY=0.90                  # allow slightly less-uniform digits (bigger imbalances OK)
+// MAX_ENTROPY=0.9997
+// MIN_CHISQUARE=1.5
+// MAX_CHISQUARE=40.0                # allow sharper bursts
+// MAX_RECENT_DIGIT_HITS=2
+// RECENT_LOOKBACK=12
+// PROPOSAL_SCAN_TOP_N=4             # test top 4 candidates per scan
+// # ⚠️ RISK LIVES HERE — Kelly + calibrator MUST be on
+// KELLY_ENABLED=true
+// KELLY_FRACTION=0.20               # slightly below quarter-Kelly (variance is higher)
+// KELLY_MAX_STAKE_FRAC=0.015        # 1.5% cap — tighter than "best" because more marginal edges
+// CALIB_ENABLED=true
+// CALIB_DISABLE_GAP=0.015           # bench symbols FASTER when they underperform
+// CALIB_WINDOW=150                  # shorter window → faster response to broken assets
+// CALIB_MIN_TRADES=30
 
   // DIVER-9 edge filters
   frequencyWindows: listEnv('FREQUENCY_WINDOWS', '20,45,90,180,360').map(x => parseInt(x, 10)).filter(Number.isFinite),
@@ -176,9 +205,9 @@ const CONFIG = Object.freeze({
   //   to the legacy flat/recovery sizing above.
   kellySizingEnabled  : boolEnv('KELLY_ENABLED',         true),
   kellyFraction       : numEnv ('KELLY_FRACTION',        0.20),
-  kellyBankrollFrac   : numEnv ('KELLY_BANKROLL_FRAC',   0.015),  // % of live balance to treat as risk bankroll
+  kellyBankrollFrac   : numEnv ('KELLY_BANKROLL_FRAC',   1.00),  // % of live balance to treat as risk bankroll
   kellyBankrollFloor  : numEnv ('KELLY_BANKROLL_FLOOR',  100.0), // never scale below this bankroll
-  kellyMaxStakeFrac   : numEnv ('KELLY_MAX_STAKE_FRAC',  0.02),  // hard cap: ≤2% of bankroll per trade
+  kellyMaxStakeFrac   : numEnv ('KELLY_MAX_STAKE_FRAC',  0.015),  // hard cap: ≤2% of bankroll per trade
   kellyMinEdgeForScale: numEnv ('KELLY_MIN_EDGE_SCALE',  0.005), // no scaling unless edge > 0.5pp
 
   // ── Per-symbol calibration tracker ─────────────────────────────────
@@ -2682,4 +2711,3 @@ main().catch(e => {
   console.error('fatal:', e);
   process.exit(1);
 });
-
