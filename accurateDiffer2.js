@@ -52,6 +52,22 @@
  *
  *  If using a new PAT token, set DERIV_ACCOUNT_ID when possible:
  *    DERIV_API_TOKEN="pat_..." DERIV_APP_ID="..." DERIV_ACCOUNT_ID="VRTC..." node deriv_digit_differ_bot.js
+ * 
+ * * Backtesting:
+ * $env:BACKTEST=1; $env:BACKTEST_ASSET="R_100"; node accurateDiffer.js  (Single asset)
+ * 
+ * $env:BACKTEST=1; $env:BACKTEST_ASSET="R_10,R_25,R_50,R_75,R_100"; node accurateDiffer.js (Multi-asset (comma-separated))
+ * 
+ * With gate overrides (live cfg stays untouched)
+ * $env:BACKTEST_MIN_EDGE=0.002
+ * $env:BACKTEST_MIN_ENTROPY=0.85
+ * $env:BACKTEST_MAX_LOSS_PROB=0.11
+ * node accurateDiffer.js
+ * 
+ * Clean up between runs:
+ * Remove-Item Env:BACKTEST, Env:BACKTEST_ASSET, Env:BACKTEST_MIN_EDGE, Env:BACKTEST_MIN_ENTROPY, Env:BACKTEST_MAX_LOSS_PROB -ErrorAction SilentlyContinue
+ * 
+ * $env:BACKTEST_PAYOUT_MULT=8.75
  *
  * =====================================================================
  */
@@ -148,11 +164,11 @@ const CONFIG = Object.freeze({
   frequencyWindows: listEnv('FREQUENCY_WINDOWS', '30,60,120,300,600').map(x => parseInt(x, 10)).filter(Number.isFinite),
   transitionLookback: intEnv('TRANSITION_LOOKBACK', 900),
   ewmaAlpha: numEnv('EWMA_ALPHA', 0.045),
-  minEdge: numEnv('MIN_EDGE', 0.0060),          //0.0040 absolute probability gap, e.g. 0.4 percentage point
+  minEdge: numEnv('MIN_EDGE', 0.015),          //0.0040 absolute probability gap, e.g. 0.4 percentage point
   safetyMargin: numEnv('SAFETY_MARGIN', 0.0025),
-  modelRiskMargin: numEnv('MODEL_RISK_MARGIN', 0.0020),
+  modelRiskMargin: numEnv('MODEL_RISK_MARGIN', 0.005),
   zScore: numEnv('EDGE_ZSCORE', 1.15),          // conservative upper bound
-  maxLossProb: numEnv('MAX_LOSS_PROB', 0.095),  // never take if model says losing digit > 9.5%
+  maxLossProb: numEnv('MAX_LOSS_PROB', 0.080),  // never take if model says losing digit > 9.5%
   minProbabilityGap: numEnv('MIN_PROBABILITY_GAP', 0.006),
   minEntropy: numEnv('MIN_ENTROPY', 0.92),      // close to random; avoid broken/tiny samples
   maxEntropy: numEnv('MAX_ENTROPY', 0.9995),    // if perfectly uniform, likely no exploitable imbalance
