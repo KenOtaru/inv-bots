@@ -132,7 +132,7 @@ const CONFIG = Object.freeze({
   durationTicks: intEnv('DURATION_TICKS', 1), // Digit contracts normally 1-10 ticks
   minStake: numEnv('MIN_STAKE', 0.35),
   maxStake: numEnv('MAX_STAKE', 670.00),
-  assets: ['R_100',],
+  assets: ['R_10','R_25','R_50','R_100'],
 
   // Trading frequency / limits
   tickWindow: intEnv('TICK_WINDOW', 1000),

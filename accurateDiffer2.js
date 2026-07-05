@@ -132,7 +132,7 @@ const CONFIG = Object.freeze({
   durationTicks: intEnv('DURATION_TICKS', 1), // Digit contracts normally 1-10 ticks
   minStake: numEnv('MIN_STAKE', 0.35),
   maxStake: numEnv('MAX_STAKE', 670.00),
-  assets: ['R_50'],
+  assets: ['R_10','R_25','R_50','R_100'],
 
   // Trading frequency / limits
   tickWindow: intEnv('TICK_WINDOW', 1000),
@@ -145,22 +145,22 @@ const CONFIG = Object.freeze({
   dailyMaxTrades: intEnv('DAILY_MAX_TRADES', 20000),
 
   // DIVER-9 edge filters
-  frequencyWindows: listEnv('FREQUENCY_WINDOWS', '30,60,120,300,600').map(x => parseInt(x, 10)).filter(Number.isFinite),
-  transitionLookback: intEnv('TRANSITION_LOOKBACK', 900),
-  ewmaAlpha: numEnv('EWMA_ALPHA', 0.045),
-  minEdge: numEnv('MIN_EDGE', 0.0060),          //0.0040 absolute probability gap, e.g. 0.4 percentage point
-  safetyMargin: numEnv('SAFETY_MARGIN', 0.0025),
-  modelRiskMargin: numEnv('MODEL_RISK_MARGIN', 0.0020),
-  zScore: numEnv('EDGE_ZSCORE', 1.15),          // conservative upper bound
-  maxLossProb: numEnv('MAX_LOSS_PROB', 0.095),  // never take if model says losing digit > 9.5%
-  minProbabilityGap: numEnv('MIN_PROBABILITY_GAP', 0.006),
-  minEntropy: numEnv('MIN_ENTROPY', 0.92),      // close to random; avoid broken/tiny samples
-  maxEntropy: numEnv('MAX_ENTROPY', 0.9995),    // if perfectly uniform, likely no exploitable imbalance
-  minChiSquare: numEnv('MIN_CHISQUARE', 2.0),   // require some measurable imbalance
-  maxChiSquare: numEnv('MAX_CHISQUARE', 30.0),  // reject extreme unstable bursts
+  frequencyWindows: listEnv('FREQUENCY_WINDOWS', '20,45,90,180,360').map(x => parseInt(x, 10)).filter(Number.isFinite),
+  transitionLookback: intEnv('TRANSITION_LOOKBACK', 600),
+  ewmaAlpha: numEnv('EWMA_ALPHA', 0.055),
+  minEdge: numEnv('MIN_EDGE', 0.004),          //0.0040 absolute probability gap, e.g. 0.4 percentage point
+  safetyMargin: numEnv('SAFETY_MARGIN', 0.002),
+  modelRiskMargin: numEnv('MODEL_RISK_MARGIN', 0.0015),
+  zScore: numEnv('EDGE_ZSCORE', 1.28),          // conservative upper bound
+  maxLossProb: numEnv('MAX_LOSS_PROB', 0.092),  // never take if model says losing digit > 9.5%
+  minProbabilityGap: numEnv('MIN_PROBABILITY_GAP', 0.004),
+  minEntropy: numEnv('MIN_ENTROPY', 0.90),      // close to random; avoid broken/tiny samples
+  maxEntropy: numEnv('MAX_ENTROPY', 0.9997),    // if perfectly uniform, likely no exploitable imbalance
+  minChiSquare: numEnv('MIN_CHISQUARE', 1.5),   // require some measurable imbalance
+  maxChiSquare: numEnv('MAX_CHISQUARE', 40.0),  // reject extreme unstable bursts
   maxRecentDigitHits: intEnv('MAX_RECENT_DIGIT_HITS', 2), // selected digit occurrences in last recentLookback
-  recentLookback: intEnv('RECENT_LOOKBACK', 15),
-  proposalScanTopN: intEnv('PROPOSAL_SCAN_TOP_N', 3),
+  recentLookback: intEnv('RECENT_LOOKBACK', 12),
+  proposalScanTopN: intEnv('PROPOSAL_SCAN_TOP_N', 4),
 
   // Optional limited loss recovery; disabled by default. Safer than the pasted 10x/100x martingale.
   recoveryEnabled: boolEnv('RECOVERY_ENABLED', true),
@@ -175,10 +175,10 @@ const CONFIG = Object.freeze({
   //   ~40% drawdowns). Disable with KELLY_ENABLED=false to fall back
   //   to the legacy flat/recovery sizing above.
   kellySizingEnabled  : boolEnv('KELLY_ENABLED',         true),
-  kellyFraction       : numEnv ('KELLY_FRACTION',        0.25),
+  kellyFraction       : numEnv ('KELLY_FRACTION',        0.20),
   kellyBankrollFrac   : numEnv ('KELLY_BANKROLL_FRAC',   1.00),  // % of live balance to treat as risk bankroll
   kellyBankrollFloor  : numEnv ('KELLY_BANKROLL_FLOOR',  100.0), // never scale below this bankroll
-  kellyMaxStakeFrac   : numEnv ('KELLY_MAX_STAKE_FRAC',  0.02),  // hard cap: ≤2% of bankroll per trade
+  kellyMaxStakeFrac   : numEnv ('KELLY_MAX_STAKE_FRAC',  0.015),  // hard cap: ≤2% of bankroll per trade
   kellyMinEdgeForScale: numEnv ('KELLY_MIN_EDGE_SCALE',  0.005), // no scaling unless edge > 0.5pp
 
   // ── Per-symbol calibration tracker ─────────────────────────────────
@@ -187,9 +187,9 @@ const CONFIG = Object.freeze({
   //   over ≥ calibMinTrades. Re-enters via low-stake probe after
   //   calibProbeAfterMs; fully re-enabled when calibration re-converges.
   calibEnabled        : boolEnv('CALIB_ENABLED',         true),
-  calibWindow         : intEnv ('CALIB_WINDOW',          200),
-  calibMinTrades      : intEnv ('CALIB_MIN_TRADES',      40),
-  calibDisableGap     : numEnv ('CALIB_DISABLE_GAP',     0.02),   // −2 pp below prediction → disable
+  calibWindow         : intEnv ('CALIB_WINDOW',          150),
+  calibMinTrades      : intEnv ('CALIB_MIN_TRADES',      30),
+  calibDisableGap     : numEnv ('CALIB_DISABLE_GAP',     0.015),   // −2 pp below prediction → disable
   calibReenableGap    : numEnv ('CALIB_REENABLE_GAP',    0.005),  // within ±0.5 pp → re-enable
   calibProbeAfterMs   : intEnv ('CALIB_PROBE_AFTER_MS',  30 * 60_000),
   calibProbeStakeFrac : numEnv ('CALIB_PROBE_STAKE_FRAC', 0.25),
@@ -253,17 +253,7 @@ const CONFIG = Object.freeze({
   // BACKTEST_PAYOUT_MULT if the probe fails.
   backtestPayoutMult  : numEnv('BACKTEST_PAYOUT_MULT', 1.10),
   backtestProbeLive   : boolEnv('BACKTEST_PROBE_LIVE', true),
-  // In LIVE trading the tradedAsset lock forces multi-symbol rotation
-  // (don't hammer the same symbol twice in a row while other symbols
-  //  are available). In backtest we scan one symbol at a time, so
-  // the lock — if enabled — would fire exactly once and then block
-  // every subsequent scan indefinitely, resulting in a single trade.
-  // Default is therefore FALSE for backtests. Set BACKTEST_ASSET_LOCK=true
-  // only if you specifically want to see the effect of the live lock
-  // (the lock will self-clear after this many ticks so trades aren't
-  //  blocked forever).
-  backtestAssetLock       : boolEnv('BACKTEST_ASSET_LOCK',       false),
-  backtestAssetLockTicks  : intEnv ('BACKTEST_ASSET_LOCK_TICKS', 10),
+  backtestAssetLock   : boolEnv('BACKTEST_ASSET_LOCK', false),
 
   backtestMinEdge     : process.env.BACKTEST_MIN_EDGE      ? Number(process.env.BACKTEST_MIN_EDGE)      : null,
   backtestSafety      : process.env.BACKTEST_SAFETY_MARGIN ? Number(process.env.BACKTEST_SAFETY_MARGIN) : null,
@@ -2208,33 +2198,7 @@ class DifferBacktester {
         if (got % 20000 < this.cfg.backtestBatchSize) logger.info(`  fetched ${got}/${tot}`);
       },
     );
-    let pip = this.market.pipSize(symbol);
-    // Belt-and-suspenders: if loadSymbols never populated pip_size for
-    // this symbol (e.g. the user is on an older version that requests
-    // active_symbols: 'brief'), infer it directly from the tick stream.
-    // Deriv volatility indices always use a fixed decimal count per
-    // symbol so this is a safe recovery.
-    if (!Number.isFinite(pip)) {
-      const sample = ticks.slice(-Math.min(50, ticks.length));
-      const decCounts = new Map();
-      for (const t of sample) {
-        const s = String(t.quote);
-        const dot = s.indexOf('.');
-        const dec = dot < 0 ? 0 : s.length - dot - 1;
-        decCounts.set(dec, (decCounts.get(dec) || 0) + 1);
-      }
-      let bestDec = 2, bestN = 0;
-      for (const [d, n] of decCounts) if (n > bestN) { bestDec = d; bestN = n; }
-      pip = bestDec;
-      logger.warn(`pipSize(${symbol}) not cached — inferred pip=${pip} from tick stream`);
-      // Push it into the market cache so downstream code (analyze,
-      // recomputes) uses the same value.
-      this.market.pipSizes.set(symbol, pip);
-      // Also patch every tick's digit field so it reflects the
-      // correct pip. Without this, the analyzer would use the old
-      // (wrong) digits and every empirical WR would be garbage.
-      for (const t of ticks) t.digit = quoteToDigit(t.quote, pip);
-    }
+    const pip = this.market.pipSize(symbol);
     if (ticks.length < this.cfg.minTicksForAnalysis + this.cfg.durationTicks + 10) {
       throw new Error(`insufficient history for ${symbol}: got ${ticks.length}`);
     }
@@ -2353,8 +2317,7 @@ class DifferBacktester {
     };
 
     const t0 = Date.now();
-    let tradedAsset    = null;   // mirrors bot.tradedAsset when assetLock=true
-    let lastTradeAtIdx = -Infinity;
+    let tradedAsset = null;   // mirrors bot.tradedAsset when assetLock=true
     let i = minWindow;
 
     while (i < ticks.length - duration - 1) {
@@ -2390,16 +2353,7 @@ class DifferBacktester {
       // Would this trade actually fire?
       let fire = analysis.allowedByModel;
       if (fire && valueEdge < this.cfg.minEdge)                     { fire = false; diag.gatedEdge++; }
-      // Asset-lock (opt-in only for single-symbol backtests). The live
-      // bot uses tradedAsset to force multi-symbol rotation; in a
-      // single-symbol backtest it would trigger once and then block
-      // every subsequent scan, so we only apply it within a short
-      // cooldown window (backtestAssetLockTicks) and never as a hard
-      // permanent lock.
-      if (fire && this.cfg.backtestAssetLock && tradedAsset === symbol
-          && (i - lastTradeAtIdx) < this.cfg.backtestAssetLockTicks) {
-        fire = false; diag.gatedAssetLock++;
-      }
+      if (fire && this.cfg.backtestAssetLock && tradedAsset === symbol) { fire = false; diag.gatedAssetLock++; }
       // Per-symbol calibrator gate (0 = disabled) — only applied when calibEnabled
       let calibMult = 1;
       if (fire && this.cfg.calibEnabled) {
@@ -2460,8 +2414,7 @@ class DifferBacktester {
       // Feed the calibrator (only if enabled)
       if (this.cfg.calibEnabled) calib.record(symbol, 1 - c.pLossUpper, won);
 
-      tradedAsset    = symbol;
-      lastTradeAtIdx = i;
+      tradedAsset = symbol;
       i += duration + 1;
 
       if (results.signals % 100 === 0) {
