@@ -2307,11 +2307,12 @@ main().catch(e => {
 
 
 
+
+// CONSERVATIVE
 // # Longer measurement windows → more stable statistics, slower reaction
 // FREQUENCY_WINDOWS=60,120,300,600,1000
 // TRANSITION_LOOKBACK=1500          # ~25 min of data — more stable transition matrix
 // EWMA_ALPHA=0.025                  # slower to react (smoother probabilities)
-
 // # Model confidence — demand a real cushion above break-even
 // MIN_EDGE=0.010                    # 1.0pp edge required (baseline was 0.6pp — noise floor)
 // SAFETY_MARGIN=0.005               # broker-friction cushion doubled
@@ -2319,7 +2320,6 @@ main().catch(e => {
 // EDGE_ZSCORE=1.96                  # 97.5% one-sided upper bound (was 87% — too loose)
 // MAX_LOSS_PROB=0.075               # never trade if upper-bound loss prob > 7.5% (well below 9.09% BE)
 // MIN_PROBABILITY_GAP=0.012         # best digit must beat 2nd-best by ≥1.2pp
-
 // # Sample stability — reject anything unstable or too small
 // MIN_ENTROPY=0.94                  # tighter — require near-uniform digits (imbalance must be subtle)
 // MAX_ENTROPY=0.9990
@@ -2328,7 +2328,6 @@ main().catch(e => {
 // MAX_RECENT_DIGIT_HITS=1           # the barrier digit can't have hit in last 20 ticks
 // RECENT_LOOKBACK=20                # slightly longer memory
 // PROPOSAL_SCAN_TOP_N=2             # only test the strongest 2 candidates (fewer proposal RPCs)
-
 // # Sizing (already conservative by default)
 // KELLY_ENABLED=true
 // KELLY_FRACTION=0.15               # 6th-Kelly — extra safe
@@ -2338,11 +2337,12 @@ main().catch(e => {
 
 
 
+
+// BEST
 // # Balanced windows — enough samples for stability, not too slow to react
 // FREQUENCY_WINDOWS=45,90,180,360,720
 // TRANSITION_LOOKBACK=1200
 // EWMA_ALPHA=0.035                  # moderate reactivity
-
 // # Model confidence — meaningful edge, honest humility
 // MIN_EDGE=0.007                    # 0.7pp minimum — above the noise floor, not deep in it
 // SAFETY_MARGIN=0.0035
@@ -2350,7 +2350,6 @@ main().catch(e => {
 // EDGE_ZSCORE=1.65                  # 95% one-sided (standard "significant" threshold)
 // MAX_LOSS_PROB=0.085               # 0.6pp cushion below break-even
 // MIN_PROBABILITY_GAP=0.008
-
 // # Sample stability
 // MIN_ENTROPY=0.93
 // MAX_ENTROPY=0.9993
@@ -2359,7 +2358,6 @@ main().catch(e => {
 // MAX_RECENT_DIGIT_HITS=2           # baseline
 // RECENT_LOOKBACK=15
 // PROPOSAL_SCAN_TOP_N=3
-
 // # Sizing
 // KELLY_ENABLED=true
 // KELLY_FRACTION=0.25               # quarter-Kelly — industry-standard growth/safety balance
@@ -2369,11 +2367,12 @@ main().catch(e => {
 
 
 
+
+// AGGRESSIVE
 // # Shorter windows → faster reaction to regime shifts, more signals
 // FREQUENCY_WINDOWS=20,45,90,180,360
 // TRANSITION_LOOKBACK=600
 // EWMA_ALPHA=0.055                  # more reactive to recent ticks
-
 // # Model confidence — still positive-EV but thinner cushion
 // MIN_EDGE=0.004                    # 0.4pp — the true noise floor; below this it's random
 // SAFETY_MARGIN=0.002
@@ -2381,7 +2380,6 @@ main().catch(e => {
 // EDGE_ZSCORE=1.28                  # 90% one-sided bound (less humble than best)
 // MAX_LOSS_PROB=0.092               # very close to break-even 9.09% — accepts marginal trades
 // MIN_PROBABILITY_GAP=0.004
-
 // # Sample stability — accept more variable regimes
 // MIN_ENTROPY=0.90                  # allow slightly less-uniform digits (bigger imbalances OK)
 // MAX_ENTROPY=0.9997
@@ -2390,7 +2388,6 @@ main().catch(e => {
 // MAX_RECENT_DIGIT_HITS=2
 // RECENT_LOOKBACK=12
 // PROPOSAL_SCAN_TOP_N=4             # test top 4 candidates per scan
-
 // # ⚠️ RISK LIVES HERE — Kelly + calibrator MUST be on
 // KELLY_ENABLED=true
 // KELLY_FRACTION=0.20               # slightly below quarter-Kelly (variance is higher)
