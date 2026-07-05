@@ -200,8 +200,8 @@ const CONFIG = Object.freeze({
   hourlySummary: boolEnv('HOURLY_SUMMARY', true),
 
   // Persistence/logging
-  stateFile: strEnv('STATE_FILE', 'deriv_digit_differ9_state.json'),
-  logFile: strEnv('LOG_FILE', 'deriv_digit_differ9_bot.log'),
+  stateFile: strEnv('STATE_FILE', 'deriv_digit_differ2_01_state.json'),
+  logFile: strEnv('LOG_FILE', 'deriv_digit_differ2_01_bot.log'),
   logLevel: strEnv('LOG_LEVEL', 'INFO').toUpperCase(),
 
   // Telegram
@@ -244,7 +244,7 @@ const CONFIG = Object.freeze({
   backtestTicks       : intEnv('BACKTEST_TICKS',      100000),
   backtestBatchSize   : intEnv('BACKTEST_BATCH_SIZE', 5000),
   backtestReportEvery : intEnv('BACKTEST_REPORT',     10000),
-  backtestOutFile     : strEnv('BACKTEST_OUT',        'differ_backtest_report.json'),
+  backtestOutFile     : strEnv('BACKTEST_OUT',        'differ_backtest_report2_01.json'),
   // The Deriv DIGITDIFF payout multiplier is roughly 1.09-1.11× stake
   // (win ~90% of the time, get ~10% profit). We DEFAULT to 1.10, but at
   // backtest start we probe a real Deriv proposal for the actual live
