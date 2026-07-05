@@ -190,22 +190,22 @@ const CONFIG = Object.freeze({
 // CALIB_MIN_TRADES=30
 
   // DIVER-9 edge filters
-  frequencyWindows: listEnv('FREQUENCY_WINDOWS', '30,60,120,300,600').map(x => parseInt(x, 10)).filter(Number.isFinite),
-  transitionLookback: intEnv('TRANSITION_LOOKBACK', 900),
-  ewmaAlpha: numEnv('EWMA_ALPHA', 0.045),
-  minEdge: numEnv('MIN_EDGE', 0.0121),          //0.0040 absolute probability gap, e.g. 0.4 percentage point
-  safetyMargin: numEnv('SAFETY_MARGIN', 0.0025),
-  modelRiskMargin: numEnv('MODEL_RISK_MARGIN', 0.005),
-  zScore: numEnv('EDGE_ZSCORE', 1.15),          // conservative upper bound
-  maxLossProb: numEnv('MAX_LOSS_PROB', 0.077),  // never take if model says losing digit > 9.5%
-  minProbabilityGap: numEnv('MIN_PROBABILITY_GAP', 0.006),
-  minEntropy: numEnv('MIN_ENTROPY', 0.85),      // close to random; avoid broken/tiny samples
-  maxEntropy: numEnv('MAX_ENTROPY', 0.9995),    // if perfectly uniform, likely no exploitable imbalance
-  minChiSquare: numEnv('MIN_CHISQUARE', 1.0),   // require some measurable imbalance
-  maxChiSquare: numEnv('MAX_CHISQUARE', 30.0),  // reject extreme unstable bursts
+  frequencyWindows: listEnv('FREQUENCY_WINDOWS', '20,45,90,180,360').map(x => parseInt(x, 10)).filter(Number.isFinite),
+  transitionLookback: intEnv('TRANSITION_LOOKBACK', 600),
+  ewmaAlpha: numEnv('EWMA_ALPHA', 0.055),
+  minEdge: numEnv('MIN_EDGE', 0.004),          //0.0040 absolute probability gap, e.g. 0.4 percentage point
+  safetyMargin: numEnv('SAFETY_MARGIN', 0.002),
+  modelRiskMargin: numEnv('MODEL_RISK_MARGIN', 0.0015),
+  zScore: numEnv('EDGE_ZSCORE', 1.28),          // conservative upper bound
+  maxLossProb: numEnv('MAX_LOSS_PROB', 0.092),  // never take if model says losing digit > 9.5%
+  minProbabilityGap: numEnv('MIN_PROBABILITY_GAP', 0.004),
+  minEntropy: numEnv('MIN_ENTROPY', 0.90),      // close to random; avoid broken/tiny samples
+  maxEntropy: numEnv('MAX_ENTROPY', 0.9997),    // if perfectly uniform, likely no exploitable imbalance
+  minChiSquare: numEnv('MIN_CHISQUARE', 1.5),   // require some measurable imbalance
+  maxChiSquare: numEnv('MAX_CHISQUARE', 40.0),  // reject extreme unstable bursts
   maxRecentDigitHits: intEnv('MAX_RECENT_DIGIT_HITS', 2), // selected digit occurrences in last recentLookback
-  recentLookback: intEnv('RECENT_LOOKBACK', 15),
-  proposalScanTopN: intEnv('PROPOSAL_SCAN_TOP_N', 3),
+  recentLookback: intEnv('RECENT_LOOKBACK', 12),
+  proposalScanTopN: intEnv('PROPOSAL_SCAN_TOP_N', 4),
 
   // Optional limited loss recovery; disabled by default. Safer than the pasted 10x/100x martingale.
   recoveryEnabled: boolEnv('RECOVERY_ENABLED', true),

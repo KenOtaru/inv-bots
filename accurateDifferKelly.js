@@ -145,22 +145,22 @@ const CONFIG = Object.freeze({
   dailyMaxTrades: intEnv('DAILY_MAX_TRADES', 20000),
 
   // DIVER-9 edge filters
-  frequencyWindows: listEnv('FREQUENCY_WINDOWS', '30,60,120,300,600').map(x => parseInt(x, 10)).filter(Number.isFinite),
-  transitionLookback: intEnv('TRANSITION_LOOKBACK', 900),
-  ewmaAlpha: numEnv('EWMA_ALPHA', 0.045),
-  minEdge: numEnv('MIN_EDGE', 0.0060),          //0.0040 absolute probability gap, e.g. 0.4 percentage point
-  safetyMargin: numEnv('SAFETY_MARGIN', 0.0025),
-  modelRiskMargin: numEnv('MODEL_RISK_MARGIN', 0.0020),
-  zScore: numEnv('EDGE_ZSCORE', 1.15),          // conservative upper bound
-  maxLossProb: numEnv('MAX_LOSS_PROB', 0.095),  // never take if model says losing digit > 9.5%
-  minProbabilityGap: numEnv('MIN_PROBABILITY_GAP', 0.006),
-  minEntropy: numEnv('MIN_ENTROPY', 0.92),      // close to random; avoid broken/tiny samples
-  maxEntropy: numEnv('MAX_ENTROPY', 0.9995),    // if perfectly uniform, likely no exploitable imbalance
-  minChiSquare: numEnv('MIN_CHISQUARE', 2.0),   // require some measurable imbalance
-  maxChiSquare: numEnv('MAX_CHISQUARE', 30.0),  // reject extreme unstable bursts
+  frequencyWindows: listEnv('FREQUENCY_WINDOWS', '20,45,90,180,360').map(x => parseInt(x, 10)).filter(Number.isFinite),
+  transitionLookback: intEnv('TRANSITION_LOOKBACK', 600),
+  ewmaAlpha: numEnv('EWMA_ALPHA', 0.055),
+  minEdge: numEnv('MIN_EDGE', 0.004),          //0.0040 absolute probability gap, e.g. 0.4 percentage point
+  safetyMargin: numEnv('SAFETY_MARGIN', 0.002),
+  modelRiskMargin: numEnv('MODEL_RISK_MARGIN', 0.0015),
+  zScore: numEnv('EDGE_ZSCORE', 1.28),          // conservative upper bound
+  maxLossProb: numEnv('MAX_LOSS_PROB', 0.092),  // never take if model says losing digit > 9.5%
+  minProbabilityGap: numEnv('MIN_PROBABILITY_GAP', 0.004),
+  minEntropy: numEnv('MIN_ENTROPY', 0.90),      // close to random; avoid broken/tiny samples
+  maxEntropy: numEnv('MAX_ENTROPY', 0.9997),    // if perfectly uniform, likely no exploitable imbalance
+  minChiSquare: numEnv('MIN_CHISQUARE', 1.5),   // require some measurable imbalance
+  maxChiSquare: numEnv('MAX_CHISQUARE', 40.0),  // reject extreme unstable bursts
   maxRecentDigitHits: intEnv('MAX_RECENT_DIGIT_HITS', 2), // selected digit occurrences in last recentLookback
-  recentLookback: intEnv('RECENT_LOOKBACK', 15),
-  proposalScanTopN: intEnv('PROPOSAL_SCAN_TOP_N', 3),
+  recentLookback: intEnv('RECENT_LOOKBACK', 12),
+  proposalScanTopN: intEnv('PROPOSAL_SCAN_TOP_N', 4),
 
   // Optional limited loss recovery; disabled by default. Safer than the pasted 10x/100x martingale.
   recoveryEnabled: boolEnv('RECOVERY_ENABLED', true),
@@ -174,9 +174,9 @@ const CONFIG = Object.freeze({
   //   cushion; full Kelly is mathematically optimal for growth but has
   //   ~40% drawdowns). Disable with KELLY_ENABLED=false to fall back
   //   to the legacy flat/recovery sizing above.
-  kellySizingEnabled  : boolEnv('KELLY_ENABLED',         false),
-  kellyFraction       : numEnv ('KELLY_FRACTION',        0.25),
-  kellyBankrollFrac   : numEnv ('KELLY_BANKROLL_FRAC',   1.00),  // % of live balance to treat as risk bankroll
+  kellySizingEnabled  : boolEnv('KELLY_ENABLED',         true),
+  kellyFraction       : numEnv ('KELLY_FRACTION',        0.20),
+  kellyBankrollFrac   : numEnv ('KELLY_BANKROLL_FRAC',   0.015),  // % of live balance to treat as risk bankroll
   kellyBankrollFloor  : numEnv ('KELLY_BANKROLL_FLOOR',  100.0), // never scale below this bankroll
   kellyMaxStakeFrac   : numEnv ('KELLY_MAX_STAKE_FRAC',  0.02),  // hard cap: ≤2% of bankroll per trade
   kellyMinEdgeForScale: numEnv ('KELLY_MIN_EDGE_SCALE',  0.005), // no scaling unless edge > 0.5pp
@@ -187,9 +187,9 @@ const CONFIG = Object.freeze({
   //   over ≥ calibMinTrades. Re-enters via low-stake probe after
   //   calibProbeAfterMs; fully re-enabled when calibration re-converges.
   calibEnabled        : boolEnv('CALIB_ENABLED',         true),
-  calibWindow         : intEnv ('CALIB_WINDOW',          200),
-  calibMinTrades      : intEnv ('CALIB_MIN_TRADES',      40),
-  calibDisableGap     : numEnv ('CALIB_DISABLE_GAP',     0.02),   // −2 pp below prediction → disable
+  calibWindow         : intEnv ('CALIB_WINDOW',          150),
+  calibMinTrades      : intEnv ('CALIB_MIN_TRADES',      30),
+  calibDisableGap     : numEnv ('CALIB_DISABLE_GAP',     0.015),   // −2 pp below prediction → disable
   calibReenableGap    : numEnv ('CALIB_REENABLE_GAP',    0.005),  // within ±0.5 pp → re-enable
   calibProbeAfterMs   : intEnv ('CALIB_PROBE_AFTER_MS',  30 * 60_000),
   calibProbeStakeFrac : numEnv ('CALIB_PROBE_STAKE_FRAC', 0.25),
@@ -2664,3 +2664,96 @@ main().catch(e => {
   console.error('fatal:', e);
   process.exit(1);
 });
+
+
+
+
+
+// CONSERVATIVE
+// # Longer measurement windows → more stable statistics, slower reaction
+// FREQUENCY_WINDOWS=60,120,300,600,1000
+// TRANSITION_LOOKBACK=1500          # ~25 min of data — more stable transition matrix
+// EWMA_ALPHA=0.025                  # slower to react (smoother probabilities)
+// # Model confidence — demand a real cushion above break-even
+// MIN_EDGE=0.010                    # 1.0pp edge required (baseline was 0.6pp — noise floor)
+// SAFETY_MARGIN=0.005               # broker-friction cushion doubled
+// MODEL_RISK_MARGIN=0.005           # additional humility on model output
+// EDGE_ZSCORE=1.96                  # 97.5% one-sided upper bound (was 87% — too loose)
+// MAX_LOSS_PROB=0.075               # never trade if upper-bound loss prob > 7.5% (well below 9.09% BE)
+// MIN_PROBABILITY_GAP=0.012         # best digit must beat 2nd-best by ≥1.2pp
+// # Sample stability — reject anything unstable or too small
+// MIN_ENTROPY=0.94                  # tighter — require near-uniform digits (imbalance must be subtle)
+// MAX_ENTROPY=0.9990
+// MIN_CHISQUARE=3.5                 # require measurable imbalance
+// MAX_CHISQUARE=20.0                # reject sharp bursts (regime transitions)
+// MAX_RECENT_DIGIT_HITS=1           # the barrier digit can't have hit in last 20 ticks
+// RECENT_LOOKBACK=20                # slightly longer memory
+// PROPOSAL_SCAN_TOP_N=2             # only test the strongest 2 candidates (fewer proposal RPCs)
+// # Sizing (already conservative by default)
+// KELLY_ENABLED=true
+// KELLY_FRACTION=0.15               # 6th-Kelly — extra safe
+// KELLY_MAX_STAKE_FRAC=0.01         # 1% bankroll cap per trade
+// CALIB_ENABLED=true
+// CALIB_DISABLE_GAP=0.015           # sideline symbols at just -1.5pp gap
+
+
+
+
+// BEST
+// # Balanced windows — enough samples for stability, not too slow to react
+// FREQUENCY_WINDOWS=45,90,180,360,720
+// TRANSITION_LOOKBACK=1200
+// EWMA_ALPHA=0.035                  # moderate reactivity
+// # Model confidence — meaningful edge, honest humility
+// MIN_EDGE=0.007                    # 0.7pp minimum — above the noise floor, not deep in it
+// SAFETY_MARGIN=0.0035
+// MODEL_RISK_MARGIN=0.003
+// EDGE_ZSCORE=1.65                  # 95% one-sided (standard "significant" threshold)
+// MAX_LOSS_PROB=0.085               # 0.6pp cushion below break-even
+// MIN_PROBABILITY_GAP=0.008
+// # Sample stability
+// MIN_ENTROPY=0.93
+// MAX_ENTROPY=0.9993
+// MIN_CHISQUARE=2.5
+// MAX_CHISQUARE=25.0
+// MAX_RECENT_DIGIT_HITS=2           # baseline
+// RECENT_LOOKBACK=15
+// PROPOSAL_SCAN_TOP_N=3
+// # Sizing
+// KELLY_ENABLED=true
+// KELLY_FRACTION=0.25               # quarter-Kelly — industry-standard growth/safety balance
+// KELLY_MAX_STAKE_FRAC=0.02         # 2% bankroll cap per trade
+// CALIB_ENABLED=true
+// CALIB_DISABLE_GAP=0.02            # standard 2pp gap
+
+
+
+
+// AGGRESSIVE
+// # Shorter windows → faster reaction to regime shifts, more signals
+// FREQUENCY_WINDOWS=20,45,90,180,360
+// TRANSITION_LOOKBACK=600
+// EWMA_ALPHA=0.055                  # more reactive to recent ticks
+// # Model confidence — still positive-EV but thinner cushion
+// MIN_EDGE=0.004                    # 0.4pp — the true noise floor; below this it's random
+// SAFETY_MARGIN=0.002
+// MODEL_RISK_MARGIN=0.0015
+// EDGE_ZSCORE=1.28                  # 90% one-sided bound (less humble than best)
+// MAX_LOSS_PROB=0.092               # very close to break-even 9.09% — accepts marginal trades
+// MIN_PROBABILITY_GAP=0.004
+// # Sample stability — accept more variable regimes
+// MIN_ENTROPY=0.90                  # allow slightly less-uniform digits (bigger imbalances OK)
+// MAX_ENTROPY=0.9997
+// MIN_CHISQUARE=1.5
+// MAX_CHISQUARE=40.0                # allow sharper bursts
+// MAX_RECENT_DIGIT_HITS=2
+// RECENT_LOOKBACK=12
+// PROPOSAL_SCAN_TOP_N=4             # test top 4 candidates per scan
+// # ⚠️ RISK LIVES HERE — Kelly + calibrator MUST be on
+// KELLY_ENABLED=true
+// KELLY_FRACTION=0.20               # slightly below quarter-Kelly (variance is higher)
+// KELLY_MAX_STAKE_FRAC=0.015        # 1.5% cap — tighter than "best" because more marginal edges
+// CALIB_ENABLED=true
+// CALIB_DISABLE_GAP=0.015           # bench symbols FASTER when they underperform
+// CALIB_WINDOW=150                  # shorter window → faster response to broken assets
+// CALIB_MIN_TRADES=30
