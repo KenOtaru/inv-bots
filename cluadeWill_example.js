@@ -29,13 +29,89 @@
 
 const WebSocket = require('ws');
 const https = require('https');
+const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const { URL } = require('url');
+
+// Load a local .env file if present
+function loadLocalEnv(filePath = path.join(__dirname, '.env')) {
+    try {
+        if (!fs.existsSync(filePath)) return;
+        for (const rawLine of fs.readFileSync(filePath, 'utf8').split(/\r?\n/)) {
+            const line = rawLine.trim();
+            if (!line || line.startsWith('#')) continue;
+            const separator = line.indexOf('=');
+            if (separator < 1) continue;
+            const key = line.slice(0, separator).trim();
+            let value = line.slice(separator + 1).trim();
+            if ((value.startsWith('"') && value.endsWith('"')) ||
+                (value.startsWith("'") && value.endsWith("'"))) {
+                value = value.slice(1, -1);
+            }
+            if (process.env[key] === undefined) process.env[key] = value;
+        }
+    } catch (error) {
+        console.warn(`Could not read .env: ${error.message}`);
+    }
+}
+
+loadLocalEnv();
+
+class RestClient {
+    constructor(baseUrl, appId, token) {
+        this.baseUrl = baseUrl || 'https://api.derivws.com';
+        this.appId = appId || '1089';
+        this.token = token || '';
+    }
+    static isPat(token) {
+        return typeof token === 'string'
+            && /^pat_[a-z0-9_\-]{16,}$/i.test(token.trim());
+    }
+    _request(method, urlPath, body = null) {
+        return new Promise((resolve, reject) => {
+            let url;
+            try { url = new URL(urlPath, this.baseUrl); }
+            catch (e) { return reject(new Error(`Invalid URL: ${urlPath}`)); }
+            const isHttps = url.protocol === 'https:';
+            const lib = isHttps ? https : http;
+            const opts = {
+                method,
+                hostname: url.hostname,
+                port: url.port || (isHttps ? 443 : 80),
+                path: url.pathname + url.search,
+                headers: {
+                    'Deriv-App-ID': this.appId,
+                    'Authorization': 'Bearer ' + this.token,
+                    'Accept': 'application/json',
+                    ...(body ? { 'Content-Type': 'application/json' } : {}),
+                },
+                timeout: 15000,
+            };
+            const req = lib.request(opts, res => {
+                let data = '';
+                res.on('data', d => data += d);
+                res.on('end', () => {
+                    let parsed = data;
+                    try { parsed = JSON.parse(data); } catch (_) { }
+                    resolve({ status: res.statusCode, body: parsed });
+                });
+            });
+            req.on('timeout', () => { req.destroy(new Error('REST request timeout')); });
+            req.on('error', reject);
+            if (body) req.write(JSON.stringify(body));
+            req.end();
+        });
+    }
+    get(p) { return this._request('GET', p); }
+    post(p, b) { return this._request('POST', p, b); }
+    delete(p) { return this._request('DELETE', p); }
+}
 
 // ============================================
 // STATE PERSISTENCE MANAGER - FIXED VERSION
 // ============================================
-const STATE_FILE = path.join(__dirname, 'claudeWillbot-state0001.json');
+const STATE_FILE = path.join(__dirname, 'claudeWillbot-state01.json');
 const STATE_SAVE_INTERVAL = 5000; // Save every 5 seconds
 
 class StatePersistence {
@@ -514,18 +590,19 @@ const TIMEFRAME_CONFIG = TIMEFRAMES[SELECTED_TIMEFRAME];
 // ============================================
 const CONFIG = {
     // API Settings
-    API_TOKEN: process.env.API_TOKEN || '0P94g4WdSrSrzir',
-    APP_ID: process.env.APP_ID || '1089',
+    API_TOKEN: 'pat_27a3197287bae3ec6c2c9cbdd68fffaa2a524e3b0a6e1ecf298b5ffb338adb10',//pat_cb2016855b5e6c61ac95f94432192dd6ed86bec7f7454e575d3fe1ed9f617692', //pat_8e0a3285bd6e74f52a67985b8069f4bea42aa96ce65d129c60ebb838ed1065ee 
+    APP_ID: '33uslPtthXBEkQOdfKfoY',
+    ACCOUNT_TYPE: 'demo',
     WS_URL: 'wss://ws.derivws.com/websockets/v3',
 
     // Capital Settings
-    INITIAL_CAPITAL: 650,
+    INITIAL_CAPITAL: 1275,
     INITIAL_STAKE: 5.00,
     TAKE_PROFIT: 1.00,
 
     // Session Targets
     SESSION_PROFIT_TARGET: 15000,
-    SESSION_STOP_LOSS: -1000,
+    SESSION_STOP_LOSS: -1275,
 
     // Reversal Settings
     REVERSAL_STAKE_MULTIPLIER: 2,
@@ -1662,18 +1739,103 @@ class ConnectionManager {
         this.isReconnecting = false;
         this.stalledContractChecks = new Map(); // Track stalled contracts
         this.autoSaveStarted = false;
+
+        this._isPat = RestClient.isPat(CONFIG.API_TOKEN);
+        this._rest = this._isPat
+            ? new RestClient('https://api.derivws.com', CONFIG.APP_ID, CONFIG.API_TOKEN)
+            : null;
+        this._otpUrl = null;
+        this._targetAccount = null;
+        this.accountInfo = null;
     }
 
     connect() {
+        if (this.ws?.readyState === WebSocket.OPEN) { LOGGER.info('Already connected'); return; }
+        if (!CONFIG.API_TOKEN) { LOGGER.error('API_TOKEN is empty — aborting'); return; }
         LOGGER.info('🔌 Connecting to Deriv API...');
-        this.ws = new WebSocket(`${CONFIG.WS_URL}?app_id=${CONFIG.APP_ID}`);
+        this.cleanup();
+        if (this._isPat) {
+            LOGGER.info('PAT token detected -> using NEW Deriv API (OTP flow)');
+            this._newApiConnect().catch(err => {
+                LOGGER.error(`New API connect failed: ${err.message}`);
+                this.onClose();
+            });
+        } else {
+            LOGGER.info('Using legacy Deriv API (token authorize flow)');
+            this._openWs(`${CONFIG.WS_URL}?app_id=${encodeURIComponent(CONFIG.APP_ID)}`);
+        }
+    }
 
+    _openWs(url) {
+        try {
+            this.ws = new WebSocket(url, {
+                headers: { 'User-Agent': 'derivBot7/7.0 (+Node.js)' },
+                handshakeTimeout: 15000,
+            });
+        } catch (e) {
+            LOGGER.error(`WS construct failed: ${e.message}`);
+            this.onClose();
+            return;
+        }
         this.ws.on('open', () => this.onOpen());
         this.ws.on('message', (data) => this.onMessage(data));
         this.ws.on('error', (error) => this.onError(error));
         this.ws.on('close', () => this.onClose());
+    }
 
-        return this.ws;
+    async _newApiConnect() {
+        const accRes = await this._rest.get('/trading/v1/options/accounts');
+        if (accRes.status !== 200) {
+            const msg = accRes.body?.errors?.[0]?.message || accRes.body?.message || JSON.stringify(accRes.body);
+            throw new Error(`Account list failed (${accRes.status}): ${msg}`);
+        }
+        const accounts = Array.isArray(accRes.body?.data) ? accRes.body.data : [];
+        if (!accounts.length) throw new Error('No Options accounts found');
+        const desiredType = (CONFIG.ACCOUNT_TYPE || 'demo').toLowerCase();
+        const acct = accounts.find(a => (a.account_type || '').toLowerCase() === desiredType) || accounts[0];
+        this._targetAccount = acct;
+        this.accountInfo = {
+            loginid: acct.account_id, email: acct.email,
+            isVirtual: (acct.account_type || '').toLowerCase() === 'demo',
+            balance: parseFloat(acct.balance), currency: acct.currency,
+        };
+        LOGGER.info(`Selected account ${acct.account_id} (${acct.account_type})`);
+        const otpRes = await this._rest.post(`/trading/v1/options/accounts/${encodeURIComponent(acct.account_id)}/otp`);
+        if (otpRes.status !== 200) throw new Error(`OTP request failed: ${JSON.stringify(otpRes.body)}`);
+        const wsUrl = otpRes.body?.data?.url;
+        if (!wsUrl || !/^wss?:/i.test(wsUrl)) throw new Error(`OTP response missing url`);
+        this._otpUrl = wsUrl;
+        this._openWs(wsUrl);
+    }
+
+    _newApiMarkAuthorized() {
+        if (!this.accountInfo) return;
+        LOGGER.info(`🔐 Authorized ${this.accountInfo.loginid} (${this.accountInfo.isVirtual ? 'DEMO' : 'REAL'}) Balance: ${this.accountInfo.balance} ${this.accountInfo.currency || 'USD'}`);
+        state.isAuthorized = true;
+        state.accountBalance = Number(this.accountInfo.balance) || 0;
+        if (state.capital === CONFIG.INITIAL_CAPITAL) {
+            state.capital = state.accountBalance;
+        }
+
+        if (this.isReconnecting) {
+            LOGGER.info('🔄 Handling reconnection...');
+            this.isReconnecting = false;
+            this.restoreOpenContracts();
+            bot.subscribeToAssets();
+            this.send({ balance: 1, subscribe: 1 });
+            TelegramService.sendMessage(`🔄 <b>BOT RECONNECTED</b>\nRestored ${state.portfolio.activePositions.length} open positions\nTime: ${new Date().toUTCString()}`);
+        } else {
+            bot.start();
+        }
+    }
+
+    cleanup() {
+        this.stopMonitor();
+        if (this.ws) {
+            this.ws.removeAllListeners();
+            try { if (this.ws.readyState <= 1) this.ws.close(); } catch { }
+            this.ws = null;
+        }
     }
 
     onOpen() {
@@ -1690,10 +1852,14 @@ class ConnectionManager {
             this.autoSaveStarted = true;
         }
 
-        this.send({ authorize: CONFIG.API_TOKEN });
+        if (this._isPat) {
+            this._newApiMarkAuthorized();
+        } else {
+            this.send({ authorize: CONFIG.API_TOKEN });
+        }
 
         // If reconnecting, we need to restore subscriptions after authorization
-        if (this.isReconnecting) {
+        if (this.isReconnecting && !this._isPat) {
             LOGGER.info('🔄 Reconnection detected - will restore subscriptions after auth');
         }
     }
@@ -1883,34 +2049,52 @@ class ConnectionManager {
         const symbol = response.echo_req.ticks_history;
         if (!state.assets[symbol]) return;
 
-        const candles = response.candles.map(c => {
-            const openTime = Math.floor((c.epoch - CONFIG.GRANULARITY) / CONFIG.GRANULARITY) * CONFIG.GRANULARITY;
-            return {
-                open: parseFloat(c.open),
-                high: parseFloat(c.high),
-                low: parseFloat(c.low),
-                close: parseFloat(c.close),
-                epoch: c.epoch,
-                open_time: openTime
-            };
-        });
+        // FIX: Use correct floor-to-bucket formula (Deriv epoch IS open_time, not close_time)
+        const nowEpoch = Math.floor(Date.now() / 1000);
+        const currentBucket = Math.floor(nowEpoch / CONFIG.GRANULARITY) * CONFIG.GRANULARITY;
 
-        if (candles.length === 0) {
-            LOGGER.warn(`${symbol}: No historical candles received`);
+        const incoming = response.candles
+            .map(c => {
+                const openTime = Math.floor(Number(c.epoch) / CONFIG.GRANULARITY) * CONFIG.GRANULARITY;
+                return {
+                    open: parseFloat(c.open),
+                    high: parseFloat(c.high),
+                    low: parseFloat(c.low),
+                    close: parseFloat(c.close),
+                    epoch: openTime,
+                    open_time: openTime
+                };
+            })
+            .filter(c => Number.isFinite(c.open_time) && c.open_time < currentBucket);
+
+        if (incoming.length === 0) {
+            LOGGER.warn(`${symbol}: No valid historical candles received`);
             return;
         }
 
-        state.assets[symbol].candles = [...candles];
-        state.assets[symbol].closedCandles = [...candles];
+        const assetState = state.assets[symbol];
 
-        const lastCandle = candles[candles.length - 1];
-        state.assets[symbol].lastProcessedCandleOpenTime = lastCandle.open_time;
-        state.assets[symbol].currentFormingCandle = null;
+        // FIX: Merge with existing closed candles via dedup Map — never overwrite on reconnect
+        const candleMap = new Map();
+        for (const c of assetState.closedCandles) candleMap.set(c.open_time, c);
+        for (const c of incoming) candleMap.set(c.open_time, c);
+        assetState.closedCandles = [...candleMap.values()]
+            .sort((a, b) => a.open_time - b.open_time)
+            .slice(-CONFIG.MAX_CANDLES_STORED);
 
-        LOGGER.info(`📊 Loaded ${candles.length} ${CONFIG.TIMEFRAME_LABEL} candles for ${symbol}`);
+        // FIX: Only advance lastProcessedCandleOpenTime forward, never backward
+        const latestClosed = assetState.closedCandles.at(-1);
+        if (latestClosed) {
+            assetState.lastProcessedCandleOpenTime = Math.max(
+                assetState.lastProcessedCandleOpenTime,
+                latestClosed.open_time
+            );
+        }
+
+        LOGGER.info(`📊 Synced ${incoming.length} ${CONFIG.TIMEFRAME_LABEL} candle(s) for ${symbol} (total stored: ${assetState.closedCandles.length})`);
 
         this.updateIndicators(symbol);
-        state.assets[symbol].indicatorsReady = true;
+        assetState.indicatorsReady = true;
     }
 
     updateIndicators(symbol) {
@@ -1922,11 +2106,18 @@ class ConnectionManager {
             return;
         }
 
-        assetState.prevWpr = assetState.wpr;
-        assetState.wpr = TechnicalIndicators.calculateWPRSafe(closedCandles, CONFIG.WPR_PERIOD);
-        assetState.indicatorsReady = true;
+        // FIX: Compute prevWpr from the preceding candle slice, not from the stale live value.
+        // Using assetState.wpr directly causes phantom crossings after reconnects/gaps.
+        const nextWpr = TechnicalIndicators.calculateWPRSafe(closedCandles, CONFIG.WPR_PERIOD);
+        let prevWpr = assetState.wpr;
+        if (!Number.isFinite(prevWpr) && closedCandles.length > CONFIG.WPR_PERIOD) {
+            prevWpr = TechnicalIndicators.calculateWPR(closedCandles.slice(0, -1), CONFIG.WPR_PERIOD);
+        }
+        assetState.prevWpr = Number.isFinite(prevWpr) ? prevWpr : null;
+        assetState.wpr = nextWpr;
+        assetState.indicatorsReady = Number.isFinite(nextWpr);
 
-        LOGGER.debug(`${symbol} WPR: ${assetState.wpr.toFixed(2)} (prev: ${assetState.prevWpr.toFixed(2)})`);
+        LOGGER.debug(`${symbol} WPR: ${assetState.wpr?.toFixed(2)} (prev: ${assetState.prevWpr?.toFixed(2)})`);
     }
 
     processCandleClose(symbol) {
@@ -2528,29 +2719,31 @@ class ConnectionManagerEnhanced extends ConnectionManager {
             return;
         }
 
-        // Store previous WPR before updating
-        assetState.prevWpr = assetState.wpr;
+        // FIX: Compute prevWpr from the preceding candle slice, not from the stale live value.
+        // Using assetState.wpr directly causes phantom crossings after reconnects/gaps.
+        const nextWpr = TechnicalIndicators.calculateWPRSafe(closedCandles, CONFIG.WPR_PERIOD);
+        let prevWpr = assetState.wpr;
+        if (!Number.isFinite(prevWpr) && closedCandles.length > CONFIG.WPR_PERIOD) {
+            prevWpr = TechnicalIndicators.calculateWPR(closedCandles.slice(0, -1), CONFIG.WPR_PERIOD);
+        }
+        assetState.prevWpr = Number.isFinite(prevWpr) ? prevWpr : null;
+        assetState.wpr = nextWpr;
+        assetState.indicatorsReady = Number.isFinite(nextWpr);
 
-        // Calculate WPR using enhanced safe method
-        assetState.wpr = TechnicalIndicators.calculateWPRSafe(closedCandles, CONFIG.WPR_PERIOD);
-        assetState.indicatorsReady = true;
-
-        // Detect potential calculation errors
-        if (assetState.wpr === assetState.prevWpr && closedCandles.length > CONFIG.WPR_PERIOD + 5) {
-            // WPR hasn't changed for a while - might be stuck
+        // Detect potential calculation errors (WPR stuck in flat market is normal; log only)
+        if (nextWpr !== null && nextWpr === assetState.prevWpr && closedCandles.length > CONFIG.WPR_PERIOD + 5) {
             const lastFewWpr = [];
             for (let i = Math.max(0, closedCandles.length - 5); i < closedCandles.length; i++) {
                 const tempWpr = TechnicalIndicators.calculateWPR(closedCandles.slice(0, i + 1), CONFIG.WPR_PERIOD);
                 lastFewWpr.push(tempWpr);
             }
-
             const allSame = lastFewWpr.every(w => Math.abs(w - assetState.wpr) < 0.01);
             if (allSame) {
-                LOGGER.warn(`${symbol}: WPR appears stuck at ${assetState.wpr.toFixed(2)} - possible calculation issue`);
+                LOGGER.warn(`${symbol}: WPR appears stuck at ${assetState.wpr?.toFixed(2)} - possible flat market or calculation issue`);
             }
         }
 
-        LOGGER.debug(`${symbol} WPR Updated: ${assetState.wpr.toFixed(2)} (prev: ${assetState.prevWpr.toFixed(2)}) | Valid: ${assetState.indicatorsReady} | Candles: ${closedCandles.length}`);
+        LOGGER.debug(`${symbol} WPR Updated: ${assetState.wpr?.toFixed(2)} (prev: ${assetState.prevWpr?.toFixed(2)}) | Valid: ${assetState.indicatorsReady} | Candles: ${closedCandles.length}`);
     }
 }
 
