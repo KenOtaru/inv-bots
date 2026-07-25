@@ -129,8 +129,8 @@ function listEnv(name, def) {
 const CONFIG = Object.freeze({
   // Deriv API — MUST come from .env / environment, never hardcode a real
   // token in source. See .env.example for the required keys.
-  apiToken:    ('0P94g4WdSrSrzir').trim(),
-  appId:       '1089',
+  apiToken:    'pat_27a3197287bae3ec6c2c9cbdd68fffaa2a524e3b0a6e1ecf298b5ffb338adb10',
+  appId:       '33uslPtthXBEkQOdfKfoY',
   accountId: '', // recommended/required for PAT new API
   accountType: 'demo', // demo | real
   legacyWsUrl: 'wss://ws.derivws.com/websockets/v3',
@@ -2991,88 +2991,3 @@ main().catch(e => {
   console.error('fatal:', e);
   process.exit(1);
 });
-
-
-
-// ═══════════════════════════════════════════════════════════════════════
-// ═══════════════════════════════════════════════════════════════════════
-// RISK PRESETS (copy into .env) — these tune caution level, not "edge"
-// ═══════════════════════════════════════════════════════════════════════
-//
-// 🛡️ CONSERVATIVE — trade rarely, on the widest measured gaps only
-// ANALYSIS_WINDOW=400
-// MIN_EDGE=0.009
-// SAFETY_MARGIN=0.005
-// MODEL_RISK_MARGIN=0.004
-// EDGE_ZSCORE=1.96
-// MAX_LOSS_PROB=0.075
-// MIN_PROBABILITY_GAP=0.010
-// MIN_ENTROPY=0.94
-// MAX_ENTROPY=0.9988
-// MIN_CHISQUARE=3.0
-// MAX_CHISQUARE=22.0
-// MAX_RECENT_DIGIT_HITS=1
-// RECENT_LOOKBACK=22
-// PROPOSAL_SCAN_TOP_N=2
-// KELLY_ENABLED=true
-// KELLY_FRACTION=0.15
-// KELLY_MAX_STAKE_FRAC=0.01
-// CALIB_ENABLED=true
-// CALIB_DISABLE_GAP=0.015
-// CIRCUIT_BREAKER_LOSSES=3
-// CIRCUIT_BREAKER_COOLDOWN_MS=3600000
-// DAILY_MAX_LOSS_PCT=0.03
-//
-// ⚖️ BALANCED (defaults in CONFIG)
-// ANALYSIS_WINDOW=200
-// MIN_EDGE=0.0065
-// SAFETY_MARGIN=0.0035
-// MODEL_RISK_MARGIN=0.0025
-// EDGE_ZSCORE=1.65
-// MAX_LOSS_PROB=0.084
-// MIN_PROBABILITY_GAP=0.007
-// MIN_ENTROPY=0.925
-// MAX_ENTROPY=0.9992
-// MIN_CHISQUARE=2.2
-// MAX_CHISQUARE=28.0
-// MAX_RECENT_DIGIT_HITS=1
-// RECENT_LOOKBACK=18
-// PROPOSAL_SCAN_TOP_N=3
-// KELLY_ENABLED=true
-// KELLY_FRACTION=0.25
-// KELLY_MAX_STAKE_FRAC=0.02
-// CALIB_ENABLED=true
-// CALIB_DISABLE_GAP=0.02
-// CIRCUIT_BREAKER_LOSSES=4
-// CIRCUIT_BREAKER_COOLDOWN_MS=1800000
-// DAILY_MAX_LOSS_PCT=0.05
-//
-// 🚀 WIDER NET — more scans qualify; risk caps do more of the work.
-//    NOTE: "wider net" does not mean "better odds" — it just means
-//    fewer trades get filtered out before the sizing/circuit-breaker
-//    layer. Expected value per trade is still governed by the house
-//    edge on DIGITDIFF, not by this analysis window.
-// ANALYSIS_WINDOW=150
-// MIN_EDGE=0.004
-// SAFETY_MARGIN=0.002
-// MODEL_RISK_MARGIN=0.0015
-// EDGE_ZSCORE=1.28
-// MAX_LOSS_PROB=0.091
-// MIN_PROBABILITY_GAP=0.004
-// MIN_ENTROPY=0.90
-// MAX_ENTROPY=0.9996
-// MIN_CHISQUARE=1.5
-// MAX_CHISQUARE=40.0
-// MAX_RECENT_DIGIT_HITS=2
-// RECENT_LOOKBACK=12
-// PROPOSAL_SCAN_TOP_N=4
-// KELLY_ENABLED=true
-// KELLY_FRACTION=0.20
-// KELLY_MAX_STAKE_FRAC=0.015
-// CALIB_ENABLED=true
-// CALIB_DISABLE_GAP=0.015
-// CALIB_WINDOW=150
-// CALIB_MIN_TRADES=30
-// CIRCUIT_BREAKER_LOSSES=4
-// CIRCUIT_BREAKER_COOLDOWN_MS=1800000
-// DAILY_MAX_LOSS_PCT=0.06
