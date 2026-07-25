@@ -142,7 +142,7 @@ const CONFIG = Object.freeze({
   durationTicks: intEnv('DURATION_TICKS', 1), // Digit contracts normally 1-10 ticks
   minStake: numEnv('MIN_STAKE', 1.1),
   maxStake: numEnv('MAX_STAKE', 182.00),
-  assets: ['R_25','R_50','R_75','R_100','RDBULL','1HZ75V','1HZ100V'], //'1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V','R_10','R_25','R_50','R_75','R_100','RDBULL','RDBEAR'
+  assets: ['R_25','R_50','R_75','R_100','RDBULL','RDBEAR'], //'1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V','R_10','R_25','R_50','R_75','R_100','RDBULL','RDBEAR'
 
   // Trading frequency / limits
   tickWindow: intEnv('TICK_WINDOW', 1000),
@@ -165,7 +165,7 @@ const CONFIG = Object.freeze({
   dailyMaxLoss: numEnv('DAILY_MAX_LOSS', 200),
   // Belt-and-braces: stop for the day at whichever loss cap is hit first —
   // a fixed dollar figure AND a % of the balance seen at the start of the day.
-  dailyMaxLossPct: numEnv('DAILY_MAX_LOSS_PCT', 0.05), // 5% of day-start balance
+  dailyMaxLossPct: numEnv('DAILY_MAX_LOSS_PCT', 0.25), // 5% of day-start balance
   dailyMaxProfit: numEnv('DAILY_MAX_PROFIT', 0), // 0 disables profit target stop
   dailyMaxTrades: intEnv('DAILY_MAX_TRADES', 200000),
 
@@ -175,12 +175,12 @@ const CONFIG = Object.freeze({
   // value-edge check below, not a claimed predictive edge — see header.
   analysisWindow: intEnv('ANALYSIS_WINDOW', 200),
   // Value-edge floors (live proposal q_be − pLossUpper)
-  minEdge: numEnv('MIN_EDGE', 0.0200),
-  safetyMargin: numEnv('SAFETY_MARGIN', 0.002),
-  modelRiskMargin: numEnv('MODEL_RISK_MARGIN', 0.0015),
+  minEdge: numEnv('MIN_EDGE', 0.00200),
+  safetyMargin: numEnv('SAFETY_MARGIN', 0.0002),
+  modelRiskMargin: numEnv('MODEL_RISK_MARGIN', 0.00015),
   zScore: numEnv('EDGE_ZSCORE', 1.28),          // Wilson one-sided upper bound
-  maxLossProb: numEnv('MAX_LOSS_PROB', 0.060),  // never take if upper-bound P(loss digit) > this
-  minProbabilityGap: numEnv('MIN_PROBABILITY_GAP', 0.004),
+  maxLossProb: numEnv('MAX_LOSS_PROB', 0.0060),  // never take if upper-bound P(loss digit) > this
+  minProbabilityGap: numEnv('MIN_PROBABILITY_GAP', 0.0004),
   // Regime sanity gates: skip samples too small/degenerate to be a
   // meaningful (non-uniform-looking) read, in either direction.
   minEntropy: numEnv('MIN_ENTROPY', 0.90),
@@ -209,7 +209,7 @@ const CONFIG = Object.freeze({
   // and keep the multiplier ladder short and shallow — DO NOT use
   // multiplier ladders like 7x/82x; those go bankrupt on a bad but
   // entirely ordinary run of consecutive losses.
-  recoveryEnabled: boolEnv('RECOVERY_ENABLED', true),
+  recoveryEnabled: boolEnv('RECOVERY_ENABLED', false),
   recoveryMultipliers: listEnv('RECOVERY_MULTIPLIERS', '1,15.2,165.0').map(Number).filter(Number.isFinite),
 
   // ─ Trade watchdog ─
@@ -223,7 +223,7 @@ const CONFIG = Object.freeze({
   //   cushion; full Kelly is mathematically optimal for growth but has
   //   ~40% drawdowns). Disable with KELLY_ENABLED=false to fall back
   //   to the legacy flat/recovery sizing above.
-  kellySizingEnabled  : boolEnv('KELLY_ENABLED',         false),
+  kellySizingEnabled  : boolEnv('KELLY_ENABLED',         true),
   kellyFraction       : numEnv ('KELLY_FRACTION',        0.25),
   kellyBankrollFrac   : numEnv ('KELLY_BANKROLL_FRAC',   1.00),  // % of live balance to treat as risk bankroll
   kellyBankrollFloor  : numEnv ('KELLY_BANKROLL_FLOOR',  100.0), // never scale below this bankroll
@@ -235,7 +235,7 @@ const CONFIG = Object.freeze({
   //   a symbol when empirical WR trails predicted by > calibDisableGap
   //   over ≥ calibMinTrades. Re-enters via low-stake probe after
   //   calibProbeAfterMs; fully re-enabled when calibration re-converges.
-  calibEnabled        : boolEnv('CALIB_ENABLED',         false),
+  calibEnabled        : boolEnv('CALIB_ENABLED',         true),
   calibWindow         : intEnv ('CALIB_WINDOW',          200),
   calibMinTrades      : intEnv ('CALIB_MIN_TRADES',      40),
   calibDisableGap     : numEnv ('CALIB_DISABLE_GAP',     0.020),   // −2 pp below prediction → disable
