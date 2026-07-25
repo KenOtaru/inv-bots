@@ -119,7 +119,7 @@ const CONFIG = Object.freeze({
   durationTicks:   intEnv('DURATION_TICKS', 1),
   minStake:        numEnv('MIN_STAKE', 1.1),
   maxStake:        numEnv('MAX_STAKE', 5.5),
-  assets:          listEnv('ASSETS', 'R_10,R_25,R_50,R_75,RDBULL,RDBEAR'),
+  assets:          listEnv('ASSETS', 'R_50,R_75,RDBULL'), //listEnv('ASSETS', 'R_10,R_25,R_50,R_75,RDBULL,RDBEAR'),
 
   // ── Timing ─────────────────────────────────────────────────────
   tickWindow:          intEnv('TICK_WINDOW', 500),
@@ -145,7 +145,7 @@ const CONFIG = Object.freeze({
 
   // ── Value Edge ─────────────────────────────────────────────────
   minEdge:            numEnv('MIN_EDGE', 0.01),
-  safetyMargin:       numEnv('SAFETY_MARGIN', 0.005),
+  safetyMargin:       numEnv('SAFETY_MARGIN', 0.016),
 
   // ── Kelly Sizing ───────────────────────────────────────────────
   kellyEnabled:       boolEnv('KELLY_ENABLED', true),
