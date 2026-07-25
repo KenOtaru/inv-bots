@@ -118,8 +118,8 @@ const CONFIG = Object.freeze({
   stake:           numEnv('STAKE', 1.1),
   durationTicks:   intEnv('DURATION_TICKS', 1),
   minStake:        numEnv('MIN_STAKE', 1.1),
-  maxStake:        numEnv('MAX_STAKE', 11.0),
-  assets:          listEnv('ASSETS', 'R_25,R_50,R_75,R_100'),
+  maxStake:        numEnv('MAX_STAKE', 5.5),
+  assets:          listEnv('ASSETS', 'R_25,R_50,R_75,RDBULL,RDBEAR'),
 
   // ── Timing ─────────────────────────────────────────────────────
   tickWindow:          intEnv('TICK_WINDOW', 500),
@@ -131,9 +131,9 @@ const CONFIG = Object.freeze({
 
   // ── Risk Management ────────────────────────────────────────────
   dailyMaxLoss:       numEnv('DAILY_MAX_LOSS', 100),
-  dailyMaxLossPct:    numEnv('DAILY_MAX_LOSS_PCT', 0.05),
+  dailyMaxLossPct:    numEnv('DAILY_MAX_LOSS_PCT', 0.25),
   dailyMaxProfit:     numEnv('DAILY_MAX_PROFIT', 0),
-  dailyMaxTrades:     intEnv('DAILY_MAX_TRADES', 500),
+  dailyMaxTrades:     intEnv('DAILY_MAX_TRADES', 5000),
   maxConsecutiveLoss: intEnv('MAX_CONSECUTIVE_LOSSES', 5),
   lossCooldownMs:     intEnv('LOSS_COOLDOWN_MS', 300000),
 
