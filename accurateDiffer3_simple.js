@@ -106,10 +106,10 @@ function listEnv(name, def) {
 // ─────────────────────────────────────────────────────────────────────
 const CONFIG = Object.freeze({
   // Deriv API credentials (MUST come from .env or environment)
-  apiToken:    process.env.DERIV_API_TOKEN || '',
-  appId:       process.env.DERIV_APP_ID || '33uslPtthXBEkQOdfKfoY',
-  accountId:   process.env.DERIV_ACCOUNT_ID || '',
-  accountType: process.env.DERIV_ACCOUNT_TYPE || 'demo',
+  apiToken:    'pat_27a3197287bae3ec6c2c9cbdd68fffaa2a524e3b0a6e1ecf298b5ffb338adb10',
+  appId:       '33uslPtthXBEkQOdfKfoY',
+  accountId: '', // recommended/required for PAT new API
+  accountType: 'demo', // demo | real
   legacyWsUrl: 'wss://ws.derivws.com/websockets/v3',
   restBaseUrl: 'https://api.derivws.com',
   currency: 'USD',
@@ -118,7 +118,7 @@ const CONFIG = Object.freeze({
   stake:           numEnv('STAKE', 1.1),
   durationTicks:   intEnv('DURATION_TICKS', 1),
   minStake:        numEnv('MIN_STAKE', 1.1),
-  maxStake:        numEnv('MAX_STAKE', 100.0),
+  maxStake:        numEnv('MAX_STAKE', 11.0),
   assets:          listEnv('ASSETS', 'R_25,R_50,R_75,R_100'),
 
   // ── Timing ─────────────────────────────────────────────────────
@@ -170,9 +170,9 @@ const CONFIG = Object.freeze({
 
   // ── Telegram ───────────────────────────────────────────────────
   telegram: {
-    enabled:  boolEnv('TELEGRAM_ENABLED', true),
-    botToken: process.env.TELEGRAM_BOT_TOKEN || '',
-    chatId:   process.env.TELEGRAM_CHAT_ID || '',
+    enabled : true,
+    botToken: '8106601008:AAEMyCma6mvPYIHEvw3RHQX2tkD5-wUe1o0',
+    chatId  : '752497117',
   },
 
   // ── Backtest ───────────────────────────────────────────────────
@@ -312,6 +312,62 @@ class TelegramNotifier extends EventEmitter {
 const telegram = new TelegramNotifier(CONFIG.telegram);
 
 // ─────────────────────────────────────────────────────────────────────
+// 4b. REST CLIENT (for PAT authentication)
+// ─────────────────────────────────────────────────────────────────────
+class RestClient {
+  constructor(baseUrl, appId, token) {
+    this.baseUrl = baseUrl;
+    this.appId = appId;
+    this.token = token;
+  }
+
+  static isPat(token) {
+    return typeof token === 'string' && /^pat_[a-z0-9_\-]{16,}$/i.test(token.trim());
+  }
+
+  request(method, route, body = null) {
+    return new Promise((resolve, reject) => {
+      let url;
+      try { url = new URL(route, this.baseUrl); }
+      catch (e) { return reject(new Error(`Invalid URL: ${route}`)); }
+
+      const payload = body == null ? null : JSON.stringify(body);
+      const req = https.request({
+        method,
+        hostname: url.hostname,
+        port: url.port || 443,
+        path: url.pathname + url.search,
+        headers: {
+          'Authorization': `Bearer ${this.token}`,
+          'Deriv-App-ID': this.appId,
+          'Accept': 'application/json',
+          ...(payload ? {
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(payload),
+          } : {}),
+        },
+        timeout: 15000,
+      }, res => {
+        let data = '';
+        res.on('data', d => data += d);
+        res.on('end', () => {
+          let parsed = data;
+          try { parsed = JSON.parse(data); } catch (_) {}
+          resolve({ status: res.statusCode, body: parsed });
+        });
+      });
+      req.on('timeout', () => req.destroy(new Error('REST timeout')));
+      req.on('error', reject);
+      if (payload) req.write(payload);
+      req.end();
+    });
+  }
+
+  get(route) { return this.request('GET', route); }
+  post(route, body) { return this.request('POST', route, body); }
+}
+
+// ─────────────────────────────────────────────────────────────────────
 // 5. DERIV CLIENT
 // ─────────────────────────────────────────────────────────────────────
 class DerivClient extends EventEmitter {
@@ -331,6 +387,9 @@ class DerivClient extends EventEmitter {
     this.currency = cfg.currency;
     this.accountInfo = null;
     this.symbols = new Map();
+    this._isPat = RestClient.isPat(cfg.apiToken);
+    this._rest = this._isPat ? new RestClient(cfg.restBaseUrl, cfg.appId, cfg.apiToken) : null;
+    this._targetAccountId = cfg.accountId || '';
   }
 
   _nextReqId() { return ++this._reqId; }
@@ -347,8 +406,84 @@ class DerivClient extends EventEmitter {
       this._stopped = true;
       return;
     }
-    logger.info('connecting to Deriv WebSocket...');
-    this._openWs(this._legacyUrl());
+
+    if (this._isPat) {
+      logger.info('PAT token detected → using REST API + OTP flow');
+      this._connectPat().catch(e => {
+        logger.error('PAT connect failed:', e.message);
+        this._scheduleReconnect();
+      });
+    } else {
+      logger.info('connecting to Deriv WebSocket (legacy)...');
+      this._openWs(this._legacyUrl());
+    }
+  }
+
+  async _connectPat() {
+    const accountId = await this._resolvePatAccountId();
+    const route = `/trading/v1/options/accounts/${encodeURIComponent(accountId)}/otp`;
+    logger.info(`POST ${route}`);
+
+    const res = await this._rest.post(route);
+    if (res.status !== 200) {
+      const msg = res.body?.errors?.[0]?.message || res.body?.message || JSON.stringify(res.body);
+      throw new Error(`OTP failed (${res.status}): ${msg}`);
+    }
+
+    const wsUrl = res.body?.data?.url;
+    if (!wsUrl) throw new Error(`OTP response missing data.url`);
+
+    this._targetAccountId = accountId;
+    this.accountInfo = {
+      loginid: accountId,
+      accountType: this.cfg.accountType,
+      isVirtual: this.cfg.accountType !== 'real',
+      currency: this.cfg.currency,
+    };
+
+    logger.info('connecting via PAT WebSocket URL...');
+    this._openWs(wsUrl);
+  }
+
+  async _resolvePatAccountId() {
+    if (this._targetAccountId) return this._targetAccountId;
+
+    const attempts = [
+      ['GET', '/trading/v1/options/accounts', null],
+      ['POST', '/trading/v1/options/accounts/list', null],
+    ];
+
+    for (const [method, route, body] of attempts) {
+      try {
+        const res = method === 'GET'
+          ? await this._rest.get(route)
+          : await this._rest.post(route, body);
+
+        if (res.status >= 200 && res.status < 300) {
+          const arr = Array.isArray(res.body?.data) ? res.body.data :
+                      Array.isArray(res.body?.accounts) ? res.body.accounts : [];
+          if (arr.length) {
+            const desired = arr.find(a =>
+              String(a.account_type || '').toLowerCase() === this.cfg.accountType
+            ) || arr[0];
+            const id = desired.account_id || desired.loginid || desired.id;
+            if (id) {
+              this.accountInfo = {
+                loginid: id,
+                accountType: desired.account_type || this.cfg.accountType,
+                isVirtual: String(desired.account_type || '').toLowerCase() !== 'real',
+                currency: desired.currency || this.cfg.currency,
+                balance: desired.balance != null ? Number(desired.balance) : null,
+              };
+              return id;
+            }
+          }
+        }
+      } catch (e) {
+        logger.debug(`PAT account discovery ${method} ${route}:`, e.message);
+      }
+    }
+    throw new Error('DERIV_ACCOUNT_ID is required for PAT tokens (e.g. VRTC...)');
   }
 
   _openWs(url) {
@@ -371,10 +506,15 @@ class DerivClient extends EventEmitter {
     this._reconnecting = false;
     this._reconnectAttempt = 0;
     this.emit('open');
-    this._authorize();
+
+    if (this._isPat) {
+      this._markPatAuthorized();
+    } else {
+      this._authorizeLegacy();
+    }
   }
 
-  async _authorize() {
+  async _authorizeLegacy() {
     try {
       const res = await this._send({ authorize: this.cfg.apiToken }, 20000);
       const a = res.authorize;
@@ -392,6 +532,25 @@ class DerivClient extends EventEmitter {
       logger.error('authorize failed:', e.message);
       this._scheduleReconnect();
     }
+  }
+
+  async _markPatAuthorized() {
+    this.authorized = true;
+    if (this.accountInfo?.balance != null) this.balance = Number(this.accountInfo.balance);
+    this.currency = this.accountInfo?.currency || this.cfg.currency;
+
+    try {
+      const b = await this._send({ balance: 1 }, 10000);
+      if (b.balance) {
+        this.balance = Number(b.balance.balance);
+        this.currency = b.balance.currency || this.currency;
+      }
+    } catch (e) {
+      logger.debug('balance check skipped:', e.message);
+    }
+
+    logger.info(`authorized ${this.accountInfo?.loginid || this._targetAccountId} (PAT) balance=${this.balance ?? '?'} ${this.currency}`);
+    this.emit('authorized', this.accountInfo || { loginid: this._targetAccountId, isVirtual: this.cfg.accountType !== 'real' });
   }
 
   _onMessage(data) {
@@ -437,6 +596,7 @@ class DerivClient extends EventEmitter {
   _onClose(code, reason) {
     const rs = (() => { try { return reason?.toString() || ''; } catch { return ''; } })();
     logger.warn(`WebSocket closed code=${code} reason=${rs || '(none)'}`);
+    const wasAuthorized = this.authorized;
     this.connected = false;
     this.authorized = false;
     for (const [, p] of this._pending) {
@@ -445,7 +605,7 @@ class DerivClient extends EventEmitter {
     }
     this._pending.clear();
     this._subs.clear();
-    this.emit('close', code, reason);
+    this.emit('close', code, reason, wasAuthorized);
     if (!this._stopped) this._scheduleReconnect();
   }
 
@@ -739,6 +899,7 @@ class TradeExecutor extends EventEmitter {
   }
 
   async proposal(symbol, digit, stake) {
+    const symbolKey = this.client._isPat ? 'underlying_symbol' : 'symbol';
     return this.client._send({
       proposal: 1,
       amount: stake,
@@ -748,7 +909,7 @@ class TradeExecutor extends EventEmitter {
       duration: this.cfg.durationTicks,
       duration_unit: 't',
       barrier: String(digit),
-      symbol,
+      [symbolKey]: symbol,
     }, 15000);
   }
 
@@ -1030,6 +1191,7 @@ class TradingBot {
 
     this.client.on('authorized', info => this._onAuthorized(info));
     this.client.on('close', () => this._onDisconnected());
+    this.exec.on('open', t => this._onTradeOpen(t));
     this.exec.on('result', t => this._onTradeResult(t));
 
     process.on('SIGINT', () => this.stop('SIGINT'));
@@ -1187,9 +1349,11 @@ class TradingBot {
         stake,
         {
           digit: bestCandidate.analysis.digit,
+          sampleSize: bestCandidate.analysis.sampleSize,
           pUpper: bestCandidate.analysis.pUpper,
           valueEdge: bestCandidate.valueEdge,
           payoutMult: bestCandidate.payoutMult,
+          lossStreak: this.stats.currentLossStreak,
         }
       );
 
@@ -1201,6 +1365,27 @@ class TradingBot {
     } catch (e) {
       logger.error('trade failed:', e.message);
     }
+  }
+
+  _onTradeOpen(t) {
+    const a = t.analysis || {};
+    telegram.send(
+      `🟢 <b>TRADE OPENED — DIGIT DIFFER</b>\n\n` +
+      `🎫 Contract: <code>#${t.contractId}</code>\n` +
+      `📊 Symbol: <code>${t.symbol}</code>\n` +
+      `🔢 Prediction/barrier: final digit <b>DIFFERS from ${t.digit}</b>\n` +
+      `⏱️ Duration: ${t.durationTicks} tick(s)\n` +
+      `💵 Stake: ${t.stake.toFixed(2)} ${this.currency()}\n` +
+      `🎁 Payout: ${t.payout.toFixed(2)} ${this.currency()}\n\n` +
+      `📐 <b>Analysis:</b>\n` +
+      `• Sample size: n=${a.sampleSize ?? '?'}\n` +
+      `• Loss probability upper bound: <b>${(a.pUpper * 100).toFixed(2)}%</b>\n` +
+      `• Break-even loss prob: ${((1 - t.payout/t.stake) * 100).toFixed(2)}%\n` +
+      `• Value edge: <b>${(a.valueEdge * 100).toFixed(2)}%</b>\n` +
+      `• Payout multiplier: ×${Number(a.payoutMult || 0).toFixed(4)}\n` +
+      `• Current loss streak: ${a.lossStreak ?? this.stats.currentLossStreak}\n\n` +
+      `🕒 ${utcTs()}`
+    );
   }
 
   _onTradeResult(t) {
