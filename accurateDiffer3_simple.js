@@ -119,7 +119,7 @@ const CONFIG = Object.freeze({
   durationTicks:   intEnv('DURATION_TICKS', 1),
   minStake:        numEnv('MIN_STAKE', 1.1),
   maxStake:        numEnv('MAX_STAKE', 5.5),
-  assets:          listEnv('ASSETS', 'R_25,R_50,R_75,RDBULL,RDBEAR'),
+  assets:          listEnv('ASSETS', 'R_10,R_25,R_50,R_75,RDBULL,RDBEAR'),
 
   // ── Timing ─────────────────────────────────────────────────────
   tickWindow:          intEnv('TICK_WINDOW', 500),
@@ -176,9 +176,10 @@ const CONFIG = Object.freeze({
   },
 
   // ── Backtest ───────────────────────────────────────────────────
-  backtestTicks:     intEnv('BACKTEST_TICKS', 50000),
-  backtestBatchSize: intEnv('BACKTEST_BATCH_SIZE', 5000),
+  backtestTicks:      intEnv('BACKTEST_TICKS', 50000),
+  backtestBatchSize:  intEnv('BACKTEST_BATCH_SIZE', 5000),
   backtestPayoutMult: numEnv('BACKTEST_PAYOUT_MULT', 1.10),
+  backtestOutFile:    strEnv('BACKTEST_OUT', 'backtest_report.json'),
 
   // ── Reconnect ──────────────────────────────────────────────────
   reconnect: {
@@ -800,6 +801,64 @@ class MarketDataManager extends EventEmitter {
     }));
   }
 
+  /**
+   * Deep historical backfill for the backtester.
+   * Deriv ticks_history returns up to 5000 ticks per call.
+   * We chain calls backwards using end = earliest epoch - 1.
+   */
+  async deepBackfill(symbol, totalCount, batchSize = 5000, onProgress = null) {
+    const out = [];
+    let remain = totalCount;
+    let end = 'latest';
+    let lastEpoch = null;
+    const pip = this.pipSize(symbol);
+
+    while (remain > 0) {
+      const count = Math.min(batchSize, remain);
+      let res;
+      try {
+        res = await this.client._send({
+          ticks_history: symbol,
+          count,
+          end,
+          style: 'ticks',
+        }, 30000);
+      } catch (e) {
+        logger.warn(`deepBackfill(${symbol}) batch failed: ${e.message} — stopping`);
+        break;
+      }
+
+      const prices = res.history?.prices || [];
+      const times = res.history?.times || [];
+      if (!times.length) {
+        logger.info(`  (server returned 0 more ticks — history exhausted)`);
+        break;
+      }
+
+      const batch = times.map((t, i) => {
+        const quote = Number(prices[i]);
+        return { epoch: Number(t), quote, digit: quoteToDigit(quote, pip) };
+      }).filter(x => x.digit != null);
+
+      if (lastEpoch !== null && batch.length && batch[batch.length - 1].epoch >= lastEpoch) {
+        logger.info(`  (server did not honor pagination — exhausted at ${out.length} ticks)`);
+        break;
+      }
+      if (batch.length) lastEpoch = batch[0].epoch;
+      out.unshift(...batch);
+      remain -= batch.length;
+      if (onProgress) onProgress(out.length, totalCount);
+      if (!batch.length) break;
+      end = String(batch[0].epoch - 1);
+      await new Promise(r => setTimeout(r, 200)); // rate-limit
+      if (batch.length < count) {
+        logger.info(`  (last batch short: ${batch.length}/${count} — history exhausted at ${out.length} ticks)`);
+        break;
+      }
+    }
+    return out;
+  }
+
   historyFor(symbol) { return this.history.get(symbol) || []; }
   last(symbol) { return this.lastQuote.get(symbol); }
 }
@@ -979,6 +1038,9 @@ class StatisticsManager {
     this.overallProfit = 0;
     this.currentLossStreak = 0;
     this.maxLossStreak = 0;
+    this.totalLosses = 0;
+    this.totalWins = 0;
+    this.lossStreakEvents = { x2: 0, x3: 0, x4: 0, x5: 0, x6: 0, x7: 0, x8plus: 0 };
     this.eodSentDates = [];
     if (saved) this.load(saved);
   }
@@ -988,6 +1050,9 @@ class StatisticsManager {
     this.overallProfit = Number(saved.overallProfit || 0);
     this.currentLossStreak = Number(saved.currentLossStreak || 0);
     this.maxLossStreak = Number(saved.maxLossStreak || 0);
+    this.totalLosses = Number(saved.totalLosses || 0);
+    this.totalWins = Number(saved.totalWins || 0);
+    this.lossStreakEvents = saved.lossStreakEvents || { x2: 0, x3: 0, x4: 0, x5: 0, x6: 0, x7: 0, x8plus: 0 };
     this.eodSentDates = Array.isArray(saved.eodSentDates) ? saved.eodSentDates : [];
   }
 
@@ -997,6 +1062,9 @@ class StatisticsManager {
       overallProfit: this.overallProfit,
       currentLossStreak: this.currentLossStreak,
       maxLossStreak: this.maxLossStreak,
+      totalLosses: this.totalLosses,
+      totalWins: this.totalWins,
+      lossStreakEvents: this.lossStreakEvents,
       eodSentDates: this.eodSentDates.slice(-100),
     };
   }
@@ -1014,9 +1082,21 @@ class StatisticsManager {
     this.overallProfit += Number(rec.profit || 0);
 
     if (rec.status === 'lost') {
+      this.totalLosses++;
       this.currentLossStreak++;
       this.maxLossStreak = Math.max(this.maxLossStreak, this.currentLossStreak);
     } else if (rec.status === 'won') {
+      this.totalWins++;
+      // Record the loss streak that just ended
+      if (this.currentLossStreak > 0) {
+        if (this.currentLossStreak === 2) this.lossStreakEvents.x2++;
+        else if (this.currentLossStreak === 3) this.lossStreakEvents.x3++;
+        else if (this.currentLossStreak === 4) this.lossStreakEvents.x4++;
+        else if (this.currentLossStreak === 5) this.lossStreakEvents.x5++;
+        else if (this.currentLossStreak === 6) this.lossStreakEvents.x6++;
+        else if (this.currentLossStreak === 7) this.lossStreakEvents.x7++;
+        else if (this.currentLossStreak >= 8) this.lossStreakEvents.x8plus++;
+      }
       this.currentLossStreak = 0;
     }
     return rec;
@@ -1407,17 +1487,25 @@ class TradingBot {
     }
 
     const emoji = t.status === 'won' ? '✅' : '❌';
+    const label = t.status === 'won' ? 'WIN' : 'LOSS';
     const todayStats = this.stats.stats(this.stats.todayTrades(rec.date));
+    const ls = this.stats.lossStreakEvents;
 
     telegram.send(
-      `${emoji} <b>TRADE ${t.status.toUpperCase()}</b>\n\n` +
-      `🎫 #${t.contractId}\n` +
-      `📊 ${t.symbol} differs ${t.digit}\n` +
+      `${emoji} <b>TRADE ${label} — DIGIT DIFFER</b>\n\n` +
+      `🎫 Contract: <code>#${t.contractId}</code>\n` +
+      `📊 Symbol: <code>${t.symbol}</code> | differs <b>${t.digit}</b>\n` +
       `💵 Stake: ${t.stake.toFixed(2)} ${this.currency()}\n` +
-      `💰 P/L: ${money(t.profit, this.currency())}\n\n` +
-      `📅 Today: ${todayStats.count} trades, ${todayStats.winRate.toFixed(1)}% WR\n` +
-      `💼 Overall: ${money(this.stats.overallProfit, this.currency())}\n` +
-      `❌ Loss streak: ${this.stats.currentLossStreak}`
+      `💰 P/L: <b>${money(t.profit, this.currency())}</b>\n\n` +
+      `📅 <b>Today (${rec.date})</b>\n` +
+      `• Trades: ${todayStats.count} (✅${todayStats.wins} ❌${todayStats.losses})\n` +
+      `• Win rate: ${todayStats.winRate.toFixed(1)}%\n` +
+      `• Net P/L: <b>${money(todayStats.totalProfit, this.currency())}</b>\n\n` +
+      `💼 <b>Overall:</b>\n` +
+      `• Profit: ${money(this.stats.overallProfit, this.currency())}\n` +
+      `• Total wins: ${this.stats.totalWins} | Total losses: ${this.stats.totalLosses}\n` +
+      `• Loss streak: current ${this.stats.currentLossStreak} | max ${this.stats.maxLossStreak}\n` +
+      `• x2=${ls.x2}  x3=${ls.x3}  x4=${ls.x4}  x5=${ls.x5}`
     );
 
     this.lastTradeAt = Date.now();
@@ -1470,6 +1558,374 @@ class TradingBot {
 }
 
 // ─────────────────────────────────────────────────────────────────────
+// 13. BACKTESTER
+// ─────────────────────────────────────────────────────────────────────
+class DifferBacktester {
+  constructor(cfg, client, market) {
+    this.cfg = cfg;
+    this.client = client;
+    this.market = market;
+    this.analyzer = new DigitAnalyzer(cfg);
+  }
+
+  async run(symbols) {
+    const list = Array.isArray(symbols) ? symbols : [symbols];
+    if (!list.length) throw new Error('no symbols to backtest');
+
+    const banner = '─'.repeat(72);
+    console.log(`\n${banner}`);
+    console.log(`  DIGIT DIFFER BACKTEST — symbols=[${list.join(', ')}]  ticks=${this.cfg.backtestTicks}`);
+    console.log(banner);
+    console.log(
+      `  config: minEdge=${this.cfg.minEdge}  safety=${this.cfg.safetyMargin}\n` +
+      `          analysisWindow=${this.cfg.analysisWindow}  duration=${this.cfg.durationTicks}t\n` +
+      `          payoutMult=${this.cfg.backtestPayoutMult}  stake=${this.cfg.stake}`
+    );
+    console.log(banner);
+
+    const combined = { signals: 0, wins: 0, losses: 0, pnl: 0, grossWin: 0, grossLoss: 0 };
+    const reports = [];
+
+    for (const sym of list) {
+      const r = await this._runOne(sym);
+      reports.push(r);
+      combined.signals += r.signals;
+      combined.wins += r.wins;
+      combined.losses += r.losses;
+      combined.pnl += r.pnl;
+      combined.grossWin += r.grossWin;
+      combined.grossLoss += r.grossLoss;
+    }
+
+    if (reports.length > 1) {
+      console.log(`\n${banner}`);
+      console.log('  COMBINED (all symbols):');
+      console.log(`    signals=${combined.signals}  wins=${combined.wins}  losses=${combined.losses}`);
+      const wr = combined.signals ? (combined.wins / combined.signals * 100) : 0;
+      console.log(`    WR=${wr.toFixed(2)}%   Net P/L=${combined.pnl >= 0 ? '+' : ''}${combined.pnl.toFixed(2)} ${this.cfg.currency}`);
+      const pf = combined.grossLoss > 0 ? combined.grossWin / combined.grossLoss : (combined.grossWin > 0 ? Infinity : 0);
+      console.log(`    PF=${pf === Infinity ? '∞' : pf.toFixed(3)}`);
+      console.log(banner + '\n');
+    }
+
+    // Save report
+    try {
+      const payload = {
+        savedAt: new Date().toISOString(),
+        config: {
+          minEdge: this.cfg.minEdge,
+          safetyMargin: this.cfg.safetyMargin,
+          analysisWindow: this.cfg.analysisWindow,
+          durationTicks: this.cfg.durationTicks,
+          payoutMultiplier: this.cfg.backtestPayoutMult,
+          stake: this.cfg.stake,
+        },
+        symbols: reports,
+        combined,
+      };
+      fs.writeFileSync(this.cfg.backtestOutFile || 'backtest_report.json', JSON.stringify(payload, null, 2));
+      console.log(`Report saved → ${this.cfg.backtestOutFile || 'backtest_report.json'}`);
+    } catch (e) {
+      logger.warn(`could not write report: ${e.message}`);
+    }
+
+    return reports;
+  }
+
+  async _runOne(symbol) {
+    const banner = '─'.repeat(72);
+    console.log(`\n${banner}`);
+    console.log(`  ${symbol}`);
+    console.log(banner);
+
+    // Fetch historical ticks
+    logger.info(`fetching historical ticks (${symbol})...`);
+    const ticks = await this.market.deepBackfill(
+      symbol,
+      this.cfg.backtestTicks,
+      this.cfg.backtestBatchSize,
+      (got, tot) => {
+        if (got % 10000 < this.cfg.backtestBatchSize) {
+          console.log(`  fetched ${got}/${tot}`);
+        }
+      }
+    );
+
+    const pip = this.market.pipSize(symbol);
+    if (ticks.length < this.cfg.minTicksForAnalysis + this.cfg.durationTicks + 10) {
+      throw new Error(`insufficient history for ${symbol}: got ${ticks.length}`);
+    }
+
+    console.log(
+      `  have ${ticks.length} ticks  pip=${pip}  ` +
+      `span=${new Date(ticks[0].epoch * 1000).toISOString().slice(0, 19)}Z → ` +
+      `${new Date(ticks[ticks.length - 1].epoch * 1000).toISOString().slice(0, 19)}Z`
+    );
+
+    // Walk-forward simulation
+    const baseStake = this.cfg.stake;
+    const payoutMult = this.cfg.backtestPayoutMult;
+    const duration = Math.max(1, this.cfg.durationTicks);
+    const minWindow = Math.max(this.cfg.minTicksForAnalysis, 200);
+
+    const results = {
+      symbol,
+      pip,
+      startEpoch: ticks[0].epoch,
+      endEpoch: ticks[ticks.length - 1].epoch,
+      tickCount: ticks.length,
+      signals: 0,
+      wins: 0,
+      losses: 0,
+      pnl: 0,
+      grossWin: 0,
+      grossLoss: 0,
+      byDigit: {},
+    };
+    for (let d = 0; d < 10; d++) results.byDigit[d] = { signals: 0, wins: 0, losses: 0, pnl: 0 };
+
+    const diag = {
+      scans: 0,
+      nullAnalyses: 0,
+      gatedGap: 0,
+      gatedRecentHit: 0,
+      gatedEdge: 0,
+      allowedModel: 0,
+      recommended: 0,
+    };
+
+    // Streak tracking
+    let currentLossStreak = 0;
+    let maxLossStreak = 0;
+    let currentWinStreak = 0;
+    let maxWinStreak = 0;
+    const lossStreakEvents = { x2: 0, x3: 0, x4: 0, x5: 0, x6: 0, x7: 0, x8plus: 0 };
+    const winStreakEvents = { x2: 0, x3: 0, x4: 0, x5: 0, x6: 0, x7: 0, x8plus: 0 };
+    const lossSequences = [];
+    const winSequences = [];
+
+    const t0 = Date.now();
+    let i = minWindow;
+
+    while (i < ticks.length - duration - 1) {
+      const window = ticks.slice(0, i + 1);
+      const analysis = this.analyzer.analyze(symbol, window);
+      diag.scans++;
+
+      if (!analysis) {
+        diag.nullAnalyses++;
+        i++;
+        continue;
+      }
+
+      if (!analysis.allowedByModel) {
+        for (const g of analysis.gates) {
+          if (g.startsWith('gap')) diag.gatedGap++;
+          else if (g.startsWith('recent')) diag.gatedRecentHit++;
+        }
+        i++;
+        continue;
+      }
+      diag.allowedModel++;
+
+      // Compute value edge
+      const ask = baseStake;
+      const payoutFull = baseStake * payoutMult;
+      const breakEvenLossProb = 1 - ask / payoutFull;
+      const valueEdge = breakEvenLossProb - analysis.pUpper - this.cfg.safetyMargin;
+
+      if (valueEdge < this.cfg.minEdge) {
+        diag.gatedEdge++;
+        i++;
+        continue;
+      }
+
+      diag.recommended++;
+      const digit = analysis.digit;
+
+      // Simulate settlement
+      const expiryTick = ticks[i + duration];
+      if (!expiryTick || expiryTick.digit == null) {
+        i++;
+        continue;
+      }
+      const won = expiryTick.digit !== digit;
+      const winNet = baseStake * payoutMult - baseStake;
+      const lossNet = -baseStake;
+
+      results.signals++;
+      results.byDigit[digit].signals++;
+
+      if (won) {
+        // Record end of loss streak if we had one
+        if (currentLossStreak > 0) {
+          lossSequences.push(currentLossStreak);
+          if (currentLossStreak === 2) lossStreakEvents.x2++;
+          else if (currentLossStreak === 3) lossStreakEvents.x3++;
+          else if (currentLossStreak === 4) lossStreakEvents.x4++;
+          else if (currentLossStreak === 5) lossStreakEvents.x5++;
+          else if (currentLossStreak === 6) lossStreakEvents.x6++;
+          else if (currentLossStreak === 7) lossStreakEvents.x7++;
+          else if (currentLossStreak >= 8) lossStreakEvents.x8plus++;
+        }
+        results.wins++;
+        results.grossWin += winNet;
+        results.pnl += winNet;
+        results.byDigit[digit].wins++;
+        results.byDigit[digit].pnl += winNet;
+        currentWinStreak++;
+        currentLossStreak = 0;
+        maxWinStreak = Math.max(maxWinStreak, currentWinStreak);
+      } else {
+        // Record end of win streak if we had one
+        if (currentWinStreak > 0) {
+          winSequences.push(currentWinStreak);
+          if (currentWinStreak === 2) winStreakEvents.x2++;
+          else if (currentWinStreak === 3) winStreakEvents.x3++;
+          else if (currentWinStreak === 4) winStreakEvents.x4++;
+          else if (currentWinStreak === 5) winStreakEvents.x5++;
+          else if (currentWinStreak === 6) winStreakEvents.x6++;
+          else if (currentWinStreak === 7) winStreakEvents.x7++;
+          else if (currentWinStreak >= 8) winStreakEvents.x8plus++;
+        }
+        results.losses++;
+        results.grossLoss += Math.abs(lossNet);
+        results.pnl += lossNet;
+        results.byDigit[digit].losses++;
+        results.byDigit[digit].pnl += lossNet;
+        currentLossStreak++;
+        currentWinStreak = 0;
+        maxLossStreak = Math.max(maxLossStreak, currentLossStreak);
+      }
+
+      i += duration + 1;
+
+      // Progress update
+      if (results.signals % 500 === 0) {
+        const wr = (results.wins / results.signals * 100).toFixed(1);
+        console.log(`    ...${i}/${ticks.length} signals=${results.signals} WR=${wr}% pnl=${results.pnl.toFixed(2)}`);
+      }
+    }
+
+    // Flush trailing streaks
+    if (currentLossStreak > 0) {
+      lossSequences.push(currentLossStreak);
+      if (currentLossStreak === 2) lossStreakEvents.x2++;
+      else if (currentLossStreak === 3) lossStreakEvents.x3++;
+      else if (currentLossStreak === 4) lossStreakEvents.x4++;
+      else if (currentLossStreak === 5) lossStreakEvents.x5++;
+      else if (currentLossStreak === 6) lossStreakEvents.x6++;
+      else if (currentLossStreak === 7) lossStreakEvents.x7++;
+      else if (currentLossStreak >= 8) lossStreakEvents.x8plus++;
+    }
+    if (currentWinStreak > 0) {
+      winSequences.push(currentWinStreak);
+      if (currentWinStreak === 2) winStreakEvents.x2++;
+      else if (currentWinStreak === 3) winStreakEvents.x3++;
+      else if (currentWinStreak === 4) winStreakEvents.x4++;
+      else if (currentWinStreak === 5) winStreakEvents.x5++;
+      else if (currentWinStreak === 6) winStreakEvents.x6++;
+      else if (currentWinStreak === 7) winStreakEvents.x7++;
+      else if (currentWinStreak >= 8) winStreakEvents.x8plus++;
+    }
+
+    const dt = ((Date.now() - t0) / 1000).toFixed(1);
+    const empiricalWR = results.signals ? (results.wins / results.signals * 100) : 0;
+    const profitFactor = results.grossLoss > 0 ? results.grossWin / results.grossLoss : (results.grossWin > 0 ? Infinity : 0);
+
+    // Calculate streak averages
+    const avgLoss = lossSequences.length ? lossSequences.reduce((s, v) => s + v, 0) / lossSequences.length : 0;
+    const avgWin = winSequences.length ? winSequences.reduce((s, v) => s + v, 0) / winSequences.length : 0;
+
+    // Probability of at least N consecutive losses
+    const probAtLeast = {
+      x2: results.signals ? (lossStreakEvents.x2 + lossStreakEvents.x3 + lossStreakEvents.x4 + lossStreakEvents.x5 + lossStreakEvents.x6 + lossStreakEvents.x7 + lossStreakEvents.x8plus) / results.signals : 0,
+      x3: results.signals ? (lossStreakEvents.x3 + lossStreakEvents.x4 + lossStreakEvents.x5 + lossStreakEvents.x6 + lossStreakEvents.x7 + lossStreakEvents.x8plus) / results.signals : 0,
+      x4: results.signals ? (lossStreakEvents.x4 + lossStreakEvents.x5 + lossStreakEvents.x6 + lossStreakEvents.x7 + lossStreakEvents.x8plus) / results.signals : 0,
+      x5: results.signals ? (lossStreakEvents.x5 + lossStreakEvents.x6 + lossStreakEvents.x7 + lossStreakEvents.x8plus) / results.signals : 0,
+    };
+
+    // Print report
+    console.log('\n' + banner);
+    console.log(`  BACKTEST REPORT — ${symbol}`);
+    console.log(banner);
+    console.log(`  Ticks processed : ${ticks.length.toLocaleString()}   pip_size=${pip}`);
+    console.log(`  Signals fired   : ${results.signals}`);
+    console.log(`  Wins / Losses   : ${results.wins} / ${results.losses}`);
+    console.log(`  Win Rate        : ${empiricalWR.toFixed(2)}%`);
+    console.log(`  Gross win / loss: +${results.grossWin.toFixed(2)} / -${results.grossLoss.toFixed(2)}`);
+    console.log(`  Net P/L         : ${results.pnl >= 0 ? '+' : ''}${results.pnl.toFixed(2)} ${this.cfg.currency}`);
+    console.log(`  Profit Factor   : ${profitFactor === Infinity ? '∞' : profitFactor.toFixed(3)}`);
+    console.log(`  Max Loss Streak : ${maxLossStreak}`);
+    console.log(`  Max Win Streak  : ${maxWinStreak}`);
+    console.log(`  Runtime         : ${dt}s`);
+    console.log(banner);
+
+    // Per-digit breakdown
+    console.log('  Per-barrier-digit breakdown:');
+    for (let d = 0; d < 10; d++) {
+      const r = results.byDigit[d];
+      if (!r.signals) continue;
+      const wr = (r.wins / r.signals * 100).toFixed(1);
+      console.log(`    d=${d}   signals=${String(r.signals).padStart(5)}   WR=${wr}%   pnl=${(r.pnl >= 0 ? '+' : '') + r.pnl.toFixed(2)}`);
+    }
+    console.log(banner);
+
+    // Consecutive-loss stats
+    console.log('  Consecutive-loss statistics:');
+    console.log(`    x2 (2 in a row) : ${String(lossStreakEvents.x2).padStart(5)}  P(≥2) ≈ ${(probAtLeast.x2 * 100).toFixed(2)}% of signals`);
+    console.log(`    x3 (3 in a row) : ${String(lossStreakEvents.x3).padStart(5)}  P(≥3) ≈ ${(probAtLeast.x3 * 100).toFixed(2)}% of signals`);
+    console.log(`    x4 (4 in a row) : ${String(lossStreakEvents.x4).padStart(5)}  P(≥4) ≈ ${(probAtLeast.x4 * 100).toFixed(2)}% of signals`);
+    console.log(`    x5 (5 in a row) : ${String(lossStreakEvents.x5).padStart(5)}  P(≥5) ≈ ${(probAtLeast.x5 * 100).toFixed(2)}% of signals`);
+    console.log(`    x6 (6 in a row) : ${String(lossStreakEvents.x6).padStart(5)}`);
+    console.log(`    x7 (7 in a row) : ${String(lossStreakEvents.x7).padStart(5)}`);
+    console.log(`    x8+ (≥8)        : ${String(lossStreakEvents.x8plus).padStart(5)}`);
+    console.log(`    Avg loss run    : ${avgLoss.toFixed(2)}  (${lossSequences.length} runs)`);
+    console.log(`    Avg win run     : ${avgWin.toFixed(2)}  (${winSequences.length} runs)`);
+    console.log(`    Worst DD (flat) : -${(maxLossStreak * baseStake).toFixed(2)} ${this.cfg.currency}`);
+    console.log(banner);
+
+    // Consecutive-win stats
+    console.log('  Consecutive-win statistics:');
+    console.log(`    x2 (2 in a row) : ${String(winStreakEvents.x2).padStart(5)}`);
+    console.log(`    x3 (3 in a row) : ${String(winStreakEvents.x3).padStart(5)}`);
+    console.log(`    x4 (4 in a row) : ${String(winStreakEvents.x4).padStart(5)}`);
+    console.log(`    x5 (5 in a row) : ${String(winStreakEvents.x5).padStart(5)}`);
+    console.log(`    x6 (6 in a row) : ${String(winStreakEvents.x6).padStart(5)}`);
+    console.log(`    x7 (7 in a row) : ${String(winStreakEvents.x7).padStart(5)}`);
+    console.log(`    x8+ (≥8)        : ${String(winStreakEvents.x8plus).padStart(5)}`);
+    console.log(banner);
+
+    // Diagnostics
+    console.log('  Diagnostics:');
+    console.log(`    scans             : ${diag.scans}`);
+    console.log(`    null analyses     : ${diag.nullAnalyses}`);
+    console.log(`    passed model gates: ${diag.allowedModel}`);
+    console.log(`    signals fired     : ${diag.recommended}`);
+    console.log(`    rejected by gap   : ${diag.gatedGap}`);
+    console.log(`    rejected by hits  : ${diag.gatedRecentHit}`);
+    console.log(`    rejected by edge  : ${diag.gatedEdge}`);
+    console.log(banner + '\n');
+
+    Object.assign(results, {
+      durationSec: +dt,
+      empiricalWinRate: +empiricalWR.toFixed(2),
+      profitFactor: profitFactor === Infinity ? Infinity : +profitFactor.toFixed(3),
+      maxLossStreak,
+      maxWinStreak,
+      lossStreakEvents,
+      winStreakEvents,
+      avgLossRun: +avgLoss.toFixed(2),
+      avgWinRun: +avgWin.toFixed(2),
+      worstDrawdown: +(maxLossStreak * baseStake).toFixed(2),
+      diagnostics: diag,
+    });
+
+    return results;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
 // 13. BOOTSTRAP
 // ─────────────────────────────────────────────────────────────────────
 function printBanner() {
@@ -1482,6 +1938,16 @@ function printBanner() {
   console.log('  Each tick is independent - past patterns don\'t predict futures.');
   console.log('  This bot uses conservative heuristics + strong risk management.');
   console.log('');
+  console.log('  Usage:');
+  console.log('    Live:    node accurateDiffer3_simple.js');
+  console.log('    Backtest: $env:BACKTEST=1; node accurateDiffer3_simple.js');
+  console.log('    Or:       node accurateDiffer3_simple.js --backtest');
+  console.log('');
+  console.log('  Backtest options (env vars):');
+  console.log('    BACKTEST_TICKS=50000      # Number of historical ticks');
+  console.log('    BACKTEST_ASSET=R_75       # Single symbol to test');
+  console.log('    BACKTEST_PAYOUT_MULT=1.10 # Payout multiplier');
+  console.log('');
 }
 
 async function main() {
@@ -1492,6 +1958,37 @@ async function main() {
     process.exit(1);
   }
 
+  // ── Backtest Mode ────────────────────────────────────────────────
+  if (process.env.BACKTEST === '1' || process.argv.includes('--backtest')) {
+    const list = (process.env.BACKTEST_ASSET || CONFIG.assets.join(','))
+      .split(',').map(s => s.trim()).filter(Boolean);
+    console.log(`🧪 BACKTEST mode — symbols=[${list.join(', ')}]  ticks=${CONFIG.backtestTicks}\n`);
+
+    const client = new DerivClient(CONFIG);
+    const market = new MarketDataManager(client, CONFIG);
+
+    client.on('authorized', async () => {
+      try {
+        await market.loadSymbols();
+        const bt = new DifferBacktester(CONFIG, client, market);
+        await bt.run(list);
+        try { client.stop(); } catch (_) {}
+        process.exit(0);
+      } catch (e) {
+        console.error('backtest failed:', e);
+        process.exit(1);
+      }
+    });
+
+    client.on('error', e => {
+      console.error('client error:', e.message);
+    });
+
+    client.connect();
+    return;
+  }
+
+  // ── Live Trading Mode ──────────────────────────────────────────
   const bot = new TradingBot();
   await bot.start();
 }
