@@ -165,8 +165,8 @@ const CONFIG = Object.freeze({
   hourlySummary:      true,
 
   // ── Persistence ────────────────────────────────────────────────
-  stateFile: strEnv('STATE_FILE', 'accurateDiffer3_simple04_state.json'),
-  logFile:   strEnv('LOG_FILE', 'accurateDiffer3_simple04.log'),
+  stateFile: strEnv('STATE_FILE', 'accurateDiffer3_simple05_state.json'),
+  logFile:   strEnv('LOG_FILE', 'accurateDiffer3_simple05.log'),
   logLevel:  strEnv('LOG_LEVEL', 'INFO').toUpperCase(),
 
   // ── Telegram ───────────────────────────────────────────────────
