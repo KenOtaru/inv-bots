@@ -119,7 +119,7 @@ const CONFIG = Object.freeze({
   durationTicks:   intEnv('DURATION_TICKS', 1),
   minStake:        numEnv('MIN_STAKE', 1.1),
   maxStake:        numEnv('MAX_STAKE', 5.5),
-  assets:          listEnv('ASSETS', 'R_10,R_25,R_50,R_75,RDBULL,RDBEAR'), //listEnv('ASSETS', 'R_10,R_25,R_50,R_75,RDBULL,RDBEAR'),
+  assets:          listEnv('ASSETS', 'R_50,R_75,RDBULL'), //listEnv('ASSETS', 'R_10,R_25,R_50,R_75,RDBULL,RDBEAR'),
 
   // ── Timing ─────────────────────────────────────────────────────
   tickWindow:          intEnv('TICK_WINDOW', 500),
@@ -137,25 +137,15 @@ const CONFIG = Object.freeze({
   maxConsecutiveLoss: intEnv('MAX_CONSECUTIVE_LOSSES', 5),
   lossCooldownMs:     intEnv('LOSS_COOLDOWN_MS', 300000),
 
-  // ── Monte Carlo Analysis ────────────────────────────────────────
-  analysisWindows:       [30, 60, 150, 400],  // multi-scale frequency windows
-  dirichletAlpha:        numEnv('DIRICHLET_ALPHA', 0.5),     // Bayesian prior strength
-  betaZScore:            numEnv('BETA_ZSCORE', 1.28),        // Beta upper-bound z (~90th pctl)
-  bootstrapIterations:   intEnv('BOOTSTRAP_ITERATIONS', 500), // bootstrap resamples
-  hotFilterTicks:        intEnv('HOT_FILTER_TICKS', 5),      // digits in last N ticks → penalty
-  cooldownTicks:         intEnv('COOLDOWN_TICKS', 15),       // don't re-predict digit within N ticks
-  maxRecentHits:         intEnv('MAX_RECENT_HITS', 2),       // max occurrences in recent tail
-  recentLookback:        intEnv('RECENT_LOOKBACK', 20),      // recent tail length for hit check
-  minProbabilityGap:     numEnv('MIN_PROBABILITY_GAP', 0.004), // min gap best vs 2nd-best
-  minEntropy:            numEnv('MIN_ENTROPY', 0.90),         // min normalized entropy gate
-  maxEntropy:            numEnv('MAX_ENTROPY', 0.9997),       // max entropy gate (too uniform)
-  minConsensusScore:     numEnv('MIN_CONSENSUS_SCORE', 0.40), // min weighted consensus (0-1)
-  minAgreementSources:   intEnv('MIN_AGREEMENT_SOURCES', 1),  // min sources agreeing on digit
-  freqWeights:           [0.20, 0.25, 0.30, 0.25],           // weights for [30,60,150,400] windows
+  // ── Digit Analysis (Simple Heuristic) ──────────────────────────
+  analysisWindow:     intEnv('ANALYSIS_WINDOW', 100),
+  minProbabilityGap:  numEnv('MIN_PROBABILITY_GAP', 0.005),
+  maxRecentHits:      intEnv('MAX_RECENT_HITS', 3),
+  recentLookback:     intEnv('RECENT_LOOKBACK', 20),
 
   // ── Value Edge ─────────────────────────────────────────────────
-  minEdge:            numEnv('MIN_EDGE', 0.005),
-  safetyMargin:       numEnv('SAFETY_MARGIN', 0.003),
+  minEdge:            numEnv('MIN_EDGE', 0.01),
+  safetyMargin:       numEnv('SAFETY_MARGIN', 0.016),
 
   // ── Kelly Sizing ───────────────────────────────────────────────
   kellyEnabled:       boolEnv('KELLY_ENABLED', true),
@@ -174,8 +164,8 @@ const CONFIG = Object.freeze({
   hourlySummary:      boolEnv('HOURLY_SUMMARY', true),
 
   // ── Persistence ────────────────────────────────────────────────
-  stateFile: strEnv('STATE_FILE', 'accurateDiffer3_simple_state.json'),
-  logFile:   strEnv('LOG_FILE', 'accurateDiffer3_simple.log'),
+  stateFile: strEnv('STATE_FILE', 'accurateDiffer3_simple01_state.json'),
+  logFile:   strEnv('LOG_FILE', 'accurateDiffer3_simple01.log'),
   logLevel:  strEnv('LOG_LEVEL', 'INFO').toUpperCase(),
 
   // ── Telegram ───────────────────────────────────────────────────
@@ -876,52 +866,12 @@ class MarketDataManager extends EventEmitter {
 // ─────────────────────────────────────────────────────────────────────
 // 7. DIGIT ANALYZER (Simple & Honest)
 // ─────────────────────────────────────────────────────────────────────
-/**
- * MonteCarloAnalyzer — 5-layer Monte Carlo analysis engine for Digit Differ.
- *
- *   Layer 1: Multi-window frequency analysis (weight 0.30)
- *   Layer 2: Bayesian Beta posterior upper bound (weight 0.35)
- *   Layer 3: Bootstrap resampling confidence intervals (weight 0.20)
- *   Layer 4: Absence streak / gap analysis (weight 0.15)
- *   Layer 5: Hot-filter & over-trade VETO (hard veto, not weighted)
- *
- * The analyzer tracks which digits the bot has recently predicted
- * (recordPrediction) and avoids re-predicting them — the core
- * "over-trade detection" the user requested.
- */
-class MonteCarloAnalyzer {
-  constructor(cfg) {
-    this.cfg = cfg;
-    // Prediction memory: [{ digit, tickIndex, symbol }]
-    this._predictionLog = [];
-    // Per-digit cooldown: Map<digit, lastTickIndex>
-    this._cooldownMap = new Map();
-    // Running tick counter (incremented by callers)
-    this._tickCounter = 0;
-  }
-
-  // ── Public API ───────────────────────────────────────────────────
+class DigitAnalyzer {
+  constructor(cfg) { this.cfg = cfg; }
 
   /**
-   * Record that the bot predicted a given digit at the current tick.
-   * Called by TradingBot after a trade is placed.
-   */
-  recordPrediction(digit, symbol) {
-    const entry = { digit, tickIndex: this._tickCounter, symbol, ts: Date.now() };
-    this._predictionLog.push(entry);
-    this._cooldownMap.set(digit, this._tickCounter);
-    // Keep log bounded
-    if (this._predictionLog.length > 500) this._predictionLog.splice(0, 250);
-  }
-
-  /**
-   * Advance the internal tick counter (call once per new tick observed).
-   */
-  tick() { this._tickCounter++; }
-
-  /**
-   * Main analysis entry point. Returns an analysis object compatible
-   * with the existing bot pipeline, or null if insufficient data.
+   * Count digit frequencies and find the coldest digit.
+   * This is a heuristic, not a predictive edge.
    */
   analyze(symbol, ticks) {
     if (!ticks || ticks.length < this.cfg.minTicksForAnalysis) return null;
@@ -929,411 +879,70 @@ class MonteCarloAnalyzer {
     const digits = ticks.map(t => t.digit).filter(d => Number.isInteger(d) && d >= 0 && d <= 9);
     if (digits.length < this.cfg.minTicksForAnalysis) return null;
 
-    // Advance tick counter to stay in sync
-    this._tickCounter = Math.max(this._tickCounter, digits.length);
+    const window = Math.min(this.cfg.analysisWindow, digits.length);
+    const recentDigits = digits.slice(-window);
 
-    const n = digits.length;
-    const lastDigit = digits[n - 1];
-
-    // ── Raw frequency counts (primary window = largest configured) ──
-    const primaryWindow = Math.min(this.cfg.analysisWindows[this.cfg.analysisWindows.length - 1], n);
-    const recentDigits = digits.slice(-primaryWindow);
+    // Count frequencies
     const counts = Array(10).fill(0);
     for (const d of recentDigits) counts[d]++;
 
-    // ── Entropy & chi-square (regime gates) ──
-    const entropy = this._normalizedEntropy(counts, primaryWindow);
-    const chiSq = this._chiSquare(counts, primaryWindow);
+    // Find coldest digit (lowest frequency)
+    let coldestDigit = 0;
+    let coldestCount = counts[0];
+    for (let d = 1; d < 10; d++) {
+      if (counts[d] < coldestCount) {
+        coldestDigit = d;
+        coldestCount = counts[d];
+      }
+    }
 
-    // ── Layer 1: Multi-window frequency scores ──
-    const freqScores = this._multiWindowFrequency(digits);
+    // Calculate probability (conservative upper bound)
+    const n = recentDigits.length;
+    const pEstimate = (coldestCount + 1) / (n + 10); // Laplace smoothing
+    const pUpper = Math.min(0.15, pEstimate + 0.01); // Conservative cap
 
-    // ── Layer 2: Bayesian Beta posterior ──
-    const beta = this._betaPosterior(digits);
-    const betaScores = beta.scores;       // normalized for consensus ranking
-    const betaMeans = beta.means;         // raw posterior mean per digit
-    const betaUpper = beta.upperBounds;   // conservative upper bound per digit
+    // Check recent occurrences
+    const recentLook = Math.min(this.cfg.recentLookback, recentDigits.length);
+    const recentTail = recentDigits.slice(-recentLook);
+    const recentHits = recentTail.filter(d => d === coldestDigit).length;
 
-    // ── Layer 3: Bootstrap resampling ──
-    const bootScores = this._bootstrapResample(digits);
-
-    // ── Layer 4: Absence streak / gap analysis ──
-    const gapScores = this._absenceGapAnalysis(digits);
-
-    // ── Layer 5: Over-trade detection & hot-filter VETO ──
-    const veto = this._hotFilterVeto(digits);
-
-    // ── Consensus scoring ──
-    const consensus = this._consensusScore(freqScores, betaScores, bootScores, gapScores);
-
-    // ── Rank candidates by consensus score (descending) ──
-    const ranked = consensus.map((score, digit) => ({ digit, score }))
-      .sort((a, b) => b.score - a.score);
-
-    // Best candidate
-    const best = ranked[0];
-    const second = ranked[1];
-
-    // Probability gap between best and 2nd-best
-    const probabilityGap = best.score - (second?.score ?? 0);
-
-    // Count agreement sources: how many of 4 sub-analyses rank this digit in top-2
-    const agreementSources = this._countAgreement(best.digit, freqScores, betaScores, bootScores, gapScores);
-
-    // Recent hits for the best digit
-    const recentLook = Math.min(this.cfg.recentLookback, n);
-    const recentTail = digits.slice(-recentLook);
-    const recentHits = recentTail.filter(d => d === best.digit).length;
-
-    // Bootstrap CI info for the best digit
-    const bootCI = this._bootstrapCIForDigit(digits, best.digit);
-
-    // Absence streak for the best digit
-    const absenceStreak = this._absenceStreak(digits, best.digit);
-
-    // Prediction cooldown for the best digit
-    const lastPredIdx = this._cooldownMap.get(best.digit);
-    const predictionCooldown = lastPredIdx != null ? this._tickCounter - lastPredIdx : Infinity;
-
-    // ── Probability estimates for the best digit ──
-    // pUpper = posterior mean (used for edge calculation — fair estimate)
-    // pLossUpper = Beta upper bound (used for risk gating — conservative)
-    const pUpper = betaMeans[best.digit];
-    const pLossUpper = betaUpper[best.digit];
-    const pEstimate = counts[best.digit] / primaryWindow;
-
-    // ── Gate checks ──
+    // Gate checks
     const gates = [];
-
-    // Entropy gates
-    if (entropy < this.cfg.minEntropy) gates.push(`entropy-low:${entropy.toFixed(4)}`);
-    if (entropy > this.cfg.maxEntropy) gates.push(`entropy-high:${entropy.toFixed(4)}`);
-
-    // Chi-square gates
-    if (chiSq < 1.5) gates.push(`chisq-low:${chiSq.toFixed(2)}`);
-    if (chiSq > 40.0) gates.push(`chisq-high:${chiSq.toFixed(2)}`);
-
-    // Max loss probability gate (Beta upper bound — conservative risk gate)
-    if (pLossUpper > 0.12) {
-      gates.push(`loss-prob-high:${(pLossUpper * 100).toFixed(2)}%`);
-    }
-
-    // Probability gap gate
-    if (probabilityGap < this.cfg.minProbabilityGap) {
-      gates.push(`gap-low:${probabilityGap.toFixed(4)}`);
-    }
-
-    // Recent hit gate
     if (recentHits > this.cfg.maxRecentHits) {
-      gates.push(`recent-hit:${recentHits}`);
+      gates.push(`recent_hits:${recentHits}`);
     }
 
-    // Hot-filter veto (digit appeared in last N ticks of stream)
-    if (veto.isHot) {
-      gates.push(`hot-filter:${veto.hotReason}`);
+    // Find second coldest for gap check
+    let secondCount = Infinity;
+    for (let d = 0; d < 10; d++) {
+      if (d !== coldestDigit && counts[d] < secondCount) {
+        secondCount = counts[d];
+      }
     }
-
-    // Cooldown veto (bot predicted this digit recently)
-    if (predictionCooldown < this.cfg.cooldownTicks) {
-      gates.push(`cooldown:${predictionCooldown}t`);
-    }
-
-    // Consensus score gate
-    if (consensus[best.digit] < this.cfg.minConsensusScore) {
-      gates.push(`consensus-low:${consensus[best.digit].toFixed(3)}`);
-    }
-
-    // Agreement sources gate
-    if (agreementSources < this.cfg.minAgreementSources) {
-      gates.push(`agreement-low:${agreementSources}`);
-    }
-
-    // Bootstrap CI width gate (reject if estimate is too uncertain)
-    if (bootCI.width > 0.08) {
-      gates.push(`bootstrap-ci-wide:${bootCI.width.toFixed(4)}`);
+    const gap = (secondCount - coldestCount) / n;
+    if (gap < this.cfg.minProbabilityGap) {
+      gates.push(`gap_low:${gap.toFixed(4)}`);
     }
 
     return {
       symbol,
-      method: 'monte-carlo-bootstrap',
-      digit: best.digit,
-      count: counts[best.digit],
-      sampleSize: primaryWindow,
+      digit: coldestDigit,
+      count: coldestCount,
+      sampleSize: n,
       pEstimate,
-      pUpper,          // posterior mean (used for edge calculation)
-      pLossUpper,      // Beta upper bound (conservative — used for risk gating)
+      pUpper,
       recentHits,
       gates,
       allowedByModel: gates.length === 0,
-      lastDigit,
-      // New Monte Carlo fields
-      consensusScore: consensus[best.digit],
-      agreementSources,
-      bootstrapCI: bootCI,
-      absenceStreak,
-      predictionCooldown,
-      entropy,
-      chiSquare: chiSq,
-      probabilityGap,
+      lastDigit: recentDigits[recentDigits.length - 1],
     };
   }
 
-  /**
-   * Rank a list of analyses: allowed first, then by ascending pUpper.
-   */
   rank(list) {
     return list
       .filter(Boolean)
       .filter(a => a.allowedByModel)
       .sort((a, b) => a.pUpper - b.pUpper);
-  }
-
-  // ── Layer 1: Multi-window frequency ──────────────────────────────
-
-  _multiWindowFrequency(digits) {
-    const windows = this.cfg.analysisWindows;
-    const weights = this.cfg.freqWeights;
-    const scores = Array(10).fill(0);
-
-    for (let w = 0; w < windows.length; w++) {
-      const winSize = Math.min(windows[w], digits.length);
-      const slice = digits.slice(-winSize);
-      const counts = Array(10).fill(0);
-      for (const d of slice) counts[d]++;
-
-      // Normalize to probabilities
-      const probs = counts.map(c => c / winSize);
-      // Score = inverse frequency (lower freq → higher score as candidate)
-      // Invert: score[d] = 1 - prob[d] (digit with lowest freq gets highest score)
-      for (let d = 0; d < 10; d++) {
-        scores[d] += (1 - probs[d]) * (weights[w] || 0.25);
-      }
-    }
-
-    // Normalize to [0, 1]
-    const min = Math.min(...scores);
-    const max = Math.max(...scores);
-    const range = max - min || 1;
-    return scores.map(s => (s - min) / range);
-  }
-
-  // ── Layer 2: Bayesian Beta posterior upper bound ─────────────────
-
-  /**
-   * Beta posterior analysis. Returns { scores, means, upperBounds }.
-   *   - scores: normalized 0-1 ranking (lower pUpper → higher score)
-   *   - means: raw Beta posterior mean per digit (used for edge calc)
-   *   - upperBounds: conservative upper bound per digit (used for risk gate)
-   */
-  _betaPosterior(digits) {
-    const n = digits.length;
-    const alpha0 = this.cfg.dirichletAlpha;
-    const K = 10;
-    const a0 = alpha0 / K;
-    const z = this.cfg.betaZScore;
-
-    const counts = Array(10).fill(0);
-    for (const d of digits) counts[d]++;
-
-    const means = Array(10).fill(0);
-    const upperBounds = Array(10).fill(0);
-    for (let d = 0; d < 10; d++) {
-      const c = counts[d];
-      const a = c + a0;
-      const b = (n - c) + (K - 1) * a0;
-      const mean = a / (a + b);
-      const variance = (a * b) / ((a + b) * (a + b) * (a + b + 1));
-      const sd = Math.sqrt(variance);
-      means[d] = mean;
-      upperBounds[d] = Math.min(1, mean + z * sd);
-    }
-
-    // Normalized scores for consensus ranking (lower upper bound → higher score)
-    const rawScores = upperBounds.map(ub => 1 - ub);
-    const min = Math.min(...rawScores);
-    const max = Math.max(...rawScores);
-    const range = max - min || 1;
-    const scores = rawScores.map(s => (s - min) / range);
-
-    return { scores, means, upperBounds };
-  }
-
-  // ── Layer 3: Bootstrap resampling ────────────────────────────────
-
-  _bootstrapResample(digits) {
-    const n = digits.length;
-    const B = this.cfg.bootstrapIterations;
-
-    // Accumulate bootstrap frequency estimates per digit
-    const bootFreqs = Array.from({ length: 10 }, () => []);
-
-    for (let b = 0; b < B; b++) {
-      // Resample with replacement
-      const sample = Array(n);
-      for (let i = 0; i < n; i++) {
-        sample[i] = digits[Math.floor(Math.random() * n)];
-      }
-      const counts = Array(10).fill(0);
-      for (const d of sample) counts[d]++;
-      for (let d = 0; d < 10; d++) {
-        bootFreqs[d].push(counts[d] / n);
-      }
-    }
-
-    // For each digit, compute the 95th percentile of bootstrap frequencies
-    // Lower 95th percentile → digit is more consistently "cold"
-    const p95 = Array(10).fill(0);
-    for (let d = 0; d < 10; d++) {
-      bootFreqs[d].sort((a, b) => a - b);
-      const idx = Math.floor(B * 0.95);
-      p95[d] = bootFreqs[d][Math.min(idx, B - 1)];
-    }
-
-    // Score = inverse 95th percentile (lower → higher score)
-    const scores = p95.map(p => 1 - p);
-    const min = Math.min(...scores);
-    const max = Math.max(...scores);
-    const range = max - min || 1;
-    return scores.map(s => (s - min) / range);
-  }
-
-  /**
-   * Get bootstrap CI details for a specific digit.
-   */
-  _bootstrapCIForDigit(digits, targetDigit) {
-    const n = digits.length;
-    const B = Math.min(this.cfg.bootstrapIterations, 200); // lighter for per-digit
-    const freqs = [];
-
-    for (let b = 0; b < B; b++) {
-      const sample = Array(n);
-      for (let i = 0; i < n; i++) {
-        sample[i] = digits[Math.floor(Math.random() * n)];
-      }
-      let count = 0;
-      for (const d of sample) if (d === targetDigit) count++;
-      freqs.push(count / n);
-    }
-
-    freqs.sort((a, b) => a - b);
-    const mean = freqs.reduce((s, v) => s + v, 0) / B;
-    const p5 = freqs[Math.floor(B * 0.05)] || 0;
-    const p95 = freqs[Math.floor(B * 0.95)] || 0;
-
-    return { mean, lower: p5, upper: p95, width: p95 - p5 };
-  }
-
-  // ── Layer 4: Absence streak / gap analysis ───────────────────────
-
-  _absenceGapAnalysis(digits) {
-    const n = digits.length;
-    const scores = Array(10).fill(0);
-
-    for (let d = 0; d < 10; d++) {
-      // Absence streak: ticks since last appearance
-      let absence = n;
-      for (let i = n - 1; i >= 0; i--) {
-        if (digits[i] === d) { absence = n - 1 - i; break; }
-      }
-
-      // Average gap between occurrences
-      const positions = [];
-      for (let i = 0; i < n; i++) {
-        if (digits[i] === d) positions.push(i);
-      }
-      let avgGap = n;
-      if (positions.length > 1) {
-        let gapSum = 0;
-        for (let i = 1; i < positions.length; i++) gapSum += positions[i] - positions[i - 1];
-        avgGap = gapSum / (positions.length - 1);
-      }
-
-      // Score: how "cold" the digit is relative to its average gap
-      // If absence >> avgGap, digit is unusually cold → higher score
-      const coldness = avgGap > 0 ? absence / avgGap : 0;
-      scores[d] = Math.min(1, coldness / 3); // cap at 3x avgGap = max score
-    }
-
-    // Normalize
-    const min = Math.min(...scores);
-    const max = Math.max(...scores);
-    const range = max - min || 1;
-    return scores.map(s => (s - min) / range);
-  }
-
-  _absenceStreak(digits, targetDigit) {
-    for (let i = digits.length - 1; i >= 0; i--) {
-      if (digits[i] === targetDigit) return digits.length - 1 - i;
-    }
-    return digits.length;
-  }
-
-  // ── Layer 5: Hot-filter & over-trade VETO ────────────────────────
-
-  _hotFilterVeto(digits) {
-    const hotN = this.cfg.hotFilterTicks;
-    const tail = digits.slice(-hotN);
-    const hotSet = new Set(tail);
-
-    return {
-      isHot: false, // will be set per-digit in caller
-      hotSet,
-      hotReason: '',
-    };
-  }
-
-  // ── Consensus scoring ────────────────────────────────────────────
-
-  _consensusScore(freq, beta, boot, gap) {
-    // Weights for the 4 evidence sources
-    const wFreq = 0.30;
-    const wBeta = 0.35;
-    const wBoot = 0.20;
-    const wGap  = 0.15;
-
-    return Array.from({ length: 10 }, (_, d) =>
-      freq[d] * wFreq + beta[d] * wBeta + boot[d] * wBoot + gap[d] * wGap
-    );
-  }
-
-  _countAgreement(targetDigit, freq, beta, boot, gap) {
-    // Count how many sources rank this digit in their top-2
-    const rankDigit = (scores) => {
-      const sorted = scores.map((s, d) => ({ d, s })).sort((a, b) => b.s - a.s);
-      return sorted.findIndex(x => x.d === targetDigit);
-    };
-
-    let count = 0;
-    if (rankDigit(freq) < 2) count++;
-    if (rankDigit(beta) < 2) count++;
-    if (rankDigit(boot) < 2) count++;
-    if (rankDigit(gap) < 2) count++;
-    return count;
-  }
-
-  // ── Utility ──────────────────────────────────────────────────────
-
-  _normalizedEntropy(counts, n) {
-    if (n === 0) return 0;
-    let H = 0;
-    for (const c of counts) {
-      if (c > 0) {
-        const p = c / n;
-        H -= p * Math.log2(p);
-      }
-    }
-    return H / Math.log2(10); // normalize to [0, 1]
-  }
-
-  _chiSquare(counts, n) {
-    if (n === 0) return 0;
-    const expected = n / 10;
-    let chiSq = 0;
-    for (const c of counts) {
-      const diff = c - expected;
-      chiSq += (diff * diff) / expected;
-    }
-    return chiSq;
   }
 }
 
@@ -1685,7 +1294,7 @@ class TradingBot {
     this.cfg = CONFIG;
     this.client = new DerivClient(this.cfg);
     this.market = new MarketDataManager(this.client, this.cfg);
-    this.analyzer = new MonteCarloAnalyzer(this.cfg);
+    this.analyzer = new DigitAnalyzer(this.cfg);
     this.exec = new TradeExecutor(this.client, this.cfg);
     this.stats = new StatisticsManager();
     this.calibrator = new SymbolCalibrator(this.cfg);
@@ -1704,7 +1313,7 @@ class TradingBot {
   }
 
   async start() {
-    logger.info('===== Monte Carlo Digit Bot starting =====');
+    logger.info('===== Simple Digit Bot starting =====');
     logger.info(`stake=${this.cfg.stake} assets=${this.cfg.assets.join(',')}`);
 
     this._loadState();
@@ -1734,7 +1343,7 @@ class TradingBot {
     await this.market.bootstrap(this.cfg.assets);
 
     telegram.send(
-      `🤖 <b>Monte Carlo Digit Bot Online</b>\n\n` +
+      `🤖 <b>Simple Digit Bot Online</b>\n\n` +
       `👤 Account: <code>${htmlEscape(info.loginid || '?')}</code>\n` +
       `💼 ${info.isVirtual ? '🟡 DEMO' : '🔴 REAL'}\n` +
       `💰 Balance: ${(this.client.balance ?? 0).toFixed(2)} ${this.currency()}\n` +
@@ -1750,7 +1359,7 @@ class TradingBot {
   }
 
   _onDisconnected() {
-    telegram.send(`⚠️ <b>Monte Carlo Digit Bot Connection lost</b>\n🔄 reconnecting...`);
+    telegram.send(`⚠️ <b>Simple Digit Bot Connection lost</b>\n🔄 reconnecting...`);
     if (this._analysisT) { clearInterval(this._analysisT); this._analysisT = null; }
   }
 
@@ -1892,9 +1501,8 @@ class TradingBot {
       this.lastTradeAt = Date.now();
       this.tradedAsset = bestCandidate.analysis.symbol;
       this.tradedAssetAt = Date.now();
-      this.analyzer.recordPrediction(bestCandidate.analysis.digit, bestCandidate.analysis.symbol);
 
-      logger.info(`trade placed #${trade.contractId} ${trade.symbol} d${trade.digit} edge=${bestCandidate.valueEdge.toFixed(4)} consensus=${bestCandidate.analysis.consensusScore.toFixed(3)}`);
+      logger.info(`trade placed #${trade.contractId} ${trade.symbol} d${trade.digit} edge=${bestCandidate.valueEdge.toFixed(4)}`);
     } catch (e) {
       logger.error('trade failed:', e.message);
     }
@@ -1902,24 +1510,19 @@ class TradingBot {
 
   _onTradeOpen(t) {
     const a = t.analysis || {};
-    const ci = a.bootstrapCI || {};
     telegram.send(
-      `🟢 <b>TRADE OPENED — MONTE CARLO DIGIT DIFFER</b>\n\n` +
+      `🟢 <b>TRADE OPENED — SIMPLE DIGIT DIFFER</b>\n\n` +
       `🎫 Contract: <code>#${t.contractId}</code>\n` +
       `📊 Symbol: <code>${t.symbol}</code>\n` +
       `🔢 Prediction/barrier: final digit <b>DIFFERS from ${t.digit}</b>\n` +
       `⏱️ Duration: ${t.durationTicks} tick(s)\n` +
       `💵 Stake: ${t.stake.toFixed(2)} ${this.currency()}\n` +
       `🎁 Payout: ${t.payout.toFixed(2)} ${this.currency()}\n\n` +
-      `📐 <b>Monte Carlo Analysis:</b>\n` +
+      `📐 <b>Analysis:</b>\n` +
       `• Sample size: n=${a.sampleSize ?? '?'}\n` +
-      `• Loss prob (conservative): <b>${((a.pLossUpper || a.pUpper) * 100).toFixed(2)}%</b>\n` +
+      `• Loss probability upper bound: <b>${(a.pUpper * 100).toFixed(2)}%</b>\n` +
       `• Break-even loss prob: ${((1 - t.payout/t.stake) * 100).toFixed(2)}%\n` +
       `• Value edge: <b>${(a.valueEdge * 100).toFixed(2)}%</b>\n` +
-      `• Consensus score: <b>${Number(a.consensusScore || 0).toFixed(3)}</b> (${a.agreementSources ?? '?'}/4 sources)\n` +
-      `• Bootstrap CI: [${(ci.lower * 100 || 0).toFixed(1)}%, ${(ci.upper * 100 || 0).toFixed(1)}%] width=${(ci.width * 100 || 0).toFixed(2)}%\n` +
-      `• Absence streak: ${a.absenceStreak ?? '?'} ticks\n` +
-      `• Entropy: ${Number(a.entropy || 0).toFixed(3)} | χ²: ${Number(a.chiSquare || 0).toFixed(2)}\n` +
       `• Payout multiplier: ×${Number(a.payoutMult || 0).toFixed(4)}\n` +
       `• Sizing: <code>${htmlEscape(a.sizingSource || 'flat')}</code>\n` +
       `• Current loss streak: ${a.lossStreak ?? this.stats.currentLossStreak}\n` +
@@ -1937,7 +1540,7 @@ class TradingBot {
       this._circuitBreakerUntil = Date.now() + this.cfg.lossCooldownMs;
       const mins = (this.cfg.lossCooldownMs / 60000).toFixed(0);
       logger.warn(`circuit breaker: ${this.stats.currentLossStreak} losses → pausing ${mins}m`);
-      telegram.send(`🛑 <b>MONTE CARLO CIRCUIT BREAKER</b>\n${this.stats.currentLossStreak} losses. Pausing ${mins}m.`);
+      telegram.send(`🛑 <b>SIMPLE DIGIT CIRCUIT BREAKER</b>\n${this.stats.currentLossStreak} losses. Pausing ${mins}m.`);
     }
 
     // Feed calibrator
@@ -1952,7 +1555,7 @@ class TradingBot {
     const ls = this.stats.lossStreakEvents;
 
     telegram.send(
-      `${emoji} <b>TRADE ${label} — DIGIT DIFFER</b>\n\n` +
+      `${emoji} <b>TRADE ${label} — SIMPLE DIGIT DIFFER</b>\n\n` +
       `🎫 Contract: <code>#${t.contractId}</code>\n` +
       `📊 Symbol: <code>${t.symbol}</code> | differs <b>${t.digit}</b>\n` +
       `💵 Stake: ${t.stake.toFixed(2)} ${this.currency()}\n` +
@@ -2009,7 +1612,7 @@ class TradingBot {
   stop(signal) {
     this.stopped = true;
     logger.info(`stopping (${signal})`);
-    telegram.send(`🛑 <b>Monte Carlo Bot stopped</b>\nProfit: ${money(this.stats.overallProfit, this.currency())}`);
+    telegram.send(`🛑 <b>Simple Digit Bot stopped</b>\nProfit: ${money(this.stats.overallProfit, this.currency())}`);
     if (this._analysisT) clearInterval(this._analysisT);
     this._saveState('shutdown');
     this.client.stop();
@@ -2025,7 +1628,7 @@ class DifferBacktester {
     this.cfg = cfg;
     this.client = client;
     this.market = market;
-    this.analyzer = new MonteCarloAnalyzer(cfg);
+    this.analyzer = new DigitAnalyzer(cfg);
   }
 
   async run(symbols) {
@@ -2038,7 +1641,7 @@ class DifferBacktester {
     console.log(banner);
     console.log(
       `  config: minEdge=${this.cfg.minEdge}  safety=${this.cfg.safetyMargin}\n` +
-      `          analysisWindows=[${this.cfg.analysisWindows}]  duration=${this.cfg.durationTicks}t\n` +
+      `          analysisWindow=${this.cfg.analysisWindow}  duration=${this.cfg.durationTicks}t\n` +
       `          payoutMult=${this.cfg.backtestPayoutMult}  stake=${this.cfg.stake}`
     );
     console.log(banner);
@@ -2075,7 +1678,7 @@ class DifferBacktester {
         config: {
           minEdge: this.cfg.minEdge,
           safetyMargin: this.cfg.safetyMargin,
-          analysisWindows: this.cfg.analysisWindows,
+          analysisWindow: this.cfg.analysisWindow,
           durationTicks: this.cfg.durationTicks,
           payoutMultiplier: this.cfg.backtestPayoutMult,
           stake: this.cfg.stake,
@@ -2150,11 +1753,6 @@ class DifferBacktester {
       gatedGap: 0,
       gatedRecentHit: 0,
       gatedEdge: 0,
-      gatedCooldown: 0,
-      gatedHotFilter: 0,
-      gatedConsensus: 0,
-      gatedBootstrapCI: 0,
-      gatedAgreement: 0,
       allowedModel: 0,
       recommended: 0,
     };
@@ -2187,11 +1785,6 @@ class DifferBacktester {
         for (const g of analysis.gates) {
           if (g.startsWith('gap')) diag.gatedGap++;
           else if (g.startsWith('recent')) diag.gatedRecentHit++;
-          else if (g.startsWith('cooldown')) diag.gatedCooldown++;
-          else if (g.startsWith('hot-filter')) diag.gatedHotFilter++;
-          else if (g.startsWith('consensus')) diag.gatedConsensus++;
-          else if (g.startsWith('bootstrap')) diag.gatedBootstrapCI++;
-          else if (g.startsWith('agreement')) diag.gatedAgreement++;
         }
         i++;
         continue;
@@ -2212,7 +1805,6 @@ class DifferBacktester {
 
       diag.recommended++;
       const digit = analysis.digit;
-      this.analyzer.recordPrediction(digit, symbol);
 
       // Simulate settlement
       const expiryTick = ticks[i + duration];
@@ -2369,18 +1961,13 @@ class DifferBacktester {
 
     // Diagnostics
     console.log('  Diagnostics:');
-    console.log(`    scans              : ${diag.scans}`);
-    console.log(`    null analyses      : ${diag.nullAnalyses}`);
-    console.log(`    passed model gates : ${diag.allowedModel}`);
-    console.log(`    signals fired      : ${diag.recommended}`);
-    console.log(`    rejected by gap    : ${diag.gatedGap}`);
-    console.log(`    rejected by hits   : ${diag.gatedRecentHit}`);
-    console.log(`    rejected by edge   : ${diag.gatedEdge}`);
-    console.log(`    rejected by cooldown   : ${diag.gatedCooldown}`);
-    console.log(`    rejected by hot-filter : ${diag.gatedHotFilter}`);
-    console.log(`    rejected by consensus  : ${diag.gatedConsensus}`);
-    console.log(`    rejected by bootstrap  : ${diag.gatedBootstrapCI}`);
-    console.log(`    rejected by agreement  : ${diag.gatedAgreement}`);
+    console.log(`    scans             : ${diag.scans}`);
+    console.log(`    null analyses     : ${diag.nullAnalyses}`);
+    console.log(`    passed model gates: ${diag.allowedModel}`);
+    console.log(`    signals fired     : ${diag.recommended}`);
+    console.log(`    rejected by gap   : ${diag.gatedGap}`);
+    console.log(`    rejected by hits  : ${diag.gatedRecentHit}`);
+    console.log(`    rejected by edge  : ${diag.gatedEdge}`);
     console.log(banner + '\n');
 
     Object.assign(results, {
