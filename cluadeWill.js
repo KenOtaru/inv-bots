@@ -124,8 +124,8 @@ class RestClient {
 // ══════════════════════════════════════════════════════════════════════════════
 // FILE PATHS
 // ══════════════════════════════════════════════════════════════════════════════
-const STATE_FILE = path.join(__dirname, 'claudeWill_07-state.json');
-const HISTORY_FILE = path.join(__dirname, 'claudeWill_07-history.json');
+const STATE_FILE = path.join(__dirname, 'claudeWill_08-state.json');
+const HISTORY_FILE = path.join(__dirname, 'claudeWill_08-history.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 // ══════════════════════════════════════════════════════════════════════════════
