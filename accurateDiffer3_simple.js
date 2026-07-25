@@ -1216,7 +1216,7 @@ class SymbolCalibrator {
 class KellySizer {
   constructor(cfg) { this.cfg = cfg; }
 
-  compute({ bankroll, pWin, payoutMult }) {
+  compute({ bankroll, pWin, payoutMult, edgeValue }) {
     const b = payoutMult - 1;
     const p = Math.max(0, Math.min(1, pWin));
     const q = 1 - p;
@@ -1225,14 +1225,63 @@ class KellySizer {
     const fStar = (b * p - q) / b;
     if (fStar <= 0) return null;
 
+    // When edge is marginal, use minimum stake to test the waters
+    if (edgeValue != null && edgeValue < 0.005) {
+      return {
+        stake: this.cfg.minStake,
+        fStar,
+        fApplied: 0,
+        reason: 'edge-marginal',
+      };
+    }
+
     const fraction = fStar * this.cfg.kellyFraction;
     const capped = Math.min(fraction, this.cfg.kellyMaxStakeFrac);
-    const stake = bankroll * capped;
+
+    // Calculate ideal stake from Kelly
+    let kellyStake = bankroll * capped;
+
+    // Determine effective fraction based on maxStake constraint
+    // If Kelly recommends more than maxStake, we need to decide:
+    // 1. Is the edge strong enough to warrant maxStake?
+    // 2. Or should we scale down?
+
+    let stake;
+    let reason;
+
+    if (kellyStake <= this.cfg.maxStake) {
+      // Kelly stake is within limits - use it
+      stake = kellyStake;
+      reason = 'ok';
+    } else if (edgeValue != null && edgeValue >= 0.02) {
+      // Strong edge (>= 2%) - use maxStake
+      stake = this.cfg.maxStake;
+      reason = 'strong-edge-max';
+    } else if (edgeValue != null && edgeValue >= 0.01) {
+      // Moderate edge (1-2%) - use 75% of maxStake
+      stake = this.cfg.maxStake * 0.75;
+      reason = 'moderate-edge-75pct';
+    } else if (edgeValue != null && edgeValue >= 0.005) {
+      // Small edge (0.5-1%) - use 50% of maxStake
+      stake = this.cfg.maxStake * 0.50;
+      reason = 'small-edge-50pct';
+    } else {
+      // Very small edge - use 25% of maxStake as probe
+      stake = this.cfg.maxStake * 0.25;
+      reason = 'probe-25pct';
+    }
+
+    stake = Math.max(this.cfg.minStake, Math.min(this.cfg.maxStake, +stake.toFixed(2)));
+
+    // Calculate effective fraction for reporting
+    const effectiveFrac = bankroll > 0 ? stake / bankroll : 0;
 
     return {
-      stake: Math.max(this.cfg.minStake, Math.min(this.cfg.maxStake, stake)),
+      stake,
       fStar,
-      fApplied: capped,
+      fApplied: effectiveFrac,
+      reason,
+      kellyStake,
     };
   }
 }
@@ -1405,6 +1454,7 @@ class TradingBot {
     // Calculate stake
     const pWin = 1 - bestCandidate.analysis.pUpper;
     let stake = this.cfg.stake;
+    let sizingSource = 'flat';
 
     if (this.cfg.kellyEnabled) {
       const bankroll = Math.max(this.cfg.kellyBankrollFloor, this.lastBalance ?? this.client.balance ?? 0);
@@ -1412,14 +1462,24 @@ class TradingBot {
         bankroll,
         pWin,
         payoutMult: bestCandidate.payoutMult,
+        edgeValue: bestCandidate.valueEdge,
       });
-      if (k) stake = k.stake;
-      else return; // No positive edge
+      if (k) {
+        stake = k.stake;
+        sizingSource = `kelly(f*=${k.fStar.toFixed(4)}, ${k.reason || 'ok'})`;
+      } else {
+        return; // No positive edge
+      }
+    } else {
+      sizingSource = 'flat';
     }
 
     // Apply calibration multiplier
-    stake *= this.calibrator.stakeMultiplier(bestCandidate.analysis.symbol);
-    stake = Math.max(this.cfg.minStake, Math.min(this.cfg.maxStake, stake));
+    const calibMult = this.calibrator.stakeMultiplier(bestCandidate.analysis.symbol);
+    stake *= calibMult;
+    stake = Math.max(this.cfg.minStake, Math.min(this.cfg.maxStake, +stake.toFixed(2)));
+
+    logger.info(`sizing: stake=${stake.toFixed(2)} src=${sizingSource} calibMult=${calibMult} pWin=${pWin.toFixed(4)} edge=${bestCandidate.valueEdge.toFixed(4)}`);
 
     // Execute trade
     try {
@@ -1433,6 +1493,7 @@ class TradingBot {
           pUpper: bestCandidate.analysis.pUpper,
           valueEdge: bestCandidate.valueEdge,
           payoutMult: bestCandidate.payoutMult,
+          sizingSource,
           lossStreak: this.stats.currentLossStreak,
         }
       );
@@ -1463,7 +1524,9 @@ class TradingBot {
       `• Break-even loss prob: ${((1 - t.payout/t.stake) * 100).toFixed(2)}%\n` +
       `• Value edge: <b>${(a.valueEdge * 100).toFixed(2)}%</b>\n` +
       `• Payout multiplier: ×${Number(a.payoutMult || 0).toFixed(4)}\n` +
-      `• Current loss streak: ${a.lossStreak ?? this.stats.currentLossStreak}\n\n` +
+      `• Sizing: <code>${htmlEscape(a.sizingSource || 'flat')}</code>\n` +
+      `• Current loss streak: ${a.lossStreak ?? this.stats.currentLossStreak}\n` +
+      `• Balance: ${(this.lastBalance ?? 0).toFixed(2)} ${this.currency()}\n\n` +
       `🕒 ${utcTs()}`
     );
   }
