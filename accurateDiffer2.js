@@ -131,18 +131,18 @@ const CONFIG = Object.freeze({
   currency: 'USD',
 
   // Trade setup
-  stake: numEnv('STAKE', 1.1),
-  durationTicks: intEnv('DURATION_TICKS', 1), // Digit contracts normally 1-10 ticks
-  minStake: numEnv('MIN_STAKE', 1.1),
-  maxStake: numEnv('MAX_STAKE', 150.00),
-  assets: ['R_10','R_50','R_75'],//'1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V','R_10','R_25','R_50','R_75','R_100','RDBULL','RDBEAR'
+  stake: 1.1,
+  durationTicks: 1, // Digit contracts normally 1-10 ticks
+  minStake: 1.1,
+  maxStake: 150.00,
+  assets: ['R_10','R_25','R_50','R_75','RDBULL','RDBEAR'],//'1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V','R_10','R_25','R_50','R_75','RDBULL','RDBEAR'
 
   // Trading frequency / limits
-  tickWindow: intEnv('TICK_WINDOW', 1000),
-  minTicksForAnalysis: intEnv('MIN_TICKS_ANALYSIS', 300),
-  analysisIntervalMs: intEnv('ANALYSIS_INTERVAL_MS', 3000),
-  tradeCooldownMs: intEnv('TRADE_COOLDOWN_MS', 2500),
-  maxOpenTrades: intEnv('MAX_OPEN_TRADES', 1),
+  tickWindow: 1000,
+  minTicksForAnalysis: 300,
+  analysisIntervalMs: 3000,
+  tradeCooldownMs: 2500,
+  maxOpenTrades: 1,
   // ── Asset rotation ────────────────────────────────────────────────
   //   To avoid hammering the same symbol back-to-back the bot briefly
   //   "locks out" the just-traded symbol. Two safety valves:
@@ -154,31 +154,48 @@ const CONFIG = Object.freeze({
   //       of skipping the whole scan.
   //   Set assetRotationMs=0 to disable the rotation entirely (trade
   //   whatever ranks first every scan).
-  assetRotationMs: intEnv('ASSET_ROTATION_MS', 60_000),
-  dailyMaxLoss: numEnv('DAILY_MAX_LOSS', 570),
-  dailyMaxProfit: numEnv('DAILY_MAX_PROFIT', 0), // 0 disables profit target stop
-  dailyMaxTrades: intEnv('DAILY_MAX_TRADES', 20000),
+  assetRotationMs: 60_000,
+  dailyMaxLoss: 570,
+  dailyMaxProfit: 0, // 0 disables profit target stop
+  dailyMaxTrades: 20000,
 
   // DIVER-9 edge filters
   frequencyWindows: listEnv('FREQUENCY_WINDOWS', '20,45,90,180,360').map(x => parseInt(x, 10)).filter(Number.isFinite),
-  transitionLookback: intEnv('TRANSITION_LOOKBACK', 600),
-  ewmaAlpha: numEnv('EWMA_ALPHA', 0.055),
-  minEdge: numEnv('MIN_EDGE', 0.0002),          //0.0040 absolute probability gap, e.g. 0.4 percentage point
-  safetyMargin: numEnv('SAFETY_MARGIN', 0.002),
-  modelRiskMargin: numEnv('MODEL_RISK_MARGIN', 0.0015),
-  zScore: numEnv('EDGE_ZSCORE', 1.28),          // conservative upper bound
-  maxLossProb: numEnv('MAX_LOSS_PROB', 0.092),  // never take if model says losing digit > 9.5%
-  minProbabilityGap: numEnv('MIN_PROBABILITY_GAP', 0.004),
-  minEntropy: numEnv('MIN_ENTROPY', 0.90),      // close to random; avoid broken/tiny samples
-  maxEntropy: numEnv('MAX_ENTROPY', 0.9997),    // if perfectly uniform, likely no exploitable imbalance
-  minChiSquare: numEnv('MIN_CHISQUARE', 1.5),   // require some measurable imbalance
-  maxChiSquare: numEnv('MAX_CHISQUARE', 40.0),  // reject extreme unstable bursts
-  maxRecentDigitHits: intEnv('MAX_RECENT_DIGIT_HITS', 2), // selected digit occurrences in last recentLookback
-  recentLookback: intEnv('RECENT_LOOKBACK', 12),
-  proposalScanTopN: intEnv('PROPOSAL_SCAN_TOP_N', 4),
+  transitionLookback: 600,
+  ewmaAlpha:  0.055,
+  minEdge: 0.0002,          //0.0040 absolute probability gap, e.g. 0.4 percentage point
+  safetyMargin: 0.002,
+  modelRiskMargin: 0.0015,
+  zScore: 1.28,          // conservative upper bound
+  maxLossProb: 0.092,  // never take if model says losing digit > 9.5%
+  minProbabilityGap: 0.004, // require at least 0.4pp gap between best and next-best digit
+  minEntropy: 0.90,      // close to random; avoid broken/tiny samples
+  maxEntropy: 0.9997,    // if perfectly uniform, likely no exploitable imbalance
+  minChiSquare: 1.5,   // require some measurable imbalance
+  maxChiSquare: 40.0,  // reject extreme unstable bursts
+  maxRecentDigitHits: 2, // selected digit occurrences in last recentLookback
+  recentLookback: 12,
+  proposalScanTopN: 4,
+
+  // ── Monte Carlo analysis ──────────────────────────────────────────
+  //   Uses simulation to test whether a candidate digit-differ has a
+  //   statistically meaningful edge over random. Treats digits as
+  //   approximately uniform and independent unless the data proves otherwise.
+  mcSimulations:          10000,
+  mcWindowSize:           500,
+  mcMinSample:            100,
+  mcEdgeThreshold:        0.02,   // 2% relative advantage needed
+  mcConfidenceThreshold:  0.47,  // 47% chance of being better than random
+  mcResamplePasses:       3,
+  mcUniformityThreshold:  0.05,  // chi2 p-value
+  mcTransitionThreshold:  0.05,
+  mcClusterThreshold:     0.10,
+  mcMaxConsecutiveSkips:  5,
+  mcLossCooldownMs:       8000,
+  mcWeakSignalCooldownMs: 15000,
 
   // Optional limited loss recovery; disabled by default. Safer than the pasted 10x/100x martingale.
-  recoveryEnabled: boolEnv('RECOVERY_ENABLED', true),
+  recoveryEnabled: true,
   recoveryMultipliers: listEnv('RECOVERY_MULTIPLIERS', '1,13.2,150.0').map(Number).filter(Number.isFinite),
 
   // ── Kelly-fractional sizing ────────────────────────────────────────
@@ -189,25 +206,25 @@ const CONFIG = Object.freeze({
   //   cushion; full Kelly is mathematically optimal for growth but has
   //   ~40% drawdowns). Disable with KELLY_ENABLED=false to fall back
   //   to the legacy flat/recovery sizing above.
-  kellySizingEnabled  : boolEnv('KELLY_ENABLED',         false),
-  kellyFraction       : numEnv ('KELLY_FRACTION',        0.25),
-  kellyBankrollFrac   : numEnv ('KELLY_BANKROLL_FRAC',   1.00),  // % of live balance to treat as risk bankroll
-  kellyBankrollFloor  : numEnv ('KELLY_BANKROLL_FLOOR',  100.0), // never scale below this bankroll
-  kellyMaxStakeFrac   : numEnv ('KELLY_MAX_STAKE_FRAC',  0.02),  // hard cap: ≤2% of bankroll per trade
-  kellyMinEdgeForScale: numEnv ('KELLY_MIN_EDGE_SCALE',  0.005), // no scaling unless edge > 0.5pp
+  kellySizingEnabled  : false,
+  kellyFraction       : 0.25,
+  kellyBankrollFrac   : 1.00,  // % of live balance to treat as risk bankroll
+  kellyBankrollFloor  : 100.0, // never scale below this bankroll
+  kellyMaxStakeFrac   : 0.02,  // hard cap: ≤2% of bankroll per trade
+  kellyMinEdgeForScale: 0.005, // no scaling unless edge > 0.5pp
 
   // ── Per-symbol calibration tracker ─────────────────────────────────
   //   Rolling per-symbol (predicted P(win), actual outcome). Auto-disables
   //   a symbol when empirical WR trails predicted by > calibDisableGap
   //   over ≥ calibMinTrades. Re-enters via low-stake probe after
   //   calibProbeAfterMs; fully re-enabled when calibration re-converges.
-  calibEnabled        : boolEnv('CALIB_ENABLED',         false),
-  calibWindow         : intEnv ('CALIB_WINDOW',          200),
-  calibMinTrades      : intEnv ('CALIB_MIN_TRADES',      40),
-  calibDisableGap     : numEnv ('CALIB_DISABLE_GAP',     0.02),   // −2 pp below prediction → disable
-  calibReenableGap    : numEnv ('CALIB_REENABLE_GAP',    0.005),  // within ±0.5 pp → re-enable
-  calibProbeAfterMs   : intEnv ('CALIB_PROBE_AFTER_MS',  30 * 60_000),
-  calibProbeStakeFrac : numEnv ('CALIB_PROBE_STAKE_FRAC', 0.25),
+  calibEnabled        : false,
+  calibWindow         : 200,
+  calibMinTrades      : 40,
+  calibDisableGap     : 0.02,   // −2 pp below prediction → disable
+  calibReenableGap    : 0.005,  // within ±0.5 pp → re-enable
+  calibProbeAfterMs   : 30 * 60_000,
+  calibProbeStakeFrac : 0.25,  // probe at 25% of normal stake
 
   // ── Scheduled pause/resume ──────────────────────────────────────
   //   The bot stops opening new trades between pauseStartGmt and
@@ -217,7 +234,7 @@ const CONFIG = Object.freeze({
   //   (e.g. 22:00 → 06:00 pauses overnight).
   //   pauseStartGmt < pauseEndGmt means a mid-day break
   //   (e.g. 12:00 → 14:00 pauses over lunch).
-  pauseEnabled   : boolEnv('PAUSE_ENABLED', true),
+  pauseEnabled   : true,
   pauseStartGmt  : strEnv('PAUSE_START_GMT', '23:00'),
   pauseEndGmt    : strEnv('PAUSE_END_GMT',   '01:00'),
 
@@ -227,13 +244,13 @@ const CONFIG = Object.freeze({
   //   trading on that day. Open trades will settle normally.
   //   These can be set via environment variables:
   //     TRADE_SUNDAY=false TRADE_MONDAY=true etc.
-  tradeSunday    : boolEnv('TRADE_SUNDAY',    false),
+  tradeSunday    : boolEnv('TRADE_SUNDAY',    true),
   tradeMonday    : boolEnv('TRADE_MONDAY',    true),
   tradeTuesday   : boolEnv('TRADE_TUESDAY',   true),
   tradeWednesday : boolEnv('TRADE_WEDNESDAY', true),
   tradeThursday  : boolEnv('TRADE_THURSDAY',  true),
   tradeFriday    : boolEnv('TRADE_FRIDAY',    true),
-  tradeSaturday  : boolEnv('TRADE_SATURDAY',  false),
+  tradeSaturday  : boolEnv('TRADE_SATURDAY',  true),
 
   // GMT/UTC reporting
   eodTimeGmt: strEnv('TRADE_DAY_END_GMT', '00:00'), // default midnight GMT; report date is previous UTC day
@@ -241,8 +258,8 @@ const CONFIG = Object.freeze({
   hourlySummary: boolEnv('HOURLY_SUMMARY', true),
 
   // Persistence/logging
-  stateFile: strEnv('STATE_FILE', 'deriv_digit_differ9_05_state.json'),
-  logFile: strEnv('LOG_FILE', 'deriv_digit_differ9_05_bot.log'),
+  stateFile: strEnv('STATE_FILE', 'monte-carlos_differ_01_state.json'),
+  logFile: strEnv('LOG_FILE', 'monte-carlos_differ_01_bot.log'),
   logLevel: strEnv('LOG_LEVEL', 'INFO').toUpperCase(),
 
   // Telegram
@@ -285,7 +302,7 @@ const CONFIG = Object.freeze({
   backtestTicks       : intEnv('BACKTEST_TICKS',      100000),
   backtestBatchSize   : intEnv('BACKTEST_BATCH_SIZE', 5000),
   backtestReportEvery : intEnv('BACKTEST_REPORT',     10000),
-  backtestOutFile     : strEnv('BACKTEST_OUT',        'differ_backtest_report_04.json'),
+  backtestOutFile     : strEnv('BACKTEST_OUT',        'monte-carlos_differ_backtest_report_01.json'),
   // The Deriv DIGITDIFF payout multiplier is roughly 1.09-1.11× stake
   // (win ~90% of the time, get ~10% profit). We DEFAULT to 1.10, but at
   // backtest start we probe a real Deriv proposal for the actual live
@@ -305,6 +322,7 @@ const CONFIG = Object.freeze({
   //  blocked forever).
   backtestAssetLock       : boolEnv('BACKTEST_ASSET_LOCK',       false),
   backtestAssetLockTicks  : intEnv ('BACKTEST_ASSET_LOCK_TICKS', 10),
+  backtestMcEnabled       : boolEnv('BACKTEST_MC_ENABLED',       false), // opt-in MC gate for backtest
 
   backtestMinEdge     : process.env.BACKTEST_MIN_EDGE      ? Number(process.env.BACKTEST_MIN_EDGE)      : null,
   backtestSafety      : process.env.BACKTEST_SAFETY_MARGIN ? Number(process.env.BACKTEST_SAFETY_MARGIN) : null,
@@ -1204,6 +1222,30 @@ class DigitAnalyzer {
       0.15 * Math.max(0, Math.min(1, best.gap / 30))
     ));
 
+    // ── Monte Carlo analysis ───────────────────────────────────────
+    const randomnessQuality = this.testRandomnessQuality(recentDigits);
+    const candidateDigits = candidates.filter(c => c.pLossUpper <= this.cfg.maxLossProb);
+    const mcResult = this.runMonteCarlo(recentDigits, candidateDigits);
+    const mcScored = this.scoreCandidatesMC(mcResult, candidateDigits);
+    const mcBest = mcScored.length ? mcScored[0] : null;
+
+    // MC recommendation: edge is stable, exceeds threshold, stream isn't purely random
+    const mcRecommended = mcResult.stable
+      && mcBest != null
+      && mcBest.shouldTrade
+      && randomnessQuality.overallRandom; // stream looks random → MC edge is meaningful
+
+    // If MC says edge is NOT stable, we may still trade but flag it
+    const mcSkippedReason = !mcResult.stable
+      ? 'edge not stable across resamples'
+      : !mcBest
+        ? 'no MC candidates'
+        : !mcBest.shouldTrade
+          ? `mcPercentile=${(mcBest.mcPercentile*100).toFixed(0)}% above threshold`
+          : !randomnessQuality.overallRandom
+            ? `randomness flags: ${randomnessQuality.flags.join('; ')}`
+            : null;
+
     return {
       symbol,
       ticks: recentDigits.length,
@@ -1218,6 +1260,13 @@ class DigitAnalyzer {
       gates,
       allowedByModel: gates.length === 0,
       weights: { rolling: wRoll, ewma: wEwma, transition: wTrans },
+      // Monte Carlo fields
+      mcResult,
+      mcScored,
+      mcBest,
+      mcRecommended,
+      mcSkippedReason,
+      randomnessQuality,
     };
   }
   rank(list) {
@@ -1226,6 +1275,387 @@ class DigitAnalyzer {
       const bu = b.best?.pLossUpper ?? 1;
       return au - bu || b.score - a.score;
     });
+  }
+
+  // ── Monte Carlo Analysis Methods ────────────────────────────────────
+
+  /**
+   * testRandomnessQuality(digits) — Check if the recent digit stream
+   * deviates from i.i.d. uniform randomness.
+   *
+   * Tests:
+   *   1. Uniformity: chi-square against equal 10% per digit
+   *   2. Transition skew: are consecutive-pair transitions uniform?
+   *   3. Short-run clustering: are there more same-digit runs than expected?
+   *
+   * Returns { uniform, transitions, clustering, overallRandom, flags }
+   * where each *-test is { pValue, random } and overallRandom is true
+   * when no significant deviation was detected.
+   */
+  testRandomnessQuality(digits) {
+    const flags = [];
+    const n = digits.length;
+
+    // ── 1. Uniformity test (chi-square) ──────────────────────────────
+    const counts = Array(10).fill(0);
+    for (const d of digits) counts[d]++;
+    const expected = n / 10;
+    let chiSq = 0;
+    for (let i = 0; i < 10; i++) {
+      chiSq += ((counts[i] - expected) ** 2) / expected;
+    }
+    // Approximate p-value for chi-square with 9 df
+    const pUniform = 1 - this._chiSquarePValue(chiSq, 9);
+    const uniform = { pValue: pUniform, random: pUniform >= this.cfg.mcUniformityThreshold };
+    if (!uniform.random) {
+      const maxDev = Math.max(...counts.map(c => Math.abs(c - expected) / expected));
+      flags.push(`uniformity-deviant (p=${pUniform.toFixed(4)}, maxDev=${(maxDev*100).toFixed(1)}%)`);
+    }
+
+    // ── 2. Transition skew test ──────────────────────────────────────
+    // Build 10x10 transition count matrix from consecutive pairs
+    const transCounts = Array.from({ length: 10 }, () => Array(10).fill(0));
+    for (let i = 0; i + 1 < n; i++) {
+      transCounts[digits[i]][digits[i + 1]]++;
+    }
+    // For each from-digit, chi-square test if transitions are uniform
+    let maxTransP = 1;
+    let totalTransChiSq = 0;
+    let totalTransDf = 0;
+    for (let from = 0; from < 10; from++) {
+      const rowSum = transCounts[from].reduce((s, x) => s + x, 0);
+      if (rowSum < 10) continue; // skip sparse rows
+      const rowExpected = rowSum / 10;
+      let rowChiSq = 0;
+      for (let to = 0; to < 10; to++) {
+        rowChiSq += ((transCounts[from][to] - rowExpected) ** 2) / rowExpected;
+      }
+      totalTransChiSq += rowChiSq;
+      totalTransDf += 9;
+      const rowP = 1 - this._chiSquarePValue(rowChiSq, 9);
+      if (rowP < maxTransP) maxTransP = rowP;
+    }
+    const transP = totalTransDf > 0
+      ? 1 - this._chiSquarePValue(totalTransChiSq, totalTransDf)
+      : 1;
+    const transitions = { pValue: Math.min(transP, maxTransP), random: Math.min(transP, maxTransP) >= this.cfg.mcTransitionThreshold };
+    if (!transitions.random) {
+      flags.push(`transition-skew (p=${transitions.pValue.toFixed(4)})`);
+    }
+
+    // ── 3. Short-run clustering test ─────────────────────────────────
+    // Count runs of identical digits in the most recent 200 ticks
+    const runWindow = digits.slice(-Math.min(200, n));
+    let runCount = 1;
+    for (let i = 1; i < runWindow.length; i++) {
+      if (runWindow[i] !== runWindow[i - 1]) runCount++;
+    }
+    // Expected runs under i.i.d.: R = N * (1 - sum(pi^2)) + 1
+    // For uniform: R ≈ N * 0.9 + 1
+    const runN = runWindow.length;
+    let sumP2 = 0;
+    for (let i = 0; i < 10; i++) {
+      const pi = counts[i] / n;
+      sumP2 += pi * pi;
+    }
+    const expectedRuns = runN * (1 - sumP2) + 1;
+    // Variance of runs (approximate): Var(R) ≈ N * sum(pi^2 * (1-pi)^2) - correction
+    let varSum = 0;
+    for (let i = 0; i < 10; i++) {
+      const pi = counts[i] / n;
+      varSum += pi * pi * (1 - pi) * (1 - pi);
+    }
+    const varRuns = Math.max(1, runN * varSum);
+    const zRuns = (runCount - expectedRuns) / Math.sqrt(varRuns);
+    // Two-tailed p-value approximation
+    const pCluster = 2 * (1 - this._normalCDF(Math.abs(zRuns)));
+    const clustering = { pValue: pCluster, random: pCluster >= this.cfg.mcClusterThreshold };
+    if (!clustering.random) {
+      flags.push(`clustering (runs=${runCount}, expected=${expectedRuns.toFixed(0)}, p=${pCluster.toFixed(4)})`);
+    }
+
+    return {
+      uniform,
+      transitions,
+      clustering,
+      overallRandom: uniform.random && transitions.random && clustering.random,
+      flags,
+      counts,
+      n,
+    };
+  }
+
+  /**
+   * _chiSquarePValue(x, df) — Approximate survival function (1-CDF)
+   * for chi-square distribution using the incomplete gamma function.
+   */
+  _chiSquarePValue(x, df) {
+    if (x <= 0) return 1;
+    // Regularized upper incomplete gamma: Q(df/2, x/2)
+    const a = df / 2;
+    const z = x / 2;
+    // Use series expansion for small z, continued fraction for large z
+    if (z < a + 1) {
+      // Series
+      let sum = 1 / a;
+      let term = 1 / a;
+      for (let n = 1; n < 200; n++) {
+        term *= z / (a + n);
+        sum += term;
+        if (Math.abs(term) < 1e-12) break;
+      }
+      return 1 - Math.exp(-z + a * Math.log(z) - this._logGamma(a)) * sum;
+    } else {
+      // Continued fraction
+      let f = 1e-30;
+      let C = f;
+      let D = 0;
+      for (let n = 1; n < 200; n++) {
+        const an = (n % 2 === 1) ? ((n + 1) / 2 - a) : (n / 2);
+        D = 1 / (1 + an * D);
+        if (D === 0) D = 1e-30;
+        C = 1 / (1 + an / C);
+        if (C === 0) C = 1e-30;
+        f *= D * C;
+      }
+      return Math.exp(-z + a * Math.log(z) - this._logGamma(a)) * f;
+    }
+  }
+
+  /**
+   * _logGamma(x) — Lanczos approximation for log(Gamma(x)).
+   */
+  _logGamma(x) {
+    const g = 7;
+    const c = [
+      0.99999999999980993, 676.5203681218851, -1259.1392167224028,
+      771.32342877765313, -176.61502916214059, 12.507343278686905,
+      -0.13857109526572012, 9.9843695780195716e-6, 1.5056327351493116e-7,
+    ];
+    if (x < 0.5) {
+      return Math.log(Math.PI / Math.sin(Math.PI * x)) - this._logGamma(1 - x);
+    }
+    x -= 1;
+    let a = c[0];
+    const t = x + g + 0.5;
+    for (let i = 1; i < g + 2; i++) a += c[i] / (x + i);
+    return 0.5 * Math.log(2 * Math.PI) + (x + 0.5) * Math.log(t) - t + Math.log(a);
+  }
+
+  /**
+   * _normalCDF(x) — Standard normal CDF approximation (Abramowitz & Stegun).
+   */
+  _normalCDF(x) {
+    const a1 = 0.254829592, a2 = -0.284496736, a3 = 1.421413741;
+    const a4 = -1.453152027, a5 = 1.061405429, p = 0.3275911;
+    const sign = x < 0 ? -1 : 1;
+    x = Math.abs(x) / Math.SQRT2;
+    const t = 1 / (1 + p * x);
+    const y = 1 - ((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
+    return 0.5 * (1 + sign * y);
+  }
+
+  /**
+   * runMonteCarlo(digits, candidateDigits) — Core Monte Carlo simulation.
+   *
+   * Uses a UNIFORM null model (each digit 0-9 has P=0.1) to test whether
+   * any candidate digit appears less frequently than expected under
+   * randomness (which would make it a better differ barrier).
+   *
+   * For each simulation, generates a synthetic sequence from the null
+   * and measures how often each candidate would appear. Then compares
+   * the observed frequency against the simulation distribution.
+   *
+   * Stability: runs multiple bootstrap passes to confirm the edge persists.
+   *
+   * Returns { candidates: [...], stable, overallScore, summary }
+   */
+  runMonteCarlo(digits, candidateDigits) {
+    const window = digits.slice(-Math.min(this.cfg.mcWindowSize, digits.length));
+    const N = window.length;
+    const nSims = this.cfg.mcSimulations;
+    const nPasses = this.cfg.mcResamplePasses;
+
+    if (N < this.cfg.mcMinSample) {
+      return { candidates: [], stable: false, overallScore: 0, summary: `sample too small (${N} < ${this.cfg.mcMinSample})` };
+    }
+
+    // Observed frequencies in the window
+    const observed = Array(10).fill(0);
+    for (const d of window) observed[d]++;
+
+    // For each candidate, collect simulation statistics
+    const candidateSet = new Set(candidateDigits.map(c => typeof c === 'number' ? c : c.digit));
+    const simResults = {};
+    for (const d of candidateSet) {
+      simResults[d] = {
+        digit: d,
+        observedFreq: observed[d] / N,
+        simFreqs: [],  // frequencies across simulations
+        beatsCount: 0, // how many sims show this digit LESS than observed
+      };
+    }
+
+    // Run simulations
+    for (let sim = 0; sim < nSims; sim++) {
+      // Generate simulated sequence from uniform null
+      const simCounts = Array(10).fill(0);
+      for (let i = 0; i < N; i++) {
+        simCounts[Math.floor(Math.random() * 10)]++;
+      }
+      for (const d of candidateSet) {
+        const simFreq = simCounts[d] / N;
+        simResults[d].simFreqs.push(simFreq);
+        // For a differ, LOWER frequency is better — count how many sims
+        // have this digit appearing MORE than observed (meaning observed is lucky)
+        if (simFreq >= simResults[d].observedFreq) {
+          simResults[d].beatsCount++;
+        }
+      }
+    }
+
+    // Compute statistics for each candidate
+    const candidates = [];
+    for (const d of candidateSet) {
+      const r = simResults[d];
+      r.simFreqs.sort((a, b) => a - b);
+
+      // Expected frequency under uniform = 0.1
+      const expectedFreq = 0.1;
+      const observedGap = expectedFreq - r.observedFreq; // positive = digit appears less than expected (GOOD for differ)
+
+      // Percentile: where does observed fall in simulation distribution?
+      // Low percentile = observed is unusually low (good for differ)
+      const percentile = r.beatsCount / nSims;
+
+      // Relative edge: how much better than chance
+      const relativeEdge = expectedFreq > 0 ? (observedGap / expectedFreq) : 0;
+
+      // Standard deviation of simulation frequencies
+      const mean = r.simFreqs.reduce((s, x) => s + x, 0) / nSims;
+      const variance = r.simFreqs.reduce((s, x) => s + (x - mean) ** 2, 0) / nSims;
+      const stdDev = Math.sqrt(variance);
+
+      // Z-score: how many stdDevs is observed from expected
+      const zScore = stdDev > 0 ? (r.observedFreq - expectedFreq) / stdDev : 0;
+
+      candidates.push({
+        digit: d,
+        observedFreq: r.observedFreq,
+        expectedFreq,
+        observedGap,
+        relativeEdge,
+        percentile,
+        zScore,
+        simMean: mean,
+        simStdDev: stdDev,
+        beatsChance: percentile < 0.5, // observed is below median (good for differ)
+        edgeExceedsThreshold: Math.abs(relativeEdge) >= this.cfg.mcEdgeThreshold,
+      });
+    }
+
+    // Sort: prefer digits with LOWEST observed frequency (best differ barriers)
+    candidates.sort((a, b) => a.observedFreq - b.observedFreq);
+
+    // Stability check: run bootstrap passes
+    let stablePasses = 0;
+    const topDigit = candidates.length ? candidates[0].digit : null;
+
+    for (let pass = 0; pass < nPasses; pass++) {
+      // Resample the window with replacement
+      const resampled = [];
+      for (let i = 0; i < N; i++) {
+        resampled.push(window[Math.floor(Math.random() * N)]);
+      }
+      const resampledObserved = Array(10).fill(0);
+      for (const d of resampled) resampledObserved[d]++;
+
+      if (topDigit != null) {
+        const resampledFreq = resampledObserved[topDigit] / N;
+        const expectedFreq = 0.1;
+        const resampledEdge = (expectedFreq - resampledFreq) / expectedFreq;
+        // Pass if the resampled edge also exceeds threshold
+        if (Math.abs(resampledEdge) >= this.cfg.mcEdgeThreshold) {
+          stablePasses++;
+        }
+      }
+    }
+
+    const stable = stablePasses >= nPasses; // edge must survive ALL resample passes
+    const topCandidate = candidates[0] || null;
+    const overallScore = topCandidate
+      ? Math.max(0, Math.min(1,
+          0.40 * Math.max(0, Math.min(1, topCandidate.relativeEdge / 0.05)) +
+          0.30 * (stable ? 1 : 0) +
+          0.20 * Math.max(0, Math.min(1, 0.5 - topCandidate.percentile)) +
+          0.10 * (topCandidate.edgeExceedsThreshold ? 1 : 0)
+        ))
+      : 0;
+
+    const summary = topCandidate
+      ? `best=d${topCandidate.digit} freq=${(topCandidate.observedFreq*100).toFixed(1)}% ` +
+        `expected=${(topCandidate.expectedFreq*100).toFixed(1)}% ` +
+        `edge=${(topCandidate.relativeEdge*100).toFixed(1)}pp ` +
+        `pctile=${(topCandidate.percentile*100).toFixed(0)}% ` +
+        `stable=${stablePasses}/${nPasses}`
+      : 'no candidates';
+
+    return { candidates, stable, overallScore, summary, stablePasses, nPasses };
+  }
+
+  /**
+   * scoreCandidatesMC(mcResult, liveCandidates) — Combine Monte Carlo
+   * results with live proposal data to produce a final ranking.
+   *
+   * mcResult: output of runMonteCarlo()
+   * liveCandidates: array of { digit, pLossUpper, ... } from the analyzer
+   *
+   * Returns sorted array of { digit, mcConfidence, mcEdge, compositeScore, shouldTrade }
+   */
+  scoreCandidatesMC(mcResult, liveCandidates) {
+    if (!mcResult || !mcResult.candidates || !mcResult.candidates.length) return [];
+
+    const mcMap = new Map(mcResult.candidates.map(c => [c.digit, c]));
+    const scored = [];
+
+    for (const lc of liveCandidates) {
+      const mc = mcMap.get(lc.digit);
+      if (!mc) continue;
+
+      // Composite score: combine MC edge with live analysis
+      const mcScore = Math.max(0, Math.min(1,
+        0.50 * Math.max(0, Math.min(1, mc.relativeEdge / 0.05)) +
+        0.25 * (mcResult.stable ? 1 : 0) +
+        0.15 * Math.max(0, Math.min(1, 0.5 - mc.percentile)) +
+        0.10 * Math.max(0, Math.min(1, (0.10 - mc.observedFreq) / 0.03))
+      ));
+
+      const shouldTrade = mcResult.stable
+        && mc.edgeExceedsThreshold
+        && mc.percentile < this.cfg.mcConfidenceThreshold;
+
+      scored.push({
+        digit: lc.digit,
+        pLossUpper: lc.pLossUpper,
+        observedFreq: mc.observedFreq,
+        expectedFreq: mc.expectedFreq,
+        mcEdge: mc.relativeEdge,
+        mcPercentile: mc.percentile,
+        mcConfidence: 1 - mc.percentile,
+        mcScore,
+        shouldTrade,
+        // Keep live analysis fields for downstream use
+        rollingP: lc.rollingP,
+        ewmaP: lc.ewmaP,
+        transitionP: lc.transitionP,
+        gap: lc.gap,
+        recentHits: lc.recentHits,
+      });
+    }
+
+    // Sort by composite score descending
+    scored.sort((a, b) => b.mcScore - a.mcScore || a.pLossUpper - b.pLossUpper);
+    return scored;
   }
 }
 
@@ -1649,6 +2079,11 @@ class TradingBot {
     this._eodT = null;
     this._pauseStartTimer = null;
     this._pauseEndTimer = null;
+
+    // ── Monte Carlo risk controls ────────────────────────────────────
+    this.consecutiveMcSkips = 0;   // tracks consecutive MC-rejected scans
+    this.lastLossAt = 0;           // timestamp of last loss (for cooldown)
+    this.lastWeakSignalAt = 0;     // timestamp of last weak-signal skip
   }
 
   // ── Scheduled pause helpers ─────────────────────────────────────
@@ -1800,6 +2235,76 @@ class TradingBot {
     if (this._pauseEndTimer)   { clearTimeout(this._pauseEndTimer);   this._pauseEndTimer = null; }
   }
 
+  // ── Monte Carlo Decision Gate ──────────────────────────────────────
+
+  /**
+   * shouldTrade(mcResult, randomnessQuality) — Final gate that decides
+   * whether Monte Carlo analysis permits a trade.
+   *
+   * Checks:
+   *   1. Sample size sufficient
+   *   2. MC stability (edge survived resampling)
+   *   3. MC confidence above threshold
+   *   4. No major randomness flags
+   *   5. Not in loss cooldown
+   *   6. Not in weak-signal cooldown
+   *   7. Not exceeded max consecutive MC skips
+   *
+   * Returns { allowed: boolean, reason: string }
+   */
+  shouldTrade(mcResult, randomnessQuality) {
+    const cfg = this.cfg;
+
+    // 1. Sample size
+    if (!mcResult || !mcResult.candidates || !mcResult.candidates.length) {
+      return { allowed: false, reason: 'no MC candidates available' };
+    }
+    const windowSize = mcResult.candidates[0] ? mcResult.candidates[0].simFreqs?.length : 0;
+    // Use the analysis's tick count if MC doesn't expose it directly
+    // The mcResult.summary contains the info we need
+
+    // 2. MC stability
+    if (!mcResult.stable) {
+      return { allowed: false, reason: `MC edge not stable (${mcResult.stablePasses}/${mcResult.nPasses} resamples pass)` };
+    }
+
+    // 3. MC confidence — top candidate must have low percentile (appears less than expected)
+    const top = mcResult.candidates[0];
+    if (!top || top.percentile >= cfg.mcConfidenceThreshold) {
+      return { allowed: false, reason: `top candidate d${top?.digit} percentile ${(top?.percentile*100).toFixed(0)}% >= threshold ${(cfg.mcConfidenceThreshold*100).toFixed(0)}%` };
+    }
+
+    // 4. Edge must exceed threshold
+    if (Math.abs(top.relativeEdge) < cfg.mcEdgeThreshold) {
+      return { allowed: false, reason: `edge ${(top.relativeEdge*100).toFixed(2)}pp < threshold ${(cfg.mcEdgeThreshold*100).toFixed(2)}pp` };
+    }
+
+    // 5. Randomness quality — if stream is NOT random, the edge may be overfitting
+    if (randomnessQuality && !randomnessQuality.overallRandom) {
+      return { allowed: false, reason: `randomness flags: ${randomnessQuality.flags.join('; ')}` };
+    }
+
+    // 6. Loss cooldown
+    const now = Date.now();
+    if (now - this.lastLossAt < cfg.mcLossCooldownMs) {
+      const remaining = ((cfg.mcLossCooldownMs - (now - this.lastLossAt)) / 1000).toFixed(1);
+      return { allowed: false, reason: `loss cooldown — ${remaining}s remaining` };
+    }
+
+    // 7. Weak-signal cooldown
+    if (now - this.lastWeakSignalAt < cfg.mcWeakSignalCooldownMs) {
+      const remaining = ((cfg.mcWeakSignalCooldownMs - (now - this.lastWeakSignalAt)) / 1000).toFixed(1);
+      return { allowed: false, reason: `weak-signal cooldown — ${remaining}s remaining` };
+    }
+
+    // 8. Max consecutive skips — if we've skipped too many times, be cautious
+    if (this.consecutiveMcSkips >= cfg.mcMaxConsecutiveSkips) {
+      return { allowed: false, reason: `consecutive MC skips (${this.consecutiveMcSkips}) >= max (${cfg.mcMaxConsecutiveSkips})` };
+    }
+
+    return { allowed: true, reason: `MC PASS: d${top.digit} edge=${(top.relativeEdge*100).toFixed(2)}pp pctile=${(top.percentile*100).toFixed(0)}% stable=${mcResult.stablePasses}/${mcResult.nPasses}` };
+  }
+
   /**
    * Check if trading is allowed on the current day of week (GMT/UTC).
    * @returns {boolean} true if trading is allowed today, false otherwise
@@ -1899,7 +2404,7 @@ class TradingBot {
       `${rotationLine}\n` +
       `${pauseLine}\n` +
       `${dayLine}\n` +
-      `🧠 Method: <b>DIVER-9</b> conservative value-edge filter\n` +
+      `🧠 Method: <b>MC-DIVER-9</b> Monte Carlo validated edge filter\n` +
       `🕒 Trade day clock: <b>GMT/UTC</b> | EOD: ${this.cfg.eodTimeGmt} GMT\n\n` +
       `💼 Overall Profit: <b>${money(this.stats.overallProfit, this.currency())}</b>\n` +
       `❌ Loss streak: current ${this.stats.currentLossStreak}, x2=${this.stats.lossStreakEvents.x2}, x3=${this.stats.lossStreakEvents.x3}, x4=${this.stats.lossStreakEvents.x4}`
@@ -2013,6 +2518,25 @@ class TradingBot {
     const topLog = ranked.slice(0, 3).map(a => `${a.symbol}:d${a.best.digit} u=${a.best.pLossUpper.toFixed(4)} H=${a.entropy.toFixed(3)} X2=${a.chiSquare.toFixed(1)} ${a.gates.length ? 'skip(' + a.gates[0] + ')' : 'ok'}`).join(' | ');
     logger.info(`DIVER-9 scan ${topLog}`);
 
+    // ── Monte Carlo diagnostics log ──────────────────────────────────
+    for (const a of ranked.slice(0, 2)) {
+      if (!a.mcResult || !a.mcResult.candidates.length) {
+        logger.info(`[MC] ${a.symbol}: no MC candidates (sample=${a.ticks})`);
+        continue;
+      }
+      const rq = a.randomnessQuality;
+      const rqStr = rq
+        ? `uniform=${rq.uniform.pValue.toFixed(3)}(${rq.uniform.random?'ok':'FLAG'}) ` +
+          `trans=${rq.transitions.pValue.toFixed(3)}(${rq.transitions.random?'ok':'FLAG'}) ` +
+          `cluster=${rq.clustering.pValue.toFixed(3)}(${rq.clustering.random?'ok':'FLAG'})`
+        : 'n/a';
+      logger.info(
+        `[MC] ${a.symbol} window=${a.ticks} | ${rqStr}\n` +
+        `[MC]   ${a.mcResult.summary}\n` +
+        `[MC]   recommendation: ${a.mcRecommended ? 'TRADE' : 'SKIP'}${a.mcSkippedReason ? ' — ' + a.mcSkippedReason : ''}`
+      );
+    }
+
     // For the initial proposal probe we use a MINIMAL stake (just to
     // discover the live payout) — the real stake is decided *after* we
     // know the payout, using Kelly + calibration.
@@ -2101,6 +2625,19 @@ class TradingBot {
       );
     }
 
+    // ── Monte Carlo gate ──────────────────────────────────────────
+    const mcAnalysis = best.analysis;
+    const mcCheck = this.shouldTrade(mcAnalysis.mcResult, mcAnalysis.randomnessQuality);
+    if (!mcCheck.allowed) {
+      this.consecutiveMcSkips++;
+      this.lastWeakSignalAt = Date.now();
+      logger.info(`[MC] SKIP: ${mcCheck.reason} (consecutive skips: ${this.consecutiveMcSkips})`);
+      return;
+    }
+    logger.info(`[MC] PASS: ${mcCheck.reason}`);
+    // Reset consecutive skips on a passing MC check
+    this.consecutiveMcSkips = 0;
+
     // ── Compute the ACTUAL stake using Kelly + calibrator ──────────
     const pWin = 1 - best.candidate.pLossUpper;   // conservative win-prob (uses upper bound of loss prob)
     const sizing = this.currentStake({
@@ -2122,7 +2659,7 @@ class TradingBot {
     const a = best.analysis;
     const c = best.candidate;
     const payload = {
-      method: 'DIVER-9',
+      method: 'MC-DIVER-9',
       digit: c.digit,
       pLoss: c.pLoss,
       pLossUpper: c.pLossUpper,
@@ -2144,16 +2681,34 @@ class TradingBot {
       stakeStakeRatio: +(stake / this.cfg.stake).toFixed(2),   // legacy field name kept for messages
       recoveryStakeMultiplier: +(stake / this.cfg.stake).toFixed(2),
       currentLossStreak: this.stats.currentLossStreak,
+      // Monte Carlo metadata
+      mcEdge: a.mcBest?.relativeEdge ?? 0,
+      mcPercentile: a.mcBest?.percentile ?? 0,
+      mcConfidence: a.mcBest?.mcConfidence ?? 0,
+      mcStable: a.mcResult?.stable ?? false,
+      mcStablePasses: a.mcResult?.stablePasses ?? 0,
+      mcSummary: a.mcResult?.summary ?? '',
+      randomnessFlags: a.randomnessQuality?.flags ?? [],
     };
 
     const trade = await this.exec.buy(a.symbol, c.digit, stake, payload);
-    
+
     this.lastTradeAt = Date.now();
-    logger.info(`trade placed #${trade.contractId} ${a.symbol} DIGITDIFF differs ${c.digit} edge=${best.valueEdge.toFixed(4)} pLossU=${c.pLossUpper.toFixed(4)} qBE=${best.breakEvenLossProb.toFixed(4)}`);
+    logger.info(
+      `trade placed #${trade.contractId} ${a.symbol} DIGITDIFF differs ${c.digit} ` +
+      `edge=${best.valueEdge.toFixed(4)} pLossU=${c.pLossUpper.toFixed(4)} qBE=${best.breakEvenLossProb.toFixed(4)} ` +
+      `mcEdge=${(payload.mcEdge*100).toFixed(2)}pp mcPctile=${(payload.mcPercentile*100).toFixed(0)}% stable=${payload.mcStable}`
+    );
   }
 
   _onTradeOpen(t) {
     const a = t.analysis || {};
+    const mcLine = a.mcSummary
+      ? `\n🎲 <b>MC Analysis</b>\n` +
+        `• Edge: ${((a.mcEdge || 0)*100).toFixed(2)}pp | Percentile: ${((a.mcPercentile || 0)*100).toFixed(0)}%\n` +
+        `• Confidence: ${((a.mcConfidence || 0)*100).toFixed(0)}% | Stable: ${a.mcStable ? '✅' : '❌'}\n` +
+        `• ${a.mcSummary}\n`
+      : '';
     telegram.send(
       `🟢 <b>TRADE OPENED — DIGIT DIFFER</b>\n\n` +
       `🎫 Contract: <code>#${t.contractId}</code>\n` +
@@ -2162,12 +2717,13 @@ class TradingBot {
       `⏱️ Duration: ${t.durationTicks} tick(s)\n` +
       `💵 Stake: ${t.stake.toFixed(2)} ${this.currency()}\n` +
       `🎁 Payout: ${t.payout.toFixed(2)} ${this.currency()}\n\n` +
-      `🧠 <b>DIVER-9 edge</b>\n` +
+      `🧠 <b>MC-DIVER-9 edge</b>\n` +
       `• Model P(loss digit ${t.digit}): ${(a.pLoss * 100).toFixed(2)}%\n` +
       `• Conservative upper bound: <b>${(a.pLossUpper * 100).toFixed(2)}%</b>\n` +
       `• Break-even loss prob: ${(a.breakEvenLossProb * 100).toFixed(2)}%\n` +
       `• Value edge: <b>${(a.valueEdge * 100).toFixed(2)}pp</b>\n` +
       `• Entropy: ${Number(a.entropy || 0).toFixed(3)} | χ²: ${Number(a.chiSquare || 0).toFixed(2)} | gap: ${Number(a.probabilityGap || 0).toFixed(4)}\n` +
+      mcLine +
       `• Current loss streak: ${a.currentLossStreak || 0}\n\n` +
       `🕒 ${utcTs()}`
     );
@@ -2195,6 +2751,22 @@ class TradingBot {
       }
     }
 
+    // ── Monte Carlo loss tracking ──────────────────────────────────
+    // On loss: activate cooldown, increment consecutive skip counter
+    // On win: reset consecutive skip counter
+    if (!won) {
+      this.lastLossAt = Date.now();
+      this.consecutiveMcSkips++;
+      logger.info(`[MC] LOSS recorded — cooldown ${this.cfg.mcLossCooldownMs/1000}s active (consecutive skips: ${this.consecutiveMcSkips})`);
+    } else {
+      this.consecutiveMcSkips = 0;
+    }
+
+    // MC metadata for telegram
+    const mcMeta = t.analysis?.mcSummary
+      ? `\n🎲 <b>MC:</b> edge=${((t.analysis.mcEdge || 0)*100).toFixed(2)}pp pctile=${((t.analysis.mcPercentile || 0)*100).toFixed(0)}% stable=${t.analysis.mcStable ? '✅' : '❌'}`
+      : '';
+
     const emoji = won ? '✅' : '❌';
     const label = won ? 'WIN' : 'LOSS';
     const dur = Math.max(0, Number(t.sellTime || Date.now() / 1000) - Number(t.buyTime || 0));
@@ -2211,7 +2783,8 @@ class TradingBot {
       `📊 Symbol: <code>${t.symbol}</code> | differs <b>${t.digit}</b> | ${t.durationTicks}t\n` +
       `💵 Stake: ${t.stake.toFixed(2)} ${this.currency()}${kellyLine}\n` +
       `💰 P/L: <b>${money(t.profit, this.currency())}</b>\n` +
-      `⏱️ Duration: ${dur.toFixed(1)}s\n\n` +
+      `⏱️ Duration: ${dur.toFixed(1)}s\n` +
+      mcMeta + '\n\n' +
       `📅 <b>GMT Day Stats (${rec.date})</b>\n` +
       `• Trades: ${todayStats.count} (✅${todayStats.wins} ❌${todayStats.losses})\n` +
       `• Win rate: ${todayStats.winRate.toFixed(1)}%\n` +
@@ -2492,7 +3065,8 @@ class DifferBacktester {
       `minGap=${this.cfg.minProbabilityGap}  ` +
       `maxHits=${this.cfg.maxRecentDigitHits}\n` +
       `         duration=${this.cfg.durationTicks}t  payoutMult=${this.cfg.backtestPayoutMult}  ` +
-      `assetLock=${this.cfg.backtestAssetLock}`
+      `assetLock=${this.cfg.backtestAssetLock}  ` +
+      `mcGate=${this.cfg.backtestMcEnabled ? 'ON' : 'off'}`
     );
     console.log(banner);
 
@@ -2808,6 +3382,14 @@ class DifferBacktester {
         if (calibMult === 0) { fire = false; diag.gatedCalib = (diag.gatedCalib || 0) + 1; }
       }
 
+      // Monte Carlo gate (opt-in via BACKTEST_MC_ENABLED=1)
+      if (fire && this.cfg.backtestMcEnabled && analysis.mcResult) {
+        if (!analysis.mcResult.stable || !analysis.mcRecommended) {
+          fire = false;
+          diag.gatedMc = (diag.gatedMc || 0) + 1;
+        }
+      }
+
       if (!fire) { i++; continue; }
 
       // ── Size the trade ─────────────────────────────────────────
@@ -3032,6 +3614,9 @@ class DifferBacktester {
     console.log(`    rejected by lossProb : ${diag.gatedLossProb}   (max upper ${this.cfg.maxLossProb})`);
     console.log(`    rejected by minEdge  : ${diag.gatedEdge}   (needed ≥ ${(this.cfg.minEdge*100).toFixed(3)}%)`);
     console.log(`    rejected by assetLock: ${diag.gatedAssetLock}`);
+    if (this.cfg.backtestMcEnabled) {
+      console.log(`    rejected by MC gate  : ${diag.gatedMc || 0}   (MC stability/confidence fail)`);
+    }
     console.log(`    best value edge seen : ${bestEdgeStr}   (min ${(this.cfg.minEdge*100).toFixed(3)}%)`);
     console.log(`    best pLossUpper seen : ${(diag.bestLossPUSeen*100).toFixed(3)}%   (max ${(this.cfg.maxLossProb*100).toFixed(1)}%)`);
 
@@ -3082,8 +3667,8 @@ class DifferBacktester {
 // ─────────────────────────────────────────────────────────────────────
 function printBanner() {
   console.log('╔════════════════════════════════════════════════════╗');
-  console.log('║   Deriv Digit Differ Trading Bot v1.0             ║');
-  console.log('║   DIGITDIFF • DIVER-9 • GMT EOD • Stateful Stats  ║');
+  console.log('║   Deriv Digit Differ Trading Bot v2.0             ║');
+  console.log('║   DIGITDIFF • MC-DIVER-9 • GMT EOD • Stateful     ║');
   console.log('╚════════════════════════════════════════════════════╝');
   console.log('');
 }

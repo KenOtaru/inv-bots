@@ -147,7 +147,7 @@ const CONFIG = Object.freeze({
   analysisWindows:       [30, 60, 150, 400], // used by backtester reporting
   bootstrapIterations:   500,     // per-digit CI (lighter)
   hotFilterTicks:        5,       // digits in last N ticks → penalty
-  cooldownTicks:         25,     // don't re-predict digit within N ticks
+  cooldownTicks:         200,     // don't re-predict digit within N ticks
   maxRecentHits:         2,       // max occurrences in recent tail
   recentLookback:        20,      // recent tail length for hit check
   minEntropy:            0.90,    // min normalized entropy gate
