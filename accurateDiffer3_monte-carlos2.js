@@ -118,7 +118,7 @@ const CONFIG = Object.freeze({
   stake:           1.1,
   durationTicks:   1,
   minStake:        1.1,
-  maxStake:        20.0,
+  maxStake:        5.5,
   assets:          ['R_10','R_25','R_50','R_75','RDBULL','RDBEAR'], //'R_10','R_25','R_50','R_75','RDBULL','RDBEAR',
 
   // ── Timing ─────────────────────────────────────────────────────
@@ -1025,7 +1025,7 @@ class MonteCarloAnalyzer {
     // Monte Carlo gates
     // if (!scored.shouldTrade) gates.push(`mc-rejected:${scored.reason}`);
     if (scored.confidence < this.cfg.minEdgeConfidence) gates.push(`confidence-low:${scored.confidence.toFixed(3)}`);
-    // if (scored.stability < this.cfg.mcStabilityThreshold) gates.push(`stability-low:${scored.stability.toFixed(3)}`);
+    if (scored.stability < this.cfg.mcStabilityThreshold) gates.push(`stability-low:${scored.stability.toFixed(3)}`);
 
     // Bootstrap CI width
     if (bootCI.width > 0.08) gates.push(`bootstrap-ci-wide:${bootCI.width.toFixed(4)}`);
