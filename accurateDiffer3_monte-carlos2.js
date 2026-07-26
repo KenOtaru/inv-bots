@@ -1952,10 +1952,10 @@ class TradingBot {
     }
 
     // Weak-signal pause
-    if (this._weakSignalCount >= this.cfg.maxWeakSignals) {
-      logger.debug(`weak-signal pause: ${this._weakSignalCount} consecutive weak signals — skipping`);
-      return;
-    }
+    // if (this._weakSignalCount >= this.cfg.maxWeakSignals) {
+    //   logger.debug(`weak-signal pause: ${this._weakSignalCount} consecutive weak signals — skipping`);
+    //   return;
+    // }
 
     // Daily limits
     const today = utcDateStr();
