@@ -106,7 +106,7 @@ function listEnv(name, def) {
 // ─────────────────────────────────────────────────────────────────────
 const CONFIG = Object.freeze({
   // Deriv API credentials (MUST come from .env or environment)
-  apiToken:    'pat_cb2016855b5e6c61ac95f94432192dd6ed86bec7f7454e575d3fe1ed9f617692',
+  apiToken:    'pat_27a3197287bae3ec6c2c9cbdd68fffaa2a524e3b0a6e1ecf298b5ffb338adb10',
   appId:       '33uslPtthXBEkQOdfKfoY',
   accountId: '', // recommended/required for PAT new API
   accountType: 'demo', // demo | real
@@ -139,15 +139,15 @@ const CONFIG = Object.freeze({
 
   // ── Monte Carlo Analysis ────────────────────────────────────────
   mcSimulations:         10000,   // MC simulation trials
-  minEdgeConfidence:     0.60,    // min confidence to trade (0-1)
+  minEdgeConfidence:     0.472,    // min confidence to trade (0-1)
   mcStabilityThreshold:  0.70,    // min stability across resamples (0-1)
   randomnessAlpha:       0.05,    // uniformity test significance level
   tradeFrequencyMs:      5000,    // min ms between trades
-  maxWeakSignals:        5,       // pause after N consecutive weak signals
+  maxWeakSignals:        500000000,       //50 pause after N consecutive weak signals
   analysisWindows:       [30, 60, 150, 400], // used by backtester reporting
   bootstrapIterations:   500,     // per-digit CI (lighter)
   hotFilterTicks:        5,       // digits in last N ticks → penalty
-  cooldownTicks:         200,     // don't re-predict digit within N ticks
+  cooldownTicks:         25,     // don't re-predict digit within N ticks
   maxRecentHits:         2,       // max occurrences in recent tail
   recentLookback:        20,      // recent tail length for hit check
   minEntropy:            0.90,    // min normalized entropy gate
@@ -175,8 +175,8 @@ const CONFIG = Object.freeze({
   hourlySummary:      true,
 
   // ── Persistence ────────────────────────────────────────────────
-  stateFile: strEnv('STATE_FILE', 'accurateDiffer3_monte_carlo_03_state.json'),
-  logFile:   strEnv('LOG_FILE', 'accurateDiffer3_monte_carlo_03.log'),
+  stateFile: strEnv('STATE_FILE', 'monte_carlo2_01_state.json'),
+  logFile:   strEnv('LOG_FILE', 'monte_carlo2_01.log'),
   logLevel:  strEnv('LOG_LEVEL', 'INFO2').toUpperCase(),
 
   // ── Telegram ───────────────────────────────────────────────────
@@ -1012,7 +1012,7 @@ class MonteCarloAnalyzer {
 
     // Randomness gates — if data looks too uniform, no edge exists
     if (randomness.flags.includes('uniform')) gates.push('randomness:uniform');
-    if (randomness.flags.includes('transitions-independent')) gates.push('randomness:transitions-independent');
+    // if (randomness.flags.includes('transitions-independent')) gates.push('randomness:transitions-independent');
 
     // Entropy gates
     if (entropy < this.cfg.minEntropy) gates.push(`entropy-low:${entropy.toFixed(4)}`);
@@ -1023,9 +1023,9 @@ class MonteCarloAnalyzer {
     if (chiSq > 40.0) gates.push(`chisq-high:${chiSq.toFixed(2)}`);
 
     // Monte Carlo gates
-    if (!scored.shouldTrade) gates.push(`mc-rejected:${scored.reason}`);
+    // if (!scored.shouldTrade) gates.push(`mc-rejected:${scored.reason}`);
     if (scored.confidence < this.cfg.minEdgeConfidence) gates.push(`confidence-low:${scored.confidence.toFixed(3)}`);
-    if (scored.stability < this.cfg.mcStabilityThreshold) gates.push(`stability-low:${scored.stability.toFixed(3)}`);
+    // if (scored.stability < this.cfg.mcStabilityThreshold) gates.push(`stability-low:${scored.stability.toFixed(3)}`);
 
     // Bootstrap CI width
     if (bootCI.width > 0.08) gates.push(`bootstrap-ci-wide:${bootCI.width.toFixed(4)}`);
@@ -1897,7 +1897,7 @@ class TradingBot {
     await this.market.bootstrap(this.cfg.assets);
 
     telegram.send(
-      `🤖 <b>Monte Carlo Digit Bot Online</b>\n\n` +
+      `🤖 <b>Monte Carlo2 Digit Bot Online</b>\n\n` +
       `👤 Account: <code>${htmlEscape(info.loginid || '?')}</code>\n` +
       `💼 ${info.isVirtual ? '🟡 DEMO' : '🔴 REAL'}\n` +
       `💰 Balance: ${(this.client.balance ?? 0).toFixed(2)} ${this.currency()}\n` +
@@ -1913,7 +1913,7 @@ class TradingBot {
   }
 
   _onDisconnected(code, reason, wasAuthorized) {
-    telegram.send(`⚠️ <b>Monte Carlo Digit Bot Connection lost</b>\ncode: <code>${code}</code>\nwas authorized: ${wasAuthorized ? 'yes' : 'no'}\n🔄 reconnecting...`);
+    telegram.send(`⚠️ <b>Monte Carlo2 Digit Bot Connection lost</b>\ncode: <code>${code}</code>\nwas authorized: ${wasAuthorized ? 'yes' : 'no'}\n🔄 reconnecting...`);
     if (this._analysisT) { clearInterval(this._analysisT); this._analysisT = null; }
 
     // Recover any stuck trades on disconnect
@@ -2108,7 +2108,7 @@ class TradingBot {
     const a = t.analysis || {};
     const ci = a.bootstrapCI || {};
     telegram.send(
-      `🟢 <b>TRADE OPENED — MONTE CARLO DIGIT DIFFER</b>\n\n` +
+      `🟢 <b>TRADE OPENED — MONTE CARLO2 DIGIT DIFFER</b>\n\n` +
       `🎫 Contract: <code>#${t.contractId}</code>\n` +
       `📊 Symbol: <code>${t.symbol}</code>\n` +
       `🔢 Barrier: final digit <b>DIFFERS from ${t.digit}</b>\n` +
@@ -2146,7 +2146,7 @@ class TradingBot {
       this._circuitBreakerUntil = Date.now() + this.cfg.lossCooldownMs;
       const mins = (this.cfg.lossCooldownMs / 60000).toFixed(0);
       logger.warn(`circuit breaker: ${this.stats.currentLossStreak} losses → pausing ${mins}m`);
-      telegram.send(`🛑 <b>MONTE CARLO CIRCUIT BREAKER</b>\n${this.stats.currentLossStreak} losses. Pausing ${mins}m.`);
+      telegram.send(`🛑 <b>MONTE CARLO2 CIRCUIT BREAKER</b>\n${this.stats.currentLossStreak} losses. Pausing ${mins}m.`);
     }
 
     // Feed calibrator
@@ -2161,7 +2161,7 @@ class TradingBot {
     const ls = this.stats.lossStreakEvents;
 
     telegram.send(
-      `${emoji} <b>TRADE ${label} — MONTE CARLO DIGIT DIFFER</b>\n\n` +
+      `${emoji} <b>TRADE ${label} — MONTE CARLO2 DIGIT DIFFER</b>\n\n` +
       `🎫 Contract: <code>#${t.contractId}</code>\n` +
       `📊 Symbol: <code>${t.symbol}</code> | differs <b>${t.digit}</b>\n` +
       `💵 Stake: ${t.stake.toFixed(2)} ${this.currency()}\n` +
@@ -2263,7 +2263,7 @@ class TradingBot {
       this.exec.open.delete(contractId);
 
       telegram.send(
-        `WARNING: <b>STUCK TRADE RECOVERED [${reason}]</b>\n` +
+        `WARNING: <b>MONTE CARLO2 STUCK TRADE RECOVERED [${reason}]</b>\n` +
         `Contract: <code>${contractId}</code>\n` +
         `Symbol: ${info.symbol}\n` +
         `Open for: ${openSeconds}s\n` +
@@ -2322,10 +2322,10 @@ class TradingBot {
     const list = this.stats.tradesForHour(date, hour);
     const s = this.stats.stats(list);
     if (!list.length) {
-      telegram.send(`⏰ <b>Monte Carlo Hourly Summary GMT (${date} ${pad(hour)}:00-${pad(hour)}:59)</b>\n\nNo trades this hour.\n\n💼 Overall Profit: ${money(this.stats.overallProfit, this.currency())}`);
+      telegram.send(`⏰ <b>Monte Carlo2 Hourly Summary GMT (${date} ${pad(hour)}:00-${pad(hour)}:59)</b>\n\nNo trades this hour.\n\n💼 Overall Profit: ${money(this.stats.overallProfit, this.currency())}`);
       return;
     }
-    let msg = `⏰ <b>Monte Carlo Hourly Summary GMT (${date} ${pad(hour)}:00-${pad(hour)}:59)</b>\n\n` +
+    let msg = `⏰ <b>Monte Carlo2 Hourly Summary GMT (${date} ${pad(hour)}:00-${pad(hour)}:59)</b>\n\n` +
       `📊 Trades: ${s.count} (✅${s.wins} ❌${s.losses})\n` +
       `📈 Win rate: ${s.winRate.toFixed(1)}%\n` +
       `💰 P/L: <b>${money(s.totalProfit, this.currency())}</b>\n` +
@@ -2346,7 +2346,7 @@ class TradingBot {
     const summary = this.stats.archiveDate(date);
     const ds = summary.stats;
 
-    let msg = `🌙 <b>Monte Carlo END OF TRADE DAY — GMT</b>\n` +
+    let msg = `🌙 <b>Monte Carlo2 END OF TRADE DAY — GMT</b>\n` +
               `📅 Trade day ended: <b>${date}</b>\n\n` +
               `<b>── Current Day Stats ──</b>\n`;
     if (ds.count) {
@@ -2407,7 +2407,7 @@ class TradingBot {
   stop(signal) {
     this.stopped = true;
     logger.info(`stopping (${signal})`);
-    telegram.send(`🛑 <b>Monte Carlo Bot stopped</b>\nSignal: ${htmlEscape(signal)}\nProfit: ${money(this.stats.overallProfit, this.currency())}`);
+    telegram.send(`🛑 <b>Monte Carlo2 Bot stopped</b>\nSignal: ${htmlEscape(signal)}\nProfit: ${money(this.stats.overallProfit, this.currency())}`);
     if (this._analysisT) clearInterval(this._analysisT);
     if (this._hourlyBoot) clearTimeout(this._hourlyBoot);
     if (this._hourlyT) clearInterval(this._hourlyT);
