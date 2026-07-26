@@ -512,6 +512,13 @@ class DerivClient extends EventEmitter {
     this._isPat = RestClient.isPat(cfg.apiToken);
     this._rest = this._isPat ? new RestClient(cfg.restBaseUrl, cfg.appId, cfg.apiToken) : null;
     this._targetAccountId = cfg.accountId || '';
+    // ── WebSocket heartbeat (ping/pong) ─────────────────────────────
+    // Deriv's server closes idle connections after ~15-20 min. Without
+    // application-level pings, the TCP half-open goes undetected and the
+    // bot silently stops trading.
+    this._heartbeatInterval = null;
+    this._pongTimeout = null;
+    this._pongReceived = false;
   }
 
   _nextReqId() { this._reqId += 1; return this._reqId; }
@@ -609,6 +616,7 @@ class DerivClient extends EventEmitter {
     this.ws.on('message', d => this._onMessage(d));
     this.ws.on('error', e => this._onError(e));
     this.ws.on('close', (c, r) => this._onClose(c, r));
+    this.ws.on('pong', () => { this._pongReceived = true; clearTimeout(this._pongTimeout); });
     this.ws.on('unexpected-response', (_, res) => {
       logger.error('WebSocket handshake failed:', res.statusCode, res.statusMessage);
       try { res.destroy(); } catch (_) {}
@@ -620,6 +628,7 @@ class DerivClient extends EventEmitter {
     this.connected = true;
     this._reconnecting = false;
     this._reconnectAttempt = 0;
+    this._startHeartbeat();
     this.emit('open');
     if (this._isPat) this._markPatAuthorized();
     else this._authorizeLegacy();
@@ -709,6 +718,7 @@ class DerivClient extends EventEmitter {
     const wasAuthorized = this.authorized;
     this.connected = false;
     this.authorized = false;
+    this._clearHeartbeat();
     for (const [, p] of this._pending) {
       clearTimeout(p.timer);
       p.reject(new Error('Connection closed'));
@@ -787,8 +797,30 @@ class DerivClient extends EventEmitter {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return Promise.resolve();
     return this._send({ forget: subId }, 8000).catch(e => logger.debug('forget:', e.message));
   }
+
+  // ── Heartbeat: ping/pong to detect dead connections ──────────────
+  _startHeartbeat() {
+    this._clearHeartbeat();
+    this._heartbeatInterval = setInterval(() => {
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+      this._pongReceived = false;
+      try { this.ws.ping(); } catch (_) {}
+      this._pongTimeout = setTimeout(() => {
+        if (!this._pongReceived) {
+          logger.warn('heartbeat: no pong received — force-reconnecting');
+          try { this.ws.terminate(); } catch (_) {}
+        }
+      }, 10000);
+    }, 30_000);
+  }
+  _clearHeartbeat() {
+    if (this._heartbeatInterval) { clearInterval(this._heartbeatInterval); this._heartbeatInterval = null; }
+    if (this._pongTimeout) { clearTimeout(this._pongTimeout); this._pongTimeout = null; }
+  }
+
   stop() {
     this._stopped = true;
+    this._clearHeartbeat();
     try { this.ws?.close(); } catch (_) {}
   }
   symbolField() { return this._isPat ? 'underlying_symbol' : 'symbol'; }
@@ -1273,6 +1305,17 @@ class TradeExecutor extends EventEmitter {
   }
   count() { return this.open.size; }
   openTrades() { return [...this.open.values()]; }
+
+  /**
+   * sell(contractId, price) — emergency sell / close a stuck contract.
+   * price=0 means "market sell at best available".
+   */
+  async sell(contractId, price = 0) {
+    const res = await this.client._send({ sell: contractId, price }, 15000);
+    const s = res.sell;
+    if (!s) throw new Error('sell returned no data');
+    return s;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────
