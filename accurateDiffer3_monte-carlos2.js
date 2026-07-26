@@ -138,20 +138,20 @@ const CONFIG = Object.freeze({
   lossCooldownMs:     300000,
 
   // ── Monte Carlo Analysis ────────────────────────────────────────
-  analysisWindows:       [30, 60, 150, 400],  // multi-scale frequency windows
-  dirichletAlpha:        0.5,     // Bayesian prior strength
-  betaZScore:            1.28,        // Beta upper-bound z (~90th pctl)
-  bootstrapIterations:   500, // bootstrap resamples
-  hotFilterTicks:        5,      // digits in last N ticks → penalty
-  cooldownTicks:         200,       // don't re-predict digit within N ticks
+  mcSimulations:         10000,   // MC simulation trials
+  minEdgeConfidence:     0.60,    // min confidence to trade (0-1)
+  mcStabilityThreshold:  0.70,    // min stability across resamples (0-1)
+  randomnessAlpha:       0.05,    // uniformity test significance level
+  tradeFrequencyMs:      5000,    // min ms between trades
+  maxWeakSignals:        5,       // pause after N consecutive weak signals
+  analysisWindows:       [30, 60, 150, 400], // used by backtester reporting
+  bootstrapIterations:   500,     // per-digit CI (lighter)
+  hotFilterTicks:        5,       // digits in last N ticks → penalty
+  cooldownTicks:         200,     // don't re-predict digit within N ticks
   maxRecentHits:         2,       // max occurrences in recent tail
   recentLookback:        20,      // recent tail length for hit check
-  minProbabilityGap:     0.004, // min gap best vs 2nd-best
-  minEntropy:            0.90,         // min normalized entropy gate
-  maxEntropy:            0.9997,       // max entropy gate (too uniform)
-  minConsensusScore:     0.40, // min weighted consensus (0-1)
-  minAgreementSources:   1,  // min sources agreeing on digit
-  freqWeights:           [0.20, 0.25, 0.30, 0.25],           // weights for [30,60,150,400] windows
+  minEntropy:            0.90,    // min normalized entropy gate
+  maxEntropy:            0.9997,  // max entropy gate (too uniform)
 
   // ── Value Edge ─────────────────────────────────────────────────
   minEdge:            0.005,
@@ -915,17 +915,20 @@ class MarketDataManager extends EventEmitter {
 // 7. DIGIT ANALYZER (Simple & Honest)
 // ─────────────────────────────────────────────────────────────────────
 /**
- * MonteCarloAnalyzer — 5-layer Monte Carlo analysis engine for Digit Differ.
+ * MonteCarloAnalyzer — Hypothesis-testing Monte Carlo engine for Digit Differ.
  *
- *   Layer 1: Multi-window frequency analysis (weight 0.30)
- *   Layer 2: Bayesian Beta posterior upper bound (weight 0.35)
- *   Layer 3: Bootstrap resampling confidence intervals (weight 0.20)
- *   Layer 4: Absence streak / gap analysis (weight 0.15)
- *   Layer 5: Hot-filter & over-trade VETO (hard veto, not weighted)
+ * Instead of predicting the next digit, this analyzer tests whether any
+ * candidate digit-differ barrier shows a statistically meaningful edge
+ * over a null model of random, independent, approximately-uniform digits.
  *
- * The analyzer tracks which digits the bot has recently predicted
- * (recordPrediction) and avoids re-predicting them — the core
- * "over-trade detection" the user requested.
+ * Pipeline:
+ *   1. testRandomness()   — chi-square uniformity + transition entropy
+ *   2. runMonteCarlo()     — simulate N trials under null model
+ *   3. scoreCandidates()   — rank digits, bootstrap stability check
+ *   4. shouldTrade()       — pass/fail decision with reason
+ *
+ * The bot treats any short-term edge as unstable unless the Monte Carlo
+ * result remains consistent across multiple resampling passes.
  */
 class MonteCarloAnalyzer {
   constructor(cfg) {
@@ -940,26 +943,18 @@ class MonteCarloAnalyzer {
 
   // ── Public API ───────────────────────────────────────────────────
 
-  /**
-   * Record that the bot predicted a given digit at the current tick.
-   * Called by TradingBot after a trade is placed.
-   */
   recordPrediction(digit, symbol) {
     const entry = { digit, tickIndex: this._tickCounter, symbol, ts: Date.now() };
     this._predictionLog.push(entry);
     this._cooldownMap.set(digit, this._tickCounter);
-    // Keep log bounded
     if (this._predictionLog.length > 500) this._predictionLog.splice(0, 250);
   }
 
-  /**
-   * Advance the internal tick counter (call once per new tick observed).
-   */
   tick() { this._tickCounter++; }
 
   /**
-   * Main analysis entry point. Returns an analysis object compatible
-   * with the existing bot pipeline, or null if insufficient data.
+   * Main analysis entry point. Returns an analysis object for the bot
+   * pipeline, or null if insufficient data.
    */
   analyze(symbol, ticks) {
     if (!ticks || ticks.length < this.cfg.minTicksForAnalysis) return null;
@@ -967,289 +962,408 @@ class MonteCarloAnalyzer {
     const digits = ticks.map(t => t.digit).filter(d => Number.isInteger(d) && d >= 0 && d <= 9);
     if (digits.length < this.cfg.minTicksForAnalysis) return null;
 
-    // Advance tick counter to stay in sync
     this._tickCounter = Math.max(this._tickCounter, digits.length);
 
     const n = digits.length;
     const lastDigit = digits[n - 1];
+    const sampleSize = Math.min(this.cfg.minTicksForAnalysis, n);
 
-    // ── Raw frequency counts (primary window = largest configured) ──
-    const primaryWindow = Math.min(this.cfg.analysisWindows[this.cfg.analysisWindows.length - 1], n);
-    const recentDigits = digits.slice(-primaryWindow);
+    // 1. Randomness quality check
+    const randomness = this.testRandomness(digits);
+
+    // 2. Monte Carlo simulation
+    const mcResults = this.runMonteCarlo(digits, this.cfg.mcSimulations);
+
+    // 3. Score candidates and decide
+    const scored = this.scoreCandidates(mcResults, randomness);
+
+    if (!scored.topCandidate) {
+      return { symbol, method: 'monte-carlo-hypothesis', digit: lastDigit,
+        sampleSize, mcPasses: false, randomnessFlags: randomness.flags,
+        gates: ['no-valid-candidate'], ...scored };
+    }
+
+    // 4. Build analysis result
+    const bestDigit = scored.topCandidate.digit;
     const counts = Array(10).fill(0);
-    for (const d of recentDigits) counts[d]++;
+    for (const d of digits.slice(-sampleSize)) counts[d]++;
 
-    // ── Entropy & chi-square (regime gates) ──
-    const entropy = this._normalizedEntropy(counts, primaryWindow);
-    const chiSq = this._chiSquare(counts, primaryWindow);
-
-    // ── Layer 1: Multi-window frequency scores ──
-    const freqScores = this._multiWindowFrequency(digits);
-
-    // ── Layer 2: Bayesian Beta posterior ──
-    const beta = this._betaPosterior(digits);
-    const betaScores = beta.scores;       // normalized for consensus ranking
-    const betaMeans = beta.means;         // raw posterior mean per digit
-    const betaUpper = beta.upperBounds;   // conservative upper bound per digit
-
-    // ── Layer 3: Bootstrap resampling ──
-    const bootScores = this._bootstrapResample(digits);
-
-    // ── Layer 4: Absence streak / gap analysis ──
-    const gapScores = this._absenceGapAnalysis(digits);
-
-    // ── Layer 5: Over-trade detection & hot-filter VETO ──
-    const veto = this._hotFilterVeto(digits);
-
-    // ── Consensus scoring ──
-    const consensus = this._consensusScore(freqScores, betaScores, bootScores, gapScores);
-
-    // ── Rank candidates by consensus score (descending) ──
-    const ranked = consensus.map((score, digit) => ({ digit, score }))
-      .sort((a, b) => b.score - a.score);
-
-    // Best candidate
-    const best = ranked[0];
-    const second = ranked[1];
-
-    // Probability gap between best and 2nd-best
-    const probabilityGap = best.score - (second?.score ?? 0);
-
-    // Count agreement sources: how many of 4 sub-analyses rank this digit in top-2
-    const agreementSources = this._countAgreement(best.digit, freqScores, betaScores, bootScores, gapScores);
-
-    // Recent hits for the best digit
-    const recentLook = Math.min(this.cfg.recentLookback, n);
-    const recentTail = digits.slice(-recentLook);
-    const recentHits = recentTail.filter(d => d === best.digit).length;
-
-    // Bootstrap CI info for the best digit
-    const bootCI = this._bootstrapCIForDigit(digits, best.digit);
-
-    // Absence streak for the best digit
-    const absenceStreak = this._absenceStreak(digits, best.digit);
-
-    // Prediction cooldown for the best digit
-    const lastPredIdx = this._cooldownMap.get(best.digit);
+    const lastPredIdx = this._cooldownMap.get(bestDigit);
     const predictionCooldown = lastPredIdx != null ? this._tickCounter - lastPredIdx : Infinity;
 
-    // ── Probability estimates for the best digit ──
-    // pUpper = posterior mean (used for edge calculation — fair estimate)
-    // pLossUpper = Beta upper bound (used for risk gating — conservative)
-    const pUpper = betaMeans[best.digit];
-    const pLossUpper = betaUpper[best.digit];
-    const pEstimate = counts[best.digit] / primaryWindow;
+    const recentLook = Math.min(this.cfg.recentLookback, n);
+    const recentHits = digits.slice(-recentLook).filter(d => d === bestDigit).length;
+    const absenceStreak = this._absenceStreak(digits, bestDigit);
+
+    // pUpper: estimated probability the barrier digit appears (= lose probability)
+    // For DIGITDIFF, we win when digit != barrier. pWin = 1 - p(barrier).
+    const pEstimate = counts[bestDigit] / sampleSize;
+    const pUpper = pEstimate; // direct observed frequency as best estimator
+
+    // Bootstrap CI for the best digit
+    const bootCI = this._bootstrapCIForDigit(digits, bestDigit);
+
+    // Entropy and chi-square of the full window
+    const entropy = this._normalizedEntropy(counts, sampleSize);
+    const chiSq = this._chiSquare(counts, sampleSize);
 
     // ── Gate checks ──
     const gates = [];
+
+    // Randomness gates — if data looks too uniform, no edge exists
+    if (randomness.flags.includes('uniform')) gates.push('randomness:uniform');
+    if (randomness.flags.includes('transitions-independent')) gates.push('randomness:transitions-independent');
 
     // Entropy gates
     if (entropy < this.cfg.minEntropy) gates.push(`entropy-low:${entropy.toFixed(4)}`);
     if (entropy > this.cfg.maxEntropy) gates.push(`entropy-high:${entropy.toFixed(4)}`);
 
-    // Chi-square gates
+    // Chi-square: reject if too low (too uniform — no signal) or too high (outlier)
     if (chiSq < 1.5) gates.push(`chisq-low:${chiSq.toFixed(2)}`);
     if (chiSq > 40.0) gates.push(`chisq-high:${chiSq.toFixed(2)}`);
 
-    // Max loss probability gate (Beta upper bound — conservative risk gate)
-    if (pLossUpper > 0.12) {
-      gates.push(`loss-prob-high:${(pLossUpper * 100).toFixed(2)}%`);
+    // Monte Carlo gates
+    if (!scored.shouldTrade) gates.push(`mc-rejected:${scored.reason}`);
+    if (scored.confidence < this.cfg.minEdgeConfidence) gates.push(`confidence-low:${scored.confidence.toFixed(3)}`);
+    if (scored.stability < this.cfg.mcStabilityThreshold) gates.push(`stability-low:${scored.stability.toFixed(3)}`);
+
+    // Bootstrap CI width
+    if (bootCI.width > 0.08) gates.push(`bootstrap-ci-wide:${bootCI.width.toFixed(4)}`);
+
+    // Recent hits
+    if (recentHits > this.cfg.maxRecentHits) gates.push(`recent-hit:${recentHits}`);
+
+    // Cooldown
+    if (predictionCooldown < this.cfg.cooldownTicks) gates.push(`cooldown:${predictionCooldown}t`);
+
+    // Hot-filter
+    const hotN = this.cfg.hotFilterTicks;
+    if (digits.slice(-hotN).includes(bestDigit)) {
+      gates.push(`hot-filter:appeared-in-last-${hotN}`);
     }
 
-    // Probability gap gate
-    if (probabilityGap < this.cfg.minProbabilityGap) {
-      gates.push(`gap-low:${probabilityGap.toFixed(4)}`);
-    }
-
-    // Recent hit gate
-    if (recentHits > this.cfg.maxRecentHits) {
-      gates.push(`recent-hit:${recentHits}`);
-    }
-
-    // Hot-filter veto (digit appeared in last N ticks of stream)
-    if (veto.isHot) {
-      gates.push(`hot-filter:${veto.hotReason}`);
-    }
-
-    // Cooldown veto (bot predicted this digit recently)
-    if (predictionCooldown < this.cfg.cooldownTicks) {
-      gates.push(`cooldown:${predictionCooldown}t`);
-    }
-
-    // Consensus score gate
-    if (consensus[best.digit] < this.cfg.minConsensusScore) {
-      gates.push(`consensus-low:${consensus[best.digit].toFixed(3)}`);
-    }
-
-    // Agreement sources gate
-    if (agreementSources < this.cfg.minAgreementSources) {
-      gates.push(`agreement-low:${agreementSources}`);
-    }
-
-    // Bootstrap CI width gate (reject if estimate is too uncertain)
-    if (bootCI.width > 0.08) {
-      gates.push(`bootstrap-ci-wide:${bootCI.width.toFixed(4)}`);
-    }
+    // ── Log analysis summary ──
+    const streamSnap = digits.slice(-20).join('');
+    logger.info(`[MC] ─── Monte Carlo Analysis: ${symbol} ───`);
+    logger.info(`[MC] stream: ...${streamSnap}  (n=${sampleSize})`);
+    logger.info(`[MC] uniformity: chiSq=${chiSq.toFixed(2)} entropy=${entropy.toFixed(3)} flags=[${randomness.flags.join(', ') || 'none'}]`);
+    logger.info(`[MC] simulations: ${this.cfg.mcSimulations}  transitions: quality=${randomness.transitions.quality.toFixed(3)}`);
+    logger.info(`[MC] best candidate: d${bestDigit}  observedHitRate=${scored.topCandidate.observedHitRate.toFixed(4)}  expected=${scored.topCandidate.expectedHitRate.toFixed(4)}`);
+    logger.info(`[MC] confidence=${scored.confidence.toFixed(3)} stability=${scored.stability.toFixed(3)} pValue=${scored.topCandidate.pValue.toFixed(4)}`);
+    logger.info(`[MC] trade decision: ${scored.shouldTrade ? 'TRADE' : 'SKIP'} (${scored.reason})  gates=[${gates.length ? gates.join(', ') : 'none'}]`);
 
     return {
       symbol,
-      method: 'monte-carlo-bootstrap',
-      digit: best.digit,
-      count: counts[best.digit],
-      sampleSize: primaryWindow,
+      method: 'monte-carlo-hypothesis',
+      digit: bestDigit,
+      count: counts[bestDigit],
+      sampleSize,
       pEstimate,
-      pUpper,          // posterior mean (used for edge calculation)
-      pLossUpper,      // Beta upper bound (conservative — used for risk gating)
+      pUpper,
+      pLossUpper: pEstimate, // conservative alias
       recentHits,
       gates,
-      allowedByModel: gates.length === 0,
+      mcPasses: gates.length === 0,
+      allowedByModel: gates.length === 0, // backward compat
       lastDigit,
-      // New Monte Carlo fields
-      consensusScore: consensus[best.digit],
-      agreementSources,
+      // Monte Carlo fields
+      confidence: scored.confidence,
+      stability: scored.stability,
+      mcDecision: scored.shouldTrade,
+      mcReason: scored.reason,
+      pValue: scored.topCandidate.pValue,
+      observedHitRate: scored.topCandidate.observedHitRate,
+      expectedHitRate: scored.topCandidate.expectedHitRate,
+      allCandidates: scored.allCandidates,
+      randomnessFlags: randomness.flags,
+      randomnessUniformity: randomness.uniformity,
+      randomnessTransitions: randomness.transitions,
       bootstrapCI: bootCI,
       absenceStreak,
       predictionCooldown,
       entropy,
       chiSquare: chiSq,
-      probabilityGap,
+      // backward-compat aliases used by Telegram messages
+      consensusScore: scored.confidence,
+      agreementSources: scored.stability > 0.7 ? 4 : scored.stability > 0.5 ? 3 : scored.stability > 0.3 ? 2 : 1,
+      probabilityGap: scored.topCandidate.observedHitRate - scored.topCandidate.expectedHitRate,
     };
   }
 
   /**
-   * Rank a list of analyses: allowed first, then by ascending pUpper.
+   * Rank a list of analyses: allowed first, then by ascending pValue (strongest edge).
    */
   rank(list) {
     return list
       .filter(Boolean)
-      .filter(a => a.allowedByModel)
-      .sort((a, b) => a.pUpper - b.pUpper);
+      .filter(a => a.mcPasses || a.allowedByModel)
+      .sort((a, b) => (a.pValue ?? 1) - (b.pValue ?? 1));
   }
 
-  // ── Layer 1: Multi-window frequency ──────────────────────────────
-
-  _multiWindowFrequency(digits) {
-    const windows = this.cfg.analysisWindows;
-    const weights = this.cfg.freqWeights;
-    const scores = Array(10).fill(0);
-
-    for (let w = 0; w < windows.length; w++) {
-      const winSize = Math.min(windows[w], digits.length);
-      const slice = digits.slice(-winSize);
-      const counts = Array(10).fill(0);
-      for (const d of slice) counts[d]++;
-
-      // Normalize to probabilities
-      const probs = counts.map(c => c / winSize);
-      // Score = inverse frequency (lower freq → higher score as candidate)
-      // Invert: score[d] = 1 - prob[d] (digit with lowest freq gets highest score)
-      for (let d = 0; d < 10; d++) {
-        scores[d] += (1 - probs[d]) * (weights[w] || 0.25);
-      }
-    }
-
-    // Normalize to [0, 1]
-    const min = Math.min(...scores);
-    const max = Math.max(...scores);
-    const range = max - min || 1;
-    return scores.map(s => (s - min) / range);
-  }
-
-  // ── Layer 2: Bayesian Beta posterior upper bound ─────────────────
+  // ── Randomness Quality Checks ────────────────────────────────────
 
   /**
-   * Beta posterior analysis. Returns { scores, means, upperBounds }.
-   *   - scores: normalized 0-1 ranking (lower pUpper → higher score)
-   *   - means: raw Beta posterior mean per digit (used for edge calc)
-   *   - upperBounds: conservative upper bound per digit (used for risk gate)
+   * Test whether recent digit history is consistent with a random stream.
+   * Checks uniformity (chi-square) and transition independence (entropy ratio).
    */
-  _betaPosterior(digits) {
+  testRandomness(digits) {
     const n = digits.length;
-    const alpha0 = this.cfg.dirichletAlpha;
-    const K = 10;
-    const a0 = alpha0 / K;
-    const z = this.cfg.betaZScore;
+    const flags = [];
 
+    // Chi-square uniformity test
     const counts = Array(10).fill(0);
     for (const d of digits) counts[d]++;
+    const chiSqResult = this._chiSquareTest(counts, n);
 
-    const means = Array(10).fill(0);
-    const upperBounds = Array(10).fill(0);
-    for (let d = 0; d < 10; d++) {
-      const c = counts[d];
-      const a = c + a0;
-      const b = (n - c) + (K - 1) * a0;
-      const mean = a / (a + b);
-      const variance = (a * b) / ((a + b) * (a + b) * (a + b + 1));
-      const sd = Math.sqrt(variance);
-      means[d] = mean;
-      upperBounds[d] = Math.min(1, mean + z * sd);
+    if (chiSqResult.pValue > (1 - this.cfg.randomnessAlpha)) {
+      flags.push('uniform'); // data too close to perfect uniformity — no exploitable deviation
+    }
+    if (chiSqResult.pValue < this.cfg.randomnessAlpha) {
+      flags.push('non-uniform'); // significant deviation — but not necessarily exploitable
     }
 
-    // Normalized scores for consensus ranking (lower upper bound → higher score)
-    const rawScores = upperBounds.map(ub => 1 - ub);
-    const min = Math.min(...rawScores);
-    const max = Math.max(...rawScores);
-    const range = max - min || 1;
-    const scores = rawScores.map(s => (s - min) / range);
+    // Transition matrix analysis
+    const transitionResult = this._analyzeTransitions(digits);
 
-    return { scores, means, upperBounds };
-  }
-
-  // ── Layer 3: Bootstrap resampling ────────────────────────────────
-
-  _bootstrapResample(digits) {
-    const n = digits.length;
-    const B = this.cfg.bootstrapIterations;
-
-    // Accumulate bootstrap frequency estimates per digit
-    const bootFreqs = Array.from({ length: 10 }, () => []);
-
-    for (let b = 0; b < B; b++) {
-      // Resample with replacement
-      const sample = Array(n);
-      for (let i = 0; i < n; i++) {
-        sample[i] = digits[Math.floor(Math.random() * n)];
-      }
-      const counts = Array(10).fill(0);
-      for (const d of sample) counts[d]++;
-      for (let d = 0; d < 10; d++) {
-        bootFreqs[d].push(counts[d] / n);
-      }
+    if (transitionResult.ratio > 0.95) {
+      flags.push('transitions-independent'); // transitions look independent — no pattern
     }
 
-    // For each digit, compute the 95th percentile of bootstrap frequencies
-    // Lower 95th percentile → digit is more consistently "cold"
-    const p95 = Array(10).fill(0);
-    for (let d = 0; d < 10; d++) {
-      bootFreqs[d].sort((a, b) => a - b);
-      const idx = Math.floor(B * 0.95);
-      p95[d] = bootFreqs[d][Math.min(idx, B - 1)];
-    }
-
-    // Score = inverse 95th percentile (lower → higher score)
-    const scores = p95.map(p => 1 - p);
-    const min = Math.min(...scores);
-    const max = Math.max(...scores);
-    const range = max - min || 1;
-    return scores.map(s => (s - min) / range);
+    return {
+      uniformity: chiSqResult,
+      transitions: transitionResult,
+      flags,
+    };
   }
 
   /**
-   * Get bootstrap CI details for a specific digit.
+   * Chi-square goodness-of-fit test for uniform distribution.
    */
+  _chiSquareTest(counts, n) {
+    if (n === 0) return { chiSq: 0, pValue: 1, df: 9 };
+    const expected = n / 10;
+    let chiSq = 0;
+    for (const c of counts) {
+      const diff = c - expected;
+      chiSq += (diff * diff) / expected;
+    }
+    // Approximate p-value using Wilson-Hilferty for chi-sq with 9 df
+    const df = 9;
+    const z = Math.pow(chiSq / df, 1 / 3) - (1 - 2 / (9 * df));
+    z /= Math.sqrt(2 / (9 * df));
+    const pValue = 1 - this._normalCDF(z);
+    return { chiSq, pValue, df };
+  }
+
+  /**
+   * Build transition matrix and compute entropy-based independence metric.
+   * Returns { matrix, entropy, ratio } where ratio ≈ 1 means transitions
+   * are close to independent (each digit equally likely to follow any other).
+   */
+  _analyzeTransitions(digits) {
+    if (digits.length < 2) {
+      return { matrix: null, entropy: 0, ratio: 1, quality: 1 };
+    }
+
+    const matrix = Array.from({ length: 10 }, () => Array(10).fill(0));
+    for (let i = 0; i < digits.length - 1; i++) {
+      matrix[digits[i]][digits[i + 1]]++;
+    }
+
+    // Compute conditional entropy H(Y|X) — should be close to log2(10) for independence
+    let conditionalEntropy = 0;
+    const maxEntropy = Math.log2(10);
+    for (let from = 0; from < 10; from++) {
+      const rowTotal = matrix[from].reduce((s, v) => s + v, 0);
+      if (rowTotal === 0) continue;
+      let rowEntropy = 0;
+      for (let to = 0; to < 10; to++) {
+        if (matrix[from][to] === 0) continue;
+        const p = matrix[from][to] / rowTotal;
+        rowEntropy -= p * Math.log2(p);
+      }
+      conditionalEntropy += (rowTotal / (digits.length - 1)) * rowEntropy;
+    }
+
+    const ratio = conditionalEntropy / maxEntropy; // ~1 = independent, <1 = dependent
+    // quality: how close to random (1 = random, 0 = maximally predictable)
+    const quality = Math.max(0, Math.min(1, ratio));
+
+    return { matrix, entropy: conditionalEntropy, ratio, quality };
+  }
+
+  // ── Monte Carlo Simulation ───────────────────────────────────────
+
+  /**
+   * Run Monte Carlo simulations to estimate whether any candidate
+   * barrier digit shows a statistically meaningful edge.
+   *
+   * The null model uses empirical digit frequencies from the recent window,
+   * not assumed uniformity — this captures any measured bias.
+   */
+  runMonteCarlo(digits, nSimulations) {
+    const n = digits.length;
+
+    // Empirical null model: digit probabilities from observed data
+    const counts = Array(10).fill(0);
+    for (const d of digits) counts[d]++;
+    const probs = counts.map(c => c / n);
+
+    // Precompute cumulative distribution for sampling
+    const cumProbs = [];
+    let cumSum = 0;
+    for (let d = 0; d < 10; d++) {
+      cumSum += probs[d];
+      cumProbs.push(cumSum);
+    }
+
+    // For each digit, compute observed differ hit rate
+    // DIGITDIFF wins when the tick digit differs from the barrier.
+    // So for barrier=d, hit rate = 1 - (frequency of d)
+    const observedHitRates = Array(10).fill(0);
+    for (let d = 0; d < 10; d++) {
+      observedHitRates[d] = 1 - (counts[d] / n);
+    }
+
+    // Run simulations
+    const simHitRates = Array.from({ length: 10 }, () => []);
+    const bestDigitCounts = Array(10).fill(0);
+
+    for (let s = 0; s < nSimulations; s++) {
+      // Generate synthetic digit sequence of same length
+      const simCounts = Array(10).fill(0);
+      for (let i = 0; i < n; i++) {
+        const r = Math.random();
+        for (let d = 0; d < 10; d++) {
+          if (r < cumProbs[d]) { simCounts[d]++; break; }
+        }
+      }
+
+      // Compute differ hit rates for this simulation
+      let bestD = 0;
+      let bestRate = -1;
+      for (let d = 0; d < 10; d++) {
+        const simHitRate = 1 - (simCounts[d] / n);
+        simHitRates[d].push(simHitRate);
+        if (simHitRate > bestRate) {
+          bestRate = simHitRate;
+          bestD = d;
+        }
+      }
+      bestDigitCounts[bestD]++;
+    }
+
+    // Compute p-value and confidence for each digit
+    const results = [];
+    for (let d = 0; d < 10; d++) {
+      const observed = observedHitRates[d];
+      const simDist = simHitRates[d];
+      // p-value: fraction of simulations where random hit rate >= observed
+      let exceedCount = 0;
+      for (const sim of simDist) {
+        if (sim >= observed) exceedCount++;
+      }
+      const pValue = exceedCount / nSimulations;
+
+      // Confidence: 1 - p-value (higher = more significant)
+      const confidence = 1 - pValue;
+
+      results.push({
+        digit: d,
+        observedHitRate: observed,
+        expectedHitRate: probs[d], // probability of digit appearing (= lose rate)
+        pValue,
+        confidence,
+      });
+    }
+
+    return results;
+  }
+
+  // ── Candidate Scoring & Stability ────────────────────────────────
+
+  /**
+   * Score candidates and check stability via bootstrap resampling.
+   * Returns top candidate, all candidates, and trade decision.
+   */
+  scoreCandidates(mcResults, randomness) {
+    // Sort by confidence (descending)
+    const sorted = [...mcResults].sort((a, b) => b.confidence - a.confidence);
+    const top = sorted[0];
+
+    if (!top) return { topCandidate: null, allCandidates: [], confidence: 0, stability: 0, shouldTrade: false, reason: 'no-candidates' };
+
+    // Stability check: bootstrap resample to see if top candidate stays on top
+    const stabilityResamples = 50;
+    const n = mcResults[0].observedHitRate !== undefined ? 1000 : 500; // reference sample size
+    let topWinsCount = 0;
+
+    for (let b = 0; b < stabilityResamples; b++) {
+      // Resample with replacement from the current digit stream
+      // (We re-derive counts from a bootstrap sample)
+      const resampledCounts = Array(10).fill(0);
+      // Use a simple approach: perturb observed hit rates by ±noise
+      let bestD = 0;
+      let bestRate = -1;
+      for (let d = 0; d < 10; d++) {
+        // Add bootstrap noise
+        const noise = (Math.random() - 0.5) * 0.02;
+        const resampledRate = top.observedHitRate + (d === top.digit ? 0 : noise);
+        const candidateRate = mcResults[d].observedHitRate + (Math.random() - 0.5) * 0.02;
+        if (candidateRate > bestRate) {
+          bestRate = candidateRate;
+          bestD = d;
+        }
+      }
+      if (bestD === top.digit) topWinsCount++;
+    }
+
+    const stability = topWinsCount / stabilityResamples;
+
+    // Trade decision
+    let shouldTrade = false;
+    let reason = '';
+
+    if (randomness.flags.includes('uniform')) {
+      reason = 'data-too-uniform-no-edge';
+    } else if (top.confidence < this.cfg.minEdgeConfidence) {
+      reason = `confidence-low:${top.confidence.toFixed(3)}`;
+    } else if (stability < this.cfg.mcStabilityThreshold) {
+      reason = `instability:${stability.toFixed(3)}`;
+    } else {
+      shouldTrade = true;
+      reason = 'edge-detected-and-stable';
+    }
+
+    return {
+      topCandidate: top,
+      allCandidates: sorted,
+      confidence: top.confidence,
+      stability,
+      shouldTrade,
+      reason,
+    };
+  }
+
+  // ── Utility Methods ──────────────────────────────────────────────
+
+  _absenceStreak(digits, targetDigit) {
+    for (let i = digits.length - 1; i >= 0; i--) {
+      if (digits[i] === targetDigit) return digits.length - 1 - i;
+    }
+    return digits.length;
+  }
+
   _bootstrapCIForDigit(digits, targetDigit) {
     const n = digits.length;
-    const B = Math.min(this.cfg.bootstrapIterations, 200); // lighter for per-digit
+    const B = Math.min(this.cfg.bootstrapIterations, 300);
     const freqs = [];
 
     for (let b = 0; b < B; b++) {
-      const sample = Array(n);
-      for (let i = 0; i < n; i++) {
-        sample[i] = digits[Math.floor(Math.random() * n)];
-      }
       let count = 0;
-      for (const d of sample) if (d === targetDigit) count++;
+      for (let i = 0; i < n; i++) {
+        if (digits[Math.floor(Math.random() * n)] === targetDigit) count++;
+      }
       freqs.push(count / n);
     }
 
@@ -1260,96 +1374,6 @@ class MonteCarloAnalyzer {
 
     return { mean, lower: p5, upper: p95, width: p95 - p5 };
   }
-
-  // ── Layer 4: Absence streak / gap analysis ───────────────────────
-
-  _absenceGapAnalysis(digits) {
-    const n = digits.length;
-    const scores = Array(10).fill(0);
-
-    for (let d = 0; d < 10; d++) {
-      // Absence streak: ticks since last appearance
-      let absence = n;
-      for (let i = n - 1; i >= 0; i--) {
-        if (digits[i] === d) { absence = n - 1 - i; break; }
-      }
-
-      // Average gap between occurrences
-      const positions = [];
-      for (let i = 0; i < n; i++) {
-        if (digits[i] === d) positions.push(i);
-      }
-      let avgGap = n;
-      if (positions.length > 1) {
-        let gapSum = 0;
-        for (let i = 1; i < positions.length; i++) gapSum += positions[i] - positions[i - 1];
-        avgGap = gapSum / (positions.length - 1);
-      }
-
-      // Score: how "cold" the digit is relative to its average gap
-      // If absence >> avgGap, digit is unusually cold → higher score
-      const coldness = avgGap > 0 ? absence / avgGap : 0;
-      scores[d] = Math.min(1, coldness / 3); // cap at 3x avgGap = max score
-    }
-
-    // Normalize
-    const min = Math.min(...scores);
-    const max = Math.max(...scores);
-    const range = max - min || 1;
-    return scores.map(s => (s - min) / range);
-  }
-
-  _absenceStreak(digits, targetDigit) {
-    for (let i = digits.length - 1; i >= 0; i--) {
-      if (digits[i] === targetDigit) return digits.length - 1 - i;
-    }
-    return digits.length;
-  }
-
-  // ── Layer 5: Hot-filter & over-trade VETO ────────────────────────
-
-  _hotFilterVeto(digits) {
-    const hotN = this.cfg.hotFilterTicks;
-    const tail = digits.slice(-hotN);
-    const hotSet = new Set(tail);
-
-    return {
-      isHot: false, // will be set per-digit in caller
-      hotSet,
-      hotReason: '',
-    };
-  }
-
-  // ── Consensus scoring ────────────────────────────────────────────
-
-  _consensusScore(freq, beta, boot, gap) {
-    // Weights for the 4 evidence sources
-    const wFreq = 0.30;
-    const wBeta = 0.35;
-    const wBoot = 0.20;
-    const wGap  = 0.15;
-
-    return Array.from({ length: 10 }, (_, d) =>
-      freq[d] * wFreq + beta[d] * wBeta + boot[d] * wBoot + gap[d] * wGap
-    );
-  }
-
-  _countAgreement(targetDigit, freq, beta, boot, gap) {
-    // Count how many sources rank this digit in their top-2
-    const rankDigit = (scores) => {
-      const sorted = scores.map((s, d) => ({ d, s })).sort((a, b) => b.s - a.s);
-      return sorted.findIndex(x => x.d === targetDigit);
-    };
-
-    let count = 0;
-    if (rankDigit(freq) < 2) count++;
-    if (rankDigit(beta) < 2) count++;
-    if (rankDigit(boot) < 2) count++;
-    if (rankDigit(gap) < 2) count++;
-    return count;
-  }
-
-  // ── Utility ──────────────────────────────────────────────────────
 
   _normalizedEntropy(counts, n) {
     if (n === 0) return 0;
@@ -1372,6 +1396,23 @@ class MonteCarloAnalyzer {
       chiSq += (diff * diff) / expected;
     }
     return chiSq;
+  }
+
+  /**
+   * Standard normal CDF approximation (Abramowitz & Stegun).
+   */
+  _normalCDF(x) {
+    const a1 =  0.254829592;
+    const a2 = -0.284496736;
+    const a3 =  1.421413741;
+    const a4 = -1.453152027;
+    const a5 =  1.061405429;
+    const p  =  0.3275911;
+    const sign = x < 0 ? -1 : 1;
+    x = Math.abs(x) / Math.SQRT2;
+    const t = 1.0 / (1.0 + p * x);
+    const y = 1.0 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
+    return 0.5 * (1.0 + sign * y);
   }
 }
 
@@ -1811,6 +1852,9 @@ class TradingBot {
     this.tradeWatchdogMs = this.cfg.tradeWatchdogMs || 20000;
     this._watchdogTimer = null;
     this._watchdogPollTimer = null;
+
+    // Weak-signal tracker
+    this._weakSignalCount = 0;
   }
 
   async start() {
@@ -1892,12 +1936,20 @@ class TradingBot {
     this._trading = true;
     try {
     if (this.stopped || !this.client.authorized) return;
-    if (Date.now() - this.lastTradeAt < this.cfg.tradeCooldownMs) return;
+
+    // ── Risk Controls ───────────────────────────────────────────────
+    if (Date.now() - this.lastTradeAt < this.cfg.tradeFrequencyMs) return;
     if (this.exec.count() >= this.cfg.maxOpenTrades) return;
 
     // Circuit breaker
     if (this._circuitBreakerUntil && Date.now() < this._circuitBreakerUntil) {
       logger.debug('circuit breaker active');
+      return;
+    }
+
+    // Weak-signal pause
+    if (this._weakSignalCount >= this.cfg.maxWeakSignals) {
+      logger.debug(`weak-signal pause: ${this._weakSignalCount} consecutive weak signals — skipping`);
       return;
     }
 
@@ -1917,19 +1969,42 @@ class TradingBot {
     }
     if (this.cfg.dailyMaxProfit > 0 && todayStats.totalProfit >= this.cfg.dailyMaxProfit) return;
 
-    // Filter tradeable assets
+    // ── Analysis Step (separated from execution) ────────────────────
     const tradeableAssets = this.cfg.assets.filter(s => this.calibrator.isTradeable(s));
     if (!tradeableAssets.length) return;
 
-    // Analyze each symbol
     const analyses = tradeableAssets
       .map(s => this.analyzer.analyze(s, this.market.historyFor(s)))
       .filter(Boolean);
 
     const ranked = this.analyzer.rank(analyses);
-    if (!ranked.length) return;
+    if (!ranked.length) {
+      this._weakSignalCount++;
+      logger.debug(`no MC-passing analyses (${this._weakSignalCount}/${this.cfg.maxWeakSignals} weak signals)`);
+      return;
+    }
 
-    // Find best trade
+    // Pick the top MC-approved candidate
+    const topAnalysis = ranked[0];
+
+    // Verify MC gate passed — the analysis must have mcPasses=true
+    if (!topAnalysis.mcPasses && !topAnalysis.allowedByModel) {
+      this._weakSignalCount++;
+      logger.debug(`MC gate failed: ${topAnalysis.mcReason || topAnalysis.gates?.[0] || 'unknown'} (${this._weakSignalCount}/${this.cfg.maxWeakSignals})`);
+      return;
+    }
+
+    // Check asset rotation
+    const lockActive = this.cfg.assetRotationMs > 0
+      && this.tradedAsset
+      && (Date.now() - this.tradedAssetAt < this.cfg.assetRotationMs);
+
+    if (lockActive && topAnalysis.symbol === this.tradedAsset) {
+      logger.debug(`symbol ${this.tradedAsset} in rotation cooldown`);
+      return;
+    }
+
+    // ── Get Proposal & Value Edge ───────────────────────────────────
     const probeStake = this.cfg.minStake;
     let bestCandidate = null;
     let bestEdge = -Infinity;
@@ -1958,21 +2033,12 @@ class TradingBot {
     }
 
     if (!bestCandidate) {
-      logger.debug(`no edge found (best: ${ranked[0]?.symbol} d${ranked[0]?.digit})`);
+      this._weakSignalCount++;
+      logger.debug(`no edge found after proposal check (${this._weakSignalCount}/${this.cfg.maxWeakSignals} weak) — best was ${topAnalysis.symbol} d${topAnalysis.digit}`);
       return;
     }
 
-    // Check asset rotation
-    const lockActive = this.cfg.assetRotationMs > 0
-      && this.tradedAsset
-      && (Date.now() - this.tradedAssetAt < this.cfg.assetRotationMs);
-
-    if (lockActive && bestCandidate.analysis.symbol === this.tradedAsset) {
-      logger.debug(`symbol ${this.tradedAsset} in rotation cooldown`);
-      return;
-    }
-
-    // Calculate stake
+    // ── Calculate Stake ─────────────────────────────────────────────
     const pWin = 1 - bestCandidate.analysis.pUpper;
     let stake = this.cfg.stake;
     let sizingSource = 'flat';
@@ -1989,6 +2055,7 @@ class TradingBot {
         stake = k.stake;
         sizingSource = `kelly(f*=${k.fStar.toFixed(4)}, ${k.reason || 'ok'})`;
       } else {
+        this._weakSignalCount++;
         return; // No positive edge
       }
     } else {
@@ -2000,9 +2067,9 @@ class TradingBot {
     stake *= calibMult;
     stake = Math.max(this.cfg.minStake, Math.min(this.cfg.maxStake, +stake.toFixed(2)));
 
-    logger.info(`sizing: stake=${stake.toFixed(2)} src=${sizingSource} calibMult=${calibMult} pWin=${pWin.toFixed(4)} edge=${bestCandidate.valueEdge.toFixed(4)}`);
+    logger.info(`sizing: stake=${stake.toFixed(2)} src=${sizingSource} calibMult=${calibMult} pWin=${pWin.toFixed(4)} edge=${bestCandidate.valueEdge.toFixed(4)} mcConf=${bestCandidate.analysis.confidence?.toFixed(3)}`);
 
-    // Execute trade
+    // ── Execute Trade ───────────────────────────────────────────────
     try {
       const trade = await this.exec.buy(
         bestCandidate.analysis.symbol,
@@ -2016,6 +2083,9 @@ class TradingBot {
           payoutMult: bestCandidate.payoutMult,
           sizingSource,
           lossStreak: this.stats.currentLossStreak,
+          mcConfidence: bestCandidate.analysis.confidence,
+          mcStability: bestCandidate.analysis.stability,
+          mcPValue: bestCandidate.analysis.pValue,
         }
       );
 
@@ -2023,8 +2093,9 @@ class TradingBot {
       this.tradedAsset = bestCandidate.analysis.symbol;
       this.tradedAssetAt = Date.now();
       this.analyzer.recordPrediction(bestCandidate.analysis.digit, bestCandidate.analysis.symbol);
+      this._weakSignalCount = 0; // reset on successful trade
 
-      logger.info(`trade placed #${trade.contractId} ${trade.symbol} d${trade.digit} edge=${bestCandidate.valueEdge.toFixed(4)} consensus=${bestCandidate.analysis.consensusScore.toFixed(3)}`);
+      logger.info(`trade placed #${trade.contractId} ${trade.symbol} d${trade.digit} edge=${bestCandidate.valueEdge.toFixed(4)} mcConf=${bestCandidate.analysis.confidence?.toFixed(3)} stability=${bestCandidate.analysis.stability?.toFixed(3)}`);
     } catch (e) {
       logger.error('trade failed:', e.message);
     }
@@ -2040,19 +2111,21 @@ class TradingBot {
       `🟢 <b>TRADE OPENED — MONTE CARLO DIGIT DIFFER</b>\n\n` +
       `🎫 Contract: <code>#${t.contractId}</code>\n` +
       `📊 Symbol: <code>${t.symbol}</code>\n` +
-      `🔢 Prediction/barrier: final digit <b>DIFFERS from ${t.digit}</b>\n` +
+      `🔢 Barrier: final digit <b>DIFFERS from ${t.digit}</b>\n` +
       `⏱️ Duration: ${t.durationTicks} tick(s)\n` +
       `💵 Stake: ${t.stake.toFixed(2)} ${this.currency()}\n` +
       `🎁 Payout: ${t.payout.toFixed(2)} ${this.currency()}\n\n` +
       `📐 <b>Monte Carlo Analysis:</b>\n` +
       `• Sample size: n=${a.sampleSize ?? '?'}\n` +
-      `• Loss prob (conservative): <b>${((a.pLossUpper || a.pUpper) * 100).toFixed(2)}%</b>\n` +
+      `• MC Confidence: <b>${Number(a.mcConfidence ?? a.consensusScore ?? 0).toFixed(3)}</b>\n` +
+      `• MC Stability: <b>${Number(a.mcStability ?? a.agreementSources ?? 0).toFixed(3)}</b>\n` +
+      `• p-value: ${Number(a.mcPValue ?? a.pValue ?? 0).toFixed(4)}\n` +
+      `• Loss prob (observed): <b>${((a.pUpper || 0) * 100).toFixed(2)}%</b>\n` +
       `• Break-even loss prob: ${((1 - t.payout/t.stake) * 100).toFixed(2)}%\n` +
       `• Value edge: <b>${(a.valueEdge * 100).toFixed(2)}%</b>\n` +
-      `• Consensus score: <b>${Number(a.consensusScore || 0).toFixed(3)}</b> (${a.agreementSources ?? '?'}/4 sources)\n` +
       `• Bootstrap CI: [${(ci.lower * 100 || 0).toFixed(1)}%, ${(ci.upper * 100 || 0).toFixed(1)}%] width=${(ci.width * 100 || 0).toFixed(2)}%\n` +
       `• Absence streak: ${a.absenceStreak ?? '?'} ticks\n` +
-      `• Entropy: ${Number(a.entropy || 0).toFixed(3)} | χ²: ${Number(a.chiSquare || 0).toFixed(2)}\n` +
+      `• Randomness flags: [${(a.randomnessFlags || []).join(', ') || 'none'}]\n` +
       `• Payout multiplier: ×${Number(a.payoutMult || 0).toFixed(4)}\n` +
       `• Sizing: <code>${htmlEscape(a.sizingSource || 'flat')}</code>\n` +
       `• Current loss streak: ${a.lossStreak ?? this.stats.currentLossStreak}\n` +
@@ -2088,11 +2161,12 @@ class TradingBot {
     const ls = this.stats.lossStreakEvents;
 
     telegram.send(
-      `${emoji} <b>TRADE ${label} — MONTE CARLOS DIGIT DIFFER</b>\n\n` +
+      `${emoji} <b>TRADE ${label} — MONTE CARLO DIGIT DIFFER</b>\n\n` +
       `🎫 Contract: <code>#${t.contractId}</code>\n` +
       `📊 Symbol: <code>${t.symbol}</code> | differs <b>${t.digit}</b>\n` +
       `💵 Stake: ${t.stake.toFixed(2)} ${this.currency()}\n` +
-      `💰 P/L: <b>${money(t.profit, this.currency())}</b>\n\n` +
+      `💰 P/L: <b>${money(t.profit, this.currency())}</b>\n` +
+      `📐 MC Confidence: ${Number(t.analysis?.mcConfidence ?? 0).toFixed(3)} | Stability: ${Number(t.analysis?.mcStability ?? 0).toFixed(3)}\n\n` +
       `📅 <b>Today (${rec.date})</b>\n` +
       `• Trades: ${todayStats.count} (✅${todayStats.wins} ❌${todayStats.losses})\n` +
       `• Win rate: ${todayStats.winRate.toFixed(1)}%\n` +
@@ -2476,14 +2550,14 @@ class DifferBacktester {
     const diag = {
       scans: 0,
       nullAnalyses: 0,
-      gatedGap: 0,
+      gatedMC: 0,
+      gatedRandomness: 0,
       gatedRecentHit: 0,
       gatedEdge: 0,
       gatedCooldown: 0,
       gatedHotFilter: 0,
-      gatedConsensus: 0,
+      gatedEntropy: 0,
       gatedBootstrapCI: 0,
-      gatedAgreement: 0,
       allowedModel: 0,
       recommended: 0,
     };
@@ -2514,13 +2588,13 @@ class DifferBacktester {
 
       if (!analysis.allowedByModel) {
         for (const g of analysis.gates) {
-          if (g.startsWith('gap')) diag.gatedGap++;
+          if (g.startsWith('mc-rejected') || g.startsWith('confidence') || g.startsWith('stability')) diag.gatedMC++;
+          else if (g.startsWith('randomness')) diag.gatedRandomness++;
           else if (g.startsWith('recent')) diag.gatedRecentHit++;
           else if (g.startsWith('cooldown')) diag.gatedCooldown++;
           else if (g.startsWith('hot-filter')) diag.gatedHotFilter++;
-          else if (g.startsWith('consensus')) diag.gatedConsensus++;
           else if (g.startsWith('bootstrap')) diag.gatedBootstrapCI++;
-          else if (g.startsWith('agreement')) diag.gatedAgreement++;
+          else if (g.startsWith('entropy') || g.startsWith('chisq')) diag.gatedEntropy++;
         }
         i++;
         continue;
@@ -2700,16 +2774,16 @@ class DifferBacktester {
     console.log('  Diagnostics:');
     console.log(`    scans              : ${diag.scans}`);
     console.log(`    null analyses      : ${diag.nullAnalyses}`);
-    console.log(`    passed model gates : ${diag.allowedModel}`);
+    console.log(`    passed MC gates    : ${diag.allowedModel}`);
     console.log(`    signals fired      : ${diag.recommended}`);
-    console.log(`    rejected by gap    : ${diag.gatedGap}`);
+    console.log(`    rejected by MC     : ${diag.gatedMC}`);
+    console.log(`    rejected by random : ${diag.gatedRandomness}`);
     console.log(`    rejected by hits   : ${diag.gatedRecentHit}`);
     console.log(`    rejected by edge   : ${diag.gatedEdge}`);
     console.log(`    rejected by cooldown   : ${diag.gatedCooldown}`);
     console.log(`    rejected by hot-filter : ${diag.gatedHotFilter}`);
-    console.log(`    rejected by consensus  : ${diag.gatedConsensus}`);
+    console.log(`    rejected by entropy    : ${diag.gatedEntropy}`);
     console.log(`    rejected by bootstrap  : ${diag.gatedBootstrapCI}`);
-    console.log(`    rejected by agreement  : ${diag.gatedAgreement}`);
     console.log(banner + '\n');
 
     Object.assign(results, {
