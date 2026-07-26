@@ -135,7 +135,7 @@ const CONFIG = Object.freeze({
   durationTicks: 1, // Digit contracts normally 1-10 ticks
   minStake: 1.1,
   maxStake: 150.00,
-  assets: ['R_10','R_50','R_75','RDBULL'],//'1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V','R_10','R_25','R_50','R_75','RDBULL','RDBEAR'
+  assets: ['R_50','R_75','RDBULL'],//'1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V','R_10','R_25','R_50','R_75','RDBULL','RDBEAR'
 
   // Trading frequency / limits
   tickWindow: 1000,
@@ -167,8 +167,8 @@ const CONFIG = Object.freeze({
   maxRecentHits:      3,         // max occurrences in recent tail
   recentLookback:     20,        // recent tail length for hit check
   cooldownTicks:      200,       // don't re-predict digit within N ticks
-  safetyMargin:       0.003,     // value edge safety margin
-  minEdge:            0.003,     // min value edge to trade
+  safetyMargin:       0.01,     // value edge safety margin
+  minEdge:            0.016,     // min value edge to trade
   maxConsecutiveSkips: 5,
   lossCooldownMs:     8000,
   weakSignalCooldownMs: 15000,
@@ -237,9 +237,9 @@ const CONFIG = Object.freeze({
   hourlySummary: boolEnv('HOURLY_SUMMARY', true),
 
   // Persistence/logging
-  stateFile: strEnv('STATE_FILE', 'monte-carlos_differ_01_state.json'),
-  logFile: strEnv('LOG_FILE', 'monte-carlos_differ_01_bot.log'),
-  logLevel: strEnv('LOG_LEVEL', 'INFO').toUpperCase(),
+  stateFile: strEnv('STATE_FILE', 'simple_differ_01_state.json'),
+  logFile: strEnv('LOG_FILE', 'simple_differ_01_bot.log'),
+  logLevel: strEnv('LOG_LEVEL', 'SIMPLE INFO').toUpperCase(),
 
   // Telegram
   telegram: {
@@ -1043,7 +1043,7 @@ class MarketDataManager extends EventEmitter {
 // 7. MONTE CARLO DIGIT ANALYZER
 // ─────────────────────────────────────────────────────────────────────
 /**
- * MonteCarloAnalyzer — Hypothesis-testing Monte Carlo engine for Digit Differ.
+ * DigitAnalyzer — Coldest-digit frequency analysis for Digit Differ.
  *
  * Instead of predicting the next digit, this analyzer tests whether any
  * candidate digit-differ barrier shows a statistically meaningful edge
@@ -2296,7 +2296,7 @@ class TradingBot {
     if (!won) {
       this.lastLossAt = Date.now();
       this.consecutiveMcSkips++;
-      logger.info(`[MC] LOSS recorded — cooldown ${this.cfg.mcLossCooldownMs/1000}s active (consecutive skips: ${this.consecutiveMcSkips})`);
+      logger.info(`LOSS recorded — cooldown ${this.cfg.lossCooldownMs/1000}s active (consecutive skips: ${this.consecutiveMcSkips})`);
     } else {
       this.consecutiveMcSkips = 0;
     }
@@ -2544,10 +2544,10 @@ class TradingBot {
  *   1. Deep-fetch N ticks (default 100K) via ticks_history in 5K batches.
  *   2. For each index i (starting at minWindow) walk the history:
  *        a. Slice ticks[0..i] as the "known" series.
- *        b. Run MonteCarloAnalyzer.analyze() on the slice.
+ *        b. Run DigitAnalyzer.analyze() on the slice.
  *        c. If MC-recommended, compute the value-edge
  *           against a *synthetic* payout (BACKTEST_PAYOUT_MULT × stake)
- *           and check the same live-trade filters (mcMinEdge,
+ *           and check the same live-trade filters (minEdge,
  *           MC stability, optional tradedAsset lock).
  *        d. If the trade would fire, look up the actual expiry digit
  *           `ticks[i + durationTicks].digit` and settle:
@@ -2784,7 +2784,7 @@ class DifferBacktester {
       mcNotRecommended: 0,
       mcNotStable    : 0,
       mcEdgeLow      : 0,
-      gatedEdge      : 0,   // value edge < mcMinEdge
+      gatedEdge      : 0,   // value edge < minEdge
       gatedAssetLock : 0,
       recommended    : 0,
       bestEdgeSeen   : -Infinity,
@@ -2872,7 +2872,7 @@ class DifferBacktester {
 
       // Would this trade actually fire?
       let fire = true;
-      if (valueEdge < this.cfg.mcMinEdge)                        { fire = false; diag.gatedEdge++; }
+      if (valueEdge < this.cfg.minEdge)                        { fire = false; diag.gatedEdge++; }
       // Asset-lock
       if (fire && this.cfg.backtestAssetLock && tradedAsset === symbol
           && (i - lastTradeAtIdx) < this.cfg.backtestAssetLockTicks) {
@@ -3104,7 +3104,7 @@ class DifferBacktester {
     console.log(`    signals actually fired: ${diag.recommended}`);
     console.log(`    rejected by minEdge  : ${diag.gatedEdge}   (needed ≥ ${(this.cfg.minEdge*100).toFixed(3)}%)`);
     console.log(`    rejected by assetLock: ${diag.gatedAssetLock}`);
-    console.log(`    best value edge seen : ${bestEdgeStr}   (min ${(this.cfg.mcMinEdge*100).toFixed(3)}%)`);
+    console.log(`    best value edge seen : ${bestEdgeStr}   (min ${(this.cfg.minEdge*100).toFixed(3)}%)`);
 
     // Edge histogram
     const total = Object.values(diag.edgeBuckets).reduce((a, b) => a + b, 0);
@@ -3124,7 +3124,7 @@ class DifferBacktester {
     if (diag.recommended === 0 && diag.scans > 0) {
       console.log('');
       console.log('  💡 No signals fired. Suggestions:');
-      if (diag.bestEdgeSeen !== -Infinity && diag.bestEdgeSeen < this.cfg.mcMinEdge) {
+      if (diag.bestEdgeSeen !== -Infinity && diag.bestEdgeSeen < this.cfg.minEdge) {
         console.log(`     • Best value-edge observed: ${(diag.bestEdgeSeen*100).toFixed(3)}%`);
         console.log(`       Try lowering minEdge below ${(diag.bestEdgeSeen*100).toFixed(3)}%`);
       }
