@@ -118,7 +118,7 @@ const CONFIG = Object.freeze({
   stake:           1.1,
   durationTicks:   1,
   minStake:        1.1,
-  maxStake:        5.5,
+  maxStake:        20.0,
   assets:          ['R_10','R_25','R_50','R_75','RDBULL','RDBEAR'], //'R_10','R_25','R_50','R_75','RDBULL','RDBEAR',
 
   // ── Timing ─────────────────────────────────────────────────────
@@ -132,7 +132,7 @@ const CONFIG = Object.freeze({
   // ── Risk Management ────────────────────────────────────────────
   dailyMaxLoss:       100,
   dailyMaxLossPct:    1.0,
-  dailyMaxProfit:     15000,
+  dailyMaxProfit:     5,
   dailyMaxTrades:     50000,
   maxConsecutiveLoss: 7,
   lossCooldownMs:     300000,

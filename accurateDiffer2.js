@@ -143,6 +143,8 @@ const CONFIG = Object.freeze({
   analysisIntervalMs: 3000,
   tradeCooldownMs: 2500,
   maxOpenTrades: 1,
+  cooldownTicks: 200,        // don't re-analyze digit within N ticks of last trade
+  tradeWatchdogMs: 20000,    // force-recover stuck trades after this many ms
   // ── Asset rotation ────────────────────────────────────────────────
   //   To avoid hammering the same symbol back-to-back the bot briefly
   //   "locks out" the just-traded symbol. Two safety valves:
@@ -154,7 +156,7 @@ const CONFIG = Object.freeze({
   //       of skipping the whole scan.
   //   Set assetRotationMs=0 to disable the rotation entirely (trade
   //   whatever ranks first every scan).
-  assetRotationMs: 240_000,
+  assetRotationMs: 60_000,
   dailyMaxLoss: 570,
   dailyMaxProfit: 0, // 0 disables profit target stop
   dailyMaxTrades: 20000,
@@ -1915,6 +1917,15 @@ class TradingBot {
     this.consecutiveMcSkips = 0;   // tracks consecutive MC-rejected scans
     this.lastLossAt = 0;           // timestamp of last loss (for cooldown)
     this.lastWeakSignalAt = 0;     // timestamp of last weak-signal skip
+
+    // ── Trade watchdog ──────────────────────────────────────────────
+    this._watchdogTimer = null;
+    this._watchdogPollTimer = null;
+    this.tradeWatchdogMs = this.cfg.tradeWatchdogMs || 20000;
+
+    // ── Tick counter for cooldownTicks ──────────────────────────────
+    this._tickCounter = 0;
+    this._lastTradeTickIdx = null;
   }
 
   // ── Scheduled pause helpers ─────────────────────────────────────
@@ -2178,6 +2189,7 @@ class TradingBot {
     this.exec.on('open', t => this._onTradeOpen(t));
     this.exec.on('result', t => this._onTradeResult(t));
     this.exec.on('update', t => logger.debug(`update #${t.contractId} ${t.status} profit=${t.profit}`));
+    this.market.on('tick', () => { this._tickCounter++; });
 
     process.on('SIGINT', () => this.stop('SIGINT'));
     process.on('SIGTERM', () => this.stop('SIGTERM'));
@@ -2251,7 +2263,10 @@ class TradingBot {
   _onDisconnected(code, reason, wasAuthorized) {
     telegram.send(`⚠️ <b>Connection lost</b>\ncode: <code>${code}</code>\nwas authorized: ${wasAuthorized ? 'yes' : 'no'}\n🔄 reconnecting...`);
     if (this._analysisT) { clearInterval(this._analysisT); this._analysisT = null; }
-    this.exec.open.clear();
+    // Recover stuck trades on disconnect instead of silently clearing them
+    if (this.exec.open.size > 0) {
+      this._recoverStuckTrade('disconnect');
+    }
   }
 
   /**
@@ -2310,6 +2325,15 @@ class TradingBot {
     }
     if (Date.now() - this.lastTradeAt < this.cfg.tradeCooldownMs) return;
     if (this.exec.count() >= this.cfg.maxOpenTrades) return;
+
+    // Tick-based cooldown: don't re-analyze within N ticks of last trade
+    if (this._lastTradeTickIdx != null) {
+      const ticksSinceTrade = this._tickCounter - this._lastTradeTickIdx;
+      if (ticksSinceTrade < this.cfg.cooldownTicks) {
+        logger.debug(`cooldownTicks: ${ticksSinceTrade}/${this.cfg.cooldownTicks} — skipping`);
+        return;
+      }
+    }
 
     const today = utcDateStr();
     const todayTrades = this.stats.todayTrades(today);
@@ -2508,6 +2532,110 @@ class TradingBot {
     );
   }
 
+  // ── Trade Watchdog ─────────────────────────────────────────────────
+
+  /**
+   * _startTradeWatchdog(contractId) — Starts a timer that fires if a
+   * trade doesn't settle within tradeWatchdogMs. Attempts to re-subscribe
+   * to the contract, then force-releases the lock after a poll timeout.
+   */
+  _startTradeWatchdog(contractId) {
+    this._clearAllWatchdogTimers();
+    const timeoutMs = this.tradeWatchdogMs;
+
+    this._watchdogTimer = setTimeout(() => {
+      if (!this.exec.open.has(contractId)) {
+        logger.debug('Watchdog fired but trade already settled');
+        return;
+      }
+
+      logger.warn(
+        `WATCHDOG FIRED — Contract ${contractId} open for ` +
+        `${(timeoutMs / 1000)}s with no settlement`
+      );
+
+      if (contractId && this.client.connected && this.client.authorized) {
+        logger.info(`Polling contract ${contractId}...`);
+
+        // Forget all existing open-contract subscriptions to avoid duplicates
+        this.client._send({
+          forget_all: 'proposal_open_contract'
+        }).catch(e => logger.debug('forget_all:', e.message));
+
+        // Re-subscribe to get the settlement update
+        this.client._send({
+          proposal_open_contract: 1,
+          contract_id: contractId,
+          subscribe: 1
+        }, 15000).catch(e => logger.debug('re-subscribe:', e.message));
+
+        // If poll doesn't resolve within 15s, force-recover
+        this._watchdogPollTimer = setTimeout(() => {
+          if (!this.exec.open.has(contractId)) return;
+          logger.error(`WATCHDOG: Poll timeout — contract ${contractId} still unresolved — force-releasing lock`);
+          this._recoverStuckTrade('watchdog-force');
+        }, 15000);
+      } else {
+        logger.error('Cannot poll contract — not connected');
+        this._recoverStuckTrade('watchdog-offline');
+      }
+    }, timeoutMs);
+
+    logger.debug(`Watchdog started for ${contractId} (${timeoutMs}ms)`);
+  }
+
+  _clearAllWatchdogTimers() {
+    if (this._watchdogTimer) {
+      clearTimeout(this._watchdogTimer);
+      this._watchdogTimer = null;
+    }
+    if (this._watchdogPollTimer) {
+      clearTimeout(this._watchdogPollTimer);
+      this._watchdogPollTimer = null;
+    }
+  }
+
+  /**
+   * _recoverStuckTrade(reason) — Force-releases stuck trades that never
+   * received a settlement update. Logs the event, notifies via Telegram,
+   * and clears the open-trades map so the bot can resume.
+   */
+  _recoverStuckTrade(reason) {
+    logger.warn(`Recovery mode: ${reason}`);
+    this._clearAllWatchdogTimers();
+
+    const openContracts = [...this.exec.open.entries()];
+    if (openContracts.length === 0) {
+      logger.debug('No open contracts to recover');
+      return;
+    }
+
+    for (const [contractId, info] of openContracts) {
+      const openSeconds = info.buyTime
+        ? Math.round((Date.now() / 1000 - info.buyTime))
+        : '?';
+
+      logger.error(
+        `STUCK TRADE RECOVERY [${reason}] | Contract: ${contractId} | ` +
+        `Symbol: ${info.symbol} | Open for: ${openSeconds}s`
+      );
+
+      this.exec.open.delete(contractId);
+
+      telegram.send(
+        `⚠️ <b>STUCK TRADE RECOVERED [${reason}]</b>\n` +
+        `Contract: <code>${contractId}</code>\n` +
+        `Symbol: ${info.symbol}\n` +
+        `Open for: ${openSeconds}s\n` +
+        `Manually verify on Deriv\n` +
+        `Overall P/L: ${money(this.stats.overallProfit, this.currency())}`
+      );
+    }
+
+    logger.warn('Lock released. Bot will continue...');
+    this._saveState('stuck-trade-recovery');
+  }
+
   _onTradeOpen(t) {
     const a = t.analysis || {};
     telegram.send(
@@ -2528,9 +2656,16 @@ class TradingBot {
       `• Current loss streak: ${a.currentLossStreak || 0}\n\n` +
       `🕒 ${utcTs()}`
     );
+
+    // Start watchdog timer for this trade
+    this._startTradeWatchdog(t.contractId);
   }
 
   _onTradeResult(t) {
+    // Clear watchdog timer — trade has settled
+    this._clearAllWatchdogTimers();
+    this._lastTradeTickIdx = this._tickCounter;
+
     const rec = this.stats.record(t);
     this.lastBalance = (this.lastBalance ?? this.client.balance ?? 0) + Number(t.profit || 0);
     if (t.balanceAfter != null) this.lastBalance = Number(t.balanceAfter) + Number(t.profit || 0);
@@ -2786,6 +2921,7 @@ class TradingBot {
     telegram.send(`🛑 <b>Digit Differ Bot stopped</b>\nSignal: ${htmlEscape(signal)}\n💼 Overall Profit: ${money(this.stats.overallProfit, this.currency())}`);
     if (this._analysisT) clearInterval(this._analysisT);
     this._clearPauseTimers();
+    this._clearAllWatchdogTimers();
     if (this._hourlyBoot) clearTimeout(this._hourlyBoot);
     if (this._hourlyT) clearInterval(this._hourlyT);
     if (this._eodBoot) clearTimeout(this._eodBoot);
