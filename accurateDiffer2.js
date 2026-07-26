@@ -2862,7 +2862,7 @@ class DifferBacktester {
       const payoutFull = baseStake * payoutMult;
       const breakEvenLossProb = 1 - ask / payoutFull;
       // Value edge: break-even minus lose probability
-      const valueEdge = breakEvenLossProb - analysis.pEstimate;
+      const valueEdge = breakEvenLossProb - analysis.pUpper - this.cfg.safetyMargin;
 
       if (valueEdge > diag.bestEdgeSeen) diag.bestEdgeSeen = valueEdge;
       diag.edgeBuckets[bucketize(valueEdge)]++;
@@ -3094,14 +3094,12 @@ class DifferBacktester {
     // ── Diagnostics ───────────────────────────────────────────
     const bestEdgeStr = diag.bestEdgeSeen === -Infinity ? 'n/a' : (diag.bestEdgeSeen*100).toFixed(3)+'%';
     console.log(line);
-    console.log('  MC Diagnostics:');
+    console.log('  Diagnostics:');
     console.log(`    scans                : ${diag.scans}`);
     console.log(`    null analyses        : ${diag.nullAnalyses}   (window too short)`);
-    console.log(`    MC not recommended   : ${diag.mcNotRecommended}`);
-    console.log(`      - not stable      : ${diag.mcNotStable}`);
-    console.log(`      - edge too low    : ${diag.mcEdgeLow}`);
+    console.log(`    gated (not allowed)  : ${diag.mcNotRecommended}`);
     console.log(`    signals actually fired: ${diag.recommended}`);
-    console.log(`    rejected by minEdge  : ${diag.gatedEdge}   (needed ≥ ${(this.cfg.mcMinEdge*100).toFixed(3)}%)`);
+    console.log(`    rejected by minEdge  : ${diag.gatedEdge}   (needed ≥ ${(this.cfg.minEdge*100).toFixed(3)}%)`);
     console.log(`    rejected by assetLock: ${diag.gatedAssetLock}`);
     console.log(`    best value edge seen : ${bestEdgeStr}   (min ${(this.cfg.mcMinEdge*100).toFixed(3)}%)`);
 
