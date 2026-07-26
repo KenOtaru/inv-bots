@@ -3,68 +3,56 @@
 
 /**
  * =====================================================================
- *  Deriv Digit Differ Trading Bot — ELDD (v3)
+ *  Deriv Digit Differ Trading Bot (single-file)
  * =====================================================================
  *
- *  Single-file DIGITDIFF bot. It observes by default, permits explicitly
- *  enabled minimum-stake demo probes, and locks real execution behind
- *  independently measured demo evidence and a live quote check.
+ *  Converts the previous Accumulator bot idea into a Digit Differ bot.
+ *  It trades DIGITDIFF contracts only when a conservative digit-probability
+ *  model plus the live Deriv payout quote shows a positive value gap.
  *
- *  IMPORTANT (honest math):
- *    No method can guarantee consistent profit. Synthetic ticks are
- *    engineered to be fair after the house margin. DIGITDIFF pays ~9–11%
- *    on a ~90% theoretical hit rate → random play has negative EV.
- *    Historical digit patterns, gaps, streaks, and Markov states are not
- *    independent evidence of a future digit. They are retained only as
- *    experimental selectors and never reduce estimated risk by themselves.
+ *  IMPORTANT:
+ *    No trading strategy can guarantee consistent profit. Deriv synthetic
+ *    ticks are designed to be random/fair after platform pricing margin.
+ *    This bot therefore trades selectively and skips whenever the measured
+ *    edge is not strong enough.
  *
- *  ── Research synthesis (common retail hypotheses; not proven edges) ──
- *    A. Least-frequency Differ ........ pick digit with % < ~9% (Digit Stats)
- *    B. Multi-window cold digit ....... coldest across short+long lookbacks
- *    C. Markov / transition sparse .... P(d | recent state) very low
- *    D. Gap / absence ............... digit missing for N ticks, then Differ
- *    E. Streak reverse .............. after same-digit runs, Differ that digit
- *    F. Mean-reversion parity ........ Even/Odd imbalance (not used for Differ
- *                                     barrier selection; used as regime hint)
- *    G. Live value-edge filter ....... only if model P(loss) < break-even q_be
- *    H. Calibration + fractional Kelly  size only when empirical WR tracks model
+ *  Core method: DIVER-9
+ *    Dynamic Imbalance Value Edge Rejection for Digit Differ.
  *
- *  ── Novel method: ELDD ──────────────────────────────────────────────
- *    Evidence-Locked Digit Differ.
+ *    1. Track last digits per symbol using correct symbol pip_size.
+ *    2. Estimate P(final digit == d) with an ensemble of:
+ *       - multi-window digit frequencies,
+ *       - EWMA recency probabilities,
+ *       - current-digit -> expiry-digit transition matrix.
+ *    3. For Differ, the selected barrier digit is the digit with the lowest
+ *       predicted expiry probability.
+ *    4. Pull a live proposal and compute the break-even losing probability:
+ *          q_be = 1 - ask_price / payout
+ *       A trade is allowed only if:
+ *          conservative_upper_bound(P(loss digit)) < q_be - safety_margin
+ *    5. Skip if entropy/chi-square/gap/liquidity/sample filters do not agree.
  *
- *    A selector may nominate a barrier, but it cannot create a trading edge.
- *    ELDD permits real-money execution only when a fixed-strategy virtual
- *    account sample clears a 99.5% one-sided Wilson lower bound above the
- *    current proposal's break-even win rate plus a margin. If it cannot do
- *    so, the correct action is no trade.
+ *  Features requested:
+ *    • Digit Differ (DIGITDIFF) trading.
+ *    • Overall Profit tracking, storage and display.
+ *    • Consecutive Loss tracking/display: current streak + x2, x3, x4 events.
+ *    • GMT/UTC day clock and end-of-trade-day notification.
+ *    • Day-of-week trading control (enable/disable trading per day).
+ *    • EOD report includes the just-ended trade day and all previous trade
+ *      days by date.
+ *    • State persistence to JSON.
+ *    • Telegram queue with safe spacing.
+ *    • Reconnect with backoff.
+ *    • Supports legacy Deriv token authorize flow and PAT/OTP flow.
  *
- *    Modules (each ranks digits cold→hot; votes for bottom-K):
- *      1. Multi-horizon frequency ensemble (short / mid / long)
- *      2. Dirichlet-Bayesian posterior mean + Wilson upper bound
- *      3. EWMA recency probability
- *      4. Order-1 transition  (current digit → expiry digit)
- *      5. Order-2 Markov      (last-2-digit state → next digit)
- *      6. Gap / absence band  (cold long enough, not absurdly stale noise)
- *      7. Hot-pressure residual (mass stolen by 1–2 hot digits → cold share)
- *      8. Cross-window persistence (must stay cold in ≥2 of 3 horizons)
+ *  Install:
+ *    npm install ws
  *
- *    Decision stack:
- *      • Barrier digit = lowest conservative pLossUpper among digits
- *        that earn ≥ minConsensusVotes module votes.
- *      • Regime gates: entropy / χ² band (stable non-uniform sample).
- *      • Anti-hit gate: barrier digit not among last N recent ticks.
- *      • Live proposal: q_be = 1 − ask/payout; require
- *            pLossUpper + safetyMargin ≤ q_be − minEdge
- *      • No recovery ladder; stake never increases after a loss.
+ *  Run:
+ *    DERIV_API_TOKEN="..." DERIV_APP_ID="..." node deriv_digit_differ_bot.js
  *
- *  Features:
- *    • DIGITDIFF only • Overall / daily P/L • Loss-streak x2/x3/x4
- *    • GMT day clock + EOD reports • State JSON • Telegram queue
- *    • Reconnect backoff • Legacy token + PAT/OTP • Built-in backtester
- *
- *  Install:  npm install ws
- *  Run:      node accurateDiffer3.js
- *  Backtest: $env:BACKTEST=1; node accurateDiffer3.js
+ *  If using a new PAT token, set DERIV_ACCOUNT_ID when possible:
+ *    DERIV_API_TOKEN="pat_..." DERIV_APP_ID="..." DERIV_ACCOUNT_ID="VRTC..." node deriv_digit_differ_bot.js
  *
  * =====================================================================
  */
@@ -132,8 +120,10 @@ function listEnv(name, def) {
 // ─────────────────────────────────────────────────────────────────────
 const CONFIG = Object.freeze({
   // Deriv API
-  apiToken:    ('0P94g4WdSrSrzir').trim(),
-  appId:       '1089',
+  // apiToken:    ('0P94g4WdSrSrzir').trim(),
+  // appId:       '1089',
+  apiToken:    'pat_27a3197287bae3ec6c2c9cbdd68fffaa2a524e3b0a6e1ecf298b5ffb338adb10',
+  appId:       '33uslPtthXBEkQOdfKfoY',
   accountId: '', // recommended/required for PAT new API
   accountType: 'demo', // demo | real
   legacyWsUrl: 'wss://ws.derivws.com/websockets/v3',
@@ -141,17 +131,16 @@ const CONFIG = Object.freeze({
   currency: 'USD',
 
   // Trade setup
-  stake: numEnv('STAKE', 2.0),
+  stake: numEnv('STAKE', 1.1),
   durationTicks: intEnv('DURATION_TICKS', 1), // Digit contracts normally 1-10 ticks
-  minStake: numEnv('MIN_STAKE', 2.0),
-  maxStake: numEnv('MAX_STAKE', 2.0),
-  // assets: ['1HZ100V','1HZ25V','R_10','R_25','R_50','R_75','R_100','RDBULL'], //'1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V','R_10','R_25','R_50','R_75','R_100','RDBULL','RDBEAR'
-  assets: ['R_25','R_75','R_100','RDBULL'],
+  minStake: numEnv('MIN_STAKE', 1.1),
+  maxStake: numEnv('MAX_STAKE', 150.00),
+  assets: ['R_10','R_50','R_75'],//'1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V','R_10','R_25','R_50','R_75','R_100','RDBULL','RDBEAR'
 
   // Trading frequency / limits
   tickWindow: intEnv('TICK_WINDOW', 1000),
   minTicksForAnalysis: intEnv('MIN_TICKS_ANALYSIS', 300),
-  analysisIntervalMs: intEnv('ANALYSIS_INTERVAL_MS', 10000),
+  analysisIntervalMs: intEnv('ANALYSIS_INTERVAL_MS', 3000),
   tradeCooldownMs: intEnv('TRADE_COOLDOWN_MS', 2500),
   maxOpenTrades: intEnv('MAX_OPEN_TRADES', 1),
   // ── Asset rotation ────────────────────────────────────────────────
@@ -166,59 +155,31 @@ const CONFIG = Object.freeze({
   //   Set assetRotationMs=0 to disable the rotation entirely (trade
   //   whatever ranks first every scan).
   assetRotationMs: intEnv('ASSET_ROTATION_MS', 60_000),
-  dailyMaxLoss: numEnv('DAILY_MAX_LOSS', 5),
+  dailyMaxLoss: numEnv('DAILY_MAX_LOSS', 570),
   dailyMaxProfit: numEnv('DAILY_MAX_PROFIT', 0), // 0 disables profit target stop
-  dailyMaxTrades: intEnv('DAILY_MAX_TRADES', 50),
+  dailyMaxTrades: intEnv('DAILY_MAX_TRADES', 20000),
 
-  // ── CASPIAN-X edge filters ────────────────────────────────────────
-  // Multi-horizon frequency windows (short → long). Cold consensus
-  // requires the barrier digit to rank cold across several of these.
+  // DIVER-9 edge filters
   frequencyWindows: listEnv('FREQUENCY_WINDOWS', '20,45,90,180,360').map(x => parseInt(x, 10)).filter(Number.isFinite),
-  // Explicit short/mid/long horizons used by the persistence module
-  shortHorizon: intEnv('SHORT_HORIZON', 40),
-  midHorizon: intEnv('MID_HORIZON', 160),
-  longHorizon: intEnv('LONG_HORIZON', 640),
   transitionLookback: intEnv('TRANSITION_LOOKBACK', 600),
-  markov2Lookback: intEnv('MARKOV2_LOOKBACK', 1200),
-  markov2MinState: intEnv('MARKOV2_MIN_STATE', 12),   // min samples of order-2 state
   ewmaAlpha: numEnv('EWMA_ALPHA', 0.055),
-  dirichletAlpha: numEnv('DIRICHLET_ALPHA', 1.5),     // Bayesian prior pseudo-counts per digit
-  // Consensus: each module votes for its bottom-K coldest digits.
-  // Barrier digit must earn ≥ minConsensusVotes votes (of 8 modules).
-  consensusTopK: intEnv('CONSENSUS_TOP_K', 3),
-  minConsensusVotes: intEnv('MIN_CONSENSUS_VOTES', 5),
-  minPersistenceHorizons: intEnv('MIN_PERSIST_HORIZONS', 2), // cold in ≥2 of short/mid/long
-  // Gap band: digit should be "absent long enough" but not pure noise
-  minGapTicks: intEnv('MIN_GAP_TICKS', 8),
-  maxGapTicks: intEnv('MAX_GAP_TICKS', 90),
-  // Hot-pressure: top hot digit(s) must steal enough mass from uniform
-  minHotPressure: numEnv('MIN_HOT_PRESSURE', 0.012), // ≥1.2pp above 10% on hottest digit
-  // Value-edge floors (live proposal q_be − pLossUpper)
-  minEdge: numEnv('MIN_EDGE', 0.0001),
-  safetyMargin: numEnv('SAFETY_MARGIN', 0.0005),
-  modelRiskMargin: numEnv('MODEL_RISK_MARGIN', 0.005),
-  zScore: numEnv('EDGE_ZSCORE', 1.28),          // Wilson one-sided upper bound
-  maxLossProb: numEnv('MAX_LOSS_PROB', 0.105),  // never take if upper-bound P(loss digit) > this
-  minProbabilityGap: numEnv('MIN_PROBABILITY_GAP', 0.0001),
-  minEntropy: numEnv('MIN_ENTROPY', 0.90),
-  maxEntropy: numEnv('MAX_ENTROPY', 0.9997),
-  minChiSquare: numEnv('MIN_CHISQUARE', 1.5),
-  maxChiSquare: numEnv('MAX_CHISQUARE', 40.0),
-  maxRecentDigitHits: intEnv('MAX_RECENT_DIGIT_HITS', 2), // barrier digit hits in recentLookback
+  minEdge: numEnv('MIN_EDGE', 0.0002),          //0.0040 absolute probability gap, e.g. 0.4 percentage point
+  safetyMargin: numEnv('SAFETY_MARGIN', 0.002),
+  modelRiskMargin: numEnv('MODEL_RISK_MARGIN', 0.0015),
+  zScore: numEnv('EDGE_ZSCORE', 1.28),          // conservative upper bound
+  maxLossProb: numEnv('MAX_LOSS_PROB', 0.092),  // never take if model says losing digit > 9.5%
+  minProbabilityGap: numEnv('MIN_PROBABILITY_GAP', 0.004),
+  minEntropy: numEnv('MIN_ENTROPY', 0.90),      // close to random; avoid broken/tiny samples
+  maxEntropy: numEnv('MAX_ENTROPY', 0.9997),    // if perfectly uniform, likely no exploitable imbalance
+  minChiSquare: numEnv('MIN_CHISQUARE', 1.5),   // require some measurable imbalance
+  maxChiSquare: numEnv('MAX_CHISQUARE', 40.0),  // reject extreme unstable bursts
+  maxRecentDigitHits: intEnv('MAX_RECENT_DIGIT_HITS', 2), // selected digit occurrences in last recentLookback
   recentLookback: intEnv('RECENT_LOOKBACK', 12),
-  proposalScanTopN: intEnv('PROPOSAL_SCAN_TOP_N', 1),
-  // Ensemble blend weights (re-normalized dynamically when markov strength varies)
-  weightRolling: numEnv('W_ROLLING', 0.28),
-  weightEwma: numEnv('W_EWMA', 0.18),
-  weightDirichlet: numEnv('W_DIRICHLET', 0.22),
-  weightTrans1: numEnv('W_TRANS1', 0.16),
-  weightMarkov2: numEnv('W_MARKOV2', 0.16),
+  proposalScanTopN: intEnv('PROPOSAL_SCAN_TOP_N', 4),
 
-  // Loss recovery is deliberately unsupported. Digit outcomes are not made
-  // more likely by a prior loss, so martingale-style sizing only increases ruin risk.
-
-  // ─ Trade watchdog ─
-  tradeWatchdogMs: intEnv('TRADE_WATCHDOG_MS', 20000),
+  // Optional limited loss recovery; disabled by default. Safer than the pasted 10x/100x martingale.
+  recoveryEnabled: boolEnv('RECOVERY_ENABLED', true),
+  recoveryMultipliers: listEnv('RECOVERY_MULTIPLIERS', '1,13.2,150.0').map(Number).filter(Number.isFinite),
 
   // ── Kelly-fractional sizing ────────────────────────────────────────
   //   kellySizingEnabled=true replaces flat/recovery stake with:
@@ -243,21 +204,36 @@ const CONFIG = Object.freeze({
   calibEnabled        : boolEnv('CALIB_ENABLED',         false),
   calibWindow         : intEnv ('CALIB_WINDOW',          200),
   calibMinTrades      : intEnv ('CALIB_MIN_TRADES',      40),
-  calibDisableGap     : numEnv ('CALIB_DISABLE_GAP',     0.020),   // −2 pp below prediction → disable
+  calibDisableGap     : numEnv ('CALIB_DISABLE_GAP',     0.02),   // −2 pp below prediction → disable
   calibReenableGap    : numEnv ('CALIB_REENABLE_GAP',    0.005),  // within ±0.5 pp → re-enable
   calibProbeAfterMs   : intEnv ('CALIB_PROBE_AFTER_MS',  30 * 60_000),
-  calibProbeStakeFrac : numEnv ('CALIB_PROBE_STAKE_FRAC', 0.20),
+  calibProbeStakeFrac : numEnv ('CALIB_PROBE_STAKE_FRAC', 0.25),
 
-  // Evidence-Locked Digit Differ (ELDD)
-  // observe: analyse and log only (default).
-  // demo-probe: place minimum-stake experiments on a Deriv virtual account.
-  // live: requires ENABLE_REAL_TRADING=true and a qualifying demo evidence record.
-  tradeMode: strEnv('TRADE_MODE', 'observe').toLowerCase(),
-  enableRealTrading: boolEnv('ENABLE_REAL_TRADING', true),
-  evidenceMinTrades: intEnv('EVIDENCE_MIN_TRADES', 300),
-  evidenceWindow: intEnv('EVIDENCE_WINDOW', 1000),
-  evidenceZScore: numEnv('EVIDENCE_ZSCORE', 2.576), // one-sided 99.5% Wilson bound
-  evidenceMinEdge: numEnv('EVIDENCE_MIN_EDGE', 0.005),
+  // ── Scheduled pause/resume ──────────────────────────────────────
+  //   The bot stops opening new trades between pauseStartGmt and
+  //   pauseEndGmt (GMT/UTC, HH:MM format). Open trades are allowed to
+  //   settle; only new analysis/trade cycles are blocked.
+  //   pauseStartGmt > pauseEndGmt means the pause wraps past midnight
+  //   (e.g. 22:00 → 06:00 pauses overnight).
+  //   pauseStartGmt < pauseEndGmt means a mid-day break
+  //   (e.g. 12:00 → 14:00 pauses over lunch).
+  pauseEnabled   : boolEnv('PAUSE_ENABLED', true),
+  pauseStartGmt  : strEnv('PAUSE_START_GMT', '23:00'),
+  pauseEndGmt    : strEnv('PAUSE_END_GMT',   '01:00'),
+
+  // ── Day-of-week trading filter ──────────────────────────────────
+  //   Control which days of the week the bot is allowed to trade.
+  //   Days are in GMT/UTC timezone. Set any day to false to disable
+  //   trading on that day. Open trades will settle normally.
+  //   These can be set via environment variables:
+  //     TRADE_SUNDAY=false TRADE_MONDAY=true etc.
+  tradeSunday    : boolEnv('TRADE_SUNDAY',    false),
+  tradeMonday    : boolEnv('TRADE_MONDAY',    true),
+  tradeTuesday   : boolEnv('TRADE_TUESDAY',   true),
+  tradeWednesday : boolEnv('TRADE_WEDNESDAY', true),
+  tradeThursday  : boolEnv('TRADE_THURSDAY',  true),
+  tradeFriday    : boolEnv('TRADE_FRIDAY',    true),
+  tradeSaturday  : boolEnv('TRADE_SATURDAY',  false),
 
   // GMT/UTC reporting
   eodTimeGmt: strEnv('TRADE_DAY_END_GMT', '00:00'), // default midnight GMT; report date is previous UTC day
@@ -265,8 +241,8 @@ const CONFIG = Object.freeze({
   hourlySummary: boolEnv('HOURLY_SUMMARY', true),
 
   // Persistence/logging
-  stateFile: strEnv('STATE_FILE', 'accurateDiffer2_01_ELDD_state.json'),
-  logFile: strEnv('LOG_FILE', 'accurateDiffer2_01_ELDD_bot.log'),
+  stateFile: strEnv('STATE_FILE', 'deriv_digit_differ9_05_state.json'),
+  logFile: strEnv('LOG_FILE', 'deriv_digit_differ9_05_bot.log'),
   logLevel: strEnv('LOG_LEVEL', 'INFO').toUpperCase(),
 
   // Telegram
@@ -309,7 +285,7 @@ const CONFIG = Object.freeze({
   backtestTicks       : intEnv('BACKTEST_TICKS',      100000),
   backtestBatchSize   : intEnv('BACKTEST_BATCH_SIZE', 5000),
   backtestReportEvery : intEnv('BACKTEST_REPORT',     10000),
-  backtestOutFile     : strEnv('BACKTEST_OUT',        'accurateDiffer3_ELDD_backtest_report.json'),
+  backtestOutFile     : strEnv('BACKTEST_OUT',        'differ_backtest_report_04.json'),
   // The Deriv DIGITDIFF payout multiplier is roughly 1.09-1.11× stake
   // (win ~90% of the time, get ~10% profit). We DEFAULT to 1.10, but at
   // backtest start we probe a real Deriv proposal for the actual live
@@ -317,7 +293,7 @@ const CONFIG = Object.freeze({
   // computation match live trading exactly. Override the fallback with
   // BACKTEST_PAYOUT_MULT if the probe fails.
   backtestPayoutMult  : numEnv('BACKTEST_PAYOUT_MULT', 1.10),
-  backtestProbeLive   : boolEnv('BACKTEST_PROBE_LIVE', false),
+  backtestProbeLive   : boolEnv('BACKTEST_PROBE_LIVE', true),
   // In LIVE trading the tradedAsset lock forces multi-symbol rotation
   // (don't hammer the same symbol twice in a row while other symbols
   //  are available). In backtest we scan one symbol at a time, so
@@ -386,16 +362,6 @@ function previousUtcDateStr(d = new Date()) {
 function utcHour(d = new Date()) { return d.getUTCHours(); }
 function htmlEscape(s) {
   return String(s).replace(/[&<>]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
-}
-
-function wilsonLower(successes, trials, z = 2.576) {
-  if (!Number.isFinite(successes) || !Number.isFinite(trials) || trials <= 0) return 0;
-  const p = Math.max(0, Math.min(1, successes / trials));
-  const z2 = z * z;
-  const denominator = 1 + z2 / trials;
-  const center = p + z2 / (2 * trials);
-  const spread = z * Math.sqrt((p * (1 - p) + z2 / (4 * trials)) / trials);
-  return Math.max(0, Math.min(1, (center - spread) / denominator));
 }
 
 // ─────────────────────────────────────────────────────────────────────
@@ -624,7 +590,7 @@ class DerivClient extends EventEmitter {
   }
   _openWs(url) {
     try {
-      this.ws = new WebSocket(url, { handshakeTimeout: 15000, headers: { 'User-Agent': 'CASPIAN-X-DigitDiffer/2.0 Node.js' } });
+      this.ws = new WebSocket(url, { handshakeTimeout: 15000, headers: { 'User-Agent': 'DerivDigitDifferBot/1.0 Node.js' } });
     } catch (e) {
       logger.error('WebSocket construct failed:', e.message);
       this._scheduleReconnect();
@@ -837,7 +803,7 @@ class DerivClient extends EventEmitter {
 //   R_10, R_25:           pip_size = 3   → quote "1234.153"   → digit 3
 //   R_50, R_75:           pip_size = 4   → quote "1234.1534"  → digit 4
 //   RDBULL, RDBEAR:       pip_size = 4
-//   1HZ10V, 1HZ25V, 1HZ50V, 1HZ75V, 1HZ100V: pip_size = 2
+//   1HZ10V, 1HZ25V, 1HZ50V, 1HZ75V, 1HZ100V: pip_size = 2  
 const KNOWN_PIP_SIZES = Object.freeze({
   R_10   : 3,
   R_25   : 3,
@@ -903,12 +869,10 @@ class MarketDataManager extends EventEmitter {
   }
   async loadSymbols() {
     try {
-      // NOTE: use 'full' — 'brief' does NOT include pip_size, which
-      // silently forced every digit computation to fall back to pip=2.
-      // Deriv's R_10..R_100 all use pip_size=3, so 'brief' was reading
-      // the LAST digit of e.g. "9421.15" as "5" when it should have been
-      // "5" from "9421.153". Backwards compatible: if 'full' fails or
-      // pip_size is still missing we fall back to 2.
+      // Use 'full' — 'brief' does NOT include pip_size. The KNOWN_PIP_SIZES
+      // table already covers all volatility indices; this call is really
+      // for populating the `client.symbols` map (used by pipSize as a
+      // secondary source and by other code paths for symbol metadata).
       const res = await this.client._send({ active_symbols: 'full' }, 15000);
       const list = res.active_symbols || [];
       let apiWithPip = 0;
@@ -920,6 +884,10 @@ class MarketDataManager extends EventEmitter {
         const rawPip = Number(s.pip_size);
         if (Number.isFinite(rawPip) && rawPip >= 1 && rawPip <= 8) {
           apiWithPip++;
+          // If API disagrees with our KNOWN table, log it loudly and
+          // TRUST THE API for that symbol — API is authoritative for
+          // symbols we don't have in KNOWN_PIP_SIZES, and if Deriv ever
+          // changes a symbol's pip_size we want to notice.
           const known = KNOWN_PIP_SIZES[key];
           if (known != null && known !== rawPip) {
             logger.warn(`pip_size mismatch for ${key}: known=${known} vs API=${rawPip} — using API value`);
@@ -936,6 +904,7 @@ class MarketDataManager extends EventEmitter {
       );
     } catch (e) {
       logger.error('loadSymbols failed:', e.message);
+      logger.info(`falling back to KNOWN_PIP_SIZES table only`);
     }
   }
   pipSize(symbol) {
@@ -1083,8 +1052,7 @@ class MarketDataManager extends EventEmitter {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// 7. CASPIAN-X DIGIT ANALYZER
-//    Consensus Adaptive Sparse Probability Imbalance for Asymmetric Novelty
+// 7. DIVER-9 DIGIT ANALYZER
 // ─────────────────────────────────────────────────────────────────────
 class DigitAnalyzer {
   constructor(cfg) { this.cfg = cfg; }
@@ -1112,23 +1080,12 @@ class DigitAnalyzer {
     for (const d of slice) counts[d] += 1;
     return { counts, n: slice.length };
   }
-  /** Rank digits ascending by probability array → coldest first. */
-  coldRank(probs) {
-    return [...Array(10).keys()].sort((a, b) => probs[a] - probs[b] || a - b);
-  }
-  /** Bottom-K cold digits from a probability vector. */
-  voteCold(probs, k) {
-    return new Set(this.coldRank(probs).slice(0, Math.max(1, k)));
-  }
-
   rollingProbabilities(digits) {
-    const windows = this.cfg.frequencyWindows.length
-      ? this.cfg.frequencyWindows
-      : [40, 80, 160, 320, 640];
+    const windows = this.cfg.frequencyWindows.length ? this.cfg.frequencyWindows : [30, 60, 120, 300, 600];
     const probs = Array(10).fill(0);
     let wSum = 0;
     for (const w of windows) {
-      if (digits.length < Math.max(20, Math.floor(w * 0.55))) continue;
+      if (digits.length < Math.max(20, Math.floor(w * 0.6))) continue;
       const { counts, n } = this.countsFor(digits, w);
       const weight = Math.sqrt(Math.min(w, n));
       wSum += weight;
@@ -1137,19 +1094,6 @@ class DigitAnalyzer {
     if (!wSum) return Array(10).fill(0.1);
     return probs.map(x => x / wSum);
   }
-
-  /**
-   * Dirichlet-Bayesian posterior mean for each digit.
-   * Prior: Dig(α,…,α). Posterior mean = (c_d + α) / (n + 10α).
-   * More stable than raw frequencies on finite samples.
-   */
-  dirichletProbabilities(digits, window) {
-    const alpha = Math.max(0.1, this.cfg.dirichletAlpha || 1.5);
-    const { counts, n } = this.countsFor(digits, window);
-    const denom = n + 10 * alpha;
-    return counts.map(c => (c + alpha) / denom);
-  }
-
   ewmaProbabilities(digits) {
     const alpha = Math.max(0.001, Math.min(0.5, this.cfg.ewmaAlpha));
     const p = Array(10).fill(0.1);
@@ -1160,16 +1104,12 @@ class DigitAnalyzer {
     const sum = p.reduce((s, x) => s + x, 0) || 1;
     return p.map(x => x / sum);
   }
-
-  /** Order-1: P(expiry digit | current digit), Laplace-smoothed. */
   transitionProbabilities(digits, duration) {
     const dTicks = Math.max(1, Math.min(10, duration));
     const look = Math.min(this.cfg.transitionLookback, digits.length - dTicks - 1);
-    if (look < 50) {
-      return { probs: Array(10).fill(0.1), n: 0, currentDigit: digits[digits.length - 1] };
-    }
+    if (look < 50) return { probs: Array(10).fill(0.1), n: 0, currentDigit: digits[digits.length - 1] };
     const currentDigit = digits[digits.length - 1];
-    const counts = Array(10).fill(1);
+    const counts = Array(10).fill(1); // Laplace smoothing
     let n = 10;
     const start = Math.max(0, digits.length - dTicks - look);
     for (let i = start; i + dTicks < digits.length; i++) {
@@ -1180,85 +1120,12 @@ class DigitAnalyzer {
     }
     return { probs: counts.map(c => c / n), n, currentDigit };
   }
-
-  /**
-   * Order-2 Markov: state = last 2 digits (0–99), predict next digit.
-   * Captures digram context that plain frequency misses (community Markov bots).
-   */
-  markov2Probabilities(digits, duration) {
-    const dTicks = Math.max(1, Math.min(10, duration));
-    const look = Math.min(this.cfg.markov2Lookback || 1200, digits.length - dTicks - 2);
-    if (look < 80 || digits.length < 3) {
-      return { probs: Array(10).fill(0.1), n: 0, state: -1, strength: 0 };
-    }
-    const a = digits[digits.length - 2];
-    const b = digits[digits.length - 1];
-    const state = a * 10 + b;
-    const counts = Array(10).fill(1); // Laplace
-    let n = 10;
-    const start = Math.max(0, digits.length - dTicks - look);
-    for (let i = start; i + 1 + dTicks < digits.length; i++) {
-      if (digits[i] === a && digits[i + 1] === b) {
-        counts[digits[i + 1 + dTicks]] += 1;
-        n += 1;
-      }
-    }
-    const rawN = n - 10;
-    const minState = this.cfg.markov2MinState || 12;
-    const strength = Math.max(0, Math.min(1, (rawN - minState) / (minState * 4)));
-    return { probs: counts.map(c => c / n), n: rawN, state, strength };
-  }
-
   gapSinceLast(digits, d) {
     for (let i = digits.length - 1, gap = 0; i >= 0; i--, gap++) {
       if (digits[i] === d) return gap;
     }
     return digits.length;
   }
-
-  /**
-   * Soft gap score in [0,1]: peaks inside [minGap, maxGap], zero outside.
-   * Avoids both "just appeared" and "so long absent it's noise".
-   */
-  gapScore(gap) {
-    const lo = this.cfg.minGapTicks || 8;
-    const hi = this.cfg.maxGapTicks || 90;
-    if (gap < lo || gap > hi) return 0;
-    const mid = (lo + hi) / 2;
-    const half = (hi - lo) / 2 || 1;
-    return Math.max(0, 1 - Math.abs(gap - mid) / half);
-  }
-
-  /**
-   * Hot-pressure residual: how much the hottest digit(s) exceed 10%.
-   * When hot pressure is high, residual probability mass is shared by
-   * cold digits — Differ on the coldest is a structured sparse bet.
-   */
-  hotPressure(probs) {
-    const sorted = [...probs].sort((a, b) => b - a);
-    return Math.max(0, sorted[0] - 0.10) + 0.5 * Math.max(0, sorted[1] - 0.10);
-  }
-
-  /**
-   * Cross-horizon persistence: digit is among bottom-K in short/mid/long.
-   * Returns count of horizons (0–3) where the digit is cold.
-   */
-  persistenceVotes(digits, digit, k) {
-    const horizons = [
-      this.cfg.shortHorizon || 40,
-      this.cfg.midHorizon || 160,
-      this.cfg.longHorizon || 640,
-    ];
-    let votes = 0;
-    for (const h of horizons) {
-      if (digits.length < Math.max(15, Math.floor(h * 0.5))) continue;
-      const { counts, n } = this.countsFor(digits, h);
-      const probs = counts.map(c => c / Math.max(1, n));
-      if (this.voteCold(probs, k).has(digit)) votes += 1;
-    }
-    return votes;
-  }
-
   wilsonUpper(phat, n, z) {
     n = Math.max(1, n);
     phat = Math.max(0, Math.min(1, phat));
@@ -1268,7 +1135,6 @@ class DigitAnalyzer {
     const spread = z * Math.sqrt((phat * (1 - phat) + z2 / (4 * n)) / n);
     return Math.min(1, (center + spread) / denom);
   }
-
   analyze(symbol, ticks) {
     if (!ticks || ticks.length < this.cfg.minTicksForAnalysis) return null;
     const digits = ticks.map(t => t.digit).filter(d => Number.isInteger(d) && d >= 0 && d <= 9);
@@ -1279,114 +1145,30 @@ class DigitAnalyzer {
     const { counts, n } = this.countsFor(recentDigits, mainWindow);
     const entropy = this.entropy(counts);
     const chiSquare = this.chiSquare(counts);
-
-    // ── Module probability vectors ──────────────────────────────────
     const rolling = this.rollingProbabilities(recentDigits);
     const ewma = this.ewmaProbabilities(recentDigits);
-    const dirichlet = this.dirichletProbabilities(recentDigits, Math.min(400, mainWindow));
     const trans = this.transitionProbabilities(recentDigits, this.cfg.durationTicks);
-    const markov2 = this.markov2Probabilities(recentDigits, this.cfg.durationTicks);
 
-    // Gap-as-probability proxy: map large gap → low implied P (for voting only)
-    const gaps = Array(10).fill(0).map((_, d) => this.gapSinceLast(recentDigits, d));
-    const gapProbs = gaps.map(g => {
-      // Soft inverse: more gap → lower implied probability mass
-      const soft = 1 / (1 + g / 12);
-      return soft;
-    });
-    const gapSum = gapProbs.reduce((s, x) => s + x, 0) || 1;
-    const gapNorm = gapProbs.map(x => x / gapSum);
-
-    // Hot pressure + retail "under-9%" module (classic Digit-Stats Differ rule)
-    const hotP = this.hotPressure(rolling);
-    const midH = Math.min(this.cfg.midHorizon || 160, recentDigits.length);
-    const { counts: midCounts, n: midN } = this.countsFor(recentDigits, midH);
-    const retailProbs = midCounts.map(c => c / Math.max(1, midN));
-
-    const topK = this.cfg.consensusTopK || 3;
-    const moduleVotes = {
-      rolling: this.voteCold(rolling, topK),
-      ewma: this.voteCold(ewma, topK),
-      dirichlet: this.voteCold(dirichlet, topK),
-      trans1: this.voteCold(trans.probs, topK),
-      markov2: this.voteCold(markov2.probs, topK),
-      gap: this.voteCold(gapNorm, topK),
-      // Retail: coldest by mid-horizon absolute frequency (under-9% community rule)
-      retail: this.voteCold(retailProbs, topK),
-      // persistence counted per-digit below as 8th vote
-    };
-
-    // Dynamic ensemble weights (strengthen Markov when state samples exist)
-    const t1Str = Math.max(0, Math.min(1, (trans.n - 20) / 120));
-    const m2Str = markov2.strength || 0;
-    let wRoll = this.cfg.weightRolling ?? 0.28;
-    let wEwma = this.cfg.weightEwma ?? 0.18;
-    let wDir  = this.cfg.weightDirichlet ?? 0.22;
-    let wT1   = (this.cfg.weightTrans1 ?? 0.16) * (0.35 + 0.65 * t1Str);
-    let wM2   = (this.cfg.weightMarkov2 ?? 0.16) * (0.25 + 0.75 * m2Str);
-    const wSum = wRoll + wEwma + wDir + wT1 + wM2 || 1;
-    wRoll /= wSum; wEwma /= wSum; wDir /= wSum; wT1 /= wSum; wM2 /= wSum;
-
-    const recentLook = Math.min(this.cfg.recentLookback, recentDigits.length);
-    const recentTail = recentDigits.slice(-recentLook);
-    const minVotes = this.cfg.minConsensusVotes || 5;
-    const minPersist = this.cfg.minPersistenceHorizons || 2;
-    const minHot = this.cfg.minHotPressure ?? 0.012;
+    // Dynamic weights: transition is useful only if enough same-current-digit samples exist.
+    const transStrength = Math.max(0, Math.min(1, (trans.n - 20) / 120));
+    const wTrans = 0.20 + 0.30 * transStrength;
+    const wRoll = 0.55 - 0.20 * transStrength;
+    const wEwma = 1 - wTrans - wRoll;
 
     const candidates = [];
+    const recentLook = Math.min(this.cfg.recentLookback, recentDigits.length);
+    const recentTail = recentDigits.slice(-recentLook);
     for (let d = 0; d < 10; d++) {
-      const phat =
-        wRoll * rolling[d] +
-        wEwma * ewma[d] +
-        wDir  * dirichlet[d] +
-        wT1   * trans.probs[d] +
-        wM2   * markov2.probs[d];
-
-      const persist = this.persistenceVotes(recentDigits, d, topK);
-      // Persistence module vote: counts as a vote if persist ≥ minPersist
-      const persistVotesOk = persist >= minPersist;
-
-      let votes = 0;
-      const voteDetail = {};
-      for (const [name, set] of Object.entries(moduleVotes)) {
-        const hit = set.has(d);
-        voteDetail[name] = hit ? 1 : 0;
-        if (hit) votes += 1;
-      }
-      voteDetail.persist = persistVotesOk ? 1 : 0;
-      if (persistVotesOk) votes += 1;
-
+      const phat = wRoll * rolling[d] + wEwma * ewma[d] + wTrans * trans.probs[d];
       const recentHits = recentTail.filter(x => x === d).length;
-      const gap = gaps[d];
-      const gScore = this.gapScore(gap);
-
-      // Effective sample size for Wilson UCB
-      const freqWindow = Math.min(320, recentDigits.length);
+      const freqWindow = Math.min(300, recentDigits.length);
       const { counts: fc, n: fn } = this.countsFor(recentDigits, freqWindow);
       const freqP = fc[d] / Math.max(1, fn);
-      const nEff = Math.max(30, Math.min(fn, Math.max(trans.n || 0, markov2.n || 0, fn)));
-
-      // Conservative upper bound: max of ensemble Wilson and Dirichlet Wilson, + model risk
-      const ucbRaw = Math.max(
+      const nEff = Math.max(30, Math.min(fn, trans.n || fn));
+      const ucb = Math.min(1, Math.max(
         this.wilsonUpper(phat, nEff, this.cfg.zScore),
-        this.wilsonUpper(dirichlet[d], fn, this.cfg.zScore),
-        this.wilsonUpper(freqP, fn, this.cfg.zScore) * 0.70 + phat * 0.30,
-      );
-      // Frequency, gap, and Markov features are all derived from the same
-      // tick stream. Their agreement is not independent evidence, so it must
-      // never reduce the probability estimate or manufacture an edge.
-      const ucb = Math.min(1, ucbRaw + this.cfg.modelRiskMargin);
-
-      // Consensus-adjusted score components for ranking
-      const consensusScore = votes / 8;
-      const sparseScore = Math.max(0, (0.10 - phat) / 0.05);
-      const candidatesScore =
-        0.32 * sparseScore +
-        0.28 * consensusScore +
-        0.15 * Math.max(0, Math.min(1, gScore)) +
-        0.15 * Math.max(0, Math.min(1, persist / 3)) +
-        0.10 * Math.max(0, Math.min(1, hotP / 0.04));
-
+        this.wilsonUpper(freqP, fn, this.cfg.zScore) * 0.75 + phat * 0.25,
+      ) + this.cfg.modelRiskMargin);
       candidates.push({
         symbol,
         digit: d,
@@ -1394,40 +1176,18 @@ class DigitAnalyzer {
         pLossUpper: ucb,
         rollingP: rolling[d],
         ewmaP: ewma[d],
-        dirichletP: dirichlet[d],
         transitionP: trans.probs[d],
         transitionN: trans.n,
-        markov2P: markov2.probs[d],
-        markov2N: markov2.n,
-        markov2State: markov2.state,
-        gap,
-        gapScore: gScore,
+        gap: this.gapSinceLast(recentDigits, d),
         recentHits,
-        consensusVotes: votes,
-        voteDetail,
-        persistence: persist,
-        candidateScore: candidatesScore,
-        hotPressure: hotP,
       });
     }
 
-    // Prefer high-consensus sparse digits; fall back to pure pLossUpper sort
-    candidates.sort((a, b) => {
-      // Digits meeting consensus threshold rank first
-      const aOk = a.consensusVotes >= minVotes ? 0 : 1;
-      const bOk = b.consensusVotes >= minVotes ? 0 : 1;
-      if (aOk !== bOk) return aOk - bOk;
-      return a.pLossUpper - b.pLossUpper
-          || b.consensusVotes - a.consensusVotes
-          || b.candidateScore - a.candidateScore
-          || a.pLoss - b.pLoss;
-    });
-
+    candidates.sort((a, b) => a.pLossUpper - b.pLossUpper || a.pLoss - b.pLoss);
     const best = candidates[0];
     const second = candidates[1];
     const probabilityGap = second ? (second.pLossUpper - best.pLossUpper) : 0;
 
-    // ── Regime + consensus gates ────────────────────────────────────
     const gates = [];
     if (entropy < this.cfg.minEntropy) gates.push(`entropy-low:${entropy.toFixed(3)}`);
     if (entropy > this.cfg.maxEntropy) gates.push(`entropy-too-uniform:${entropy.toFixed(3)}`);
@@ -1436,62 +1196,35 @@ class DigitAnalyzer {
     if (probabilityGap < this.cfg.minProbabilityGap) gates.push(`gap-low:${probabilityGap.toFixed(4)}`);
     if (best.recentHits > this.cfg.maxRecentDigitHits) gates.push(`recent-hit:${best.recentHits}`);
     if (best.pLossUpper > this.cfg.maxLossProb) gates.push(`loss-prob-high:${best.pLossUpper.toFixed(4)}`);
-    if (best.consensusVotes < minVotes) gates.push(`consensus-low:${best.consensusVotes}/${minVotes}`);
-    if (best.persistence < minPersist) gates.push(`persist-low:${best.persistence}/${minPersist}`);
-    if (hotP < minHot) gates.push(`hot-pressure-low:${hotP.toFixed(4)}`);
-    // Gap band soft gate: zero gapScore means outside useful absence band
-    if (best.gapScore <= 0 && best.gap < (this.cfg.minGapTicks || 8)) {
-      gates.push(`gap-too-recent:${best.gap}`);
-    }
 
     const score = Math.max(0, Math.min(1,
-      0.30 * Math.max(0, (0.10 - best.pLossUpper) / 0.03) +
-      0.25 * Math.max(0, Math.min(1, best.consensusVotes / 8)) +
-      0.15 * Math.max(0, Math.min(1, probabilityGap / 0.025)) +
-      0.15 * Math.max(0, Math.min(1, (chiSquare - this.cfg.minChiSquare) / 10)) +
-      0.10 * Math.max(0, Math.min(1, best.persistence / 3)) +
-      0.05 * Math.max(0, Math.min(1, best.gapScore))
+      0.40 * Math.max(0, (0.10 - best.pLossUpper) / 0.03) +
+      0.25 * Math.max(0, Math.min(1, probabilityGap / 0.025)) +
+      0.20 * Math.max(0, Math.min(1, (chiSquare - this.cfg.minChiSquare) / 10)) +
+      0.15 * Math.max(0, Math.min(1, best.gap / 30))
     ));
 
     return {
       symbol,
-      method: 'ELDD-selector',
       ticks: recentDigits.length,
       lastDigit: recentDigits[recentDigits.length - 1],
       lastQuote: ticks[ticks.length - 1]?.quote,
       entropy,
       chiSquare,
       probabilityGap,
-      hotPressure: hotP,
       score,
       candidates,
       best,
       gates,
       allowedByModel: gates.length === 0,
-      markov2State: markov2.state,
-      weights: {
-        rolling: wRoll,
-        ewma: wEwma,
-        dirichlet: wDir,
-        transition: wT1,
-        markov2: wM2,
-        trans1Strength: t1Str,
-        markov2Strength: m2Str,
-      },
+      weights: { rolling: wRoll, ewma: wEwma, transition: wTrans },
     };
   }
-
   rank(list) {
     return list.filter(Boolean).sort((a, b) => {
-      // Prefer allowed analyses, then lower pLossUpper, then higher score/consensus
-      const aAllow = a.allowedByModel ? 0 : 1;
-      const bAllow = b.allowedByModel ? 0 : 1;
-      if (aAllow !== bAllow) return aAllow - bAllow;
       const au = a.best?.pLossUpper ?? 1;
       const bu = b.best?.pLossUpper ?? 1;
-      const ac = a.best?.consensusVotes ?? 0;
-      const bc = b.best?.consensusVotes ?? 0;
-      return au - bu || bc - ac || b.score - a.score;
+      return au - bu || b.score - a.score;
     });
   }
 }
@@ -1520,17 +1253,13 @@ class TradeExecutor extends EventEmitter {
       [symbolKey]: symbol,
     }, 15000);
   }
-  async buy(symbol, digit, stake, analysis, quoteGuard = null) {
+  async buy(symbol, digit, stake, analysis) {
     stake = Math.max(this.cfg.minStake, Math.min(this.cfg.maxStake, Number(stake)));
     const pres = await this.proposal(symbol, digit, stake);
     const p = pres.proposal;
     if (!p?.id) throw new Error('No proposal id returned');
     const ask = Number(p.ask_price || stake);
     const payout = Number(p.payout || 0);
-    if (quoteGuard) {
-      const verdict = quoteGuard({ ask, payout, proposal: p });
-      if (!verdict?.allowed) throw new Error(`Final quote rejected: ${verdict?.reason || 'guard failed'}`);
-    }
     const bres = await this.client._send({ buy: p.id, price: ask }, 15000);
     const b = bres.buy;
     if (!b?.contract_id) throw new Error('Buy did not return contract_id');
@@ -1911,62 +1640,190 @@ class TradingBot {
     this.lastTradeAt = 0;
     this.tradedAsset   = null;   // symbol most recently traded (rotation lock)
     this.tradedAssetAt = 0;      // when that symbol was traded (ms epoch)
-    this.isVirtualAccount = null;
     this.stopped = false;
+    this.paused = false;
     this._analysisT = null;
     this._hourlyBoot = null;
     this._hourlyT = null;
     this._eodBoot = null;
     this._eodT = null;
-
-    // ── Trade watchdog timers ──
-    this.tradeWatchdogMs = CONFIG.tradeWatchdogMs || 90000;
-    this.tradeStartTime = null;
-    this._tradeWatchdogTimer = null;
-    this._tradeWatchdogPollTimer = null;
+    this._pauseStartTimer = null;
+    this._pauseEndTimer = null;
   }
 
-  evidenceSummary(symbol, payoutMult) {
-    const samples = this.stats.trades
-      .filter(t => t.symbol === symbol
-        && t.analysis?.strategyVersion === 'ELDD-v1'
-        && t.analysis?.executionMode === 'demo-probe'
-        && (t.status === 'won' || t.status === 'lost'))
-      .slice(-this.cfg.evidenceWindow);
-    const wins = samples.filter(t => t.status === 'won').length;
-    const lowerWinProb = wilsonLower(wins, samples.length, this.cfg.evidenceZScore);
-    const requiredWinProb = 1 / Math.max(1.000001, payoutMult) + this.cfg.evidenceMinEdge;
-    return {
-      symbol,
-      samples: samples.length,
-      wins,
-      lowerWinProb,
-      requiredWinProb,
-      qualified: samples.length >= this.cfg.evidenceMinTrades && lowerWinProb > requiredWinProb,
+  // ── Scheduled pause helpers ─────────────────────────────────────
+  _parsePauseTime(str) {
+    const m = String(str || '').match(/^(\d{1,2}):(\d{2})$/);
+    if (!m) return null;
+    const h = Math.max(0, Math.min(23, Number(m[1])));
+    const min = Math.max(0, Math.min(59, Number(m[2])));
+    return { h, min };
+  }
+
+  /**
+   * Returns true if the current GMT time falls inside the pause window.
+   * Supports both overnight (start > end, e.g. 22:00 → 06:00) and
+   * same-day (start < end, e.g. 12:00 → 14:00) windows.
+   */
+  _isPausedNow() {
+    if (!this.cfg.pauseEnabled) return false;
+    const start = this._parsePauseTime(this.cfg.pauseStartGmt);
+    const end   = this._parsePauseTime(this.cfg.pauseEndGmt);
+    if (!start || !end) return false;
+    const now = new Date();
+    const nowMin = now.getUTCHours() * 60 + now.getUTCMinutes();
+    const startMin = start.h * 60 + start.min;
+    const endMin   = end.h   * 60 + end.min;
+    if (startMin > endMin) {
+      // Overnight window: paused from startMin..1439 OR 0..endMin
+      return nowMin >= startMin || nowMin < endMin;
+    }
+    // Same-day window: paused from startMin..endMin
+    return nowMin >= startMin && nowMin < endMin;
+  }
+
+  /**
+   * Schedule the next pause-start and pause-end transitions.
+   * Called once at startup and re-called after each transition.
+   */
+  _schedulePause() {
+    this._clearPauseTimers();
+    if (!this.cfg.pauseEnabled) return;
+
+    const now = new Date();
+    const nowMs = now.getTime();
+    const nowMin = now.getUTCHours() * 60 + now.getUTCMinutes();
+    const start = this._parsePauseTime(this.cfg.pauseStartGmt);
+    const end   = this._parsePauseTime(this.cfg.pauseEndGmt);
+    if (!start || !end) {
+      logger.warn('pause schedule: invalid pauseStartGmt or pauseEndGmt format');
+      return;
+    }
+    const startMin = start.h * 60 + start.min;
+    const endMin   = end.h   * 60 + end.min;
+
+    // Helper: ms from now to a target time (next occurrence)
+    const msToTarget = (targetMinOfDay) => {
+      let diff = targetMinOfDay - nowMin;
+      if (diff <= 0) diff += 24 * 60; // next day
+      return diff * 60_000 - (now.getUTCSeconds() * 1000) - now.getUTCMilliseconds();
     };
+
+    if (startMin > endMin) {
+      // Overnight window:  startMin..1439, then 0..endMin
+      if (nowMin >= startMin) {
+        // Currently paused (first half) → schedule resume at endMin
+        this.paused = true;
+        const delay = msToTarget(endMin);
+        this._pauseEndTimer = setTimeout(() => this._onPauseResume('resume'), delay);
+        logger.info(`pause: currently active (overnight), resumes in ${(delay/60000).toFixed(1)}m at ${this.cfg.pauseEndGmt} GMT`);
+      } else if (nowMin < endMin) {
+        // Currently paused (second half, before endMin) → schedule resume
+        this.paused = true;
+        const delay = msToTarget(endMin);
+        this._pauseEndTimer = setTimeout(() => this._onPauseResume('resume'), delay);
+        logger.info(`pause: currently active, resumes in ${(delay/60000).toFixed(1)}m at ${this.cfg.pauseEndGmt} GMT`);
+      } else {
+        // Currently active window → schedule pause at startMin
+        this.paused = false;
+        const delay = msToTarget(startMin);
+        this._pauseStartTimer = setTimeout(() => this._onPauseResume('pause'), delay);
+        logger.info(`pause: scheduled, pauses in ${(delay/60000).toFixed(1)}m at ${this.cfg.pauseStartGmt} GMT`);
+      }
+    } else {
+      // Same-day window:  startMin..endMin
+      if (nowMin >= startMin && nowMin < endMin) {
+        // Currently paused → schedule resume
+        this.paused = true;
+        const delay = msToTarget(endMin);
+        this._pauseEndTimer = setTimeout(() => this._onPauseResume('resume'), delay);
+        logger.info(`pause: currently active, resumes in ${(delay/60000).toFixed(1)}m at ${this.cfg.pauseEndGmt} GMT`);
+      } else {
+        // Currently active → schedule next pause at startMin
+        this.paused = false;
+        const delay = msToTarget(startMin);
+        this._pauseStartTimer = setTimeout(() => this._onPauseResume('pause'), delay);
+        logger.info(`pause: scheduled, pauses in ${(delay/60000).toFixed(1)}m at ${this.cfg.pauseStartGmt} GMT`);
+      }
+    }
   }
 
-  executionPermission(symbol, payoutMult) {
-    const mode = this.cfg.tradeMode;
-    if (mode === 'observe') return { allowed: false, reason: 'TRADE_MODE=observe' };
-    if (mode === 'demo-probe') {
-      return this.isVirtualAccount
-        ? { allowed: true, mode, stake: this.cfg.minStake }
-        : { allowed: false, reason: 'demo-probe requires a Deriv virtual account' };
+  _onPauseResume(action) {
+    this._clearPauseTimers();
+    if (action === 'pause') {
+      this.paused = true;
+      logger.info(`TRADING PAUSED at ${this.cfg.pauseStartGmt} GMT until ${this.cfg.pauseEndGmt} GMT`);
+      telegram.send(
+        `⏸️ <b>TRADING PAUSED</b>\n\n` +
+        `Scheduled pause active from <b>${htmlEscape(this.cfg.pauseStartGmt)}</b> to <b>${htmlEscape(this.cfg.pauseEndGmt)}</b> GMT.\n` +
+        `Open trades will settle normally. No new trades until resume.\n\n` +
+        `🕒 ${utcTs()}`
+      );
+      // Schedule the resume
+      const end = this._parsePauseTime(this.cfg.pauseEndGmt);
+      if (end) {
+        const delay = this._msToTarget(end.h, end.min);
+        this._pauseEndTimer = setTimeout(() => this._onPauseResume('resume'), delay);
+        logger.info(`pause: resumes in ${(delay/60000).toFixed(1)}m`);
+      }
+    } else {
+      this.paused = false;
+      logger.info(`TRADING RESUMED at ${this.cfg.pauseEndGmt} GMT`);
+      telegram.send(
+        `▶️ <b>TRADING RESUMED</b>\n\n` +
+        `Scheduled pause ended. Bot is now scanning for trades.\n\n` +
+        `💼 Overall Profit: ${money(this.stats.overallProfit, this.currency())}\n\n` +
+        `🕒 ${utcTs()}`
+      );
+      // Schedule the next pause
+      const start = this._parsePauseTime(this.cfg.pauseStartGmt);
+      if (start) {
+        const delay = this._msToTarget(start.h, start.min);
+        this._pauseStartTimer = setTimeout(() => this._onPauseResume('pause'), delay);
+        logger.info(`pause: next pause in ${(delay/60000).toFixed(1)}m`);
+      }
     }
-    if (mode !== 'live') return { allowed: false, reason: `invalid TRADE_MODE=${mode}` };
-    if (this.isVirtualAccount) return { allowed: false, reason: 'live mode refuses a virtual account' };
-    if (!this.cfg.enableRealTrading) return { allowed: false, reason: 'ENABLE_REAL_TRADING=true is required' };
+  }
 
-    const evidence = this.evidenceSummary(symbol, payoutMult);
-    if (!evidence.qualified) {
-      return {
-        allowed: false,
-        reason: `demo evidence n=${evidence.samples}, lower=${pct(evidence.lowerWinProb)}, required>${pct(evidence.requiredWinProb)}`,
-        evidence,
-      };
+  /** ms from now to next occurrence of a given HH:MM GMT time. */
+  _msToTarget(targetH, targetMin) {
+    const now = new Date();
+    const nowMin = now.getUTCHours() * 60 + now.getUTCMinutes();
+    const targetMinOfDay = targetH * 60 + targetMin;
+    let diff = targetMinOfDay - nowMin;
+    if (diff <= 0) diff += 24 * 60;
+    return diff * 60_000 - (now.getUTCSeconds() * 1000) - now.getUTCMilliseconds();
+  }
+
+  _clearPauseTimers() {
+    if (this._pauseStartTimer) { clearTimeout(this._pauseStartTimer); this._pauseStartTimer = null; }
+    if (this._pauseEndTimer)   { clearTimeout(this._pauseEndTimer);   this._pauseEndTimer = null; }
+  }
+
+  /**
+   * Check if trading is allowed on the current day of week (GMT/UTC).
+   * @returns {boolean} true if trading is allowed today, false otherwise
+   */
+  _isTradingAllowedToday() {
+    const now = new Date();
+    const dayOfWeek = now.getUTCDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+    
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const daySettings = [
+      this.cfg.tradeSunday,
+      this.cfg.tradeMonday,
+      this.cfg.tradeTuesday,
+      this.cfg.tradeWednesday,
+      this.cfg.tradeThursday,
+      this.cfg.tradeFriday,
+      this.cfg.tradeSaturday
+    ];
+    
+    const allowed = daySettings[dayOfWeek];
+    if (!allowed) {
+      logger.debug(`trading disabled for ${dayNames[dayOfWeek]} (GMT) — skipping analysis cycle`);
     }
-    return { allowed: true, mode, evidence };
+    return allowed;
   }
 
   async start() {
@@ -1996,7 +1853,6 @@ class TradingBot {
   }
 
   async _onAuthorized(info) {
-    this.isVirtualAccount = Boolean(info.isVirtual);
     this.startBalance = this.startBalance ?? this.client.balance ?? 0;
     this.lastBalance = this.lastBalance ?? this.client.balance ?? this.startBalance;
     logger.info(`start balance: ${this.startBalance} ${this.currency()}`);
@@ -2004,16 +1860,34 @@ class TradingBot {
 
     const sizingLine = this.cfg.kellySizingEnabled
       ? `🧮 Sizing: <b>Kelly-fractional</b> (f=${this.cfg.kellyFraction}, cap=${(this.cfg.kellyMaxStakeFrac*100).toFixed(1)}% bankroll)`
-      : `🧮 Sizing: flat (no recovery ladder)`;
+      : (this.cfg.recoveryEnabled
+          ? `🧮 Sizing: recovery ladder [${this.cfg.recoveryMultipliers.join(',')}]`
+          : `🧮 Sizing: flat`);
     const calibLine = this.cfg.calibEnabled
       ? `📐 Calibrator: <b>ON</b> (window=${this.cfg.calibWindow}, disableGap=${(this.cfg.calibDisableGap*100).toFixed(1)}pp)`
       : `📐 Calibrator: off`;
     const rotationLine = this.cfg.assetRotationMs > 0
       ? `🔄 Asset rotation: ${(this.cfg.assetRotationMs/1000).toFixed(0)}s lockout`
       : `🔄 Asset rotation: OFF (may repeat same symbol)`;
+    const pauseLine = this.cfg.pauseEnabled
+      ? `⏸️ Scheduled pause: <b>${htmlEscape(this.cfg.pauseStartGmt)}</b> → <b>${htmlEscape(this.cfg.pauseEndGmt)}</b> GMT`
+      : `⏸️ Scheduled pause: off`;
+    
+    // Day-of-week settings display
+    const dayAbbrev = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const daySettings = [
+      this.cfg.tradeSunday,
+      this.cfg.tradeMonday,
+      this.cfg.tradeTuesday,
+      this.cfg.tradeWednesday,
+      this.cfg.tradeThursday,
+      this.cfg.tradeFriday,
+      this.cfg.tradeSaturday
+    ];
+    const dayLine = `📅 Trading days: ${dayAbbrev.map((d, i) => daySettings[i] ? `✅${d}` : `❌${d}`).join(' ')}`;
 
     telegram.send(
-      `🤖 <b>CASPIAN-X Digit Differ Bot Online</b>\n\n` +
+      `🤖 <b>Digit Differ Bot Online</b>\n\n` +
       `👤 Account: <code>${htmlEscape(info.loginid || '?')}</code>\n` +
       `💼 Type: ${info.isVirtual ? '🟡 DEMO' : '🔴 REAL'}\n` +
       `💰 Balance: ${(this.client.balance ?? 0).toFixed(2)} ${this.currency()}\n` +
@@ -2023,22 +1897,23 @@ class TradingBot {
       `${sizingLine}\n` +
       `${calibLine}\n` +
       `${rotationLine}\n` +
-      `🧠 Method: <b>ELDD-v1</b> evidence-locked quote validation\n` +
-      `🛡️ Mode: <b>${htmlEscape(this.cfg.tradeMode)}</b> (real execution is opt-in)\n` +
-      `🗳️ Consensus: ≥${this.cfg.minConsensusVotes} votes / top-K=${this.cfg.consensusTopK}\n` +
+      `${pauseLine}\n` +
+      `${dayLine}\n` +
+      `🧠 Method: <b>DIVER-9</b> conservative value-edge filter\n` +
       `🕒 Trade day clock: <b>GMT/UTC</b> | EOD: ${this.cfg.eodTimeGmt} GMT\n\n` +
       `💼 Overall Profit: <b>${money(this.stats.overallProfit, this.currency())}</b>\n` +
       `❌ Loss streak: current ${this.stats.currentLossStreak}, x2=${this.stats.lossStreakEvents.x2}, x3=${this.stats.lossStreakEvents.x3}, x4=${this.stats.lossStreakEvents.x4}`
     );
 
     await this.market.bootstrap(this.cfg.assets);
+    this._schedulePause();
     if (this._analysisT) clearInterval(this._analysisT);
     this._analyzeAndTrade().catch(e => logger.error('initial analyze:', e.message));
     this._analysisT = setInterval(() => this._analyzeAndTrade().catch(e => logger.error('analyze:', e.message)), this.cfg.analysisIntervalMs);
   }
 
   _onDisconnected(code, reason, wasAuthorized) {
-    telegram.send(`⚠️ <b>CASPIAN-X Connection lost</b>\ncode: <code>${code}</code>\nwas authorized: ${wasAuthorized ? 'yes' : 'no'}\n🔄 reconnecting...`);
+    telegram.send(`⚠️ <b>Connection lost</b>\ncode: <code>${code}</code>\nwas authorized: ${wasAuthorized ? 'yes' : 'no'}\n🔄 reconnecting...`);
     if (this._analysisT) { clearInterval(this._analysisT); this._analysisT = null; }
     this.exec.open.clear();
   }
@@ -2049,7 +1924,7 @@ class TradingBot {
    *   • When ctx = { pWin, payoutMult, edgeValue, symbol } and Kelly sizing
    *     is enabled, use Kelly-fractional. Applied to bankroll = live
    *     balance × kellyBankrollFrac, capped at kellyMaxStakeFrac.
-   *   • Otherwise use a flat stake. Losses never increase the next stake.
+   *   • Otherwise fall back to the legacy flat/recovery-multiplier stake.
    *   • In both modes, the per-symbol calibrator's stake-multiplier is
    *     applied last (1.0 enabled, calibProbeStakeFrac probing, 0 disabled).
    */
@@ -2072,8 +1947,13 @@ class TradingBot {
         return { stake: 0, source: 'kelly-negative', calibMult: 1 };
       }
     } else {
-      base = +this.cfg.stake.toFixed(2);
-      src  = 'flat';
+      let mult = 1;
+      if (this.cfg.recoveryEnabled) {
+        const idx = Math.min(this.stats.currentLossStreak, this.cfg.recoveryMultipliers.length - 1);
+        mult = this.cfg.recoveryMultipliers[idx] || 1;
+      }
+      base = +(this.cfg.stake * mult).toFixed(2);
+      src  = `flat×${mult}`;
     }
     // Per-symbol calibrator scaling (0 = symbol disabled)
     let calibMult = 1;
@@ -2084,6 +1964,14 @@ class TradingBot {
 
   async _analyzeAndTrade() {
     if (this.stopped || !this.client.authorized) return;
+    if (this.paused) {
+      logger.debug('trading paused — skipping analysis cycle');
+      return;
+    }
+    // Check if trading is allowed on current day of week
+    if (!this._isTradingAllowedToday()) {
+      return;
+    }
     if (Date.now() - this.lastTradeAt < this.cfg.tradeCooldownMs) return;
     if (this.exec.count() >= this.cfg.maxOpenTrades) return;
 
@@ -2122,14 +2010,8 @@ class TradingBot {
       return;
     }
 
-    const topLog = ranked.slice(0, 3).map(a =>
-      `${a.symbol}:d${a.best.digit} u=${a.best.pLossUpper.toFixed(4)} ` +
-      `votes=${a.best.consensusVotes ?? '?'} persist=${a.best.persistence ?? '?'} ` +
-      `H=${a.entropy.toFixed(3)} X2=${a.chiSquare.toFixed(1)} ` +
-      `digits=${a.lastDigit} ` +
-      `${a.gates.length ? 'skip(' + a.gates[0] + ')' : 'ok'}`
-    ).join(' | ');
-    logger.info(`ELDD selector scan ${topLog}`);
+    const topLog = ranked.slice(0, 3).map(a => `${a.symbol}:d${a.best.digit} u=${a.best.pLossUpper.toFixed(4)} H=${a.entropy.toFixed(3)} X2=${a.chiSquare.toFixed(1)} ${a.gates.length ? 'skip(' + a.gates[0] + ')' : 'ok'}`).join(' | ');
+    logger.info(`DIVER-9 scan ${topLog}`);
 
     // For the initial proposal probe we use a MINIMAL stake (just to
     // discover the live payout) — the real stake is decided *after* we
@@ -2219,22 +2101,14 @@ class TradingBot {
       );
     }
 
-    const permission = this.executionPermission(best.analysis.symbol, best.payoutMult);
-    if (!permission.allowed) {
-      logger.info(`ELDD hold ${best.analysis.symbol} d${best.candidate.digit}: ${permission.reason}`);
-      return;
-    }
-
-    // ── Compute the stake only after mode and evidence checks ───────
+    // ── Compute the ACTUAL stake using Kelly + calibrator ──────────
     const pWin = 1 - best.candidate.pLossUpper;   // conservative win-prob (uses upper bound of loss prob)
-    const sizing = permission.mode === 'demo-probe'
-      ? { stake: this.cfg.minStake, source: 'demo-probe-minimum', calibMult: 1 }
-      : this.currentStake({
-          pWin,
-          payoutMult: best.payoutMult,
-          edgeValue : best.valueEdge,
-          symbol    : best.analysis.symbol,
-        });
+    const sizing = this.currentStake({
+      pWin,
+      payoutMult: best.payoutMult,
+      edgeValue : best.valueEdge,
+      symbol    : best.analysis.symbol,
+    });
     if (!sizing.stake || sizing.stake <= 0) {
       logger.info(`skip: sizing returned 0 (${sizing.source}, calibMult=${sizing.calibMult})`);
       return;
@@ -2248,9 +2122,7 @@ class TradingBot {
     const a = best.analysis;
     const c = best.candidate;
     const payload = {
-      method: 'ELDD',
-      strategyVersion: 'ELDD-v1',
-      executionMode: permission.mode,
+      method: 'DIVER-9',
       digit: c.digit,
       pLoss: c.pLoss,
       pLossUpper: c.pLossUpper,
@@ -2261,62 +2133,41 @@ class TradingBot {
       entropy: a.entropy,
       chiSquare: a.chiSquare,
       probabilityGap: a.probabilityGap,
-      hotPressure: a.hotPressure,
       lastDigit: a.lastDigit,
       recentHits: c.recentHits,
       gap: c.gap,
-      gapScore: c.gapScore,
-      consensusVotes: c.consensusVotes,
-      voteDetail: c.voteDetail,
-      persistence: c.persistence,
-      markov2P: c.markov2P,
-      markov2State: c.markov2State,
-      dirichletP: c.dirichletP,
       score: a.score,
       weights: a.weights,
       sizingSource: sizing.source,
       calibStakeMultiplier: sizing.calibMult,
       calibState: this.calibrator.status(a.symbol),
       stakeStakeRatio: +(stake / this.cfg.stake).toFixed(2),   // legacy field name kept for messages
+      recoveryStakeMultiplier: +(stake / this.cfg.stake).toFixed(2),
       currentLossStreak: this.stats.currentLossStreak,
-      evidence: permission.evidence || null,
     };
 
-    const finalQuoteGuard = ({ ask, payout }) => {
-      if (!(ask > 0 && payout > ask)) return { allowed: false, reason: 'invalid payout' };
-      if (permission.mode === 'demo-probe') return { allowed: true };
-      const finalBreakEvenLossProb = 1 - ask / payout;
-      const finalValueEdge = finalBreakEvenLossProb - c.pLossUpper - this.cfg.safetyMargin;
-      return finalValueEdge >= this.cfg.minEdge
-        ? { allowed: true }
-        : { allowed: false, reason: `edge moved to ${finalValueEdge.toFixed(4)}` };
-    };
-    const trade = await this.exec.buy(a.symbol, c.digit, stake, payload, finalQuoteGuard);
+    const trade = await this.exec.buy(a.symbol, c.digit, stake, payload);
     
     this.lastTradeAt = Date.now();
     logger.info(`trade placed #${trade.contractId} ${a.symbol} DIGITDIFF differs ${c.digit} edge=${best.valueEdge.toFixed(4)} pLossU=${c.pLossUpper.toFixed(4)} qBE=${best.breakEvenLossProb.toFixed(4)}`);
   }
 
   _onTradeOpen(t) {
-    this.tradeStartTime = Date.now();
-    this._startTradeWatchdog(t.contractId);
     const a = t.analysis || {};
     telegram.send(
-      `🟢 <b>CASPIAN-X TRADE OPENED — DIGIT DIFFER</b>\n\n` +
+      `🟢 <b>TRADE OPENED — DIGIT DIFFER</b>\n\n` +
       `🎫 Contract: <code>#${t.contractId}</code>\n` +
       `📊 Symbol: <code>${t.symbol}</code>\n` +
       `🔢 Prediction/barrier: final digit <b>DIFFERS from ${t.digit}</b>\n` +
       `⏱️ Duration: ${t.durationTicks} tick(s)\n` +
       `💵 Stake: ${t.stake.toFixed(2)} ${this.currency()}\n` +
       `🎁 Payout: ${t.payout.toFixed(2)} ${this.currency()}\n\n` +
-      `🧠 <b>CASPIAN-X consensus edge</b>\n` +
+      `🧠 <b>DIVER-9 edge</b>\n` +
       `• Model P(loss digit ${t.digit}): ${(a.pLoss * 100).toFixed(2)}%\n` +
       `• Conservative upper bound: <b>${(a.pLossUpper * 100).toFixed(2)}%</b>\n` +
       `• Break-even loss prob: ${(a.breakEvenLossProb * 100).toFixed(2)}%\n` +
       `• Value edge: <b>${(a.valueEdge * 100).toFixed(2)}pp</b>\n` +
-      `• Consensus votes: <b>${a.consensusVotes ?? '?'}/8</b> | persist: ${a.persistence ?? '?'}/3\n` +
-      `• Entropy: ${Number(a.entropy || 0).toFixed(3)} | χ²: ${Number(a.chiSquare || 0).toFixed(2)} | p-gap: ${Number(a.probabilityGap || 0).toFixed(4)}\n` +
-      `• Hot pressure: ${Number(a.hotPressure || 0).toFixed(4)} | abs-gap: ${a.gap ?? '?'}\n` +
+      `• Entropy: ${Number(a.entropy || 0).toFixed(3)} | χ²: ${Number(a.chiSquare || 0).toFixed(2)} | gap: ${Number(a.probabilityGap || 0).toFixed(4)}\n` +
       `• Current loss streak: ${a.currentLossStreak || 0}\n\n` +
       `🕒 ${utcTs()}`
     );
@@ -2355,7 +2206,7 @@ class TradingBot {
       : '';
 
     telegram.send(
-      `${emoji} <b>CASPIAN-X TRADE ${label} — DIGIT DIFFER</b>\n\n` +
+      `${emoji} <b>TRADE ${label} — DIGIT DIFFER</b>\n\n` +
       `🎫 Contract: <code>#${t.contractId}</code>\n` +
       `📊 Symbol: <code>${t.symbol}</code> | differs <b>${t.digit}</b> | ${t.durationTicks}t\n` +
       `💵 Stake: ${t.stake.toFixed(2)} ${this.currency()}${kellyLine}\n` +
@@ -2374,72 +2225,6 @@ class TradingBot {
 
     this.lastTradeAt = Date.now();
     this._saveState('after-trade');
-  }
-
-  // ── Trade Watchdog ─────────────────────────────────────────
-  _startTradeWatchdog(contractId) {
-    this._clearWatchdogTimers();
-    const timeoutMs = this.tradeWatchdogMs;
-    this._tradeWatchdogTimer = setTimeout(() => {
-      const hasActiveTrade = this.exec.openTrades().some(t => t.contractId);
-      if (!hasActiveTrade) { this._clearWatchdogTimers(); return; }
-      logger.warn(`WATCHDOG FIRED — Contract ${contractId || 'unknown'} open for ${(timeoutMs/1000).toFixed(0)}s with no settlement`);
-      if (contractId && this.client.authorized && this.client.connected) {
-        logger.info(`Polling contract ${contractId} for current status…`);
-        this.client._send({ proposal_open_contract: 1, contract_id: contractId, subscribe: 1 })
-          .catch(e => { logger.warn(`watchdog poll failed: ${e.message}`);
-                        this._recoverStuckTrade('watchdog-poll-failed'); });
-        this._tradeWatchdogPollTimer = setTimeout(() => {
-          if (this.exec.count() === 0) { this._clearWatchdogTimers(); return; }
-          logger.error(`WATCHDOG: Poll timed out — contract ${contractId} still unresolved`);
-          this._recoverStuckTrade('watchdog-force');
-        }, 15000);
-      } else {
-        this._recoverStuckTrade('watchdog-offline');
-      }
-    }, timeoutMs);
-  }
-
-  _clearWatchdogTimers() {
-    if (this._tradeWatchdogTimer)     { clearTimeout(this._tradeWatchdogTimer);     this._tradeWatchdogTimer     = null; }
-    if (this._tradeWatchdogPollTimer) { clearTimeout(this._tradeWatchdogPollTimer); this._tradeWatchdogPollTimer = null; }
-  }
-
-  async _recoverStuckTrade(reason) {
-    this._clearWatchdogTimers();
-    const stuck = this.exec.openTrades()[0];
-    if (!stuck) { logger.warn('No active trade found for stuck trade recovery'); return; }
-    const contractId  = stuck.contractId || 'unknown';
-    const symbol      = stuck.symbol;
-    const stake       = stuck.stake || 0;
-    const entryTime   = this.tradeStartTime || (stuck.buyTime ? stuck.buyTime * 1000 : Date.now());
-    const openSeconds = Math.round((Date.now() - entryTime) / 1000);
-    logger.error(`STUCK TRADE [${reason}] #${contractId} ${symbol} ${openSeconds}s`);
-
-    if (contractId !== 'unknown' && this.client.authorized && this.client.connected) {
-      try { await this.exec.sell(contractId, 0); }
-      catch (e) { logger.warn(`emergency sell failed: ${e.message}`); }
-    }
-    this.exec.open.delete(contractId);
-
-    const finishedTrade = {
-      contractId, symbol, stake, profit: -stake, status: 'lost',
-      sellPrice: 0, sellTime: Date.now()/1000, buyTime: entryTime/1000,
-    };
-    this.stats.record(finishedTrade);
-    this.lastBalance   = (this.lastBalance ?? this.client.balance ?? 0) + finishedTrade.profit;
-
-    this.lastTradeAt    = Date.now();
-    this.tradeStartTime = null;
-
-    telegram.send(
-      `<b>STUCK TRADE RECOVERED [${reason}]</b>\n` +
-      `Contract: ${contractId}\n` +
-      `Asset: ${symbol}\n` +
-      `Stake: $${stake.toFixed(2)}\n` +
-      `Open: ${openSeconds}s`,
-    );
-    this._saveState('stuck-trade-recovery');
   }
 
   _scheduleSummaries() {
@@ -2487,10 +2272,10 @@ class TradingBot {
     const list = this.stats.tradesForHour(date, hour);
     const s = this.stats.stats(list);
     if (!list.length) {
-      telegram.send(`⏰ <b>CASPIAN Hourly Summary GMT (${date} ${pad(hour)}:00-${pad(hour)}:59)</b>\n\nNo trades this hour.\n\n💼 Overall Profit: ${money(this.stats.overallProfit, this.currency())}`);
+      telegram.send(`⏰ <b>Hourly Summary GMT (${date} ${pad(hour)}:00-${pad(hour)}:59)</b>\n\nNo trades this hour.\n\n💼 Overall Profit: ${money(this.stats.overallProfit, this.currency())}`);
       return;
     }
-    let msg = `⏰ <b>CASPIAN Hourly Summary GMT (${date} ${pad(hour)}:00-${pad(hour)}:59)</b>\n\n` +
+    let msg = `⏰ <b>Hourly Summary GMT (${date} ${pad(hour)}:00-${pad(hour)}:59)</b>\n\n` +
       `📊 Trades: ${s.count} (✅${s.wins} ❌${s.losses})\n` +
       `📈 Win rate: ${s.winRate.toFixed(1)}%\n` +
       `💰 P/L: <b>${money(s.totalProfit, this.currency())}</b>\n` +
@@ -2511,7 +2296,7 @@ class TradingBot {
     const summary = this.stats.archiveDate(date);
     const ds = summary.stats;
 
-    let msg = `🌙 <b>CASPIAN END OF TRADE DAY — GMT</b>\n` +
+    let msg = `🌙 <b>END OF TRADE DAY — GMT</b>\n` +
               `📅 Trade day ended: <b>${date}</b>\n\n` +
               `<b>── Current Day Stats ──</b>\n`;
     if (ds.count) {
@@ -2527,7 +2312,7 @@ class TradingBot {
       msg += `No trades recorded for this GMT trade day.\n\n`;
     }
 
-    msg += `<b>──CASPIAN Overall / Stored Stats ──</b>\n` +
+    msg += `<b>── Overall / Stored Stats ──</b>\n` +
            `💼 Overall Profit: <b>${money(this.stats.overallProfit, this.currency())}</b>\n` +
            `❌ Consecutive losses: current ${this.stats.currentLossStreak} | max ${this.stats.maxLossStreak}\n` +
            `   x2=${this.stats.lossStreakEvents.x2}  x3=${this.stats.lossStreakEvents.x3}  x4=${this.stats.lossStreakEvents.x4}\n\n`;
@@ -2537,7 +2322,7 @@ class TradingBot {
       const calib = this.calibrator.summary();
       const keys  = Object.keys(calib);
       if (keys.length) {
-        msg += `<b>──CASPIAN Symbol Calibration (rolling ${this.cfg.calibWindow}) ──</b>\n`;
+        msg += `<b>── Symbol Calibration (rolling ${this.cfg.calibWindow}) ──</b>\n`;
         for (const sym of keys) {
           const c = calib[sym];
           const emo = c.state === 'enabled'  ? '🟢'
@@ -2567,7 +2352,9 @@ class TradingBot {
 
   _statePayload(reason) {
     return {
-      version: 2,
+      // v3 = post pip-fix. Older versions may have been built from
+      // wrong-digit history and MUST NOT be blended forward.
+      version: 3,
       savedAt: new Date().toISOString(),
       savedReason: reason,
       startBalance: this.startBalance,
@@ -2592,15 +2379,27 @@ class TradingBot {
     if (!fs.existsSync(file)) return;
     try {
       const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+      const v = Number(data.version || 1);
+
+      // Always restore money-flow fields — they're right regardless.
       this.startBalance = data.startBalance ?? null;
-      this.lastBalance = data.lastBalance ?? null;
+      this.lastBalance  = data.lastBalance  ?? null;
       this.stats = new StatisticsManager(data.stats || data);
-      if (data.calibrator && typeof data.calibrator === 'object') {
+
+      // Only restore the calibrator when the state was written by v3+
+      // (post pip-fix). Older state was built from wrong digits and
+      // would poison the rolling per-symbol win-rate estimates.
+      if (v >= 3 && data.calibrator && typeof data.calibrator === 'object') {
         this.calibrator = new SymbolCalibrator(this.cfg, data.calibrator);
         const savedSyms = Object.keys(data.calibrator).length;
-        logger.info(`calibrator restored: ${savedSyms} symbols`);
+        logger.info(`calibrator restored: ${savedSyms} symbols (state v${v})`);
+      } else if (data.calibrator) {
+        logger.warn(
+          `state v${v} calibrator data DISCARDED (pre pip-fix). ` +
+          `Calibrator will rebuild from scratch — expect ~${this.cfg.calibMinTrades} trades before it can judge any symbol.`
+        );
       }
-      logger.info(`state restored from ${file}: overallProfit=${this.stats.overallProfit.toFixed(2)} lossStreak=${this.stats.currentLossStreak}`);
+      logger.info(`state restored from ${file}: overallProfit=${this.stats.overallProfit.toFixed(2)} lossStreak=${this.stats.currentLossStreak} (v${v})`);
     } catch (e) {
       logger.warn(`state load failed (${file}):`, e.message);
     }
@@ -2610,8 +2409,9 @@ class TradingBot {
     if (this.stopped) return;
     this.stopped = true;
     logger.info(`stopping (${signal})`);
-    telegram.send(`🛑 <b>Digit Differ CASPIAN stopped</b>\nSignal: ${htmlEscape(signal)}\n💼 Overall Profit: ${money(this.stats.overallProfit, this.currency())}`);
+    telegram.send(`🛑 <b>Digit Differ Bot stopped</b>\nSignal: ${htmlEscape(signal)}\n💼 Overall Profit: ${money(this.stats.overallProfit, this.currency())}`);
     if (this._analysisT) clearInterval(this._analysisT);
+    this._clearPauseTimers();
     if (this._hourlyBoot) clearTimeout(this._hourlyBoot);
     if (this._hourlyT) clearInterval(this._hourlyT);
     if (this._eodBoot) clearTimeout(this._eodBoot);
@@ -2677,7 +2477,7 @@ class DifferBacktester {
 
     const banner = '─'.repeat(72);
     console.log(`\n${banner}`);
-    console.log(`  CASPIAN-X DIFFER BACKTEST — symbols=[${list.join(', ')}]  ticks=${this.cfg.backtestTicks}`);
+    console.log(`  DIFFER BACKTEST — symbols=[${list.join(', ')}]  ticks=${this.cfg.backtestTicks}`);
     console.log(banner);
     if (Object.keys(this.overrides).length) {
       console.log(`  overrides applied: ${JSON.stringify(this.overrides)}`);
@@ -2893,9 +2693,6 @@ class DifferBacktester {
       gatedGap       : 0,
       gatedRecentHit : 0,
       gatedLossProb  : 0,
-      gatedConsensus : 0,
-      gatedPersist   : 0,
-      gatedHot       : 0,
       gatedEdge      : 0,   // best candidate edge < minEdge
       gatedAssetLock : 0,
       allowedModel   : 0,
@@ -2970,14 +2767,11 @@ class DifferBacktester {
 
       // Track gate rejections (mirrors DigitAnalyzer's own `gates` array)
       for (const g of analysis.gates) {
-        if (g.startsWith('entropy'))          diag.gatedEntropy++;
-        else if (g.startsWith('chisq'))       diag.gatedChiSq++;
-        else if (g.startsWith('gap-low') || g.startsWith('gap-too')) diag.gatedGap++;
-        else if (g.startsWith('recent'))      diag.gatedRecentHit++;
-        else if (g.startsWith('loss'))        diag.gatedLossProb++;
-        else if (g.startsWith('consensus'))   diag.gatedConsensus = (diag.gatedConsensus || 0) + 1;
-        else if (g.startsWith('persist'))     diag.gatedPersist = (diag.gatedPersist || 0) + 1;
-        else if (g.startsWith('hot-pressure')) diag.gatedHot = (diag.gatedHot || 0) + 1;
+        if (g.startsWith('entropy'))     diag.gatedEntropy++;
+        else if (g.startsWith('chisq'))  diag.gatedChiSq++;
+        else if (g.startsWith('gap'))    diag.gatedGap++;
+        else if (g.startsWith('recent')) diag.gatedRecentHit++;
+        else if (g.startsWith('loss'))   diag.gatedLossProb++;
       }
       if (analysis.allowedByModel) diag.allowedModel++;
 
@@ -3113,6 +2907,18 @@ class DifferBacktester {
       lossRuns            : streak.lossSequences.length,
       winRuns             : streak.winSequences.length,
       maxDrawdownFlatStake: +(streak.max * baseStake).toFixed(2),
+      // Simulated recovery-multiplier drawdown: what you'd lose in cash
+      // through the WORST loss run using cfg.recoveryMultipliers.
+      maxDrawdownRecovery : (() => {
+        if (!this.cfg.recoveryEnabled || !this.cfg.recoveryMultipliers?.length) return null;
+        const mults = this.cfg.recoveryMultipliers;
+        let sum = 0;
+        for (let k = 0; k < streak.max; k++) {
+          const idx = Math.min(k, mults.length - 1);
+          sum += baseStake * (mults[idx] || 1);
+        }
+        return +sum.toFixed(2);
+      })(),
     };
 
     // Assemble result object
@@ -3173,6 +2979,9 @@ class DifferBacktester {
     console.log(`      x6 (6 in a row) : ${String(streakMetrics.events.x6).padStart(4)}`);
     console.log(`      x7 (7 in a row) : ${String(streakMetrics.events.x7).padStart(4)}`);
     console.log(`      x8+ (≥8)        : ${String(streakMetrics.events.x8plus).padStart(4)}`);
+    if (streakMetrics.maxDrawdownRecovery != null) {
+      console.log(`    Worst DD using cfg.recoveryMultipliers [${this.cfg.recoveryMultipliers.join(',')}]: -${streakMetrics.maxDrawdownRecovery.toFixed(2)} ${this.cfg.currency}`);
+    }
     if (results.signals > 0 && empiricalWR > 0 && empiricalWR < 100) {
       const q       = 1 - (empiricalWR / 100);
       const nTrades = results.signals;
@@ -3221,9 +3030,6 @@ class DifferBacktester {
     console.log(`    rejected by gap      : ${diag.gatedGap}   (needed ≥ ${this.cfg.minProbabilityGap})`);
     console.log(`    rejected by recentHit: ${diag.gatedRecentHit}   (max hits ${this.cfg.maxRecentDigitHits})`);
     console.log(`    rejected by lossProb : ${diag.gatedLossProb}   (max upper ${this.cfg.maxLossProb})`);
-    console.log(`    rejected by consensus: ${diag.gatedConsensus || 0}   (needed ≥ ${this.cfg.minConsensusVotes} module votes)`);
-    console.log(`    rejected by persist  : ${diag.gatedPersist || 0}   (needed ≥ ${this.cfg.minPersistenceHorizons} horizons)`);
-    console.log(`    rejected by hotPress : ${diag.gatedHot || 0}   (needed ≥ ${this.cfg.minHotPressure})`);
     console.log(`    rejected by minEdge  : ${diag.gatedEdge}   (needed ≥ ${(this.cfg.minEdge*100).toFixed(3)}%)`);
     console.log(`    rejected by assetLock: ${diag.gatedAssetLock}`);
     console.log(`    best value edge seen : ${bestEdgeStr}   (min ${(this.cfg.minEdge*100).toFixed(3)}%)`);
@@ -3244,7 +3050,7 @@ class DifferBacktester {
     }
 
     // Suggestions
-    if (diag.recommended === 0 && diag.scans > 0) {
+    if (diag.scans >= 0) {
       console.log('');
       console.log('  💡 No signals fired. Suggestions:');
       if (diag.bestEdgeSeen !== -Infinity && diag.bestEdgeSeen < this.cfg.minEdge) {
@@ -3275,11 +3081,10 @@ class DifferBacktester {
 // 11. BOOTSTRAP
 // ─────────────────────────────────────────────────────────────────────
 function printBanner() {
-  console.log('╔══════════════════════════════════════════════════════════╗');
-  console.log('║   Deriv Digit Differ Bot v2.0 — CASPIAN-X               ║');
-  console.log('║   DIGITDIFF • Consensus Sparse Prob • Value-Edge        ║');
-  console.log('║   GMT EOD • Kelly/Calib • Stateful Stats                ║');
-  console.log('╚══════════════════════════════════════════════════════════╝');
+  console.log('╔════════════════════════════════════════════════════╗');
+  console.log('║   Deriv Digit Differ Trading Bot v1.0             ║');
+  console.log('║   DIGITDIFF • DIVER-9 • GMT EOD • Stateful Stats  ║');
+  console.log('╚════════════════════════════════════════════════════╝');
   console.log('');
 }
 async function main() {
