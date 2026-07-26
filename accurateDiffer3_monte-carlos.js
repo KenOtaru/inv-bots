@@ -135,13 +135,13 @@ const CONFIG = Object.freeze({
   durationTicks: 1, // Digit contracts normally 1-10 ticks
   minStake: 1.1,
   maxStake: 150.00,
-  assets: ['R_10','R_50','R_75','RDBULL'],//'1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V','R_10','R_25','R_50','R_75','RDBULL','RDBEAR'
+  assets: ['1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V','R_10','R_25','R_50','R_75','RDBULL','RDBEAR'],//'1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V','R_10','R_25','R_50','R_75','RDBULL','RDBEAR'
 
   // Trading frequency / limits
   tickWindow: 1000,
   minTicksForAnalysis: 300,
   analysisIntervalMs: 3000,
-  tradeCooldownMs: 2500,
+  tradeCooldownMs: 20000,
   maxOpenTrades: 1,
   cooldownTicks: 200,        // don't re-analyze digit within N ticks of last trade
   tradeWatchdogMs: 20000,    // force-recover stuck trades after this many ms
@@ -245,8 +245,8 @@ const CONFIG = Object.freeze({
   hourlySummary: boolEnv('HOURLY_SUMMARY', true),
 
   // Persistence/logging
-  stateFile: strEnv('STATE_FILE', 'monte-carlos_differ_01_state.json'),
-  logFile: strEnv('LOG_FILE', 'monte-carlos_differ_01_bot.log'),
+  stateFile: strEnv('STATE_FILE', 'monte-carlos_differ_0001_state.json'),
+  logFile: strEnv('LOG_FILE', 'monte-carlos_differ_0001_bot.log'),
   logLevel: strEnv('LOG_LEVEL', 'INFO').toUpperCase(),
 
   // Telegram
@@ -752,7 +752,17 @@ class DerivClient extends EventEmitter {
       this._pending.set(reqId, {
         resolve: msg => {
           const subId = msg.subscription?.id;
-          if (!subId) return reject(new Error('No subscription id in response'));
+          if (!subId) {
+            // Contract may have settled before the subscription was established
+            // (common with 1-tick DIGITDIFF). Deriv returns the settlement data
+            // directly without a subscription id. Invoke the callback so the
+            // caller can process the result, then resolve with null.
+            if (msg.proposal_open_contract) {
+              try { callback(msg); } catch (e) { logger.error('subscription handler error:', e.message); }
+            }
+            resolve(null);
+            return;
+          }
           this._subs.set(subId, callback);
           resolve(subId);
         },
@@ -2067,7 +2077,7 @@ class TradingBot {
       this.paused = true;
       logger.info(`TRADING PAUSED at ${this.cfg.pauseStartGmt} GMT until ${this.cfg.pauseEndGmt} GMT`);
       telegram.send(
-        `⏸️ <b>TRADING PAUSED</b>\n\n` +
+        `⏸️ <b>MC TRADING PAUSED</b>\n\n` +
         `Scheduled pause active from <b>${htmlEscape(this.cfg.pauseStartGmt)}</b> to <b>${htmlEscape(this.cfg.pauseEndGmt)}</b> GMT.\n` +
         `Open trades will settle normally. No new trades until resume.\n\n` +
         `🕒 ${utcTs()}`
@@ -2083,7 +2093,7 @@ class TradingBot {
       this.paused = false;
       logger.info(`TRADING RESUMED at ${this.cfg.pauseEndGmt} GMT`);
       telegram.send(
-        `▶️ <b>TRADING RESUMED</b>\n\n` +
+        `▶️ <b>MC TRADING RESUMED</b>\n\n` +
         `Scheduled pause ended. Bot is now scanning for trades.\n\n` +
         `💼 Overall Profit: ${money(this.stats.overallProfit, this.currency())}\n\n` +
         `🕒 ${utcTs()}`
