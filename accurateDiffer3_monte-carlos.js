@@ -167,7 +167,6 @@ const CONFIG = Object.freeze({
   mcStabilityThreshold:  0.40,    // min stability across resamples (0-1)
   randomnessAlpha:       0.05,    // uniformity test significance level
   tradeFrequencyMs:      5000,    // min ms between trades
-  maxWeakSignals:        500000000,
   analysisWindows:       [30, 60, 150, 400], // used by backtester reporting
   bootstrapIterations:   500,     // per-digit CI
   hotFilterTicks:        5,       // digits in last N ticks → penalty
