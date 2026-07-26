@@ -139,7 +139,7 @@ const CONFIG = Object.freeze({
 
   // ── Monte Carlo Analysis ────────────────────────────────────────
   mcSimulations:         10000,   // MC simulation trials
-  minEdgeConfidence:     0.475,    // min confidence to trade (0-1)
+  minEdgeConfidence:     0.476,    // min confidence to trade (0-1)
   mcStabilityThreshold:  0.70,    // min stability across resamples (0-1)
   randomnessAlpha:       0.05,    // uniformity test significance level
   tradeFrequencyMs:      5000,    // min ms between trades
@@ -175,8 +175,8 @@ const CONFIG = Object.freeze({
   hourlySummary:      true,
 
   // ── Persistence ────────────────────────────────────────────────
-  stateFile: strEnv('STATE_FILE', 'monte_carlo2_01_state.json'),
-  logFile:   strEnv('LOG_FILE', 'monte_carlo2_01.log'),
+  stateFile: strEnv('STATE_FILE', 'monte_carlo2_02_state.json'),
+  logFile:   strEnv('LOG_FILE', 'monte_carlo2_02.log'),
   logLevel:  strEnv('LOG_LEVEL', 'INFO2').toUpperCase(),
 
   // ── Telegram ───────────────────────────────────────────────────
