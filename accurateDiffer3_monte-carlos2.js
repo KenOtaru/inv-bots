@@ -1149,7 +1149,7 @@ class MonteCarloAnalyzer {
     }
     // Approximate p-value using Wilson-Hilferty for chi-sq with 9 df
     const df = 9;
-    const z = Math.pow(chiSq / df, 1 / 3) - (1 - 2 / (9 * df));
+    let z = Math.pow(chiSq / df, 1 / 3) - (1 - 2 / (9 * df));
     z /= Math.sqrt(2 / (9 * df));
     const pValue = 1 - this._normalCDF(z);
     return { chiSq, pValue, df };
