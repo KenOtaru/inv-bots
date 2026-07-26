@@ -2962,6 +2962,7 @@ class TradingBot {
 class DifferBacktester {
   constructor(cfg, client, market) {
     this.cfg       = { ...cfg };
+    this.overrides = {};
     this.client    = client;
     this.market    = market;
     this.analyzer  = new DigitAnalyzer(this.cfg);
