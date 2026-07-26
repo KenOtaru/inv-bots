@@ -119,7 +119,7 @@ const CONFIG = Object.freeze({
   durationTicks:   1,
   minStake:        1.1,
   maxStake:        5.5,
-  assets:          ['R_10','R_25','R_50','R_75','RDBULL','RDBEAR'], //'R_10','R_25','R_50','R_75','RDBULL','RDBEAR'
+  assets:          ['R_50','R_75','RDBULL'], //'R_10','R_25','R_50','R_75','RDBULL','RDBEAR'
 
   // ── Timing ─────────────────────────────────────────────────────
   tickWindow:          500,
@@ -162,12 +162,12 @@ const CONFIG = Object.freeze({
 
   // ── Reporting ──────────────────────────────────────────────────
   eodTimeGmt:         strEnv('TRADE_DAY_END_GMT', '00:00'),
-  eodSendDelaySeconds: intEnv('EOD_SEND_DELAY_SECONDS', 10),
+  eodSendDelaySeconds: 10,
   hourlySummary:      true,
 
   // ── Persistence ────────────────────────────────────────────────
-  stateFile: strEnv('STATE_FILE', 'accurateDiffer3_simple05_state.json'),
-  logFile:   strEnv('LOG_FILE', 'accurateDiffer3_simple05.log'),
+  stateFile: strEnv('STATE_FILE', 'accurateDiffer3_simple07_state.json'),
+  logFile:   strEnv('LOG_FILE', 'accurateDiffer3_simple07.log'),
   logLevel:  strEnv('LOG_LEVEL', 'INFO').toUpperCase(),
 
   // ── Telegram ───────────────────────────────────────────────────
