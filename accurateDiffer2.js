@@ -2584,10 +2584,11 @@ class DifferBacktester {
       console.log(`  overrides applied: ${JSON.stringify(this.overrides)}`);
     }
     console.log(
-      `  MC gates: sims=${this.cfg.mcSimulations}  ` +
-      `confidence=${this.cfg.minEdgeConfidence}  stability=${this.cfg.mcStabilityThreshold}\n` +
-      `           mcMinEdge=${this.cfg.mcMinEdge}  ` +
-      `duration=${this.cfg.durationTicks}t  payoutMult=${this.cfg.backtestPayoutMult}  ` +
+      `  analysisWindow=${this.cfg.analysisWindow}  ` +
+      `minEdge=${this.cfg.minEdge}  safetyMargin=${this.cfg.safetyMargin}\n` +
+      `           cooldownTicks=${this.cfg.cooldownTicks}  maxRecentHits=${this.cfg.maxRecentHits}  ` +
+      `minGap=${this.cfg.minProbabilityGap}\n` +
+      `           duration=${this.cfg.durationTicks}t  payoutMult=${this.cfg.backtestPayoutMult}  ` +
       `assetLock=${this.cfg.backtestAssetLock}`
     );
     console.log(banner);
@@ -2633,10 +2634,12 @@ class DifferBacktester {
 
   _gateSnapshot() {
     return {
-      mcMinEdge         : this.cfg.mcMinEdge,
-      minEdgeConfidence : this.cfg.minEdgeConfidence,
-      mcStabilityThreshold: this.cfg.mcStabilityThreshold,
-      mcSimulations     : this.cfg.mcSimulations,
+      minEdge           : this.cfg.minEdge,
+      safetyMargin      : this.cfg.safetyMargin,
+      analysisWindow    : this.cfg.analysisWindow,
+      minProbabilityGap : this.cfg.minProbabilityGap,
+      maxRecentHits     : this.cfg.maxRecentHits,
+      cooldownTicks     : this.cfg.cooldownTicks,
       durationTicks     : this.cfg.durationTicks,
       payoutMultiplier  : this.cfg.backtestPayoutMult,
     };
@@ -3123,15 +3126,7 @@ class DifferBacktester {
       console.log('  💡 No signals fired. Suggestions:');
       if (diag.bestEdgeSeen !== -Infinity && diag.bestEdgeSeen < this.cfg.mcMinEdge) {
         console.log(`     • Best value-edge observed: ${(diag.bestEdgeSeen*100).toFixed(3)}%`);
-        console.log(`       Try lowering MC_MIN_EDGE below ${(diag.bestEdgeSeen*100).toFixed(3)}%`);
-      }
-      if (diag.mcNotStable > 0) {
-        console.log(`     • ${diag.mcNotStable} scans rejected: MC edge not stable across resamples`);
-        console.log(`       Try lowering MC_EDGE_THRESHOLD or MC_RESAMPLE_PASSES`);
-      }
-      if (diag.mcEdgeLow > 0) {
-        console.log(`     • ${diag.mcEdgeLow} scans rejected: confidence below threshold`);
-        console.log(`       Current minEdgeConfidence=${this.cfg.minEdgeConfidence}`);
+        console.log(`       Try lowering minEdge below ${(diag.bestEdgeSeen*100).toFixed(3)}%`);
       }
     }
     console.log(line + '\n');
