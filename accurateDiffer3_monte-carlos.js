@@ -177,7 +177,6 @@ const CONFIG = Object.freeze({
   maxEntropy:            0.9997,  // max entropy gate (too uniform)
   mcMinEdge:             0.003,   // min value edge to trade
   mcLossCooldownMs:      8000,
-  mcWeakSignalCooldownMs: 500000000000000000,
 
   // Optional limited loss recovery; disabled by default. Safer than the pasted 10x/100x martingale.
   recoveryEnabled: true, // If true, set kellySizingEnabled below to false
@@ -2159,12 +2158,6 @@ class TradingBot {
     if (now - this.lastLossAt < cfg.mcLossCooldownMs) {
       const remaining = ((cfg.mcLossCooldownMs - (now - this.lastLossAt)) / 1000).toFixed(1);
       return { allowed: false, reason: `loss cooldown — ${remaining}s remaining` };
-    }
-
-    // 5. Weak-signal cooldown
-    if (now - this.lastWeakSignalAt < cfg.mcWeakSignalCooldownMs) {
-      const remaining = ((cfg.mcWeakSignalCooldownMs - (now - this.lastWeakSignalAt)) / 1000).toFixed(1);
-      return { allowed: false, reason: `weak-signal cooldown — ${remaining}s remaining` };
     }
 
     return { allowed: true, reason: `MC PASS: d${analysis.digit} confidence=${analysis.confidence.toFixed(3)} stability=${analysis.stability.toFixed(3)} p=${analysis.pValue.toFixed(4)}` };
