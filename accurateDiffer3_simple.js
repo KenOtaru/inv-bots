@@ -170,7 +170,6 @@ const CONFIG = Object.freeze({
   safetyMargin:       0.01,     // value edge safety margin
   minEdge:            0.016,     // min value edge to trade
   lossCooldownMs:     8000,
-  weakSignalCooldownMs: 500000000000000000,
 
   // Optional limited loss recovery; disabled by default. Safer than the pasted 10x/100x martingale.
   recoveryEnabled: true,
@@ -1777,12 +1776,6 @@ class TradingBot {
     if (now - this.lastLossAt < cfg.lossCooldownMs) {
       const remaining = ((cfg.lossCooldownMs - (now - this.lastLossAt)) / 1000).toFixed(1);
       return { allowed: false, reason: `loss cooldown — ${remaining}s remaining` };
-    }
-
-    // 3. Weak-signal cooldown
-    if (now - this.lastWeakSignalAt < cfg.weakSignalCooldownMs) {
-      const remaining = ((cfg.weakSignalCooldownMs - (now - this.lastWeakSignalAt)) / 1000).toFixed(1);
-      return { allowed: false, reason: `weak-signal cooldown — ${remaining}s remaining` };
     }
 
     return { allowed: true, reason: `PASS: d${analysis.digit} pUpper=${analysis.pUpper.toFixed(4)} gap OK` };
