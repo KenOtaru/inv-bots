@@ -169,9 +169,8 @@ const CONFIG = Object.freeze({
   cooldownTicks:      200,       // don't re-predict digit within N ticks
   safetyMargin:       0.01,     // value edge safety margin
   minEdge:            0.016,     // min value edge to trade
-  maxConsecutiveSkips: 5,
   lossCooldownMs:     8000,
-  weakSignalCooldownMs: 15000,
+  weakSignalCooldownMs: 500000000000000000,
 
   // Optional limited loss recovery; disabled by default. Safer than the pasted 10x/100x martingale.
   recoveryEnabled: true,
@@ -223,23 +222,23 @@ const CONFIG = Object.freeze({
   //   trading on that day. Open trades will settle normally.
   //   These can be set via environment variables:
   //     TRADE_SUNDAY=false TRADE_MONDAY=true etc.
-  tradeSunday    : boolEnv('TRADE_SUNDAY',    true),
-  tradeMonday    : boolEnv('TRADE_MONDAY',    true),
-  tradeTuesday   : boolEnv('TRADE_TUESDAY',   true),
-  tradeWednesday : boolEnv('TRADE_WEDNESDAY', true),
-  tradeThursday  : boolEnv('TRADE_THURSDAY',  true),
-  tradeFriday    : boolEnv('TRADE_FRIDAY',    true),
-  tradeSaturday  : boolEnv('TRADE_SATURDAY',  true),
+  tradeSunday    : true,
+  tradeMonday    : true,
+  tradeTuesday   : true,
+  tradeWednesday : true,
+  tradeThursday  : true,
+  tradeFriday    : true,
+  tradeSaturday  : true,
 
   // GMT/UTC reporting
-  eodTimeGmt: strEnv('TRADE_DAY_END_GMT', '00:00'), // default midnight GMT; report date is previous UTC day
-  eodSendDelaySeconds: intEnv('EOD_SEND_DELAY_SECONDS', 10),
-  hourlySummary: boolEnv('HOURLY_SUMMARY', true),
+  eodTimeGmt: '00:00', // default midnight GMT; report date is previous UTC day
+  eodSendDelaySeconds: 10,
+  hourlySummary: true,
 
   // Persistence/logging
-  stateFile: strEnv('STATE_FILE', 'simple_differ_01_state.json'),
-  logFile: strEnv('LOG_FILE', 'simple_differ_01_bot.log'),
-  logLevel: strEnv('LOG_LEVEL', 'SIMPLE INFO').toUpperCase(),
+  stateFile: strEnv('STATE_FILE', 'simple3_differ_001_state.json'),
+  logFile: strEnv('LOG_FILE', 'simple3_differ_001_bot.log'),
+  logLevel: strEnv('LOG_LEVEL', 'SIMPLE3 INFO').toUpperCase(),
 
   // Telegram
   telegram: {
