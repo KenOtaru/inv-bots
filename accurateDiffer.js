@@ -143,6 +143,7 @@ const CONFIG = Object.freeze({
   analysisIntervalMs: 3000,
   tradeCooldownMs: 2000,
   maxOpenTrades: 1,
+  cooldownTicks: 200,        // don't re-analyze within N ticks of last trade
   // ── Asset rotation ────────────────────────────────────────────────
   //   To avoid hammering the same symbol back-to-back the bot briefly
   //   "locks out" the just-traded symbol. Two safety valves:
@@ -218,8 +219,8 @@ const CONFIG = Object.freeze({
   //   pauseStartGmt < pauseEndGmt means a mid-day break
   //   (e.g. 12:00 → 14:00 pauses over lunch).
   pauseEnabled   : true,
-  pauseStartGmt  : strEnv('PAUSE_START_GMT', '23:00'),
-  pauseEndGmt    : strEnv('PAUSE_END_GMT',   '01:00'),
+  pauseStartGmt  : '23:00',
+  pauseEndGmt    : '01:00',
 
   // ── Day-of-week trading filter ──────────────────────────────────
   //   Control which days of the week the bot is allowed to trade.
@@ -1649,6 +1650,10 @@ class TradingBot {
     this._eodT = null;
     this._pauseStartTimer = null;
     this._pauseEndTimer = null;
+
+    // ── Tick counter for cooldownTicks ──────────────────────────────
+    this._tickCounter = 0;
+    this._lastTradeTickIdx = null;
   }
 
   // ── Scheduled pause helpers ─────────────────────────────────────
@@ -1842,6 +1847,7 @@ class TradingBot {
     this.exec.on('open', t => this._onTradeOpen(t));
     this.exec.on('result', t => this._onTradeResult(t));
     this.exec.on('update', t => logger.debug(`update #${t.contractId} ${t.status} profit=${t.profit}`));
+    this.market.on('tick', () => { this._tickCounter++; });
 
     process.on('SIGINT', () => this.stop('SIGINT'));
     process.on('SIGTERM', () => this.stop('SIGTERM'));
@@ -1885,6 +1891,9 @@ class TradingBot {
       this.cfg.tradeSaturday
     ];
     const dayLine = `📅 Trading days: ${dayAbbrev.map((d, i) => daySettings[i] ? `✅${d}` : `❌${d}`).join(' ')}`;
+    const cooldownLine = this.cfg.cooldownTicks
+      ? `⏱️ Tick cooldown: <b>${this.cfg.cooldownTicks} ticks</b> (${(this.cfg.cooldownTicks * this.cfg.analysisIntervalMs / 1000).toFixed(0)}s)`
+      : '';
 
     telegram.send(
       `🤖 <b>Digit Differ Bot Online</b>\n\n` +
@@ -1899,6 +1908,7 @@ class TradingBot {
       `${rotationLine}\n` +
       `${pauseLine}\n` +
       `${dayLine}\n` +
+      `${cooldownLine}\n` +
       `🧠 Method: <b>DIVER-9</b> conservative value-edge filter\n` +
       `🕒 Trade day clock: <b>GMT/UTC</b> | EOD: ${this.cfg.eodTimeGmt} GMT\n\n` +
       `💼 Overall Profit: <b>${money(this.stats.overallProfit, this.currency())}</b>\n` +
@@ -1973,6 +1983,14 @@ class TradingBot {
       return;
     }
     if (Date.now() - this.lastTradeAt < this.cfg.tradeCooldownMs) return;
+    // Tick-based cooldown: don't re-analyze within N ticks of last trade
+    if (this._lastTradeTickIdx != null) {
+      const ticksSinceTrade = this._tickCounter - this._lastTradeTickIdx;
+      if (ticksSinceTrade < this.cfg.cooldownTicks) {
+        logger.debug(`cooldownTicks: ${ticksSinceTrade}/${this.cfg.cooldownTicks} — skipping`);
+        return;
+      }
+    }
     if (this.exec.count() >= this.cfg.maxOpenTrades) return;
 
     const today = utcDateStr();
@@ -2224,6 +2242,7 @@ class TradingBot {
     );
 
     this.lastTradeAt = Date.now();
+    this._lastTradeTickIdx = this._tickCounter;
     this._saveState('after-trade');
   }
 

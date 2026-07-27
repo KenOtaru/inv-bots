@@ -152,6 +152,7 @@ const CONFIG = Object.freeze({
   analysisIntervalMs: 3000,
   tradeCooldownMs: 2000,
   maxOpenTrades: 1,
+  cooldownTicks: 200,        // don't re-analyze within N ticks of last trade
   // ── Asset rotation ────────────────────────────────────────────────
   //   To avoid hammering the same symbol back-to-back the bot briefly
   //   "locks out" the just-traded symbol. Two safety valves:
@@ -2150,6 +2151,10 @@ class TradingBot {
     this._pauseStartTimer = null;
     this._pauseEndTimer = null;
 
+    // ── Tick counter for cooldownTicks ──────────────────────────────
+    this._tickCounter = 0;
+    this._lastTradeTickIdx = null;
+
     // ── Trade watchdog timers ──
     this.tradeWatchdogMs = CONFIG.tradeWatchdogMs || 90000;
     this.tradeStartTime = null;
@@ -2322,6 +2327,7 @@ class TradingBot {
     this.exec.on('open', t => this._onTradeOpen(t));
     this.exec.on('result', t => this._onTradeResult(t));
     this.exec.on('update', t => logger.debug(`update #${t.contractId} ${t.status} profit=${t.profit}`));
+    this.market.on('tick', () => { this._tickCounter++; });
 
     process.on('SIGINT', () => this.stop('SIGINT'));
     process.on('SIGTERM', () => this.stop('SIGTERM'));
@@ -2357,6 +2363,9 @@ class TradingBot {
     const breakerLine = this.cfg.circuitBreakerEnabled
       ? `🚨 Circuit breaker: <b>ON</b> (trip after ${this.cfg.circuitBreakerLosses} consecutive losses, cooldown ${(this.cfg.circuitBreakerCooldownMs/60000).toFixed(0)}m)`
       : `🚨 Circuit breaker: off`;
+    const cooldownLine = this.cfg.cooldownTicks
+      ? `⏱️ Tick cooldown: <b>${this.cfg.cooldownTicks} ticks</b> (${(this.cfg.cooldownTicks * this.cfg.analysisIntervalMs / 1000).toFixed(0)}s)`
+      : '';
 
     telegram.send(
       `🤖 <b>x2Digit Differ Bot Online</b>\n\n` +
@@ -2370,6 +2379,7 @@ class TradingBot {
       `${calibLine}\n` +
       `${rotationLine}\n` +
       `${breakerLine}\n` +
+      `${cooldownLine}\n` +
       `📈 Signal: empirical digit frequency (heuristic, not a demonstrated edge — see file header)\n` +
       `🧯 Daily stop: ${money(-Math.abs(this.cfg.dailyMaxLoss), this.currency())} or ${(this.cfg.dailyMaxLossPct*100).toFixed(1)}% of balance, whichever first\n` +
       `🕒 Trade day clock: <b>GMT/UTC</b> | EOD: ${this.cfg.eodTimeGmt} GMT\n\n` +
@@ -2440,6 +2450,14 @@ class TradingBot {
       return;
     }
     if (Date.now() - this.lastTradeAt < this.cfg.tradeCooldownMs) return;
+    // Tick-based cooldown: don't re-analyze within N ticks of last trade
+    if (this._lastTradeTickIdx != null) {
+      const ticksSinceTrade = this._tickCounter - this._lastTradeTickIdx;
+      if (ticksSinceTrade < this.cfg.cooldownTicks) {
+        logger.debug(`cooldownTicks: ${ticksSinceTrade}/${this.cfg.cooldownTicks} — skipping`);
+        return;
+      }
+    }
     if (this.exec.count() >= this.cfg.maxOpenTrades) return;
 
     // ── Consecutive-loss circuit breaker ──────────────────────────────
@@ -2731,6 +2749,7 @@ class TradingBot {
     );
 
     this.lastTradeAt = Date.now();
+    this._lastTradeTickIdx = this._tickCounter;
     this._saveState('after-trade');
   }
 

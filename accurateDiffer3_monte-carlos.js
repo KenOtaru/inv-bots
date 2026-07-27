@@ -219,8 +219,8 @@ const CONFIG = Object.freeze({
   //   pauseStartGmt < pauseEndGmt means a mid-day break
   //   (e.g. 12:00 → 14:00 pauses over lunch).
   pauseEnabled   : true,
-  pauseStartGmt  : strEnv('PAUSE_START_GMT', '23:00'),
-  pauseEndGmt    : strEnv('PAUSE_END_GMT',   '01:00'),
+  pauseStartGmt  : '23:00',
+  pauseEndGmt    : '01:00',
 
   // ── Day-of-week trading filter ──────────────────────────────────
   //   Control which days of the week the bot is allowed to trade.
