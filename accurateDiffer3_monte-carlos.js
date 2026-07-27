@@ -143,7 +143,6 @@ const CONFIG = Object.freeze({
   analysisIntervalMs: 3000,
   tradeCooldownMs: 2500,
   maxOpenTrades: 1,
-  cooldownTicks: 200,        // don't re-analyze digit within N ticks of last trade
   tradeWatchdogMs: 20000,    // force-recover stuck trades after this many ms
   // ── Asset rotation ────────────────────────────────────────────────
   //   To avoid hammering the same symbol back-to-back the bot briefly
