@@ -141,7 +141,7 @@ const CONFIG = Object.freeze({
   tickWindow: 1000,
   minTicksForAnalysis: 300,
   analysisIntervalMs: 3000,
-  tradeCooldownMs: 20000,
+  tradeCooldownMs: 2500,
   maxOpenTrades: 1,
   cooldownTicks: 200,        // don't re-analyze digit within N ticks of last trade
   tradeWatchdogMs: 20000,    // force-recover stuck trades after this many ms
