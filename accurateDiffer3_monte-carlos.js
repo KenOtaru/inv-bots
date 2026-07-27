@@ -135,13 +135,13 @@ const CONFIG = Object.freeze({
   durationTicks: 1, // Digit contracts normally 1-10 ticks
   minStake: 1.1,
   maxStake: 150.00,
-  assets: ['1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V','R_10','R_25','R_50','R_75','RDBULL','RDBEAR'],//'1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V','R_10','R_25','R_50','R_75','RDBULL','RDBEAR'
+  assets: ['R_50','R_75','RDBULL'],//'1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V','R_10','R_25','R_50','R_75','RDBULL','RDBEAR'
 
   // Trading frequency / limits
   tickWindow: 1000,
   minTicksForAnalysis: 300,
   analysisIntervalMs: 3000,
-  tradeCooldownMs: 6000, // min ms between trades
+  tradeCooldownMs: 2000, // min ms between trades
   maxOpenTrades: 1,
   tradeWatchdogMs: 20000,    // force-recover stuck trades after this many ms
   // ── Asset rotation ────────────────────────────────────────────────
