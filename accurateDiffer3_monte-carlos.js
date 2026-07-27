@@ -141,7 +141,7 @@ const CONFIG = Object.freeze({
   tickWindow: 1000,
   minTicksForAnalysis: 300,
   analysisIntervalMs: 3000,
-  tradeCooldownMs: 2500,
+  tradeCooldownMs: 5000, // min ms between trades
   maxOpenTrades: 1,
   tradeWatchdogMs: 20000,    // force-recover stuck trades after this many ms
   // ── Asset rotation ────────────────────────────────────────────────
