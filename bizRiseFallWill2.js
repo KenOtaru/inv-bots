@@ -2,32 +2,10 @@
 
 /**
  * ╔══════════════════════════════════════════════════════════════════════════╗
- * ║      DERIV SYNTHETIC INDICES CALLE/PUTE BOT  —  v4.0  "WILL"           ║
- * ║      Williams %R Breakout + Normal Trading Mode                         ║
- * ║                                                                          ║
+ * ║      DERIV SYNTHETIC INDICES CALLE/PUTE BOT  —  v1.0  "CANDLE CLOSE"     ║
  * ║  STRATEGY:                                                               ║
- * ║  ────────────────────────────────────────────────────────────────────── ║
- * ║  1. WPR (Williams Percent Range) detects momentum shifts:               ║
- * ║     · BUY:  WPR crosses above -20 (must have visited -80 first)        ║
- * ║     · SELL: WPR crosses below -80 (must have visited -20 first)        ║
- * ║                                                                          ║
- * ║  2. When WPR signal fires → set breakout levels (prev candle H/L)      ║
- * ║     and execute first trade in breakout direction.                      ║
- * ║                                                                          ║
- * ║  3. NORMAL MODE: After breakout levels set, trade on every candle close ║
- * ║     · Bullish candle (close > open) → CALLE                             ║
- * ║     · Bearish candle (close < open) → PUTE                              ║
- * ║     · Continues for MAX_TRADES_PER_CYCLE trades (default 20)           ║
- * ║     · After cycle completes → wait for new WPR signal                   ║
- * ║                                                                          ║
- * ║  4. RECOVERY MODE (retained from v3 DARE):                              ║
- * ║     · After loss → force opposite direction with increased stake        ║
- * ║     · Capped recovery steps, no martingale ladder                      ║
- * ║     · Recovery trades do NOT count toward normal mode trade count      ║
- * ║                                                                          ║
- * ║  RETAINED FROM v3:                                                       ║
- * ║    RestClient, PAT/legacy auth, ConnectionManager, watchdog,            ║
- * ║    persistence, trade-history, SessionManager, recovery logic.           ║
+ * ║  ──────────────────────────────────────────────────────────────────────  ║
+ * ║  1. Candle Direction Trading (CALLE/PUTE)                                ║
  * ╚══════════════════════════════════════════════════════════════════════════╝
  */
 
@@ -101,12 +79,12 @@ class RestClient {
 // ============================================================
 // FILE PATHS  [RETAINED]
 // ============================================================
-const STATE_FILE = path.join(__dirname, 'bizwill2_01-state.json');
-const HISTORY_FILE = path.join(__dirname, 'bizwill2_01-history.json');
+const STATE_FILE = path.join(__dirname, 'bizCandle_01-state.json');
+const HISTORY_FILE = path.join(__dirname, 'bizCandle_01-history.json');
 const STATE_SAVE_INTERVAL = 5000;  // ms
 
 // ============================================================
-// LOGGER  [RETAINED + WPR/breakout loggers]
+// LOGGER  [RETAINED + CANDLE DIRECTION loggers]
 // ============================================================
 const getGMTTime = () =>
     new Date().toISOString().replace('T', ' ').split('.')[0] + ' GMT';
@@ -118,8 +96,6 @@ const LOGGER = {
     error: (msg) => console.error(`\x1b[31m[ERROR] ${getGMTTime()} - ${msg}\x1b[0m`),
     debug: (msg) => { if (CONFIG.DEBUG_MODE) console.log(`\x1b[90m[DEBUG] ${getGMTTime()} - ${msg}\x1b[0m`); },
     signal: (msg) => console.log(`\x1b[36m[SIGNAL]${getGMTTime()} - ${msg}\x1b[0m`),
-    wpr: (msg) => console.log(`\x1b[34m[WPR]   ${getGMTTime()} - ${msg}\x1b[0m`),
-    breakout: (msg) => console.log(`\x1b[35m[BREAK]  ${getGMTTime()} - ${msg}\x1b[0m`),
     normal: (msg) => console.log(`\x1b[93m[NORM]   ${getGMTTime()} - ${msg}\x1b[0m`),
     recovery: (msg) => console.log(`\x1b[33m[RECOV]  ${getGMTTime()} - ${msg}\x1b[0m`),
     candle: (msg) => console.log(`\x1b[95m[CANDLE] ${getGMTTime()} - ${msg}\x1b[0m`),
@@ -162,7 +138,7 @@ const CONFIG = {
     MAX_CANDLES_STORED: 300,
     DURATION: 60,
     DURATION_UNIT: 's',
-    MIN_CANDLES_REQUIRED: 82,      // WPR_PERIOD (80) + 2 minimum
+    MIN_CANDLES_REQUIRED: 82,    
 
     // ── Trading Sessions (synthetics trade 24/7) ─────────────
     USE_TRADING_SESSIONS: false,
@@ -184,7 +160,7 @@ const CONFIG = {
 
     // ── Misc ──────────────────────────────────────────────────
     DEBUG_MODE: true,
-    TELEGRAM_ENABLED: false,
+    TELEGRAM_ENABLED: true,
     TELEGRAM_BOT_TOKEN: '8565754902:AAHS6UQWEgLJ0DO-JTpAGQhZLs-UDVVNAQc',
     TELEGRAM_CHAT_ID: '752497117',
 };
@@ -199,7 +175,7 @@ class StakeCalculator {
         const p = pWin && pWin > 0.5 ? pWin : 0.54;
         let stake;
 
-        if (!CONFIG.RECOVERY_ENABLED || recoveryStep <= 0) {
+        if (!CONFIG.RECOVERY_ENABLED) {
             const kelly = b > 0 ? (p * b - (1 - p)) / b : 0;
             const frac = Math.max(0, Math.min(0.5, kelly * 0.5));
             const riskCapital = capital * (CONFIG.BASE_RISK_PERCENT_PER_TRADE / 100);
@@ -361,7 +337,7 @@ class TradeHistoryManager {
 }
 
 // ============================================================
-// STATE PERSISTENCE  [MODIFIED for WPR + normal mode]
+// STATE PERSISTENCE  [MODIFIED for CANDLE DIRECTION + normal mode]
 // ============================================================
 class StatePersistence {
 
@@ -391,12 +367,9 @@ class StatePersistence {
                     consecutiveWins: a.consecutiveWins,
                     consecutiveLosses: a.consecutiveLosses,
                     cooldownCandles: a.cooldownCandles,
-                    // WPR state
-                    wpr: a.wpr,
-                    prevWpr: a.prevWpr,
+                    //  state
                     buyFlagActive: a.buyFlagActive,
                     sellFlagActive: a.sellFlagActive,
-                    breakout: { ...a.breakout },
                     inTradeCycle: a.inTradeCycle,
                     waitingForReentry: a.waitingForReentry,
                     priceReturnedToZone: a.priceReturnedToZone,
@@ -454,12 +427,9 @@ class StatePersistence {
                         a.consecutiveLosses = saved.consecutiveLosses || 0;
                         a.cooldownCandles = saved.cooldownCandles || 0;
 
-                        // WPR state
-                        a.wpr = saved.wpr || -50;
-                        a.prevWpr = saved.prevWpr || -50;
+                        // state
                         a.buyFlagActive = saved.buyFlagActive || false;
                         a.sellFlagActive = saved.sellFlagActive || false;
-                        a.breakout = saved.breakout || { active: false, type: null, highLevel: 0, lowLevel: 0, triggerCandle: 0, canBeReplaced: true };
                         a.inTradeCycle = saved.inTradeCycle || false;
                         a.waitingForReentry = saved.waitingForReentry || false;
                         a.priceReturnedToZone = saved.priceReturnedToZone || false;
@@ -479,7 +449,7 @@ class StatePersistence {
                         a.loss = saved.loss || 0;
                         a.activePositions = (saved.activePositions || []).map(p => ({ ...p }));
 
-                        LOGGER.info(`${symbol}: Rec=${a.recoveryStep} Stake=$${(a.currentStake || 0).toFixed(2)} P/L=$${(a.netPL || 0).toFixed(2)} WPR:${a.wpr.toFixed(1)} Normal:${a.normalModeActive ? a.tradesInNormalMode + '/' + CONFIG.MAX_TRADES_PER_CYCLE : 'off'}`);
+                        LOGGER.info(`${symbol}: Rec=${a.recoveryStep} Stake=$${(a.currentStake || 0).toFixed(2)} P/L=$${(a.netPL || 0).toFixed(2)} | Wins=${a.winsCount} Losses=${a.lossesCount} Trades=${a.tradesCount} | NormalMode=${a.normalModeActive ? 'ON' : 'OFF'}`);
                     }
                 });
             }
@@ -496,7 +466,7 @@ class StatePersistence {
 }
 
 // ============================================================
-// TELEGRAM SERVICE  [MODIFIED for WPR display]
+// TELEGRAM SERVICE  [MODIFIED for CANDLE DIRECTION display]
 // ============================================================
 class TelegramService {
 
@@ -530,7 +500,7 @@ class TelegramService {
         const today = TradeHistoryManager.getTodayStats();
 
         const lines = [
-            `${emoji} <b>WILL BOT v4.0 — ${type}</b>`,
+            `${emoji} <b>CANDLE DIRECTION BOT v1.0 — ${type}</b>`,
             `Pair: <b>${symbol}</b>  Direction: <b>${direction === 'CALLE' ? '\u{1f4c8} CALLE' : '\u{1f4c9} PUTE'}</b>`,
             `Stake: $${stake.toFixed(2)} | Duration: ${duration}${(durationUnit || 's').toUpperCase()}`,
             `Recovery Step: ${a?.recoveryStep ?? 0} | ${TradingSessionManager.getStatusString()}`,
@@ -538,14 +508,13 @@ class TelegramService {
         ];
 
         if (type === 'OPEN' && details.signal) {
-            const sig = details.signal;
-            lines.push(`\u{1f9e0} <b>Signal:</b> ${sig.method || 'WPR'}`);
-            lines.push(`WPR: ${a?.wpr?.toFixed(2) ?? 'N/A'} | Breakout: ${a?.breakout?.type || 'none'}`);
+            // const sig = details.signal;
+            lines.push(`\u{1f9e0} <b>Signal:</b> ${'CANDLE DIRECTION'}`);
             if (a?.breakout?.active) {
                 lines.push(`Levels: H=${a.breakout.highLevel.toFixed(5)} L=${a.breakout.lowLevel.toFixed(5)}`);
             }
             if (a?.normalModeActive) {
-                lines.push(`Normal Mode: ${a.tradesInNormalMode}/${CONFIG.MAX_TRADES_PER_CYCLE} trades`);
+                lines.push(`Normal Mode: ${a.tradesInNormalMode} | Direction: ${a.normalModeDirection}`);
             }
         }
 
@@ -578,12 +547,12 @@ class TelegramService {
             const a = state.assets[sym];
             if (a?.tradesCount > 0) {
                 const normalInfo = a.normalModeActive ? `Nrm:${a.tradesInNormalMode}/${CONFIG.MAX_TRADES_PER_CYCLE}` : '';
-                assetInfo += `\n  ${sym}: ${a.tradesCount}t ${a.winsCount}W/${a.lossesCount}L $${(a.netPL || 0).toFixed(2)} Rec:${a.recoveryStep} WPR:${a.wpr?.toFixed(1)}${normalInfo}`;
+                assetInfo += `\n  ${sym}: ${a.tradesCount}t ${a.winsCount}W/${a.lossesCount}L $${(a.netPL || 0).toFixed(2)} Rec:${a.recoveryStep} ${normalInfo}`;
             }
         });
 
         await this.sendMessage([
-            `⏰ <b>WILL4 v4.0 Hourly</b>`,
+            `⏰ <b>CANDLE DIRECTION BOT v1.0 Hourly</b>`,
             `Last Hour: ${h.trades}t ${h.wins}W/${h.losses}L ${wr}% ${h.pnl >= 0 ? '\u{1f7e2}' : '\u{1f534}'} $${h.pnl.toFixed(2)}`,
             `Today: ${today.tradesCount}t P/L: $${(today.netPL || 0).toFixed(2)}`,
             `Capital: $${state.capital.toFixed(2)}`,
@@ -610,7 +579,7 @@ class TelegramService {
         });
 
         await this.sendMessage([
-            `\u{1f4ca} <b>WILL4 v4.0 SESSION SUMMARY</b>`,
+            `\u{1f4ca} <b>CANDLE DIRECTION BOT v1.0 SESSION SUMMARY</b>`,
             `Duration: ${stats.duration} | Trades: ${stats.trades}`,
             `W: ${stats.wins} | L: ${stats.losses} | Win Rate: ${stats.winRate}`,
             `Session P/L: $${(stats.netPL || 0).toFixed(2)}`,
@@ -631,10 +600,9 @@ class TelegramService {
         });
 
         await this.sendMessage([
-            `\u{1f916} <b>WILL BOT v4.0 STARTED</b>`,
-            `Strategy: Williams %R Breakout + Normal Trading Mode`,
-            `WPR Period: ${CONFIG.WPR_PERIOD} | Overbought: ${CONFIG.WPR_OVERBOUGHT} | Oversold: ${CONFIG.WPR_OVERSOLD}`,
-            `Normal Mode: ${CONFIG.MAX_TRADES_PER_CYCLE} trades per cycle`,
+            `\u{1f916} <b>CANDLE DIRECTION BOT v1.0 STARTED</b>`,
+            `Strategy: Candle Direction + Normal Trading Mode`,
+            `Candle Period: ${CONFIG.CANDLE_PERIOD} | Overbought: ${CONFIG.CANDLE_OVERBOUGHT} | Oversold: ${CONFIG.CANDLE_OVERSOLD}`,
             `Risk: ${CONFIG.BASE_RISK_PERCENT_PER_TRADE}%/trade (cap ${CONFIG.MAX_RISK_PCT}%)`,
             `Recovery: ${CONFIG.RECOVERY_ENABLED ? `single capped step (×${CONFIG.RECOVERY_MULTIPLIER})` : 'Disabled'} — no martingale`,
             `Capital: $${state.capital.toFixed(2)}`,
@@ -730,7 +698,7 @@ class SessionManager {
             LOGGER.info(`Day changed: ${state.currentTradeDay} -> ${today}`);
             const dayStats = TradeHistoryManager.getDayStats(state.currentTradeDay);
             TelegramService.sendMessage(
-                `\u{1f319} <b>WILL4 END OF DAY ${state.currentTradeDay}</b>\nP/L: $${(dayStats?.netPL || 0).toFixed(2)}\nCapital: $${state.capital.toFixed(2)}`
+                `\u{1f319} <b>CANDLE DIRECTION BOT END OF DAY ${state.currentTradeDay}</b>\nP/L: $${(dayStats?.netPL || 0).toFixed(2)}\nCapital: $${state.capital.toFixed(2)}`
             );
             this._resetDailyStats();
             if (!state.session.isActive) {
@@ -813,7 +781,7 @@ class SessionManager {
                 LOGGER.recovery(`[${symbol}] Normal mode PAUSED for recovery`);
             }
 
-            if (CONFIG.RECOVERY_ENABLED && a.recoveryStep < CONFIG.MAX_RECOVERY_STEPS) {
+            if (a.recoveryStep < CONFIG.MAX_RECOVERY_STEPS) {
                 a.recoveryStep++;
             } else {
                 a.recoveryStep = 0;
@@ -827,7 +795,7 @@ class SessionManager {
                 a.forceRecoverDirection = null;
                 LOGGER.warn(`[${symbol}] ${CONFIG.MAX_CONSECUTIVE_LOSSES} consecutive losses — cooling down for ${CONFIG.COOLDOWN_CANDLES} candles`);
                 TelegramService.sendMessage(
-                    `❄️ <b>[${symbol}] WILL4 COOL-DOWN ACTIVATED</b>\n` +
+                    `❄️ <b>[${symbol}] CANDLE DIRECTION BOT COOL-DOWN ACTIVATED</b>\n` +
                     `${CONFIG.MAX_CONSECUTIVE_LOSSES} consecutive losses\n` +
                     `Pausing for ${CONFIG.COOLDOWN_CANDLES} candles\n` +
                     `Capital: $${state.capital.toFixed(2)}`
@@ -842,7 +810,7 @@ class SessionManager {
 }
 
 // ============================================================
-// STATE  [MODIFIED for WPR + normal mode]
+// STATE  [MODIFIED for CANDLE DIRECTION + normal mode]
 // ============================================================
 const state = {
     assets: {},
@@ -917,7 +885,7 @@ class ConnectionManager {
     _openWs(url) {
         try {
             this.ws = new WebSocket(url, {
-                headers: { 'User-Agent': 'willBot4/4.0 (+Node.js)' },
+                headers: { 'User-Agent': 'Bot/1.0 (+Node.js)' },
                 handshakeTimeout: 15000,
             });
         } catch (e) {
@@ -1046,11 +1014,9 @@ class ConnectionManager {
                     tradesCount: 0, winsCount: 0, lossesCount: 0,
                     profit: 0, loss: 0, netPL: 0,
 
-                    // WPR state
-                    wpr: -50, prevWpr: -50,
+                    // state
                     buyFlagActive: false,
                     sellFlagActive: false,
-                    breakout: { active: false, type: null, highLevel: 0, lowLevel: 0, triggerCandle: 0, canBeReplaced: true },
                     inTradeCycle: false,
                     waitingForReentry: false,
                     priceReturnedToZone: false,
@@ -1362,9 +1328,7 @@ class ConnectionManager {
         a.candlesLoaded = true;
 
         LOGGER.info(
-            `[${symbol}] Loaded ${incomingCandles.length} ${CONFIG.TIMEFRAME_LABEL} candles (${addedCount} new merged, total: ${a.closedCandles.length}) |` +
-            `WPR: ${a.wpr.toFixed(2)} |` +
-            `Breakout: ${a.breakout.type || 'none'}`
+            `[${symbol}] Loaded ${incomingCandles.length} ${CONFIG.TIMEFRAME_LABEL} candles (${addedCount} new merged, total: ${a.closedCandles.length}) |`
         );
     }
 
@@ -1385,7 +1349,7 @@ class ConnectionManager {
             this.reconnectAttempts++;
             const delay = Math.min(this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1), 30000);
             LOGGER.info(`Reconnecting in ${(delay / 1000).toFixed(1)}s (attempt ${this.reconnectAttempts})`);
-            TelegramService.sendMessage(`⚠️ <b>WILL4 CONNECTION LOST</b> — Reconnecting (attempt ${this.reconnectAttempts})`);
+            TelegramService.sendMessage(`⚠️ <b>CANDLE DIRECTION BOT CONNECTION LOST</b> — Reconnecting (attempt ${this.reconnectAttempts})`);
 
             this.reconnectTimer = setTimeout(() => {
                 this.reconnectTimer = null;
@@ -1395,7 +1359,7 @@ class ConnectionManager {
             }, delay);
         } else {
             LOGGER.error('Max reconnection attempts reached — giving up');
-            TelegramService.sendMessage(`\u{1f6d1} <b>WILL4 BOT STOPPED</b> — Max reconnections\nFinal P/L: $${(state.session.netPL || 0).toFixed(2)}`);
+            TelegramService.sendMessage(`\u{1f6d1} <b>CANDLE DIRECTION BOT STOPPED</b> — Max reconnections\nFinal P/L: $${(state.session.netPL || 0).toFixed(2)}`);
             process.exit(1);
         }
     }
@@ -1427,7 +1391,7 @@ class ConnectionManager {
 }
 
 // ============================================================
-// MAIN BOT CLASS — v4 WILL (FIXED)
+// MAIN BOT CLASS — v1 CANDLE DIRECTION (FIXED)
 // ============================================================
 class IndexBot {
 
@@ -1450,11 +1414,10 @@ class IndexBot {
 
     async start() {
         console.log('\n' + '═'.repeat(74));
-        console.log(' DERIV CALLE/PUTE BOT v4.0 — WILL (Williams %R Breakout Engine)');
+        console.log(' DERIV CALLE/PUTE BOT v1.0 — CANDLE DIRECTION (Candle Direction Engine)');
         console.log('═'.repeat(74));
         console.log(`Assets    : ${CONFIG.ACTIVE_ASSETS.join(', ')}`);
         console.log(`Timeframe : ${CONFIG.TIMEFRAME_LABEL} candles | Duration: ${CONFIG.DURATION}${CONFIG.DURATION_UNIT}`);
-        console.log(`Strategy  : WPR(${CONFIG.WPR_PERIOD}) cross ${CONFIG.WPR_OVERBOUGHT}/${CONFIG.WPR_OVERSOLD} → Breakout Levels → Normal Mode (${CONFIG.MAX_TRADES_PER_CYCLE} trades)`);
         console.log(`Risk      : cap ${CONFIG.MAX_RISK_PCT}% | Recoup: 1 step ×${CONFIG.RECOVERY_MULTIPLIER} (no martingale)`);
         console.log(`Capital   : $${state.capital.toFixed(2)}`);
         console.log(`Sessions  : ${TradingSessionManager.getStatusString()}`);
@@ -1471,7 +1434,7 @@ class IndexBot {
         TelegramService.startDailyTimer();
         this.startSessionTimeChecker();
 
-        LOGGER.info('WILL Bot v4.0 fully started!');
+        LOGGER.info('CANDLE DIRECTION BOT v1.0 fully started!');
     }
 
     subscribeToCandles(symbol) {
@@ -1505,7 +1468,6 @@ class IndexBot {
     // PRIORITY ORDER:
     //   1. RECOVERY mode — forced trade after loss (retained from v3)
     //   2. NORMAL mode — trade candle direction for N trades
-    //   3. WPR SIGNAL mode — detect WPR cross, set breakout, start normal mode
     // ════════════════════════════════════════════════════════
     processNewCandle(symbol, lastClosedCandle) {
         const a = state.assets[symbol];
@@ -1570,55 +1532,107 @@ class IndexBot {
             return;
         }
 
-        // Detect new WPR signals
+        // Detect new CANDLE DIRECTION signals
         const dir = lastClosedCandle.close > lastClosedCandle.open ? 'CALLE' : 'PUTE';
 
-        if (dir === 'CALLE') {
-            LOGGER.signal(`[${symbol}] BUY SIGNAL — setting breakout levels and starting normal mode`);
-            const setupSuccess = dir === 'CALLE';
+        const mode = a.recoveryStep < 3 ? 'trend' : a.recoveryStep > 6 ? 'trend' : 'range';
 
-            if (setupSuccess) {
-                // Execute first trade as CALLE
-                const firstDir = 'CALLE';
-                a.normalModeActive = true;
-                a.tradesInNormalMode = 1;
-                a.normalModeDirection = firstDir;
-                a.lastTradeDirection = firstDir;
-                a.currentDirection = firstDir;
+        if (mode === 'trend') {
+            if (dir === 'CALLE') {
+                LOGGER.signal(`[${symbol}] BUY SIGNAL`);
+                const setupSuccess = dir === 'CALLE';
 
-                LOGGER.normal(`[${symbol}] NORMAL MODE #1/${CONFIG.MAX_TRADES_PER_CYCLE} \u{1f4c8} CALLE (initial signal trade) | Stake: $${stake.toFixed(2)}`);
+                if (setupSuccess) {
+                    // Execute first trade as CALLE
+                    const firstDir = 'CALLE';
+                    a.normalModeActive = true;
+                    a.tradesInNormalMode = 1;
+                    a.normalModeDirection = firstDir;
+                    a.lastTradeDirection = firstDir;
+                    a.currentDirection = firstDir;
 
-                this._executeBuy(symbol, firstDir, stake, {
-                    method: 'CANDLE_CLOSE_BULLISH',
-                    reason: `CANDLE_CLOSE_BULLISH signal — candle closed above previous candle (bullish pattern)`,
-                });
+                    LOGGER.normal(`[${symbol}] NORMAL MODE #1/${CONFIG.MAX_TRADES_PER_CYCLE} \u{1f4c8} CALLE (initial signal trade) | Stake: $${stake.toFixed(2)}`);
 
-                a.buyFlagActive = false; // consumed
+                    this._executeBuy(symbol, firstDir, stake, {
+                        method: 'CANDLE_CLOSE_BULLISH',
+                        reason: `CANDLE_CLOSE_BULLISH signal — candle closed above previous candle (bullish pattern)`,
+                    });
+
+                    a.buyFlagActive = false; // consumed
+                }
+                return;
+            } else {
+                LOGGER.signal(`[${symbol}] SELL SIGNAL`);
+                const setupSuccess = dir === 'PUTE';
+
+                if (setupSuccess) {
+                    // Execute first trade as PUTE
+                    const firstDir = 'PUTE';
+                    a.normalModeActive = true;
+                    a.tradesInNormalMode = 1;
+                    a.normalModeDirection = firstDir;
+                    a.lastTradeDirection = firstDir;
+                    a.currentDirection = firstDir;
+
+                    LOGGER.normal(`[${symbol}] NORMAL MODE #1/${CONFIG.MAX_TRADES_PER_CYCLE} \u{1f4c9} PUTE (initial signal trade) | Stake: $${stake.toFixed(2)}`);
+
+                    this._executeBuy(symbol, firstDir, stake, {
+                        method: 'CANDLE_CLOSE_BEARISH',
+                        reason: `CANDLE_CLOSE_BEARISH signal — candle closed below previous candle (bearish pattern)`,
+                    });
+
+                    a.sellFlagActive = false; // consumed
+                }
+                return;
             }
-            return;
         } else {
-            LOGGER.signal(`[${symbol}] SELL SIGNAL — setting breakout levels and starting normal mode`);
-            const setupSuccess = dir === 'PUTE';
+            if (dir === 'PUTE') {
+                LOGGER.signal(`[${symbol}] BUY SIGNAL`);
+                const setupSuccess = dir === 'CALLE';
 
-            if (setupSuccess) {
-                // Execute first trade as PUTE
-                const firstDir = 'PUTE';
-                a.normalModeActive = true;
-                a.tradesInNormalMode = 1;
-                a.normalModeDirection = firstDir;
-                a.lastTradeDirection = firstDir;
-                a.currentDirection = firstDir;
+                if (setupSuccess) {
+                    // Execute first trade as CALLE
+                    const firstDir = 'CALLE';
+                    a.normalModeActive = true;
+                    a.tradesInNormalMode = 1;
+                    a.normalModeDirection = firstDir;
+                    a.lastTradeDirection = firstDir;
+                    a.currentDirection = firstDir;
 
-                LOGGER.normal(`[${symbol}] NORMAL MODE #1/${CONFIG.MAX_TRADES_PER_CYCLE} \u{1f4c9} PUTE (initial signal trade) | Stake: $${stake.toFixed(2)}`);
+                    LOGGER.normal(`[${symbol}] NORMAL MODE #1/${CONFIG.MAX_TRADES_PER_CYCLE} \u{1f4c8} CALLE (initial signal trade) | Stake: $${stake.toFixed(2)}`);
 
-                this._executeBuy(symbol, firstDir, stake, {
-                    method: 'CANDLE_CLOSE_BEARISH',
-                    reason: `CANDLE_CLOSE_BEARISH signal — candle closed below previous candle (bearish pattern)`,
-                });
+                    this._executeBuy(symbol, firstDir, stake, {
+                        method: 'CANDLE_CLOSE_BULLISH',
+                        reason: `CANDLE_CLOSE_BULLISH signal — candle closed above previous candle (bullish pattern)`,
+                    });
 
-                a.sellFlagActive = false; // consumed
+                    a.buyFlagActive = false; // consumed
+                }
+                return;
+            } else {
+                LOGGER.signal(`[${symbol}] SELL SIGNAL`);
+                const setupSuccess = dir === 'PUTE';
+
+                if (setupSuccess) {
+                    // Execute first trade as PUTE
+                    const firstDir = 'PUTE';
+                    a.normalModeActive = true;
+                    a.tradesInNormalMode = 1;
+                    a.normalModeDirection = firstDir;
+                    a.lastTradeDirection = firstDir;
+                    a.currentDirection = firstDir;
+
+                    LOGGER.normal(`[${symbol}] NORMAL MODE #1/${CONFIG.MAX_TRADES_PER_CYCLE} \u{1f4c9} PUTE (initial signal trade) | Stake: $${stake.toFixed(2)}`);
+
+                    this._executeBuy(symbol, firstDir, stake, {
+                        method: 'CANDLE_CLOSE_BEARISH',
+                        reason: `CANDLE_CLOSE_BEARISH signal — candle closed below previous candle (bearish pattern)`,
+                    });
+
+                    a.sellFlagActive = false; // consumed
+                }
+                return;
             }
-            return;
         }
 
         // No signal — log status
@@ -1746,7 +1760,7 @@ class IndexBot {
         state.tradeStartTime = null;
 
         TelegramService.sendMessage(
-            `⚠️ <b>WILL4 STUCK TRADE RECOVERED [${reason}]</b>\n` +
+            `⚠️ <b>CANDLE DIRECTION BOT STUCK TRADE RECOVERED [${reason}]</b>\n` +
             `Contract: ${contractId}\n` +
             `⚠️ VERIFY OUTCOME MANUALLY ON DERIV\n` +
             `Capital: $${state.capital.toFixed(2)}`
@@ -1789,12 +1803,8 @@ class IndexBot {
                     cooldownCandles: a.cooldownCandles,
                     trades: a.tradesCount, wins: a.winsCount, losses: a.lossesCount, netPL: a.netPL,
                     lastDirection: a.lastTradeDirection,
-                    wpr: a.wpr,
                     buyFlag: a.buyFlagActive,
                     sellFlag: a.sellFlagActive,
-                    breakoutType: a.breakout.type,
-                    breakoutHigh: a.breakout.highLevel,
-                    breakoutLow: a.breakout.lowLevel,
                     normalMode: a.normalModeActive,
                     normalTrades: a.tradesInNormalMode,
                 };
@@ -1829,7 +1839,7 @@ if (CONFIG.API_TOKEN === 'YOUR_API_TOKEN_HERE') {
     process.exit(1);
 }
 
-console.log('\n\u{1f680} Starting WILL Bot v4.0...\n');
+console.log('\n\u{1f680} Starting CANDLE DIRECTION BOT v1.0...\n');
 bot.connection.connect();
 
 // ── Status display every 60s ──────────────────────────────────
@@ -1856,11 +1866,9 @@ const statusInterval = setInterval(() => {
         const p = status.pairs[sym];
         if (p) {
             const normal = p.normalMode ? `Nrm:${p.normalTrades}/${CONFIG.MAX_TRADES_PER_CYCLE}` : '';
-            const wpr = `WPR:${p.wpr?.toFixed(1) ?? '?'}`;
-            const bk = p.breakoutType ? `Bk:${p.breakoutType}` : '';
             const cdwn = p.cooldownCandles > 0 ? `❄️CD:${p.cooldownCandles}` : '';
 
-            pairLines += `\n  ${sym}: ${wpr} ${p.buyFlag ? '\u{1f7e2}BF' : ''} ${p.sellFlag ? '\u{1f534}SF' : ''} ${bk} Rec${p.recoveryStep} $${(p.currentStake || 0).toFixed(2)} | ${p.trades}t ${p.wins}W/${p.losses}L $${(p.netPL || 0).toFixed(2)} | Pos:${p.activePositions} ${normal}${cdwn}`;
+            pairLines += `\n  ${sym}: ${p.buyFlag ? '\u{1f7e2}BF' : ''} ${p.sellFlag ? '\u{1f534}SF' : ''} Rec${p.recoveryStep} $${(p.currentStake || 0).toFixed(2)} | ${p.trades}t ${p.wins}W/${p.losses}L $${(p.netPL || 0).toFixed(2)} | Pos:${p.activePositions} ${normal}${cdwn}`;
         }
     });
 
