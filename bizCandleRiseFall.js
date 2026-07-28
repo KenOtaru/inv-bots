@@ -1669,8 +1669,8 @@ class IndexBot {
         const total = types.length - 1;
         const alternationRatio = alternations / total;
 
-        // More than 60% alternations → range; otherwise trend
-        const mode = alternationRatio > 0.6 ? 'range' : 'trend';
+        // More than 10% alternations → range; otherwise trend
+        const mode = alternationRatio > 0.1 ? 'range' : 'trend';
 
         LOGGER.debug(`[MarketMode] types=${types.join('')} alt=${alternations} con=${consecutive} ratio=${alternationRatio.toFixed(2)} → ${mode}`);
 
