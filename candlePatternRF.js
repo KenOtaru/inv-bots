@@ -466,11 +466,11 @@ class CandlePatternAnalyzer {
 // ══════════════════════════════════════════════════════════════════════════════
 
 const DEFAULT_CONFIG = {
-  apiToken: 'pat_cb2016855b5e6c61ac95f94432192dd6ed86bec7f7454e575d3fe1ed9f617692',
+  apiToken: 'pat_27a3197287bae3ec6c2c9cbdd68fffaa2a524e3b0a6e1ecf298b5ffb338adb10',
   appId: '33uslPtthXBEkQOdfKfoY',
   accountType: 'demo',
 
-  symbol: 'R_75', // Volatility Index 100 (1s)
+  symbol: 'R_100', // Volatility Index 100
   tickDuration: 60, // seconds (trade duration)
   initialStake: 0.35,
   investmentAmount: 120,
@@ -494,7 +494,7 @@ const DEFAULT_CONFIG = {
     // 0.60 = 60% — the bot will only trade when it's at least 60% sure
     // Increase for fewer but higher-quality trades
     // Decrease for more frequent trading with lower accuracy
-    minConfidence: 0.53,
+    minConfidence: 0.50,
 
     // Pattern lengths to analyze
     // Shorter (3-4): more matches, less specific
@@ -1857,6 +1857,7 @@ class STEPINDEXGridBot {
 
       if (contractId && this.isConnected && this.isAuthorized) {
         this.log(`🔍 Polling contract ${contractId} for current status…`);
+        this._send({ forget_all: 'proposal_open_contract' });
         this._send({
           proposal_open_contract: 1,
           contract_id: contractId,
@@ -1870,8 +1871,8 @@ class STEPINDEXGridBot {
             `— force-releasing lock`,
             'error'
           );
-          this._recoverStuckTrade('watchdog-force');
-        }, timeoutMs);
+          this._recoverStuckTrade('watchdog-timeout');
+        }, 30000);
 
       } else {
         this._recoverStuckTrade('watchdog-offline');
@@ -1976,6 +1977,7 @@ class STEPINDEXGridBot {
       `Contract: ${contractId || 'unknown'}\n` +
       `Grid Level: ${this.currentGridLevel}\n` +
       `Recovery Mode: ${this.inRecoveryMode ? 'YES' : 'NO'}\n` +
+      `⚠️ VERIFY OUTCOME MANUALLY ON DERIV\n` +
       `Action: waiting for next candle + pattern analysis`
     );
 
