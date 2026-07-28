@@ -242,8 +242,8 @@ const CONFIG = Object.freeze({
   hourlySummary: true,
 
   // Persistence/logging
-  stateFile: strEnv('STATE_FILE', 'monte-carlos_differ_0003_state.json'),
-  logFile: strEnv('LOG_FILE', 'monte-carlos_differ_0003_bot.log'),
+  stateFile: strEnv('STATE_FILE', 'monte-carlos_differ_0004_state.json'),
+  logFile: strEnv('LOG_FILE', 'monte-carlos_differ_0004_bot.log'),
   logLevel: strEnv('LOG_LEVEL', 'INFO').toUpperCase(),
 
   // Telegram
