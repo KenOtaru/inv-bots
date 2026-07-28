@@ -508,8 +508,10 @@ class TelegramService {
         ];
 
         if (type === 'OPEN' && details.signal) {
-            // const sig = details.signal;
+            const sig = details.signal;
+            const modeLabel = sig.marketMode === 'trend' ? '\u{1f4c8} TREND' : '\u{1f4c9} RANGE';
             lines.push(`\u{1f9e0} <b>Signal:</b> ${'CANDLE DIRECTION'}`);
+            lines.push(`Market Mode: ${modeLabel}`);
             if (a?.breakout?.active) {
                 lines.push(`Levels: H=${a.breakout.highLevel.toFixed(5)} L=${a.breakout.lowLevel.toFixed(5)}`);
             }
@@ -1535,7 +1537,10 @@ class IndexBot {
         // Detect new CANDLE DIRECTION signals
         const dir = lastClosedCandle.close > lastClosedCandle.open ? 'CALLE' : 'PUTE';
 
-        const mode = a.recoveryStep < 3 ? 'trend' : a.recoveryStep > 6 ? 'trend' : 'range';
+        // const mode = a.recoveryStep < 3 ? 'trend' : a.recoveryStep > 6 ? 'trend' : 'range';
+        //Candle formation of Bullish -> Bearish -> Bullish or Bearish -> Bullish -> Bearish can be considered as a Range, while a series of candles Bullish -> Bullish or Bearish -> Bearish can be considered as a Trend. 
+        // You can implement a function to analyze the last few closed candles and determine if the market is trending or ranging.
+        const mode = this._determineMarketMode(a.closedCandles);
 
         if (mode === 'trend') {
             if (dir === 'CALLE') {
@@ -1556,6 +1561,7 @@ class IndexBot {
                     this._executeBuy(symbol, firstDir, stake, {
                         method: 'CANDLE_CLOSE_BULLISH',
                         reason: `CANDLE_CLOSE_BULLISH signal — candle closed above previous candle (bullish pattern)`,
+                        marketMode: mode,
                     });
 
                     a.buyFlagActive = false; // consumed
@@ -1579,6 +1585,7 @@ class IndexBot {
                     this._executeBuy(symbol, firstDir, stake, {
                         method: 'CANDLE_CLOSE_BEARISH',
                         reason: `CANDLE_CLOSE_BEARISH signal — candle closed below previous candle (bearish pattern)`,
+                        marketMode: mode,
                     });
 
                     a.sellFlagActive = false; // consumed
@@ -1604,6 +1611,7 @@ class IndexBot {
                     this._executeBuy(symbol, firstDir, stake, {
                         method: 'CANDLE_CLOSE_BULLISH',
                         reason: `CANDLE_CLOSE_BULLISH signal — candle closed above previous candle (bullish pattern)`,
+                        marketMode: mode,
                     });
 
                     a.buyFlagActive = false; // consumed
@@ -1627,6 +1635,7 @@ class IndexBot {
                     this._executeBuy(symbol, firstDir, stake, {
                         method: 'CANDLE_CLOSE_BEARISH',
                         reason: `CANDLE_CLOSE_BEARISH signal — candle closed below previous candle (bearish pattern)`,
+                        marketMode: mode,
                     });
 
                     a.sellFlagActive = false; // consumed
@@ -1637,6 +1646,35 @@ class IndexBot {
 
         // No signal — log status
         LOGGER.debug(`[${symbol}] No new trade signal detected — last closed candle: O:${lastClosedCandle.open.toFixed(5)} H:${lastClosedCandle.high.toFixed(5)} L:${lastClosedCandle.low.toFixed(5)} C:${lastClosedCandle.close.toFixed(5)}`);
+    }
+
+    // ── Determine market mode from recent candle sequence ──
+    // Alternating (B→R→B or R→B→R) = range
+    // Consecutive same direction (B→B or R→R) = trend
+    _determineMarketMode(closedCandles) {
+        if (!closedCandles || closedCandles.length < 3) return 'range';
+
+        const recent = closedCandles.slice(-3);
+
+        const types = recent.map(c => (c.close > c.open ? 'B' : 'R'));
+
+        let alternations = 0;
+        let consecutive = 0;
+
+        for (let i = 1; i < types.length; i++) {
+            if (types[i] !== types[i - 1]) alternations++;
+            else consecutive++;
+        }
+
+        const total = types.length - 1;
+        const alternationRatio = alternations / total;
+
+        // More than 60% alternations → range; otherwise trend
+        const mode = alternationRatio > 0.6 ? 'range' : 'trend';
+
+        LOGGER.debug(`[MarketMode] types=${types.join('')} alt=${alternations} con=${consecutive} ratio=${alternationRatio.toFixed(2)} → ${mode}`);
+
+        return mode;
     }
 
     // ── Execute a buy order (CALLE/PUTE) ──────────────────
