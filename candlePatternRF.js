@@ -470,7 +470,7 @@ const DEFAULT_CONFIG = {
   appId: '33uslPtthXBEkQOdfKfoY',
   accountType: 'demo',
 
-  symbol: 'R_100', // Volatility Index 100
+  symbol: 'R_75', // Volatility Index 100
   tickDuration: 60, // seconds (trade duration)
   initialStake: 0.35,
   investmentAmount: 120,
