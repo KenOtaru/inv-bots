@@ -421,7 +421,7 @@ const LOGGER = {
 // TRADE HISTORY MANAGER
 // ══════════════════════════════════════════════════════════════════════════════
 
-const HISTORY_FILE = path.join(__dirname, 'candlePatternRFn-multi-history01005.json');
+const HISTORY_FILE = path.join(__dirname, 'candlePatternRFm-multii-history001.json');
 let tradeHistory = null;
 
 class TradeHistoryManager {

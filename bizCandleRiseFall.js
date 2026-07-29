@@ -733,14 +733,14 @@ class SessionManager {
         });
     }
 
-    static recordTradeResult(symbol, profit, direction) {
+    static recordTradeResult(symbol, profit, direction, stake) {
         const a = state.assets[symbol];
         if (!a) return;
 
         this.checkDayChange();
 
-        // Credit profit/loss back to rolling investment pool (reference bot behavior)
-        state.capital = Number((state.capital + profit).toFixed(2));
+        // Credit stake + profit back to rolling pool (stake deducted on open, so return full payout)
+        state.capital = Number((state.capital + stake + profit).toFixed(2));
 
         const hour = new Date().getUTCHours();
         if (hour !== state.hourlyStats.lastHour) {
@@ -1214,7 +1214,7 @@ class ConnectionManager {
         const pos = a.activePositions[posIdx];
         const profit = Number(contract.profit);
 
-        SessionManager.recordTradeResult(ownerSym, profit, pos.direction);
+        SessionManager.recordTradeResult(ownerSym, profit, pos.direction, pos.stake);
         a.canTrade = true;
 
         TelegramService.sendTradeAlert(
