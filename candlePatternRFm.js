@@ -30,9 +30,9 @@ const CONFIG = {
   ACCOUNT_TYPE: 'demo',
 
   // Capital Settings
-  INITIAL_CAPITAL: 500,
+  INITIAL_CAPITAL: 152,
   SESSION_PROFIT_TARGET: 50000,
-  SESSION_STOP_LOSS: -250,
+  SESSION_STOP_LOSS: -152,
 
   // Telegram
   TELEGRAM_ENABLED: true,
@@ -64,8 +64,8 @@ const DEFAULT_ASSET_CONFIG = {
   // Candle Settings
   GRANULARITY: 60,
   TIMEFRAME_LABEL: '1m',
-  MAX_CANDLES_STORED: 4,
-  CANDLES_TO_LOAD: 30,
+  MAX_CANDLES_STORED: 5000,
+  CANDLES_TO_LOAD: 5000,
 
   // Trade Duration
   DURATION: 1,
@@ -73,7 +73,7 @@ const DEFAULT_ASSET_CONFIG = {
 
   // Stake Settings
   INITIAL_STAKE: 0.35,
-  INVESTMENT_AMOUNT: 153,
+  INVESTMENT_AMOUNT: 152,
 
   // Martingale Settings
   MARTINGALE_MULTIPLIER: 1.48,
@@ -87,7 +87,7 @@ const DEFAULT_ASSET_CONFIG = {
   COMPOUND_PERCENTAGE: 0.24,
 
   // Risk Management
-  STOP_LOSS: 153,
+  STOP_LOSS: 321,
   TAKE_PROFIT: 10000,
 
   // Pattern Analysis Settings
@@ -95,7 +95,7 @@ const DEFAULT_ASSET_CONFIG = {
   MIN_AGREEMENT_RATIO_CONFIDENCE: 0.50, //0.91
   MIN_PATTERN_CONFIDENCE: 0.50, //0.91
   MIN_PATTERN_CONFIDENCE_STEP_RNG: 0.50, // 0.91
-  PATTERN_LENGTHS: [2], //[3, 4, 5, 6, 7, 8]
+  PATTERN_LENGTHS: [3], //[3, 4, 5, 6, 7, 8]
   PATTERN_MIN_OCCURRENCES: 1,
   PATTERN_RECENCY_DECAY: 0.9990,
   PATTERN_DOJI_THRESHOLD: 0.00001
@@ -1767,7 +1767,12 @@ class DerivPatternBot {
       return;
     }
 
-    // Capital check
+    // Authorization / capital checks
+    if (!state.isAuthorized) {
+      LOGGER.warn(`[${symbol}] Not authorized yet — cannot place trade`);
+      return;
+    }
+
     if (state.capital < assetState.currentStake) {
       LOGGER.warn(`[${symbol}] Insufficient capital`);
       return;
@@ -1825,6 +1830,21 @@ class DerivPatternBot {
     if (!direction) return;
 
     const stake = assetState.currentStake;
+    // Stake / investmentRemaining checks (match reference behavior)
+    if (stake > assetState.investmentRemaining) {
+      LOGGER.error(`[${symbol}] Insufficient investment: stake $${stake} > remaining $${assetState.investmentRemaining.toFixed(2)}`);
+      assetState.canTrade = false;
+      return;
+    }
+    if (stake > state.capital) {
+      LOGGER.error(`[${symbol}] Insufficient balance: stake $${stake} > capital $${state.capital.toFixed(2)}`);
+      assetState.canTrade = false;
+      return;
+    }
+
+    // Deduct investment immediately as in reference
+    assetState.investmentRemaining = Number((assetState.investmentRemaining - stake).toFixed(2));
+    state.capital = Number((state.capital - stake).toFixed(2));
     const duration = assetConfig.DURATION;
     const durationUnit = assetConfig.DURATION_UNIT;
 
@@ -1848,6 +1868,11 @@ class DerivPatternBot {
     };
 
     assetState.activePositions.push(position);
+
+    // Global trade lock / pending info (reference bot uses global state)
+    state.tradeInProgress = true;
+    state.currentContractId = null;
+    state.pendingTradeInfo = { symbol, stake, direction, time: Date.now() };
 
     // Send enhanced Telegram notification
     TelegramService.sendTradeAlert('OPEN', symbol, direction, stake, `${duration}${durationUnit}`, {
