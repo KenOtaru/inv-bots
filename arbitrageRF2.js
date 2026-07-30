@@ -69,7 +69,7 @@ const DEFAULT_ASSET_CONFIG = {
 
   // Trade Duration
   DURATION: 2,
-  DURATION_UNIT: 's',
+  DURATION_UNIT: 't',
 
   // Stake Settings
   INITIAL_STAKE: 0.35,
