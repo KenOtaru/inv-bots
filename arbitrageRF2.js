@@ -68,7 +68,7 @@ const DEFAULT_ASSET_CONFIG = {
   CANDLES_TO_LOAD: 5000,
 
   // Trade Duration
-  DURATION: 2,
+  DURATION: 3,
   DURATION_UNIT: 't',
 
   // Stake Settings
