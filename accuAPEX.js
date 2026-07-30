@@ -142,7 +142,7 @@ const CONFIG = Object.freeze({
   // assets: ('R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,BOOM50,BOOM150N,BOOM300N,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH50,CRASH150N,CRASH300N,CRASH500,CRASH600,CRASH900,CRASH1000')
   //   .split(',').map(s => s.trim()).filter(Boolean),
 
-  assets: ('R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH500,CRASH600,CRASH900,CRASH1000')
+  assets: ('R_10,R_25,R_50,R_75,R_100,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH500,CRASH600,CRASH900,CRASH1000')
     .split(',').map(s => s.trim()).filter(Boolean),
 
   // ─ Telegram ─
@@ -279,14 +279,14 @@ const CONFIG = Object.freeze({
   //   Max entries per post-spike window per asset. After a spike fires,
   //   the bot has a limited exploitable window. Re-entering too many
   //   times in the same window increases exposure to the next spike.
-  maxEntriesPerSpikeWindow : parseInt('3', 10),
+  maxEntriesPerSpikeWindow : parseInt('2', 10),
 
   //   Cooldown after a loss on a specific asset (ms). Prevents
   //   re-entering the same asset immediately after a loss.
   assetLossCooldownMs      : parseInt('120000', 10),  // 2 minutes
 
   //   After N consecutive losses on one asset, pause that asset entirely.
-  assetMaxConsecutiveLosses: parseInt('3', 10),
+  assetMaxConsecutiveLosses: parseInt('5', 10),
 
   //   How long to pause an asset after hitting consecutive loss limit (ms).
   assetPauseDurationMs     : parseInt('600000', 10),  // 10 minutes
