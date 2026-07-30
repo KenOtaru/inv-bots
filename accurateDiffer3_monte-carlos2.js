@@ -131,11 +131,11 @@ const CONFIG = Object.freeze({
   currency: 'USD',
 
   // Trade setup
-  stake: 1.1,
+  stake: 10.1,
   durationTicks: 1, // Digit contracts normally 1-10 ticks
-  minStake: 1.1,
+  minStake: 10.1,
   maxStake: 150.00,
-  assets: ['R_50','R_75','RDBULL'],//'1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V','R_10','R_25','R_50','R_75','RDBULL','RDBEAR'
+  assets: ['R_50','R_75','RDBULL'],//'R_50','R_75','RDBULL' //'1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V','R_10','R_25','R_50','R_75','RDBULL','RDBEAR'
 
   // Trading frequency / limits
   tickWindow: 1000,
@@ -158,7 +158,7 @@ const CONFIG = Object.freeze({
   assetRotationMs: 60_000,
   dailyMaxLoss: 570,
   dailyMaxProfit: 0, // 0 disables profit target stop
-  dailyMaxTrades: 20000,
+  dailyMaxTrades: 1,
 
   // ── Monte Carlo Analysis ────────────────────────────────────────
   mcSimulations:         10000,   // MC simulation trials
@@ -242,8 +242,8 @@ const CONFIG = Object.freeze({
   hourlySummary: true,
 
   // Persistence/logging
-  stateFile: strEnv('STATE_FILE', 'monte-carlos_differ_0002_state.json'),
-  logFile: strEnv('LOG_FILE', 'monte-carlos_differ_0002_bot.log'),
+  stateFile: strEnv('STATE_FILE', 'monte-carlos_differ2_0001_state.json'),
+  logFile: strEnv('LOG_FILE', 'monte-carlos_differ2_0001_bot.log'),
   logLevel: strEnv('LOG_LEVEL', 'INFO').toUpperCase(),
 
   // Telegram
