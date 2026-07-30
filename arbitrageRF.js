@@ -35,7 +35,7 @@ const CONFIG = {
   SESSION_STOP_LOSS: -152,
 
   // Telegram
-  TELEGRAM_ENABLED: false,
+  TELEGRAM_ENABLED: true,
   TELEGRAM_BOT_TOKEN: '8565754902:AAHS6UQWEgLJ0DO-JTpAGQhZLs-UDVVNAQc',
   TELEGRAM_CHAT_ID: '752497117',
 
@@ -833,7 +833,7 @@ class TelegramService {
         const confPct = ((analysis?.confidence || 0) * 100).toFixed(1);
         const bestConf = bestPattern && bestPattern.confidence ? (bestPattern.confidence * 100).toFixed(1) + '%' : 'N/A';
         analysisDetails = `
-        🧠 <b>PATTERN ANALYSIS:</b>
+        🧠 <b>ARBITRAGE PATTERN ANALYSIS:</b>
         📊 Confidence: ${confPct}%
         📊 Pattern Occurrence: ${analysis?.patternOccurrence || 0}
         🤝 Agreement: ${agreementRatio}%
@@ -866,7 +866,7 @@ class TelegramService {
     const recoveryStatus = asset?.isRecovery ? '🔄 RECOVERY' : '🎯 NORMAL';
 
     const msg = `
-        ${emoji} <b>${type} TRADE ALERT - ${recoveryStatus}</b>
+        ${emoji} <b>${type} ARBITRAGE TRADE ALERT - ${recoveryStatus}</b>
 
         📊 Asset: ${symbol}
         📈 Direction: ${direction === 'CALLE' ? 'RISE 📈' : 'FALL 📉'}
@@ -899,7 +899,7 @@ class TelegramService {
     });
 
     await this.sendMessage([
-      `⏰ <b>Pattern Bot Hourly Summary</b>`,
+      `⏰ <b>ARBITRAGE Pattern Bot Hourly Summary</b>`,
       `Last Hour: ${h.trades}t ${h.wins}W/${h.losses}L ${wr}% ${h.pnl >= 0 ? '🟢' : '🔴'} $${h.pnl.toFixed(2)}`,
       `Today: ${today.tradesCount}t P/L: $${(today.netPL || 0).toFixed(2)}`,
       `Loss Stats: x2:${today.x2Losses || 0} x3:${today.x3Losses || 0} x4:${today.x4Losses || 0} x5:${today.x5Losses || 0} x6:${today.x6Losses || 0} x7:${today.x7Losses || 0} x8:${today.x8Losses || 0} x9:${today.x9Losses || 0}`,
@@ -939,7 +939,7 @@ class TelegramService {
     });
 
     await this.sendMessage([
-      `🤖 <b>MULTI-ASSET PATTERN BOT STARTED</b>`,
+      `🤖 <b>MULTI-ASSET ARBITRAGE PATTERN BOT STARTED</b>`,
       `Strategy: Candle Pattern Recognition + Grid Martingale`,
       `Risk: Martingale progression with cap $${CONFIG.INVESTMENT_AMOUNT}`,
       `Recovery: ${CONFIG.USE_RECOVERY_STRATEGY ? 'ENABLED (immediate same-direction retry)' : 'DISABLED (wait for pattern analysis)'}`,
@@ -966,7 +966,7 @@ class TelegramService {
     });
 
     await this.sendMessage([
-      `📊 <b>CANDLE PATTERN BOT SESSION SUMMARY</b>`,
+      `📊 <b>ARBITRAGE CANDLE PATTERN BOT SESSION SUMMARY</b>`,
       `Duration: ${stats.duration} | Trades: ${stats.trades}`,
       `W: ${stats.wins} | L: ${stats.losses} | Win Rate: ${stats.winRate}`,
       `Session P/L: $${(stats.netPL || 0).toFixed(2)}`,
