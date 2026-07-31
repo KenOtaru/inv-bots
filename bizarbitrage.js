@@ -79,8 +79,8 @@ class RestClient {
 // ============================================================
 // FILE PATHS  [RETAINED]
 // ============================================================
-const STATE_FILE = path.join(__dirname, 'bizCandle_010-state.json');
-const HISTORY_FILE = path.join(__dirname, 'bizCandle_010-history.json');
+const STATE_FILE = path.join(__dirname, 'bizArbitrage_01-state.json');
+const HISTORY_FILE = path.join(__dirname, 'bizArbitrage_01-history.json');
 const STATE_SAVE_INTERVAL = 5000;  // ms
 
 // ============================================================
@@ -106,36 +106,29 @@ const LOGGER = {
 // ============================================================
 const CONFIG = {
     // ── Deriv API [RETAINED credentials] ─────────────────────
-    API_TOKEN: 'pat_cb2016855b5e6c61ac95f94432192dd6ed86bec7f7454e575d3fe1ed9f617692', //pat_cb2016855b5e6c61ac95f94432192dd6ed86bec7f7454e575d3fe1ed9f617692  //pat_8e0a3285bd6e74f52a67985b8069f4bea42aa96ce65d129c60ebb838ed1065ee
+    API_TOKEN: 'pat_27a3197287bae3ec6c2c9cbdd68fffaa2a524e3b0a6e1ecf298b5ffb338adb10',
     APP_ID: '33uslPtthXBEkQOdfKfoY',
-    ACCOUNT_TYPE: 'demo',          // 'demo' | 'real' (PAT mode only)
+    ACCOUNT_TYPE: 'demo',
     WS_URL: 'wss://ws.derivws.com/websockets/v3',
 
-    // ── Martingale / staking settings mirrored from candlePatternRFm.js ─
-    INITIAL_STAKE: 0.35,
-    INVESTMENT_AMOUNT: 152,
-    MARTINGALE_MULTIPLIER: 1.48,
-    MAX_MARTINGALE_LEVEL: 1,
-    AFTER_MAX_LOSS: 'continue',
-    CONTINUE_EXTRA_LEVELS: 8,
-    EXTRA_LEVEL_MULTIPLIERS: [1.8, 2.1, 2.1, 2.1, 2.1, 2.1, 2.1],
-    AUTO_COMPOUNDING: true,
-    COMPOUND_PERCENTAGE: 0.24,
-    STOP_LOSS: 152,
+    // ── Recovery Strategy (from arbitrageRF.js) ──────────────
+    // When enabled: After a loss, trade immediately on next candle in SAME direction (no analysis)
+    // When disabled: After a loss, wait for pattern analysis signal
+    USE_RECOVERY_STRATEGY: false,
 
     // ── Session / daily guards ───────────────────
     SESSION_PROFIT_TARGET: 500000,
     SESSION_STOP_LOSS: -152,
     COOLDOWN_CANDLES: 5,
 
-    // ── Candle / Contract Settings [RETAINED] ────────────────
-    GRANULARITY: 60,     // 1-minute candles
+    // ── Candle / Contract Settings (defaults, overridable per asset) ──
+    GRANULARITY: 60,
     TIMEFRAME_LABEL: '1m',
-    CANDLES_TO_LOAD: 200,
-    MAX_CANDLES_STORED: 300,
-    DURATION: 1,
-    DURATION_UNIT: 'm',
-    MIN_CANDLES_REQUIRED: 82,    
+    CANDLES_TO_LOAD: 5000,
+    MAX_CANDLES_STORED: 5000,
+    DURATION: 2,
+    DURATION_UNIT: 't',
+    MIN_CANDLES_REQUIRED: 82,
 
     // ── Trading Sessions (synthetics trade 24/7) ─────────────
     USE_TRADING_SESSIONS: false,
@@ -151,9 +144,7 @@ const CONFIG = {
 
     // ── Active Index Assets ───────────────────────────────────
     ACTIVE_ASSETS: [
-        'R_75',
-        // 'R_100',
-        // 'stpRNG',
+        'stpRNG',
     ],
 
     // ── Misc ──────────────────────────────────────────────────
@@ -162,6 +153,261 @@ const CONFIG = {
     TELEGRAM_BOT_TOKEN: '8565754902:AAHS6UQWEgLJ0DO-JTpAGQhZLs-UDVVNAQc',
     TELEGRAM_CHAT_ID: '752497117',
 };
+
+// ============================================================
+// PER-ASSET CONFIGURATION (from arbitrageRF.js)
+// ============================================================
+const DEFAULT_ASSET_CONFIG = {
+    // Candle Settings
+    GRANULARITY: 60,
+    TIMEFRAME_LABEL: '1m',
+    MAX_CANDLES_STORED: 5000,
+    CANDLES_TO_LOAD: 5000,
+
+    // Trade Duration
+    DURATION: 2,
+    DURATION_UNIT: 't',
+
+    // Stake Settings
+    INITIAL_STAKE: 0.35,
+    INVESTMENT_AMOUNT: 152,
+
+    // Martingale Settings
+    MARTINGALE_MULTIPLIER: 4,
+    MAX_MARTINGALE_LEVEL: 1,
+    AFTER_MAX_LOSS: 'continue',
+    CONTINUE_EXTRA_LEVELS: 4,
+    EXTRA_LEVEL_MULTIPLIERS: [4, 4, 4, 4],
+
+    // Auto-Compounding
+    AUTO_COMPOUNDING: true,
+    COMPOUND_PERCENTAGE: 0.24,
+
+    // Risk Management
+    STOP_LOSS: 152,
+
+    // Pattern Analysis Settings
+    PATTERN_MIN_CONFIDENCE: 0.50,
+    MIN_PATTERN_CONFIDENCE: 0.50,
+    MIN_PATTERN_CONFIDENCE_STEP_RNG: 0.50,
+    PATTERN_LENGTHS: [3],
+    PATTERN_MIN_OCCURRENCES: 1,
+    PATTERN_RECENCY_DECAY: 0.9990,
+    PATTERN_DOJI_THRESHOLD: 0.00001,
+};
+
+const ASSET_CONFIGS = {
+    // 'R_75': {
+    //     INITIAL_STAKE: 0.35,
+    //     INVESTMENT_AMOUNT: 153,
+    //     MARTINGALE_MULTIPLIER: 1.48,
+    //     MAX_MARTINGALE_LEVEL: 1
+    // },
+};
+
+function getAssetConfig(symbol) {
+    const overrides = ASSET_CONFIGS[symbol] || {};
+    return { ...DEFAULT_ASSET_CONFIG, ...overrides };
+}
+
+// ============================================================
+// CANDLE PATTERN ANALYZER CLASS (from arbitrageRF.js)
+// ============================================================
+class CandlePatternAnalyzer {
+    constructor(options = {}) {
+        this.minConfidence = options.minConfidence || 0.60;
+        this.patternLengths = options.patternLengths || [3, 4, 5, 6, 7, 8];
+        this.minOccurrences = options.minOccurrences || 5;
+        this.recencyDecay = options.recencyDecay || 0.9990;
+        this.dojiThreshold = options.dojiThreshold || 0.00001;
+        this.lastAnalysis = null;
+        this.lastAnalysisTime = 0;
+    }
+
+    classifyCandle(candle) {
+        const bodySize = Math.abs(candle.close - candle.open);
+        const threshold = candle.open * this.dojiThreshold;
+        if (bodySize <= threshold) return 'D';
+        if (candle.close > candle.open) return 'B';
+        return 'R';
+    }
+
+    classifyAll(candles) {
+        return candles.map(c => this.classifyCandle(c));
+    }
+
+    analyze(closedCandles) {
+        const maxPatLen = Math.max(...this.patternLengths);
+        if (closedCandles.length < maxPatLen) {
+            return {
+                shouldTrade: false,
+                direction: null,
+                confidence: 0,
+                reason: `Insufficient candle history: ${closedCandles.length} candles`,
+                details: {}
+            };
+        }
+
+        const types = this.classifyAll(closedCandles);
+        const totalCandles = types.length;
+        const patternResults = [];
+
+        for (const patLen of this.patternLengths) {
+            if (totalCandles < patLen + 1) continue;
+
+            const currentPattern = types.slice(totalCandles - patLen);
+            let bullishWeightedSum = 0;
+            let bearishWeightedSum = 0;
+            let dojiWeightedSum = 0;
+            let totalWeight = 0;
+            let rawOccurrences = 0;
+
+            const searchEnd = totalCandles - patLen - 1;
+
+            for (let i = 0; i <= searchEnd; i++) {
+                let matches = true;
+                for (let j = 0; j < patLen; j++) {
+                    if (types[i + j] !== currentPattern[j]) {
+                        matches = false;
+                        break;
+                    }
+                }
+
+                if (matches) {
+                    const nextType = types[i + patLen];
+                    const distanceFromPresent = searchEnd - i;
+                    const weight = Math.pow(this.recencyDecay, distanceFromPresent);
+
+                    rawOccurrences++;
+                    totalWeight += weight;
+
+                    if (nextType === 'B') bullishWeightedSum += weight;
+                    else if (nextType === 'R') bearishWeightedSum += weight;
+                    else dojiWeightedSum += weight;
+                }
+            }
+
+            if (rawOccurrences < this.minOccurrences) continue;
+
+            const decisiveWeight = bullishWeightedSum + bearishWeightedSum;
+            if (decisiveWeight === 0) continue;
+
+            const bullProb = bullishWeightedSum / decisiveWeight;
+            const bearProb = bearishWeightedSum / decisiveWeight;
+            const confidence = Math.max(bullProb, bearProb);
+            const direction = bullProb > bearProb ? 'CALLE' : 'PUTE';
+
+            patternResults.push({
+                patternLength: patLen,
+                pattern: currentPattern.join(''),
+                direction,
+                confidence,
+                bullProb,
+                bearProb,
+                rawOccurrences,
+                totalWeight: totalWeight.toFixed(2),
+                decisiveWeight: decisiveWeight.toFixed(2)
+            });
+        }
+
+        if (patternResults.length === 0) {
+            return {
+                shouldTrade: false,
+                direction: null,
+                confidence: 0,
+                reason: 'No patterns met minimum occurrence threshold',
+                details: { patternResults: [] }
+            };
+        }
+
+        let consensusBullScore = 0;
+        let consensusBearScore = 0;
+        let totalVoteWeight = 0;
+
+        for (const r of patternResults) {
+            const voteWeight = Math.sqrt(r.rawOccurrences) * Math.sqrt(r.patternLength);
+            consensusBullScore += voteWeight * r.bullProb;
+            consensusBearScore += voteWeight * r.bearProb;
+            totalVoteWeight += voteWeight;
+        }
+
+        const finalBullProb = consensusBullScore / totalVoteWeight;
+        const finalBearProb = consensusBearScore / totalVoteWeight;
+        const consensusConfidence = Math.max(finalBullProb, finalBearProb);
+        const consensusDirection = finalBullProb > finalBearProb ? 'CALLE' : 'PUTE';
+
+        patternResults.sort((a, b) => b.confidence - a.confidence);
+        const bestPattern = patternResults[0];
+
+        const agreeingPatterns = patternResults.filter(r => r.direction === consensusDirection);
+        const agreementRatio = agreeingPatterns.length / patternResults.length;
+
+        const finalDirection = consensusDirection;
+        const finalConfidence = consensusConfidence;
+        const decisionMethod = 'CONSENSUS+BEST_AGREE';
+        const patternOccurrence = bestPattern.rawOccurrences;
+
+        const shouldTrade = finalConfidence >= this.minConfidence;
+
+        let reason;
+        if (shouldTrade) {
+            const dirLabel = finalDirection === 'CALLE' ? 'BULLISH' : 'BEARISH';
+            reason = `Pattern analysis predicts ${dirLabel} with ${(finalConfidence * 100).toFixed(1)}% confidence`;
+        } else {
+            reason = `Confidence ${(finalConfidence * 100).toFixed(1)}% below threshold ${(this.minConfidence * 100).toFixed(1)}%`;
+        }
+
+        this.lastAnalysis = {
+            shouldTrade,
+            direction: shouldTrade ? finalDirection : null,
+            confidence: finalConfidence,
+            reason,
+            patternOccurrence: patternOccurrence,
+            details: {
+                patternResults,
+                consensus: {
+                    direction: consensusDirection,
+                    confidence: consensusConfidence,
+                    bullProb: finalBullProb,
+                    bearProb: finalBearProb,
+                    agreementRatio
+                },
+                bestPattern,
+                decisionMethod,
+                totalCandlesAnalyzed: totalCandles,
+                timestamp: Date.now()
+            }
+        };
+        this.lastAnalysisTime = Date.now();
+
+        return this.lastAnalysis;
+    }
+
+    getAnalysisSummary(result) {
+        if (!result || !result.details || !result.details.patternResults) {
+            return 'No analysis available';
+        }
+
+        const lines = [];
+        lines.push(`📊 Pattern Analysis (${result.details.totalCandlesAnalyzed} candles):`);
+        lines.push(`   Decision: ${result.details.decisionMethod}`);
+
+        for (const r of result.details.patternResults) {
+            const dirIcon = r.direction === 'CALLE' ? '🟢' : '🔴';
+            lines.push(
+                `   L${r.patternLength} "${r.pattern}" → ${dirIcon} ${(r.confidence * 100).toFixed(1)}% (${r.rawOccurrences} matches)`
+            );
+        }
+
+        if (result.shouldTrade) {
+            lines.push(`   ✅ SIGNAL: ${result.direction} @ ${(result.confidence * 100).toFixed(1)}%`);
+        } else {
+            lines.push(`   ⏳ NO TRADE: ${(result.confidence * 100).toFixed(1)}% < ${(this.minConfidence * 100).toFixed(1)}%`);
+        }
+
+        return lines.join('\n');
+    }
+}
 
 // ============================================================
 // STAKE CALCULATOR — auto-compounding + martingale (from reference bot)
@@ -175,40 +421,42 @@ const CONFIG = {
 //
 class StakeCalculator {
 
-    static getBaseStake(investmentRemaining) {
-        if (CONFIG.AUTO_COMPOUNDING && investmentRemaining > 0) {
+    static getBaseStake(symbol, investmentRemaining) {
+        const cfg = getAssetConfig(symbol);
+        if (cfg.AUTO_COMPOUNDING && investmentRemaining > 0) {
             return Math.max(
-                Number((investmentRemaining * CONFIG.COMPOUND_PERCENTAGE / 100).toFixed(2)),
-                CONFIG.INITIAL_STAKE
+                Number((investmentRemaining * cfg.COMPOUND_PERCENTAGE / 100).toFixed(2)),
+                cfg.INITIAL_STAKE
             );
         }
-        return CONFIG.INITIAL_STAKE;
+        return cfg.INITIAL_STAKE;
     }
 
-    static calculate(investmentRemaining, martingaleLevel = 0) {
+    static calculate(symbol, martingaleLevel, investmentRemaining) {
+        const cfg = getAssetConfig(symbol);
         const level = Math.max(0, martingaleLevel || 0);
-        let base = this.getBaseStake(investmentRemaining);
-        base = Math.max(base, CONFIG.INITIAL_STAKE);
+        let base = this.getBaseStake(symbol, investmentRemaining);
+        base = Math.max(base, cfg.INITIAL_STAKE);
 
         let stake;
-        if (level <= CONFIG.MAX_MARTINGALE_LEVEL) {
-            stake = base * Math.pow(CONFIG.MARTINGALE_MULTIPLIER, level);
+        if (level <= cfg.MAX_MARTINGALE_LEVEL) {
+            stake = base * Math.pow(cfg.MARTINGALE_MULTIPLIER, level);
         } else {
-            stake = base * Math.pow(CONFIG.MARTINGALE_MULTIPLIER, CONFIG.MAX_MARTINGALE_LEVEL);
-            const extraIdx = level - CONFIG.MAX_MARTINGALE_LEVEL - 1;
+            stake = base * Math.pow(cfg.MARTINGALE_MULTIPLIER, cfg.MAX_MARTINGALE_LEVEL);
+            const extraIdx = level - cfg.MAX_MARTINGALE_LEVEL - 1;
             for (let i = 0; i <= extraIdx; i++) {
-                stake *= (CONFIG.EXTRA_LEVEL_MULTIPLIERS[i] || CONFIG.MARTINGALE_MULTIPLIER);
+                stake *= (cfg.EXTRA_LEVEL_MULTIPLIERS[i] || cfg.MARTINGALE_MULTIPLIER);
             }
         }
 
         // Cap at remaining investment pool
         stake = Math.min(stake, investmentRemaining > 0 ? investmentRemaining : stake);
-        stake = Math.max(CONFIG.INITIAL_STAKE, stake);
+        stake = Math.max(cfg.INITIAL_STAKE, stake);
         return parseFloat(stake.toFixed(2));
     }
 
-    static describe(investmentRemaining, martingaleLevel) {
-        const stake = this.calculate(investmentRemaining, martingaleLevel);
+    static describe(symbol, investmentRemaining, martingaleLevel) {
+        const stake = this.calculate(symbol, martingaleLevel, investmentRemaining);
         const pct = investmentRemaining > 0 ? ((stake / investmentRemaining) * 100).toFixed(2) : '0.00';
         return `$${stake.toFixed(2)} (${pct}% pool, martingale level ${martingaleLevel})`;
     }
@@ -386,9 +634,11 @@ class StatePersistence {
                     candlesLoaded: a.candlesLoaded,
                     lastTradeDirection: a.lastTradeDirection,
                     lastTradeWasWin: a.lastTradeWasWin,
+                    isRecovery: a.isRecovery,
                     forceRecoverDirection: a.forceRecoverDirection,
                     recoveryStep: a.recoveryStep,
                     currentStake: a.currentStake,
+                    baseStake: a.baseStake,
                     martingaleLevel: a.martingaleLevel,
                     investmentRemaining: a.investmentRemaining,
                     consecutiveWins: a.consecutiveWins,
@@ -447,11 +697,13 @@ class StatePersistence {
                         a.candlesLoaded = false;
                         a.lastTradeDirection = saved.lastTradeDirection || null;
                         a.lastTradeWasWin = saved.lastTradeWasWin ?? null;
+                        a.isRecovery = saved.isRecovery || false;
                         a.forceRecoverDirection = saved.forceRecoverDirection ?? null;
                         a.recoveryStep = saved.recoveryStep || 0;
                         a.martingaleLevel = saved.martingaleLevel || 0;
-                        a.currentStake = saved.currentStake || StakeCalculator.calculate(a.investmentRemaining);
-                        a.investmentRemaining = saved.investmentRemaining || CONFIG.INVESTMENT_AMOUNT;
+                        a.currentStake = saved.currentStake || StakeCalculator.calculate(symbol, 0, a.investmentRemaining);
+                        a.baseStake = saved.baseStake || StakeCalculator.getBaseStake(symbol, a.investmentRemaining);
+                        a.investmentRemaining = saved.investmentRemaining || getAssetConfig(symbol).INVESTMENT_AMOUNT;
                         a.consecutiveWins = saved.consecutiveWins || 0;
                         a.consecutiveLosses = saved.consecutiveLosses || 0;
                         a.cooldownCandles = saved.cooldownCandles || 0;
@@ -528,45 +780,67 @@ class TelegramService {
         const overall = TradeHistoryManager.getOverallStats();
         const today = TradeHistoryManager.getTodayStats();
 
-        const lines = [
-            `${emoji} <b>CANDLE DIRECTION BOT v1.0 — ${type}</b>`,
-            `Pair: <b>${symbol}</b>  Direction: <b>${direction === 'CALLE' ? '\u{1f4c8} CALLE' : '\u{1f4c9} PUTE'}</b>`,
-            `Stake: $${stake.toFixed(2)} | Duration: ${duration}${(durationUnit || 's').toUpperCase()}`,
-            `Recovery Step: ${a?.recoveryStep ?? 0} | ${TradingSessionManager.getStatusString()}`,
-            ``,
-        ];
-
-        if (type === 'OPEN' && details.signal) {
-            const sig = details.signal;
-            const modeLabel = sig.marketMode === 'trend' ? '\u{1f4c8} TREND' : '\u{1f4c9} RANGE';
-            lines.push(`\u{1f9e0} <b>Signal:</b> ${'CANDLE DIRECTION'}`);
-            lines.push(`Market Mode: ${modeLabel}`);
-            if (a?.breakout?.active) {
-                lines.push(`Levels: H=${a.breakout.highLevel.toFixed(5)} L=${a.breakout.lowLevel.toFixed(5)}`);
-            }
-            if (a?.normalModeActive) {
-                lines.push(`Normal Mode: ${a.tradesInNormalMode} | Direction: ${a.normalModeDirection}`);
+        // Build analysis details for OPEN trades
+        let analysisDetails = '';
+        if (type === 'OPEN' && details) {
+            if (details.isRecovery) {
+                analysisDetails = `
+        🔄 <b>RECOVERY MODE: YES</b>
+        ⚡ Same direction as loss trade (NO pattern analysis)`;
+            } else if (details.analysis) {
+                const analysis = details.analysis;
+                const agreementRatio = analysis?.details?.consensus?.agreementRatio
+                    ? (analysis.details.consensus.agreementRatio * 100).toFixed(0)
+                    : 'N/A';
+                const bestPattern = analysis?.details?.bestPattern;
+                const confPct = ((analysis?.confidence || 0) * 100).toFixed(1);
+                const bestConf = bestPattern && bestPattern.confidence ? (bestPattern.confidence * 100).toFixed(1) + '%' : 'N/A';
+                analysisDetails = `
+        🧠 <b>ARBITRAGE PATTERN ANALYSIS:</b>
+        📊 Confidence: ${confPct}%
+        📊 Pattern Occurrence: ${analysis?.patternOccurrence || 0}
+        🤝 Agreement: ${agreementRatio}%
+        📈 Best Pattern: L${bestPattern?.patternLength || 'N/A'} "${bestPattern?.pattern || 'N/A'}" (${bestConf})`;
             }
         }
 
+        // Profit/Loss details for WIN/LOSS trades
+        let resultDetails = '';
         if (details.profit !== undefined) {
-            const pl = Number(details.profit) || 0;
-            lines.push(`Profit: ${pl >= 0 ? '+' : ''}$${pl.toFixed(2)}`);
-            lines.push(``);
-            lines.push(`\u{1f4cb} <b>${symbol} Stats:</b>`);
-            lines.push(`W/L: ${a?.winsCount ?? 0}/${a?.lossesCount ?? 0} | P/L: $${(a?.netPL ?? 0).toFixed(2)}`);
-            lines.push(`\u{1f522} Martingale Level: ${a?.martingaleLevel ?? 0}`);
-            lines.push(``);
-            lines.push(`\u{1f4cb} <b>Today:</b>`);
-            lines.push(`Trades: ${today.tradesCount} | W/L: ${today.winsCount}/${today.lossesCount} | P/L: $${(today.netPL || 0).toFixed(2)}`);
-            lines.push(`\u{1f4c9} x2-x9: ${state.session.x2Losses || 0} | ${state.session.x3Losses || 0} | ${state.session.x4Losses || 0} | ${state.session.x5Losses || 0} | ${state.session.x6Losses || 0} | ${state.session.x7Losses || 0} | ${state.session.x8Losses || 0} | ${state.session.x9Losses || 0}`);
-            lines.push(`Capital: $${state.capital.toFixed(2)}`);
-            lines.push(``);
-            lines.push(`\u{1f4cb} <b>Overall:</b>`);
-            lines.push(`Trades: ${overall.tradesCount} | W/L: ${overall.winsCount}/${overall.lossesCount} | P/L: $${(overall.netPL || 0).toFixed(2)}`);
+            const profitNum = Number(details.profit) || 0;
+            const isWin = profitNum > 0;
+            const a = state.assets[symbol];
+            resultDetails = `
+        ${isWin ? '🟢' : '🔴'} <b>Profit: $${profitNum.toFixed(2)}</b>
+
+        📋 <b>${symbol} Stats:</b>
+        W/L: ${a?.winsCount ?? 0}/${a?.lossesCount ?? 0} | P/L: $${(a?.netPL ?? 0).toFixed(2)}
+        🔢 Martingale Level: ${a?.martingaleLevel ?? 0}
+
+        📋 <b>Today:</b>
+        Trades: ${today.tradesCount} | W/L: ${today.winsCount || 0}/${today.lossesCount || 0} | P/L: $${(today.netPL || 0).toFixed(2)}
+        📉 x2-x9: ${state.session.x2Losses || 0} | ${state.session.x3Losses || 0} | ${state.session.x4Losses || 0} | ${state.session.x5Losses || 0} | ${state.session.x6Losses || 0} | ${state.session.x7Losses || 0} | ${state.session.x8Losses || 0} | ${state.session.x9Losses || 0}
+        💰 Capital: $${state.capital.toFixed(2)}
+
+        📋 <b>Overall:</b>
+        Trades: ${overall.tradesCount} | W/L: ${overall.winsCount}/${overall.lossesCount} | P/L: $${(overall.netPL || 0).toFixed(2)}`;
         }
 
-        await this.sendMessage(lines.join('\n'));
+        const recoveryStatus = a?.isRecovery ? '🔄 RECOVERY' : '🎯 NORMAL';
+
+        const msg = `
+        ${emoji} <b>${type} ARBITRAGE TRADE ALERT - ${recoveryStatus}</b>
+
+        📊 Asset: ${symbol}
+        📈 Direction: ${direction === 'CALLE' ? 'RISE 📈' : 'FALL 📉'}
+        💵 Stake: $${stake.toFixed(2)}
+        ⏱ Duration: ${duration}${(durationUnit || 's').toUpperCase()}
+        🔢 Martingale Level: ${a ? a.martingaleLevel : 0}
+        ${type !== 'OPEN' ? `📉 x2-x9: ${state.session.x2Losses} | ${state.session.x3Losses} | ${state.session.x4Losses} | ${state.session.x5Losses} | ${state.session.x6Losses} | ${state.session.x7Losses} | ${state.session.x8Losses} | ${state.session.x9Losses}` : ''}
+        ${analysisDetails}${resultDetails}
+        `.trim();
+
+        await this.sendMessage(msg);
     }
 
     static async sendHourlySummary() {
@@ -585,7 +859,7 @@ class TelegramService {
         });
 
         await this.sendMessage([
-            `⏰ <b>CANDLE DIRECTION BOT v1.0 Hourly</b>`,
+            `⏰ <b>ARBITRAGE PATTERN BOT HOURLY SUMMARY</b>`,
             `Last Hour: ${h.trades}t ${h.wins}W/${h.losses}L ${wr}% ${h.pnl >= 0 ? '\u{1f7e2}' : '\u{1f534}'} $${h.pnl.toFixed(2)}`,
             `Today: ${today.tradesCount}t P/L: $${(today.netPL || 0).toFixed(2)}`,
             `Loss Stats: x2:${today.x2Losses || 0} x3:${today.x3Losses || 0} x4:${today.x4Losses || 0} x5:${today.x5Losses || 0} x6:${today.x6Losses || 0} x7:${today.x7Losses || 0} x8:${today.x8Losses || 0} x9:${today.x9Losses || 0}`,
@@ -613,7 +887,7 @@ class TelegramService {
         });
 
         await this.sendMessage([
-            `\u{1f4ca} <b>CANDLE DIRECTION BOT v1.0 SESSION SUMMARY</b>`,
+            `\u{1f4ca} <b>ARBITRAGE CANDLE PATTERN BOT SESSION SUMMARY</b>`,
             `Duration: ${stats.duration} | Trades: ${stats.trades}`,
             `W: ${stats.wins} | L: ${stats.losses} | Win Rate: ${stats.winRate}`,
             `Session P/L: $${(stats.netPL || 0).toFixed(2)}`,
@@ -634,11 +908,10 @@ class TelegramService {
         });
 
         await this.sendMessage([
-            `\u{1f916} <b>CANDLE DIRECTION BOT v1.0 STARTED</b>`,
-            `Strategy: Candle Direction + Normal Trading Mode`,
-            `Candle Period: ${CONFIG.CANDLE_PERIOD} | Overbought: ${CONFIG.CANDLE_OVERBOUGHT} | Oversold: ${CONFIG.CANDLE_OVERSOLD}`,
-            `Risk: Martingale progression with cap $${CONFIG.INVESTMENT_AMOUNT}`,
-            `Recovery: ${CONFIG.AFTER_MAX_LOSS === 'continue' ? 'Continue after max loss using extra levels' : 'Reset on max loss'}`,
+            `\u{1f916} <b>ARBITRAGE PATTERN BOT STARTED</b>`,
+            `Strategy: Candle Pattern Recognition + Grid Martingale`,
+            `Risk: Martingale progression with cap $${getAssetConfig(CONFIG.ACTIVE_ASSETS[0]).INVESTMENT_AMOUNT}`,
+            `Recovery: ${CONFIG.USE_RECOVERY_STRATEGY ? 'ENABLED (immediate same-direction retry)' : 'DISABLED (wait for pattern analysis)'}`,
             `Capital: $${state.capital.toFixed(2)}`,
             TradingSessionManager.getStatusString(),
             ``,
@@ -726,7 +999,7 @@ class SessionManager {
             LOGGER.info(`Day changed: ${state.currentTradeDay} -> ${today}`);
             const dayStats = TradeHistoryManager.getDayStats(state.currentTradeDay);
             TelegramService.sendMessage(
-                `\u{1f319} <b>CANDLE DIRECTION BOT END OF DAY ${state.currentTradeDay}</b>\nP/L: $${(dayStats?.netPL || 0).toFixed(2)}\nCapital: $${state.capital.toFixed(2)}`
+                `\u{1f319} <b>ARBITRAGE PATTERN BOT END OF DAY ${state.currentTradeDay}</b>\nP/L: $${(dayStats?.netPL || 0).toFixed(2)}\nCapital: $${state.capital.toFixed(2)}`
             );
             this._resetDailyStats();
             if (!state.session.isActive) {
@@ -790,9 +1063,16 @@ class SessionManager {
             a.lastTradeWasWin = true;
             a.forceRecoverDirection = null;  // win exits forced recovery mode
 
+            // Exit recovery mode on win
+            if (a.isRecovery) {
+                a.isRecovery = false;
+                LOGGER.info(`[${symbol}] Recovery mode EXITED - Win achieved`);
+            }
+
             // Credit payout (stake + profit) back to investment pool — pool grows on win
             a.investmentRemaining = Number((a.investmentRemaining + stake + profit).toFixed(2));
-            a.currentStake = StakeCalculator.calculate(a.investmentRemaining, 0);
+            a.baseStake = StakeCalculator.getBaseStake(symbol, a.investmentRemaining);
+            a.currentStake = StakeCalculator.calculate(symbol, 0, a.investmentRemaining);
 
             LOGGER.trade(`WIN [${symbol}] +$${(profit || 0).toFixed(2)} | ${direction} | P/L: $${(a.netPL || 0).toFixed(2)}`);
         } else {
@@ -811,6 +1091,12 @@ class SessionManager {
             a.forceRecoverDirection = a.lastTradeDirection === 'CALLE' ? 'CALLE' : 'PUTE';
             a.martingaleLevel = (a.martingaleLevel || 0) + 1;
 
+            // Enter recovery mode on loss (if recovery strategy is enabled)
+            if (CONFIG.USE_RECOVERY_STRATEGY) {
+                a.isRecovery = true;
+                LOGGER.info(`[${symbol}] Recovery mode ENTERED - Will trade ${direction} on next candle without analysis`);
+            }
+
             // Pause normal mode during recovery
             if (a.normalModeActive) {
                 a.normalModePaused = true;
@@ -823,15 +1109,16 @@ class SessionManager {
                 a[key]++;
             }
 
-            a.currentStake = StakeCalculator.calculate(a.investmentRemaining, a.martingaleLevel);
+            a.currentStake = StakeCalculator.calculate(symbol, a.martingaleLevel, a.investmentRemaining);
 
             if (a.consecutiveLosses >= 10) {
-                a.currentStake = CONFIG.INITIAL_STAKE;
+                const assetCfg = getAssetConfig(symbol);
+                a.currentStake = assetCfg.INITIAL_STAKE;
                 a.cooldownCandles = CONFIG.COOLDOWN_CANDLES;
                 a.forceRecoverDirection = null;
                 LOGGER.warn(`[${symbol}] 10 consecutive losses — cooling down for ${CONFIG.COOLDOWN_CANDLES} candles`);
                 TelegramService.sendMessage(
-                    `❄️ <b>[${symbol}] CANDLE DIRECTION BOT COOL-DOWN ACTIVATED</b>\n` +
+                    `❄️ <b>[${symbol}] ARBITRAGE PATTERN BOT COOL-DOWN ACTIVATED</b>\n` +
                     `10 consecutive losses\n` +
                     `Pausing for ${CONFIG.COOLDOWN_CANDLES} candles\n` +
                     `Capital: $${state.capital.toFixed(2)}`
@@ -850,7 +1137,7 @@ class SessionManager {
 // ============================================================
 const state = {
     assets: {},
-    capital: CONFIG.INVESTMENT_AMOUNT,
+    capital: CONFIG.ACTIVE_ASSETS.length ? getAssetConfig(CONFIG.ACTIVE_ASSETS[0]).INVESTMENT_AMOUNT : DEFAULT_ASSET_CONFIG.INVESTMENT_AMOUNT,
     accountBalance: 0,
     currentTradeDay: null,
     session: {
@@ -858,7 +1145,7 @@ const state = {
         tradesCount: 0, winsCount: 0, lossesCount: 0,
         x2Losses: 0, x3Losses: 0, x4Losses: 0, x5Losses: 0,
         x6Losses: 0, x7Losses: 0, x8Losses: 0, x9Losses: 0,
-        isActive: true, startTime: Date.now(), startCapital: CONFIG.INVESTMENT_AMOUNT,
+        isActive: true, startTime: Date.now(), startCapital: CONFIG.ACTIVE_ASSETS.length ? getAssetConfig(CONFIG.ACTIVE_ASSETS[0]).INVESTMENT_AMOUNT : DEFAULT_ASSET_CONFIG.INVESTMENT_AMOUNT,
     },
     isConnected: false,
     isAuthorized: false,
@@ -1034,19 +1321,29 @@ class ConnectionManager {
     initializeAssets() {
         CONFIG.ACTIVE_ASSETS.forEach(symbol => {
             if (!state.assets[symbol]) {
+                const assetConfig = getAssetConfig(symbol);
                 state.assets[symbol] = {
                     candles: [], closedCandles: [],
                     currentFormingCandle: null,
                     lastProcessedCandleOpenTime: null,
                     candlesLoaded: false,
+                    // Pattern analyzer
+                    patternAnalyzer: new CandlePatternAnalyzer({
+                        minConfidence: assetConfig.PATTERN_MIN_CONFIDENCE,
+                        patternLengths: assetConfig.PATTERN_LENGTHS,
+                        minOccurrences: assetConfig.PATTERN_MIN_OCCURRENCES,
+                        recencyDecay: assetConfig.PATTERN_RECENCY_DECAY,
+                        dojiThreshold: assetConfig.PATTERN_DOJI_THRESHOLD
+                    }),
                     lastTradeDirection: null,
                     lastTradeWasWin: null,
+                    isRecovery: false,
                     forceRecoverDirection: null,
                     recoveryStep: 0,
-                    currentStake: StakeCalculator.calculate(CONFIG.INVESTMENT_AMOUNT),
+                    currentStake: assetConfig.INITIAL_STAKE,
+                    baseStake: assetConfig.INITIAL_STAKE,
                     martingaleLevel: 0,
-                    recoveryStep: 0,
-                    investmentRemaining: CONFIG.INVESTMENT_AMOUNT,
+                    investmentRemaining: assetConfig.INVESTMENT_AMOUNT,
                     canTrade: false,
                     consecutiveWins: 0,
                     consecutiveLosses: 0,
@@ -1068,8 +1365,11 @@ class ConnectionManager {
                     tradesInNormalMode: 0,
                     normalModeDirection: null,
                     normalModePaused: false,
+
+                    // Last analysis for notifications
+                    lastAnalysis: null,
                 };
-                LOGGER.info(`Initialized asset: ${symbol}`);
+                LOGGER.info(`Initialized asset: ${symbol} (Stake: $${assetConfig.INITIAL_STAKE}, Duration: ${assetConfig.DURATION}${assetConfig.DURATION_UNIT})`);
             }
         });
     }
@@ -1166,12 +1466,6 @@ class ConnectionManager {
                     state.pendingTradeInfo = { stake: pos.stake, direction: pos.direction, symbol: pos.symbol };
 
                     bot._startTradeWatchdog(contract.contract_id);
-
-                    TelegramService.sendTradeAlert(
-                        'OPEN', pos.symbol, pos.direction, pos.stake,
-                        pos.duration, pos.durationUnit,
-                        { signal: pos.signal }
-                    );
                     break;
                 }
             }
@@ -1313,7 +1607,7 @@ class ConnectionManager {
                     a.canTrade = true;
 
                     try {
-                        bot.processNewCandle(symbol, closed);
+                        bot.executeNextTrade(symbol, closed);
                     } catch (err) {
                         LOGGER.error(`[${symbol}] Trade execution error: ${err.message}`);
                         bot._forceReleaseTradeLock();
@@ -1401,7 +1695,7 @@ class ConnectionManager {
             this.reconnectAttempts++;
             const delay = Math.min(this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1), 30000);
             LOGGER.info(`Reconnecting in ${(delay / 1000).toFixed(1)}s (attempt ${this.reconnectAttempts})`);
-            TelegramService.sendMessage(`⚠️ <b>CANDLE DIRECTION BOT CONNECTION LOST</b> — Reconnecting (attempt ${this.reconnectAttempts})`);
+            TelegramService.sendMessage(`⚠️ <b>ARBITRAGE PATTERN BOT CONNECTION LOST</b> — Reconnecting (attempt ${this.reconnectAttempts})`);
 
             this.reconnectTimer = setTimeout(() => {
                 this.reconnectTimer = null;
@@ -1411,7 +1705,7 @@ class ConnectionManager {
             }, delay);
         } else {
             LOGGER.error('Max reconnection attempts reached — giving up');
-            TelegramService.sendMessage(`\u{1f6d1} <b>CANDLE DIRECTION BOT STOPPED</b> — Max reconnections\nFinal P/L: $${(state.session.netPL || 0).toFixed(2)}`);
+            TelegramService.sendMessage(`\u{1f6d1} <b>ARBITRAGE PATTERN BOT STOPPED</b> — Max reconnections\nFinal P/L: $${(state.session.netPL || 0).toFixed(2)}`);
             process.exit(1);
         }
     }
@@ -1470,7 +1764,7 @@ class IndexBot {
         console.log('═'.repeat(74));
         console.log(`Assets    : ${CONFIG.ACTIVE_ASSETS.join(', ')}`);
         console.log(`Timeframe : ${CONFIG.TIMEFRAME_LABEL} candles | Duration: ${CONFIG.DURATION}${CONFIG.DURATION_UNIT}`);
-        console.log(`Risk      : Martingale level progression with cap $${CONFIG.INVESTMENT_AMOUNT}`);
+        console.log(`Risk      : Martingale level progression with cap $${CONFIG.ACTIVE_ASSETS.length ? getAssetConfig(CONFIG.ACTIVE_ASSETS[0]).INVESTMENT_AMOUNT : DEFAULT_ASSET_CONFIG.INVESTMENT_AMOUNT}`);
         console.log(`Capital   : $${state.capital.toFixed(2)}`);
         console.log(`Sessions  : ${TradingSessionManager.getStatusString()}`);
         console.log('═'.repeat(74) + '\n');
@@ -1517,273 +1811,153 @@ class IndexBot {
     // ════════════════════════════════════════════════════════
     // CORE TRADE LOGIC — called on every candle close (FIXED)
     //
-    // PRIORITY ORDER:
-    //   1. MARTINGALE recovery after loss
-    //   2. NORMAL mode — trade candle direction for N trades
     // ════════════════════════════════════════════════════════
-    processNewCandle(symbol, lastClosedCandle) {
-        const a = state.assets[symbol];
-        if (!a || !a.canTrade) return;
+    // CORE TRADE LOGIC — pattern analysis + execution
+    // (from arbitrageRF.js — Candle Pattern Recognition)
+    // ════════════════════════════════════════════════════════
+    executeNextTrade(symbol, lastClosedCandle) {
+        const assetState = state.assets[symbol];
+        if (!assetState) return;
+        if (!assetState.canTrade) return;
         if (!SessionManager.isSessionActive()) return;
-        if (a.activePositions.length >= CONFIG.MAX_OPEN_POSITIONS_PER_ASSET) return;
-        if (!state.isConnected || !state.isAuthorized) return;
 
-        if (this._tradeLocked) {
-            LOGGER.debug(`[${symbol}] Trade mutex locked — skipping`);
+        const assetConfig = getAssetConfig(symbol);
+
+        // Check position limit
+        if (assetState.activePositions.length >= CONFIG.MAX_OPEN_POSITIONS_PER_ASSET) {
             return;
         }
 
-        if (a.cooldownCandles > 0) {
-            LOGGER.debug(`[${symbol}] In cool-down (${a.cooldownCandles} candles remaining)`);
-            a.canTrade = false;
+        // Authorization / capital checks
+        if (!state.isAuthorized) {
+            LOGGER.warn(`[${symbol}] Not authorized yet — cannot place trade`);
             return;
         }
 
-        const totalPositions = CONFIG.ACTIVE_ASSETS.reduce(
-            (sum, s) => sum + (state.assets[s]?.activePositions?.length ?? 0), 0
-        );
-        if (totalPositions >= CONFIG.MAX_TOTAL_POSITIONS) {
-            LOGGER.debug(`[${symbol}] Max total positions (${totalPositions}/${CONFIG.MAX_TOTAL_POSITIONS})`);
+        if (state.capital < assetState.currentStake) {
+            LOGGER.warn(`[${symbol}] Insufficient capital`);
             return;
         }
 
-        if (CONFIG.USE_TRADING_SESSIONS) {
-            const sessInfo = TradingSessionManager.isWithinAnySession();
-            if (!sessInfo.inSession) {
-                const now = Date.now();
-                if (now - state.lastSessionLogTime > 300000) {
-                    LOGGER.info(`${TradingSessionManager.getStatusString()} — holding new trades`);
-                    state.lastSessionLogTime = now;
-                }
-                a.canTrade = false;
-                return;
-            }
-        }
+        let direction;
+        let analysis = null;
+        let isRecovery = assetState.isRecovery;
 
-        const stake = a.currentStake;
-
-        if (state.capital < stake) {
-            LOGGER.error(`[${symbol}] Stake $${stake.toFixed(2)} exceeds capital $${state.capital.toFixed(2)}`);
-            a.recoveryStep = 0;
-            a.forceRecoverDirection = null;
-            a.currentStake = StakeCalculator.calculate(a.investmentRemaining);
-            a.canTrade = false;
-            return;
-        }
-
-        if (a.closedCandles.length < CONFIG.MIN_CANDLES_REQUIRED) {
-            LOGGER.debug(`[${symbol}] Not enough candles yet (${a.closedCandles.length}/${CONFIG.MIN_CANDLES_REQUIRED})`);
-            a.canTrade = false;
-            return;
-        }
-
-        // ── Only trade the asset that is in martingale recovery; skip all others ──
-        const recoveringAsset = CONFIG.ACTIVE_ASSETS.find(s => state.assets[s]?.forceRecoverDirection);
-        if (recoveringAsset && recoveringAsset !== symbol) {
-            LOGGER.debug(`[${symbol}] Skipping — ${recoveringAsset} is in martingale recovery`);
-            return;
-        }
-
-        // Detect new CANDLE DIRECTION signals
-        const dir = lastClosedCandle.close > lastClosedCandle.open ? 'CALLE' : 'PUTE';
-
-        // const mode = a.recoveryStep < 3 ? 'trend' : a.recoveryStep > 6 ? 'trend' : 'range';
-
-        //Candle formation of Bullish -> Bearish -> Bullish or Bearish -> Bullish -> Bearish can be considered as a Range, while a series of candles Bullish -> Bullish or Bearish -> Bearish can be considered as a Trend. 
-        // You can implement a function to analyze the last few closed candles and determine if the market is trending or ranging.
-        const mode = this._determineMarketMode(a.closedCandles);
-
-        if (mode === 'trend') {
-            if (dir === 'CALLE') {
-                LOGGER.signal(`[${symbol}] BUY SIGNAL`);
-                const setupSuccess = 'CALLE';
-
-                if (setupSuccess) {
-                    // Execute first trade as CALLE
-                    const firstDir = 'CALLE';
-                    a.normalModeActive = true;
-                    a.tradesInNormalMode = 1;
-                    a.normalModeDirection = firstDir;
-                    a.lastTradeDirection = firstDir;
-                    a.currentDirection = firstDir;
-
-                    LOGGER.normal(`[${symbol}] NORMAL MODE #1/${CONFIG.MAX_TRADES_PER_CYCLE} \u{1f4c8} CALLE (initial signal trade) | Stake: $${stake.toFixed(2)}`);
-
-                    this._executeBuy(symbol, firstDir, stake, {
-                        method: 'CANDLE_CLOSE_BULLISH',
-                        reason: `CANDLE_CLOSE_BULLISH signal — candle closed above previous candle (bullish pattern)`,
-                        marketMode: mode,
-                    });
-
-                    a.buyFlagActive = false; // consumed
-                }
-                return;
-            } else {
-                LOGGER.signal(`[${symbol}] SELL SIGNAL`);
-                const setupSuccess = 'PUTE';
-
-                if (setupSuccess) {
-                    // Execute first trade as PUTE
-                    const firstDir = 'PUTE';
-                    a.normalModeActive = true;
-                    a.tradesInNormalMode = 1;
-                    a.normalModeDirection = firstDir;
-                    a.lastTradeDirection = firstDir;
-                    a.currentDirection = firstDir;
-
-                    LOGGER.normal(`[${symbol}] NORMAL MODE #1/${CONFIG.MAX_TRADES_PER_CYCLE} \u{1f4c9} PUTE (initial signal trade) | Stake: $${stake.toFixed(2)}`);
-
-                    this._executeBuy(symbol, firstDir, stake, {
-                        method: 'CANDLE_CLOSE_BEARISH',
-                        reason: `CANDLE_CLOSE_BEARISH signal — candle closed below previous candle (bearish pattern)`,
-                        marketMode: mode,
-                    });
-
-                    a.sellFlagActive = false; // consumed
-                }
-                return;
-            }
+        // Check if in recovery mode and recovery strategy is enabled
+        if (CONFIG.USE_RECOVERY_STRATEGY && assetState.isRecovery && assetState.lastTradeDirection) {
+            // Recovery mode: trade SAME direction as losing trade, NO pattern analysis
+            direction = assetState.lastTradeDirection;
+            LOGGER.trade(`🔄 [${symbol}] RECOVERY TRADE - Same direction: ${direction} (NO analysis)`);
         } else {
-            if (dir === 'CALLE') {
-                LOGGER.signal(`[${symbol}] BUY SIGNAL`);
-                const setupSuccess = 'PUTE';
+            // Normal mode: run pattern analysis
+            analysis = assetState.patternAnalyzer.analyze(assetState.closedCandles);
+            assetState.lastAnalysis = analysis;
 
-                if (setupSuccess) {
-                    // Execute first trade as PUTE
-                    const firstDir = 'PUTE';
-                    a.normalModeActive = true;
-                    a.tradesInNormalMode = 1;
-                    a.normalModeDirection = firstDir;
-                    a.lastTradeDirection = firstDir;
-                    a.currentDirection = firstDir;
+            const bestPatternConfidence = analysis?.details?.bestPattern?.confidence || 0;
 
-                    LOGGER.normal(`[${symbol}] NORMAL MODE #1/${CONFIG.MAX_TRADES_PER_CYCLE} \u{1f4c8} PUTE (initial signal trade) | Stake: $${stake.toFixed(2)}`);
-
-                    this._executeBuy(symbol, firstDir, stake, {
-                        method: 'CANDLE_CLOSE_BULLISH',
-                        reason: `CANDLE_CLOSE_BULLISH signal — candle closed above previous candle (bullish pattern)`,
-                        marketMode: mode,
-                    });
-
-                    a.buyFlagActive = false; // consumed
-                }
+            if (!analysis.shouldTrade) {
+                LOGGER.info(`[${symbol}] No trade signal - Confidence too low)`);
+                assetState.canTrade = false;
                 return;
+            }
+
+            direction = analysis.direction;
+
+            if ((symbol === 'stpRNG' || symbol === 'stpRNG2' || symbol === 'stpRNG3' || symbol === 'stpRNG4' || symbol === 'stpRNG5')) {
+                if (bestPatternConfidence < DEFAULT_ASSET_CONFIG.MIN_PATTERN_CONFIDENCE_STEP_RNG) {
+                    LOGGER.info(`[${symbol}] Low Pattern Confidence (Confidence: ${bestPatternConfidence ? (bestPatternConfidence * 100).toFixed(0) + '%' : 'N/A'})`);
+                    assetState.canTrade = false;
+                    return;
+                }
             } else {
-                LOGGER.signal(`[${symbol}] BUY SIGNAL`);
-                const setupSuccess = 'CALLE';
-
-                if (setupSuccess) {
-                    // Execute first trade as PUTE
-                    const firstDir = 'CALLE';
-                    a.normalModeActive = true;
-                    a.tradesInNormalMode = 1;
-                    a.normalModeDirection = firstDir;
-                    a.lastTradeDirection = firstDir;
-                    a.currentDirection = firstDir;
-
-                    LOGGER.normal(`[${symbol}] NORMAL MODE #1/${CONFIG.MAX_TRADES_PER_CYCLE} \u{1f4c9} CALLE (initial signal trade) | Stake: $${stake.toFixed(2)}`);
-
-                    this._executeBuy(symbol, firstDir, stake, {
-                        method: 'CANDLE_CLOSE_BEARISH',
-                        reason: `CANDLE_CLOSE_BEARISH signal — candle closed below previous candle (bearish pattern)`,
-                        marketMode: mode,
-                    });
-
-                    a.sellFlagActive = false; // consumed
+                if (bestPatternConfidence < DEFAULT_ASSET_CONFIG.MIN_PATTERN_CONFIDENCE) {
+                    LOGGER.info(`[${symbol}] Low Pattern Confidence (Confidence: ${bestPatternConfidence ? (bestPatternConfidence * 100).toFixed(0) + '%' : 'N/A'})`);
+                    assetState.canTrade = false;
+                    return;
                 }
-                return;
+            }
+
+            LOGGER.trade(`🎯 [${symbol}] PATTERN TRADE - Direction: ${direction} | Confidence: ${((analysis?.confidence||0) * 100).toFixed(1)}% | Pattern Occurrence: ${analysis?.patternOccurrence || 0}`);
+
+            if (analysis.patternOccurrence >= 2) {
+                direction = analysis.direction;
+                isRecovery = false;
             }
         }
 
-        // No signal — log status
-        LOGGER.debug(`[${symbol}] No new trade signal detected — last closed candle: O:${lastClosedCandle.open.toFixed(5)} H:${lastClosedCandle.high.toFixed(5)} L:${lastClosedCandle.low.toFixed(5)} C:${lastClosedCandle.close.toFixed(5)}`);
-    }
+        if (!direction) return;
 
-    // ── Determine market mode from last 3 closed candles ──
-    // Ranging: candles alternate every time (B→R→B or R→B→R)
-    // Trending: candles do NOT fully alternate (B→R→R, R→B→B, B→B→B, etc.)
-    _determineMarketMode(closedCandles) {
-        if (!closedCandles || closedCandles.length < 3) return 'range';
-
-        const recent = closedCandles.slice(-3);
-        const types = recent.map(c => (c.close > c.open ? 'B' : 'R'));
-
-        // Count how many times adjacent candles differ (alternate)
-        let alternations = 0;
-        for (let i = 1; i < types.length; i++) {
-            if (types[i] !== types[i - 1]) alternations++;
+        const stake = assetState.currentStake;
+        // Stake / investmentRemaining checks
+        if (stake > assetState.investmentRemaining) {
+            LOGGER.error(`[${symbol}] Insufficient investment: stake $${stake} > remaining $${assetState.investmentRemaining.toFixed(2)}`);
+            assetState.canTrade = false;
+            return;
+        }
+        if (stake > state.capital) {
+            LOGGER.error(`[${symbol}] Insufficient balance: stake $${stake} > capital $${state.capital.toFixed(2)}`);
+            assetState.canTrade = false;
+            return;
         }
 
-        // With 3 candles (2 pairs): all pairs alternate → range; otherwise → trend
-        const mode = alternations === 2 ? 'range' : 'trend';
-        LOGGER.debug(`[MarketMode] ${types.join('→')} → ${mode} (${alternations} alternations)`);
-        return mode;
-    }
-
-    // ── Execute a buy order (CALLE/PUTE) ──────────────────
-    _executeBuy(symbol, direction, stake, signalInfo = {}) {
-        this._tradeLocked = true;
-        state.assets[symbol].canTrade = false;
-
-        // Deduct stake from rolling investment pool (reference bot behavior)
-        state.assets[symbol].investmentRemaining = Number((state.assets[symbol].investmentRemaining - stake).toFixed(2));
+        // Deduct investment immediately
+        assetState.investmentRemaining = Number((assetState.investmentRemaining - stake).toFixed(2));
         state.capital = Number((state.capital - stake).toFixed(2));
+        const duration = assetConfig.DURATION;
+        const durationUnit = assetConfig.DURATION_UNIT;
 
-        const pos = {
-            symbol, direction, stake,
-            duration: CONFIG.DURATION,
-            durationUnit: CONFIG.DURATION_UNIT,
-            entryTime: Date.now(),
-            contractId: null, reqId: null, currentProfit: 0, buyPrice: 0,
-            signal: signalInfo,
+        // Log trade details
+        if (isRecovery) {
+            LOGGER.trade(`   Recovery Mode: ${isRecovery ? 'YES' : 'NO'} | Same direction as loss | Stake: $${stake.toFixed(2)} | Martingale: L${assetState.martingaleLevel}`);
+        } else {
+            const agreementRatio = analysis?.details?.consensus?.agreementRatio ? (analysis.details.consensus.agreementRatio * 100).toFixed(0) : 'N/A';
+            const confPct = ((analysis?.confidence || 0) * 100).toFixed(1);
+            const patternOcc = analysis?.patternOccurrence || 0;
+            LOGGER.trade(`   Recovery Mode: NO | Confidence: ${confPct}% | Agreement: ${agreementRatio}% | Stake: $${stake.toFixed(2)} | Martingale: L${assetState.martingaleLevel} | Pattern Occurrence: ${patternOcc}`);
+        }
+
+        // Execute trade
+        assetState.canTrade = false;
+        assetState.lastTradeDirection = direction;
+
+        const position = {
+            symbol, direction, stake, duration, durationUnit,
+            entryTime: Date.now(), contractId: null, reqId: null, currentProfit: 0, buyPrice: 0
         };
 
-        state.assets[symbol].activePositions.push(pos);
+        assetState.activePositions.push(position);
 
-        LOGGER.trade(
-            `\u{1f3af} [${symbol}] ${direction === 'CALLE' ? '\u{1f4c8} CALLE' : '\u{1f4c9} PUTE'} |` +
-            `Stake: $${stake.toFixed(2)} | ${signalInfo.reason || ''}`
-        );
+        // Global trade lock / pending info
+        this._tradeLocked = true;
+        state.currentContractId = null;
+        state.pendingTradeInfo = { symbol, stake, direction, time: Date.now() };
 
-        const reqId = this.connection.send({
-            buy: 1, subscribe: 1, price: stake.toFixed(2),
-            parameters: {
-                contract_type: direction,
-                [this.connection._isPat ? 'underlying_symbol' : 'symbol']: symbol,
-                currency: 'USD', amount: stake.toFixed(2),
-                duration: CONFIG.DURATION, duration_unit: CONFIG.DURATION_UNIT, basis: 'stake',
-            },
+        // Send enhanced Telegram notification
+        TelegramService.sendTradeAlert('OPEN', symbol, direction, stake, duration, durationUnit, {
+            isRecovery,
+            analysis: isRecovery ? null : analysis
         });
 
-        pos.reqId = reqId;
-
-        setTimeout(() => {
-            if (this._tradeLocked && !pos.contractId) {
-                LOGGER.warn(`[${symbol}] Buy response timeout — releasing lock`);
-                const idx = state.assets[symbol].activePositions.indexOf(pos);
-                if (idx >= 0) state.assets[symbol].activePositions.splice(idx, 1);
-                this._tradeLocked = false;
+        const symbolKey = this.connection && this.connection._isPat ? 'underlying_symbol' : 'symbol';
+        const tradeRequest = {
+            buy: 1,
+            subscribe: 1,
+            price: Number(stake).toFixed(2),
+            parameters: {
+                contract_type: direction,
+                [symbolKey]: symbol,
+                currency: 'USD',
+                amount: Number(stake).toFixed(2),
+                duration,
+                duration_unit: durationUnit,
+                basis: 'stake'
             }
-        }, 5000);
+        };
+
+        const reqId = this.connection.send(tradeRequest);
+        position.reqId = reqId;
 
         StatePersistence.saveState();
-    }
-
-    // ── Execute a reversal (close + reopen in new direction) ──
-    executeReversal(symbol, newDirection) {
-        const a = state.assets[symbol];
-        const pos = a.activePositions[0];
-
-        if (!pos || !pos.contractId) {
-            LOGGER.warn(`No active position to reverse on ${symbol}`);
-            return;
-        }
-
-        LOGGER.trade(`\u{1f504} REVERSING [${symbol}]: ${pos.direction} -> ${newDirection}`);
-
-        // Close current position, then the handleOpenContract will handle re-entry
-        // For now, just close — the next candle close will handle the new trade
-        this.connection.send({ sell: pos.contractId, price: 0 });
     }
 
     // ── WATCHDOG [RETAINED] ────────────────────────────────────
@@ -1849,7 +2023,7 @@ class IndexBot {
         state.tradeStartTime = null;
 
         TelegramService.sendMessage(
-            `⚠️ <b>CANDLE DIRECTION BOT STUCK TRADE RECOVERED [${reason}]</b>\n` +
+            `⚠️ <b>ARBITRAGE PATTERN STUCK TRADE RECOVERED [${reason}]</b>\n` +
             `Contract: ${contractId}\n` +
             `⚠️ VERIFY OUTCOME MANUALLY ON DERIV\n` +
             `Capital: $${state.capital.toFixed(2)}`
