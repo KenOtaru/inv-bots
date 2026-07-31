@@ -131,7 +131,7 @@ const CONFIG = Object.freeze({
   // token in source. See .env.example for the required keys.
   // apiToken:    ('0P94g4WdSrSrzir').trim(),
   // appId:       '1089',
-  apiToken:    'pat_8e0a3285bd6e74f52a67985b8069f4bea42aa96ce65d129c60ebb838ed1065ee',
+  apiToken:    'pat_cb2016855b5e6c61ac95f94432192dd6ed86bec7f7454e575d3fe1ed9f617692',
   appId:       '33uslPtthXBEkQOdfKfoY',
   accountId: '', // recommended/required for PAT new API
   accountType: 'demo', // demo | real
@@ -152,7 +152,7 @@ const CONFIG = Object.freeze({
   analysisIntervalMs: 3000,
   tradeCooldownMs: 2000,
   maxOpenTrades: 1,
-  cooldownTicks: 200,        // don't re-analyze within N ticks of last trade
+  cooldownTicks: 300,        // don't re-analyze within N ticks of last trade
   // ── Asset rotation ────────────────────────────────────────────────
   //   To avoid hammering the same symbol back-to-back the bot briefly
   //   "locks out" the just-traded symbol. Two safety valves:
@@ -165,12 +165,24 @@ const CONFIG = Object.freeze({
   //   Set assetRotationMs=0 to disable the rotation entirely (trade
   //   whatever ranks first every scan).
   assetRotationMs: 60_000,
-  dailyMaxLoss: 2000,
+  dailyMaxLoss: 570,
   // Belt-and-braces: stop for the day at whichever loss cap is hit first —
   // a fixed dollar figure AND a % of the balance seen at the start of the day.
   dailyMaxLossPct: 0.05, // 5% of day-start balance
   dailyMaxProfit: 0, // 0 disables profit target stop
   dailyMaxTrades: 200000,
+
+  // ── Day-of-week trading filter ──────────────────────────────────
+  //   Control which days of the week the bot is allowed to trade
+  //   (GMT/UTC). Set any day to false to disable trading on that
+  //   day; open trades still settle normally.
+  tradeSunday    : true,
+  tradeMonday    : true,
+  tradeTuesday   : true,
+  tradeWednesday : true,
+  tradeThursday  : true,
+  tradeFriday    : true,
+  tradeSaturday  : true,
 
   // ── Strategy selection ───────────────────────────────────────────────
   // 'frequency'    = Empirical-frequency coldest digit (DigitAnalyzer).
@@ -224,17 +236,21 @@ const CONFIG = Object.freeze({
   raSlopeEps     : 0.008,
 
   // ── Frequency-analysis config ───────────────────────────────────────
-  // Single empirical-frequency window used to rank digits + a Wilson
-  // upper confidence bound. This is a heuristic used to feed the live
-  // value-edge check below, not a claimed predictive edge — see header.
-  analysisWindow: 200,
+  // Single empirical-frequency window used to rank digits. The LIVE
+  // strategy (SimpleDigitAnalyzer) is the same as accurateDiffer3_simple.js:
+  // coldest digit + Laplace-smoothed conservative upper bound, feeding
+  // the value-edge check below — a heuristic, not a claimed edge.
+  analysisWindow: 100,
   // Value-edge floors (live proposal q_be − pLossUpper)
-  minEdge: 0.0100,
-  safetyMargin: 0.002,
+  minEdge: 0.016,
+  safetyMargin: 0.02,
+  // Coldest-digit analyzer gates (accurateDiffer3_simple.js)
+  maxRecentHits: 3,         // max occurrences of barrier digit in recent tail
+  lossCooldownMs: 8000,     // MC loss cooldown after a loss
   modelRiskMargin: 0.0015,
   zScore: 1.28,          // Wilson one-sided upper bound
   maxLossProb: 0.092,  // never take if upper-bound P(loss digit) > this
-  minProbabilityGap: 0.004,
+  minProbabilityGap: 0.005,
   // Regime sanity gates: skip samples too small/degenerate to be a
   // meaningful (non-uniform-looking) read, in either direction.
   minEntropy: 0.90,
@@ -242,7 +258,7 @@ const CONFIG = Object.freeze({
   minChiSquare: 1.5,
   maxChiSquare: 40.0,
   maxRecentDigitHits: 2, // barrier digit hits in recentLookback
-  recentLookback: 12,
+  recentLookback: 20,
   proposalScanTopN: 4,
 
   // ── Consecutive-loss circuit breaker ────────────────────────────────
@@ -315,9 +331,9 @@ const CONFIG = Object.freeze({
   hourlySummary: true,
 
   // Persistence/logging
-  stateFile: strEnv('STATE_FILE', 'newDifferx2_state_001.json'),
-  logFile: strEnv('LOG_FILE', 'newDifferx2_bot_001.log'),
-  logLevel: strEnv('LOG_LEVEL', 'INFO NEWDIFFER').toUpperCase(),
+  stateFile: strEnv('STATE_FILE', 'simpleDiffer_state_001.json'),
+  logFile: strEnv('LOG_FILE', 'simpleDiffer_bot_001.log'),
+  logLevel: strEnv('LOG_LEVEL', 'INFO SIMPLEDIFFER').toUpperCase(),
 
   // Telegram — MUST come from .env / environment, never hardcode a real
   // bot token in source. Notifications are auto-disabled if either is empty.
@@ -1253,6 +1269,124 @@ class DigitAnalyzer {
 }
 
 // ─────────────────────────────────────────────────────────────────────
+// 7a. SIMPLE COLDEST-DIGIT ANALYZER (live strategy)
+//
+//   The LIVE trading strategy now uses the same analyzer as
+//   accurateDiffer3_simple.js: coldest digit over an empirical
+//   frequency window, Laplace-smoothed P(loss) with a conservative cap,
+//   a recent-hit gate, and a per-digit prediction cooldown. The older
+//   DigitAnalyzer / RepeatAvoidAnalyzer classes are kept for the
+//   BACKTEST=1 / DIAGNOSE=1 modes (makeAnalyzer still selects them).
+// ─────────────────────────────────────────────────────────────────────
+class SimpleDigitAnalyzer {
+  constructor(cfg) {
+    this.cfg = cfg;
+    this._predictionLog = [];
+    this._cooldownMap = new Map();
+    this._tickCounter = 0;
+  }
+
+  recordPrediction(digit, symbol) {
+    const entry = { digit, tickIndex: this._tickCounter, symbol, ts: Date.now() };
+    this._predictionLog.push(entry);
+    this._cooldownMap.set(digit, this._tickCounter);
+    if (this._predictionLog.length > 500) this._predictionLog.splice(0, 250);
+  }
+
+  tick() { this._tickCounter++; }
+
+  /**
+   * Count digit frequencies and find the coldest digit.
+   * This is a heuristic, not a predictive edge.
+   */
+  analyze(symbol, ticks) {
+    if (!ticks || ticks.length < this.cfg.minTicksForAnalysis) return null;
+
+    const digits = ticks.map(t => t.digit).filter(d => Number.isInteger(d) && d >= 0 && d <= 9);
+    if (digits.length < this.cfg.minTicksForAnalysis) return null;
+
+    // Advance tick counter to stay in sync
+    this._tickCounter = Math.max(this._tickCounter, digits.length);
+
+    const window = Math.min(this.cfg.analysisWindow, digits.length);
+    const recentDigits = digits.slice(-window);
+
+    // Count frequencies
+    const counts = Array(10).fill(0);
+    for (const d of recentDigits) counts[d]++;
+
+    // Find coldest digit (lowest frequency)
+    let coldestDigit = 0;
+    let coldestCount = counts[0];
+    for (let d = 1; d < 10; d++) {
+      if (counts[d] < coldestCount) {
+        coldestDigit = d;
+        coldestCount = counts[d];
+      }
+    }
+
+    // Calculate probability (conservative upper bound)
+    const n = recentDigits.length;
+    const pEstimate = (coldestCount + 1) / (n + 10); // Laplace smoothing
+    const pUpper = Math.min(0.15, pEstimate + 0.01); // Conservative cap
+
+    // Check recent occurrences
+    const recentLook = Math.min(this.cfg.recentLookback, recentDigits.length);
+    const recentTail = recentDigits.slice(-recentLook);
+    const recentHits = recentTail.filter(d => d === coldestDigit).length;
+
+    // Prediction cooldown for the coldest digit
+    const lastPredIdx = this._cooldownMap.get(coldestDigit);
+    const predictionCooldown = lastPredIdx != null ? this._tickCounter - lastPredIdx : Infinity;
+
+    // Gate checks
+    const gates = [];
+    if (recentHits > this.cfg.maxRecentHits) {
+      gates.push(`recent_hits:${recentHits}`);
+    }
+
+    // Cooldown veto (bot predicted this digit recently)
+    if (predictionCooldown < this.cfg.cooldownTicks) {
+      gates.push(`cooldown:${predictionCooldown}t`);
+    }
+
+    // Find second coldest for gap check
+    let secondCount = Infinity;
+    for (let d = 0; d < 10; d++) {
+      if (d !== coldestDigit && counts[d] < secondCount) {
+        secondCount = counts[d];
+      }
+    }
+    const gap = (secondCount - coldestCount) / n;
+    if (gap < this.cfg.minProbabilityGap) {
+      gates.push(`gap_low:${gap.toFixed(4)}`);
+    }
+
+    return {
+      symbol,
+      digit: coldestDigit,
+      count: coldestCount,
+      sampleSize: n,
+      pEstimate,
+      pUpper,
+      recentHits,
+      predictionCooldown,
+      gates,
+      allowedByModel: gates.length === 0,
+      lastDigit: recentDigits[recentDigits.length - 1],
+      lastQuote: ticks[ticks.length - 1]?.quote,
+    };
+  }
+
+  rank(list) {
+    return list
+      .filter(Boolean)
+      .filter(a => a.allowedByModel)
+      .sort((a, b) => a.pUpper - b.pUpper);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────
 // 7b. REPEAT-AVOID ANALYZER (STRATEGY=repeat_avoid)
 //
 //   Barrier digit = current last digit (DIGITDIFF: bet next tick does
@@ -2129,7 +2263,7 @@ class TradingBot {
     this.cfg = CONFIG;
     this.client = new DerivClient(this.cfg);
     this.market = new MarketDataManager(this.client, this.cfg);
-    this.analyzer = makeAnalyzer(this.cfg);
+    this.analyzer = new SimpleDigitAnalyzer(this.cfg);
     this.exec = new TradeExecutor(this.client, this.cfg);
     this.stats = new StatisticsManager();
     this.calibrator = new SymbolCalibrator(this.cfg);
@@ -2154,6 +2288,12 @@ class TradingBot {
     // ── Tick counter for cooldownTicks ──────────────────────────────
     this._tickCounter = 0;
     this._lastTradeTickIdx = null;
+
+    // ── Monte Carlo state (from accurateDiffer3_simple.js) ─────────
+    this.consecutiveMcSkips = 0;
+    this.lastLossAt = 0;
+    this.lastWeakSignalAt = 0;
+    this._circuitBreakerUntil = null;
 
     // ── Trade watchdog timers ──
     this.tradeWatchdogMs = CONFIG.tradeWatchdogMs || 90000;
@@ -2368,7 +2508,7 @@ class TradingBot {
       : '';
 
     telegram.send(
-      `🤖 <b>x2Digit Differ Bot Online</b>\n\n` +
+      `🤖 <b>SIMPLE Digit Differ Bot Online</b>\n\n` +
       `👤 Account: <code>${htmlEscape(info.loginid || '?')}</code>\n` +
       `💼 Type: ${info.isVirtual ? '🟡 DEMO' : '🔴 REAL'}\n` +
       `💰 Balance: ${(this.client.balance ?? 0).toFixed(2)} ${this.currency()}\n` +
@@ -2380,7 +2520,7 @@ class TradingBot {
       `${rotationLine}\n` +
       `${breakerLine}\n` +
       `${cooldownLine}\n` +
-      `📈 Signal: empirical digit frequency (heuristic, not a demonstrated edge — see file header)\n` +
+      `🧠 Method: <b>Monte Carlo</b> simulation-based differ selection\n` +
       `🧯 Daily stop: ${money(-Math.abs(this.cfg.dailyMaxLoss), this.currency())} or ${(this.cfg.dailyMaxLossPct*100).toFixed(1)}% of balance, whichever first\n` +
       `🕒 Trade day clock: <b>GMT/UTC</b> | EOD: ${this.cfg.eodTimeGmt} GMT\n\n` +
       `💼 Overall Profit: <b>${money(this.stats.overallProfit, this.currency())}</b>\n` +
@@ -2443,13 +2583,44 @@ class TradingBot {
     return { stake: calibMult === 0 ? 0 : stake, source: src, calibMult };
   }
 
+  /**
+   * Check if trading is allowed on the current day of week (GMT/UTC).
+   * @returns {boolean} true if trading is allowed today, false otherwise
+   */
+  _isTradingAllowedToday() {
+    const now = new Date();
+    const dayOfWeek = now.getUTCDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const daySettings = [
+      this.cfg.tradeSunday,
+      this.cfg.tradeMonday,
+      this.cfg.tradeTuesday,
+      this.cfg.tradeWednesday,
+      this.cfg.tradeThursday,
+      this.cfg.tradeFriday,
+      this.cfg.tradeSaturday
+    ];
+
+    const allowed = daySettings[dayOfWeek];
+    if (!allowed) {
+      logger.debug(`trading disabled for ${dayNames[dayOfWeek]} (GMT) — skipping analysis cycle`);
+    }
+    return allowed;
+  }
+
   async _analyzeAndTrade() {
     if (this.stopped || !this.client.authorized) return;
     if (this.paused) {
       logger.debug('trading paused — skipping analysis cycle');
       return;
     }
+    // Check if trading is allowed on current day of week
+    if (!this._isTradingAllowedToday()) {
+      return;
+    }
     if (Date.now() - this.lastTradeAt < this.cfg.tradeCooldownMs) return;
+    if (this.exec.count() >= this.cfg.maxOpenTrades) return;
     // Tick-based cooldown: don't re-analyze within N ticks of last trade
     if (this._lastTradeTickIdx != null) {
       const ticksSinceTrade = this._tickCounter - this._lastTradeTickIdx;
@@ -2458,7 +2629,6 @@ class TradingBot {
         return;
       }
     }
-    if (this.exec.count() >= this.cfg.maxOpenTrades) return;
 
     // ── Consecutive-loss circuit breaker ──────────────────────────────
     // Stops trading entirely for a cooldown after N losses in a row,
@@ -2515,109 +2685,90 @@ class TradingBot {
       return;
     }
 
-    const topLog = ranked.slice(0, 3).map(a =>
-      `${a.symbol}:d${a.best.digit} u=${a.best.pLossUpper.toFixed(4)} n=${a.best.sampleSize} ` +
-      `H=${a.entropy.toFixed(3)} X2=${a.chiSquare.toFixed(1)} ` +
-      `digits=${a.lastDigit} ` +
-      `${a.gates.length ? 'skip(' + a.gates[0] + ')' : 'ok'}`
-    ).join(' | ');
-    logger.info(`scan ${topLog}`);
+    // ── Filter to MC-approved analyses only ────────────────────────
+    const mcApproved = ranked.filter(a => a.allowedByModel || a.mcPasses);
+    if (!mcApproved.length) {
+      const top = ranked[0];
+      logger.info(`[MC] SKIP ALL: gates=[${top?.gates?.join(', ') || 'none'}] reason=${top?.mcReason || 'unknown'}`);
+      return;
+    }
 
-    // For the initial proposal probe we use a MINIMAL stake (just to
-    // discover the live payout) — the real stake is decided *after* we
-    // know the payout, using Kelly + calibration.
+    // ── Probe proposals for live payout ────────────────────────────
     const probeStake = this.cfg.minStake;
     const proposalCandidates = [];
 
-    for (const a of ranked.slice(0, Math.max(1, this.cfg.proposalScanTopN))) {
-      if (!a.allowedByModel) continue;
-      const candidateDigits = a.candidates.slice(0, Math.max(1, Math.min(3, this.cfg.proposalScanTopN)));
-      for (const c of candidateDigits) {
-        if (c.recentHits > this.cfg.maxRecentDigitHits) continue;
-        if (c.pLossUpper > this.cfg.maxLossProb) continue;
-        try {
-          const pres = await this.exec.proposal(a.symbol, c.digit, probeStake);
-          const p = pres.proposal;
-          if (!p?.id) continue;
-          const ask = Number(p.ask_price || probeStake);
-          const payout = Number(p.payout || 0);
-          if (!(payout > ask)) continue;
-          const payoutMult      = payout / ask;
-          const breakEvenLossProb = 1 - ask / payout;
-          const valueEdge       = breakEvenLossProb - c.pLossUpper - this.cfg.safetyMargin;
-          proposalCandidates.push({
-            analysis: a,
-            candidate: c,
-            proposal: p,
-            ask, payout, payoutMult,
-            breakEvenLossProb,
-            valueEdge,
-          });
-          this.livePayoutMult.set(a.symbol, payoutMult);
-        } catch (e) {
-          logger.debug(`proposal ${a.symbol} d${c.digit}:`, e.message);
-        }
+    for (const a of mcApproved) {
+      try {
+        const pres = await this.exec.proposal(a.symbol, a.digit, probeStake);
+        const p = pres.proposal;
+        if (!p?.id) continue;
+        const ask = Number(p.ask_price || probeStake);
+        const payout = Number(p.payout || 0);
+        if (!(payout > ask)) continue;
+        const payoutMult = payout / ask;
+        const breakEvenLossProb = 1 - ask / payout;
+        // Value edge: break-even loss prob minus pUpper minus safety margin
+        const valueEdge = breakEvenLossProb - a.pUpper - this.cfg.safetyMargin;
+        proposalCandidates.push({
+          analysis: a,
+          proposal: p,
+          ask, payout, payoutMult,
+          breakEvenLossProb,
+          valueEdge,
+        });
+        this.livePayoutMult.set(a.symbol, payoutMult);
+      } catch (e) {
+        logger.debug(`proposal ${a.symbol} d${a.digit}:`, e.message);
       }
     }
 
-    proposalCandidates.sort((a, b) => b.valueEdge - a.valueEdge || a.candidate.pLossUpper - b.candidate.pLossUpper);
+    if (!proposalCandidates.length) {
+      logger.debug('no proposal candidates after payout probe');
+      return;
+    }
 
-    // ── Filter by edge floor + asset rotation ─────────────────────
-    // The old code aborted the entire scan when the top-ranked candidate
-    // matched `this.tradedAsset`. That was a permanent lock: R_10 would
-    // win rank #1 every scan, get skipped every scan, and the bot could
-    // sit idle for days. Two fixes:
-    //   1) The lock now EXPIRES after cfg.assetRotationMs (default 60s).
-    //   2) If the top candidate is locked but a different-symbol
-    //      candidate is available, we fall through to that one instead
-    //      of skipping the whole scan.
+    proposalCandidates.sort((a, b) => b.valueEdge - a.valueEdge);
+
+    // ── Asset rotation ────────────────────────────────────────────
     const rotationMs = Math.max(0, this.cfg.assetRotationMs || 0);
     const lockActive = rotationMs > 0
                     && this.tradedAsset
                     && (Date.now() - (this.tradedAssetAt || 0) < rotationMs);
 
-    // Only consider candidates that clear the edge floor.
     const qualified = proposalCandidates.filter(c => c.valueEdge >= this.cfg.minEdge);
     if (!qualified.length) {
       const top = proposalCandidates[0];
       if (top) {
-        logger.info(`skip: best edge ${top.valueEdge.toFixed(4)} < minEdge ${this.cfg.minEdge} (${top.analysis.symbol} d${top.candidate.digit})`);
-      } else {
-        logger.debug('no proposal candidates after model gates');
+        logger.info(`skip: best edge ${top.valueEdge.toFixed(4)} < minEdge ${this.cfg.minEdge} (${top.analysis.symbol} d${top.analysis.digit})`);
       }
       return;
     }
 
-    // Prefer the highest-edge candidate that is NOT the recently-traded
-    // symbol. If every qualified candidate is on the locked symbol,
-    // check whether the lock has expired; if it has, allow re-trading
-    // that symbol. If the lock is still active AND every candidate is
-    // on that symbol, defer to the next scan.
     let best = qualified.find(c => !lockActive || c.analysis.symbol !== this.tradedAsset);
     if (!best) {
       if (lockActive) {
         const ageSec = ((Date.now() - (this.tradedAssetAt || 0)) / 1000).toFixed(1);
         logger.info(
-          `skip: only qualifying symbol is ${this.tradedAsset} — still in ${(rotationMs/1000).toFixed(0)}s rotation cooldown (age ${ageSec}s). Will retry next scan.`
+          `skip: only qualifying symbol is ${this.tradedAsset} — still in ${(rotationMs/1000).toFixed(0)}s rotation cooldown (age ${ageSec}s)`
         );
         return;
       }
-      best = qualified[0];   // lock expired; take the top candidate
+      best = qualified[0];
     }
     if (best !== qualified[0]) {
       logger.info(
-        `rotation: skipping locked ${qualified[0].analysis.symbol} (edge ${qualified[0].valueEdge.toFixed(4)}) → ` +
-        `taking ${best.analysis.symbol} d${best.candidate.digit} (edge ${best.valueEdge.toFixed(4)})`
+        `rotation: skipping locked ${qualified[0].analysis.symbol} → taking ${best.analysis.symbol} d${best.analysis.digit}`
       );
     }
 
-    // ── Compute the ACTUAL stake using Kelly + calibrator ──────────
-    const pWin = 1 - best.candidate.pLossUpper;   // conservative win-prob (uses upper bound of loss prob)
+    // ── Compute stake using Kelly + calibrator ────────────────────
+    // Win prob = 1 - pUpper (conservative upper bound of loss prob)
+    const pWin = 1 - best.analysis.pUpper;
     const sizing = this.currentStake({
       pWin,
       payoutMult: best.payoutMult,
-      edgeValue : best.valueEdge,
-      symbol    : best.analysis.symbol,
+      edgeValue: best.valueEdge,
+      symbol: best.analysis.symbol,
     });
     if (!sizing.stake || sizing.stake <= 0) {
       logger.info(`skip: sizing returned 0 (${sizing.source}, calibMult=${sizing.calibMult})`);
@@ -2627,63 +2778,67 @@ class TradingBot {
     logger.info(`sizing → stake=${stake.toFixed(2)} src=${sizing.source} calibMult=${sizing.calibMult}`);
 
     this.tradedAsset   = best.analysis.symbol;
-    this.tradedAssetAt = Date.now();   // used by the rotation-lock expiry above
+    this.tradedAssetAt = Date.now();
 
     const a = best.analysis;
-    const c = best.candidate;
     const payload = {
-      method: 'empirical-frequency',
-      digit: c.digit,
-      pLoss: c.pLoss,
-      pLossUpper: c.pLossUpper,
-      sampleSize: c.sampleSize,
-      predictedPWin: pWin,                         // ← calibrator input
+      method: 'coldest-digit',
+      digit: a.digit,
+      pEstimate: a.pEstimate,
+      pUpper: a.pUpper,
+      predictedPWin: pWin,
       payoutMult: best.payoutMult,
       breakEvenLossProb: best.breakEvenLossProb,
       valueEdge: best.valueEdge,
-      entropy: a.entropy,
-      chiSquare: a.chiSquare,
-      probabilityGap: a.probabilityGap,
       lastDigit: a.lastDigit,
-      recentHits: c.recentHits,
       sizingSource: sizing.source,
       calibStakeMultiplier: sizing.calibMult,
       calibState: this.calibrator.status(a.symbol),
-      stakeStakeRatio: +(stake / this.cfg.stake).toFixed(2),   // legacy field name kept for messages
-      recoveryStakeMultiplier: +(stake / this.cfg.stake).toFixed(2),
       currentLossStreak: this.stats.currentLossStreak,
+      gates: a.gates,
     };
 
-    const trade = await this.exec.buy(a.symbol, c.digit, stake, payload);
-    
+    // Record prediction for cooldown tracking
+    this.analyzer.recordPrediction(a.digit, a.symbol);
+
+    const trade = await this.exec.buy(a.symbol, a.digit, stake, payload);
+
     this.lastTradeAt = Date.now();
-    logger.info(`trade placed #${trade.contractId} ${a.symbol} DIGITDIFF differs ${c.digit} edge=${best.valueEdge.toFixed(4)} pLossU=${c.pLossUpper.toFixed(4)} qBE=${best.breakEvenLossProb.toFixed(4)}`);
+    logger.info(
+      `trade placed #${trade.contractId} ${a.symbol} DIGITDIFF differs ${a.digit} ` +
+      `pUpper=${(a.pUpper*100).toFixed(2)}% edge=${best.valueEdge.toFixed(4)}`
+    );
   }
 
   _onTradeOpen(t) {
     this.tradeStartTime = Date.now();
-    this._startTradeWatchdog(t.contractId);
     const a = t.analysis || {};
     telegram.send(
-      `🟢 <b>TRADE OPENED — x2DIGIT DIFFER</b>\n\n` +
+      `🟢 <b>TRADE OPENED — SIMPLE DIGIT DIFFER</b>\n\n` +
       `🎫 Contract: <code>#${t.contractId}</code>\n` +
       `📊 Symbol: <code>${t.symbol}</code>\n` +
-      `🔢 Prediction/barrier: final digit <b>DIFFERS from ${t.digit}</b>\n` +
+      `🔢 Barrier: final digit <b>DIFFERS from ${t.digit}</b>\n` +
       `⏱️ Duration: ${t.durationTicks} tick(s)\n` +
       `💵 Stake: ${t.stake.toFixed(2)} ${this.currency()}\n` +
       `🎁 Payout: ${t.payout.toFixed(2)} ${this.currency()}\n\n` +
-      `📐 <b>Model read (empirical frequency, not a guaranteed edge)</b>\n` +
-      `• Model P(loss digit ${t.digit}): ${(a.pLoss * 100).toFixed(2)}% (n=${a.sampleSize ?? '?'})\n` +
-      `• Conservative upper bound: <b>${(a.pLossUpper * 100).toFixed(2)}%</b>\n` +
+      `📐 <b>Analysis</b>\n` +
+      `• Loss probability (pUpper): <b>${((a.pUpper || 0)*100).toFixed(2)}%</b>\n` +
       `• Break-even loss prob: ${(a.breakEvenLossProb * 100).toFixed(2)}%\n` +
       `• Value edge: <b>${(a.valueEdge * 100).toFixed(2)}pp</b>\n` +
-      `• Entropy: ${Number(a.entropy || 0).toFixed(3)} | χ²: ${Number(a.chiSquare || 0).toFixed(2)} | p-gap: ${Number(a.probabilityGap || 0).toFixed(4)}\n` +
+      `• Recent hits: ${a.recentHits || 0}\n` +
       `• Current loss streak: ${a.currentLossStreak || 0}\n\n` +
       `🕒 ${utcTs()}`
     );
+
+    // Start watchdog timer for this trade
+    this._startTradeWatchdog(t.contractId);
   }
 
   _onTradeResult(t) {
+    // Clear watchdog timer — trade has settled
+    this._clearWatchdogTimers();
+    this._lastTradeTickIdx = this._tickCounter;
+
     const rec = this.stats.record(t);
     this.lastBalance = (this.lastBalance ?? this.client.balance ?? 0) + Number(t.profit || 0);
     if (t.balanceAfter != null) this.lastBalance = Number(t.balanceAfter) + Number(t.profit || 0);
@@ -2705,10 +2860,10 @@ class TradingBot {
 
     // ── Feed the per-symbol calibrator ──────────────────────────────
     // Uses the pWin we baked into the trade's analysis payload. Fall
-    // back to (1 − pLossUpper) if the field is missing (legacy trades).
+    // back to (1 − pUpper) if the field is missing (legacy trades).
     const won        = t.status === 'won';
     const pWinUsed   = Number(t.analysis?.predictedPWin
-                        ?? (t.analysis?.pLossUpper != null ? 1 - Number(t.analysis.pLossUpper) : null));
+                        ?? (t.analysis?.pUpper != null ? 1 - Number(t.analysis.pUpper) : null));
     let calibNote = '';
     if (this.cfg.calibEnabled && Number.isFinite(pWinUsed) && pWinUsed > 0 && pWinUsed < 1) {
       this.calibrator.record(t.symbol, pWinUsed, won);
@@ -2719,6 +2874,22 @@ class TradingBot {
           `vs pred ${cs.predicted.toFixed(2)}% (gap ${cs.gap >= 0 ? '+' : ''}${cs.gap.toFixed(2)}pp)`;
       }
     }
+
+    // ── Monte Carlo loss tracking ──────────────────────────────────
+    // On loss: activate cooldown, increment consecutive skip counter
+    // On win: reset consecutive skip counter
+    if (!won) {
+      this.lastLossAt = Date.now();
+      this.consecutiveMcSkips++;
+      logger.info(`LOSS recorded — cooldown ${this.cfg.lossCooldownMs/1000}s active (consecutive skips: ${this.consecutiveMcSkips})`);
+    } else {
+      this.consecutiveMcSkips = 0;
+    }
+
+    // Analysis metadata for telegram
+    const analysisMeta = t.analysis?.pUpper != null
+      ? `\n📐 pUpper=${((t.analysis.pUpper)*100).toFixed(2)}% edge=${((t.analysis.valueEdge || 0)*100).toFixed(2)}pp`
+      : '';
 
     const emoji = won ? '✅' : '❌';
     const label = won ? 'WIN' : 'LOSS';
@@ -2731,12 +2902,13 @@ class TradingBot {
       : '';
 
     telegram.send(
-      `${emoji} <b>TRADE ${label} — x2DIGIT DIFFER</b>\n\n` +
+      `${emoji} <b>TRADE ${label} — SIMPLE DIGIT DIFFER</b>\n\n` +
       `🎫 Contract: <code>#${t.contractId}</code>\n` +
       `📊 Symbol: <code>${t.symbol}</code> | differs <b>${t.digit}</b> | ${t.durationTicks}t\n` +
       `💵 Stake: ${t.stake.toFixed(2)} ${this.currency()}${kellyLine}\n` +
       `💰 P/L: <b>${money(t.profit, this.currency())}</b>\n` +
-      `⏱️ Duration: ${dur.toFixed(1)}s\n\n` +
+      `⏱️ Duration: ${dur.toFixed(1)}s\n` +
+      analysisMeta + '\n\n' +
       `📅 <b>GMT Day Stats (${rec.date})</b>\n` +
       `• Trades: ${todayStats.count} (✅${todayStats.wins} ❌${todayStats.losses})\n` +
       `• Win rate: ${todayStats.winRate.toFixed(1)}%\n` +
@@ -2749,7 +2921,6 @@ class TradingBot {
     );
 
     this.lastTradeAt = Date.now();
-    this._lastTradeTickIdx = this._tickCounter;
     this._saveState('after-trade');
   }
 
