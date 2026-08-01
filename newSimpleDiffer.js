@@ -257,8 +257,8 @@ const CONFIG = Object.freeze({
   hourlySummary: true,
 
   // Persistence/logging
-  stateFile: strEnv('STATE_FILE', 'simpleDiffer_state_001.json'),
-  logFile: strEnv('LOG_FILE', 'simpleDiffer_bot_001.log'),
+  stateFile: strEnv('STATE_FILE', 'simpleDiffern_state_01.json'),
+  logFile: strEnv('LOG_FILE', 'simpleDiffern_bot_01.log'),
   logLevel: strEnv('LOG_LEVEL', 'INFO SIMPLEDIFFER').toUpperCase(),
 
   // Telegram — MUST come from .env / environment, never hardcode a real
