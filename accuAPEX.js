@@ -142,7 +142,10 @@ const CONFIG = Object.freeze({
   // assets: ('R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,BOOM50,BOOM150N,BOOM300N,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH50,CRASH150N,CRASH300N,CRASH500,CRASH600,CRASH900,CRASH1000')
   //   .split(',').map(s => s.trim()).filter(Boolean),
 
-  assets: ('R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH500,CRASH600,CRASH900,CRASH1000')
+  // assets: ('R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH500,CRASH600,CRASH900,CRASH1000')
+  //   .split(',').map(s => s.trim()).filter(Boolean),
+
+  assets: ('R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V')
     .split(',').map(s => s.trim()).filter(Boolean),
 
   // ─ Telegram ─
@@ -177,7 +180,7 @@ const CONFIG = Object.freeze({
   },
 
   // ─ Logging ─
-  logFile : 'deriv_apex_bot_01.log',
+  logFile : 'deriv_apex_bot_001.log',
   logLevel: ('INFO').toUpperCase(),
 
   // ═══════════════════════════════════════════════════════════════════
@@ -279,7 +282,7 @@ const CONFIG = Object.freeze({
   //   Max entries per post-spike window per asset. After a spike fires,
   //   the bot has a limited exploitable window. Re-entering too many
   //   times in the same window increases exposure to the next spike.
-  maxEntriesPerSpikeWindow : parseInt('3', 10),
+  maxEntriesPerSpikeWindow : parseInt('1', 10),
 
   //   Cooldown after a loss on a specific asset (ms). Prevents
   //   re-entering the same asset immediately after a loss.
@@ -311,7 +314,7 @@ const CONFIG = Object.freeze({
   // ═══════════════════════════════════════════════════════════════════
   // v3: DYNAMIC ASSET DISCOVERY
   // ═══════════════════════════════════════════════════════════════════
-  autoDiscoverAssets       : true,
+  autoDiscoverAssets       : false,
   discoveryIntervalMs      : parseInt('3600000', 10),  // re-discover every hour
 
   //   Asset families to include in auto-discovery (case-insensitive).
@@ -362,7 +365,7 @@ const CONFIG = Object.freeze({
   tradeWatchdogMs: parseInt('90000', 10),
 
   // ─ State persistence ─
-  stateFile          : 'deriv_apex_bot_state_01.json',
+  stateFile          : 'deriv_apex_bot_state_001.json',
   stateSaveOnTrade   : true,
   stateSaveOnShutdown: true,
 
