@@ -132,7 +132,7 @@ const CONFIG = {
     GRANULARITY: 60,     // 1-minute candles
     TIMEFRAME_LABEL: '1m',
     CANDLES_TO_LOAD: 30,
-    MAX_CANDLES_STORED: 4,
+    MAX_CANDLES_STORED: 30,
     DURATION: 1,
     DURATION_UNIT: 's',
     MIN_CANDLES_REQUIRED: 30,    
