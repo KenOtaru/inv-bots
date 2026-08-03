@@ -119,7 +119,7 @@ const CONFIG = Object.freeze({
   // assets: ('R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,BOOM50,BOOM150N,BOOM300N,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH50,CRASH150N,CRASH300N,CRASH500,CRASH600,CRASH900,CRASH1000')
   //   .split(',').map(s => s.trim()).filter(Boolean),
 
-  assets: ('R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH500,CRASH600,CRASH900,CRASH1000')
+  assets: ('R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V')
     .split(',').map(s => s.trim()).filter(Boolean),
 
   // ── Telegram (retained) ──
@@ -160,7 +160,7 @@ const CONFIG = Object.freeze({
   ddFullStake    : parseFloat('0.05'),
   ddReduce25     : parseFloat('0.10'),
   ddReduce50     : parseFloat('0.15'),
-  ddStopTrading  : parseFloat('0.20'),
+  ddStopTrading  : parseFloat('0.70'),
 
   // ── Streak circuit breakers ──
   streakReduceStake  : parseInt('3'),
@@ -168,7 +168,7 @@ const CONFIG = Object.freeze({
   streakStopDay      : parseInt('7'),
 
   // ── Daily limits ──
-  dailyMaxLoss   : parseFloat('110'),
+  dailyMaxLoss   : parseFloat('150'),
   dailyMaxTrades : parseInt('2000000000'),
 
   // ── Reconnect ──
@@ -186,11 +186,11 @@ const CONFIG = Object.freeze({
   tradeWatchdogMs: parseInt('90000', 10),
 
   // ── Logging ──
-  logFile : 'accuPULSE2b_01.log',
+  logFile : 'accuPULSE2bc_01.log',
   logLevel: 'INFO',
 
   // ── State persistence ──
-  stateFile           : 'accuPULSE2b_state_01.json',
+  stateFile           : 'accuPULSE2bc_state_01.json',
   stateSaveOnTrade    : true,
   stateSaveOnShutdown : true,
 
