@@ -147,7 +147,7 @@ const CONFIG = {
     // ── Position Management ───────────────────────────────────
     MAX_OPEN_POSITIONS_PER_ASSET: 1,
     MAX_TOTAL_POSITIONS: 1,
-    MAX_TRADES_PER_CYCLE: 3,
+    MAX_TRADES_PER_CYCLE: 9,
 
     // ── Active Index Assets ───────────────────────────────────
     ACTIVE_ASSETS: [
