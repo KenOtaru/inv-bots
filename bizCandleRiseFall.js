@@ -134,7 +134,7 @@ const CONFIG = {
     CANDLES_TO_LOAD: 30,
     MAX_CANDLES_STORED: 30,
     DURATION: 1,
-    DURATION_UNIT: 's',
+    DURATION_UNIT: 't',
     MIN_CANDLES_REQUIRED: 30,    
 
     // ── Trading Sessions (synthetics trade 24/7) ─────────────
