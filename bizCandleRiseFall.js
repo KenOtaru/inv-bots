@@ -79,8 +79,8 @@ class RestClient {
 // ============================================================
 // FILE PATHS  [RETAINED]
 // ============================================================
-const STATE_FILE = path.join(__dirname, 'bizCandle_010-state.json');
-const HISTORY_FILE = path.join(__dirname, 'bizCandle_010-history.json');
+const STATE_FILE = path.join(__dirname, 'bizCandle_011-state.json');
+const HISTORY_FILE = path.join(__dirname, 'bizCandle_011-history.json');
 const STATE_SAVE_INTERVAL = 5000;  // ms
 
 // ============================================================
@@ -118,7 +118,7 @@ const CONFIG = {
     MAX_MARTINGALE_LEVEL: 1,
     AFTER_MAX_LOSS: 'continue',
     CONTINUE_EXTRA_LEVELS: 8,
-    EXTRA_LEVEL_MULTIPLIERS: [1.8, 2.1, 2.1, 2.1, 2.1, 2.1, 2.1],
+    EXTRA_LEVEL_MULTIPLIERS: [1.8, 2.1, 2.1, 2.2, 2.2, 2.2, 2.3],
     AUTO_COMPOUNDING: true,
     COMPOUND_PERCENTAGE: 0.24,
     STOP_LOSS: 152,
@@ -131,10 +131,10 @@ const CONFIG = {
     // ── Candle / Contract Settings [RETAINED] ────────────────
     GRANULARITY: 60,     // 1-minute candles
     TIMEFRAME_LABEL: '1m',
-    CANDLES_TO_LOAD: 200,
-    MAX_CANDLES_STORED: 300,
+    CANDLES_TO_LOAD: 30,
+    MAX_CANDLES_STORED: 4,
     DURATION: 1,
-    DURATION_UNIT: 'm',
+    DURATION_UNIT: 's',
     MIN_CANDLES_REQUIRED: 82,    
 
     // ── Trading Sessions (synthetics trade 24/7) ─────────────
@@ -1643,57 +1643,58 @@ class IndexBot {
                 }
                 return;
             }
-        } else {
-            if (dir === 'CALLE') {
-                LOGGER.signal(`[${symbol}] BUY SIGNAL`);
-                const setupSuccess = 'PUTE';
+        } 
+        // else {
+        //     if (dir === 'CALLE') {
+        //         LOGGER.signal(`[${symbol}] BUY SIGNAL`);
+        //         const setupSuccess = 'PUTE';
 
-                if (setupSuccess) {
-                    // Execute first trade as PUTE
-                    const firstDir = 'PUTE';
-                    a.normalModeActive = true;
-                    a.tradesInNormalMode = 1;
-                    a.normalModeDirection = firstDir;
-                    a.lastTradeDirection = firstDir;
-                    a.currentDirection = firstDir;
+        //         if (setupSuccess) {
+        //             // Execute first trade as PUTE
+        //             const firstDir = 'PUTE';
+        //             a.normalModeActive = true;
+        //             a.tradesInNormalMode = 1;
+        //             a.normalModeDirection = firstDir;
+        //             a.lastTradeDirection = firstDir;
+        //             a.currentDirection = firstDir;
 
-                    LOGGER.normal(`[${symbol}] NORMAL MODE #1/${CONFIG.MAX_TRADES_PER_CYCLE} \u{1f4c8} PUTE (initial signal trade) | Stake: $${stake.toFixed(2)}`);
+        //             LOGGER.normal(`[${symbol}] NORMAL MODE #1/${CONFIG.MAX_TRADES_PER_CYCLE} \u{1f4c8} PUTE (initial signal trade) | Stake: $${stake.toFixed(2)}`);
 
-                    this._executeBuy(symbol, firstDir, stake, {
-                        method: 'CANDLE_CLOSE_BULLISH',
-                        reason: `CANDLE_CLOSE_BULLISH signal — candle closed above previous candle (bullish pattern)`,
-                        marketMode: mode,
-                    });
+        //             this._executeBuy(symbol, firstDir, stake, {
+        //                 method: 'CANDLE_CLOSE_BULLISH',
+        //                 reason: `CANDLE_CLOSE_BULLISH signal — candle closed above previous candle (bullish pattern)`,
+        //                 marketMode: mode,
+        //             });
 
-                    a.buyFlagActive = false; // consumed
-                }
-                return;
-            } else {
-                LOGGER.signal(`[${symbol}] BUY SIGNAL`);
-                const setupSuccess = 'CALLE';
+        //             a.buyFlagActive = false; // consumed
+        //         }
+        //         return;
+        //     } else {
+        //         LOGGER.signal(`[${symbol}] BUY SIGNAL`);
+        //         const setupSuccess = 'CALLE';
 
-                if (setupSuccess) {
-                    // Execute first trade as PUTE
-                    const firstDir = 'CALLE';
-                    a.normalModeActive = true;
-                    a.tradesInNormalMode = 1;
-                    a.normalModeDirection = firstDir;
-                    a.lastTradeDirection = firstDir;
-                    a.currentDirection = firstDir;
+        //         if (setupSuccess) {
+        //             // Execute first trade as PUTE
+        //             const firstDir = 'CALLE';
+        //             a.normalModeActive = true;
+        //             a.tradesInNormalMode = 1;
+        //             a.normalModeDirection = firstDir;
+        //             a.lastTradeDirection = firstDir;
+        //             a.currentDirection = firstDir;
 
-                    LOGGER.normal(`[${symbol}] NORMAL MODE #1/${CONFIG.MAX_TRADES_PER_CYCLE} \u{1f4c9} CALLE (initial signal trade) | Stake: $${stake.toFixed(2)}`);
+        //             LOGGER.normal(`[${symbol}] NORMAL MODE #1/${CONFIG.MAX_TRADES_PER_CYCLE} \u{1f4c9} CALLE (initial signal trade) | Stake: $${stake.toFixed(2)}`);
 
-                    this._executeBuy(symbol, firstDir, stake, {
-                        method: 'CANDLE_CLOSE_BEARISH',
-                        reason: `CANDLE_CLOSE_BEARISH signal — candle closed below previous candle (bearish pattern)`,
-                        marketMode: mode,
-                    });
+        //             this._executeBuy(symbol, firstDir, stake, {
+        //                 method: 'CANDLE_CLOSE_BEARISH',
+        //                 reason: `CANDLE_CLOSE_BEARISH signal — candle closed below previous candle (bearish pattern)`,
+        //                 marketMode: mode,
+        //             });
 
-                    a.sellFlagActive = false; // consumed
-                }
-                return;
-            }
-        }
+        //             a.sellFlagActive = false; // consumed
+        //         }
+        //         return;
+        //     }
+        // }
 
         // No signal — log status
         LOGGER.debug(`[${symbol}] No new trade signal detected — last closed candle: O:${lastClosedCandle.open.toFixed(5)} H:${lastClosedCandle.high.toFixed(5)} L:${lastClosedCandle.low.toFixed(5)} C:${lastClosedCandle.close.toFixed(5)}`);
