@@ -124,9 +124,9 @@ const CONFIG = {
     // ── Candle / Contract Settings (defaults, overridable per asset) ──
     GRANULARITY: 60,
     TIMEFRAME_LABEL: '1m',
-    CANDLES_TO_LOAD: 60,
-    MAX_CANDLES_STORED: 60,
-    DURATION: 14,
+    CANDLES_TO_LOAD: 30,
+    MAX_CANDLES_STORED: 30,
+    DURATION: 21,
     DURATION_UNIT: 's',
     // MIN_CANDLES_REQUIRED: 82,
 
@@ -169,7 +169,7 @@ const DEFAULT_ASSET_CONFIG = {
     TIMEFRAME_LABEL: '1m',
 
     // Trade Duration
-    DURATION: 60,
+    DURATION: 21,
     DURATION_UNIT: 's',
 
     // Stake Settings
@@ -191,9 +191,9 @@ const DEFAULT_ASSET_CONFIG = {
     STOP_LOSS: 152,
 
     // Pattern Analysis Settings
-    PATTERN_MIN_CONFIDENCE: 0.10,
+    PATTERN_MIN_CONFIDENCE: 0.60,
     MIN_PATTERN_CONFIDENCE: 0.10,
-    MIN_PATTERN_CONFIDENCE_STEP_RNG: 0.10,
+    MIN_PATTERN_CONFIDENCE_STEP_RNG: 0.60,
     PATTERN_LENGTHS: [2], //[3, 4, 5, 6, 7, 8]
     PATTERN_MIN_OCCURRENCES: 1,
     PATTERN_RECENCY_DECAY: 0.9990,
