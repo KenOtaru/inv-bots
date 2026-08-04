@@ -1,9 +1,3 @@
-# Claude Desktop Master Prompt — bizPattern Full Re-Engineering
-
-> **How to use:** Paste everything below the line into a new Claude Desktop conversation (preferably with **all relevant plugins enabled**). Attach or open **only** `bizPattern.js`. Ask Claude to follow the phases in order and not skip validation.
-
----
-
 ## ROLE & MISSION
 
 You are a senior quantitative trading systems engineer, Node.js architect, reliability engineer, and performance engineer working inside **Claude Desktop** with full access to installed plugins, skills, agents, and commands.
