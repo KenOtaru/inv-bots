@@ -79,8 +79,8 @@ class RestClient {
 // ============================================================
 // FILE PATHS  [RETAINED]
 // ============================================================
-const STATE_FILE = path.join(__dirname, 'bizArbitrage_04-state.json');
-const HISTORY_FILE = path.join(__dirname, 'bizArbitrage_04-history.json');
+const STATE_FILE = path.join(__dirname, 'bizArbitrage_06-state.json');
+const HISTORY_FILE = path.join(__dirname, 'bizArbitrage_06-history.json');
 const STATE_SAVE_INTERVAL = 5000;  // ms
 
 // ============================================================
@@ -126,9 +126,8 @@ const CONFIG = {
     TIMEFRAME_LABEL: '1m',
     CANDLES_TO_LOAD: 30,
     MAX_CANDLES_STORED: 4,
-    DURATION: 2,
-    DURATION_UNIT: 't',
-    MIN_CANDLES_REQUIRED: 82,
+    DURATION: 14,
+    DURATION_UNIT: 's',
 
     // ── Trading Sessions (synthetics trade 24/7) ─────────────
     USE_TRADING_SESSIONS: false,
@@ -139,12 +138,18 @@ const CONFIG = {
 
     // ── Position Management ───────────────────────────────────
     MAX_OPEN_POSITIONS_PER_ASSET: 1,
-    MAX_TOTAL_POSITIONS: 6,
-    MAX_TRADES_PER_CYCLE: 3,
+    MAX_TOTAL_POSITIONS: 7,
+    MAX_TRADES_PER_CYCLE: 1,
 
     // ── Active Index Assets ───────────────────────────────────
     ACTIVE_ASSETS: [
+        'R_75',
+        'R_100',
+        '1HZ10V',
+        '1HZ25V',
+        '1HZ100V',
         'stpRNG',
+        'stpRNG3',
     ],
 
     // ── Misc ──────────────────────────────────────────────────
@@ -158,13 +163,6 @@ const CONFIG = {
 // PER-ASSET CONFIGURATION (from arbitrageRF.js)
 // ============================================================
 const DEFAULT_ASSET_CONFIG = {
-    // Candle Settings
-    GRANULARITY: 60,
-    TIMEFRAME_LABEL: '1m',
-
-    // Trade Duration
-    DURATION: 5,
-    DURATION_UNIT: 't',
 
     // Stake Settings
     INITIAL_STAKE: 0.35,
@@ -1820,6 +1818,14 @@ class IndexBot {
         if (!SessionManager.isSessionActive()) return;
 
         const assetConfig = getAssetConfig(symbol);
+
+        const totalPositions = CONFIG.ACTIVE_ASSETS.reduce(
+            (sum, s) => sum + (state.assets[s]?.activePositions?.length ?? 0), 0
+        );
+        if (totalPositions >= CONFIG.MAX_TOTAL_POSITIONS) {
+            LOGGER.debug(`[${symbol}] Max total positions (${totalPositions}/${CONFIG.MAX_TOTAL_POSITIONS})`);
+            return;
+        }
 
         // Check position limit
         if (assetState.activePositions.length >= CONFIG.MAX_OPEN_POSITIONS_PER_ASSET) {
