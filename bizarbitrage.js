@@ -79,8 +79,8 @@ class RestClient {
 // ============================================================
 // FILE PATHS  [RETAINED]
 // ============================================================
-const STATE_FILE = path.join(__dirname, 'bizArbitrage_06-state.json');
-const HISTORY_FILE = path.join(__dirname, 'bizArbitrage_06-history.json');
+const STATE_FILE = path.join(__dirname, 'bizArbitrage_07-state.json');
+const HISTORY_FILE = path.join(__dirname, 'bizArbitrage_07-history.json');
 const STATE_SAVE_INTERVAL = 5000;  // ms
 
 // ============================================================
@@ -124,10 +124,11 @@ const CONFIG = {
     // ── Candle / Contract Settings (defaults, overridable per asset) ──
     GRANULARITY: 60,
     TIMEFRAME_LABEL: '1m',
-    CANDLES_TO_LOAD: 30,
-    MAX_CANDLES_STORED: 4,
+    CANDLES_TO_LOAD: 60,
+    MAX_CANDLES_STORED: 60,
     DURATION: 14,
     DURATION_UNIT: 's',
+    // MIN_CANDLES_REQUIRED: 82,
 
     // ── Trading Sessions (synthetics trade 24/7) ─────────────
     USE_TRADING_SESSIONS: false,
@@ -163,14 +164,21 @@ const CONFIG = {
 // PER-ASSET CONFIGURATION (from arbitrageRF.js)
 // ============================================================
 const DEFAULT_ASSET_CONFIG = {
+    // Candle Settings
+    GRANULARITY: 60,
+    TIMEFRAME_LABEL: '1m',
+
+    // Trade Duration
+    DURATION: 60,
+    DURATION_UNIT: 's',
 
     // Stake Settings
     INITIAL_STAKE: 0.35,
     INVESTMENT_AMOUNT: 152,
 
     // Martingale Settings
-    MARTINGALE_MULTIPLIER: 1.48,
-    MAX_MARTINGALE_LEVEL: 1,
+    MARTINGALE_MULTIPLIER: 1,
+    MAX_MARTINGALE_LEVEL: 5,
     AFTER_MAX_LOSS: 'continue',
     CONTINUE_EXTRA_LEVELS: 8,
     EXTRA_LEVEL_MULTIPLIERS: [1.8, 2.1, 2.1, 2.2, 2.2, 2.2, 2.3],
