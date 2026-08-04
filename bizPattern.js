@@ -126,9 +126,9 @@ const CONFIG = {
     // ── Candle Pattern Recognition settings (from candlePatternRFm.js) ─
     USE_RECOVERY_STRATEGY: false,
     PATTERN_MIN_CONFIDENCE: 0.50,
-    MIN_AGREEMENT_RATIO_CONFIDENCE: 0.50,
-    MIN_PATTERN_CONFIDENCE: 0.50,
-    MIN_PATTERN_CONFIDENCE_STEP_RNG: 0.50,
+    MIN_AGREEMENT_RATIO_CONFIDENCE: 0.10,
+    MIN_PATTERN_CONFIDENCE: 0.10,
+    MIN_PATTERN_CONFIDENCE_STEP_RNG: 0.10,
     PATTERN_LENGTHS: [3],
     PATTERN_MIN_OCCURRENCES: 1,
     PATTERN_RECENCY_DECAY: 0.9990,
@@ -163,8 +163,8 @@ const CONFIG = {
     // ── Active Index Assets ───────────────────────────────────
     ACTIVE_ASSETS: [
         'R_75',
-        // 'R_100',
-        // 'stpRNG',
+        'R_100',
+        'stpRNG',
     ],
 
     // ── Misc ──────────────────────────────────────────────────

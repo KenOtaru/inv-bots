@@ -79,8 +79,8 @@ class RestClient {
 // ============================================================
 // FILE PATHS  [RETAINED]
 // ============================================================
-const STATE_FILE = path.join(__dirname, 'bizArbitrage_03-state.json');
-const HISTORY_FILE = path.join(__dirname, 'bizArbitrage_03-history.json');
+const STATE_FILE = path.join(__dirname, 'bizArbitrage_04-state.json');
+const HISTORY_FILE = path.join(__dirname, 'bizArbitrage_04-history.json');
 const STATE_SAVE_INTERVAL = 5000;  // ms
 
 // ============================================================
@@ -163,7 +163,7 @@ const DEFAULT_ASSET_CONFIG = {
     TIMEFRAME_LABEL: '1m',
 
     // Trade Duration
-    DURATION: 3,
+    DURATION: 5,
     DURATION_UNIT: 't',
 
     // Stake Settings
