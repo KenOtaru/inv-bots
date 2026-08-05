@@ -94,20 +94,11 @@ loadEnv();
 // ═══════════════════════════════════════════════════════════════════════
 // 2. CONFIGURATION  (credentials retained from reference bots)
 // ═══════════════════════════════════════════════════════════════════════
-/*
- * Strategy assumptions (demo validation only): An ACCU can knock out on one
- * tick outside a barrier evaluated from the previous spot. No code path treats
- * distance from entry as barrier safety. A candidate requires a barrier from a
- * recent proposal, a 95% Wilson lower bound on single-tick survival from recent
- * returns, positive conservative horizon EV after a 35% model haircut, and the
- * same test again on the fresh proposal used for buy. This is a selection model,
- * not proof of an edge: compare predicted survival with realized outcomes.
- */
 const CONFIG = Object.freeze({
   // ── Deriv API ──
   // apiToken  : ('0P94g4WdSrSrzir').trim(),   // retained from reference
   // appId     : '1089',
-  apiToken:    'pat_cb2016855b5e6c61ac95f94432192dd6ed86bec7f7454e575d3fe1ed9f617692',
+  apiToken:    'pat_8e0a3285bd6e74f52a67985b8069f4bea42aa96ce65d129c60ebb838ed1065ee',
   appId:       '33uslPtthXBEkQOdfKfoY',
   wsUrl     : 'wss://ws.derivws.com/websockets/v3',
   currency  : 'USD',
@@ -116,14 +107,12 @@ const CONFIG = Object.freeze({
   // ── Trade parameters ──
   stake           : parseFloat('5.0'),
   growthRate      : parseFloat('0.05'),    // 5% base growth rate
-  stopLoss        : parseFloat('500.0'),     // hard $ stop per contract in demo
-  takeProfit      : parseFloat('5000.0'),    // session take-profit in demo
-  demoOnly        : true,                  // refuse to trade a non-virtual account
-  tradeEnabled    : true,                  // set false for observe-only market collection
+  stopLoss        : parseFloat('100.0'),   // hard $ stop per contract
+  takeProfit      : parseFloat('5000.0'),   // session take-profit
 
   // ── Anti-Martingale (win-streak compounding) ──
   winsBeforeScaling     : parseInt('3'),
-  winStakeMultiplier    : parseFloat('1.2'),
+  winStakeMultiplier    : parseFloat('1.5'),
   maxWinStakeMultiplier : parseFloat('4.0'),
 
   // ── Assets ──
@@ -146,19 +135,6 @@ const CONFIG = Object.freeze({
   analysisIntervalMs  : parseInt('8000', 10),
   tradeCooldownMs     : parseInt('5000', 10),
   maxOpenTrades       : parseInt('1', 10),
-
-  // Accumulator risk model. A barrier is evaluated against the prior tick;
-  // these controls model that single-tick hazard, never a static entry barrier.
-  candidateGrowthRates : [0.01, 0.02, 0.03, 0.04],
-  hazardWindow         : parseInt('250', 10),
-  plannedHoldTicks     : parseInt('20', 10),
-  minBarrierPct        : parseFloat('0.02'),
-  minEmpiricalSamples  : parseInt('150', 10),
-  confidenceZ          : parseFloat('1.96'),
-  evHaircut            : parseFloat('0.65'),
-  minNetEvRatio        : parseFloat('0.02'),
-  maxRecentJumpZ       : parseFloat('4.0'),
-  maxAssetCorrelation  : parseFloat('0.85'),
 
   // ── ARCA gates ──
   minConfidence       : parseFloat('0.60'), //0.072
@@ -192,8 +168,8 @@ const CONFIG = Object.freeze({
   streakStopDay      : parseInt('7'),
 
   // ── Daily limits ──
-  dailyMaxLoss   : parseFloat('25'),
-  dailyMaxTrades : parseInt('12'),
+  dailyMaxLoss   : parseFloat('150'),
+  dailyMaxTrades : parseInt('2000000000'),
 
   // ── Reconnect ──
   reconnect: {
@@ -207,15 +183,14 @@ const CONFIG = Object.freeze({
   barrierRefreshMs: parseInt('45000', 10),
 
   // ── Trade watchdog ──
-  tradeWatchdogMs: parseInt('120000', 10),
-  maxTelegramQueue: parseInt('100', 10),
+  tradeWatchdogMs: parseInt('90000', 10),
 
   // ── Logging ──
-  logFile : 'accuPULSE2bc_02.log',
+  logFile : 'accuPULSE2bc_01.log',
   logLevel: 'INFO',
 
   // ── State persistence ──
-  stateFile           : 'accuPULSE2bc_state_02.json',
+  stateFile           : 'accuPULSE2bc_state_01.json',
   stateSaveOnTrade    : true,
   stateSaveOnShutdown : true,
 
@@ -223,7 +198,6 @@ const CONFIG = Object.freeze({
   eodTimeGmt          : '00:00',
   eodSendDelaySeconds : parseInt('10', 10),
   hourlySummary       : true,
-  pauseWindowsGmt     : [], // e.g. [['23:55', '00:10']] blocks new entries only
 });
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -293,13 +267,8 @@ class TelegramNotifier extends EventEmitter {
   }
   send(text) {
     if (!this.enabled) { logger.debug('tg(dry):', text.slice(0, 100)); return; }
-    // Summaries must not let an unavailable Telegram endpoint grow memory forever.
-    if (this.queue.length >= CONFIG.maxTelegramQueue) {
-      this.queue.shift();
-      logger.warn('telegram queue full; dropped oldest notification');
-    }
     this.queue.push(text);
-    void this._drain();
+    this._drain();
   }
 }
 const telegram = new TelegramNotifier(CONFIG.telegram);
@@ -581,10 +550,8 @@ class MarketDataManager extends EventEmitter {
   cacheBarrier(symbol, growthRate, cd) {
     if (!cd) return;
     const key = `${symbol}:${growthRate}`;
-    const spot = parseFloat(cd.current_spot || 0);
-    const distance = parseFloat(cd.barrier_spot_distance || 0);
     this._barrierCache.set(key, {
-      halfBarrierPct: spot > 0 && distance > 0 ? (distance / spot) * 100 : parseFloat(cd.tick_size_barrier_percentage || 0),
+      halfBarrierPct: parseFloat(cd.tick_size_barrier_percentage || 0),
       highBarrier: parseFloat(cd.high_barrier || 0),
       lowBarrier: parseFloat(cd.low_barrier || 0),
       maxPayout: parseFloat(cd.maximum_payout || 0),
@@ -668,70 +635,50 @@ class ARCAAnalyzer {
   constructor(cfg) { this.cfg = cfg; this.w = cfg.weights; }
 
   // ── MAIN ENTRY ──────────────────────────────────────────────
-  analyze(symbol, ticks, barrier, growthRate) {
-    const model = this._hazardEstimate(ticks, barrier?.halfBarrierPct, growthRate);
-    if (!model.ok) return { symbol, growthRate, eligible: false, score: -Infinity, reasons: [model.reason] };
+  analyze(symbol, ticks, stays) {
+    if (!ticks || ticks.length < this.cfg.minTicksForAnalysis) return null;
     const quotes = ticks.map(t => t.quote);
+    const n = quotes.length;
+
     const vol = this._volatilityRegime(quotes);
     const trend = this._trendAlignment(quotes);
-    // Score only ranks candidates. The hard acceptance rule is conservative EV.
-    const score = model.conservativeEV + (vol?.score || 0) * 0.01;
+    const surv = stays ? this._survivalTrend(stays.ticks_stayed_in) : null;
+    const session = this._sessionScore();
+
+    const volScore = vol ? vol.score : 0.5;
+    const trendScore = trend ? trend.composite : 0.5;
+    const survScore = surv ? surv.score : 0.5;
+    const barrScore = 0.6;  // default: assume OK at entry
+
+    const composite =
+      this.w.volRegime  * volScore +
+      this.w.trendAlign * trendScore +
+      this.w.survival   * survScore +
+      this.w.barrier    * barrScore +
+      this.w.session    * session;
+
+    const suggestedGrowth = vol
+      ? (vol.regime === 0 ? 0.05 : vol.regime === 1 ? 0.03 : 0.01)
+      : this.cfg.growthRate;
+
+    const reasons = [];
+    if (vol) reasons.push(`vol:${vol.regimeLabel}`);
+    if (trend) reasons.push(`trend:${trend.direction}`);
+    if (surv) reasons.push(`surv:${surv.trendLabel}`);
+    reasons.push(`sess:${session.toFixed(2)}`);
+
     return {
-      symbol, growthRate, eligible: true, score, model,
-      volRegime: vol?.regime ?? 1, volRegimeLabel: vol?.regimeLabel ?? 'normal', volScore: vol?.score ?? 0,
-      trendDirection: trend?.direction ?? 'neutral', trendScore: trend?.composite ?? 0, rsi: trend?.rsi ?? 50,
-      survivalScore: model.pLower, survivalMean: model.pTick * this.cfg.plannedHoldTicks,
-      survivalSlope: 0, survivalConsistency: model.pLower, pSurvival: model.pHorizon,
-      sessionScore: 0, suggestedGrowth: growthRate, hurst: vol?.hurst ?? 0.5,
-      reasons: [`pL:${model.pLower.toFixed(4)}`, `S${this.cfg.plannedHoldTicks}:${model.pHorizon.toFixed(3)}`, `ev:${(model.conservativeEV * 100).toFixed(2)}%`],
+      symbol, score: composite,
+      volRegime: vol?.regime ?? 1, volRegimeLabel: vol?.regimeLabel ?? 'normal', volScore,
+      trendDirection: trend?.direction ?? 'neutral', trendScore, rsi: trend?.rsi ?? 50,
+      survivalScore: survScore, survivalMean: surv?.mean ?? 0, survivalSlope: surv?.slope ?? 0,
+      survivalConsistency: surv?.consistency ?? 0, pSurvival: surv?.pSurvival ?? 0.5,
+      sessionScore: session, suggestedGrowth,
+      hurst: vol?.hurst ?? 0.5, reasons,
     };
   }
 
-  rank(analyses) { return analyses.filter(a => a?.eligible).sort((a, b) => b.score - a.score); }
-
-  // The only relevant knockout event is a single return outside the barrier
-  // around the previous spot. We use a Wilson lower bound rather than treating
-  // a proposal's historical `ticks_stayed_in` display as a predictive sample.
-  _hazardEstimate(ticks, halfBarrierPct, growthRate) {
-    const barrierPct = Number(halfBarrierPct || 0);
-    if (!(barrierPct >= this.cfg.minBarrierPct)) return { ok: false, reason: 'NO_VERIFIED_BARRIER' };
-    if (!ticks || ticks.length < this.cfg.minEmpiricalSamples + 1) return { ok: false, reason: 'INSUFFICIENT_TICKS' };
-    const start = Math.max(1, ticks.length - this.cfg.hazardWindow);
-    const returns = [];
-    for (let i = start; i < ticks.length; i++) {
-      const prev = Number(ticks[i - 1].quote), next = Number(ticks[i].quote);
-      if (prev > 0 && next > 0) returns.push(Math.abs(Math.log(next / prev)));
-    }
-    if (returns.length < this.cfg.minEmpiricalSamples) return { ok: false, reason: 'INSUFFICIENT_VALID_RETURNS' };
-    const threshold = barrierPct / 100;
-    const survivors = returns.filter(r => r < threshold).length;
-    const pTick = survivors / returns.length;
-    const pLower = this._wilsonLower(survivors, returns.length, this.cfg.confidenceZ);
-    const pHorizon = Math.pow(pLower, this.cfg.plannedHoldTicks);
-    const gross = Math.pow(1 + growthRate, this.cfg.plannedHoldTicks) * pHorizon - 1;
-    const conservativeEV = gross > 0 ? gross * this.cfg.evHaircut : gross;
-    const sorted = [...returns].sort((a, b) => a - b);
-    const median = sorted[Math.floor(sorted.length / 2)] || 1e-12;
-    const mad = sorted.reduce((s, x) => s + Math.abs(x - median), 0) / sorted.length || 1e-12;
-    const jumpZ = Math.abs(returns[returns.length - 1] - median) / (1.4826 * mad);
-    if (jumpZ > this.cfg.maxRecentJumpZ) return { ok: false, reason: 'RECENT_JUMP', jumpZ };
-    if (conservativeEV < this.cfg.minNetEvRatio) return { ok: false, reason: 'EV_BELOW_HAIRCUT', conservativeEV, pLower, pHorizon };
-    return { ok: true, barrierPct, threshold, observations: returns.length, survivors, pTick, pLower, pHorizon, grossEV: gross, conservativeEV, jumpZ };
-  }
-
-  _wilsonLower(hits, n, z) {
-    if (!n) return 0;
-    const p = hits / n, z2 = z * z, d = 1 + z2 / n;
-    return Math.max(0, (p + z2 / (2 * n) - z * Math.sqrt((p * (1 - p) + z2 / (4 * n)) / n)) / d);
-  }
-
-  evaluateProposal(ticks, growthRate, proposal) {
-    const cd = proposal?.contract_details || {};
-    const spot = Number(proposal?.spot || cd.current_spot || 0);
-    const distance = Number(cd.barrier_spot_distance || 0);
-    const pct = spot > 0 && distance > 0 ? (distance / spot) * 100 : Number(cd.tick_size_barrier_percentage || 0);
-    return this._hazardEstimate(ticks, pct, growthRate);
-  }
+  rank(analyses) { return analyses.filter(Boolean).sort((a, b) => b.score - a.score); }
 
   // ── 1. VOLATILITY REGIME ────────────────────────────────────
   _volatilityRegime(q) {
@@ -903,12 +850,9 @@ class TradeExecutor extends EventEmitter {
     this.open = new Map();
     this.market = null;
     this._selling = new Set();
-    this._buying = false;
   }
 
-  async buy(symbol, growthRate, stake, limit, analysis = null, proposalValidator = null) {
-    if (this._buying || this.open.size >= this.cfg.maxOpenTrades) throw new Error('ENTRY_LOCKED');
-    this._buying = true;
+  async buy(symbol, growthRate, stake, limit, analysis = null) {
     growthRate = Math.max(0.01, Math.min(0.05, +growthRate.toFixed(4)));
     try {
       const symbolKey = this.client._isPat ? 'underlying_symbol' : 'symbol';
@@ -920,11 +864,6 @@ class TradeExecutor extends EventEmitter {
       const p = pres.proposal;
       if (!p?.id) throw new Error('No proposal id');
       if (pres.error) throw new Error(pres.error.message);
-      if (proposalValidator) {
-        const verdict = proposalValidator(p);
-        if (!verdict?.ok) throw new Error(`PROPOSAL_REJECTED:${verdict?.reason || 'UNKNOWN'}`);
-        analysis = { ...analysis, proposalModel: verdict };
-      }
       logger.info(`proposal id=${p.id} ask=${p.ask_price} payout=${p.payout} spot=${p.spot}`);
 
       if (this.market && p.contract_details) {
@@ -954,42 +893,11 @@ class TradeExecutor extends EventEmitter {
       };
       this.open.set(b.contract_id, info);
 
-      try { await this._subscribeContract(info); }
-      catch (e) { logger.warn(`post-buy subscription #${b.contract_id} failed; reconciliation will retry:`, e.message); }
+      await this.client.subscribe({ proposal_open_contract: 1, contract_id: b.contract_id },
+        msg => this._onUpdate(msg, info));
       this.emit('open', info);
       return info;
     } catch (e) { logger.error(`buy(${symbol}):`, e.message); throw e; }
-    finally { this._buying = false; }
-  }
-
-  async _subscribeContract(info) {
-    return this.client.subscribe({ proposal_open_contract: 1, contract_id: info.contractId }, msg => this._onUpdate(msg, info));
-  }
-
-  async reconcile() {
-    // Portfolio is authoritative after a transport break. Never clear `open`
-    // before this reconciliation; doing so can create a phantom-free slot.
-    let portfolio;
-    try { portfolio = await this.client._send({ portfolio: 1 }, 15000); }
-    catch (e) { logger.warn('portfolio reconciliation failed:', e.message); return false; }
-    const contracts = Array.isArray(portfolio?.portfolio) ? portfolio.portfolio : [];
-    const liveIds = new Set();
-    for (const c of contracts) {
-      const id = c.contract_id;
-      if (!id) continue;
-      liveIds.add(id);
-      let info = this.open.get(id);
-      if (!info) {
-        info = { contractId: id, symbol: c.underlying || c.underlying_symbol || 'UNKNOWN', growthRate: Number(c.growth_rate || 0), stake: Number(c.buy_price || 0), buyPrice: Number(c.buy_price || 0), payout: Number(c.payout || 0), buyTime: Number(c.purchase_time || Date.now() / 1000), limit: {}, profit: Number(c.profit || 0), status: 'open', currentSpot: Number(c.current_spot || 0), recovered: true };
-        this.open.set(id, info);
-        this.emit('recovered', info);
-      }
-      try { await this._subscribeContract(info); } catch (e) { logger.warn(`resubscribe #${id}:`, e.message); }
-    }
-    for (const id of [...this.open.keys()]) {
-      if (!liveIds.has(id)) this.open.delete(id);
-    }
-    return true;
   }
 
   _onUpdate(msg, info) {
@@ -1007,14 +915,18 @@ class TradeExecutor extends EventEmitter {
       this.sell(cid, 0).catch(e => logger.error(`SL sell failed:`, e.message)).finally(() => this._selling.delete(cid));
     }
 
-    // ACCU barriers are evaluated around the previous spot. A displacement from
-    // entry is therefore not a danger signal and must not trigger a fabricated
-    // "barrier drift" exit. Server-side limit orders and the hard loss cap are
-    // the only automated exit paths here.
+    // Early exit: barrier drift danger
+    if (info.halfBarrierPct > 0 && spot > 0 && info._entrySpot > 0) {
+      const driftFrac = Math.abs(spot - info._entrySpot) / info._entrySpot / (info.halfBarrierPct / 100);
+      if (driftFrac > this.cfg.earlyExitDriftFrac && !this._selling.has(cid)) {
+        logger.info(`drift exit #${cid}: ${(driftFrac * 100).toFixed(1)}% of barrier`);
+        this._selling.add(cid);
+        this.sell(cid, 0).catch(() => {}).finally(() => this._selling.delete(cid));
+      }
+    }
 
-    if (c.status !== 'open' || c.is_sold) {
-      const status = profit >= 0 ? 'won' : 'lost';
-      const finished = { ...info, contractId: cid, profit, status, sellPrice: parseFloat(c.sell_price ?? c.bid_price ?? 0), sellTime: c.sell_time ?? c.exit_tick_time ?? (Date.now() / 1000), currentSpot: spot };
+    if (c.status === 'won' || c.status === 'lost') {
+      const finished = { ...info, contractId: cid, profit, status: c.status, sellPrice: parseFloat(c.sell_price ?? 0), sellTime: c.sell_time ?? (Date.now() / 1000), currentSpot: spot };
       this.open.delete(cid);
       this.emit('result', finished);
       if (msg.subscription?.id) this.client.forget(msg.subscription.id).catch(() => {});
@@ -1133,7 +1045,6 @@ class AccuPULSE2Bot {
     this._eodBoot = null;
     this._barrierT = null;
     this._tradeWatchdogTimer = null;
-    this._analysisInFlight = false;
 
     // Anti-Martingale state
     this.winStreak = 0;
@@ -1158,7 +1069,6 @@ class AccuPULSE2Bot {
     this.exec.on('open', t => this._onTradeOpen(t));
     this.exec.on('update', t => this._onTradeUpdate(t));
     this.exec.on('result', t => this._onTradeResult(t));
-    this.exec.on('recovered', t => logger.warn(`recovered open contract #${t.contractId}`));
 
     process.on('SIGINT', () => this.stop('SIGINT'));
     process.on('SIGTERM', () => this.stop('SIGTERM'));
@@ -1186,16 +1096,9 @@ class AccuPULSE2Bot {
 
   // ── Authorised ──────────────────────────────────────────────
   async _onAuthorized(info) {
-    if (this.cfg.demoOnly && !info.isVirtual) {
-      logger.error('demoOnly is enabled; refusing non-demo account');
-      this.stopped = true;
-      telegram.send('STOPPED: demoOnly is enabled but the authorized account is not virtual.');
-      this.client.stop();
-      return;
-    }
-    this.startBalance ??= this.client.balance;
-    this.lastBalance = this.client.balance ?? this.lastBalance ?? this.startBalance;
-    this.equityPeak = Math.max(this.equityPeak || 0, this.lastBalance || 0);
+    this.startBalance = this.balance ?? this.client.balance;
+    this.lastBalance = this.startBalance;
+    this.equityPeak = this.startBalance;
 
     telegram.send(
       `🤖 <b>AccuPULSE2b Online</b>\n\n` +
@@ -1213,7 +1116,6 @@ class AccuPULSE2Bot {
     );
 
     await Promise.all([
-      this.exec.reconcile(),
       this.market.loadSymbols(),
       this.market.bootstrap(this.cfg.assets),
       this._refreshBarriers(),
@@ -1230,7 +1132,7 @@ class AccuPULSE2Bot {
     this._clearWatchdog();
     telegram.send(`⚠️ <b>Connection lost</b>\ncode: <code>${code}</code>\nwas auth: ${wasAuth ? 'yes' : 'no'}\n🔄 reconnecting…`);
     if (this._analysisT) { clearInterval(this._analysisT); this._analysisT = null; }
-    // Preserve positions until the authoritative portfolio reconciliation.
+    if (this.exec) this.exec.open.clear();
   }
 
   // ── Trade callbacks ─────────────────────────────────────────
@@ -1334,7 +1236,6 @@ class AccuPULSE2Bot {
   _checkCircuitBreakers() {
     const today = this.stats.todayTrades();
     const pl = today.reduce((s, t) => s + (t.profit || 0), 0);
-    if (pl >= this.cfg.takeProfit) { logger.warn(`session profit limit: ${pl.toFixed(2)}`); return true; }
     if (pl <= -this.cfg.dailyMaxLoss) { telegram.send(`🛑 Daily loss limit: ${pl.toFixed(2)}`); return true; }
     if (today.length >= this.cfg.dailyMaxTrades) { telegram.send(`🛑 Daily trade limit`); return true; }
     const dd = this.equityPeak > 0 ? (this.equityPeak - (this.lastBalance ?? 0)) / this.equityPeak : 0;
@@ -1345,25 +1246,24 @@ class AccuPULSE2Bot {
 
   // ── Main ARCA strategy loop ─────────────────────────────────
   async _analyzeAndTrade() {
-    if (this._analysisInFlight) return;
-    this._analysisInFlight = true;
     try {
       if (this.stopped || !this.client.authorized) return;
-      if (!this.cfg.tradeEnabled) { logger.debug('skip: TRADE_DISABLED'); return; }
-      if (this._isPausedNow()) { logger.debug('skip: PAUSE_WINDOW'); return; }
-      if (this._checkCircuitBreakers()) { this.stopped = true; return; }
       if (Date.now() - this.lastTradeAt < this.cfg.tradeCooldownMs) return;
       if (this.exec.count() >= this.cfg.maxOpenTrades) return;
 
-      const analyses = this.cfg.assets.flatMap(sym => this.cfg.candidateGrowthRates.map(rate =>
-        this.analyzer.analyze(sym, this.market.historyFor(sym), this.market.getBarrier(sym, rate), rate)));
+      const analyses = this.cfg.assets.map(sym => {
+        const ticks = this.market.historyFor(sym);
+        const stays = this.market.getStays(sym, this.cfg.growthRate);
+        return this.analyzer.analyze(sym, ticks, stays);
+      });
       const ranked = this.analyzer.rank(analyses);
-      if (!ranked.length) { logger.debug('skip: NO_CONSERVATIVE_EDGE'); return; }
+      if (!ranked.length) return;
 
       const best = ranked[0];
       logger.info(`best=${best.symbol} score=${best.score.toFixed(3)} vol=${best.volRegimeLabel} trend=${best.trendDirection} [${best.reasons.join(',')}]`);
 
       // ARCA gates
+      if (best.score < this.cfg.minConfidence) { logger.debug(`score ${best.score.toFixed(3)} < min — skip`); return; }
       if (best.volRegime > this.cfg.maxVolRegime) { logger.debug(`vol regime ${best.volRegime} > max — skip`); return; }
       if (best.hurst > this.cfg.maxHurst) { logger.debug(`hurst ${best.hurst.toFixed(2)} > max — skip`); return; }
       if (best.survivalScore > 0 && best.survivalSlope < this.cfg.minSurvivalSlope) { logger.debug(`surv slope low — skip`); return; }
@@ -1371,7 +1271,7 @@ class AccuPULSE2Bot {
 
       const growthRate = best.suggestedGrowth;
       const stake = this.currentStake();
-      const tp = +(stake * Math.max(0.10, Math.min(0.50, best.model.conservativeEV * 4))).toFixed(2);
+      const tp = +(stake * Math.max(0.3, Math.min(1.5, best.pSurvival * 2))).toFixed(2);
 
       const analysis = {
         score: best.score, volRegimeLabel: best.volRegimeLabel, volScore: best.volScore,
@@ -1380,28 +1280,16 @@ class AccuPULSE2Bot {
         hurst: best.hurst, pSurvival: best.pSurvival, reasons: best.reasons,
       };
 
-      const trade = await this.exec.buy(best.symbol, growthRate, stake, { take_profit: tp, stop_loss: this.cfg.stopLoss }, analysis,
-        proposal => this.analyzer.evaluateProposal(this.market.historyFor(best.symbol), growthRate, proposal));
+      const trade = await this.exec.buy(best.symbol, growthRate, stake, { take_profit: tp }, analysis);
       logger.info(`trade #${trade.contractId} ${best.symbol} g=${growthRate} stake=${stake} tp=${tp}`);
     } catch (e) { logger.error('ARCA error:', e.message); }
-    finally { this._analysisInFlight = false; }
-  }
-
-  _isPausedNow() {
-    const now = new Date();
-    const minutes = now.getUTCHours() * 60 + now.getUTCMinutes();
-    const asMinutes = value => { const m = String(value).match(/^(\d{1,2}):(\d{2})$/); return m ? +m[1] * 60 + +m[2] : null; };
-    return (this.cfg.pauseWindowsGmt || []).some(([from, to]) => {
-      const a = asMinutes(from), b = asMinutes(to);
-      if (a == null || b == null || a === b) return false;
-      return a < b ? minutes >= a && minutes < b : minutes >= a || minutes < b;
-    });
   }
 
   async _refreshBarriers() {
     try {
       if (!this.client.authorized) return;
-      await this.market.refreshBarriers(this.cfg.assets, this.cfg.candidateGrowthRates);
+      const rates = [0.01, 0.02, 0.03, 0.04, 0.05];
+      await this.market.refreshBarriers(this.cfg.assets, rates);
       logger.debug('barriers refreshed');
     } catch (e) { logger.debug('barrier refresh:', e.message); }
   }
@@ -1531,26 +1419,4 @@ async function main() {
   await bot.start();
 }
 
-function runSelfTest() {
-  const assert = require('assert');
-  const cfg = { ...CONFIG, minEmpiricalSamples: 20, hazardWindow: 40, plannedHoldTicks: 5, minBarrierPct: 0.01, minNetEvRatio: -0.5 };
-  const analyzer = new ARCAAnalyzer(cfg);
-  assert(analyzer._wilsonLower(95, 100, 1.96) < 0.95, 'Wilson bound must be conservative');
-  const calm = Array.from({ length: 50 }, (_, i) => ({ quote: 100 * Math.exp(i * 0.00001) }));
-  const model = analyzer._hazardEstimate(calm, 0.10, 0.01);
-  assert(model.ok && model.pLower > 0.8, 'calm path should pass single-tick survival model');
-  const jumpy = Array.from({ length: 50 }, (_, i) => ({ quote: i % 2 ? 101 : 99 }));
-  const rejected = analyzer._hazardEstimate(jumpy, 0.10, 0.01);
-  assert(!rejected.ok, 'barrier-breaching path must be rejected');
-  const bot = Object.create(AccuPULSE2Bot.prototype);
-  bot.cfg = { pauseWindowsGmt: [['23:55', '00:10']] };
-  assert.strictEqual(typeof bot._isPausedNow(), 'boolean', 'pause-window evaluator must be callable');
-  console.log('selftest: PASS');
-}
-
-module.exports = { ARCAAnalyzer, TradeExecutor, DerivClient, MarketDataManager, AccuPULSE2Bot, CONFIG, runSelfTest };
-
-if (require.main === module) {
-  if (process.argv.includes('--selftest')) runSelfTest();
-  else main().catch(e => { console.error('fatal:', e); process.exit(1); });
-}
+main().catch(e => { console.error('fatal:', e); process.exit(1); });
