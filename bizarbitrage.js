@@ -1887,7 +1887,7 @@ class IndexBot {
             LOGGER.trade(`🔄 [${symbol}] RECOVERY TRADE - Same direction: ${direction} (NO analysis)`);
         } else {
             const mode = this._determineMarketMode(assetState.closedCandles);
-            //Returm if Market is not Trending
+            //Return if Market is not Trend Mode
             if (mode === 'range') {
                 LOGGER.info(`[${symbol}] Market is in RANGE mode — skipping trade`);
                 assetState.canTrade = false;
