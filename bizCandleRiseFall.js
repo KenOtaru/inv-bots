@@ -114,11 +114,11 @@ const CONFIG = {
     // ── Martingale / staking settings mirrored from candlePatternRFm.js ─
     INITIAL_STAKE: 0.5,
     INVESTMENT_AMOUNT: 152,
-    MARTINGALE_MULTIPLIER: 1.8,
+    MARTINGALE_MULTIPLIER: 1.48,
     MAX_MARTINGALE_LEVEL: 1,
     AFTER_MAX_LOSS: 'continue',
     CONTINUE_EXTRA_LEVELS: 4,
-    EXTRA_LEVEL_MULTIPLIERS: [2.2, 2.2, 2.2, 2.3], //[2.0, 2.1, 2.1, 2.2, 2.2, 2.2, 2.3]
+    EXTRA_LEVEL_MULTIPLIERS: [2.1, 2.2, 2, 2.3], //[2.0, 2.1, 2.1, 2.2, 2.2, 2.2, 2.3]
     AUTO_COMPOUNDING: false,
     COMPOUND_PERCENTAGE: 0.24,
     STOP_LOSS: 152,
