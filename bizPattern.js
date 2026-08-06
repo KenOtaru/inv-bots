@@ -276,11 +276,11 @@ const CONFIG = {
                                        // true ONLY after a calibration week proves
                                        // edge; see martingale warnings below.
     // Legacy martingale knobs — only read when ENABLE_MARTINGALE is true.
-    MARTINGALE_MULTIPLIER: 1.8,
+    MARTINGALE_MULTIPLIER: 1.48,
     MAX_MARTINGALE_LEVEL: 1,
     AFTER_MAX_LOSS: 'continue',
     CONTINUE_EXTRA_LEVELS: 4,
-    EXTRA_LEVEL_MULTIPLIERS: [2.0, 2.1, 2.2, 2.3],
+    EXTRA_LEVEL_MULTIPLIERS: [2.1, 2.2, 2, 2.3],
     AUTO_COMPOUNDING: false,
     COMPOUND_PERCENTAGE: 0.24,         // 0.24% of pool — only matters with martingale
     MAX_CONSECUTIVE_LOSSES: 15,         // asset halts for the day after this many
