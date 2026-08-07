@@ -587,7 +587,7 @@ class StakeCalculator {
             stake = Math.min(stake, CONFIG.MAX_STAKE);
         } else {
             // Legacy ladder (unchanged math from v1, kept intact behind the flag).
-            const level = Math.max(0, martingaleLevel || 0);
+            let level = Math.max(0, martingaleLevel || 0);
             let base = this.getBaseStake(pool);
             base = Math.max(base, CONFIG.MIN_STAKE);
 
@@ -598,6 +598,12 @@ class StakeCalculator {
                 const extraIdx = level - CONFIG.MAX_MARTINGALE_LEVEL - 1;
                 for (let i = 0; i <= extraIdx; i++) {
                     stake *= (CONFIG.EXTRA_LEVEL_MULTIPLIERS[i] || CONFIG.MARTINGALE_MULTIPLIER);
+                }
+
+                //reset to base stake after exceeding max martingale + extra levels
+                if (level > CONFIG.MAX_MARTINGALE_LEVEL + CONFIG.CONTINUE_EXTRA_LEVELS) {
+                    stake = base;
+                    level = 0; // Reset level to 0 for calculation
                 }
             }
         }
