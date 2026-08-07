@@ -1143,7 +1143,7 @@ class SessionManager {
             LOGGER.info(`Day changed: ${state.currentTradeDay} -> ${today}`);
             const dayStats = TradeHistoryManager.getDayStats(state.currentTradeDay);
             TelegramService.sendMessage(
-                `\u{1f319} <b>PATTERN BOT END OF DAY ${state.currentTradeDay}</b>\nP/L: $${(dayStats?.netPL || 0).toFixed(2)}\nLedger: $${state.capital.toFixed(2)}`
+                `\u{1f319} <b>PATTERN2 BOT END OF DAY ${state.currentTradeDay}</b>\nP/L: $${(dayStats?.netPL || 0).toFixed(2)}\nLedger: $${state.capital.toFixed(2)}`
             );
             this._resetDailyStats();
             if (!state.session.isActive) {
@@ -1606,7 +1606,7 @@ class ConnectionManager {
         if (Math.abs(state.accountBalance - expected) > CONFIG.RECONCILE_DRIFT_TOLERANCE) {
             LOGGER.error(`Capital drift: ledger=$${state.capital.toFixed(2)} locked=$${locked.toFixed(2)} acct=$${state.accountBalance.toFixed(2)}`);
             TelegramService.sendMessage(
-                `⚠️ <b>CAPITAL DRIFT DETECTED</b>\nledger=$${state.capital.toFixed(2)} + locked=$${locked.toFixed(2)}\naccount=$${state.accountBalance.toFixed(2)}\nNew entries paused.`
+                `⚠️ <b>PATTERN2 CAPITAL DRIFT DETECTED</b>\nledger=$${state.capital.toFixed(2)} + locked=$${locked.toFixed(2)}\naccount=$${state.accountBalance.toFixed(2)}\nNew entries paused.`
             );
             CONFIG.ACTIVE_ASSETS.forEach(sym => { if (state.assets[sym]) state.assets[sym].canTrade = false; });
         }
@@ -2066,7 +2066,7 @@ class ConnectionManager {
             this.reconnectAttempts++;
             const delay = Math.min(this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1), 30000);
             LOGGER.info(`Reconnecting in ${(delay / 1000).toFixed(1)}s (attempt ${this.reconnectAttempts})`);
-            TelegramService.sendMessage(`⚠️ <b>PATTERN BOT CONNECTION LOST</b> — Reconnecting (attempt ${this.reconnectAttempts})`);
+            TelegramService.sendMessage(`⚠️ <b>PATTERN2 BOT CONNECTION LOST</b> — Reconnecting (attempt ${this.reconnectAttempts})`);
 
             this.reconnectTimer = setTimeout(() => {
                 this.reconnectTimer = null;
@@ -2076,7 +2076,7 @@ class ConnectionManager {
             }, delay);
         } else {
             LOGGER.error('Max reconnection attempts reached — giving up');
-            TelegramService.sendMessage(`\u{1f6d1} <b>PATTERN BOT STOPPED</b> — Max reconnections\nFinal P/L: $${(state.session.netPL || 0).toFixed(2)}`);
+            TelegramService.sendMessage(`\u{1f6d1} <b>PATTERN2 BOT STOPPED</b> — Max reconnections\nFinal P/L: $${(state.session.netPL || 0).toFixed(2)}`);
             process.exit(1);
         }
     }
@@ -2469,7 +2469,7 @@ class IndexBot {
         state.tradeStartTime = null;
 
         TelegramService.sendMessage(
-            `⚠️ <b>PATTERN BOT STUCK TRADE [${reason}]</b>\n` +
+            `⚠️ <b>PATTERN2 BOT STUCK TRADE [${reason}]</b>\n` +
             `Contract: ${contractId}\n` +
             `Outcome will be reconciled against the exchange.`
         );
