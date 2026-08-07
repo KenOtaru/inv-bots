@@ -2300,15 +2300,20 @@ class IndexBot {
             `Stake: $${stake.toFixed(2)} | ${analysis?.reason || reasonCode}`
         );
 
+        // Official `buy` schema: the PAT (new) API expects `underlying_symbol`,
+        // the legacy API expects `symbol`. Derive it from the live connection
+        // (matches bizarbitrage.js), instead of the hardcoded BUY_SYMBOL_FIELD
+        // which always sent `symbol` and got rejected by the PAT endpoint.
+        const symbolKey = this.connection && this.connection._isPat ? 'underlying_symbol' : 'symbol';
         const params = {
             contract_type: direction,
+            [symbolKey]: symbol,
             currency: CONFIG.CURRENCY,
             amount: Number(stake).toFixed(2),
             duration: CONFIG.DURATION,
             duration_unit: CONFIG.DURATION_UNIT,
             basis: 'stake',
         };
-        params[CONFIG.BUY_SYMBOL_FIELD] = symbol;
 
         const reqId = this.connection.send({
             buy: 1, subscribe: 1, price: Number(stake).toFixed(2),
