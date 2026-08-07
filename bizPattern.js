@@ -225,10 +225,12 @@ const CONFIG = {
     APP_ID: '33uslPtthXBEkQOdfKfoY',
     ACCOUNT_TYPE: 'demo',          // 'demo' | 'real' (PAT mode only)
     WS_URL: 'wss://ws.derivws.com/websockets/v3',
-    // Official `buy` schema field for the underlying. v1 used `underlying_symbol`
-    // for PAT mode; the schema (config/v3/buy.json) says `symbol`. Flip only if
-    // your endpoint empirically rejects `symbol`.
-    BUY_SYMBOL_FIELD: 'symbol',
+    // Buy `parameters` field name for the underlying. The NEW API (PAT/OTP
+    // websocket) requires `underlying_symbol`; the legacy API requires `symbol`.
+    // v2.2 hardcoded `symbol` for both, which the new API rejects with
+    // "Input validation failed: parameters". Set to 'auto' to pick per auth mode
+    // (matches the working v1 logic); or force 'symbol'/'underlying_symbol'.
+    BUY_SYMBOL_FIELD: 'auto',
     CURRENCY: 'USD',
 
     // ── Strategy: payout prior & breakeven math ────────────────
@@ -2314,7 +2316,13 @@ class IndexBot {
             duration_unit: CONFIG.DURATION_UNIT,
             basis: 'stake',
         };
-        params[CONFIG.BUY_SYMBOL_FIELD] = symbol;
+        // Resolve the underlying field per auth mode. 'auto' = the new PAT API
+        // needs `underlying_symbol`, the legacy API needs `symbol`. This mirrors
+        // the working v1 conditional (`_isPat ? 'underlying_symbol' : 'symbol'`).
+        const symbolField = CONFIG.BUY_SYMBOL_FIELD === 'auto'
+            ? (this.connection && this.connection._isPat ? 'underlying_symbol' : 'symbol')
+            : CONFIG.BUY_SYMBOL_FIELD;
+        params[symbolField] = symbol;
 
         const reqId = this.connection.send({
             buy: 1, subscribe: 1, price: Number(stake).toFixed(2),
