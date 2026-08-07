@@ -250,12 +250,12 @@ const CONFIG = {
     // Sim result: noise WR 50.2% (no phantom edge), momentum WR 54.1% (+2.8pp),
     // active (~10-15/day with the cooldown, vs 1/day before).
     PATTERN_LENGTHS: [3],        //[3, 4, 5] >=2 lengths => real consensus gate
-    PATTERN_MIN_OCCURRENCES: 10,       //10 per pattern, train windows (min sample)
-    PATTERN_MIN_VALIDATION_SAMPLES: 4, //4 per pattern, holdout windows
-    PATTERN_CONFIDENCE_LEVEL: 0.80,    //0.80 Wilson z for REPORTED confidenceLower
+    PATTERN_MIN_OCCURRENCES: 5,       //10 per pattern, train windows (min sample)
+    PATTERN_MIN_VALIDATION_SAMPLES: 2, //4 per pattern, holdout windows
+    PATTERN_CONFIDENCE_LEVEL: 0.60,    //0.80 Wilson z for REPORTED confidenceLower
                                        // only (z=0.842). No longer a trade gate.
     PATTERN_BREAKEVEN_MARGIN: 0.04,    // point-estimate cushion above breakeven
-    MIN_CANDIDATES_FOR_TRADE: 2,       // require this many lengths to pass+agree
+    MIN_CANDIDATES_FOR_TRADE: 1,       // require this many lengths to pass+agree
     PATTERN_AGREEMENT_RATIO: 1.0,      // passing lengths must agree 100% by default
     PATTERN_DOJI_ATR_FRACTION: 0.10,   // v2.0 used 0.25*ATR which classified ~36%
                                        // of candles Doji (silent conservatism; worse
