@@ -144,8 +144,8 @@ class RestClient {
 // ============================================================
 // FILE PATHS  [kept — this bot's own artifacts]
 // ============================================================
-const STATE_FILE = path.join(__dirname, 'bizPattern_005-state.json');
-const HISTORY_FILE = path.join(__dirname, 'bizPattern_005-history.json');
+const STATE_FILE = path.join(__dirname, 'bizPattern_006-state.json');
+const HISTORY_FILE = path.join(__dirname, 'bizPattern_006-history.json');
 const STATE_SAVE_INTERVAL = 5000;  // ms
 
 // ============================================================
@@ -249,7 +249,7 @@ const CONFIG = {
     // overfit (rejected); 56% in BOTH = plausible persistent edge.
     // Sim result: noise WR 50.2% (no phantom edge), momentum WR 54.1% (+2.8pp),
     // active (~10-15/day with the cooldown, vs 1/day before).
-    PATTERN_LENGTHS: [3, 4, 5],        // >=2 lengths => real consensus gate
+    PATTERN_LENGTHS: [3],        //[3, 4, 5] >=2 lengths => real consensus gate
     PATTERN_MIN_OCCURRENCES: 10,       //10 per pattern, train windows (min sample)
     PATTERN_MIN_VALIDATION_SAMPLES: 4, //4 per pattern, holdout windows
     PATTERN_CONFIDENCE_LEVEL: 0.80,    //0.80 Wilson z for REPORTED confidenceLower
