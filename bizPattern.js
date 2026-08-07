@@ -248,9 +248,9 @@ const CONFIG = {
     // Sim result: noise WR 48.3% (no phantom edge), momentum WR 55.4%
     // (~+4pp edge), ~29-35 trades/day. That's the honest-but-active profile.
     PATTERN_LENGTHS: [3, 4, 5],        // >=2 lengths => real consensus gate
-    PATTERN_MIN_OCCURRENCES: 5,       //10 per pattern, train windows (min sample)
-    PATTERN_MIN_VALIDATION_SAMPLES: 2, //4 per pattern, holdout windows
-    PATTERN_CONFIDENCE_LEVEL: 0.60,    //0.80 Wilson z (0.80/0.90/0.95). 0.80 keeps the
+    PATTERN_MIN_OCCURRENCES: 10,       //10 per pattern, train windows (min sample)
+    PATTERN_MIN_VALIDATION_SAMPLES: 4, //4 per pattern, holdout windows
+    PATTERN_CONFIDENCE_LEVEL: 0.80,    //0.80 Wilson z (0.80/0.90/0.95). 0.80 keeps the
                                        // noise gate while allowing real edges.
     PATTERN_BREAKEVEN_MARGIN: 0.04,    // point-estimate cushion above breakeven
     MIN_CANDIDATES_FOR_TRADE: 2,       // require this many lengths to pass+agree
