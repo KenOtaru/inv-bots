@@ -152,7 +152,7 @@ const CONFIG = Object.freeze({
   tradeCooldownMs     : parseInt('4000',  10),
   maxOpenTrades       : parseInt('1',     10),
   skipRecentTradedSymbols: true,        // don't re-enter the same symbol back-to-back
-  recentTradedSymbolsLen : parseInt('3', 10),
+  recentTradedSymbolsLen : parseInt('2', 10),
 
   // ── EV / survival gates (per-trade floors; NOT loosened by cadence) ──
   apexMinEV       : parseFloat('0.010'),   // ≥ +1% net EV to fire
