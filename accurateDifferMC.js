@@ -133,97 +133,97 @@ const CONFIG = Object.freeze({
   // Deriv API credentials & connection endpoints
   apiToken:    'pat_cb2016855b5e6c61ac95f94432192dd6ed86bec7f7454e575d3fe1ed9f617692',
   appId:       '33uslPtthXBEkQOdfKfoY',
-  accountId:   strEnv('DERIV_ACCOUNT_ID', ''),
-  accountType: strEnv('DERIV_ACCOUNT_TYPE', 'demo'), // 'demo' | 'real'
-  legacyWsUrl: strEnv('DERIV_LEGACY_WS', 'wss://ws.derivws.com/websockets/v3'),
-  restBaseUrl: strEnv('DERIV_REST_BASE', 'https://api.derivws.com'),
-  currency:    strEnv('DERIV_CURRENCY', 'USD'),
+  accountId:   '',
+  accountType: 'demo', // 'demo' | 'real'
+  legacyWsUrl: 'wss://ws.derivws.com/websockets/v3',
+  restBaseUrl: 'https://api.derivws.com',
+  currency:    'USD',
 
   // Trade Setup & Instruments
-  stake:         numEnv('STAKE', 1.1),
-  durationTicks: intEnv('DURATION_TICKS', 1), // DIGITDIFF duration 1-10 ticks
-  minStake:      numEnv('MIN_STAKE', 1.1),
-  maxStake:      numEnv('MAX_STAKE', 150.00),
-  assets:        listEnv('ASSETS', 'R_50,R_75,RDBULL'),
+  stake:         1.1,
+  durationTicks: 1, // DIGITDIFF duration 1-10 ticks
+  minStake:      1.1,
+  maxStake:      150.00,
+  assets:        ['R_10','R_25','R_50','R_75','R_100','RDBEAR','RDBULL'],
 
   // Execution timing & throughput limits
-  tickWindow:          intEnv('TICK_WINDOW', 1000),
-  minTicksForAnalysis: intEnv('MIN_TICKS_FOR_ANALYSIS', 300),
-  analysisIntervalMs:  intEnv('ANALYSIS_INTERVAL_MS', 3000),
-  tradeCooldownMs:     intEnv('TRADE_COOLDOWN_MS', 2000),
+  tickWindow:          1000,
+  minTicksForAnalysis: 300,
+  analysisIntervalMs:  3000,
+  tradeCooldownMs:     2000,
   maxOpenTrades:       1,
-  tradeWatchdogMs:     intEnv('TRADE_WATCHDOG_MS', 20000),
-  assetRotationMs:     intEnv('ASSET_ROTATION_MS', 60000), // 60s lockout on just-traded asset
-  dailyMaxLoss:        numEnv('DAILY_MAX_LOSS', 570), // hard capital stop loss
-  dailyMaxProfit:      numEnv('DAILY_MAX_PROFIT', 0), // 0 = disabled
-  dailyMaxTrades:      intEnv('DAILY_MAX_TRADES', 20000),
+  tradeWatchdogMs:     20000,
+  assetRotationMs:     60000, // 60s lockout on just-traded asset
+  dailyMaxLoss:        570, // hard capital stop loss
+  dailyMaxProfit:      0, // 0 = disabled
+  dailyMaxTrades:      20000,
 
   // ── Monte Carlo & Quantitative Analysis ───────────────────────────
-  mcSimulations:        intEnv('MC_SIMULATIONS', 5000),       // Null trials per scan
-  minEdgeConfidence:    numEnv('MIN_EDGE_CONFIDENCE', 0.98),  // 90% statistical significance vs H0
-  mcStabilityThreshold: numEnv('MC_STABILITY_THRESHOLD', 0.60),// 60% bootstrap rank stability
-  randomnessAlpha:      numEnv('RANDOMNESS_ALPHA', 0.05),     // 5% significance for goodness-of-fit
-  wilsonConfidenceZ:    numEnv('WILSON_Z', 1.96),             // 95% CI (z=1.96) for conservative loss prob
-  mcMinEdge:            numEnv('MC_MIN_EDGE', 0.005),         // Min 0.5pp conservative value edge
-  mcLossCooldownMs:     intEnv('MC_LOSS_COOLDOWN_MS', 15000), // Cooldown after a loss
-  bootstrapIterations:  intEnv('BOOTSTRAP_ITERATIONS', 100),  // Bootstrap resamples for stability
-  hotFilterTicks:       intEnv('HOT_FILTER_TICKS', 5),        // Penalty if appeared in last N ticks
-  cooldownTicks:        intEnv('COOLDOWN_TICKS', 30),         // Tick spacing per barrier digit
-  maxRecentHits:        intEnv('MAX_RECENT_HITS', 2),         // Max occurrences in tail lookback
-  recentLookback:       intEnv('RECENT_LOOKBACK', 20),
-  minEntropy:           numEnv('MIN_ENTROPY', 0.90),          // Shannon entropy floor
-  maxEntropy:           numEnv('MAX_ENTROPY', 0.9997),        // Max entropy ceiling (too uniform)
+  mcSimulations:        5000,       // Null trials per scan
+  minEdgeConfidence:    0.98,  // 90% statistical significance vs H0
+  mcStabilityThreshold: 0.60,// 60% bootstrap rank stability
+  randomnessAlpha:      0.05,     // 5% significance for goodness-of-fit
+  wilsonConfidenceZ:    1.96,             // 95% CI (z=1.96) for conservative loss prob
+  mcMinEdge:            0.005,         // Min 0.5pp conservative value edge
+  mcLossCooldownMs:     15000, // Cooldown after a loss
+  bootstrapIterations:  100,  // Bootstrap resamples for stability
+  hotFilterTicks:       5,        // Penalty if appeared in last N ticks
+  cooldownTicks:        30,         // Tick spacing per barrier digit
+  maxRecentHits:        2,         // Max occurrences in tail lookback
+  recentLookback:       20,
+  minEntropy:           0.90,          // Shannon entropy floor
+  maxEntropy:           0.9997,        // Max entropy ceiling (too uniform)
 
   // ── Capital Protection & Sizing Policy ────────────────────────────
-  recoveryEnabled:     boolEnv('RECOVERY_ENABLED', false),
+  recoveryEnabled:     false,
   recoveryMultipliers: listEnv('RECOVERY_MULTIPLIERS', '1,1.2,1.5').map(Number).filter(Number.isFinite),
-  maxRecoveryLevel:    intEnv('MAX_RECOVERY_LEVEL', 2),
+  maxRecoveryLevel:    2,
 
-  kellySizingEnabled:   boolEnv('KELLY_ENABLED', false),
-  kellyFraction:        numEnv('KELLY_FRACTION', 0.25),        // Quarter-Kelly
-  kellyBankrollFrac:    numEnv('KELLY_BANKROLL_FRAC', 1.00),
-  kellyBankrollFloor:   numEnv('KELLY_BANKROLL_FLOOR', 100.0),
-  kellyMaxStakeFrac:    numEnv('KELLY_MAX_STAKE_FRAC', 0.02),  // Max 2% bankroll per trade
-  kellyMinEdgeForScale: numEnv('KELLY_MIN_EDGE_SCALE', 0.005),
+  kellySizingEnabled:   false,
+  kellyFraction:        0.25,        // Quarter-Kelly
+  kellyBankrollFrac:    1.00,
+  kellyBankrollFloor:   100.0,
+  kellyMaxStakeFrac:    0.02,  // Max 2% bankroll per trade
+  kellyMinEdgeForScale: 0.005,
 
   // Per-symbol calibration tracker
-  calibEnabled:        boolEnv('CALIB_ENABLED', true),
-  calibWindow:         intEnv('CALIB_WINDOW', 200),
-  calibMinTrades:      intEnv('CALIB_MIN_TRADES', 30),
-  calibDisableGap:     numEnv('CALIB_DISABLE_GAP', 0.02),
-  calibReenableGap:    numEnv('CALIB_REENABLE_GAP', 0.005),
-  calibProbeAfterMs:   intEnv('CALIB_PROBE_AFTER_MS', 1800000), // 30m probe cooldown
-  calibProbeStakeFrac: numEnv('CALIB_PROBE_STAKE_FRAC', 0.25),
+  calibEnabled:        true,
+  calibWindow:         200,
+  calibMinTrades:      30,
+  calibDisableGap:     0.02,
+  calibReenableGap:    0.005,
+  calibProbeAfterMs:   1800000, // 30m probe cooldown
+  calibProbeStakeFrac: 0.25,
 
   // Scheduled Pause Windows (GMT/UTC)
-  pauseEnabled:  boolEnv('PAUSE_ENABLED', true),
-  pauseStartGmt: strEnv('PAUSE_START_GMT', '23:00'),
-  pauseEndGmt:   strEnv('PAUSE_END_GMT', '01:00'),
+  pauseEnabled:  true,
+  pauseStartGmt: '23:00',
+  pauseEndGmt:   '01:00',
 
   // Day-of-week Trading Filters (GMT/UTC)
-  tradeSunday:    boolEnv('TRADE_SUNDAY', true),
-  tradeMonday:    boolEnv('TRADE_MONDAY', true),
-  tradeTuesday:   boolEnv('TRADE_TUESDAY', true),
-  tradeWednesday: boolEnv('TRADE_WEDNESDAY', true),
-  tradeThursday:  boolEnv('TRADE_THURSDAY', true),
-  tradeFriday:    boolEnv('TRADE_FRIDAY', true),
-  tradeSaturday:  boolEnv('TRADE_SATURDAY', true),
+  tradeSunday:    true,
+  tradeMonday:    true,
+  tradeTuesday:   true,
+  tradeWednesday: true,
+  tradeThursday:  true,
+  tradeFriday:    true,
+  tradeSaturday:  true,
 
   // GMT/UTC Reporting & EOD
   eodTimeGmt:          strEnv('EOD_TIME_GMT', '00:00'),
   eodSendDelaySeconds: 10,
-  hourlySummary:       boolEnv('HOURLY_SUMMARY', true),
+  hourlySummary:       true,
 
   // Persistence & Logging
-  stateFile: strEnv('STATE_FILE', 'monte-carlos_differ_0004_state.json'),
-  logFile:   strEnv('LOG_FILE', 'monte-carlos_differ_0004_bot.log'),
+  stateFile: strEnv('STATE_FILE', 'MC_differ_01_state.json'),
+  logFile:   strEnv('LOG_FILE', 'MC_differ_01_bot.log'),
   logLevel:  strEnv('LOG_LEVEL', 'INFO').toUpperCase(),
 
   // Telegram Notifications
   telegram: {
-    enabled:  boolEnv('TELEGRAM_ENABLED', true),
-    botToken: strEnv('TELEGRAM_BOT_TOKEN', '8106601008:AAEMyCma6mvPYIHEvw3RHQX2tkD5-wUe1o0'),
-    chatId:   strEnv('TELEGRAM_CHAT_ID', '752497117'),
+    enabled:  true,
+    botToken: '8106601008:AAEMyCma6mvPYIHEvw3RHQX2tkD5-wUe1o0',
+    chatId:   '752497117',
   },
 
   // Connection Reconnect Settings
@@ -238,7 +238,7 @@ const CONFIG = Object.freeze({
   backtestTicks:          intEnv('BACKTEST_TICKS', 100000),
   backtestBatchSize:      intEnv('BACKTEST_BATCH_SIZE', 5000),
   backtestReportEvery:    intEnv('BACKTEST_REPORT', 10000),
-  backtestOutFile:        strEnv('BACKTEST_OUT', 'monte-carlos_differ_backtest_report_01.json'),
+  backtestOutFile:        strEnv('BACKTEST_OUT', 'MC_differ_backtest_report_01.json'),
   backtestPayoutMult:     numEnv('BACKTEST_PAYOUT_MULT', 1.10),
   backtestProbeLive:      boolEnv('BACKTEST_PROBE_LIVE', true),
   backtestAssetLock:      boolEnv('BACKTEST_ASSET_LOCK', false),
