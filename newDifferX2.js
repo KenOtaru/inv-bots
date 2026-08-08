@@ -334,8 +334,8 @@ const CONFIG = Object.freeze({
   hourlySummary: true,
 
   // Persistence/logging
-  stateFile: strEnv('STATE_FILE', 'newDifferx2_state_001.json'),
-  logFile: strEnv('LOG_FILE', 'newDifferx2_bot_001.log'),
+  stateFile: strEnv('STATE_FILE', 'newX2Differ_state_01.json'),
+  logFile: strEnv('LOG_FILE', 'newX2Differ_bot_01.log'),
   logLevel: strEnv('LOG_LEVEL', 'INFO NEWDIFFER').toUpperCase(),
 
   // Telegram — existing hardcoded demo-test values, preserved.
@@ -370,7 +370,7 @@ const CONFIG = Object.freeze({
   backtestTicks       : intEnv('BACKTEST_TICKS',      100000),
   backtestBatchSize   : intEnv('BACKTEST_BATCH_SIZE', 5000),
   backtestReportEvery : intEnv('BACKTEST_REPORT',     10000),
-  backtestOutFile     : strEnv('BACKTEST_OUT',        'newDifferx2_backtest_report1.json'),
+  backtestOutFile     : strEnv('BACKTEST_OUT',        'newX2Differ_backtest_report.json'),
   // The Deriv DIGITDIFF payout multiplier is roughly 1.09-1.11× stake.
   // We DEFAULT to 1.10; at backtest start we can probe a real proposal
   // per symbol (BACKTEST_PROBE_LIVE=true) and use that instead.
