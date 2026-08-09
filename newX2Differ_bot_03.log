@@ -1,0 +1,2 @@
+[2026-08-09 16:26:37 GMT] [INFO] scan R_25:d9 u=0.0841 n=400 H=0.991 X2=17.1 digits=4 ok | RDBULL:d4 u=0.0841 n=400 H=0.991 X2=17.2 digits=9 ok | R_100:d1 u=0.0979 n=400 H=0.996 X2=8.3 digits=7 skip(loss-prob-high:0.0979)
+[2026-08-09 16:26:37 GMT] [INFO] skip: best edge -0.0028 < minEdge 0.01 (R_25 d9)
