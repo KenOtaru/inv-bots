@@ -230,9 +230,9 @@ const CONFIG = Object.freeze({
   tradeWatchdogMs: parseInt('90000', 10),
 
   // ── Logging / state ──
-  logFile           : 'accuAPEXnewn_05.log',
+  logFile           : 'accuAPEXnewn_08.log',
   logLevel          : 'INFO',
-  stateFile         : 'accuAPEXnewn_state_05.json',
+  stateFile         : 'accuAPEXnewn_state_08.json',
   stateSaveOnTrade  : true,
   stateSaveOnShutdown: true,
 
