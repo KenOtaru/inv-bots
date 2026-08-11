@@ -7,6 +7,9 @@
 
 require('dotenv').config();
 const WebSocket = require('ws');
+const https = require('https');
+const http = require('http');
+const { URL } = require('url');
 const TelegramBot = require('node-telegram-bot-api');
 const winston = require('winston');
 const { EventEmitter } = require('events');
@@ -18,9 +21,9 @@ class ConfigManager {
   constructor() {
     this.config = {
       deriv: {
-        apiToken: '0P94g4WdSrSrzir',
-        appId: '1089',
-        endpoint: `wss://ws.derivws.com/websockets/v3?app_id=${'1089'}`,
+        apiToken: 'pat_27a3197287bae3ec6c2c9cbdd68fffaa2a524e3b0a6e1ecf298b5ffb338adb10',
+        appId: '33uslPtthXBEkQOdfKfoY',
+        endpoint: `wss://ws.derivws.com/websockets/v3?app_id=${'33uslPtthXBEkQOdfKfoY'}`,
         accountType: 'DEMO',
       },
       telegram: {
@@ -249,7 +252,67 @@ class RiskAndTradeManager {
 }
 
 // ============================================================================
-// SECTION 6: DERIV API CLIENT (Optimized)
+// SECTION 6: DERIV REST CLIENT (PAT / OAuth OTP auth flow — same as reference)
+// ============================================================================
+class RestClient {
+  constructor(baseUrl, appId, token) {
+    this.baseUrl = baseUrl || 'https://api.derivws.com';
+    this.appId = appId || '1089';
+    this.token = token || '';
+  }
+
+  static isPat(token) {
+    return typeof token === 'string'
+      && /^pat_[a-z0-9_\-]{16,}$/i.test(token.trim());
+  }
+
+  _request(method, urlPath, body = null) {
+    return new Promise((resolve, reject) => {
+      let url;
+      try { url = new URL(urlPath, this.baseUrl); }
+      catch (e) { return reject(new Error(`Invalid URL: ${urlPath}`)); }
+
+      const isHttps = url.protocol === 'https:';
+      const lib = isHttps ? https : http;
+
+      const opts = {
+        method,
+        hostname: url.hostname,
+        port: url.port || (isHttps ? 443 : 80),
+        path: url.pathname + url.search,
+        headers: {
+          'Deriv-App-ID': this.appId,
+          'Authorization': 'Bearer ' + this.token,
+          'Accept': 'application/json',
+          ...(body ? { 'Content-Type': 'application/json' } : {}),
+        },
+        timeout: 15000,
+      };
+
+      const req = lib.request(opts, res => {
+        let data = '';
+        res.on('data', d => data += d);
+        res.on('end', () => {
+          let parsed = data;
+          try { parsed = JSON.parse(data); } catch (_) { }
+          resolve({ status: res.statusCode, body: parsed });
+        });
+      });
+
+      req.on('timeout', () => { req.destroy(new Error('REST request timeout')); });
+      req.on('error', reject);
+      if (body) req.write(JSON.stringify(body));
+      req.end();
+    });
+  }
+
+  get(p) { return this._request('GET', p); }
+  post(p, b) { return this._request('POST', p, b); }
+  delete(p) { return this._request('DELETE', p); }
+}
+
+// ============================================================================
+// SECTION 6b: DERIV API CLIENT (PAT / OTP flow — same method as reference bot)
 // ============================================================================
 class DerivAPI extends EventEmitter {
   constructor(config, logger) {
@@ -260,25 +323,160 @@ class DerivAPI extends EventEmitter {
     this.reqId = 0;
     this.pending = new Map();
     this.balance = 0;
+    this.accountInfo = null;
+    this.reconnectAttempts = 0;
+    this.maxReconnectAttempts = config.system.maxReconnectAttempts;
+    this.reconnectDelay = config.system.reconnectDelay;
+    this.isReconnecting = false;
+    this.isShuttingDown = false;
+    this.reconnectTimer = null;
+    this.pingInterval = null;
+
+    this._isPat = RestClient.isPat(config.deriv.apiToken);
+    this._rest = this._isPat
+      ? new RestClient('https://api.derivws.com', config.deriv.appId, config.deriv.apiToken)
+      : null;
+    this._otpUrl = null;
+    this._targetAccount = null;
   }
 
-  async connect() {
-    return new Promise((resolve, reject) => {
-      this.ws = new WebSocket(this.config.deriv.endpoint);
-      this.ws.on('open', () => { this.logger.info('WS Connected'); resolve(); });
-      this.ws.on('message', (d) => this._handle(JSON.parse(d.toString())));
-      this.ws.on('close', () => { this.logger.warn('WS Closed'); this.emit('disconnect'); this._reconnect(); });
-      this.ws.on('error', (e) => { this.logger.error(`WS Error: ${e.message}`); reject(e); });
+  connect() {
+    if (this.ws?.readyState === WebSocket.OPEN) { this.logger.info('Already connected'); return; }
+    if (!this.config.deriv.apiToken) { this.logger.error('API_TOKEN is empty — aborting'); return; }
+    this.logger.info('Connecting to Deriv API...');
+    this.cleanup();
+    this.isShuttingDown = false;
+
+    if (this._isPat) {
+      this.logger.info('PAT token detected -> using NEW Deriv API (OTP flow)');
+      this._newApiConnect().catch(err => {
+        this.logger.error(`New API connect failed: ${err.message}`);
+        this.onClose();
+      });
+    } else {
+      this.logger.info('Using legacy Deriv API (token authorize flow)');
+      this._openWs(`${this.config.deriv.endpoint}`);
+    }
+  }
+
+  _openWs(url) {
+    try {
+      this.ws = new WebSocket(url, {
+        headers: { 'User-Agent': 'Bot/1.0 (+Node.js)' },
+        handshakeTimeout: 15000,
+      });
+    } catch (e) {
+      this.logger.error(`WS construct failed: ${e.message}`);
+      this.onClose();
+      return;
+    }
+
+    this.ws.on('open', () => this.onOpen());
+    this.ws.on('message', data => this._onMessage(data));
+    this.ws.on('error', err => this._onError(err));
+    this.ws.on('close', () => this.onClose());
+    this.ws.on('unexpected-response', (_req, res) => {
+      this.logger.error(`WS handshake failed: ${res.statusCode} ${res.statusMessage}`);
+      try { res.destroy(); } catch (_) { }
+      this.onClose();
     });
   }
 
+  async _newApiConnect() {
+    this.logger.info('REST: GET /trading/v1/options/accounts');
+    const accRes = await this._rest.get('/trading/v1/options/accounts');
+
+    if (accRes.status !== 200) {
+      const msg = accRes.body?.errors?.[0]?.message || accRes.body?.message || JSON.stringify(accRes.body);
+      let hint = '';
+      if (accRes.status === 401) hint = ' — check PAT validity and APP_ID registration';
+      else if (accRes.status === 403) hint = ' — PAT may lack "trade" scope';
+      throw new Error(`Account list failed (${accRes.status}): ${msg}${hint}`);
+    }
+
+    const accounts = Array.isArray(accRes.body?.data) ? accRes.body.data : [];
+    if (!accounts.length) throw new Error('No Options accounts found for this token');
+
+    const desiredType = (this.config.deriv.accountType || 'demo').toLowerCase();
+    const acct = accounts.find(a => (a.account_type || '').toLowerCase() === desiredType) || accounts[0];
+
+    this._targetAccount = acct;
+    this.accountInfo = {
+      loginid: acct.account_id, email: acct.email,
+      isVirtual: (acct.account_type || '').toLowerCase() === 'demo',
+      accountType: acct.account_type, currency: acct.currency,
+      balance: parseFloat(acct.balance), group: acct.group,
+    };
+
+    this.logger.info(`Selected account ${acct.account_id} (${acct.account_type}, ${acct.currency}, balance=${acct.balance})`);
+
+    const otpPath = `/trading/v1/options/accounts/${encodeURIComponent(acct.account_id)}/otp`;
+    const otpRes = await this._rest.post(otpPath);
+
+    if (otpRes.status !== 200) {
+      const msg = otpRes.body?.errors?.[0]?.message || JSON.stringify(otpRes.body);
+      throw new Error(`OTP request failed (${otpRes.status}): ${msg}`);
+    }
+
+    const wsUrl = otpRes.body?.data?.url;
+    if (!wsUrl || !/^wss?:/i.test(wsUrl)) {
+      throw new Error(`OTP response missing .data.url: ${JSON.stringify(otpRes.body)}`);
+    }
+
+    this._otpUrl = wsUrl;
+    this._openWs(wsUrl);
+  }
+
+  _markAuthorized() {
+    if (!this.accountInfo) return;
+
+    this.logger.info(
+      `Authorized ${this.accountInfo.loginid}` +
+      `(${this.accountInfo.isVirtual ? 'DEMO' : 'REAL'})` +
+      `balance=${this.accountInfo.balance} ${this.accountInfo.currency} via PAT/new-API`
+    );
+
+    this.balance = this.accountInfo.balance;
+    this.send({ balance: 1, subscribe: 1 });
+    this.emit('connected', this.accountInfo);
+  }
+
+  onOpen() {
+    this.logger.info('WS Connected');
+    this.reconnectAttempts = 0;
+    this.isReconnecting = false;
+    this.startPing();
+
+    if (this._isPat) {
+      this._markAuthorized();
+    } else {
+      this.send({ authorize: this.config.deriv.apiToken });
+    }
+  }
+
+  _onMessage(data) {
+    let res;
+    try { res = JSON.parse(data); }
+    catch (e) { this.logger.error(`Parse error: ${e.message}`); return; }
+    this._handle(res);
+  }
+
   _handle(res) {
-    if (res.msg_type === 'tick') this.emit('tick', res.tick);
-    if (res.msg_type === 'proposal_open_contract' && res.proposal_open_contract.is_sold) {
+    if (res.msg_type === 'tick' && res.tick && typeof res.tick.quote !== 'undefined') {
+      this.emit('tick', res.tick);
+    }
+    if (res.msg_type === 'proposal_open_contract' && res.proposal_open_contract && res.proposal_open_contract.is_sold) {
       this.emit('contract_sold', res.proposal_open_contract);
     }
     if (res.msg_type === 'balance') this.balance = parseFloat(res.balance.balance);
-    
+    if (res.msg_type === 'authorize' && !this._isPat) {
+      if (res.error) { this.logger.error(`Auth failed: ${res.error.message}`); return; }
+      this.balance = parseFloat(res.authorize.balance);
+      this.accountInfo = res.authorize;
+      this.send({ balance: 1, subscribe: 1 });
+      this.emit('connected', res.authorize);
+    }
+
     if (res.req_id && this.pending.has(res.req_id)) {
       const { resolve, reject } = this.pending.get(res.req_id);
       this.pending.delete(res.req_id);
@@ -286,7 +484,15 @@ class DerivAPI extends EventEmitter {
     }
   }
 
+  async getTickHistory(symbol, count = 500) {
+    const res = await this.send({ ticks_history: symbol, count, end: 'latest', style: 'ticks' });
+    if (res.error || !res.history) return [];
+    const { times, prices } = res.history;
+    return times.map((t, i) => parseFloat(prices[i]));
+  }
+
   send(req) {
+    if (this.ws?.readyState !== WebSocket.OPEN) { this.logger.error('Cannot send: WebSocket not open'); return Promise.reject(new Error('WebSocket not open')); }
     return new Promise((resolve, reject) => {
       const id = ++this.reqId;
       req.req_id = id;
@@ -295,18 +501,12 @@ class DerivAPI extends EventEmitter {
     });
   }
 
-  async authorize() {
-    const res = await this.send({ authorize: this.config.deriv.apiToken });
-    this.balance = parseFloat(res.authorize.balance);
-    await this.send({ balance: 1, subscribe: 1 });
-    return res.authorize;
-  }
-
   async buy(params) {
+    const symbolKey = this._isPat ? 'underlying_symbol' : 'symbol';
     const res = await this.send({
       buy: 1, subscribe: 1, price: params.amount,
       parameters: {
-        contract_type: params.type, symbol: params.symbol,
+        contract_type: params.type, [symbolKey]: params.symbol,
         duration: params.duration, duration_unit: params.unit,
         basis: 'stake', amount: params.amount, currency: 'USD'
       }
@@ -314,10 +514,61 @@ class DerivAPI extends EventEmitter {
     return res.buy;
   }
 
-  async _reconnect() {
-    await new Promise(r => setTimeout(r, this.config.system.reconnectDelay));
-    try { await this.connect(); await this.authorize(); this.emit('reconnect'); } 
-    catch (e) { this.logger.error('Reconnect failed'); }
+  _onError(err) { this.logger.error(`WebSocket error: ${err.message}`); }
+
+  onClose() {
+    this.logger.warn('Disconnected from Deriv API');
+    this.stopPing();
+    this.emit('disconnect');
+
+    if (this.isShuttingDown) return;
+    if (this.isReconnecting) return;
+
+    if (this.reconnectAttempts < this.maxReconnectAttempts) {
+      this.isReconnecting = true;
+      this.reconnectAttempts++;
+      const delay = Math.min(this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1), 30000);
+      this.logger.info(`Reconnecting in ${(delay / 1000).toFixed(1)}s (attempt ${this.reconnectAttempts})`);
+
+      this.reconnectTimer = setTimeout(() => {
+        this.reconnectTimer = null;
+        if (this.isShuttingDown) return;
+        this.isReconnecting = false;
+        this.connect();
+      }, delay);
+    } else {
+      this.logger.error('Max reconnection attempts reached — giving up');
+      process.exit(1);
+    }
+  }
+
+  startPing() {
+    this.stopPing();
+    this.pingInterval = setInterval(() => {
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ ping: 1 }));
+      }
+    }, 30000);
+  }
+
+  stopPing() {
+    if (this.pingInterval) { clearInterval(this.pingInterval); this.pingInterval = null; }
+  }
+
+  cleanup() {
+    this.stopPing();
+    if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null; }
+    if (this.ws) {
+      this.ws.removeAllListeners();
+      try { if (this.ws.readyState <= 1) this.ws.close(); } catch { }
+      this.ws = null;
+    }
+  }
+
+  shutdown() {
+    this.isShuttingDown = true;
+    this.isReconnecting = false;
+    this.cleanup();
   }
 }
 
@@ -340,29 +591,40 @@ class DerivBot {
 
   async start() {
     this.logger.info('🚀 Starting Deriv Bot v4.0 (RNG Optimized)...');
-    await this.api.connect();
-    const auth = await this.api.authorize();
-    this.logger.info(`✅ Authorized: ${auth.loginid} | Balance: $${this.api.balance}`);
-    
+
+    const connected = new Promise((resolve) => {
+      this.api.once('connected', (account) => resolve(account));
+    });
+    this.api.connect();
+    const account = await connected;
+
+    this.logger.info(`✅ Authorized: ${account.loginid} | Balance: $${this.api.balance}`);
+
     await this.tg.send(`🤖 <b>Bot v4.0 Started</b>\nBalance: $${this.api.balance}\nSymbol: ${this.config.trading.symbol}\nDuration: ${this.config.trading.contractDuration}m`);
 
     this.api.on('tick', (t) => this.onTick(t));
     this.api.on('contract_sold', (c) => this.onContractSold(c));
     this.api.on('disconnect', () => { this.isTrading = false; });
-    this.api.on('reconnect', async () => { 
-      this.isTrading = true; 
-      await this.api.send({ ticks: this.config.trading.symbol, subscribe: 1 }); 
+    this.api.on('connected', async () => {
+      this.isTrading = true;
+      await this.api.send({ ticks: this.config.trading.symbol, subscribe: 1 });
     });
 
-    // Subscribe to ticks
+    // Backfill price history so indicators have data immediately (like bizarbitrage.js)
+    this.prices = await this.api.getTickHistory(this.config.trading.symbol, this.config.system.tickHistoryCount);
+    this.logger.info(`📊 Backfilled ${this.prices.length} ticks from history`);
+
+    // Subscribe to live ticks
     await this.api.send({ ticks: this.config.trading.symbol, subscribe: 1 });
     this.logger.info('📡 Listening to ticks...');
   }
 
   async onTick(tick) {
     if (!this.isTrading) return;
+    if (!tick || typeof tick.quote === 'undefined') return;
 
     const price = parseFloat(tick.quote);
+    if (isNaN(price)) return;
     this.prices.push(price);
     if (this.prices.length > this.config.system.maxTickBuffer) {
       this.prices = this.prices.slice(-500);
