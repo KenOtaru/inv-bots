@@ -112,7 +112,7 @@ const CONFIG = Object.freeze({
   accountType: 'demo',    // 'demo' | 'real'  — keep demo for testing
 
   // ── Trade parameters ──
-  stake          : parseFloat('2.5'),
+  stake          : parseFloat('5'),
   stopLoss       : parseFloat('900.0'),   // catastrophic per-contract stop ($)
   dailyMaxLoss   : parseFloat('500'),     // hard daily loss → stop until next UTC day
   dailyMaxTrades : parseInt('6000', 10),    // hard daily trade cap → stop until next UTC day
@@ -133,7 +133,7 @@ const CONFIG = Object.freeze({
   minStakeFraction     : parseFloat('0.25'),
   maxStakeFraction     : parseFloat('1.50'),
   kellyFraction        : parseFloat('0.20'),
-  martingaleMultiplier : parseFloat('20.0'),  // martingale × on each consecutive loss
+  martingaleMultiplier : parseFloat('22.0'),  // martingale × on each consecutive loss
   martingaleStep       : parseInt('2', 10),  // stop trading after this many stake multiplications (consecutive losses)
 
   // ── Assets (Deriv synthetic indices) ──
@@ -230,9 +230,9 @@ const CONFIG = Object.freeze({
   tradeWatchdogMs: parseInt('90000', 10),
 
   // ── Logging / state ──
-  logFile           : 'accuAPEXnewn_08.log',
+  logFile           : 'accuAPEXnewn_09.log',
   logLevel          : 'INFO',
-  stateFile         : 'accuAPEXnewn_state_08.json',
+  stateFile         : 'accuAPEXnewn_state_09.json',
   stateSaveOnTrade  : true,
   stateSaveOnShutdown: true,
 
