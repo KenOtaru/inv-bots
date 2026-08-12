@@ -35,19 +35,19 @@ class ConfigManager {
         enabled: true,
       },
       trading: {
-        symbol: 'R_75',
+        symbol: 'R_100',
         initialStake: 0.35,
         contractDuration: 1,
         contractDurationUnit: 'm',
-        riseType: 'CALL',
-        fallType: 'PUT',
-        maxDailyLoss: 20,
-        maxDailyTrades: 150,
-        takeProfitTarget: 30,
+        riseType: 'CALLE',
+        fallType: 'PUTE',
+        maxDailyLoss: 200,
+        maxDailyTrades: 250,
+        takeProfitTarget: 3000,
         minTimeBetweenTrades: 15000,
         payoutRatio: 0.90,          // conservative vs ~95% advertised
-        requireBacktestEdge: true,  // refuse live entries if history has no edge
-        backtestTicks: 10000,
+        requireBacktestEdge: false,  // refuse live entries if history has no edge
+        backtestTicks: 1000,
         backtestMinTrades: 200,
         edgeMinSample: 100,
       },
@@ -72,9 +72,9 @@ class ConfigManager {
       risk: {
         // Review: martingale raises ruin risk on a non-positive-EV game.
         useRecovery: false,
-        recoveryMultiplier: 2.1,
-        maxRecoverySteps: 3,
-        drawdownLimit: 20,
+        recoveryMultiplier: 2.2,
+        maxRecoverySteps: 9,
+        drawdownLimit: 200,
       },
       system: {
         tickHistoryCount: 2000,
@@ -90,7 +90,7 @@ class ConfigManager {
         staleMessageMs: 45000,
         settlementGraceMs: 45000,
         scheduleCheckMs: 15000,
-        stateFile: path.join(__dirname, 'newRiseFall2State.json'),
+        stateFile: path.join(__dirname, 'newRiseFall2State_01.json'),
       },
     };
     this.validate();
@@ -118,7 +118,7 @@ class Logger {
       transports: [
         new winston.transports.Console(),
         new winston.transports.File({
-          filename: 'newRiseFall2.log',
+          filename: 'newRiseFall2_01.log',
           maxsize: 5 * 1024 * 1024,
           maxFiles: 3,
         }),
