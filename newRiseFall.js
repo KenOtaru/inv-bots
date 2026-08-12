@@ -6,6 +6,7 @@
 'use strict';
 
 require('dotenv').config();
+const fs = require('fs');
 const path = require('path');
 const WebSocket = require('ws');
 const https = require('https');
@@ -14,7 +15,6 @@ const { URL } = require('url');
 const TelegramBot = require('node-telegram-bot-api');
 const winston = require('winston');
 const { EventEmitter } = require('events');
-const { StateStore } = require('./state');
 
 // ============================================================================
 // SECTION 1: CONFIGURATION
@@ -228,6 +228,82 @@ function fmtPx(v, digits = 2) {
   const n = num(v, NaN);
   if (!Number.isFinite(n)) return '—';
   return n.toFixed(digits);
+}
+
+// ============================================================================
+// STATE STORE (inlined — single-file, no ./state module)
+// ============================================================================
+class StateStore {
+  constructor(filePath, logger) {
+    this.filePath = filePath;
+    this.tmpPath = filePath + '.tmp';
+    this.bakPath = filePath + '.bak';
+    this.logger = logger;
+    this.dirty = false;
+    this.pending = null;
+    this.timer = null;
+    this.lastSavedAt = 0;
+  }
+
+  load() {
+    const candidates = [this.filePath, this.tmpPath, this.bakPath];
+    for (const pth of candidates) {
+      try {
+        if (!fs.existsSync(pth)) continue;
+        const raw = fs.readFileSync(pth, 'utf8');
+        if (!raw || !raw.trim()) continue;
+        const data = JSON.parse(raw);
+        if (data && typeof data === 'object') {
+          this.lastSavedAt = data.savedAt || fs.statSync(pth).mtimeMs;
+          this.logger.info(`State loaded from ${path.basename(pth)} (saved ${new Date(this.lastSavedAt).toISOString()})`);
+          return data;
+        }
+      } catch (e) {
+        this.logger.warn(`State read failed (${path.basename(pth)}): ${e.message}`);
+      }
+    }
+    this.logger.info('No usable state file — starting fresh');
+    return null;
+  }
+
+  queue(payload) {
+    this.pending = payload;
+    this.dirty = true;
+    if (!this.timer) {
+      this.timer = setTimeout(() => this.flush(), 200);
+    }
+  }
+
+  flush() {
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = null;
+    }
+    if (!this.dirty || this.pending == null) return true;
+    const data = this.pending;
+    this.dirty = false;
+    try {
+      const dir = path.dirname(this.filePath);
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+      const json = JSON.stringify(data, null, 2);
+      fs.writeFileSync(this.tmpPath, json);
+      if (fs.existsSync(this.filePath)) {
+        try { fs.copyFileSync(this.filePath, this.bakPath); } catch (_) { /* best-effort */ }
+      }
+      try {
+        fs.renameSync(this.tmpPath, this.filePath);
+      } catch (_) {
+        fs.copyFileSync(this.tmpPath, this.filePath);
+        try { fs.unlinkSync(this.tmpPath); } catch (__) { /* ignore */ }
+      }
+      this.lastSavedAt = data.savedAt || Date.now();
+      return true;
+    } catch (e) {
+      this.logger.error(`State save failed: ${e.message}`);
+      this.dirty = true;
+      return false;
+    }
+  }
 }
 
 // ============================================================================
