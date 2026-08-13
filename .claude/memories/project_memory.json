@@ -13,8 +13,14 @@
       "content": "continue",
       "added_at": "2026-08-12T21:19:15.707821",
       "source": "realtime_capture"
+    },
+    {
+      "type": "message",
+      "content": "Currently this bot (C:\\Users\\kenot\\Desktop\\Investment AccumulatorBot\\newRiseFall.js) resets all trade stats when a new day starts. I want previous days trade stats to be stored and displayed along wit",
+      "added_at": "2026-08-13T19:20:27.434205",
+      "source": "realtime_capture"
     }
   ],
   "created_at": "2026-08-12T21:19:15.702217",
-  "updated_at": "2026-08-12T21:19:15.707825"
+  "updated_at": "2026-08-13T19:20:27.434237"
 }
