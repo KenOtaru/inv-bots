@@ -412,6 +412,45 @@ class TelegramService {
     if (!this.bot) return;
     try { await this.bot.stopPolling(); } catch (_) { /* ignore */ }
   }
+
+  async sendHourlySummary(riskManager, balance, config) {
+    if (!this.enabled) return;
+    const stats = riskManager.getStats();
+    const hourlyLosses = riskManager.hourlyTrades - riskManager.hourlyWins;
+    const hourlyWR = riskManager.hourlyTrades > 0
+      ? ((riskManager.hourlyWins / riskManager.hourlyTrades) * 100).toFixed(1)
+      : '0.0';
+    const clock = tzNow(config.schedule.timezone);
+
+    await this.send([
+      `⏰ <b>HOURLY SUMMARY</b>`,
+      `Time: <code>${clock.stamp} ${clock.tzLabel}</code>`,
+      ``,
+      `<b>Last Hour:</b>`,
+      `Trades: ${riskManager.hourlyTrades}  |  ${riskManager.hourlyWins}W / ${hourlyLosses}L`,
+      `Win Rate: ${hourlyWR}%`,
+      `P/L: <b>${money(riskManager.hourlyPnL, true)}</b>`,
+      ``,
+      `<b>Today (${stats.dayDate}):</b>`,
+      `Trades: ${stats.trades}  |  ${stats.wins}W / ${stats.losses}L`,
+      `Win Rate: ${stats.winRate}%`,
+      `P/L: <b>${money(stats.dailyPnLNum, true)}</b>`,
+      `Balance: ${money(balance)}`,
+    ].join('\n'));
+  }
+
+  async sendEndOfDaySummary(riskManager, balance, config) {
+    if (!this.enabled) return;
+    const stats = riskManager.getStats();
+    const clock = tzNow(config.schedule.timezone);
+
+    await this.send([
+      `🌙 <b>END OF DAY SUMMARY</b>`,
+      `Time: <code>${clock.stamp} ${clock.tzLabel}</code>`,
+      ``,
+      statsBlockWithHistory(stats, balance),
+    ].join('\n'));
+  }
 }
 
 // ============================================================================
@@ -560,6 +599,11 @@ class RiskAndTradeManager {
     this.lastResetDate = gmtPlus1DateKey();
     // Archived stats for previous completed days, keyed by GMT+1 date (YYYY-MM-DD).
     this.dailyHistory = {};
+    // Hourly stats for summary notifications
+    this.hourlyTrades = 0;
+    this.hourlyWins = 0;
+    this.hourlyPnL = 0;
+    this.lastHour = new Date().getUTCHours();
   }
 
   checkDailyReset() {
@@ -618,6 +662,18 @@ class RiskAndTradeManager {
     };
   }
 
+  checkHourlyReset() {
+    const currentHour = new Date().getUTCHours();
+    if (currentHour !== this.lastHour) {
+      this.lastHour = currentHour;
+      this.hourlyTrades = 0;
+      this.hourlyWins = 0;
+      this.hourlyPnL = 0;
+      return true;
+    }
+    return false;
+  }
+
   recordTrade(profit) {
     this.checkDailyReset();
     const p = Number(profit);
@@ -626,10 +682,13 @@ class RiskAndTradeManager {
     this.totalTrades++;
     this.dailyTrades++;
     this.dailyPnL += safe;
+    this.hourlyTrades++;
+    this.hourlyPnL += safe;
 
     if (safe > 0) {
       this.wins++;
       this.dailyWins++;
+      this.hourlyWins++;
       this.consecutiveLosses = 0;
     } else {
       this.consecutiveLosses++;
@@ -800,6 +859,16 @@ function analysisBlock(a, title = 'Analysis') {
 }
 
 function statsBlock(stats, balance) {
+  return [
+    `<b>💰 Account</b>`,
+    `Balance: ${money(balance)}`,
+    `Daily P/L: <b>${money(stats.dailyPnLNum, true)}</b>`,
+    `Today (${stats.dayDate}): ${stats.wins}W / ${stats.losses}L  WR ${stats.winRate}%  (${stats.trades} trades)`,
+    `Streak: ${escapeHtml(stats.currentStreak)}`,
+  ].join('\n');
+}
+
+function statsBlockWithHistory(stats, balance) {
   const lines = [
     `<b>💰 Account</b>`,
     `Balance: ${money(balance)}`,
@@ -1391,6 +1460,10 @@ class DerivBot {
     this._disconnectSince = 0;
     this._notifiedDisconnect = false;
     this.restoredFromDisk = false;
+
+    // Timers for hourly and daily summaries
+    this.hourlyTimer = null;
+    this.dailyTimer = null;
   }
 
   snapshotState() {
@@ -1537,6 +1610,8 @@ class DerivBot {
     this.persist();
     await this._notifyStartup();
     this._startScheduleLoop();
+    this._startHourlyTimer();
+    this._startDailyTimer();
     await this._applySchedule(true);
   }
 
@@ -1659,6 +1734,32 @@ class DerivBot {
     this.scheduleTimer = setInterval(() => {
       this._applySchedule(false).catch(e => this.logger.error(`schedule: ${e.message}`));
     }, this.config.system.scheduleCheckMs || 15000);
+  }
+
+  _startHourlyTimer() {
+    if (this.hourlyTimer) clearInterval(this.hourlyTimer);
+    this.hourlyTimer = setInterval(() => {
+      const prevHour = this.risk.lastHour;
+      const currentHour = new Date().getUTCHours();
+      if (currentHour !== prevHour) {
+        this.risk.checkHourlyReset();
+        this.tg.sendHourlySummary(this.risk, this.api.balance, this.config)
+          .catch(e => this.logger.error(`hourly summary: ${e.message}`));
+      }
+    }, 60000);
+  }
+
+  _startDailyTimer() {
+    if (this.dailyTimer) clearInterval(this.dailyTimer);
+    this.dailyTimer = setInterval(() => {
+      const prevDay = this.risk.lastResetDate;
+      const currentDay = gmtPlus1DateKey();
+      if (currentDay !== prevDay) {
+        this.risk.checkDailyReset();
+        this.tg.sendEndOfDaySummary(this.risk, this.api.balance, this.config)
+          .catch(e => this.logger.error(`end of day summary: ${e.message}`));
+      }
+    }, 60000);
   }
 
   async _applySchedule(isStartup) {
@@ -2292,6 +2393,8 @@ class DerivBot {
   async shutdown() {
     this.logger.info('Shutting down — flushing state (open contract kept)');
     if (this.scheduleTimer) { clearInterval(this.scheduleTimer); this.scheduleTimer = null; }
+    if (this.hourlyTimer) { clearInterval(this.hourlyTimer); this.hourlyTimer = null; }
+    if (this.dailyTimer) { clearInterval(this.dailyTimer); this.dailyTimer = null; }
     this.persist(true);
     this.api.shutdown();
     await this.tg.stop();
