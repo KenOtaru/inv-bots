@@ -36,7 +36,7 @@ class ConfigManager {
       trading: {
         symbol: 'R_100',
         initialStake: 0.35,
-        contractDuration: 1,
+        contractDuration: 2,
         contractDurationUnit: 'm',
         riseType: 'CALLE',
         fallType: 'PUTE',
@@ -51,7 +51,7 @@ class ConfigManager {
         enabled: true,
         timezone: 'Africa/Lagos',
         resumeTime: '02:00',
-        pauseTime: '22:00',
+        pauseTime: '24:00',
       },
       analysis: {
         bbPeriod: 50,
@@ -80,7 +80,7 @@ class ConfigManager {
         staleMessageMs: 45000,
         settlementGraceMs: 45000,
         scheduleCheckMs: 15000,
-        stateFile: path.join(__dirname, 'newRiseFallState_02.json'),
+        stateFile: path.join(__dirname, 'newRiseFallState_03.json'),
       },
     };
     this.validate();
@@ -108,7 +108,7 @@ class Logger {
       transports: [
         new winston.transports.Console(),
         new winston.transports.File({
-          filename: 'newRiseFall_02.log',
+          filename: 'newRiseFall_03.log',
           maxsize: 5 * 1024 * 1024,
           maxFiles: 3,
         }),
@@ -2273,12 +2273,12 @@ class DerivBot {
       aligned == null ? null : `Price move vs call: ${aligned ? '✔ agreed' : '✘ opposed'}`,
       `Contract: <code>${trade?.contractId || contract?.contract_id || '—'}</code>`,
       ``,
-      analysisBlock(trade?.analysis, 'Entry analysis'),
-      trade?.reason ? `Why: <i>${escapeHtml(trade.reason)}</i>` : null,
-      `Confidence at entry: ${conf}`,
-      ``,
-      analysisBlock(exitAnalysis, 'Exit snapshot'),
-      ``,
+      // analysisBlock(trade?.analysis, 'Entry analysis'),
+      // trade?.reason ? `Why: <i>${escapeHtml(trade.reason)}</i>` : null,
+      // `Confidence at entry: ${conf}`,
+      // ``,
+      // analysisBlock(exitAnalysis, 'Exit snapshot'),
+      // ``,
       `<b>🕐 Timing</b>`,
       `Executed:  <code>${trade?.openedStamp || '—'}</code>`,
       `Completed: <code>${closedStamp}</code>`,
