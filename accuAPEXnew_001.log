@@ -1,0 +1,8 @@
+[2026-08-15 21:22:12] [INFO] ═══════════════════════════════════════════
+[2026-08-15 21:22:12] [INFO]   AccuAPEXnew — APEX Strategy
+[2026-08-15 21:22:12] [INFO] ═══════════════════════════════════════════
+[2026-08-15 21:22:13] [INFO] assets: BOOM500, BOOM600, BOOM900, BOOM1000, CRASH500, CRASH600, CRASH900, CRASH1000
+[2026-08-15 21:22:13] [INFO] PAT token detected → new API (OTP flow)
+[2026-08-15 21:22:14] [INFO] connecting OTP → wss://api.derivws.com/trading/v1/options/ws/demo?otp=***
+[2026-08-15 21:22:15] [INFO] ws connected
+[2026-08-15 21:22:15] [INFO] authorized DOT93017789 (DEMO) bal=7973.6
