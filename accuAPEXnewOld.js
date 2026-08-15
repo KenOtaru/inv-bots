@@ -141,7 +141,7 @@ const CONFIG = Object.freeze({
   pulseMaxHorizon     : parseInt  ('6', 10),
 
   // ── Growth-rate candidates (Deriv supports 0.01-0.05) ──
-  pulseGrowthRates    : [0.05], // eval multiple rates, let EV pick best
+  pulseGrowthRates    : [0.05, 0.04, 0.03, 0.02, 0.01], //0.05, 0.04, 0.03, 0.02, 0.01 eval multiple rates, let EV pick best
 
   // ── Volatility regime ──
   pulseCalmMaxRatio   : parseFloat('1.05'),

@@ -167,7 +167,7 @@ const CONFIG = Object.freeze({
   apexMinEV       : parseFloat('0.010'),   // ≥ +1% net EV to fire
   apexMinSurvival : parseFloat('0.940'),    // forward K-tick survival floor
   pulseSpreadCost : parseFloat('0.002'),   // flat spread model (low; see honesty note)
-  pulseGrowthRates: [0.05], //[0.05, 0.04, 0.03, 0.02, 0.01] grid searched by EV (lower rates = looser barrier)
+  pulseGrowthRates: [0.05, 0.04, 0.03, 0.02, 0.01], //[0.05, 0.04, 0.03, 0.02, 0.01] grid searched by EV (lower rates = looser barrier)
 
   // ── APEX strategy tunables ──
   // History depth: spike cadence needs ≥2 spike intervals in view.
