@@ -406,7 +406,7 @@ class TelegramService {
 
         const lines = [
             `${emoji} <b>RISE ALWAYS-CALL BOT — ${type}</b>`,
-            `Pair: <b>${symbol}</b>  Direction: <b>${direction === 'CALL' ? '\u{1f4c8} CALL (Rise)' : '\u{1f4c9} PUT (Fall)'}</b>`,
+            `Pair: <b>${symbol}</b>  Direction: <b>${direction === 'CALLE' ? '\u{1f4c8} CALLE (Rise)' : '\u{1f4c9} PUTE (Fall)'}</b>`,
             `Stake: $${stake.toFixed(2)} | Duration: ${duration}${(durationUnit || 's').toUpperCase()}`,
             `${TradingSessionManager.getStatusString()}`,
             ``,
@@ -1204,7 +1204,7 @@ class IndexBot {
         console.log('═'.repeat(74));
         console.log(`Assets    : ${CONFIG.ACTIVE_ASSETS.join(', ')}`);
         console.log(`Timeframe : ${CONFIG.TIMEFRAME_LABEL} candles | Duration: ${CONFIG.DURATION}${CONFIG.DURATION_UNIT}`);
-        console.log(`Entry     : ALWAYS CALL (Rise)`);
+        console.log(`Entry     : ALWAYS CALLE (Rise)`);
         console.log(`Stake     : start $${CONFIG.INITIAL_STAKE.toFixed(2)} | win→reset $${CONFIG.WIN_AMOUNT.toFixed(2)} | loss→+|loss|×${CONFIG.LOSS_RECOVERY_MULTIPLIER}`);
         console.log(`Guards    : reset if |loss|≥$${CONFIG.MAX_LOSS_AMOUNT} | stop at +$${CONFIG.EXPECTED_PROFIT.toFixed(2)}`);
         console.log(`Balance   : $${(state.accountBalance || 0).toFixed(2)}`);
@@ -1296,9 +1296,9 @@ class IndexBot {
         }
 
         // ── Always CALL (Rise) ──
-        const direction = 'CALL';
+        const direction = 'CALLE';
 
-        LOGGER.signal(`[${symbol}] BUY SIGNAL — ALWAYS CALL (Rise) | Stake: $${stake.toFixed(2)} | Cycle P/L: $${state.totalProfit.toFixed(2)}`);
+        LOGGER.signal(`[${symbol}] BUY SIGNAL — ALWAYS CALLE (Rise) | Stake: $${stake.toFixed(2)} | Cycle P/L: $${state.totalProfit.toFixed(2)}`);
 
         this._executeBuy(symbol, direction, stake, {
             method: 'RISE_ALWAYS_CALL',
@@ -1323,7 +1323,7 @@ class IndexBot {
         state.assets[symbol].activePositions.push(pos);
 
         LOGGER.trade(
-            `\u{1f3af} [${symbol}] ${direction === 'CALL' ? '\u{1f4c8} CALL (Rise)' : '\u{1f4c9} PUT (Fall)'} |` +
+            `\u{1f3af} [${symbol}] ${direction === 'CALL' ? '\u{1f4c8} CALLE (Rise)' : '\u{1f4c9} PUTE (Fall)'} |` +
             `Stake: $${stake.toFixed(2)} | ${signalInfo.reason || ''}`
         );
 
