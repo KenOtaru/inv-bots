@@ -215,7 +215,7 @@ const CONFIG = Object.freeze({
   // when mode is left at the default. It does NOT silently override an
   // explicit mode. Default false → mode=cycle actually runs the cycle
   // engine (previously this flag silently demoted cycle → conditional).
-  repeatAvoidMode: strEnv('REPEAT_AVOID_MODE', 'flat'),
+  repeatAvoidMode: strEnv('REPEAT_AVOID_MODE', 'conditional'),
   repeatAvoidUseConditional: false,
   repeatAvoidMaxStreakBucket: 100,
   repeatAvoidMinBucketN: 100,
@@ -332,20 +332,20 @@ const CONFIG = Object.freeze({
 
   // ── Scheduled pause/resume ──────────────────────────────────────
   pauseEnabled   : true,
-  pauseStartGmt  : '06:00',
-  pauseEndGmt    : '18:00',
+  pauseStartGmt  : '23:00',
+  pauseEndGmt    : '01:00',
 
   // ── Day-of-week trading filter ──────────────────────────────────
   //   Trading days are evaluated in GMT/UTC. Open trades ALWAYS settle
   //   normally on a disabled day; only NEW analysis/trade cycles are blocked.
   //   Each can be toggled via env var, e.g. TRADE_SUNDAY=false.
-  tradeSunday    : boolEnv('TRADE_SUNDAY',    false),
+  tradeSunday    : boolEnv('TRADE_SUNDAY',    true),
   tradeMonday    : boolEnv('TRADE_MONDAY',    true),
   tradeTuesday   : boolEnv('TRADE_TUESDAY',   true),
   tradeWednesday : boolEnv('TRADE_WEDNESDAY', true),
   tradeThursday  : boolEnv('TRADE_THURSDAY',  true),
   tradeFriday    : boolEnv('TRADE_FRIDAY',    true),
-  tradeSaturday  : boolEnv('TRADE_SATURDAY',  false),
+  tradeSaturday  : boolEnv('TRADE_SATURDAY',  true),
 
   // GMT/UTC reporting
   eodTimeGmt: '00:00', // default midnight GMT; report date is previous UTC day
