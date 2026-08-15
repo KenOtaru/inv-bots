@@ -86,8 +86,8 @@ class RestClient {
 // ============================================================
 // FILE PATHS
 // ============================================================
-const STATE_FILE = path.join(__dirname, 'riseFallR50-state.json');
-const HISTORY_FILE = path.join(__dirname, 'riseFallR50-history.json');
+const STATE_FILE = path.join(__dirname, 'riseFallR50-state_01.json');
+const HISTORY_FILE = path.join(__dirname, 'riseFallR50-history_01.json');
 const STATE_SAVE_INTERVAL = 5000;  // ms
 
 // ============================================================
