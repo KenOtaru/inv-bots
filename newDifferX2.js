@@ -335,6 +335,18 @@ const CONFIG = Object.freeze({
   pauseStartGmt  : '06:00',
   pauseEndGmt    : '18:00',
 
+  // ── Day-of-week trading filter ──────────────────────────────────
+  //   Trading days are evaluated in GMT/UTC. Open trades ALWAYS settle
+  //   normally on a disabled day; only NEW analysis/trade cycles are blocked.
+  //   Each can be toggled via env var, e.g. TRADE_SUNDAY=false.
+  tradeSunday    : boolEnv('TRADE_SUNDAY',    false),
+  tradeMonday    : boolEnv('TRADE_MONDAY',    true),
+  tradeTuesday   : boolEnv('TRADE_TUESDAY',   true),
+  tradeWednesday : boolEnv('TRADE_WEDNESDAY', true),
+  tradeThursday  : boolEnv('TRADE_THURSDAY',  true),
+  tradeFriday    : boolEnv('TRADE_FRIDAY',    true),
+  tradeSaturday  : boolEnv('TRADE_SATURDAY',  false),
+
   // GMT/UTC reporting
   eodTimeGmt: '00:00', // default midnight GMT; report date is previous UTC day
   eodSendDelaySeconds: 10,
@@ -2337,6 +2349,31 @@ class TradingBot {
     if (this._pauseEndTimer)   { clearTimeout(this._pauseEndTimer);   this._pauseEndTimer = null; }
   }
 
+  /**
+   * Day-of-week trading filter (GMT/UTC).
+   * Returns true when the bot is permitted to open new trades today.
+   * Mirrors the implementation in accurateDiffer.js.
+   */
+  _isTradingAllowedToday() {
+    const now = new Date();
+    const dayOfWeek = now.getUTCDay(); // 0 = Sunday, 6 = Saturday
+    const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const daySettings = [
+      this.cfg.tradeSunday,
+      this.cfg.tradeMonday,
+      this.cfg.tradeTuesday,
+      this.cfg.tradeWednesday,
+      this.cfg.tradeThursday,
+      this.cfg.tradeFriday,
+      this.cfg.tradeSaturday,
+    ];
+    const allowed = daySettings[dayOfWeek];
+    if (!allowed) {
+      logger.debug(`trading disabled for ${dayNames[dayOfWeek]} (GMT) — skipping analysis cycle`);
+    }
+    return allowed;
+  }
+
   async start() {
     logger.info('===== Deriv Digit Differ Bot starting =====');
     logger.info(`config: stake=${this.cfg.stake} duration=${this.cfg.durationTicks}t assets=${this.cfg.assets.join(',')}`);
@@ -2391,6 +2428,17 @@ class TradingBot {
     const pauseLine = this.cfg.pauseEnabled
       ? `⏸️ Scheduled pause: <b>${htmlEscape(this.cfg.pauseStartGmt)}</b> → <b>${htmlEscape(this.cfg.pauseEndGmt)}</b> GMT`
       : `⏸️ Scheduled pause: off`;
+    const dayAbbrev = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const daySettings = [
+      this.cfg.tradeSunday,
+      this.cfg.tradeMonday,
+      this.cfg.tradeTuesday,
+      this.cfg.tradeWednesday,
+      this.cfg.tradeThursday,
+      this.cfg.tradeFriday,
+      this.cfg.tradeSaturday,
+    ];
+    const dayLine = `📅 Trading days: ${dayAbbrev.map((d, i) => daySettings[i] ? `✅${d}` : `❌${d}`).join(' ')} (GMT)`;
     const breakerLine = this.cfg.circuitBreakerEnabled
       ? `🚨 Circuit breaker: <b>ON</b> (trip after ${this.cfg.circuitBreakerLosses} consecutive losses, cooldown ${(this.cfg.circuitBreakerCooldownMs/60000).toFixed(0)}m)`
       : `🚨 Circuit breaker: off`;
@@ -2410,6 +2458,8 @@ class TradingBot {
       `${calibLine}\n` +
       `${rotationLine}\n` +
       `${breakerLine}\n` +
+      `${pauseLine}\n` +
+      `${dayLine}\n` +
       `${cooldownLine}\n` +
       `📈 Signal: empirical digit frequency (heuristic, not a demonstrated edge — see file header)\n` +
       `🧯 Daily stop: ${money(-Math.abs(this.cfg.dailyMaxLoss), this.currency())} or ${(this.cfg.dailyMaxLossPct*100).toFixed(1)}% of balance, whichever first\n` +
@@ -2427,6 +2477,19 @@ class TradingBot {
     }
 
     await this.market.bootstrap(this.cfg.assets);
+
+    // ── Scheduled pause/resume ───────────────────────────────────────
+    // Initialize the paused state from the current GMT time (in case the
+    // bot starts already inside the pause window), then arm the timers
+    // that will flip paused↔resumed at the configured boundaries.
+    // Without _schedulePause() being called here the timers are never set,
+    // this.paused stays false, and the pause never takes effect.
+    this.paused = this._isPausedNow();
+    this._schedulePause();
+    if (this.paused) {
+      logger.info(`startup: currently inside scheduled pause window — trading held until resume`);
+    }
+
     if (this._analysisT) clearInterval(this._analysisT);
     this._analyzeAndTrade().catch(e => logger.error('initial analyze:', e.message));
     this._analysisT = setInterval(() => this._analyzeAndTrade().catch(e => logger.error('analyze:', e.message)), this.cfg.analysisIntervalMs);
@@ -2633,6 +2696,9 @@ class TradingBot {
       return;
     }
     if (this._globalHalt) return;
+
+    // ── Day-of-week trading filter ──────────────────────────────────
+    if (!this._isTradingAllowedToday()) return;
 
     // ── Lifetime stop ───────────────────────────────────────────────
     if (this.cfg.globalMaxLoss > 0 && this.stats.overallProfit <= -Math.abs(this.cfg.globalMaxLoss)) {
