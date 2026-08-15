@@ -1302,6 +1302,7 @@ class EnhancedTradeExecutor extends EventEmitter {
     this._scalingOut = new Set();
     this._buying = false;
     this._lastUpdateMap = new Map();
+    this._settledIds = new Set();
     this.positionHistory = [];
     this._lastVolRegime = 'normal';
     this._lastTrend = 'neutral';
@@ -1695,7 +1696,13 @@ class EnhancedTradeExecutor extends EventEmitter {
       }
     }
     for (const id of [...this.open.keys()]) {
-      if (!liveIds.has(id)) this.open.delete(id);
+      if (!liveIds.has(id)) {
+        this.open.delete(id);
+        this._lastUpdateMap.delete(id);
+        // Server no longer lists it as open → it settled while we weren't
+        // subscribed. Mark settled so a stray echo can't re-settle it.
+        this._settledIds.add(id);
+      }
     }
     return true;
   }
@@ -1725,6 +1732,14 @@ class EnhancedTradeExecutor extends EventEmitter {
     }
 
     if (c.status !== 'open' || c.is_sold) {
+      // Idempotent settlement: ignore late/duplicate settlement echoes for a
+      // contract we already finalized (force-sold or previously settled).
+      if (this._settledIds.has(cid)) {
+        this.open.delete(cid);
+        this._lastUpdateMap.delete(cid);
+        return;
+      }
+      this._settledIds.add(cid);
       const status = profit >= 0 ? 'won' : 'lost';
       const finished = {
         ...info,
@@ -1767,10 +1782,43 @@ class EnhancedTradeExecutor extends EventEmitter {
     const now = Date.now();
     for (const [cid, lastTime] of this._lastUpdateMap.entries()) {
       if (now - lastTime > maxStaleMsec) {
-        log('WARN', `Contract #${cid} stuck for ${((now - lastTime) / 1000).toFixed(0)}s, force-selling`);
+        const staleSec = ((now - lastTime) / 1000).toFixed(0);
+        const info = this.open.get(cid);
+        log('WARN', `Contract #${cid} stuck for ${staleSec}s, force-selling`);
+        // Idempotency guard: never re-settle a contract we already finalized.
+        if (this._settledIds.has(cid)) {
+          this.open.delete(cid);
+          this._lastUpdateMap.delete(cid);
+          continue;
+        }
         this._selling.add(cid);
         this.sell(cid, 0)
-          .catch(e => log('ERROR', `Force-sell #${cid} failed:`, e.message))
+          .catch(e => {
+            const msg = String(e?.message || e);
+            // "not found among your open positions" = contract already closed
+            // server-side (subscription died before settlement echoed). The
+            // local entry is stale; drop it so the stuck-check loop ends.
+            const alreadyClosed = /not found among your open positions/i.test(msg);
+            if (alreadyClosed) {
+              log('WARN', `Force-sell #${cid} missed: contract already closed on server — dropping stale local entry`);
+              if (info) {
+                info.status = 'unknown';
+                info.profit = 0;
+                info.sellTime = Date.now() / 1000;
+                info.currentSpot = info.currentSpot || 0;
+                // Record as explicit 'unknown' so it is excluded from WR/streaks
+                // (never fabricate a win/loss for an unconfirmable contract).
+                this.positionHistory.push(info);
+                this.emit('result', info);
+              }
+            } else {
+              log('ERROR', `Force-sell #${cid} failed:`, msg);
+            }
+            // In both cases the local entry is gone; never retry forever.
+            this._settledIds.add(cid);
+            this.open.delete(cid);
+            this._lastUpdateMap.delete(cid);
+          })
           .finally(() => this._selling.delete(cid));
       }
     }
@@ -1852,7 +1900,8 @@ class EnhancedStatisticsManager {
     }
     const stats = this.assetStats.get(rec.symbol);
     if (rec.status === 'won') stats.wins++;
-    else stats.losses++;
+    else if (rec.status === 'lost') stats.losses++;
+    // 'unknown' (unconfirmable) settlements are excluded from win/loss tallies.
     stats.profit += Number(rec.profit || 0);
     stats.trades.push(rec);
     if (stats.trades.length > 500) stats.trades.shift();
@@ -1880,6 +1929,7 @@ class EnhancedStatisticsManager {
   stats(list) {
     const wins = list.filter(t => t.status === 'won');
     const losses = list.filter(t => t.status === 'lost');
+    const decided = list.filter(t => t.status === 'won' || t.status === 'lost');
     const total = list.reduce((s, t) => s + Number(t.profit || 0), 0);
     const gw = wins.reduce((s, t) => s + Number(t.profit || 0), 0);
     const gl = Math.abs(losses.reduce((s, t) => s + Number(t.profit || 0), 0));
@@ -1887,7 +1937,7 @@ class EnhancedStatisticsManager {
       count: list.length,
       wins: wins.length,
       losses: losses.length,
-      winRate: list.length ? wins.length / list.length * 100 : 0,
+      winRate: decided.length ? wins.length / decided.length * 100 : 0,
       grossWin: gw,
       grossLoss: gl,
       totalProfit: total,
@@ -2086,7 +2136,8 @@ class AccuPULSE3BotV5 {
     if (recentTrades.length < 5) return rc.recoveryMinStake || 0.40;
 
     const wins = recentTrades.filter(t => t.status === 'won').length;
-    const wr = wins / recentTrades.length;
+    const decidedCount = recentTrades.filter(t => t.status === 'won' || t.status === 'lost').length;
+    const wr = decidedCount > 0 ? wins / decidedCount : 0;
 
     let mult = rc.recoveryMinStake || 0.40;
     if (wr > (rc.wrThresholdNormal || 0.70)) mult = rc.recoveryMaxStake || 1.00;
@@ -2278,7 +2329,8 @@ class AccuPULSE3BotV5 {
 
   _onTradeResult(t) {
     this.tradeStartTime = null;
-    this.tradeCount++;
+    // Unknown (unconfirmable) settlements don't advance the warm-up lifecycle.
+    if (t.status !== 'unknown') this.tradeCount++;
     const rec = this.stats.record(t);
 
     // ── Feature 5: Check mode transition ──────────────────────────────
@@ -2308,14 +2360,18 @@ class AccuPULSE3BotV5 {
     // Phase 4: Update asset Sharpe
     this.analyzer.updateAssetSharpe(t.symbol, this.stats.trades);
 
-    const emoji = t.status === 'won' ? '✅' : '❌';
+    const emoji = t.status === 'won' ? '✅' : (t.status === 'unknown' ? '❓' : '❌');
     const dur = Math.max(0, (t.sellTime || Date.now() / 1000) - (t.buyTime || 0));
     this.lastBalance = (this.lastBalance ?? 0) + t.profit;
     this.overallProfit += t.profit;
 
     if (this.lastBalance > this.equityPeak) this.equityPeak = this.lastBalance;
 
-    if (t.status === 'won') {
+    if (t.status === 'unknown') {
+      // Unconfirmable settlement (e.g. subscription died before server echoed
+      // close). Excluded from win/loss streaks — never fabricate a result.
+      log('WARN', `Trade #${t.contractId} settled as UNKNOWN — excluded from WR/streaks`);
+    } else if (t.status === 'won') {
       this.winStreak++;
       this.lossStreak = 0;
       if (this.winStreak >= this.cfg.winsBeforeScaling) {
@@ -2336,7 +2392,7 @@ class AccuPULSE3BotV5 {
 
     const todayStats = this.stats.stats(this.stats.todayTrades(rec.date));
     let msg =
-      `${emoji} <b>TRADE ${t.status === 'won' ? 'WON' : 'LOST'}</b>\n\n` +
+      `${emoji} <b>TRADE ${t.status === 'won' ? 'WON' : (t.status === 'unknown' ? 'UNKNOWN' : 'LOST')}</b>\n\n` +
       `🎫 #${t.contractId} | ${t.symbol}\n` +
       `💵 Stake: ${t.stake.toFixed(2)} | P/L: ${money(t.profit, this.currencyStr())}\n` +
       `⏱️ Duration: ${dur.toFixed(1)}s\n` +
@@ -2559,7 +2615,8 @@ class AccuPULSE3BotV5 {
 
       const growthRate = best.suggestedGrowth;
       const recentWinRate = this.stats.trades.length >= 10
-        ? this.stats.trades.slice(-50).filter(t => t.status === 'won').length / Math.min(50, this.stats.trades.length)
+        ? this.stats.trades.slice(-50).filter(t => t.status === 'won').length /
+          Math.max(1, this.stats.trades.slice(-50).filter(t => t.status === 'won' || t.status === 'lost').length)
         : 0.5;
 
       // ── Feature 2 + 6: Dynamic stake with recovery ───────────────────
