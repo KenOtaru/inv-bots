@@ -4,29 +4,47 @@
   "realtime_memories": [
     {
       "type": "preference",
-      "content": "User works across multiple bot files (newDifferX2.js, accurateDiffer.js, newRiseFall.js). Prefer porting working patterns between files rather than re-deriving. Config uses GMT/UTC day clock and env-var-overridable CONFIG entries (boolEnv/strEnv/numEnv/intEnv pattern).",
+      "content": "User works across multiple bot files (newDifferX2.js, accurateDiffer.js, newRiseFall.js, accuPULSE3.js, bizPattern.js, accuAPEXnew.js, accuPULSE2b.js). Prefer porting working patterns between files rather than re-deriving. Config uses GMT/UTC day clock and env-var-overridable CONFIG entries (boolEnv/strEnv/numEnv/intEnv pattern). All bot credentials hardcoded in CONFIG (no .env migration).",
       "added_at": "2026-08-15T09:50:00.000000",
       "source": "realtime_capture"
     },
     {
-      "type": "message",
-      "content": "Please help me check and fix any issues preventing this bot (C:\\Users\\kenot\\Desktop\\Investment AccumulatorBot\\accuPULSE3.js) from trading correctly, it only executed one trade in over 48 hours. Please",
-      "added_at": "2026-08-15T10:11:32.812185",
+      "type": "project",
+      "content": "newDifferX2.js v4: frequency strategy default (falsifiable); deviation gate minDeviationZ=4.2 with min-of-10 on fair-Bernoulli z; recovery OFF by default; circuit breaker ON (4 losses); calibrator ON (window 200, minTrades 40); dailyMaxTrades=300; reconcile on reconnect, never clear exec.open; exec.sell() must exist; lastBalance = balanceAfter + profit + stake; selftest verifies 0 phantom signals.",
+      "added_at": "2026-08-08T07:47:31.000000",
       "source": "realtime_capture"
     },
     {
-      "type": "claude_response",
-      "content": "Perfect! Let me create one final comprehensive summary for you:\n\n---\n\n# 🎯 AccuPULSE3 v4.0 — COMPLETE ANALYSIS & FIX\n\n## Executive Summary\n\nYour bot executed only **1 trade in 48+ hours** due to **6 ca",
-      "added_at": "2026-08-15T10:28:23.877681",
+      "type": "project",
+      "content": "AccuAPEXnew v4: Reconcile open contracts after every re-auth; idempotent settlement via _settledIds; single-flight entry latch _tradeInFlight; VOL compression = recent-MAD / long-baseline-MAD (not EWMA ratio); growth-rate grid [0.05,0.04,0.03,0.02,0.01]; hard daily caps (60 trades / $500 loss); CLI flags --selftest and --dry-run.",
+      "added_at": "2026-08-04T13:14:28.000000",
       "source": "realtime_capture"
     },
     {
-      "type": "message",
-      "content": "Please create a new bot using your ACCUPULSE3_UPGRADED_STRATEGY.md",
-      "added_at": "2026-08-15T10:28:23.877740",
+      "type": "project",
+      "content": "bizPattern.js v2: Wilson lower bound REMOVED as trade gate (only reported as confidenceLower) — using it made trading impossible on n≈20-60 samples; holdout comparison is THE anti-overfit check; BUY_SYMBOL_FIELD must be 'auto' (resolves to 'underlying_symbol' for PAT/OTP); DURATION must equal GRANULARITY (60s/60s); martingale user-re-enabled (preserve user config edits).",
+      "added_at": "2026-08-07T13:01:12.000000",
+      "source": "realtime_capture"
+    },
+    {
+      "type": "project",
+      "content": "accuPULSE2b AEBA v2: Gate = hard EV net of costs; EV(g) = (1+g)·p̂ − 1 − costHaircut; g chosen by argmax EV; survival floor S(K) ≥ survivalFloor; vol-of-vol percentile gate. Barrier from live tick_size_barrier_percentage per growth-rate bucket — never fabricate. P0: do NOT clear exec.open on disconnect; reconcile on re-auth; entry gated on this.reconciled. dailyMaxTrades=40. Selftest: 8 checks, no network.",
+      "added_at": "2026-08-05T09:52:03.000000",
+      "source": "realtime_capture"
+    },
+    {
+      "type": "project",
+      "content": "newDifferX2.js pause + DOW fix: _schedulePause() was defined but never called — pause windows never fired. Fix: call this.paused = this._isPausedNow() + this._schedulePause() in _onAuthorized. Day-of-week filter ported from accurateDiffer.js: CONFIG tradeSunday..tradeSaturday (env-overridable), _isTradingAllowedToday() checks getUTCDay(). All times GMT/UTC. Both filters independent and stack.",
+      "added_at": "2026-08-15T09:03:35.000000",
+      "source": "realtime_capture"
+    },
+    {
+      "type": "project",
+      "content": "accuPULSE3 v5.0 built 2026-08-15 (accuPULSE3_v5.js, 2875 lines). 7 features: (1) adaptive confidence gates by vol regime (0.01-0.08); (2) 6-factor stake sizing (Kelly, confidence, vol, WR, DD, streak); (3) 6-check entry confirmation (≥4/6 pass); (4) 4-tier exit (3/8/15/20 ticks, scale-out 30%); (5) warm-up lifecycle WARMUP→BALANCED→OPTIMIZED; (6) graduated recovery (WR-based multipliers, no hard pause); (7) full metrics JSONL logging. v4.0 had 6 critical blockers causing 1 trade/48h. Worktree agent lesson: always commit base changes before spawning worktree agents.",
+      "added_at": "2026-08-15T10:00:00.000000",
       "source": "realtime_capture"
     }
   ],
   "created_at": "2026-08-12T21:19:15.702217",
-  "updated_at": "2026-08-15T10:28:23.877744"
+  "updated_at": "2026-08-15T10:00:00.000000"
 }
