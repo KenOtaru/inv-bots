@@ -127,9 +127,9 @@ const CONFIG = Object.freeze({
   recentTradedSymbolsLen : parseInt('1', 10),
 
   // ── Anti-Martingale (win-streak compounding) ──
-  winsBeforeScaling     : parseInt('500'), // FIXED: was 3000
-  winStakeMultiplier    : parseFloat('1.2'),
-  maxWinStakeMultiplier : parseFloat('4.0'),
+  winsBeforeScaling     : parseInt('1'), // FIXED: was 3000
+  winStakeMultiplier    : parseFloat('1.1'),
+  maxWinStakeMultiplier : parseFloat('5.0'),
 
   // ── Assets ──
   assets: ('R_10,R_25,R_50,R_75,R_100')
@@ -151,7 +151,7 @@ const CONFIG = Object.freeze({
 
   // ── HAZARD MODEL (FIXED) ──
   // Now computes one-tick-ahead knockout probability from historical returns
-  candidateGrowthRates : [0.04],
+  candidateGrowthRates : [0.03, 0.04, 0.05],
   hazardWindow         : parseInt('250', 10),   // lookback ticks
   plannedHoldTicks     : parseInt('20', 10),    // N for p_N calculation
   minBarrierPct        : parseFloat('0.02'),    // minimum acceptable barrier width
@@ -213,11 +213,11 @@ const CONFIG = Object.freeze({
   maxTelegramQueue: parseInt('100', 10),
 
   // ── Logging ──
-  logFile : 'accuPULSE2b_fixed.log',
+  logFile : 'accuPULSE2b_fixed_01.log',
   logLevel: 'INFO',
 
   // ── State persistence ──
-  stateFile           : 'accuPULSE2b_state_fixed.json',
+  stateFile           : 'accuPULSE2b_state_fixed_01.json',
   stateSaveOnTrade    : true,
   stateSaveOnShutdown : true,
 
