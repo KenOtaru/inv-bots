@@ -187,7 +187,7 @@ const CONFIG = Object.freeze({
   //   drop out of the window. Unlike assetRotationMs there is no time
   //   expiry — a symbol stays barred for N subsequent trades.
   skipRecentTradedSymbols: true,        // don't re-enter the same symbol back-to-back
-  recentTradedSymbolsLen : parseInt('3', 10),
+  recentTradedSymbolsLen : parseInt('4', 10),
   // ── Hard daily stops (these actually HALT new trades for the day) ──
   dailyMaxLoss: 2000,          // fixed dollar figure
   dailyMaxLossPct: 0.05,       // 5% of day-start balance (whichever hits first)
@@ -215,7 +215,7 @@ const CONFIG = Object.freeze({
   // when mode is left at the default. It does NOT silently override an
   // explicit mode. Default false → mode=cycle actually runs the cycle
   // engine (previously this flag silently demoted cycle → conditional).
-  repeatAvoidMode: strEnv('REPEAT_AVOID_MODE', 'cycle'),
+  repeatAvoidMode: strEnv('REPEAT_AVOID_MODE', 'flat'),
   repeatAvoidUseConditional: false,
   repeatAvoidMaxStreakBucket: 100,
   repeatAvoidMinBucketN: 100,
@@ -341,8 +341,8 @@ const CONFIG = Object.freeze({
   hourlySummary: true,
 
   // Persistence/logging
-  stateFile: strEnv('STATE_FILE', 'newX2Differ_state_18.json'),
-  logFile: strEnv('LOG_FILE', 'newX2Differ_bot_18.log'),
+  stateFile: strEnv('STATE_FILE', 'newX2Differ_state_20.json'),
+  logFile: strEnv('LOG_FILE', 'newX2Differ_bot_20.log'),
   logLevel: strEnv('LOG_LEVEL', 'INFO NEWDIFFER').toUpperCase(),
 
   // Telegram — existing hardcoded demo-test values, preserved.
