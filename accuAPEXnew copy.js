@@ -111,7 +111,7 @@ const CONFIG = Object.freeze({
   // assets: ('R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH500,CRASH600,CRASH900,CRASH1000')
   //   .split(',').map(s => s.trim()).filter(Boolean),
 
-  assets: ('R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V')
+  assets: ('BOOM500,BOOM600,BOOM900,BOOM1000,CRASH500,CRASH600,CRASH900,CRASH1000')
     .split(',').map(s => s.trim()).filter(Boolean),
 
   // ── Telegram (retained) ──
@@ -258,11 +258,11 @@ const CONFIG = Object.freeze({
   tradeWatchdogMs: parseInt('90000', 10),
 
   // ── Logging ──
-  logFile : 'accuAPEXnew_05.log',
+  logFile : 'accuAPEXnew_001.log',
   logLevel: 'INFO',
 
   // ── State persistence ──
-  stateFile           : 'accuAPEXnew_state_05.json',
+  stateFile           : 'accuAPEXnew_state_001.json',
   stateSaveOnTrade    : true,
   stateSaveOnShutdown : true,
 
