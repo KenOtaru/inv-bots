@@ -4,8 +4,14 @@
   "realtime_memories": [
     {
       "type": "preference",
-      "content": "User works across multiple bot files (newDifferX2.js, accurateDiffer.js, newRiseFall.js, accuPULSE3.js, bizPattern.js, accuAPEXnew.js, accuPULSE2b.js). Prefer porting working patterns between files rather than re-deriving. Config uses GMT/UTC day clock and env-var-overridable CONFIG entries (boolEnv/strEnv/numEnv/intEnv pattern). All bot credentials hardcoded in CONFIG (no .env migration).",
+      "content": "User works across multiple bot files (newDifferX2.js, accurateDiffer.js, newRiseFall.js, accuPULSE3.js, accuPULSE3_v5.js, bizPattern.js, accuAPEXnew.js, accuPULSE2b.js). Prefer porting working patterns between files rather than re-deriving. Config uses GMT/UTC day clock and env-var-overridable CONFIG entries (boolEnv/strEnv/numEnv/intEnv pattern). All bot credentials hardcoded in CONFIG (no .env migration).",
       "added_at": "2026-08-15T09:50:00.000000",
+      "source": "realtime_capture"
+    },
+    {
+      "type": "project",
+      "content": "Stuck-contract handling pattern (applies to accuPULSE3.js v4.0 AND accuPULSE3_v5.js): subscription death leaves a stale entry in exec.open + _lastUpdateMap → force-sell fails ('not found among your open positions') but old .catch never cleared state → stuck-check looped every 30s forever AND blocked new trades (count() >= maxOpenTrades). FIX: checkStuckContracts drops stale entry when server says already-closed; add _settledIds idempotency guard in _onUpdate/reconcile; record unconfirmable contracts as status 'unknown' (excluded from WR/streaks/win-rate denom). This was the root cause of '1 trade / 48h' — orphaned open slots choke entry.",
+      "added_at": "2026-08-15T12:05:42.000000",
       "source": "realtime_capture"
     },
     {
@@ -43,20 +49,8 @@
       "content": "accuPULSE3 v5.0 built 2026-08-15 (accuPULSE3_v5.js, 2875 lines). 7 features: (1) adaptive confidence gates by vol regime (0.01-0.08); (2) 6-factor stake sizing (Kelly, confidence, vol, WR, DD, streak); (3) 6-check entry confirmation (≥4/6 pass); (4) 4-tier exit (3/8/15/20 ticks, scale-out 30%); (5) warm-up lifecycle WARMUP→BALANCED→OPTIMIZED; (6) graduated recovery (WR-based multipliers, no hard pause); (7) full metrics JSONL logging. v4.0 had 6 critical blockers causing 1 trade/48h. Worktree agent lesson: always commit base changes before spawning worktree agents.",
       "added_at": "2026-08-15T10:00:00.000000",
       "source": "realtime_capture"
-    },
-    {
-      "type": "claude_response",
-      "content": "Consolidated. The project-level `.claude/memories/project_memory.json` now has **7 realtime_memories** (target: 5-7):\n\n- **1 preference** — user's multi-bot workflow, porting patterns, GMT/UTC config,",
-      "added_at": "2026-08-15T11:47:11.398130",
-      "source": "realtime_capture"
-    },
-    {
-      "type": "message",
-      "content": "Please help fix the error below. Trade gets stuck, and bot does not handle it properly. 167|accuPu | [2026-08-15 10:43:26] [WARN] Contract #9299684239 stuck for 497s, force-selling 167|accuPu | [2026-",
-      "added_at": "2026-08-15T11:47:11.398263",
-      "source": "realtime_capture"
     }
   ],
   "created_at": "2026-08-12T21:19:15.702217",
-  "updated_at": "2026-08-15T11:53:04.343834"
+  "updated_at": "2026-08-15T12:05:42.000000"
 }
