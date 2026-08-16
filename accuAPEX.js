@@ -82,7 +82,7 @@ const CONFIG = Object.freeze({
   // ── Deriv API ──
   // apiToken  : ('0P94g4WdSrSrzir').trim(),   // retained from reference
   // appId     : '1089',
-  apiToken:    'pat_8e0a3285bd6e74f52a67985b8069f4bea42aa96ce65d129c60ebb838ed1065ee',
+  apiToken:    'pat_cb2016855b5e6c61ac95f94432192dd6ed86bec7f7454e575d3fe1ed9f617692',
   appId:       '33uslPtthXBEkQOdfKfoY',
   wsUrl     : 'wss://ws.derivws.com/websockets/v3',
   currency  : 'USD',
@@ -259,11 +259,11 @@ const CONFIG = Object.freeze({
   tradeWatchdogMs: parseInt('90000', 10),
 
   // ── Logging ──
-  logFile : 'accuAPEXnew_0002.log',
+  logFile : 'accuAPEXnew_0003.log',
   logLevel: 'INFO',
 
   // ── State persistence ──
-  stateFile           : 'accuAPEXnew_state_0002.json',
+  stateFile           : 'accuAPEXnew_state_0003.json',
   stateSaveOnTrade    : true,
   stateSaveOnShutdown : true,
 
