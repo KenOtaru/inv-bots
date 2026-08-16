@@ -38,7 +38,7 @@ const CONFIG = Object.freeze({
   demoOnly: false,
   tradeEnabled: true,
   skipRecentTradedSymbols: true,
-  recentTradedSymbolsLen: parseInt('2', 10),
+  recentTradedSymbolsLen: parseInt('3', 10),
 
   // Anti-Martingale
   winsBeforeScaling: parseInt('500'),
@@ -46,7 +46,9 @@ const CONFIG = Object.freeze({
   maxWinStakeMultiplier: parseFloat('4.0'),
 
   // Assets
-  assets: ('R_10,R_25,R_50,R_75,R_100').split(',').map(s => s.trim()).filter(Boolean),
+  // assets: ('R_10,R_25,R_50,R_75,R_100').split(',').map(s => s.trim()).filter(Boolean),
+  assets: ('R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH500,CRASH600,CRASH900,CRASH1000')
+    .split(',').map(s => s.trim()).filter(Boolean),
 
   // Telegram
   telegram: {
@@ -63,7 +65,7 @@ const CONFIG = Object.freeze({
   maxOpenTrades: parseInt('3', 10),
 
   // Hazard Model (v4.0: relaxed for realistic 20-tick holds)
-  candidateGrowthRates: [0.05],
+  candidateGrowthRates: [0.05, 0.04, 0.03, 0.02, 0.01],
   hazardWindow: parseInt('600', 10),        // Increased: fresher analysis
   plannedHoldTicks: parseInt('20', 10),
   minBarrierPct: parseFloat('0.015'),       // FIXED: 1.5% (was 0.02=2%, unrealistic)
@@ -141,10 +143,10 @@ const CONFIG = Object.freeze({
   barrierRefreshMs: parseInt('45000', 10),
   tradeWatchdogMs: parseInt('120000', 10),
   maxTelegramQueue: parseInt('100', 10),
-  logFile: 'accuPULSE3_v3_03.log',
+  logFile: 'accuPULSE3_v3_05.log',
   logLevel: 'INFO3',
-  stateFile: 'accuPULSE3_state_v3_03.json',
-  metricsFile: 'metrics.json_03',
+  stateFile: 'accuPULSE3_state_v3_05.json',
+  metricsFile: 'metrics.json_05',
   eodTimeGmt: '00:00',
   eodSendDelaySeconds: parseInt('10', 10),
   hourlySummary: true,

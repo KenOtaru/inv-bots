@@ -38,8 +38,8 @@ const CONFIG = Object.freeze({
   stopLoss: parseFloat('500.0'),
   demoOnly: false,
   tradeEnabled: true,
-  skipRecentTradedSymbols: false,
-  recentTradedSymbolsLen: parseInt('2', 10),
+  skipRecentTradedSymbols: true,
+  recentTradedSymbolsLen: parseInt('3', 10),
 
   // Anti-Martingale
   winsBeforeScaling: parseInt('500'),
@@ -47,7 +47,9 @@ const CONFIG = Object.freeze({
   maxWinStakeMultiplier: parseFloat('4.0'),
 
   // Assets
-  assets: ('R_10,R_25,R_50,R_75,R_100').split(',').map(s => s.trim()).filter(Boolean),
+  // assets: ('R_10,R_25,R_50,R_75,R_100').split(',').map(s => s.trim()).filter(Boolean),
+  assets: ('R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH500,CRASH600,CRASH900,CRASH1000')
+    .split(',').map(s => s.trim()).filter(Boolean),
 
   // Telegram
   telegram: {
@@ -64,7 +66,7 @@ const CONFIG = Object.freeze({
   maxOpenTrades: parseInt('3', 10),
 
   // Hazard Model (v4.0 fixes)
-  candidateGrowthRates: [0.04],
+  candidateGrowthRates: [0.05, 0.04, 0.03, 0.02, 0.01],
   hazardWindow: parseInt('600', 10),
   plannedHoldTicks: parseInt('20', 10),
   minBarrierPct: parseFloat('0.015'),
