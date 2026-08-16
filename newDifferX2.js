@@ -353,8 +353,8 @@ const CONFIG = Object.freeze({
   hourlySummary: true,
 
   // Persistence/logging
-  stateFile: strEnv('STATE_FILE', 'newX2Differ_state_21.json'),
-  logFile: strEnv('LOG_FILE', 'newX2Differ_bot_21.log'),
+  stateFile: strEnv('STATE_FILE', 'newX2Differ_state_22.json'),
+  logFile: strEnv('LOG_FILE', 'newX2Differ_bot_22.log'),
   logLevel: strEnv('LOG_LEVEL', 'INFO NEWDIFFER').toUpperCase(),
 
   // Telegram — existing hardcoded demo-test values, preserved.
