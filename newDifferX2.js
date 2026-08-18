@@ -331,7 +331,7 @@ const CONFIG = Object.freeze({
   calibProbeStakeFrac : 0.20,
 
   // ── Scheduled pause/resume ──────────────────────────────────────
-  pauseEnabled   : true,
+  pauseEnabled   : false,
   pauseStartGmt  : '08:00',
   pauseEndGmt    : '18:00',
 
@@ -353,8 +353,8 @@ const CONFIG = Object.freeze({
   hourlySummary: true,
 
   // Persistence/logging
-  stateFile: strEnv('STATE_FILE', 'newX2Differ_state_23.json'),
-  logFile: strEnv('LOG_FILE', 'newX2Differ_bot_23.log'),
+  stateFile: strEnv('STATE_FILE', 'newX2Differ_state_24.json'),
+  logFile: strEnv('LOG_FILE', 'newX2Differ_bot_24.log'),
   logLevel: strEnv('LOG_LEVEL', 'INFO NEWDIFFERX2').toUpperCase(),
 
   // Telegram — existing hardcoded demo-test values, preserved.
