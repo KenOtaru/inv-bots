@@ -105,7 +105,7 @@ loadEnv();
 // ═══════════════════════════════════════════════════════════════════════
 const CONFIG = Object.freeze({
   // ── Deriv API (existing hardcoded CONFIG values — kept in-file) ──
-  apiToken:    'pat_8e0a3285bd6e74f52a67985b8069f4bea42aa96ce65d129c60ebb838ed1065ee',
+  apiToken:    'pat_cb2016855b5e6c61ac95f94432192dd6ed86bec7f7454e575d3fe1ed9f617692',
   appId:       '33uslPtthXBEkQOdfKfoY',
   wsUrl     : 'wss://ws.derivws.com/websockets/v3',
   currency  : 'USD',
@@ -194,7 +194,7 @@ const CONFIG = Object.freeze({
   apexMaxHoldVol       : parseInt('10', 10),
 
   // ── Adaptive exit ──
-  apexExitHazard        : parseFloat('0.050'),
+  apexExitHazard        : parseFloat('0.011'), // 1.1% per-tick hazard (≈ 0.89^K survival)
   apexExitDriftFrac     : parseFloat('0.75'),
   apexProfitLockFrac    : parseFloat('0.90'),
   apexMinProfitLockFrac : parseFloat('0.025'),
@@ -235,9 +235,9 @@ const CONFIG = Object.freeze({
   tradeWatchdogMs: parseInt('90000', 10),
 
   // ── Logging / state ──
-  logFile           : 'accuAPEXnewBC_01.log',
+  logFile           : 'accuAPEXnewBC_02.log',
   logLevel          : 'INFO',
-  stateFile         : 'accuAPEXnewBC_state_01.json',
+  stateFile         : 'accuAPEXnewBC_state_02.json',
   stateSaveOnTrade  : true,
   stateSaveOnShutdown: true,
 
@@ -245,7 +245,7 @@ const CONFIG = Object.freeze({
   edgeTallyEnabled : true,
 
   // ── Scheduled pause/resume (GMT) ──
-  pauseEnabled : false,
+  pauseEnabled : true,
   pauseStartGmt: '23:00',
   pauseEndGmt  : '01:00',
 
