@@ -178,8 +178,6 @@ const CONFIG = Object.freeze({
   apexSpikeK           : parseFloat('5.0'),
   apexMinSpikesSeen    : parseInt('2', 10),
   hazardCiZ            : parseFloat('1.28'),    // 80% upper CI on hazard (conservative)
-  spikeHazardFilterEnabled: true,              // hard ceiling for BOOM/CRASH entries
-  maxSpikeHazard      : parseFloat('0.0011'),   // 0.11% conservative upper hazard
 
   // ── Post-spike entry (BOOM/CRASH) ──
   apexPostSpikeMin        : parseInt('1', 10),
@@ -853,13 +851,6 @@ function isVolEntryAllowed(compression, barrierSigma, estimated, cfg) {
   return { ok: true, reason: 'vol-compressed' };
 }
 
-// Spike hazard applies only to spike-driven BOOM/CRASH entries; VOL has no
-// spike hazard in its per-tick survival model.
-function isSpikeHazardAllowed(regime, hazard, cfg) {
-  if (!cfg.spikeHazardFilterEnabled || regime === 'VOL') return true;
-  return hazard <= cfg.maxSpikeHazard;
-}
-
 // ═══════════════════════════════════════════════════════════════════════
 // 9. APEX ANALYZER  (conditional-volatility survival engine)
 // ═══════════════════════════════════════════════════════════════════════
@@ -1036,12 +1027,10 @@ class ApexAnalyzer {
                             sp.ticksSinceSpike <= windowFrac * sp.cadence;
         const spikeSurvivalHold = Math.pow(Math.max(0, 1 - hazard), maxHold);
         const hazardOK = spikeSurvivalHold >= cfg.apexMinSpikeSurvival;
-        const spikeHazardOK = isSpikeHazardAllowed(regime, hazard, cfg);
-        entryOK = cadenceKnown && hazardOK && spikeHazardOK && !estimated;
+        entryOK = cadenceKnown && hazardOK && !estimated;
         entryReason = estimated       ? 'no-barrier'
                     : !cadenceKnown   ? 'cadence-unknown'
                     // : !freshWindow    ? 'not-post-spike'
-                    : !spikeHazardOK  ? `spike-hazard>${(cfg.maxSpikeHazard*100).toFixed(2)}%`
                     : !hazardOK       ? `hazard-low-surv:${(spikeSurvivalHold*100).toFixed(0)}%`
                     : 'post-spike';
       }
@@ -2510,18 +2499,12 @@ function runSelfTest() {
   test('vol gate blocked on estimated barrier', isVolEntryAllowed(0.85, 3.0, true, CONFIG).ok === false);
   test('vol gate allows compressed + wide + real', isVolEntryAllowed(0.85, 3.0, false, CONFIG).ok === true);
 
-  // 8. Configurable spike-hazard ceiling for BOOM/CRASH entries.
-  test('spike hazard filter allows threshold', isSpikeHazardAllowed('BOOM', 0.0011, CONFIG));
-  test('spike hazard filter blocks above threshold', !isSpikeHazardAllowed('CRASH', 0.0012, CONFIG));
-  test('spike hazard filter can be disabled', isSpikeHazardAllowed('BOOM', 0.01, { ...CONFIG, spikeHazardFilterEnabled: false }));
-  test('spike hazard filter does not gate VOL', isSpikeHazardAllowed('VOL', 0.01, CONFIG));
-
-  // 9. regimeClassOf.
+  // 8. regimeClassOf.
   test('regime BOOM', regimeClassOf('BOOM1000') === 'BOOM');
   test('regime CRASH', regimeClassOf('CRASH500') === 'CRASH');
   test('regime VOL', regimeClassOf('R_100') === 'VOL' && regimeClassOf('1HZ100V') === 'VOL');
 
-  // 10. Analyzer on synthetic data: no barrier → null (never fabricate).
+  // 9. Analyzer on synthetic data: no barrier → null (never fabricate).
   const emptyMarket = { getBarrier: () => null };
   const ticks = [];
   let px = 100;
@@ -2529,7 +2512,7 @@ function runSelfTest() {
   const noBarrier = an.analyze('R_100', ticks, emptyMarket);
   test('analyzer null without barrier (no fabrication)', noBarrier === null, noBarrier ? `returned ${JSON.stringify(noBarrier)}` : '');
 
-  // 11. Idempotent settlement.
+  // 10. Idempotent settlement.
   const fakeClient = { forget: () => Promise.resolve(), _isPat: false };
   const ex = new TradeExecutor(fakeClient, CONFIG);
   let resultsEmitted = 0;
@@ -2541,7 +2524,7 @@ function runSelfTest() {
   test('settle emits result once', resultsEmitted === 1, `emitted ${resultsEmitted}`);
   test('settle frees slot', ex.count() === 0);
 
-  // 12. Synthetic VOL compression: high-variance past, calm recent → recommendable VOL entry.
+  // 11. Synthetic VOL compression: high-variance past, calm recent → recommendable VOL entry.
   const fakeVolMarket = {
     getBarrier: sym => {
       if (sym === 'R_100') return { halfBarrierPct: 0.25 };   // ±0.25% per tick
