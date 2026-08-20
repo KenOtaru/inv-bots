@@ -161,7 +161,7 @@ const CONFIG = Object.freeze({
   tradeCooldownMs     : parseInt('4000',  10),
   maxOpenTrades       : parseInt('1',     10),
   skipRecentTradedSymbols: true,        // don't re-enter the same symbol back-to-back
-  recentTradedSymbolsLen : parseInt('3', 10),
+  recentTradedSymbolsLen : parseInt('2', 10),
 
   // ── EV / survival gates (per-trade floors; NOT loosened by cadence) ──
   apexMinEV       : parseFloat('0.010'),   // ≥ +1% net EV to fire
@@ -182,7 +182,7 @@ const CONFIG = Object.freeze({
   // ── Post-spike entry (BOOM/CRASH) ──
   apexPostSpikeMin        : parseInt('1', 10),
   apexPostSpikeWindowFrac : parseFloat('0.35'),
-  apexMinSpikeSurvival    : parseFloat('1.000'), // (1-hazard)^maxHold floor
+  apexMinSpikeSurvival    : parseFloat('0.970'), //1.000 (1-hazard)^maxHold floor
   apexMaxHoldBoom         : parseInt('7', 10),
 
   // ── Vol-compression entry (VOL) ──
@@ -235,9 +235,9 @@ const CONFIG = Object.freeze({
   tradeWatchdogMs: parseInt('90000', 10),
 
   // ── Logging / state ──
-  logFile           : 'accuAPEXold_01.log',
+  logFile           : 'accuAPEXnewBC_01.log',
   logLevel          : 'INFO',
-  stateFile         : 'accuAPEXold_state_01.json',
+  stateFile         : 'accuAPEXnewBC_state_01.json',
   stateSaveOnTrade  : true,
   stateSaveOnShutdown: true,
 
@@ -245,7 +245,7 @@ const CONFIG = Object.freeze({
   edgeTallyEnabled : true,
 
   // ── Scheduled pause/resume (GMT) ──
-  pauseEnabled : true,
+  pauseEnabled : false,
   pauseStartGmt: '23:00',
   pauseEndGmt  : '01:00',
 
@@ -1027,10 +1027,10 @@ class ApexAnalyzer {
                             sp.ticksSinceSpike <= windowFrac * sp.cadence;
         const spikeSurvivalHold = Math.pow(Math.max(0, 1 - hazard), maxHold);
         const hazardOK = spikeSurvivalHold >= cfg.apexMinSpikeSurvival;
-        entryOK = cadenceKnown && freshWindow && hazardOK && !estimated;
+        entryOK = cadenceKnown && hazardOK && !estimated;
         entryReason = estimated       ? 'no-barrier'
                     : !cadenceKnown   ? 'cadence-unknown'
-                    : !freshWindow    ? 'not-post-spike'
+                    // : !freshWindow    ? 'not-post-spike'
                     : !hazardOK       ? `hazard-low-surv:${(spikeSurvivalHold*100).toFixed(0)}%`
                     : 'post-spike';
       }
@@ -1945,13 +1945,13 @@ class AccuAPEXnewBot {
     if (action === 'pause') {
       this.paused = true;
       logger.info(`TRADING PAUSED at ${this.cfg.pauseStartGmt} GMT until ${this.cfg.pauseEndGmt} GMT`);
-      telegram.send(`⏸️ <b>TRADING PAUSED</b>\nPaused from <b>${this.cfg.pauseStartGmt}</b> to <b>${this.cfg.pauseEndGmt}</b> GMT.`);
+      telegram.send(`⏸️ <b>APEX-BC TRADING PAUSED</b>\nPaused from <b>${this.cfg.pauseStartGmt}</b> to <b>${this.cfg.pauseEndGmt}</b> GMT.`);
       const end = this._parsePauseTime(this.cfg.pauseEndGmt);
       if (end) this._pauseEndTimer = setTimeout(() => this._onPauseResume('resume'), this._msToTarget(end.h, end.min));
     } else {
       this.paused = false;
       logger.info(`TRADING RESUMED at ${this.cfg.pauseEndGmt} GMT`);
-      telegram.send(`▶️ <b>TRADING RESUMED</b>\nOverall Profit: ${money(this.overallProfit, this.currencyStr())}`);
+      telegram.send(`▶️ <b>APEX-BC TRADING RESUMED</b>\nOverall Profit: ${money(this.overallProfit, this.currencyStr())}`);
       const start = this._parsePauseTime(this.cfg.pauseStartGmt);
       if (start) this._pauseStartTimer = setTimeout(() => this._onPauseResume('pause'), this._msToTarget(start.h, start.min));
     }
@@ -1969,7 +1969,7 @@ class AccuAPEXnewBot {
       this.assetTracker.resetSession();
       this._dailyStopUntil = 0;
       this._dailyStopNotified = false;
-      telegram.send(`📅 <b>New trade day: ${today}</b>\nOverall Profit: ${money(this.overallProfit, this.currencyStr())}`);
+      telegram.send(`📅 <b>APEX-BC New trade day: ${today}</b>\nOverall Profit: ${money(this.overallProfit, this.currencyStr())}`);
     }
     this._lastDayISODate = today;
   }
@@ -1983,7 +1983,7 @@ class AccuAPEXnewBot {
     if (!this._bootedOnce) {
       this._bootedOnce = true;
       telegram.send(
-        `<b>APEX v4 Bot Online</b>${this.dryRun ? ' <b>🔒 DRY-RUN</b>' : ''}\n\n` +
+        `<b>APEX-BC v4 Bot Online</b>${this.dryRun ? ' <b>🔒 DRY-RUN</b>' : ''}\n\n` +
         `<b>Account:</b> ${info.loginid}\n` +
         `<b>Type:</b> ${info.isVirtual ? '🟡 DEMO' : '🔴 REAL'}\n` +
         `<b>Balance:</b> ${(this.startBalance ?? 0).toFixed(2)} ${this.currencyStr()}\n` +
@@ -1995,7 +1995,7 @@ class AccuAPEXnewBot {
         `<b>Overall Profit:</b> ${money(this.overallProfit, this.currencyStr())}`,
       );
     } else {
-      telegram.send(`🔄 <b>Reconnected</b> (${info.loginid}, ${info.isVirtual ? 'DEMO' : 'REAL'})`);
+      telegram.send(`🔄 <b>APEX-BC Reconnected</b> (${info.loginid}, ${info.isVirtual ? 'DEMO' : 'REAL'})`);
     }
 
     try {
@@ -2016,9 +2016,9 @@ class AccuAPEXnewBot {
           for (const a of newAssets) this.cfg.assets.push(a);
           await this.market.bootstrap(newAssets);
           await this._refreshBarriers();
-          telegram.send(`<b>v3: New Assets Discovered</b>\nAdded: ${newAssets.join(', ')}`);
+          telegram.send(`<b>APEX-BC: New Assets Discovered</b>\nAdded: ${newAssets.join(', ')}`);
         }
-      } catch (e) { logger.warn(`v3: asset discovery error: ${e.message}`); }
+      } catch (e) { logger.warn(`APEX-BC: asset discovery error: ${e.message}`); }
       if (this._discoveryT) clearInterval(this._discoveryT);
       this._discoveryT = setInterval(async () => {
         try {
@@ -2029,7 +2029,7 @@ class AccuAPEXnewBot {
             await this.market.bootstrap(newAssets);
             await this._refreshBarriers();
           }
-        } catch (e) { logger.debug(`v3: periodic discovery error: ${e.message}`); }
+        } catch (e) { logger.debug(`APEX-BC: periodic discovery error: ${e.message}`); }
       }, this.cfg.discoveryIntervalMs);
     }
 
@@ -2050,7 +2050,7 @@ class AccuAPEXnewBot {
   async _onDisconnected() {
     this._clearWatchdog();
     this._clearPauseTimers();
-    telegram.send(`⚠️ <b>Connection lost</b> — reconnecting…`);
+    telegram.send(`⚠️ <b>APEX-BC Connection lost</b> — reconnecting…`);
     if (this._analysisT) { clearInterval(this._analysisT); this._analysisT = null; }
     // NOTE: this.exec.open is intentionally KEPT — contracts are still live
     // server-side. reconcileOpenContracts() re-attaches them after re-auth.
@@ -2070,7 +2070,7 @@ class AccuAPEXnewBot {
           ? `<b>Sizing:</b> Martingale (${t.stake.toFixed(2)} ${this.currencyStr()}) | Base: ${(a.baseStake ?? this.cfg.stake).toFixed(2)}\n`
           : '';
     const msg =
-      `<b>APEX v4 TRADE OPENED</b>\n\n` +
+      `<b>APEX-BC v4 TRADE OPENED</b>\n\n` +
       `<b>Contract:</b> #${t.contractId}\n` +
       `<b>Symbol:</b> <code>${t.symbol}</code>\n` +
       `<b>Growth Rate:</b> ${(t.growthRate*100).toFixed(2)}%\n` +
@@ -2108,7 +2108,7 @@ class AccuAPEXnewBot {
     const todayStats = this.stats.stats(this.stats.todayTrades(rec.date));
     const assetState = this.assetTracker._getAsset(t.symbol);
     const msg =
-      `${emoji} <b>APEX TRADE ${label}</b>\n\n` +
+      `${emoji} <b>APEX-BC TRADE ${label}</b>\n\n` +
       `<b>Contract:</b> #${t.contractId} · <b>Symbol:</b> <code>${t.symbol}</code>\n` +
       `<b>Growth:</b> ${(t.growthRate*100).toFixed(0)}% · <b>Stake:</b> ${Number(t.stake).toFixed(2)} ${this.currencyStr()}\n` +
       `<b>Sell:</b> ${Number(t.sellPrice ?? 0).toFixed(2)} ${this.currencyStr()}\n` +
@@ -2167,7 +2167,7 @@ class AccuAPEXnewBot {
         `— BOT STOPPED trading until restart`,
       );
       telegram.send(
-        `⛔ <b>MARTINGALE STEP LIMIT REACHED</b>\n` +
+        `⛔ <b>APEX-BC MARTINGALE STEP LIMIT REACHED</b>\n` +
         `${m.streak} consecutive losses (step limit: ${this.cfg.martingaleStep}).\n` +
         `Next stake would have been <b>${m.stake.toFixed(2)} ${this.currencyStr()}</b>.\n` +
         `Trading halted — restart the bot to reset the sequence.`,
@@ -2198,7 +2198,7 @@ class AccuAPEXnewBot {
           this._dailyStopUntil = this._nextUtcMidnight();
           const pl = today.reduce((s, t) => s + (t.profit || 0), 0);
           logger.warn(`daily hard stop: ${today.length} trades / P/L ${pl.toFixed(2)} — paused until next UTC day`);
-          telegram.send(`⛔ <b>Daily hard stop</b>\n${today.length} trades, net ${money(pl, this.currencyStr())}.\nPaused until next UTC day.`);
+          telegram.send(`⛔ <b>APEX-BC Daily hard stop</b>\n${today.length} trades, net ${money(pl, this.currencyStr())}.\nPaused until next UTC day.`);
         }
         return;
       }
@@ -2348,10 +2348,10 @@ class AccuAPEXnewBot {
     const s = this.stats.stats(list);
     const tally = this.stats.edgeTallyLine();
     if (!list.length) {
-      telegram.send(`⏰ <b>${date} ${pad(hour)}:00</b> — No trades\n💼 Overall: ${money(this.stats.overallProfit, this.currencyStr())}`);
+      telegram.send(`⏰ <b>APEX-BC ${date} ${pad(hour)}:00</b> — No trades\n💼 Overall: ${money(this.stats.overallProfit, this.currencyStr())}`);
       return;
     }
-    let msg = `⏰ <b>${date} ${pad(hour)}:00</b>\n\n📊 ${s.count} trades (✅${s.wins} ❌${s.losses})\n📈 WR: ${s.winRate.toFixed(1)}%\n💰 P/L: <b>${money(s.totalProfit, this.currencyStr())}</b>\n💼 Overall: <b>${money(this.stats.overallProfit, this.currencyStr())}</b>\n`;
+    let msg = `⏰ <b>APEX-BC ${date} ${pad(hour)}:00</b>\n\n📊 ${s.count} trades (✅${s.wins} ❌${s.losses})\n📈 WR: ${s.winRate.toFixed(1)}%\n💰 P/L: <b>${money(s.totalProfit, this.currencyStr())}</b>\n💼 Overall: <b>${money(this.stats.overallProfit, this.currencyStr())}</b>\n`;
     if (tally) msg += `\n🧪 ${tally}\n`;
     list.slice(-15).forEach((t, i) => { msg += `${i + 1}. ${t.status === 'won' ? '✅' : '❌'} #${t.contractId} ${t.symbol} ${money(t.profit, this.currencyStr())}\n`; });
     telegram.send(msg);
@@ -2365,7 +2365,7 @@ class AccuAPEXnewBot {
     const balStart = this.startBalance ?? 0, balNow = this.lastBalance ?? balStart;
     const balDelta = balNow - balStart;
     const tally = this.stats.edgeTallyLine();
-    let msg = `🌙 <b>DAILY REPORT — ${date}</b>\n\n`;
+    let msg = `🌙 <b>APEX-BC DAILY REPORT — ${date}</b>\n\n`;
     if (ds.count) msg += `📊 ${ds.count} trades (✅${ds.wins} ❌${ds.losses}) | WR ${ds.winRate.toFixed(1)}%\n💰 Net: <b>${money(ds.totalProfit, this.currencyStr())}</b> | PF ${ds.profitFactor === Infinity ? '∞' : ds.profitFactor.toFixed(2)}\n`;
     else msg += `No trades.\n`;
     if (tally) msg += `\n🧪 ${tally}\n`;
@@ -2428,7 +2428,7 @@ class AccuAPEXnewBot {
     this._clearWatchdog();
     this._clearPauseTimers();
     logger.info(`stopping (${signal})`);
-    telegram.send(`<b>APEX Bot stopped</b>\nSignal: ${signal}`);
+    telegram.send(`<b>APEX-BC Bot stopped</b>\nSignal: ${signal}`);
     if (this._analysisT) clearInterval(this._analysisT);
     if (this._hourlyT) clearInterval(this._hourlyT);
     if (this._hourlyBoot) clearTimeout(this._hourlyBoot);
@@ -2440,7 +2440,7 @@ class AccuAPEXnewBot {
       const today = this.stats.todayTrades();
       const s = this.stats.stats(today);
       const tally = this.stats.edgeTallyLine();
-      let msg = `🌙 <b>SESSION END</b>\n📊 ${s.count} trades (✅${s.wins} ❌${s.losses}) | WR ${s.winRate.toFixed(1)}%\n💰 Net: ${money(s.totalProfit, this.currencyStr())}\n💼 Overall: ${money(this.overallProfit, this.currencyStr())}`;
+      let msg = `🌙 <b>APEX-BC SESSION END</b>\n📊 ${s.count} trades (✅${s.wins} ❌${s.losses}) | WR ${s.winRate.toFixed(1)}%\n💰 Net: ${money(s.totalProfit, this.currencyStr())}\n💼 Overall: ${money(this.overallProfit, this.currencyStr())}`;
       if (tally) msg += `\n🧪 ${tally}`;
       telegram.send(msg);
       this._saveState('shutdown');
