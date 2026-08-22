@@ -26,7 +26,7 @@ const EventEmitter = require('events');
 
 // ── Configuration ──────────────────────────────────────────────────────
 const CONFIG = Object.freeze({
-  apiToken: 'pat_cb2016855b5e6c61ac95f94432192dd6ed86bec7f7454e575d3fe1ed9f617692',
+  apiToken: 'pat_27a3197287bae3ec6c2c9cbdd68fffaa2a524e3b0a6e1ecf298b5ffb338adb10',
   appId: '33uslPtthXBEkQOdfKfoY',
   wsUrl: 'wss://ws.derivws.com/websockets/v3',
   currency: 'USD',
@@ -42,9 +42,9 @@ const CONFIG = Object.freeze({
   recentTradedSymbolsLen: parseInt('1', 10),
 
   // Anti-Martingale
-  winsBeforeScaling: parseInt('1'),
+  winsBeforeScaling: parseInt('500'),
   winStakeMultiplier: parseFloat('1.2'),
-  maxWinStakeMultiplier: parseFloat('5.0'),
+  maxWinStakeMultiplier: parseFloat('4.0'),
 
   // Assets
   // assets: ('R_10,R_25,R_50,R_75,R_100').split(',').map(s => s.trim()).filter(Boolean),
@@ -66,7 +66,7 @@ const CONFIG = Object.freeze({
   maxOpenTrades: parseInt('3', 10),
 
   // Hazard Model (v4.0 fixes)
-  candidateGrowthRates: [0.05], //[0.05, 0.04, 0.03, 0.02, 0.01]
+  candidateGrowthRates: [0.05, 0.04, 0.03, 0.02, 0.01],
   hazardWindow: parseInt('600', 10),
   plannedHoldTicks: parseInt('20', 10),
   minBarrierPct: parseFloat('0.015'),
@@ -79,9 +79,9 @@ const CONFIG = Object.freeze({
   // ── Feature 1: Adaptive Confidence Gates (by vol regime) ──────────────
   minConfidenceByRegime: {
     0: 0.08,  // low vol: stricter (good conditions, be selective)
-    1: 0.07,  //0.05 normal vol: balanced
-    // 2: 0.03,  // high vol: looser (risky anyway, take more)
-    // 3: 0.01,  // extreme: only obvious setups
+    1: 0.05,  // normal vol: balanced
+    2: 0.03,  // high vol: looser (risky anyway, take more)
+    3: 0.01,  // extreme: only obvious setups
   },
 
   // ARCA gates (v4.0 relaxations + v5.0 adaptive)
@@ -144,11 +144,11 @@ const CONFIG = Object.freeze({
   barrierRefreshMs: parseInt('45000', 10),
   tradeWatchdogMs: parseInt('120000', 10),
   maxTelegramQueue: parseInt('100', 10),
-  logFile: 'accuPULSE3BC_v5_01.log',
+  logFile: 'accuPULSE3BC_v5_03.log',
   logLevel: 'INFO3BC_v5',
-  stateFile: 'accuPULSE3BC_state_v5_01.json',
-  metricsFile: 'metricsBC_v5_01.json',
-  metricsFileV5: 'accuPULSE3BC_analysis_v5_01.jsonl',  // Feature 7: Full metrics logging
+  stateFile: 'accuPULSE3BC_state_v5_03.json',
+  metricsFile: 'metricsBC_v5_03.json',
+  metricsFileV5: 'accuPULSE3BC_analysis_v5_03.jsonl',  // Feature 7: Full metrics logging
   eodTimeGmt: '00:00',
   eodSendDelaySeconds: parseInt('10', 10),
   hourlySummary: true,
@@ -156,8 +156,8 @@ const CONFIG = Object.freeze({
 
   // ── Feature 5: Warm-up Mode Lifecycle ─────────────────────────────────
   warmupConfig: {
-    warmupTrades: 5,        // Trades 0-30
-    balancedTrades: 10,     // Trades 30-300
+    warmupTrades: 30,        // Trades 0-30
+    balancedTrades: 300,     // Trades 30-300
     warmupMaxOpen: 5,        // Max open during warmup
     balancedMaxOpen: 3,      // Max open during balanced
     optimizedMaxOpen: 2,     // Max open during optimized
@@ -2069,7 +2069,7 @@ class AccuPULSE3BotV5 {
         };
       case 'BALANCED':
         return {
-          minConfidence: 0.07,
+          minConfidence: 0.05,
           maxVolRegime: 2,
           maxOpen: wc.balancedMaxOpen || 3,
           useAllAssets: false,
