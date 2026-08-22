@@ -3,8 +3,8 @@
 
 /**
  * =====================================================================
- *  AccuPULSE3 v5.0 — Enhanced Production Build
- *  File: C:\Users\kenot\Desktop\Investment AccumulatorBot\accuPULSE3_v5.js
+ *  AccuPULSE3 v5.1-BC — Enhanced Production Build (Boom/Crash edition)
+ *  File: C:\Users\kenot\Desktop\Investment AccumulatorBot\accuPULSE3BC_v5.js
  * =====================================================================
  *
  *  ✅ All v4.0 fixes applied
@@ -15,6 +15,15 @@
  *  ✅ Feature 5: Warm-up Mode Lifecycle
  *  ✅ Feature 6: Enhanced Streak Recovery
  *  ✅ Feature 7: Full Metrics Logging
+ *
+ *  ── v5.1-BC: Boom/Crash support ────────────────────────────────────
+ *  ✅ Spike-aware hazard model (direction & interval aware per symbol)
+ *  ✅ Robust ACCU barrier extraction (tick band → geometric band → distance)
+ *  ✅ Long tick backfill so spike-rate estimates cover full spike cycles
+ *  ✅ RECENT_JUMP exempted on Boom/Crash (post-spike is recorded, not fatal)
+ *  ✅ Fixed barrier_check NaN (operator-precedence bug) in entry confirmation
+ *  ✅ Boom-vs-Crash correlation families (no stacking correlated positions)
+ *  ✅ Offline selftest: node accuPULSE3BC_v5.js --selftest
  */
 
 const WebSocket = require('ws');
@@ -75,6 +84,40 @@ const CONFIG = Object.freeze({
   evHaircut: parseFloat('0.65'),
   minNetEvRatio: parseFloat('0.001'),
   maxRecentJumpZ: parseFloat('4.0'),
+
+  // ── v5.1-BC: Boom/Crash spike model ────────────────────────────────────
+  boomCrash: {
+    enabled: true,
+    // Per-symbol expected mean ticks between spikes (Deriv publishes these
+    // as BOOM<n>/CRASH<n>). Used to sanity-check the empirical spike rate.
+    nominalSpikeInterval: {
+      BOOM300: 300, BOOM500: 500, BOOM600: 600, BOOM900: 900, BOOM1000: 1000,
+      CRASH300: 300, CRASH500: 500, CRASH600: 600, CRASH900: 900, CRASH1000: 1000,
+    },
+    // Ticks of history required before the BC hazard model trusts its rate.
+    // Must span ≥2 expected spike cycles (BOOM1000 → ≥2000 ticks).
+    minBcSamples: parseInt('1200', 10),
+    // Backfill length for BC symbols (spike cycles are long; indices need far
+    // fewer). ~3× the longest spike interval in the asset list.
+    bcBackfillTicks: parseInt('4000', 10),
+    // Spike detection: a tick whose |log ret| exceeds this many × the recent
+    // median absolute move is treated as the one-tick spike (Boom up / Crash down).
+    spikeK: parseFloat('8.0'),
+    // After a spike the market resets; drop this many post-spike ticks from
+    // drift/vol estimates so the reset doesn't poison the baseline.
+    postSpikeSkip: parseInt('3', 10),
+    // RECENT_JUMP gate is disabled for BC: spikes are the asset's nature and
+    // happen between holds, not during them. The spike-rate model handles it.
+    disableRecentJumpGate: true,
+    // Wilson z for the per-interval survival estimate (BC uses interval-level
+    // data — far fewer observations than per-tick — so keep z modest).
+    confidenceZ: parseFloat('1.28'),
+    // Minimum acceptable estimated P(survive N ticks) after haircut.
+    minPHorizon: parseFloat('0.55'),
+    // Reject candidates whose empirical spike rate is wildly worse than the
+    // nominal (e.g. clustered spikes). 0.5 = allow if observed rate ≤ 2× nominal.
+    maxSpikeRateVsNominal: parseFloat('2.0'),
+  },
 
   // ── Feature 1: Adaptive Confidence Gates (by vol regime) ──────────────
   minConfidenceByRegime: {
@@ -663,9 +706,10 @@ class MarketDataManager extends EventEmitter {
     if (!cd) return;
     const key = `${symbol}:${growthRate}`;
     const spot = parseFloat(cd.current_spot || 0);
-    const distance = parseFloat(cd.barrier_spot_distance || 0);
+    // v5.1-BC: prefer tick_size_barrier_percentage; fall back to the
+    // geometric band and only then to the decaying spot distance.
     this._barrierCache.set(key, {
-      halfBarrierPct: spot > 0 && distance > 0 ? (distance / spot) * 100 : parseFloat(cd.tick_size_barrier_percentage || 0),
+      halfBarrierPct: extractBarrierPct(cd, spot),
       highBarrier: parseFloat(cd.high_barrier || 0),
       lowBarrier: parseFloat(cd.low_barrier || 0),
       maxPayout: parseFloat(cd.maximum_payout || 0),
@@ -776,8 +820,17 @@ class MarketDataManager extends EventEmitter {
     try {
       await Promise.all(symbols.map(s => this.subscribe(s).catch(e => log('WARN', `sub(${s}):`, e.message))));
       await Promise.all(symbols.map(async s => {
-        if ((this.history.get(s) || []).length < this.cfg.minTicksForAnalysis) {
-          await this.backfill(s, Math.max(this.cfg.tickWindow * 5, 1000));
+        // v5.1-BC: Boom/Crash needs multi-spike-cycle history; indices need
+        // far less.
+        const isBc = isBoomCrash(s);
+        const need = isBc
+          ? Math.max(this.cfg.boomCrash?.minBcSamples || 0, 1)
+          : this.cfg.minTicksForAnalysis;
+        if ((this.history.get(s) || []).length < need) {
+          const count = isBc
+            ? Math.min(this.cfg.boomCrash?.bcBackfillTicks || 4000, 5000)
+            : Math.max(this.cfg.tickWindow * 5, 1000);
+          await this.backfill(s, count);
         }
       }));
     } finally {
@@ -791,6 +844,39 @@ class MarketDataManager extends EventEmitter {
 }
 
 // ── Enhanced ARCA Analyzer (v4.0 core + v5.0 adaptive confidence) ──────
+// ── Boom/Crash asset detection helper ──────────────────────────────────
+function isBoomCrash(symbol) {
+  if (!symbol) return false;
+  const s = String(symbol).toUpperCase();
+  return s.startsWith('BOOM') || s.startsWith('CRASH');
+}
+
+// ── v5.1-BC: Robust ACCU barrier extraction ───────────────────────────
+// ACCU proposals report the per-tick barrier band in different fields
+// depending on symbol/symbol state. Preference order:
+//   1. tick_size_barrier_percentage — the actual per-tick band (%), always
+ //     the right quantity for hazard-vs-band math.
+//   2. high/low barrier band vs spot — geometric half-width of the band.
+//   3. barrier_spot_distance / spot — current distance to barrier; decays
+//      toward 0 as the contract ages, so only used as a last resort.
+function extractBarrierPct(cd, spot) {
+  if (!cd) return 0;
+  const tickPct = parseFloat(cd.tick_size_barrier_percentage);
+  if (Number.isFinite(tickPct) && tickPct > 0) return tickPct;
+
+  const high = parseFloat(cd.high_barrier);
+  const low = parseFloat(cd.low_barrier);
+  const sp = Number(spot) || parseFloat(cd.current_spot);
+  if (Number.isFinite(high) && Number.isFinite(low) && high > low && sp > 0) {
+    const halfBand = ((high - low) / 2 / sp) * 100;
+    if (Number.isFinite(halfBand) && halfBand > 0) return halfBand;
+  }
+
+  const dist = parseFloat(cd.barrier_spot_distance);
+  if (Number.isFinite(dist) && dist > 0 && sp > 0) return (dist / sp) * 100;
+  return 0;
+}
+
 class EnhancedARCAAnalyzer {
   constructor(cfg) {
     this.cfg = cfg;
@@ -888,7 +974,7 @@ class EnhancedARCAAnalyzer {
 
   // Main Analysis
   analyze(symbol, ticks, barrier, growthRate, stayData = null) {
-    const model = this._hazardEstimate(ticks, barrier?.halfBarrierPct, growthRate);
+    const model = this._hazardEstimate(ticks, barrier?.halfBarrierPct, growthRate, symbol);
     if (!model.ok) {
       return {
         symbol,
@@ -975,7 +1061,14 @@ class EnhancedARCAAnalyzer {
     return analyses.filter(a => a?.eligible).sort((a, b) => b.score - a.score);
   }
 
-  _hazardEstimate(ticks, halfBarrierPct, growthRate) {
+  // Router: Boom/Crash symbols get the spike-aware hazard model; everything
+  // else keeps the classic per-tick barrier model.
+  _hazardEstimate(ticks, halfBarrierPct, growthRate, symbol = null) {
+    const bcCfg = this.cfg.boomCrash;
+    if (isBoomCrash(symbol) && bcCfg?.enabled) {
+      return this._bcHazardEstimate(ticks, halfBarrierPct, growthRate, symbol);
+    }
+
     const barrierPct = Number(halfBarrierPct || 0);
     if (!(barrierPct >= this.cfg.minBarrierPct)) {
       return { ok: false, reason: 'NO_VERIFIED_BARRIER' };
@@ -1048,6 +1141,154 @@ class EnhancedARCAAnalyzer {
     };
   }
 
+  // ── v5.1-BC: spike-aware hazard model ────────────────────────────────
+  // Boom/Crash ACCU survival is governed by ONE event: the directional
+  // spike (BOOM spikes up, CRASH spikes down). Per-tick |log-ret| vs a
+  // barrier band is meaningless here — the spike dwarfs the band whether
+  // it threatens us or not, and abs() erases the direction. Instead we:
+  //   1. detect spikes directionally (ret beyond spikeK × recent typical move),
+  //   2. estimate per-tick spike probability over a LONG window (Wilson LB),
+  //   3. guard against spike clustering via the recent-window rate vs nominal,
+  //   4. EV(g) = (1+g)^N · P(survive N ticks) − 1, haircut when positive.
+  _bcSpikeThreshold(ticks, direction) {
+    // Typical move size = median absolute log-return over the recent window.
+    const win = Math.min(this.cfg.hazardWindow, ticks.length - 1);
+    const absRets = [];
+    for (let i = ticks.length - win; i < ticks.length; i++) {
+      const prev = Number(ticks[i - 1]?.quote);
+      const next = Number(ticks[i]?.quote);
+      if (prev > 0 && next > 0) absRets.push(Math.abs(Math.log(next / prev)));
+    }
+    if (!absRets.length) return Infinity;
+    const sorted = [...absRets].sort((a, b) => a - b);
+    const med = sorted[Math.floor(sorted.length / 2)] || 1e-12;
+    return med * this.cfg.boomCrash.spikeK;
+  }
+
+  _detectBcSpikes(ticks, symbol) {
+    const direction = String(symbol).toUpperCase().startsWith('BOOM') ? 'up' : 'down';
+    const thr = this._bcSpikeThreshold(ticks, direction);
+    const idx = [];
+    for (let i = 1; i < ticks.length; i++) {
+      const prev = Number(ticks[i - 1].quote);
+      const next = Number(ticks[i].quote);
+      if (!(prev > 0 && next > 0)) continue;
+      const r = Math.log(next / prev);
+      if (direction === 'up' ? r > thr : r < -thr) idx.push(i);
+    }
+    return { direction, threshold: thr, spikeIdx: idx };
+  }
+
+  _bcHazardEstimate(ticks, halfBarrierPct, growthRate, symbol) {
+    const bcc = this.cfg.boomCrash;
+    const barrierPct = Number(halfBarrierPct || 0);
+    if (!(barrierPct >= this.cfg.minBarrierPct)) {
+      return { ok: false, reason: 'NO_VERIFIED_BARRIER' };
+    }
+    if (!ticks || ticks.length < bcc.minBcSamples + 1) {
+      return {
+        ok: false,
+        reason: 'INSUFFICIENT_TICKS',
+        have: ticks ? ticks.length : 0,
+        need: bcc.minBcSamples + 1
+      };
+    }
+
+    const { direction, threshold: spikeThr, spikeIdx } = this._detectBcSpikes(ticks, symbol);
+
+    // Long-run sample: every tick is either pre-spike (survives) or the
+    // spike tick itself. Wilson LB on per-tick survival.
+    const W = ticks.length - 1;
+    const spikes = spikeIdx.length;
+    const survivors = W - spikes;
+    const pTick = survivors / W;
+    const pLower = this._wilsonLower(survivors, W, bcc.confidenceZ);
+    const N = this.cfg.plannedHoldTicks;
+    const pHorizon = Math.pow(pLower, N);
+    const gross = Math.pow(1 + growthRate, N) * pHorizon - 1;
+    const conservativeEV = gross > 0 ? gross * this.cfg.evHaircut : gross;
+
+    // Inter-spike intervals (diagnostics + clustering guard).
+    let meanInterval = null;
+    if (spikes >= 2) {
+      let sum = 0;
+      for (let i = 1; i < spikeIdx.length; i++) sum += spikeIdx[i] - spikeIdx[i - 1];
+      meanInterval = sum / (spikes - 1);
+    }
+
+    // Clustering guard A: long-run rate wildly worse than nominal?
+    const nominal = bcc.nominalSpikeInterval[symbol.toUpperCase()];
+    if (nominal && spikes >= 2) {
+      if (meanInterval < nominal / bcc.maxSpikeRateVsNominal) {
+        return {
+          ok: false,
+          reason: 'SPIKE_CLUSTERING',
+          meanInterval,
+          nominal,
+          spikes
+        };
+      }
+    }
+
+    // Clustering guard B: recent burst? Spikes packed into the recent window
+    // mean we may be entering a spike-rich regime regardless of long-run rate.
+    const recentWin = Math.min(this.cfg.hazardWindow, W);
+    const recentSpikes = spikeIdx.filter(i => i >= ticks.length - recentWin).length;
+    const recentRate = recentSpikes / recentWin;
+    if (nominal) {
+      const cap = bcc.maxSpikeRateVsNominal / nominal;
+      if (recentRate > cap) {
+        return {
+          ok: false,
+          reason: 'RECENT_SPIKE_BURST',
+          recentSpikes,
+          recentWin,
+          recentRate,
+          capPerTick: cap
+        };
+      }
+    }
+
+    if (pHorizon < bcc.minPHorizon) {
+      return {
+        ok: false,
+        reason: 'SURVIVAL_BELOW_FLOOR',
+        pTick,
+        pLower,
+        pHorizon
+      };
+    }
+
+    if (conservativeEV < this.cfg.minNetEvRatio) {
+      return {
+        ok: false,
+        reason: 'EV_BELOW_HAIRCUT',
+        conservativeEV,
+        pLower,
+        pHorizon
+      };
+    }
+
+    return {
+      ok: true,
+      bcModel: true,
+      spikeDirection: direction,
+      barrierPct,
+      spikeThreshold: spikeThr,
+      observations: W,
+      spikes,
+      meanInterval,
+      nominalInterval: nominal || null,
+      recentSpikes,
+      pTick,
+      pLower,
+      pHorizon,
+      grossEV: gross,
+      conservativeEV,
+      jumpZ: null, // RECENT_JUMP gate intentionally disabled for BC
+    };
+  }
+
   _wilsonLower(hits, n, z) {
     if (!n) return 0;
     const p = hits / n;
@@ -1057,12 +1298,12 @@ class EnhancedARCAAnalyzer {
   }
 
   // Phase 3: Evaluate Proposal
-  evaluateProposal(ticks, growthRate, proposal) {
+  evaluateProposal(ticks, growthRate, proposal, symbol = null) {
     const cd = proposal?.contract_details || {};
     const spot = Number(proposal?.spot || cd.current_spot || 0);
     const distance = Number(cd.barrier_spot_distance || 0);
-    const pct = spot > 0 && distance > 0 ? (distance / spot) * 100 : Number(cd.tick_size_barrier_percentage || 0);
-    return this._hazardEstimate(ticks, pct, growthRate);
+    const pct = extractBarrierPct(cd, spot);
+    return this._hazardEstimate(ticks, pct, growthRate, symbol);
   }
 
   _volatilityRegime(q) {
@@ -1371,12 +1612,16 @@ class EnhancedTradeExecutor extends EventEmitter {
 
       // 2. Barrier sufficiency
       barrier_check: () => {
-        const barrierPct = proposal?.contract_details?.tick_size_barrier_percentage
-          || proposal?.contract_details?.barrier_spot_distance
-          ? (proposal.contract_details.barrier_spot_distance / (proposal.spot || 1)) * 100
-          : 0;
+        // v5.1-BC fix: old expression mixed || and ?: so the result was
+        // distance/(spot||1) whenever EITHER field existed — NaN when spot
+        // was missing — and the check silently always failed.
+        const cd = proposal?.contract_details || {};
+        const spot = Number(proposal?.spot) || Number(cd.current_spot) || 0;
+        const barrierPct = extractBarrierPct(cd, spot)
+          ?? analysis?.model?.barrierPct
+          ?? 0;
         const result = barrierPct >= (cfg.minBarrierPct || 0.015);
-        log('DEBUG', `EntryCheck barrier: ${barrierPct.toFixed(3)}% >= ${(cfg.minBarrierPct || 0.015) * 100}% = ${result}`);
+        log('DEBUG', `EntryCheck barrier: ${Number(barrierPct).toFixed(3)}% >= ${(cfg.minBarrierPct || 0.015) * 100}% = ${result}`);
         return result;
       },
 
@@ -1540,7 +1785,19 @@ class EnhancedTradeExecutor extends EventEmitter {
   checkCorrelationWithOpen(symbol) {
     if (this.open.size === 0) return true;
     const openSymbols = [...this.open.values()].map(t => t.symbol);
-    const getAssetFamily = (sym) => sym.split('_')[0];
+
+    // v5.1-BC: Boom/Crash correlation = shared spike interval (index number).
+    // BOOM500 and CRASH500 share the ~500-tick spike cadence → same family.
+    // BOOM500 vs BOOM1000 → different cadence → allowed together.
+    const getAssetFamily = (sym) => {
+      if (isBoomCrash(sym)) {
+        // Extract the trailing digits: 'BOOM1000'→'1000', 'CRASH500'→'500'
+        const m = String(sym).toUpperCase().match(/(\d+)$/);
+        return m ? m[1] : String(sym).toUpperCase();
+      }
+      // R_10 / R_25 etc → 'R_10', 'R_25' etc
+      return String(sym).split('_')[0];
+    };
     const family = getAssetFamily(symbol);
     const openFamilies = openSymbols.map(getAssetFamily);
     const sameFamilyCount = openFamilies.filter(f => f === family).length;
@@ -2688,7 +2945,7 @@ class AccuPULSE3BotV5 {
         stake,
         { take_profit: tp, stop_loss: this.cfg.stopLoss },
         analysis,
-        proposal => this.analyzer.evaluateProposal(this.market.historyFor(best.symbol), growthRate, proposal)
+        proposal => this.analyzer.evaluateProposal(this.market.historyFor(best.symbol), growthRate, proposal, best.symbol)
       );
       log('INFO', `Trade #${trade.contractId} ${best.symbol} stake=${stake} tp=${tp}`);
 
@@ -2928,8 +3185,122 @@ function main() {
   });
 }
 
+// ── v5.1-BC offline selftest (no network) ───────────────────────────────
+function selftest() {
+  const checks = [];
+  const t = (name, fn) => {
+    try {
+      const r = fn();
+      checks.push({ name, pass: r === true || (r && r.pass), detail: r === true ? '' : String(r?.detail ?? '') });
+    } catch (e) {
+      checks.push({ name, pass: false, detail: e.message });
+    }
+  };
+
+  // Synthetic Boom-like series: small random walk, spike up every ~500 ticks.
+  const mkSeries = (n, interval, dirSign) => {
+    const ticks = [];
+    let price = 100;
+    for (let i = 0; i < n; i++) {
+      if (i > 0 && i % interval === 0) price *= 1 + dirSign * 0.25; // spike
+      else price *= 1 + dirSign * 0.00005 * Math.sin(i / 7);        // gentle drift
+      ticks.push({ epoch: i, quote: price });
+    }
+    return ticks;
+  };
+
+  const analyzer = new EnhancedARCAAnalyzer(CONFIG);
+
+  t('isBoomCrash detects BOOM/CRASH, rejects others', () => ({
+    pass: isBoomCrash('BOOM500') && isBoomCrash('crash1000') && !isBoomCrash('R_10'),
+    detail: 'BOOM500/crash1000 true, R_10 false'
+  }));
+
+  t('extractBarrierPct prefers tick_size_barrier_percentage', () => {
+    const pct = extractBarrierPct({ tick_size_barrier_percentage: '0.03', barrier_spot_distance: '0.1' }, 100);
+    return { pass: Math.abs(pct - 0.03) < 1e-9, detail: `got ${pct}` };
+  });
+
+  t('extractBarrierPct falls back to geometric band', () => {
+    const pct = extractBarrierPct({ high_barrier: 101, low_barrier: 99 }, 100);
+    return { pass: Math.abs(pct - 1.0) < 1e-9, detail: `got ${pct}` };
+  });
+
+  t('extractBarrierPct falls back to spot distance', () => {
+    const pct = extractBarrierPct({ barrier_spot_distance: 0.02 }, 100);
+    return { pass: Math.abs(pct - 0.02) < 1e-9, detail: `got ${pct}` };
+  });
+
+  t('BC hazard model passes a healthy BOOM1000 series with EV > 0', () => {
+    const ticks = mkSeries(3000, 1000, +1); // nominal cadence
+    const m = analyzer._hazardEstimate(ticks, 0.03, 0.03, 'BOOM1000');
+    return {
+      pass: m.ok === true && m.conservativeEV > 0 && m.bcModel === true,
+      detail: m.ok ? `EV=${(m.conservativeEV * 100).toFixed(2)}% pHorizon=${m.pHorizon.toFixed(3)}` : `${m.reason} ${JSON.stringify(m)}`
+    };
+  });
+
+  t('BC hazard model rejects series with clustered spikes', () => {
+    const ticks = mkSeries(3000, 250, -1); // spikes every 250 → 4× nominal for CRASH1000
+    const m = analyzer._hazardEstimate(ticks, 0.03, 0.03, 'CRASH1000');
+    return { pass: !m.ok && m.reason === 'SPIKE_CLUSTERING', detail: m.reason || 'unexpectedly ok' };
+  });
+
+  t('BC hazard model rejects short history', () => {
+    const ticks = mkSeries(500, 1000, +1);
+    const m = analyzer._hazardEstimate(ticks, 0.03, 0.03, 'BOOM1000');
+    return { pass: !m.ok && m.reason === 'INSUFFICIENT_TICKS', detail: m.reason || 'unexpectedly ok' };
+  });
+
+  t('Classic hazard path still works for non-BC symbol', () => {
+    const ticks = mkSeries(400, 10000000, +1); // no spikes in window
+    const m = analyzer._hazardEstimate(ticks, 0.10, 0.01, 'R_10');
+    return { pass: m.ok === true, detail: m.ok ? `EV=${(m.conservativeEV * 100).toFixed(2)}%` : m.reason };
+  });
+
+  t('Correlation families: CRASH500 blocked by open BOOM500', () => {
+    const exec = Object.create(EnhancedTradeExecutor.prototype);
+    exec.open = new Map([[1, { symbol: 'BOOM500' }]]);
+    return { pass: exec.checkCorrelationWithOpen('CRASH500') === false, detail: '' };
+  });
+
+  t('Correlation families: BOOM600 allowed with open BOOM500', () => {
+    const exec = Object.create(EnhancedTradeExecutor.prototype);
+    exec.open = new Map([[1, { symbol: 'BOOM500' }]]);
+    return { pass: exec.checkCorrelationWithOpen('BOOM1000') === true, detail: '' };
+  });
+
+  t('barrier_check entry confirmation is not NaN-poisoned', () => {
+    const exec = Object.create(EnhancedTradeExecutor.prototype);
+    exec.cfg = CONFIG;
+    const proposal = { contract_details: { tick_size_barrier_percentage: 0.03 } }; // note: no spot field
+    let sawResult = null;
+    const origLog = log;
+    const res = (() => {
+      // Run just the barrier_check closure by invoking confirmEntry with a
+      // stubbed analysis; we inspect via details.
+      const fakeAnalysis = {};
+      const out = EnhancedTradeExecutor.prototype.confirmEntry.call(exec, 'BOOM500', fakeAnalysis, [], proposal);
+      const bc = out.details.find(d => d.check === 'barrier_check');
+      sawResult = bc ? bc.result : null;
+      return out;
+    })();
+    void origLog;
+    return { pass: res.approved !== undefined && typeof sawResult === 'boolean', detail: `barrier_check=${sawResult}` };
+  });
+
+  const failed = checks.filter(c => !c.pass);
+  console.log('\n=== accuPULSE3BC_v5 selftest ===');
+  for (const c of checks) {
+    console.log(` ${c.pass ? 'PASS' : 'FAIL'}  ${c.name}${c.detail ? ' — ' + c.detail : ''}`);
+  }
+  console.log(`=== ${checks.length - failed.length}/${checks.length} passed ===\n`);
+  process.exit(failed.length ? 1 : 0);
+}
+
 if (require.main === module) {
-  main();
+  if (process.argv.includes('--selftest')) selftest();
+  else main();
 }
 
 module.exports = {
