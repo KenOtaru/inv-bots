@@ -1138,7 +1138,7 @@ function createTelegramNotifier(token, chatId) {
     async sendTradeOpen(symbol, blockTime, label, barrier, stakeUsd, evTag) {
       const evLine = evTag ? `\n${evTag}` : '';
       await post(
-        `<b>🔵 Trade Open</b> ${symbol} ${blockTime}\n` +
+        `<b>🔵 NodeJS Bot Trade Open</b> ${symbol} ${blockTime}\n` +
         `${label} @ ${barrier}\n` +
         `Stake: $${stakeUsd}${evLine}`
       );
@@ -1149,7 +1149,7 @@ function createTelegramNotifier(token, chatId) {
         `<b>📊 Trade Result</b> ${symbol}\n` +
         `P/L: ${pnl}\n` +
         `${legs}\n\n` +
-        `📈 <b>Session Stats</b>\n` +
+        `📈 <b>NodeJS Bot Session Stats</b>\n` +
         `Total Trades: ${stats.trades} (Win: ${stats.wins} / Loss: ${stats.losses})\n` +
         `Win Ratio: ${stats.winRate}\n` +
         `Net P/L: ${stats.netPnl}`
@@ -1158,7 +1158,7 @@ function createTelegramNotifier(token, chatId) {
 
     async sendHourly(symbol, trades, pnl, winRate, stats) {
       await post(
-        `<b>⏱ Hourly Report</b> ${symbol}\n` +
+        `<b>⏱ NodeJS Bot Hourly Report</b> ${symbol}\n` +
         `Blocks Traded (Hour): ${trades}\n` +
         `Hour P/L: ${pnl}\n\n` +
         `📈 <b>Session Summary</b>\n` +
@@ -1170,7 +1170,7 @@ function createTelegramNotifier(token, chatId) {
 
     async sendSessionEnd(symbol, trades, pnl, winRate, reason) {
       await post(
-        `<b>🏁 Session Ended</b> ${symbol} — ${reason}\n` +
+        `<b>🏁 NodeJS Bot Session Ended</b> ${symbol} — ${reason}\n` +
         `Blocks: ${trades}\n` +
         `P/L: ${pnl}\n` +
         `Win rate: ${winRate}`
@@ -1179,7 +1179,7 @@ function createTelegramNotifier(token, chatId) {
 
     async sendEndOfDay(symbol, dateStr, stats) {
       await post(
-        `🌙 <b>End of Day Report</b> ${symbol} (${dateStr} GMT+1)\n` +
+        `🌙 <b>NodeJS Bot End of Day Report</b> ${symbol} (${dateStr} GMT+1)\n` +
         `Total Trades: ${stats.trades} (Win: ${stats.wins} / Loss: ${stats.losses})\n` +
         `Win Rate: ${stats.winRate}\n` +
         `Net P/L: ${stats.netPnl}`
