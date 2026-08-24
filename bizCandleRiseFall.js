@@ -15,6 +15,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { URL } = require('url');
+const e = require('express');
 
 // ══════════════════════════════════════════════════════════════════════════════
 // DERIV REST CLIENT  (for the PAT / OAuth OTP-based auth flow)  [RETAINED]
@@ -79,8 +80,8 @@ class RestClient {
 // ============================================================
 // FILE PATHS  [RETAINED]
 // ============================================================
-const STATE_FILE = path.join(__dirname, 'bizCandle_R50_17-state.json');
-const HISTORY_FILE = path.join(__dirname, 'bizCandle_R50_17-history.json');
+const STATE_FILE = path.join(__dirname, 'bizCandle_R50_18-state.json');
+const HISTORY_FILE = path.join(__dirname, 'bizCandle_R50_18-history.json');
 const STATE_SAVE_INTERVAL = 5000;  // ms
 
 // ============================================================
@@ -839,12 +840,18 @@ class SessionManager {
                 a[key]++;
             }
 
-            if (a.consecutiveLosses === 3) {
+            if (a.consecutiveLosses === 2) {
                 if (typeof bot !== 'undefined' && bot) bot.rangeCheck = false;
-                LOGGER.info(`[${symbol}] 3 consecutive losses — Going back to range check for next trade`);
+                LOGGER.info(`[${symbol}] 2 consecutive losses — Going back to range check for next trade`);
+            } else if (a.consecutiveLosses === 4) {
+                if (typeof bot !== 'undefined' && bot) bot.rangeCheck = false;
+                LOGGER.warn(`[${symbol}] 4 consecutive losses — Going back to range check for next trade`);
             } else if (a.consecutiveLosses === 6) {
                 if (typeof bot !== 'undefined' && bot) bot.rangeCheck = false;
                 LOGGER.warn(`[${symbol}] 6 consecutive losses — Going back to range check for next trade`);
+            } else if (a.consecutiveLosses === 8) {
+                if (typeof bot !== 'undefined' && bot) bot.rangeCheck = false;
+                LOGGER.warn(`[${symbol}] 8 consecutive losses — Going back to range check for next trade`);
             }
 
             a.currentStake = StakeCalculator.calculate(a.investmentRemaining, a.martingaleLevel);
