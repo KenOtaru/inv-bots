@@ -79,8 +79,8 @@ class RestClient {
 // ============================================================
 // FILE PATHS  [RETAINED]
 // ============================================================
-const STATE_FILE = path.join(__dirname, 'bizCandle_R50_16-state.json');
-const HISTORY_FILE = path.join(__dirname, 'bizCandle_R50_16-history.json');
+const STATE_FILE = path.join(__dirname, 'bizCandle_R50_17-state.json');
+const HISTORY_FILE = path.join(__dirname, 'bizCandle_R50_17-history.json');
 const STATE_SAVE_INTERVAL = 5000;  // ms
 
 // ============================================================
@@ -113,7 +113,7 @@ const CONFIG = {
 
     // ── Martingale / staking settings mirrored from candlePatternRFm.js ─
     INITIAL_STAKE: 0.35,
-    INVESTMENT_AMOUNT: 152,
+    INVESTMENT_AMOUNT: 208,
     MARTINGALE_MULTIPLIER: 1.48,
     MAX_MARTINGALE_LEVEL: 1,
     AFTER_MAX_LOSS: 'continue',
@@ -121,11 +121,11 @@ const CONFIG = {
     EXTRA_LEVEL_MULTIPLIERS: [2.1, 2.2, 2, 2.1, 2.2, 2.3, 2.3], //[2.1, 2.2, 2, 2.3]
     AUTO_COMPOUNDING: false,
     COMPOUND_PERCENTAGE: 0.1,
-    STOP_LOSS: 152,
+    STOP_LOSS: 208,
 
     // ── Session / daily guards ───────────────────
     SESSION_PROFIT_TARGET: 500000,
-    SESSION_STOP_LOSS: -500,
+    SESSION_STOP_LOSS: -208,
     COOLDOWN_CANDLES: 5,
 
     // ── Candle / Contract Settings [RETAINED] ────────────────
@@ -133,7 +133,7 @@ const CONFIG = {
     TIMEFRAME_LABEL: '1m',
     CANDLES_TO_LOAD: 30,
     MAX_CANDLES_STORED: 30,
-    DURATION: 57,
+    DURATION: 56,
     DURATION_UNIT: 's', // 's' | 'm' | 'h'
     MIN_CANDLES_REQUIRED: 30,    
 
