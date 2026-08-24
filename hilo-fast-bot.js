@@ -994,7 +994,7 @@ function saveState(filePath, session) {
       dayProfit: session.dayProfit,
       savedAt: new Date().toISOString(),
     };
-    fs.writeFileSync(path, JSON.stringify(data, null, 2) + '\n');
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2) + '\n');
   } catch {
     // Best-effort — don't break the trading loop over persistence.
   }
@@ -2476,12 +2476,15 @@ class Trader {
   }
 
   onBlockEnd(w) {
+    console.log('[TRACE] onBlockEnd called, STATE_PATH=' + this.cfg.STATE_PATH + ' DEBUG=' + CONFIG.DEBUG_MODE);
     const spot = state.lastSpot ?? (this.candles.length ? this.candles[this.candles.length - 1].close : 0);
     const bar = this.candles.find((c) => c.epoch === w.start);
     const range = bar ? bar.high - bar.low : 0;
     const pair = this.pair.realiseAtBlockEnd(spot, this.intraHigh, this.intraLow, range);
     if (pair) this.recordLedgerRow(pair, w);
+    LOGGER.debug('about to save state, path=' + this.cfg.STATE_PATH);
     this.savePersistedState();
+    LOGGER.debug('state save done');
     this.evaluateSessionGuards();
   }
 
@@ -2515,7 +2518,9 @@ class Trader {
         return null;
       }
     };
-  }recordLedgerRow(pair, w) {
+  }
+
+  recordLedgerRow(pair, w) {
     if (!this.cfg.LEDGER_PATH) return;
     const pnlUp = pair.higher ? pair.higher.liveProfit : 0;
     const pnlDn = pair.lower ? pair.lower.liveProfit : 0;
@@ -2609,7 +2614,12 @@ class Trader {
 
   savePersistedState() {
     if (!this.cfg.STATE_PATH) return;
-    saveState(this.cfg.STATE_PATH, state.session);
+    try {
+      saveState(this.cfg.STATE_PATH, state.session);
+      LOGGER.debug('state saved to ' + this.cfg.STATE_PATH);
+    } catch (err) {
+      LOGGER.error('savePersistedState failed: ' + (err.message || String(err)));
+    }
   }
 
   scheduleEodSummary() {
