@@ -113,9 +113,9 @@ const CONFIG = {
 
   // Survival & measurement (Phase 3)
   LEDGER_PATH: process.env.HILO_LEDGER || '',
-  STATE_PATH: process.env.HILO_STATE_PATH || '.hilo_state.json',
+  STATE_PATH: process.env.HILO_STATE_PATH || '.hilo_state_001.json',
   MAX_CONSECUTIVE_LOSSES: Number(process.env.HILO_MAX_LOSSES) || 25,
-  DAILY_LOSS_CAP: Number(process.env.HILO_DAILY_LOSS_CAP) || 20,
+  DAILY_LOSS_CAP: Number(process.env.HILO_DAILY_LOSS_CAP) || 200,
 
   // Telegram
   TELEGRAM_TOKEN: process.env.TELEGRAM_BOT_TOKEN || '',
