@@ -50,76 +50,76 @@ const ALLOWED_CANDLE_GRANULARITIES = new Set([
 // ─── CONFIG (defaults) ──────────────────────────────────────────────────────────
 const CONFIG = {
   // Auth / transport
-  APP_ID: process.env.DERIV_APP_ID2 || DEFAULT_APP_ID,
-  TOKEN: process.env.DERIV_TOKEN2 || '',
-  ACCOUNT_ID: process.env.DERIV_ACCOUNT_ID2 || undefined,
-  PREFER: process.env.HILO_PREFER2 || 'demo',
+  APP_ID: process.env.DERIV_APP_ID || DEFAULT_APP_ID,
+  TOKEN: process.env.DERIV_TOKEN || '',
+  ACCOUNT_ID: process.env.DERIV_ACCOUNT_ID || undefined,
+  PREFER: process.env.HILO_PREFER || 'demo',
 
   // Market
-  SYMBOL: process.env.HILO_SYMBOL2 || '1HZ100V',
-  CURRENCY: process.env.HILO_CURRENCY2 || '',
-  STAKE: Number(process.env.HILO_STAKE2) || 1.0,
+  SYMBOL: process.env.HILO_SYMBOL || '1HZ100V',
+  CURRENCY: process.env.HILO_CURRENCY || '',
+  STAKE: Number(process.env.HILO_STAKE) || 1.0,
 
   // Block grid
-  BLOCK_MINUTES: Number(process.env.HILO_BLOCK_MINUTES2) || 3,
-  BLOCK_TP: Number(process.env.HILO_BLOCK_TP2) || 1.5,
-  BLOCK_SL: Number(process.env.HILO_BLOCK_SL2) || 0,
-  BLOCK_TRAIL: Number(process.env.HILO_BLOCK_TRAIL2) || 0.5,
-  SESSION_TP: Number(process.env.HILO_SESSION_TP2) || 15,
-  SESSION_SL: Number(process.env.HILO_SESSION_SL2) || 10,
+  BLOCK_MINUTES: Number(process.env.HILO_BLOCK_MINUTES) || 3,
+  BLOCK_TP: Number(process.env.HILO_BLOCK_TP) || 1.5,
+  BLOCK_SL: Number(process.env.HILO_BLOCK_SL) || 0,
+  BLOCK_TRAIL: Number(process.env.HILO_BLOCK_TRAIL) || 0.5,
+  SESSION_TP: Number(process.env.HILO_SESSION_TP) || 15,
+  SESSION_SL: Number(process.env.HILO_SESSION_SL) || 10,
 
   // Trade primitive
   MODE: (function() {
-    const raw = (process.env.HILO_TRADE_MODE2 || 'no-touch').toLowerCase();
+    const raw = (process.env.HILO_TRADE_MODE || 'no-touch').toLowerCase();
     if (raw === 'hl' || raw === 'higherlower' || raw === 'higher-lower') return 'higher-lower';
     return 'no-touch';
   })(),
 
   // Prediction
   RANGE_MODE: (function() {
-    const raw = (process.env.HILO_RANGE_MODE2 || 'hybrid').toLowerCase();
+    const raw = (process.env.HILO_RANGE_MODE || 'hybrid').toLowerCase();
     if (raw === 'h' || raw === 'hybrid') return 'hybrid';
     if (raw === 'hist' || raw === 'historical') return 'historical';
     if (raw === 'atr') return 'atr';
     return 'hybrid';
   })(),
-  LOOKBACK_DAYS: Number(process.env.HILO_LOOKBACK_DAYS2) || 20,
-  ATR_BARS: Number(process.env.HILO_ATR_BARS2) || 14,
-  RANGE_K: Number(process.env.HILO_RANGE_K2) || 1.0,
-  REGIME_BARS: Number(process.env.HILO_REGIME_BARS2) || 24,
-  REGIME_BLEND: Number(process.env.HILO_REGIME_BLEND2) || 0,
+  LOOKBACK_DAYS: Number(process.env.HILO_LOOKBACK_DAYS) || 20,
+  ATR_BARS: Number(process.env.HILO_ATR_BARS) || 14,
+  RANGE_K: Number(process.env.HILO_RANGE_K) || 1.0,
+  REGIME_BARS: Number(process.env.HILO_REGIME_BARS) || 24,
+  REGIME_BLEND: Number(process.env.HILO_REGIME_BLEND) || 0,
 
   // EV-first band selection (Phase 1)
-  EV_MODE: process.env.HILO_EV_MODE2 === '1' || process.env.HILO_EV_MODE2 === 'true',
+  EV_MODE: process.env.HILO_EV_MODE === '1' || process.env.HILO_EV_MODE === 'true',
   K_CANDIDATES: (function() {
-    const raw = process.env.HILO_K_CANDIDATES2;
+    const raw = process.env.HILO_K_CANDIDATES;
     if (!raw) return [1.0, 1.5, 2.0, 2.5, 3.0];
     const out = raw.split(',').map(s => Number(s.trim())).filter(n => Number.isFinite(n) && n > 0);
     return out.length ? out : [1.0, 1.5, 2.0, 2.5, 3.0];
   })(),
-  MIN_EV: Number(process.env.HILO_MIN_EV2) || 0.15,
-  DRY_RUN_EDGE: Number(process.env.HILO_DRY_RUN_EDGE2) || 0.03,
-  EV_STAGGER: process.env.HILO_EV_STAGGER2 === '1' || process.env.HILO_EV_STAGGER2 === 'true',
+  MIN_EV: Number(process.env.HILO_MIN_EV) || 0.15,
+  DRY_RUN_EDGE: Number(process.env.HILO_DRY_RUN_EDGE) || 0.03,
+  EV_STAGGER: process.env.HILO_EV_STAGGER === '1' || process.env.HILO_EV_STAGGER === 'true',
 
   // Trade direction & Martingale
   TRADE_DIRECTION: (function() {
-    const raw = (process.env.HILO_TRADE_DIRECTION2 || 'both').toLowerCase();
+    const raw = (process.env.HILO_TRADE_DIRECTION || 'both').toLowerCase();
     if (raw === 'positive-ev' || raw === 'positiveev' || raw === 'positive' || raw === 'single') return 'positive-ev';
     return 'both';
   })(),
-  MARTINGALE_ENABLED: process.env.HILO_MARTINGALE_ENABLED2 === '1' || process.env.HILO_MARTINGALE_ENABLED2 === 'true',
-  MARTINGALE_MULTIPLIER: Number(process.env.HILO_MARTINGALE_MULTIPLIER2) || 2,
-  MARTINGALE_STEPS: Number(process.env.HILO_MARTINGALE_STEPS2) || 3,
+  MARTINGALE_ENABLED: process.env.HILO_MARTINGALE_ENABLED === '1' || process.env.HILO_MARTINGALE_ENABLED === 'true',
+  MARTINGALE_MULTIPLIER: Number(process.env.HILO_MARTINGALE_MULTIPLIER) || 2,
+  MARTINGALE_STEPS: Number(process.env.HILO_MARTINGALE_STEPS) || 3,
 
   // Survival & measurement (Phase 3)
-  LEDGER_PATH: process.env.HILO_LEDGER2 || '',
-  STATE_PATH: process.env.HILO_STATE_PATH2 || '.hilo_state_01.json',
-  MAX_CONSECUTIVE_LOSSES: Number(process.env.HILO_MAX_LOSSES2) || 25,
-  DAILY_LOSS_CAP: Number(process.env.HILO_DAILY_LOSS_CAP2) || 200,
+  LEDGER_PATH: process.env.HILO_LEDGER || '',
+  STATE_PATH: process.env.HILO_STATE_PATH || '.hilo_state_01.json',
+  MAX_CONSECUTIVE_LOSSES: Number(process.env.HILO_MAX_LOSSES) || 25,
+  DAILY_LOSS_CAP: Number(process.env.HILO_DAILY_LOSS_CAP) || 200,
 
   // Telegram
-  TELEGRAM_TOKEN: process.env.TELEGRAM_BOT_TOKEN2 || '',
-  TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID2 || '',
+  TELEGRAM_TOKEN: process.env.TELEGRAM_BOT_TOKEN || '',
+  TELEGRAM_CHAT_ID: process.env.TELEGRAM_CHAT_ID || '',
 
   // Modes
   DRY_RUN: false,
@@ -140,12 +140,12 @@ if (CONFIG.STAKE < STAKE_MIN_DERIV) {
 if (CONFIG.EV_STAGGER && CONFIG.STAKE < STAKE_MIN_STAGGER) {
   // When base < 0.70, stagger's 0.5× floor clips at 0.35 defeating differentiation.
   // Auto-disable stagger unless the user explicitly set HILO_ALLOW_MICRO_STAGGER.
-  if (process.env.HILO_ALLOW_MICRO_STAGGER2 !== '1' && process.env.HILO_ALLOW_MICRO_STAGGER2 !== 'true') {
+  if (process.env.HILO_ALLOW_MICRO_STAGGER !== '1' && process.env.HILO_ALLOW_MICRO_STAGGER !== 'true') {
     CONFIG.EV_STAGGER = false;
     // Will log warning after LOGGER is defined
   }
 }
-const _staggerWarn = CONFIG.EV_STAGGER === false && (process.env.HILO_EV_STAGGER2 === '1' || process.env.HILO_EV_STAGGER2 === 'true') && CONFIG.STAKE < STAKE_MIN_STAGGER;
+const _staggerWarn = CONFIG.EV_STAGGER === false && (process.env.HILO_EV_STAGGER === '1' || process.env.HILO_EV_STAGGER === 'true') && CONFIG.STAKE < STAKE_MIN_STAGGER;
 
 // ─── LOGGER ─────────────────────────────────────────────────────────────────────
 function timestamp() {
@@ -1218,7 +1218,7 @@ function createTelegramNotifier(token, chatId) {
     async sendTradeOpen(symbol, blockTime, label, barrier, stakeUsd, evTag) {
       const evLine = evTag ? `\n${evTag}` : '';
       await post(
-        `<b>🔵 NodeJS2 Bot Trade Open</b> ${symbol} ${blockTime}\n` +
+        `<b>🔵 NodeJS Bot Trade Open</b> ${symbol} ${blockTime}\n` +
         `${label} @ ${barrier}\n` +
         `Stake: $${stakeUsd}${evLine}`
       );
@@ -1229,7 +1229,7 @@ function createTelegramNotifier(token, chatId) {
         `<b>📊 Trade Result</b> ${symbol}\n` +
         `P/L: ${pnl}\n` +
         `${legs}\n\n` +
-        `📈 <b>NodeJS2 Bot Session Stats</b>\n` +
+        `📈 <b>NodeJS Bot Session Stats</b>\n` +
         `Total Trades: ${stats.trades} (Win: ${stats.wins} / Loss: ${stats.losses})\n` +
         `Win Ratio: ${stats.winRate}\n` +
         `Net P/L: ${stats.netPnl}`
@@ -1238,7 +1238,7 @@ function createTelegramNotifier(token, chatId) {
 
     async sendHourly(symbol, trades, pnl, winRate, stats) {
       await post(
-        `<b>⏱ NodeJS2 Bot Hourly Report</b> ${symbol}\n` +
+        `<b>⏱ NodeJS Bot Hourly Report</b> ${symbol}\n` +
         `Blocks Traded (Hour): ${trades}\n` +
         `Hour P/L: ${pnl}\n\n` +
         `📈 <b>Session Summary</b>\n` +
@@ -1250,7 +1250,7 @@ function createTelegramNotifier(token, chatId) {
 
     async sendSessionEnd(symbol, trades, pnl, winRate, reason) {
       await post(
-        `<b>🏁 NodeJS2 Bot Session Ended</b> ${symbol} — ${reason}\n` +
+        `<b>🏁 NodeJS Bot Session Ended</b> ${symbol} — ${reason}\n` +
         `Blocks: ${trades}\n` +
         `P/L: ${pnl}\n` +
         `Win rate: ${winRate}`
@@ -1259,7 +1259,7 @@ function createTelegramNotifier(token, chatId) {
 
     async sendEndOfDay(symbol, dateStr, stats) {
       await post(
-        `🌙 <b>NodeJS2 Bot End of Day Report</b> ${symbol} (${dateStr} GMT+1)\n` +
+        `🌙 <b>NodeJS Bot End of Day Report</b> ${symbol} (${dateStr} GMT+1)\n` +
         `Total Trades: ${stats.trades} (Win: ${stats.wins} / Loss: ${stats.losses})\n` +
         `Win Rate: ${stats.winRate}\n` +
         `Net P/L: ${stats.netPnl}`
