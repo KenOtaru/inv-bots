@@ -82,8 +82,8 @@ class RestClient {
 // ============================================================
 // FILE PATHS  [RETAINED]
 // ============================================================
-const STATE_FILE = path.join(__dirname, 'bizArbitrage_trend_001-state.json');
-const HISTORY_FILE = path.join(__dirname, 'bizArbitrage_trend_001-history.json');
+const STATE_FILE = path.join(__dirname, 'bizArbitrage_trend_002-state.json');
+const HISTORY_FILE = path.join(__dirname, 'bizArbitrage_trend_002-history.json');
 const STATE_SAVE_INTERVAL = 5000;  // ms
 
 // ============================================================
@@ -1507,7 +1507,20 @@ class ConnectionManager {
         SessionManager.checkSessionTargets();
         StatePersistence.saveState();
         // Recovery is now handled ONLY on candle close (handleOHLC → executeRecoveryTradeImmediate)
-        // — no immediate settlement trade to ensure every trade is a full 1m candle (open→close)
+        if (profit < 0 && a.isRecovery && CONFIG.USE_RECOVERY_STRATEGY && a.cooldownCandles === 0) {
+            // Defer to next-tick to allow lock release and state flush
+            setImmediate(() => {
+                try {
+                    if (bot && typeof bot.executeRecoveryTradeImmediate === 'function') {
+                        bot.executeRecoveryTradeImmediate(ownerSym);
+                    }
+                } catch (e) {
+                    LOGGER.error(`[${ownerSym}] Immediate recovery error: ${e.message}`);
+                    if (bot) bot._forceReleaseTradeLock();
+                }
+            });
+        }
+        
     }
 
     // ════════════════════════════════════════════════════════
