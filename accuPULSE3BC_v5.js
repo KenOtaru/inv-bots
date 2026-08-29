@@ -240,8 +240,8 @@ const CONFIG = Object.freeze({
 
   // ── Daily-Reset + Relaxed Sharpe (fix multi-day decay) ─────────────────
   relaxedAssetsConfig: {
-    minTradesForFilter: 200,  // only Sharpe-filter after 200 trades (was 50)
-    topN: 3,                  // keep 5 of 8 assets (was 3) when filtering
+    minTradesForFilter: 300,  // only Sharpe-filter after 200 trades (was 50)
+    topN: 3,                  // keep 3 of 4 assets (was 3) when filtering
   },
   dailyReset: {
     enabled: true,
