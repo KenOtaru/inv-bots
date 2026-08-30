@@ -121,7 +121,7 @@ const CONFIG = {
 
     // ── Session / daily guards ───────────────────
     SESSION_PROFIT_TARGET: 500000,
-    SESSION_STOP_LOSS: -208,
+    SESSION_STOP_LOSS: -458,
     COOLDOWN_CANDLES: 5,
 
     // ── Candle / Contract Settings (defaults, overridable per asset) ──
@@ -191,7 +191,7 @@ const DEFAULT_ASSET_CONFIG = {
 
     // Stake Settings
     INITIAL_STAKE: 0.35,
-    INVESTMENT_AMOUNT: 208,
+    INVESTMENT_AMOUNT: 458,
 
     // Martingale Settings
     MARTINGALE_MULTIPLIER: 1.48, //1.48
@@ -205,7 +205,7 @@ const DEFAULT_ASSET_CONFIG = {
     COMPOUND_PERCENTAGE: 0.1,
 
     // Risk Management
-    STOP_LOSS: 208,
+    STOP_LOSS: 458,
 
     // Pattern Analysis Settings — CONSECUTIVE OPPOSITE logic
     // Number of consecutive same candles (B or R) required before opposite trade

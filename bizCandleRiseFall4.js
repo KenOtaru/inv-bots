@@ -364,6 +364,60 @@ class CandlePatternAnalyzer {
 }
 
 // ============================================================
+// STRATEGY ENGINE — single decision point shared by live + backtest
+// Pure function over assetState snapshot + ctx. NO side effects.
+// Action enum:
+//   'skip'           — no trade this candle
+//   'recovery_first' — first recovery trade (58s remaining on current candle)
+//   'recovery_1m'    — subsequent recovery trade (full next 1m candle)
+//   'enter'          — pattern-driven trade (CALLE or PUTE)
+// ============================================================
+class StrategyEngine {
+    static decide(symbol, assetState, cfg, ctx = {}) {
+        const isSessionActive = ctx.isSessionActive !== false; // default true
+        const isAnyOtherInRecovery = !!ctx.isAnyOtherInRecovery;
+        if (!isSessionActive) {
+            return { action: 'skip', direction: null, analysis: null, reason: 'session_inactive' };
+        }
+        // Cooldown: live decrements BEFORE deciding (handleOHLC ~1802). Caller must
+        // have already decremented cooldownCandles for this candle. We only read it.
+        if ((assetState.cooldownCandles || 0) > 0) {
+            return { action: 'skip', direction: null, analysis: null, reason: 'cooldown' };
+        }
+        // Exclusive: if some OTHER asset is in recovery, only it may trade.
+        if (isAnyOtherInRecovery && !assetState.isRecovery) {
+            return { action: 'skip', direction: null, analysis: null, reason: 'recovery_exclusive' };
+        }
+        // Recovery path (B-style): same direction as last loss
+        if (CONFIG.USE_RECOVERY_STRATEGY && assetState.isRecovery && assetState.lastTradeDirection) {
+            if (!assetState.recoveryFirstDone) {
+                return {
+                    action: 'recovery_first',
+                    direction: assetState.lastTradeDirection,
+                    analysis: null,
+                    reason: 'recovery_first_58s',
+                };
+            }
+            return {
+                action: 'recovery_1m',
+                direction: assetState.lastTradeDirection,
+                analysis: null,
+                reason: 'recovery_1m_until_win',
+            };
+        }
+        // Pattern-driven entry
+        const N = cfg.PATTERN_CONSECUTIVE_COUNT || CONFIG.PATTERN_CONSECUTIVE_COUNT || 6;
+        const analyzer = assetState.patternAnalyzer
+            || new CandlePatternAnalyzer({ dojiThreshold: cfg.PATTERN_DOJI_THRESHOLD });
+        const analysis = analyzer.checkConsecutiveOpposite(assetState.closedCandles || [], N);
+        if (!analysis.shouldTrade) {
+            return { action: 'skip', direction: null, analysis, reason: analysis.reason || 'no_pattern' };
+        }
+        return { action: 'enter', direction: analysis.direction, analysis, reason: analysis.reason };
+    }
+}
+
+// ============================================================
 // STAKE CALCULATOR — auto-compounding + martingale (from reference bot)
 // ============================================================
 //
@@ -424,6 +478,9 @@ class StakeCalculator {
 
 // ============================================================
 // DERIV CANDLE FETCHER — paginates beyond 1000 limit via end epoch
+// NOTE: Deriv ticks_history candles return `epoch` as the candle CLOSE.
+//   open_time is therefore computed as floor((epoch - granularity) / granularity) * granularity.
+//   This matches live handleCandlesHistory mapping below (epoch == close).
 // ============================================================
 class DerivCandleFetcher {
     constructor(appId, logger) {
@@ -443,11 +500,17 @@ class DerivCandleFetcher {
                 want = Math.ceil((toSec - fromSec) / granularity);
             }
         } else if (opts.days) {
-            want = Math.ceil(Number(opts.days) * 86400 / granularity);
+            const d = Number(opts.days);
+            if (!Number.isFinite(d) || d <= 0) throw new Error(`Invalid --days: ${opts.days}`);
+            want = Math.ceil(d * 86400 / granularity);
         } else if (!want) {
             want = 30 * 1440; // default 30 days of 1m
         }
-        want = Math.max(1, Math.min(want, 500000));
+        if (want > 500000) {
+            this.logger.warn(`Requested ${want} candles exceeds 500000 cap — clamping`);
+            want = 500000;
+        }
+        want = Math.max(1, want);
         let end = opts.to ? Math.floor(new Date(opts.to).getTime() / 1000) : 'latest';
         const startEpoch = opts.from ? Math.floor(new Date(opts.from).getTime() / 1000) : null;
         const all = [];
@@ -491,35 +554,38 @@ class DerivCandleFetcher {
                 if (r.error) { this.logger.error(`Fetch error: ${r.error.message}`); break; }
                 const candles = (r.candles || []).map(c => ({
                     open: parseFloat(c.open), high: parseFloat(c.high), low: parseFloat(c.low), close: parseFloat(c.close),
-                    epoch: c.epoch, open_time: c.epoch - (c.epoch % granularity)
+                    epoch: c.epoch,
+                    // epoch = candle close → open_time = floor((epoch-granularity)/granularity)*granularity
+                    open_time: Math.floor((c.epoch - granularity) / granularity) * granularity
                 })).filter(c => Number.isFinite(c.open) && Number.isFinite(c.close));
                 if (!candles.length) break;
-                // prepend chronologically (Deriv returns oldest first? ensure order)
                 candles.sort((a,b)=>a.open_time-b.open_time);
-                // dedup by open_time
                 const existing = new Set(all.map(x=>x.open_time));
                 const uniq = candles.filter(c=> !existing.has(c.open_time));
                 all.unshift(...uniq);
-                // prepare next end (earliest candle before current earliest)
                 const earliest = candles[0];
                 if (!earliest || candles.length < batch) break;
                 end = earliest.epoch - 1;
                 if (startEpoch && end < startEpoch) break;
-                // rate-limit
                 await new Promise(res=> setTimeout(res, 300));
             }
         } finally {
             try { ws.close(); } catch {}
         }
-        // sort ascending and trim to want
-        all.sort((a,b)=>a.open_time-b.open_time);
-        if (all.length > want) return all.slice(-want);
-        return all;
+        // dedup (paranoid) + sort ascending + trim to want
+        const dedup = new Map();
+        for (const c of all) dedup.set(c.open_time, c);
+        const merged = [...dedup.values()].sort((a,b)=>a.open_time-b.open_time);
+        const dupesRemoved = all.length - merged.length;
+        if (dupesRemoved > 0) this.logger.warn(`Fetch dedup removed ${dupesRemoved} duplicate candle(s)`);
+        if (merged.length > want) return { candles: merged.slice(-want), requested: want, fetched: merged.length, dupesRemoved };
+        return { candles: merged, requested: want, fetched: merged.length, dupesRemoved };
     }
 }
 
 // ============================================================
 // BACKTEST ENGINE — exact live strategy replay per asset
+// Drives StrategyEngine.decide() with a full assetState mirror.
 // ============================================================
 class BacktestEngine {
     static wilsonLowerBound(wins, n, z=1.645) {
@@ -529,115 +595,259 @@ class BacktestEngine {
     }
     static breakeven(payout){ return 1/(1+payout); }
     async run(symbol, candles, opts={}) {
+        // Backwards compat: caller may pass {candles, requested, fetched, dupesRemoved}
+        const candleList = Array.isArray(candles) ? candles : (candles?.candles || []);
+        const candleStats = Array.isArray(candles) ? null : candles;
+
         const payoutRatio = Number.isFinite(opts.payoutRatio) ? opts.payoutRatio : (Number.isFinite(opts.payout) ? opts.payout : 0.90);
         const cfg = getAssetConfig(symbol);
-        const N = cfg.PATTERN_CONSECUTIVE_COUNT ?? CONFIG.PATTERN_CONSECUTIVE_COUNT ?? 6;
-        const analyzer = new CandlePatternAnalyzer({dojiThreshold: cfg.PATTERN_DOJI_THRESHOLD});
-        // mirror live state vars
-        let investmentRemaining = cfg.INVESTMENT_AMOUNT;
-        let martingaleLevel = 0;
-        let isRecovery=false, recoveryFirstDone=false, lastTradeDirection=null;
-        let consecutiveLosses=0, cooldownCandles=0;
-        let netPL=0, totalStake=0;
-        const trades=[];
-        const streakCounts={}; let curStreak=0, maxStreak=0;
-        const closed=[];
-        // session guard replica (optional)
-        let sessionActive=true, sessionNetPL=0;
-        for(let i=0;i<candles.length;i++){
-            const c=candles[i];
-            closed.push(c);
-            if(closed.length>50000) closed.shift();
-            // cooldown
-            // Note: cooldown decremented on candle close before decision, mirror live 1579
-            // For backtest we decrement at start of next iteration if needed
-            if(cooldownCandles>0){ cooldownCandles--; if(cooldownCandles===0) isRecovery=false; continue; }
-            // session guard (mirror live SESSION_PROFIT_TARGET / SESSION_STOP_LOSS)
-            if(CONFIG.SESSION_PROFIT_TARGET && sessionNetPL >= CONFIG.SESSION_PROFIT_TARGET) { sessionActive=false; }
-            if(CONFIG.SESSION_STOP_LOSS && sessionNetPL <= CONFIG.SESSION_STOP_LOSS) { sessionActive=false; }
-            if(!sessionActive) continue;
-            let direction=null, isRecoveryTrade=false;
-            if(isRecovery && CONFIG.USE_RECOVERY_STRATEGY && lastTradeDirection){
-                direction=lastTradeDirection; isRecoveryTrade=true;
-            } else {
-                const r=analyzer.checkConsecutiveOpposite(closed, N);
-                if(!r.shouldTrade) continue;
-                direction=r.direction;
+
+        // ── Stateful asset mirror (mirrors state.assets[symbol]) ──────────
+        const assetState = {
+            closedCandles: [],
+            lastTradeDirection: null,
+            isRecovery: false,
+            recoveryFirstDone: false,
+            forceRecoverDirection: null,
+            martingaleLevel: 0,
+            consecutiveLosses: 0,
+            consecutiveWins: 0,
+            cooldownCandles: 0,
+            investmentRemaining: cfg.INVESTMENT_AMOUNT,
+            baseStake: cfg.INITIAL_STAKE,
+            currentStake: cfg.INITIAL_STAKE,
+            patternAnalyzer: new CandlePatternAnalyzer({ dojiThreshold: cfg.PATTERN_DOJI_THRESHOLD }),
+            tradesCount: 0, winsCount: 0, lossesCount: 0,
+            profit: 0, loss: 0, netPL: 0,
+        };
+
+        // Session guard (one-shot per run, mirrors SessionManager.checkSessionTargets)
+        const session = { isActive: true, netPL: 0 };
+
+        let totalStake = 0;
+        let sessionNetPL = 0;
+        let maxDrawdown = 0;
+        let peakPL = 0;
+        const trades = [];
+        const streakCounts = {};
+        let curStreak = 0;
+        let maxStreak = 0;
+        const perDayPnl = {};
+
+        for (let i = 0; i < candleList.length; i++) {
+            const c = candleList[i];
+            if (!c || !Number.isFinite(c.close)) continue;
+
+            // ── 1. Append closed candle (mirrors handleOHLC closed-candle push)
+            assetState.closedCandles.push(c);
+            if (assetState.closedCandles.length > CONFIG.MAX_CANDLES_STORED) {
+                assetState.closedCandles = assetState.closedCandles.slice(-CONFIG.MAX_CANDLES_STORED);
             }
-            if(!direction) continue;
-            if(i+1>=candles.length) break; // need next candle to settle
-            const stake=StakeCalculator.calculate(symbol, martingaleLevel, investmentRemaining);
-            if(stake > investmentRemaining) continue;
-            // simulate capital check (backtest starts with INVESTMENT_AMOUNT, not global capital)
-            // deduct
-            investmentRemaining = Number((investmentRemaining - stake).toFixed(2));
+
+            // ── 2. Decrement cooldown BEFORE decision (live: handleOHLC ~1802)
+            if (assetState.cooldownCandles > 0) {
+                assetState.cooldownCandles--;
+                if (assetState.cooldownCandles === 0) assetState.forceRecoverDirection = null;
+            }
+
+            // ── 3. Session check (mirror checkSessionTargets one-shot)
+            if (CONFIG.SESSION_PROFIT_TARGET && sessionNetPL >= CONFIG.SESSION_PROFIT_TARGET) session.isActive = false;
+            if (CONFIG.SESSION_STOP_LOSS && sessionNetPL <= CONFIG.SESSION_STOP_LOSS) session.isActive = false;
+
+            // ── 4. Shared decision
+            const decision = StrategyEngine.decide(symbol, assetState, cfg, {
+                isSessionActive: session.isActive,
+                isAnyOtherInRecovery: false, // single-asset backtest (documented limitation)
+            });
+            if (decision.action === 'skip') continue;
+
+            // ── 5. Need next candle to settle
+            if (i + 1 >= candleList.length) break;
+            const next = candleList[i + 1];
+            if (!next || !Number.isFinite(next.close)) continue;
+
+            // ── 6. Stake (uses same StakeCalculator as live)
+            const stake = StakeCalculator.calculate(symbol, assetState.martingaleLevel, assetState.investmentRemaining);
+            if (stake > assetState.investmentRemaining) continue; // insufficient pool — skip (mirrors live)
+
+            assetState.investmentRemaining = Number((assetState.investmentRemaining - stake).toFixed(2));
             totalStake += stake;
-            const entryClose=c.close;
-            const exitClose=candles[i+1].close;
-            const won = direction==='CALLE' ? exitClose > entryClose : exitClose < entryClose;
+
+            // ── 7. Settle on next candle close
+            const entryClose = c.close;
+            const exitClose = next.close;
+            const won = decision.direction === 'CALLE' ? exitClose > entryClose : exitClose < entryClose;
             const pnl = won ? Number((stake * payoutRatio).toFixed(2)) : -stake;
-            netPL = Number((netPL + pnl).toFixed(2));
-            sessionNetPL = Number((sessionNetPL + pnl).toFixed(2));
-            trades.push({idx:i, open_time:c.open_time, close_time:candles[i+1].open_time, direction, stake, won, pnl, level:martingaleLevel, isRecovery:isRecoveryTrade, firstDone:recoveryFirstDone});
-            // update state exactly as SessionManager.recordTradeResult
-            if(won){
-                // win resets
-                lastTradeDirection=direction;
-                if(isRecovery){ isRecovery=false; }
-                recoveryFirstDone=false;
-                martingaleLevel=0; consecutiveLosses=0; curStreak=0;
-                investmentRemaining = Number((investmentRemaining + stake + pnl).toFixed(2));
+            const netPLDelta = pnl;
+            const isRecoveryTrade = decision.action === 'recovery_first' || decision.action === 'recovery_1m';
+
+            trades.push({
+                idx: i,
+                open_time: c.open_time,
+                close_time: next.open_time,
+                decision: decision.action,
+                decision_reason: decision.reason,
+                direction: decision.direction,
+                stake,
+                won,
+                pnl,
+                level: assetState.martingaleLevel,
+                isRecovery: isRecoveryTrade,
+                recoveryFirst: decision.action === 'recovery_first',
+            });
+
+            // ── 8. Mirror SessionManager.recordTradeResult
+            assetState.tradesCount++;
+            sessionNetPL = Number((sessionNetPL + netPLDelta).toFixed(2));
+            if (won) {
+                assetState.winsCount++;
+                assetState.profit += pnl;
+                assetState.netPL += pnl;
+                assetState.lastTradeDirection = decision.direction;
+                assetState.isRecovery = false;
+                assetState.recoveryFirstDone = false;
+                assetState.martingaleLevel = 0;
+                assetState.consecutiveLosses = 0;
+                assetState.consecutiveWins++;
+                curStreak = 0;
+                assetState.investmentRemaining = Number((assetState.investmentRemaining + stake + pnl).toFixed(2));
+                assetState.forceRecoverDirection = null;
+                assetState.baseStake = StakeCalculator.getBaseStake(symbol, assetState.investmentRemaining);
+                assetState.currentStake = StakeCalculator.calculate(symbol, 0, assetState.investmentRemaining);
             } else {
-                lastTradeDirection=direction;
-                const wasRec=isRecovery;
-                isRecovery=true;
-                if(!wasRec) recoveryFirstDone=false;
-                // after first recovery execution, mark done (B logic)
-                if(!recoveryFirstDone) recoveryFirstDone=true;
-                martingaleLevel++;
-                consecutiveLosses++; curStreak++; maxStreak=Math.max(maxStreak,curStreak);
-                const key='x'+Math.min(curStreak,12);
-                streakCounts[key]=(streakCounts[key]||0)+1;
-                if(consecutiveLosses>=10){ martingaleLevel=0; cooldownCandles=CONFIG.COOLDOWN_CANDLES; }
-                // loss does not credit pool
+                assetState.lossesCount++;
+                assetState.loss += Math.abs(pnl);
+                assetState.netPL += pnl;
+                assetState.lastTradeDirection = decision.direction;
+                assetState.forceRecoverDirection = decision.direction;
+                assetState.martingaleLevel = (assetState.martingaleLevel || 0) + 1;
+                assetState.consecutiveLosses++;
+                assetState.consecutiveWins = 0;
+                const wasAlreadyRecovery = assetState.isRecovery;
+                assetState.isRecovery = true;
+                if (!wasAlreadyRecovery) assetState.recoveryFirstDone = false;
+                // B logic: first recovery execution marks done — but in backtest we set it
+                // optimistically since we settle at next candle close. The live bot sets
+                // recoveryFirstDone after executeRecoveryTradeImmediate returns true.
+                if (!assetState.recoveryFirstDone) assetState.recoveryFirstDone = true;
+                curStreak++;
+                if (curStreak > maxStreak) maxStreak = curStreak;
+                const key = 'x' + Math.min(curStreak, 12);
+                streakCounts[key] = (streakCounts[key] || 0) + 1;
+                if (assetState.consecutiveLosses >= 10) {
+                    assetState.martingaleLevel = 0;
+                    assetState.cooldownCandles = CONFIG.COOLDOWN_CANDLES;
+                    assetState.forceRecoverDirection = null;
+                }
+                assetState.currentStake = StakeCalculator.calculate(symbol, assetState.martingaleLevel, assetState.investmentRemaining);
             }
-            // next trade can only be after next candle (i+1) is close, so i++ already ensures
+
+            // Track drawdown + per-day PnL
+            if (assetState.netPL > peakPL) peakPL = assetState.netPL;
+            const dd = peakPL - assetState.netPL;
+            if (dd > maxDrawdown) maxDrawdown = dd;
+            const dayKey = new Date(c.open_time * 1000).toISOString().slice(0, 10);
+            perDayPnl[dayKey] = Number(((perDayPnl[dayKey] || 0) + netPLDelta).toFixed(2));
         }
-        const total=trades.length, wins=trades.filter(t=>t.won).length, losses=total-wins;
-        const winRate= total? wins/total:0;
-        const breakeven= BacktestEngine.breakeven(payoutRatio);
-        const expectancy= total? trades.reduce((s,t)=>s+t.pnl,0)/trades.reduce((s,t)=>s+t.stake,0) : 0; // per stake or per trade? use per trade pnl/stake
-        const expectancyPerTrade= total? trades.reduce((s,t)=>s+t.pnl,0)/total : 0;
-        const lb= BacktestEngine.wilsonLowerBound(wins,total);
-        const successProb= lb; // lower bound as prob
+
+        const total = trades.length;
+        const wins = trades.filter(t => t.won).length;
+        const losses = total - wins;
+        const winRate = total ? wins / total : 0;
+        const breakeven = BacktestEngine.breakeven(payoutRatio);
+        const expectancyPerTrade = total ? trades.reduce((s, t) => s + t.pnl, 0) / total : 0;
+        const lb = BacktestEngine.wilsonLowerBound(wins, total);
         let verdict;
-        if(total < 200) verdict='INSUFFICIENT SAMPLE — need ≥200 trades';
-        else if(winRate > breakeven && expectancyPerTrade>0) verdict='POSITIVE EDGE (tentative)';
-        else verdict='NO EDGE — do not trade live';
+        if (total < 200) verdict = 'INSUFFICIENT SAMPLE — need ≥200 trades';
+        else if (winRate > breakeven && expectancyPerTrade > 0) verdict = 'POSITIVE EDGE (tentative)';
+        else verdict = 'NO EDGE — do not trade live';
+
+        const N = cfg.PATTERN_CONSECUTIVE_COUNT ?? CONFIG.PATTERN_CONSECUTIVE_COUNT ?? 6;
+        const filtered = Object.keys(streakCounts).filter(k => parseInt(k.slice(1)) >= 2).sort((a, b) => parseInt(a.slice(1)) - parseInt(b.slice(1)));
+        const streakStr = filtered.map(k => `${k}:${streakCounts[k]}`).join(' ') || 'none';
+
         return {
-            symbol, N, granularity: cfg.GRANULARITY, payoutRatio, breakeven: Number((breakeven*100).toFixed(2)),
-            periodFrom: candles[0]?.open_time ? new Date(candles[0].open_time*1000).toISOString() : null,
-            periodTo: candles[candles.length-1]?.open_time ? new Date(candles[candles.length-1].open_time*1000).toISOString() : null,
-            candles: candles.length, trades: total, wins, losses, winRate: Number((winRate*100).toFixed(2)), lossRate: Number(((losses/total)*100||0).toFixed(2)),
-            profitRatio: Number((winRate*100).toFixed(2)), // same as winRate
-            netPL: Number(netPL.toFixed(2)), totalStake: Number(totalStake.toFixed(2)), avgStake: total? Number((totalStake/total).toFixed(2)):0,
-            expectancyPerTrade: Number(expectancyPerTrade.toFixed(4)), expectancy, breakevenWinRate: Number((breakeven*100).toFixed(2)),
-            streakCounts, maxConsecutiveLosses: maxStreak, successProbability: Number((successProb*100).toFixed(2)), wilsonLowerBound: Number((lb*100).toFixed(2)),
-            verdict, ranAt: new Date().toISOString(), isRecoveryB: true
+            symbol,
+            N,
+            granularity: cfg.GRANULARITY,
+            payoutRatio,
+            breakeven: Number((breakeven * 100).toFixed(2)),
+            periodFrom: candleList[0]?.open_time ? new Date(candleList[0].open_time * 1000).toISOString() : null,
+            periodTo: candleList[candleList.length - 1]?.open_time ? new Date(candleList[candleList.length - 1].open_time * 1000).toISOString() : null,
+            candles: candleList.length,
+            trades: total,
+            wins,
+            losses,
+            winRate: Number((winRate * 100).toFixed(2)),
+            lossRate: Number(((losses / total) * 100 || 0).toFixed(2)),
+            profitRatio: Number((winRate * 100).toFixed(2)),
+            netPL: Number(assetState.netPL.toFixed(2)),
+            totalStake: Number(totalStake.toFixed(2)),
+            avgStake: total ? Number((totalStake / total).toFixed(2)) : 0,
+            expectancyPerTrade: Number(expectancyPerTrade.toFixed(4)),
+            breakevenWinRate: Number((breakeven * 100).toFixed(2)),
+            streakCounts,
+            maxConsecutiveLosses: maxStreak,
+            streakSummary: streakStr,
+            maxDrawdown: Number(maxDrawdown.toFixed(2)),
+            perDayPnl,
+            successProbability: Number((lb * 100).toFixed(2)),
+            wilsonLowerBound: Number((lb * 100).toFixed(2)),
+            verdict,
+            ranAt: new Date().toISOString(),
+            // ── Provenance: prove what was actually simulated ──
+            strategyParity: {
+                exclusiveSimulated: false,          // single-asset; cross-asset mutex not modelled
+                cooldownDecrementedBeforeDecision: true,
+                martingaleResetAfterExtra: false,    // live does NOT reset; backtest matches
+                sessionGateActive: true,             // SESSION_PROFIT_TARGET / STOP_LOSS one-shot
+                firstRecovery58sApproximated: true,  // entry at i.close, settle at i+1.close
+                sharedStrategyEngine: true,          // calls StrategyEngine.decide (same as live)
+            },
+            effectiveConfig: {
+                PATTERN_CONSECUTIVE_COUNT: cfg.PATTERN_CONSECUTIVE_COUNT,
+                PATTERN_DOJI_THRESHOLD: cfg.PATTERN_DOJI_THRESHOLD,
+                INVESTMENT_AMOUNT: cfg.INVESTMENT_AMOUNT,
+                INITIAL_STAKE: cfg.INITIAL_STAKE,
+                MARTINGALE_MULTIPLIER: cfg.MARTINGALE_MULTIPLIER,
+                MAX_MARTINGALE_LEVEL: cfg.MAX_MARTINGALE_LEVEL,
+                CONTINUE_EXTRA_LEVELS: cfg.CONTINUE_EXTRA_LEVELS,
+                EXTRA_LEVEL_MULTIPLIERS: cfg.EXTRA_LEVEL_MULTIPLIERS,
+                COOLDOWN_CANDLES: CONFIG.COOLDOWN_CANDLES,
+                SESSION_PROFIT_TARGET: CONFIG.SESSION_PROFIT_TARGET,
+                SESSION_STOP_LOSS: CONFIG.SESSION_STOP_LOSS,
+                USE_RECOVERY_STRATEGY: CONFIG.USE_RECOVERY_STRATEGY,
+                GRANULARITY: cfg.GRANULARITY,
+            },
+            candleStats: candleStats || null,
+            sampleTrades: trades.slice(0, 10),
         };
     }
     formatReport(r){
         if(!r) return 'No backtest';
-        const filtered = Object.keys(r.streakCounts).filter(k=> parseInt(k.slice(1))>=2).sort((a,b)=> parseInt(a.slice(1))-parseInt(b.slice(1)));
-        const streakStr = filtered.map(k=> `${k}:${r.streakCounts[k]}`).join(' ') || 'none';
+        const cfg = getAssetConfig(r.symbol);
         const xn = r.maxConsecutiveLosses ? `x2..x${r.maxConsecutiveLosses}` : 'x2..xn';
+        const streakStr = r.streakSummary || 'none';
+        const parity = r.strategyParity || {};
+        const parityFlags = [
+            parity.exclusiveSimulated ? 'exclusive:ON' : 'exclusive:OFF',
+            parity.cooldownDecrementedBeforeDecision ? 'cooldown-pre:ON' : 'cooldown-pre:OFF',
+            parity.sessionGateActive ? 'session-gate:ON' : 'session-gate:OFF',
+            parity.firstRecovery58sApproximated ? 'recovery-58s:approx' : 'recovery-58s:exact',
+            parity.sharedStrategyEngine ? 'shared-engine:YES' : 'shared-engine:NO',
+        ].join(' ');
+        const periodLine = r.candleStats
+            ? `Period: ${r.periodFrom} → ${r.periodTo} (requested ${r.candleStats.requested}, fetched ${r.candleStats.fetched}, dupes removed ${r.candleStats.dupesRemoved}, granularity ${r.granularity}s)`
+            : `Period: ${r.periodFrom} → ${r.periodTo} (${r.candles} candles, ${r.granularity}s)`;
         return [
-            `🧪 BACKTEST — ${r.symbol} (N=${r.N}, ${r.granularity}s, payout ${(r.payoutRatio*100).toFixed(0)}%, stake $${getAssetConfig(r.symbol).INITIAL_STAKE}×${getAssetConfig(r.symbol).MARTINGALE_MULTIPLIER})`,
-            `Period: ${r.periodFrom} → ${r.periodTo} (${r.candles} candles)`,
+            `🧪 BACKTEST — ${r.symbol} (N=${r.N}, payout ${(r.payoutRatio*100).toFixed(0)}%, stake $${cfg.INITIAL_STAKE}×${cfg.MARTINGALE_MULTIPLIER}, pool $${cfg.INVESTMENT_AMOUNT})`,
+            periodLine,
             `Trades: ${r.trades} (${r.wins}W / ${r.losses}L)  WinRate ${r.winRate}% / Loss ${r.lossRate}% (need ≥ ${r.breakevenWinRate}% BE)`,
-            `Profit Ratio: ${r.profitRatio}%  Expectancy/trade: ${r.expectancyPerTrade>=0?'+':''}${r.expectancyPerTrade}  Net P/L: $${r.netPL.toFixed(2)} (staked $${r.totalStake.toFixed(2)}, avg $${r.avgStake.toFixed(2)})`,
+            `Net P/L: $${r.netPL.toFixed(2)} (staked $${r.totalStake.toFixed(2)}, avg $${r.avgStake.toFixed(2)}, max DD $${(r.maxDrawdown||0).toFixed(2)})`,
+            `Expectancy/trade: ${r.expectancyPerTrade>=0?'+':''}${r.expectancyPerTrade}`,
             `Streaks ${xn}: ${streakStr}  Max consecutive losses: ${r.maxConsecutiveLosses}`,
-            `Success prob (Wilson LB 90%): ${r.successProbability}% (LB) vs BE ${r.breakevenWinRate}% → ${r.wilsonLowerBound}%`,
+            `Wilson LB 90%: ${r.wilsonLowerBound}% vs BE ${r.breakevenWinRate}%`,
+            `Parity: ${parityFlags}`,
             `Verdict: ${r.verdict}`,
         ].join('\n');
     }
@@ -2172,7 +2382,8 @@ class IndexBot {
 
     // ════════════════════════════════════════════════════════
     // CORE TRADE LOGIC — consecutive opposite (NO market-mode filter)
-    // Called on every candle close
+    // Called on every candle close. Delegates decision to StrategyEngine
+    // so live and backtest share identical branching.
     // ════════════════════════════════════════════════════════
     executeNextTrade(symbol, lastClosedCandle) {
         const assetState = state.assets[symbol];
@@ -2201,43 +2412,45 @@ class IndexBot {
 
         // Exclusive recovery: only recovery asset may trade
         const recoveryAsset = this._getRecoveryAsset();
-        if (recoveryAsset && recoveryAsset !== symbol) {
-            LOGGER.info(`[${symbol}] Blocked — recovery exclusive on ${recoveryAsset} (normal trades paused)`);
+        const isAnyOtherInRecovery = !!recoveryAsset && recoveryAsset !== symbol;
+
+        // Shared decision (mirrors backtest)
+        const decision = StrategyEngine.decide(symbol, assetState, assetConfig, {
+            isSessionActive: SessionManager.isSessionActive(),
+            isAnyOtherInRecovery,
+        });
+
+        if (decision.action === 'skip') {
+            if (decision.reason === 'recovery_exclusive') {
+                LOGGER.info(`[${symbol}] Blocked — recovery exclusive on ${recoveryAsset} (normal trades paused)`);
+                assetState.canTrade = false;
+            } else if (decision.reason === 'cooldown') {
+                LOGGER.info(`[${symbol}] In cool-down (${assetState.cooldownCandles} candles remaining) — skipping`);
+                assetState.canTrade = false;
+            } else if (decision.reason === 'session_inactive') {
+                // session already checked above
+            } else if (decision.analysis) {
+                LOGGER.info(`[${symbol}] No trade — ${decision.analysis.reason}`);
+            }
             assetState.canTrade = false;
             return;
         }
 
-        let direction;
-        let analysis = null;
-
-        // Recovery priority: B - first 58s finish current candle, subsequent 1m until win
-        if (CONFIG.USE_RECOVERY_STRATEGY && assetState.isRecovery && assetState.lastTradeDirection) {
+        if (decision.action === 'recovery_first' || decision.action === 'recovery_1m') {
             if (assetState.cooldownCandles > 0) {
                 LOGGER.info(`[${symbol}] In recovery but cool-down ${assetState.cooldownCandles} — skipping`);
                 assetState.canTrade = false;
                 return;
             }
-            // Delegate to unified recovery executor (handles first s vs subsequent 1m)
             this.executeRecoveryTradeImmediate(symbol);
             return;
         }
 
-        // Normal mode: consecutive opposite logic (configurable N per asset)
+        // decision.action === 'enter'
         const N = assetConfig.PATTERN_CONSECUTIVE_COUNT ?? CONFIG.PATTERN_CONSECUTIVE_COUNT ?? 6;
-        analysis = assetState.patternAnalyzer.checkConsecutiveOpposite(assetState.closedCandles, N);
-        assetState.lastAnalysis = analysis;
-
-        if (!analysis.shouldTrade) {
-            LOGGER.info(`[${symbol}] No trade — ${analysis.reason}`);
-            assetState.canTrade = false;
-            return;
-        }
-
-        direction = analysis.direction;
-        // Doji already handled as break; opposite direction already chosen
-        LOGGER.trade(`🎯 [${symbol}] CONSECUTIVE SIGNAL N=${N} ${analysis.details.types} → ${direction} | ${analysis.reason}`);
-
-        this._executeBuy(symbol, direction, false, analysis);
+        assetState.lastAnalysis = decision.analysis;
+        LOGGER.trade(`🎯 [${symbol}] CONSECUTIVE SIGNAL N=${N} ${decision.analysis.details.types} → ${decision.direction} | ${decision.reason}`);
+        this._executeBuy(symbol, decision.direction, false, decision.analysis);
     }
 
     // ── WATCHDOG [RETAINED] ────────────────────────────────────
@@ -2383,32 +2596,56 @@ function parseBacktestArgs(argv) {
     return a;
 }
 async function runBacktestCLI(opts) {
-    const symbols = (!opts.asset || opts.asset.toLowerCase()==='all') ? CONFIG.ACTIVE_ASSETS : [opts.asset];
+    // Validate inputs early so we fail before any network call
+    if (opts.days !== null && opts.days !== undefined) {
+        const d = Number(opts.days);
+        if (!Number.isFinite(d) || d <= 0) {
+            LOGGER.error(`Invalid --days: ${opts.days} (must be a positive number)`);
+            process.exit(2);
+        }
+        opts.days = d;
+    }
+    if (opts.candles !== null && opts.candles !== undefined) {
+        const c = Number(opts.candles);
+        if (!Number.isFinite(c) || c <= 0) {
+            LOGGER.error(`Invalid --candles: ${opts.candles} (must be a positive integer)`);
+            process.exit(2);
+        }
+        opts.candles = Math.floor(c);
+    }
+
+    const symbols = (!opts.asset || opts.asset.toLowerCase() === 'all') ? CONFIG.ACTIVE_ASSETS : [opts.asset];
     const payoutRatio = Number.isFinite(opts.payout) ? opts.payout : 0.90;
-    LOGGER.info(`🧪 BACKTEST standalone: ${symbols.join(', ')} | ${opts.days? opts.days+'d' : opts.candles? opts.candles+' candles' : '30d'} | payout ${(payoutRatio*100).toFixed(0)}%`);
+    LOGGER.info(`🧪 BACKTEST standalone: ${symbols.join(', ')} | ${opts.days ? opts.days + 'd' : opts.candles ? opts.candles + ' candles' : '30d'} | payout ${(payoutRatio * 100).toFixed(0)}%`);
     const fetcher = new DerivCandleFetcher(CONFIG.APP_ID, LOGGER);
     const engine = new BacktestEngine();
-    const reports=[];
-    for(const sym of symbols){
-        if(!CONFIG.ACTIVE_ASSETS.includes(sym) && !Object.keys(ASSET_CONFIGS).includes(sym)){
-            LOGGER.warn(`Skipping unknown asset ${sym}`);
+    const reports = [];
+    for (const sym of symbols) {
+        if (!CONFIG.ACTIVE_ASSETS.includes(sym) && !Object.keys(ASSET_CONFIGS).includes(sym) && sym !== 'all') {
+            LOGGER.error(`Unknown asset ${sym}. Active: ${CONFIG.ACTIVE_ASSETS.join(', ')} | per-asset overrides: ${Object.keys(ASSET_CONFIGS).join(', ') || 'none'}`);
             continue;
         }
         LOGGER.info(`Fetching candles for ${sym}...`);
-        let candles;
-        try { candles = await fetcher.fetchCandles(sym, opts); } catch(e){ LOGGER.error(`Fetch failed for ${sym}: ${e.message}`); continue; }
-        LOGGER.info(`Fetched ${candles.length} candles for ${sym} (${candles[0]?new Date(candles[0].open_time*1000).toISOString():'-'} → ${candles[candles.length-1]?new Date(candles[candles.length-1].open_time*1000).toISOString():'-'})`);
-        const report = await engine.run(sym, candles, {payoutRatio});
+        let fetchResult;
+        try { fetchResult = await fetcher.fetchCandles(sym, opts); }
+        catch (e) { LOGGER.error(`Fetch failed for ${sym}: ${e.message}`); continue; }
+        // Backwards-compat: fetcher now returns { candles, requested, fetched, dupesRemoved }
+        const candleList = Array.isArray(fetchResult) ? fetchResult : fetchResult.candles;
+        const candleStats = Array.isArray(fetchResult) ? null : fetchResult;
+        LOGGER.info(`Fetched ${candleList.length} candles for ${sym} (${candleList[0] ? new Date(candleList[0].open_time * 1000).toISOString() : '-'} → ${candleList[candleList.length - 1] ? new Date(candleList[candleList.length - 1].open_time * 1000).toISOString() : '-'})`);
+        const report = await engine.run(sym, candleList, { payoutRatio });
+        // Stamp fetch stats onto report so the JSON carries provenance
+        if (candleStats) report.candleStats = candleStats;
         reports.push(report);
         console.log('\n' + engine.formatReport(report) + '\n');
-        const fname = `bizArbitrage2-backtest-${sym}-${new Date().toISOString().slice(0,10).replace(/-/g,'')}.json`;
-        try { fs.writeFileSync(path.join(__dirname, fname), JSON.stringify(report,null,2)); LOGGER.info(`Report saved: ${fname}`);} catch(e){ LOGGER.error(`Save report failed: ${e.message}`);}
-        // also per-candle CSV-like detail if needed
+        const fname = `bizArbitrage2-backtest-${sym}-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}.json`;
+        try { fs.writeFileSync(path.join(__dirname, fname), JSON.stringify(report, null, 2)); LOGGER.info(`Report saved: ${fname}`); }
+        catch (e) { LOGGER.error(`Save report failed: ${e.message}`); }
     }
-    if(reports.length>1){
+    if (reports.length > 1) {
         console.log('\n══════════════════════════════════════════');
         console.log('SUMMARY (all assets)');
-        reports.forEach(r=> console.log(`${r.symbol}: ${r.trades} trades WR ${r.winRate}% Net $${r.netPL.toFixed(2)} Verdict ${r.verdict}`));
+        reports.forEach(r => console.log(`${r.symbol}: ${r.trades} trades WR ${r.winRate}% Net $${r.netPL.toFixed(2)} Verdict ${r.verdict}`));
         console.log('══════════════════════════════════════════\n');
     }
 }
@@ -2444,8 +2681,10 @@ function startTelegramBacktestPolling(){
                 const engine=new BacktestEngine();
                 const syms= asset==='all'? CONFIG.ACTIVE_ASSETS : [asset];
                 for(const sym of syms){
-                    const candles=await fetcher.fetchCandles(sym, {days:days||30, from, to, payoutRatio:payoutArg});
-                    const report=await engine.run(sym,candles,{payoutRatio: payoutArg||0.90});
+                    const fetchResult=await fetcher.fetchCandles(sym, {days:days||30, from, to, payoutRatio:payoutArg});
+                    const candleList = Array.isArray(fetchResult) ? fetchResult : fetchResult.candles;
+                    const report=await engine.run(sym,candleList,{payoutRatio: payoutArg||0.90});
+                    if (!Array.isArray(fetchResult)) report.candleStats = fetchResult;
                     await tbot.sendMessage(chatId, engine.formatReport(report), {parse_mode:'HTML'});
                 }
             } catch(e){
@@ -2459,6 +2698,14 @@ function startTelegramBacktestPolling(){
 // ============================================================
 // INITIALIZATION
 // ============================================================
+const FLAG_SELFTEST = process.argv.slice(2).includes('--selftest');
+if (FLAG_SELFTEST) {
+    // Selftest must run BEFORE we spin up tradeHistory / IndexBot (which start timers
+    // and load state). Run and exit before any of that happens.
+    runSelftest().catch(e => { LOGGER.error(`Selftest crashed: ${e.message}\n${e.stack}`); process.exit(2); });
+    return; // unreachable inside Node top-level — but the early-return is enforced by runSelftest calling process.exit()
+}
+
 tradeHistory = TradeHistoryManager.loadHistory();
 const bot = new IndexBot();
 
@@ -2466,6 +2713,92 @@ process.on('SIGINT', () => { bot.stop(); bot.connection.shutdown(); setTimeout((
 process.on('SIGTERM', () => { bot.stop(); bot.connection.shutdown(); setTimeout(() => process.exit(0), 3000); });
 process.on('uncaughtException', (err) => { LOGGER.error(`UNCAUGHT: ${err.message}\n${err.stack}`); try { StatePersistence.saveState(); } catch { } });
 process.on('unhandledRejection', (reason) => { LOGGER.error(`UNHANDLED: ${reason}`); try { StatePersistence.saveState(); } catch { } });
+
+// ── --selftest: deterministic offline engine sanity check ──
+// Runs three synthetic streams (noise, alternating, all-BULL) through BacktestEngine
+// without touching the network. Proves the engine plumbing is wired correctly.
+function makeLcgRng(seed) {
+    let s = seed >>> 0;
+    return () => {
+        // Numerical Recipes LCG — deterministic, no Date.now/Math.random
+        s = (s * 1664525 + 1013904223) >>> 0;
+        return s / 0x100000000;
+    };
+}
+function synthesizeCandles({ n, granularity = 60, mode, seed = 42, startEpoch = 1700000000, startPrice = 1000 }) {
+    const rng = makeLcgRng(seed);
+    const out = [];
+    let price = startPrice;
+    let epoch = startEpoch;
+    let bullRun = 0;
+    for (let i = 0; i < n; i++) {
+        let open = price;
+        let close;
+        if (mode === 'all_bull') {
+            // Strictly rising — every candle closes above open
+            close = open * (1 + 0.001 + rng() * 0.001);
+        } else if (mode === 'alternating') {
+            // BBBRRR BBBRRR ... — N=6 will see 3B then 3R transitions
+            const cycle = Math.floor(i / 3) % 2;
+            close = cycle === 0 ? open * (1 + 0.001) : open * (1 - 0.001);
+        } else {
+            // 'noise': pure random walk around starting price
+            close = open * (1 + (rng() - 0.5) * 0.01);
+        }
+        const high = Math.max(open, close) * (1 + rng() * 0.0005);
+        const low = Math.min(open, close) * (1 - rng() * 0.0005);
+        out.push({
+            open: parseFloat(open.toFixed(5)),
+            close: parseFloat(close.toFixed(5)),
+            high: parseFloat(high.toFixed(5)),
+            low: parseFloat(low.toFixed(5)),
+            epoch,
+            open_time: Math.floor((epoch - granularity) / granularity) * granularity,
+        });
+        price = close;
+        epoch += granularity;
+    }
+    return out;
+}
+async function runSelftest() {
+    LOGGER.info('🧪 SELFTEST — offline engine sanity check (no network)');
+    const N = 60 * 24 * 30; // 30 days of 1m candles
+    const streams = [
+        { name: 'noise', mode: 'noise', expect: 'WR ~50%' },
+        { name: 'alternating', mode: 'alternating', expect: 'WR any' },
+        { name: 'all_bull', mode: 'all_bull', expect: 'WR ~0% (strategy fades streak)' },
+    ];
+    const engine = new BacktestEngine();
+    const payout = 0.90;
+    let failed = false;
+    for (const s of streams) {
+        const candles = synthesizeCandles({ n: N, mode: s.mode, seed: 42 });
+        const report = await engine.run('R_100', candles, { payoutRatio: payout });
+        console.log('\n' + engine.formatReport(report));
+        console.log(`   expected: ${s.expect}`);
+        if (s.mode === 'noise') {
+            // ±5pp tolerance on 50% to avoid flake
+            const wr = report.winRate;
+            if (wr < 45 || wr > 55) {
+                LOGGER.error(`SELFTEST FAIL: noise stream WR ${wr}% outside [45,55]`);
+                failed = true;
+            }
+        }
+        if (s.mode === 'all_bull') {
+            // Strategy deliberately enters PUTE after 6 bullish → must have low WR
+            if (report.winRate > 10) {
+                LOGGER.error(`SELFTEST FAIL: all_bull stream WR ${report.winRate}% > 10 (strategy not fading)`);
+                failed = true;
+            }
+        }
+    }
+    if (failed) {
+        LOGGER.error('SELFTEST FAILED');
+        process.exit(1);
+    }
+    LOGGER.info('✅ SELFTEST PASSED — engine plumbing verified on synthetic streams');
+    process.exit(0);
+}
 
 const cliArgs = parseBacktestArgs(process.argv.slice(2));
 if (cliArgs.backtest) {
