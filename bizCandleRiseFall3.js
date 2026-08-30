@@ -172,7 +172,7 @@ const CONFIG = {
 
     // ── Misc ──────────────────────────────────────────────────
     DEBUG_MODE: true,
-    TELEGRAM_ENABLED: true,
+    TELEGRAM_ENABLED: false,
     TELEGRAM_BOT_TOKEN: '8565754902:AAHS6UQWEgLJ0DO-JTpAGQhZLs-UDVVNAQc',
     TELEGRAM_CHAT_ID: '752497117',
 };
