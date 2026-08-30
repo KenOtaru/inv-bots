@@ -225,13 +225,21 @@ const DEFAULT_ASSET_CONFIG = {
 
 const ASSET_CONFIGS = {
     // Per-asset consecutive count override example:
-    // 'R_75': {
-    //     PATTERN_CONSECUTIVE_COUNT: 5,
-    //     INITIAL_STAKE: 0.35,
-    //     INVESTMENT_AMOUNT: 153,
-    //     MARTINGALE_MULTIPLIER: 1.48,
-    //     MAX_MARTINGALE_LEVEL: 1
-    // },
+    'R_10': {
+        PATTERN_CONSECUTIVE_COUNT: 7
+    },
+    'R_25': {
+        PATTERN_CONSECUTIVE_COUNT: 7
+    },
+    'R_50': {
+        PATTERN_CONSECUTIVE_COUNT: 7
+    },
+    'R_75': {
+        PATTERN_CONSECUTIVE_COUNT: 7
+    },
+    'R_100': {
+        PATTERN_CONSECUTIVE_COUNT: 8
+    },
 };
 
 function getAssetConfig(symbol) {
