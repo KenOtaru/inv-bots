@@ -163,10 +163,11 @@ const CONFIG = {
         '1HZ50V',
         '1HZ75V',
         '1HZ100V',
-        // 'stpRNG',
-        // 'stpRNG3',
-        // 'stpRNG4',
-        // 'stpRNG5'
+        'stpRNG',
+        'stpRNG2',
+        'stpRNG3',
+        'stpRNG4',
+        'stpRNG5'
     ],
 
     // ── Misc ──────────────────────────────────────────────────
