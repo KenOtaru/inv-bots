@@ -2401,7 +2401,7 @@ async function runBacktestCLI(opts) {
         const report = await engine.run(sym, candles, {payoutRatio});
         reports.push(report);
         console.log('\n' + engine.formatReport(report) + '\n');
-        const fname = `bizCandleRiseFall3-backtest-${sym}-${new Date().toISOString().slice(0,10).replace(/-/g,'')}.json`;
+        const fname = `bizArbitrage2-backtest-${sym}-${new Date().toISOString().slice(0,10).replace(/-/g,'')}.json`;
         try { fs.writeFileSync(path.join(__dirname, fname), JSON.stringify(report,null,2)); LOGGER.info(`Report saved: ${fname}`);} catch(e){ LOGGER.error(`Save report failed: ${e.message}`);}
         // also per-candle CSV-like detail if needed
     }
