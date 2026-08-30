@@ -1257,7 +1257,7 @@ class TelegramService {
         const recoveryStatus = a?.isRecovery ? '🔄 RECOVERY' : '🎯 NORMAL';
 
         const msg = `
-        ${emoji} <b>${type} ARBITRAGE TRADE ALERT - ${recoveryStatus}</b>
+        ${emoji} <b>${type} ARBITRAGE4 TRADE ALERT - ${recoveryStatus}</b>
 
         📊 Asset: ${symbol}
         📈 Direction: ${direction === 'CALLE' ? 'RISE 📈' : 'FALL 📉'}
@@ -1287,7 +1287,7 @@ class TelegramService {
         });
 
         await this.sendMessage([
-            `⏰ <b>ARBITRAGE PATTERN BOT HOURLY SUMMARY</b>`,
+            `⏰ <b>ARBITRAGE4 PATTERN BOT HOURLY SUMMARY</b>`,
             `Last Hour: ${h.trades}t ${h.wins}W/${h.losses}L ${wr}% ${h.pnl >= 0 ? '\u{1f7e2}' : '\u{1f534}'} $${h.pnl.toFixed(2)}`,
             `Today: ${today.tradesCount}t P/L: $${(today.netPL || 0).toFixed(2)}`,
             `Loss Stats: x2:${today.x2Losses || 0} x3:${today.x3Losses || 0} x4:${today.x4Losses || 0} x5:${today.x5Losses || 0} x6:${today.x6Losses || 0} x7:${today.x7Losses || 0} x8:${today.x8Losses || 0} x9:${today.x9Losses || 0}`,
@@ -1315,7 +1315,7 @@ class TelegramService {
         });
 
         await this.sendMessage([
-            `\u{1f4ca} <b>ARBITRAGE CANDLE PATTERN BOT SESSION SUMMARY</b>`,
+            `\u{1f4ca} <b>ARBITRAGE4 CANDLE PATTERN BOT SESSION SUMMARY</b>`,
             `Duration: ${stats.duration} | Trades: ${stats.trades}`,
             `W: ${stats.wins} | L: ${stats.losses} | Win Rate: ${stats.winRate}`,
             `Session P/L: $${(stats.netPL || 0).toFixed(2)}`,
@@ -1336,7 +1336,7 @@ class TelegramService {
         });
 
         await this.sendMessage([
-            `\u{1f916} <b>ARBITRAGE PATTERN BOT STARTED</b>`,
+            `\u{1f916} <b>ARBITRAGE4 PATTERN BOT STARTED</b>`,
             `Strategy: Candle Pattern Recognition + Grid Martingale`,
             `Risk: Martingale progression with cap $${getAssetConfig(CONFIG.ACTIVE_ASSETS[0]).INVESTMENT_AMOUNT}`,
             `Recovery: ${CONFIG.USE_RECOVERY_STRATEGY ? 'ENABLED (immediate same-direction retry)' : 'DISABLED (wait for pattern analysis)'}`,
@@ -1427,7 +1427,7 @@ class SessionManager {
             LOGGER.info(`Day changed: ${state.currentTradeDay} -> ${today}`);
             const dayStats = TradeHistoryManager.getDayStats(state.currentTradeDay);
             TelegramService.sendMessage(
-                `\u{1f319} <b>ARBITRAGE PATTERN BOT END OF DAY ${state.currentTradeDay}</b>\nP/L: $${(dayStats?.netPL || 0).toFixed(2)}\nCapital: $${state.capital.toFixed(2)}`
+                `\u{1f319} <b>ARBITRAGE4 PATTERN BOT END OF DAY ${state.currentTradeDay}</b>\nP/L: $${(dayStats?.netPL || 0).toFixed(2)}\nCapital: $${state.capital.toFixed(2)}`
             );
             this._resetDailyStats();
             if (!state.session.isActive) {
@@ -1551,7 +1551,7 @@ class SessionManager {
                 a.forceRecoverDirection = null;
                 LOGGER.warn(`[${symbol}] 10 consecutive losses — cooling down for ${CONFIG.COOLDOWN_CANDLES} candles`);
                 TelegramService.sendMessage(
-                    `❄️ <b>[${symbol}] ARBITRAGE PATTERN BOT COOL-DOWN ACTIVATED</b>\n` +
+                    `❄️ <b>[${symbol}] ARBITRAGE4 PATTERN BOT COOL-DOWN ACTIVATED</b>\n` +
                     `10 consecutive losses\n` +
                     `Pausing for ${CONFIG.COOLDOWN_CANDLES} candles\n` +
                     `Capital: $${state.capital.toFixed(2)}`
@@ -2156,7 +2156,7 @@ class ConnectionManager {
             this.reconnectAttempts++;
             const delay = Math.min(this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1), 30000);
             LOGGER.info(`Reconnecting in ${(delay / 1000).toFixed(1)}s (attempt ${this.reconnectAttempts})`);
-            TelegramService.sendMessage(`⚠️ <b>ARBITRAGE PATTERN BOT CONNECTION LOST</b> — Reconnecting (attempt ${this.reconnectAttempts})`);
+            TelegramService.sendMessage(`⚠️ <b>ARBITRAGE4 PATTERN BOT CONNECTION LOST</b> — Reconnecting (attempt ${this.reconnectAttempts})`);
 
             this.reconnectTimer = setTimeout(() => {
                 this.reconnectTimer = null;
@@ -2166,7 +2166,7 @@ class ConnectionManager {
             }, delay);
         } else {
             LOGGER.error('Max reconnection attempts reached — giving up');
-            TelegramService.sendMessage(`\u{1f6d1} <b>ARBITRAGE PATTERN BOT STOPPED</b> — Max reconnections\nFinal P/L: $${(state.session.netPL || 0).toFixed(2)}`);
+            TelegramService.sendMessage(`\u{1f6d1} <b>ARBITRAGE4 PATTERN BOT STOPPED</b> — Max reconnections\nFinal P/L: $${(state.session.netPL || 0).toFixed(2)}`);
             process.exit(1);
         }
     }
@@ -2554,7 +2554,7 @@ class IndexBot {
         state.tradeStartTime = null;
 
         TelegramService.sendMessage(
-            `⚠️ <b>ARBITRAGE PATTERN STUCK TRADE RECOVERED [${reason}]</b>\n` +
+            `⚠️ <b>ARBITRAGE4 PATTERN STUCK TRADE RECOVERED [${reason}]</b>\n` +
             `Contract: ${contractId}\n` +
             `⚠️ VERIFY OUTCOME MANUALLY ON DERIV\n` +
             `Capital: $${state.capital.toFixed(2)}`
