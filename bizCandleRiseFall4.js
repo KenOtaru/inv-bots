@@ -226,7 +226,7 @@ const DEFAULT_ASSET_CONFIG = {
 const ASSET_CONFIGS = {
     // Per-asset consecutive count override example:
     'R_10': {
-        PATTERN_CONSECUTIVE_COUNT: 7
+        PATTERN_CONSECUTIVE_COUNT: 6
     },
     'R_25': {
         PATTERN_CONSECUTIVE_COUNT: 7
