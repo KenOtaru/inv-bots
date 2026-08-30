@@ -121,7 +121,7 @@ const CONFIG = {
 
     // ── Session / daily guards ───────────────────
     SESSION_PROFIT_TARGET: 500000,
-    SESSION_STOP_LOSS: -208,
+    SESSION_STOP_LOSS: -508,
     COOLDOWN_CANDLES: 5,
 
     // ── Candle / Contract Settings (defaults, overridable per asset) ──
@@ -135,7 +135,7 @@ const CONFIG = {
 
     // ── Consecutive Candle Pattern (user configurable) ──────────
     // Number of consecutive same-direction candles to trigger opposite trade
-    PATTERN_CONSECUTIVE_COUNT: 6,
+    PATTERN_CONSECUTIVE_COUNT: 8,
     // MIN_RECOVERY_SECONDS kept for backward compat (no longer used — recovery always 1m on candle close)
     MIN_RECOVERY_SECONDS: 10,
 
@@ -191,26 +191,26 @@ const DEFAULT_ASSET_CONFIG = {
 
     // Stake Settings
     INITIAL_STAKE: 0.35,
-    INVESTMENT_AMOUNT: 208,
+    INVESTMENT_AMOUNT: 508,
 
     // Martingale Settings
     MARTINGALE_MULTIPLIER: 1, //1.48
     MAX_MARTINGALE_LEVEL: 30, //1
     AFTER_MAX_LOSS: 'continue', // 'continue' | 'reset' | 'stop' 
-    CONTINUE_EXTRA_LEVELS: 8,
-    EXTRA_LEVEL_MULTIPLIERS: [2.1, 2.2, 2, 2.1, 2.2, 2.3, 2.3], //[2.1, 2.2, 2, 2.3]
+    CONTINUE_EXTRA_LEVELS: 9,
+    EXTRA_LEVEL_MULTIPLIERS: [2.1, 2.2, 2, 2.1, 2.2, 2.3, 2.2, 2.3], //[2.1, 2.2, 2, 2.3]
 
     // Auto-Compounding
     AUTO_COMPOUNDING: false,
     COMPOUND_PERCENTAGE: 0.1,
 
     // Risk Management
-    STOP_LOSS: 208,
+    STOP_LOSS: 508,
 
     // Pattern Analysis Settings — CONSECUTIVE OPPOSITE logic
     // Number of consecutive same candles (B or R) required before opposite trade
     // Doji breaks the streak (no trade). User can set per-asset via ASSET_CONFIGS.
-    PATTERN_CONSECUTIVE_COUNT: 6,
+    PATTERN_CONSECUTIVE_COUNT: 8,
     PATTERN_DOJI_THRESHOLD: 0.00001,
     // MIN_RECOVERY_SECONDS kept for compat (recovery now always 1m on candle close)
     MIN_RECOVERY_SECONDS: 10,
