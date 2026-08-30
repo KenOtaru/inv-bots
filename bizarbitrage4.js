@@ -135,7 +135,7 @@ const CONFIG = {
 
     // ── Consecutive Candle Pattern (user configurable) ──────────
     // Number of consecutive same-direction candles to trigger opposite trade
-    PATTERN_CONSECUTIVE_COUNT: 8,
+    PATTERN_CONSECUTIVE_COUNT: 6,
     // MIN_RECOVERY_SECONDS kept for backward compat (no longer used — recovery always 1m on candle close)
     MIN_RECOVERY_SECONDS: 10,
 
@@ -172,7 +172,7 @@ const CONFIG = {
 
     // ── Misc ──────────────────────────────────────────────────
     DEBUG_MODE: true,
-    TELEGRAM_ENABLED: false,
+    TELEGRAM_ENABLED: true,
     TELEGRAM_BOT_TOKEN: '8565754902:AAHS6UQWEgLJ0DO-JTpAGQhZLs-UDVVNAQc',
     TELEGRAM_CHAT_ID: '752497117',
 };

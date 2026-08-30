@@ -121,7 +121,7 @@ const CONFIG = {
 
     // ── Session / daily guards ───────────────────
     SESSION_PROFIT_TARGET: 500000,
-    SESSION_STOP_LOSS: -458,
+    SESSION_STOP_LOSS: -508,
     COOLDOWN_CANDLES: 5,
 
     // ── Candle / Contract Settings (defaults, overridable per asset) ──
@@ -135,7 +135,7 @@ const CONFIG = {
 
     // ── Consecutive Candle Pattern (user configurable) ──────────
     // Number of consecutive same-direction candles to trigger opposite trade
-    PATTERN_CONSECUTIVE_COUNT: 8,
+    PATTERN_CONSECUTIVE_COUNT: 6,
     // MIN_RECOVERY_SECONDS kept for backward compat (no longer used — recovery always 1m on candle close)
     MIN_RECOVERY_SECONDS: 10,
 
@@ -159,7 +159,7 @@ const CONFIG = {
         'R_75',
         'R_100',
         '1HZ10V',
-        // '1HZ25V',
+        '1HZ25V',
         '1HZ50V',
         '1HZ75V',
         '1HZ100V',
@@ -172,7 +172,7 @@ const CONFIG = {
 
     // ── Misc ──────────────────────────────────────────────────
     DEBUG_MODE: true,
-    TELEGRAM_ENABLED: false,
+    TELEGRAM_ENABLED: true,
     TELEGRAM_BOT_TOKEN: '8565754902:AAHS6UQWEgLJ0DO-JTpAGQhZLs-UDVVNAQc',
     TELEGRAM_CHAT_ID: '752497117',
 };
@@ -191,7 +191,7 @@ const DEFAULT_ASSET_CONFIG = {
 
     // Stake Settings
     INITIAL_STAKE: 0.35,
-    INVESTMENT_AMOUNT: 458,
+    INVESTMENT_AMOUNT: 508,
 
     // Martingale Settings
     MARTINGALE_MULTIPLIER: 1.48, //1.48
@@ -205,7 +205,7 @@ const DEFAULT_ASSET_CONFIG = {
     COMPOUND_PERCENTAGE: 0.1,
 
     // Risk Management
-    STOP_LOSS: 458,
+    STOP_LOSS: 508,
 
     // Pattern Analysis Settings — CONSECUTIVE OPPOSITE logic
     // Number of consecutive same candles (B or R) required before opposite trade
