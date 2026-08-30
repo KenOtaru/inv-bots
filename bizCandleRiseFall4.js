@@ -232,13 +232,43 @@ const ASSET_CONFIGS = {
         PATTERN_CONSECUTIVE_COUNT: 8
     },
     'R_50': {
-        PATTERN_CONSECUTIVE_COUNT: 7
+        PATTERN_CONSECUTIVE_COUNT: 8
     },
     'R_75': {
-        PATTERN_CONSECUTIVE_COUNT: 7
+        PATTERN_CONSECUTIVE_COUNT: 8
     },
     'R_100': {
         PATTERN_CONSECUTIVE_COUNT: 8
+    },
+    '1HZ10V': {
+        PATTERN_CONSECUTIVE_COUNT: 6
+    },
+    '1HZ25V': {
+        PATTERN_CONSECUTIVE_COUNT: 10
+    },
+    '1HZ50V': {
+        PATTERN_CONSECUTIVE_COUNT: 8
+    },
+    '1HZ75V': {
+        PATTERN_CONSECUTIVE_COUNT: 6
+    },
+    '1HZ100V': {
+        PATTERN_CONSECUTIVE_COUNT: 7
+    },
+    'stpRNG': {
+        PATTERN_CONSECUTIVE_COUNT: 10
+    },
+    'stpRNG2': {
+        PATTERN_CONSECUTIVE_COUNT: 10
+    },
+    'stpRNG3': {
+        PATTERN_CONSECUTIVE_COUNT: 8
+    },
+    'stpRNG4': {
+        PATTERN_CONSECUTIVE_COUNT: 8
+    },
+    'stpRNG5': {
+        PATTERN_CONSECUTIVE_COUNT: 7
     },
 };
 
