@@ -82,8 +82,8 @@ class RestClient {
 // ============================================================
 // FILE PATHS  [RETAINED]
 // ============================================================
-const STATE_FILE = path.join(__dirname, 'bizArbitrage_trend_03-state.json');
-const HISTORY_FILE = path.join(__dirname, 'bizArbitrage_trend_03-history.json');
+const STATE_FILE = path.join(__dirname, 'bizArbitrage_trend_04-state.json');
+const HISTORY_FILE = path.join(__dirname, 'bizArbitrage_trend_04-history.json');
 const STATE_SAVE_INTERVAL = 5000;  // ms
 
 // ============================================================
@@ -194,9 +194,9 @@ const DEFAULT_ASSET_CONFIG = {
     INVESTMENT_AMOUNT: 208,
 
     // Martingale Settings
-    MARTINGALE_MULTIPLIER: 1.48,
-    MAX_MARTINGALE_LEVEL: 1,
-    AFTER_MAX_LOSS: 'continue',
+    MARTINGALE_MULTIPLIER: 1, //1.48
+    MAX_MARTINGALE_LEVEL: 30, //1
+    AFTER_MAX_LOSS: 'continue', // 'continue' | 'reset' | 'stop' 
     CONTINUE_EXTRA_LEVELS: 8,
     EXTRA_LEVEL_MULTIPLIERS: [2.1, 2.2, 2, 2.1, 2.2, 2.3, 2.3], //[2.1, 2.2, 2, 2.3]
 
