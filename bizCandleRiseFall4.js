@@ -194,8 +194,8 @@ const DEFAULT_ASSET_CONFIG = {
     INVESTMENT_AMOUNT: 508,
 
     // Martingale Settings
-    MARTINGALE_MULTIPLIER: 1, //1.48
-    MAX_MARTINGALE_LEVEL: 30, //1
+    MARTINGALE_MULTIPLIER: 1.48, //1.48
+    MAX_MARTINGALE_LEVEL: 1, //1
     AFTER_MAX_LOSS: 'continue', // 'continue' | 'reset' | 'stop' 
     CONTINUE_EXTRA_LEVELS: 9,
     EXTRA_LEVEL_MULTIPLIERS: [2.1, 2.2, 2, 2.1, 2.2, 2.3, 2.2, 2.3], //[2.1, 2.2, 2, 2.3]
