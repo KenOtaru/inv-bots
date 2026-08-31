@@ -80,7 +80,7 @@ const CONFIG = Object.freeze({
   plannedHoldTicks: parseInt('20', 10),
   minBarrierPct: parseFloat('0.015'),
   minEmpiricalSamples: parseInt('150', 10),
-  confidenceZ: parseFloat('0.67'),
+  confidenceZ: parseFloat('0.67'), //1.28
   evHaircut: parseFloat('0.65'),
   minNetEvRatio: parseFloat('0.001'),
   maxRecentJumpZ: parseFloat('4.0'),
@@ -111,7 +111,7 @@ const CONFIG = Object.freeze({
     disableRecentJumpGate: true,
     // Wilson z for the per-interval survival estimate (BC uses interval-level
     // data — far fewer observations than per-tick — so keep z modest).
-    confidenceZ: parseFloat('1.28'),
+    confidenceZ: parseFloat('0.67'), //1.28
     // Minimum acceptable estimated P(survive N ticks) after haircut.
     minPHorizon: parseFloat('0.55'),
     // Reject candidates whose empirical spike rate is wildly worse than the
