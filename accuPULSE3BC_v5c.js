@@ -71,7 +71,7 @@ const CONFIG = Object.freeze({
   plannedHoldTicks: parseInt('20', 10),
   minBarrierPct: parseFloat('0.015'),
   minEmpiricalSamples: parseInt('150', 10),
-  confidenceZ: parseFloat('1.28'),
+  confidenceZ: parseFloat('0.67'), //1.28
   evHaircut: parseFloat('0.65'),
   minNetEvRatio: parseFloat('0.001'),
   maxRecentJumpZ: parseFloat('4.0'),
