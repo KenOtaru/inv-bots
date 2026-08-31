@@ -48,7 +48,7 @@ const CONFIG = Object.freeze({
 
   // Assets
   // assets: ('R_10,R_25,R_50,R_75,R_100').split(',').map(s => s.trim()).filter(Boolean),
-  assets: ('BOOM900,BOOM1000,CRASH900,CRASH1000')
+  assets: ('R_10,R_25,R_50,R_75,R_100')
     .split(',').map(s => s.trim()).filter(Boolean),
 
   // Telegram
@@ -79,13 +79,13 @@ const CONFIG = Object.freeze({
   // ── Feature 1: Adaptive Confidence Gates (by vol regime) ──────────────
   minConfidenceByRegime: {
     0: 0.08,  // low vol: stricter (good conditions, be selective)
-    1: 0.05,  // normal vol: balanced
-    2: 0.03,  // high vol: looser (risky anyway, take more)
-    3: 0.01,  // extreme: only obvious setups
+    // 1: 0.05,  // normal vol: balanced
+    // 2: 0.03,  // high vol: looser (risky anyway, take more)
+    // 3: 0.01,  // extreme: only obvious setups
   },
 
   // ARCA gates (v4.0 relaxations + v5.0 adaptive)
-  minConfidence: parseFloat('0.05'),   // fallback if regime lookup fails
+  minConfidence: parseFloat('0.55'),   //0.05 fallback if regime lookup fails
   maxVolRegime: parseInt('3', 10),     // ALLOW all regimes (scale stake instead)
   maxHurst: parseFloat('0.70'),
   minSurvivalSlope: parseFloat('-0.01'),
@@ -158,9 +158,9 @@ const CONFIG = Object.freeze({
   warmupConfig: {
     warmupTrades: 30,        // Trades 0-30
     balancedTrades: 300,     // Trades 30-300
-    warmupMaxOpen: 5,        // Max open during warmup
-    balancedMaxOpen: 3,      // Max open during balanced
-    optimizedMaxOpen: 2,     // Max open during optimized
+    warmupMaxOpen: 1,        // Max open during warmup
+    balancedMaxOpen: 1,      // Max open during balanced
+    optimizedMaxOpen: 1,     // Max open during optimized
     warmupAssets: true,      // Use ALL assets during warmup
   },
 
@@ -168,16 +168,16 @@ const CONFIG = Object.freeze({
   tp_tiers: {
     quick_win:  { ticks: 3,  profit_pct: 0.15, scale_out: 0.30 },
     early_win:  { ticks: 8,  profit_pct: 0.25, scale_out: 0.30 },
-    mid_win:    { ticks: 15, profit_pct: 0.35, scale_out: 0.30 },
-    full_hold:  { ticks: 20, profit_pct: 0.50, scale_out: 0.00 },
+    // mid_win:    { ticks: 15, profit_pct: 0.35, scale_out: 0.30 },
+    // full_hold:  { ticks: 20, profit_pct: 0.50, scale_out: 0.00 },
   },
 
   // ── Feature 6: Enhanced Streak Recovery ────────────────────────────────
   recoveryConfig: {
-    triggerLosses: 3,
-    recoveryMinStake: 0.40,
-    recoveryMaxStake: 1.00,
-    recoveryExitWins: 10,
+    triggerLosses: 1,
+    recoveryMinStake: 1.00,
+    recoveryMaxStake: 5.00,
+    recoveryExitWins: 5,
     recoveryExitHours: 2,
     wrThresholdNormal: 0.70,
     wrThresholdMedium: 0.60,

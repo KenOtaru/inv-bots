@@ -57,7 +57,7 @@ const CONFIG = Object.freeze({
 
   // Assets
   // assets: ('R_10,R_25,R_50,R_75,R_100').split(',').map(s => s.trim()).filter(Boolean),
-  assets: ('R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH500,CRASH600,CRASH900,CRASH1000')
+  assets: ('R_10,R_25,R_50,R_75,R_100')
     .split(',').map(s => s.trim()).filter(Boolean),
 
   // Telegram
@@ -75,7 +75,7 @@ const CONFIG = Object.freeze({
   maxOpenTrades: parseInt('3', 10),
 
   // Hazard Model (v4.0 fixes)
-  candidateGrowthRates: [0.05], //0.05, 0.04, 0.03, 0.02, 0.01
+  candidateGrowthRates: [0.05, 0.04, 0.03, 0.02, 0.01], //0.05, 0.04, 0.03, 0.02, 0.01
   hazardWindow: parseInt('600', 10),
   plannedHoldTicks: parseInt('20', 10),
   minBarrierPct: parseFloat('0.015'),
@@ -123,13 +123,12 @@ const CONFIG = Object.freeze({
   minConfidenceByRegime: {
     0: 0.08,  // low vol: stricter (good conditions, be selective)
     // 1: 0.05,  // normal vol: balanced
-    1: 0.07,  // normal vol: balanced
     // 2: 0.03,  // high vol: looser (risky anyway, take more)
     // 3: 0.01,  // extreme: only obvious setups
   },
 
   // ARCA gates (v4.0 relaxations + v5.0 adaptive)
-  minConfidence: parseFloat('0.05'),   // fallback if regime lookup fails
+  minConfidence: parseFloat('0.55'),   //0.05 fallback if regime lookup fails
   maxVolRegime: parseInt('3', 10),     // ALLOW all regimes (scale stake instead)
   maxHurst: parseFloat('0.70'),
   minSurvivalSlope: parseFloat('-0.01'),
@@ -212,16 +211,16 @@ const CONFIG = Object.freeze({
   tp_tiers: {
     quick_win:  { ticks: 3,  profit_pct: 0.15, scale_out: 0.30 },
     early_win:  { ticks: 8,  profit_pct: 0.25, scale_out: 0.30 },
-    mid_win:    { ticks: 15, profit_pct: 0.35, scale_out: 0.30 },
-    full_hold:  { ticks: 20, profit_pct: 0.50, scale_out: 0.00 },
+    // mid_win:    { ticks: 15, profit_pct: 0.35, scale_out: 0.30 },
+    // full_hold:  { ticks: 20, profit_pct: 0.50, scale_out: 0.00 },
   },
 
   // ── Feature 6: Enhanced Streak Recovery ────────────────────────────────
   recoveryConfig: {
-    triggerLosses: 3,
-    recoveryMinStake: 0.40,
-    recoveryMaxStake: 1.00,
-    recoveryExitWins: 10,
+    triggerLosses: 1,
+    recoveryMinStake: 1.00,
+    recoveryMaxStake: 5.00,
+    recoveryExitWins: 5,
     recoveryExitHours: 2,
     wrThresholdNormal: 0.70,
     wrThresholdMedium: 0.60,
