@@ -1218,7 +1218,7 @@ function createTelegramNotifier(token, chatId) {
     async sendTradeOpen(symbol, blockTime, label, barrier, stakeUsd, evTag) {
       const evLine = evTag ? `\n${evTag}` : '';
       await post(
-        `<b>🔵 NodeJS Bot Trade Open2</b> ${symbol} ${blockTime}\n` +
+        `<b>🔵 NodeJS Bot Trade Open</b> ${symbol} ${blockTime}\n` +
         `${label} @ ${barrier}\n` +
         `Stake: $${stakeUsd}${evLine}`
       );
@@ -1226,7 +1226,7 @@ function createTelegramNotifier(token, chatId) {
 
     async sendTradeResult(symbol, pnl, legs, stats) {
       await post(
-        `<b>📊 Trade Result2</b> ${symbol}\n` +
+        `<b>📊 Trade Result</b> ${symbol}\n` +
         `P/L: ${pnl}\n` +
         `${legs}\n\n` +
         `📈 <b>NodeJS Bot Session Stats</b>\n` +
