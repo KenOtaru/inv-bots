@@ -48,7 +48,7 @@ const CONFIG = Object.freeze({
   demoOnly: false,
   tradeEnabled: true,
   skipRecentTradedSymbols: true,
-  recentTradedSymbolsLen: parseInt('1', 10),
+  recentTradedSymbolsLen: parseInt('2', 10),
 
   // Anti-Martingale
   winsBeforeScaling: parseInt('500'),
@@ -75,7 +75,7 @@ const CONFIG = Object.freeze({
   maxOpenTrades: parseInt('3', 10),
 
   // Hazard Model (v4.0 fixes)
-  candidateGrowthRates: [0.03], //[0.05, 0.04, 0.03, 0.02, 0.01]
+  candidateGrowthRates: [0.05, 0.04, 0.03, 0.02, 0.01], //[0.05, 0.04, 0.03, 0.02, 0.01]
   hazardWindow: parseInt('600', 10),
   plannedHoldTicks: parseInt('15', 10),
   minBarrierPct: parseFloat('0.015'),
