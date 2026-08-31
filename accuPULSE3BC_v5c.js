@@ -33,7 +33,7 @@ const CONFIG = Object.freeze({
   accountType: 'demo',
 
   // Trade parameters
-  baseStake: parseFloat('1.0'),
+  baseStake: parseFloat('2.0'),
   growthRate: parseFloat('0.05'),
   stopLoss: parseFloat('500.0'),
   demoOnly: false,

@@ -35,7 +35,7 @@ const EventEmitter = require('events');
 
 // ── Configuration ──────────────────────────────────────────────────────
 const CONFIG = Object.freeze({
-  apiToken: 'pat_cb2016855b5e6c61ac95f94432192dd6ed86bec7f7454e575d3fe1ed9f617692',
+  apiToken: 'pat_8e0a3285bd6e74f52a67985b8069f4bea42aa96ce65d129c60ebb838ed1065ee',
   appId: '33uslPtthXBEkQOdfKfoY',
   wsUrl: 'wss://ws.derivws.com/websockets/v3',
   currency: 'USD',
