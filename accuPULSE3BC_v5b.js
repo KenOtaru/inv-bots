@@ -47,8 +47,8 @@ const CONFIG = Object.freeze({
   stopLoss: parseFloat('500.0'),
   demoOnly: false,
   tradeEnabled: true,
-  skipRecentTradedSymbols: false,
-  recentTradedSymbolsLen: parseInt('2', 10),
+  skipRecentTradedSymbols: true,
+  recentTradedSymbolsLen: parseInt('9', 10),
 
   // Anti-Martingale
   winsBeforeScaling: parseInt('500'),
@@ -134,7 +134,7 @@ const CONFIG = Object.freeze({
   maxHurst: parseFloat('0.70'),
   minSurvivalSlope: parseFloat('-0.01'),
   minSurvivalConsist: parseFloat('0.20'),
-  bestScore: parseFloat('0.80'), //0.83
+  bestScore: parseFloat('0.803'), //0.83
 
   // ARCA weights
   weights: {
