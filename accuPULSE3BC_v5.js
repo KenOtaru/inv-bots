@@ -136,7 +136,7 @@ const CONFIG = Object.freeze({
   maxHurst: parseFloat('0.70'),
   minSurvivalSlope: parseFloat('-0.01'),
   minSurvivalConsist: parseFloat('0.20'),
-  bestScore: parseFloat('0.857'),//0.88
+  bestScore: parseFloat('0.855'),//0.88
 
   // ARCA weights
   weights: {
