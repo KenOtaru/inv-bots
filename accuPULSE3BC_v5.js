@@ -48,7 +48,7 @@ const CONFIG = Object.freeze({
   demoOnly: false,
   tradeEnabled: true,
   skipRecentTradedSymbols: true,
-  recentTradedSymbolsLen: parseInt('7', 10),
+  recentTradedSymbolsLen: parseInt('9', 10),
 
   // Anti-Martingale
   winsBeforeScaling: parseInt('500'),
@@ -59,7 +59,7 @@ const CONFIG = Object.freeze({
   // assets: ('R_10,R_25,R_50,R_75,R_100,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH500,CRASH600,CRASH900,CRASH1000')
   //   .split(',').map(s => s.trim()).filter(Boolean),
   // assets: ('R_10,R_25,R_50,R_75,R_100').split(',').map(s => s.trim()).filter(Boolean),
-  assets: ('BOOM500,BOOM600,BOOM900,BOOM1000,CRASH500,CRASH600,CRASH900,CRASH1000')
+  assets: ('BOOM300,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH300,CRASH500,CRASH600,CRASH900,CRASH1000')
     .split(',').map(s => s.trim()).filter(Boolean),
 
   // Telegram
@@ -74,7 +74,7 @@ const CONFIG = Object.freeze({
   minTicksForAnalysis: parseInt('200', 10),
   analysisIntervalMs: parseInt('3000', 10),
   tradeCooldownMs: parseInt('500', 10),
-  maxOpenTrades: parseInt('3', 10),
+  maxOpenTrades: parseInt('1', 10),
 
   // Hazard Model (v4.0 fixes)
   candidateGrowthRates: [0.05, 0.04, 0.03, 0.02, 0.01], //[0.05, 0.04, 0.03, 0.02, 0.01]
@@ -136,7 +136,7 @@ const CONFIG = Object.freeze({
   maxHurst: parseFloat('0.70'),
   minSurvivalSlope: parseFloat('-0.01'),
   minSurvivalConsist: parseFloat('0.20'),
-  bestScore: parseFloat('0.856'),//0.88
+  bestScore: parseFloat('0.85'),//0.88
 
   // ARCA weights
   weights: {
@@ -191,11 +191,11 @@ const CONFIG = Object.freeze({
   barrierRefreshMs: parseInt('45000', 10),
   tradeWatchdogMs: parseInt('120000', 10),
   maxTelegramQueue: parseInt('100', 10),
-  logFile: 'accuPULSE3BC_v5_010.log',
+  logFile: 'accuPULSE3BC_v5_011.log',
   logLevel: 'INFO3BC_v5',
-  stateFile: 'accuPULSE3BC_state_v5_010.json',
-  metricsFile: 'metricsBC_v5_010.json',
-  metricsFileV5: 'accuPULSE3BC_analysis_v5_010.jsonl',  // Feature 7: Full metrics logging
+  stateFile: 'accuPULSE3BC_state_v5_011.json',
+  metricsFile: 'metricsBC_v5_011.json',
+  metricsFileV5: 'accuPULSE3BC_analysis_v5_011.jsonl',  // Feature 7: Full metrics logging
   eodTimeGmt: '00:00',
   eodSendDelaySeconds: parseInt('10', 10),
   hourlySummary: true,
@@ -247,7 +247,7 @@ const CONFIG = Object.freeze({
     topN: 3,                  // keep 3 of 4 assets (was 3) when filtering
   },
   dailyReset: {
-    enabled: false,
+    enabled: true,
     decayRegimeRates: false,   // halve regime win/loss counts on reset
     resetEquityPeak: false,    // set equityPeak = lastBalance on new day
   },
