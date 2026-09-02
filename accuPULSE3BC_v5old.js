@@ -80,7 +80,7 @@ const CONFIG = Object.freeze({
   maxOpenTrades: parseInt('1', 10),
 
   // Hazard Model (v4.0 fixes)
-  candidateGrowthRates: [0.03], //[0.05, 0.04, 0.03, 0.02, 0.01]
+  candidateGrowthRates: [0.05, 0.04, 0.03, 0.02, 0.01], //[0.05, 0.04, 0.03, 0.02, 0.01]
   hazardWindow: parseInt('600', 10),
   plannedHoldTicks: parseInt('2', 10), //15
   minBarrierPct: parseFloat('0.015'),
@@ -96,9 +96,13 @@ const CONFIG = Object.freeze({
     // Primary EV source for BC is `ticks_stayed_in` from ACCU proposals —
     // server-recorded survival history of previous contracts at this exact
     // symbol + growth rate. No fabricated barriers, no abs() log-ret math.
+    // nominalSpikeInterval: {
+    //   BOOM300: 50, BOOM500: 500, BOOM600: 600, BOOM900: 900, BOOM1000: 1000,
+    //   CRASH300: 50, CRASH500: 500, CRASH600: 600, CRASH900: 900, CRASH1000: 1000,
+    // },
     nominalSpikeInterval: {
-      BOOM300: 50, BOOM500: 500, BOOM600: 600, BOOM900: 900, BOOM1000: 1000,
-      CRASH300: 50, CRASH500: 500, CRASH600: 600, CRASH900: 900, CRASH1000: 1000,
+      BOOM1000: 1000,
+      CRASH1000: 1000,
     },
     // Stay samples required before trusting P(reach N). The API returns ~100
     // per refresh; require most of a full refresh before trading.
@@ -194,11 +198,11 @@ const CONFIG = Object.freeze({
   barrierRefreshMs: parseInt('45000', 10),
   tradeWatchdogMs: parseInt('120000', 10),
   maxTelegramQueue: parseInt('100', 10),
-  logFile: 'accuPULSE3BC_v5_013.log',
-  logLevel: 'INFO3BC_v5',
-  stateFile: 'accuPULSE3BC_state_v5_013.json',
-  metricsFile: 'metricsBC_v5_013.json',
-  metricsFileV5: 'accuPULSE3BC_analysis_v5_013.jsonl',  // Feature 7: Full metrics logging
+  logFile: 'accuPULSE3BC_v5o_1.log',
+  logLevel: 'INFO3BC_v5o_1',
+  stateFile: 'accuPULSE3BC_state_v5o_1.json',
+  metricsFile: 'metricsBC_v5o_1.json',
+  metricsFileV5: 'accuPULSE3BC_analysis_v5o_1.jsonl',  // Feature 7: Full metrics logging
   eodTimeGmt: '00:00',
   eodSendDelaySeconds: parseInt('10', 10),
   hourlySummary: true,
@@ -237,12 +241,12 @@ const CONFIG = Object.freeze({
   // ── Feature 3: 6-Check Entry Confirmation ─────────────────────────────
   entryConfirmation: {
     requiredChecks: 6,              // Need 4/6 to pass
-    minVolPercentile: 0.20,         // Vol check: at least 20th percentile
-    minBarrierPct: 0.015,           // Barrier check: 1.5% minimum
+    minVolPercentile: 0.35,         //0.20 Vol check: at least 20th percentile
+    minBarrierPct: 0.015,           //0.015 Barrier check: 1.5% minimum
     minEv: 0.005,                   // 0.005 EV check: 0.5% net EV
-    minMomentum: 0.000013,            // Momentum check: non-flat (for Crash)
-    minMomentum2: -0.000013,            // Momentum check: non-flat (for Boom)
-    minSurvivalMean: 15,            // Survival check: 15+ ticks
+    minMomentum: 0.000007,            // Momentum check: non-flat (for Crash)
+    minMomentum2: -0.000007,            // Momentum check: non-flat (for Boom)
+    minSurvivalMean: 20,            //15 Survival check: 15+ ticks
   },
 
   // ── Daily-Reset + Relaxed Sharpe (fix multi-day decay) ─────────────────
