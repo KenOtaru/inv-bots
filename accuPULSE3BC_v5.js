@@ -34,12 +34,78 @@ const { URL } = require('url');
 const EventEmitter = require('events');
 
 // ── Configuration ──────────────────────────────────────────────────────
-const CONFIG = Object.freeze({
+// Profile selector: 'aggressive' (~200 trades/day, surv 28.5/score 0.82) or
+// 'conservative' (~90 trades/day, surv 30/score 0.85). Change one string to toggle.
+// Derived from joint sweep of 676 Telegram trades (data/gates_sweep_2026-09-01.csv):
+// aggressive WR 92.5% avg +0.064/trade projected, conservative WR 93.9% +0.023/trade
+const ACTIVE_PROFILE = 'aggressive'; // 'aggressive' | 'conservative'
+const PROFILE_DEFS = Object.freeze({
+  aggressive: Object.freeze({
+    minNetEvRatio: 0.010,
+    minPHorizon: 0.55,
+    minConfidenceByRegime: { 0: 0.12, 1: 0.10, 2: 0.06, 3: 0.03 },
+    minConfidence: 0.08,
+    bestScore: 0.82,
+    entryRequiredChecks: 4,
+    minVolPercentile: 0.35,
+    minEv: 0.012,
+    minMomentum: 0.000020,
+    minMomentum2: -0.000020,
+    minSurvivalMean: 28.5,
+    kellyFraction: 0.15,
+    maxStakeMultiplier: 1.5,
+    tpProfitPct: 0.25,
+  }),
+  conservative: Object.freeze({
+    minNetEvRatio: 0.015,
+    minPHorizon: 0.60,
+    minConfidenceByRegime: { 0: 0.14, 1: 0.10, 2: 0.06, 3: 0.03 },
+    minConfidence: 0.10,
+    bestScore: 0.85,
+    entryRequiredChecks: 5,
+    minVolPercentile: 0.40,
+    minEv: 0.015,
+    minMomentum: 0.000025,
+    minMomentum2: -0.000025,
+    minSurvivalMean: 30,
+    kellyFraction: 0.12,
+    maxStakeMultiplier: 1.3,
+    tpProfitPct: 0.30,
+  }),
+});
+function resolveProfile(base, profileName) {
+  const def = PROFILE_DEFS[profileName] || PROFILE_DEFS.aggressive;
+  // deep-clone base and apply profile overrides
+  const cfg = JSON.parse(JSON.stringify(base));
+  cfg.minNetEvRatio = def.minNetEvRatio;
+  cfg.boomCrash = cfg.boomCrash || {};
+  cfg.boomCrash.minPHorizon = def.minPHorizon;
+  cfg.minConfidenceByRegime = { ...def.minConfidenceByRegime };
+  cfg.minConfidence = def.minConfidence;
+  cfg.bestScore = def.bestScore;
+  cfg.kellyFraction = def.kellyFraction;
+  cfg.maxStakeMultiplier = def.maxStakeMultiplier;
+  // entryConfirmation
+  cfg.entryConfirmation = cfg.entryConfirmation || {};
+  cfg.entryConfirmation.requiredChecks = def.entryRequiredChecks;
+  cfg.entryConfirmation.minVolPercentile = def.minVolPercentile;
+  cfg.entryConfirmation.minEv = def.minEv;
+  cfg.entryConfirmation.minMomentum = def.minMomentum;
+  cfg.entryConfirmation.minMomentum2 = def.minMomentum2;
+  cfg.entryConfirmation.minSurvivalMean = def.minSurvivalMean;
+  // tp_tiers quick_win
+  cfg.tp_tiers = cfg.tp_tiers || {};
+  cfg.tp_tiers.quick_win = cfg.tp_tiers.quick_win || {};
+  cfg.tp_tiers.quick_win.profit_pct = def.tpProfitPct;
+  return cfg;
+}
+const _BASE_CONFIG = {
   apiToken: 'pat_cb2016855b5e6c61ac95f94432192dd6ed86bec7f7454e575d3fe1ed9f617692',
   appId: '33uslPtthXBEkQOdfKfoY',
   wsUrl: 'wss://ws.derivws.com/websockets/v3',
   currency: 'USD',
   accountType: 'demo',
+  profile: ACTIVE_PROFILE,
 
   // Trade parameters
   baseStake: parseFloat('2.0'),
@@ -94,8 +160,8 @@ const CONFIG = Object.freeze({
     // server-recorded survival history of previous contracts at this exact
     // symbol + growth rate. No fabricated barriers, no abs() log-ret math.
     nominalSpikeInterval: {
-      BOOM300: 50, BOOM500: 500, BOOM600: 600, BOOM900: 900, BOOM1000: 1000,
-      CRASH300: 50, CRASH500: 500, CRASH600: 600, CRASH900: 900, CRASH1000: 1000,
+      BOOM50: 50, BOOM300: 50, BOOM500: 500, BOOM600: 600, BOOM900: 900, BOOM1000: 1000,
+      CRASH50: 50, CRASH300: 50, CRASH500: 500, CRASH600: 600, CRASH900: 900, CRASH1000: 1000,
     },
     // Stay samples required before trusting P(reach N). The API returns ~100
     // per refresh; require most of a full refresh before trading.
@@ -249,8 +315,8 @@ const CONFIG = Object.freeze({
   },
   dailyReset: {
     enabled: true,
-    decayRegimeRates: false,   // halve regime win/loss counts on reset
-    resetEquityPeak: false,    // set equityPeak = lastBalance on new day
+    decayRegimeRates: true,   // halve regime win/loss counts on reset (fix multi-day decay)
+    resetEquityPeak: true,    // set equityPeak = lastBalance on new day (avoid permanent dd throttle)
   },
 
   // Reconnect
@@ -260,8 +326,8 @@ const CONFIG = Object.freeze({
     backoffFactor : 2,
     jitterMs      : 750,
   },
-});
-
+};
+const CONFIG = Object.freeze(resolveProfile(_BASE_CONFIG, ACTIVE_PROFILE));
 // ── Logger ──────────────────────────────────────────────────────────────
 const LOG_LEVELS = { ERROR: 0, WARN: 1, INFO: 2, DEBUG: 3 };
 const currentLevel = LOG_LEVELS[CONFIG.logLevel] || LOG_LEVELS.INFO;
@@ -2629,8 +2695,10 @@ class AccuPULSE3BotV5 {
   // ── Bot Lifecycle ──────────────────────────────────────────────────────
   async start() {
     log('INFO', '═══════════════════════════════════════════');
-    log('INFO', '  AccuPULSE3 v5.0 — Enhanced Production Build');
+    log('INFO', '  AccuPULSE3 v5.1-BC — Gates-Optimized (profile selectable)');
     log('INFO', '═══════════════════════════════════════════');
+    log('INFO', `Profile: ${this.cfg.profile} (aggressive=surv28.5/score0.82/4checks | conservative=surv30/score0.85/5checks) — edit ACTIVE_PROFILE at top of file to switch`);
+    log('INFO', `Gates [${this.cfg.profile}]: bestScore=${this.cfg.bestScore} surv>${this.cfg.entryConfirmation.minSurvivalMean} EV>${(this.cfg.entryConfirmation.minEv*100).toFixed(1)}% vol>${this.cfg.entryConfirmation.minVolPercentile} checks=${this.cfg.entryConfirmation.requiredChecks}/6 kelly=${this.cfg.kellyFraction} TP=${(this.cfg.tp_tiers.quick_win.profit_pct*100).toFixed(0)}%`);
     log('INFO', `Assets: ${this.cfg.assets.join(', ')}`);
     log('INFO', `Features: 1-AdaptiveGates 2-6FactorSizing 3-6CheckEntry 4-4TierExit 5-WarmupMode 6-StreakRecovery 7-MetricsLogging`);
 
@@ -3649,7 +3717,7 @@ function selftest() {
 
   t('Classic hazard path still works for non-BC symbol', () => {
     const ticks = mkSeries(400, 10000000, +1); // no spikes in window
-    const m = analyzer._hazardEstimate(ticks, 0.10, 0.01, 'R_10');
+    const m = analyzer._hazardEstimate(ticks, 0.10, 0.03, 'R_10'); // 3% growth ensures EV > 1% threshold (aggressive profile)
     return { pass: m.ok === true, detail: m.ok ? `EV=${(m.conservativeEV * 100).toFixed(2)}%` : m.reason };
   });
 
