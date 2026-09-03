@@ -163,7 +163,7 @@ const CONFIG = Object.freeze({
   dailyMaxTrades: 20000,
   // Circuit breaker: pause after N consecutive losses (re-added)
   circuitBreakerEnabled: true,
-  circuitBreakerLosses: 3,
+  circuitBreakerLosses: 2,
   circuitBreakerCooldownMs: 20 * 60_000,
 
   // ── Predictive Monte Carlo Analysis (tiered ultra-light) ──────────
@@ -251,9 +251,9 @@ const CONFIG = Object.freeze({
   hourlySummary: true,
 
   // Persistence/logging
-  stateFile: strEnv('STATE_FILE', 'monte-carlos_differn_02_state.json'),
-  logFile: strEnv('LOG_FILE', 'monte-carlos_differn_02_bot.log'),
-  logLevel: strEnv('LOG_LEVEL', 'INFO').toUpperCase(),
+  stateFile: strEnv('STATE_FILE', 'monte-carlos_differnew_1_state.json'),
+  logFile: strEnv('LOG_FILE', 'monte-carlos_differnew_1_bot.log'),
+  logLevel: strEnv('LOG_LEVEL', 'INFOnew').toUpperCase(),
 
   // Telegram
   telegram: {
@@ -295,7 +295,7 @@ const CONFIG = Object.freeze({
   backtestTicks       : intEnv('BACKTEST_TICKS',      100000),
   backtestBatchSize   : intEnv('BACKTEST_BATCH_SIZE', 5000),
   backtestReportEvery : intEnv('BACKTEST_REPORT',     10000),
-  backtestOutFile     : strEnv('BACKTEST_OUT',        'monte-carlos_differ_backtest_report_01.json'),
+  backtestOutFile     : strEnv('BACKTEST_OUT',        'monte-carlos_differ_backtestnew_report_1.json'),
   // The Deriv DIGITDIFF payout multiplier is roughly 1.09-1.11× stake
   // (win ~90% of the time, get ~10% profit). We DEFAULT to 1.10, but at
   // backtest start we probe a real Deriv proposal for the actual live
