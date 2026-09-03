@@ -83,8 +83,8 @@ class RestClient {
 // ============================================================
 // FILE PATHS  [RETAINED]
 // ============================================================
-const STATE_FILE = path.join(__dirname, 'bizArbitrage_trend_01-state.json');
-const HISTORY_FILE = path.join(__dirname, 'bizArbitrage_trend_01-history.json');
+const STATE_FILE = path.join(__dirname, 'bizArbitrage_trend_old_1-state.json');
+const HISTORY_FILE = path.join(__dirname, 'bizArbitrage_trend_old_1-history.json');
 const STATE_SAVE_INTERVAL = 5000;  // ms
 
 // ============================================================
@@ -122,7 +122,7 @@ const CONFIG = {
 
     // ── Session / daily guards ───────────────────
     SESSION_PROFIT_TARGET: 500000,
-    SESSION_STOP_LOSS: -208,
+    SESSION_STOP_LOSS: -508,
     COOLDOWN_CANDLES: 5,
 
     // ── Candle / Contract Settings (defaults, overridable per asset) ──
@@ -154,15 +154,19 @@ const CONFIG = {
 
     // ── Active Index Assets ───────────────────────────────────
     ACTIVE_ASSETS: [
+        'R_10',
         'R_25',
         'R_50',
         'R_75',
-        // 'R_100',
-        // '1HZ10V',
-        // '1HZ25V',
-        // '1HZ100V',
-        // 'stpRNG',
-        // 'stpRNG3',
+        'R_100',
+        '1HZ10V',
+        '1HZ25V',
+        '1HZ50V',
+        '1HZ75V',
+        '1HZ100V',
+        'stpRNG',
+        'stpRNG2',
+        'stpRNG3',
         'stpRNG4',
         'stpRNG5'
     ],
@@ -188,21 +192,21 @@ const DEFAULT_ASSET_CONFIG = {
 
     // Stake Settings
     INITIAL_STAKE: 0.35,
-    INVESTMENT_AMOUNT: 208,
+    INVESTMENT_AMOUNT: 508,
 
     // Martingale Settings
     MARTINGALE_MULTIPLIER: 1.48,
     MAX_MARTINGALE_LEVEL: 1,
     AFTER_MAX_LOSS: 'continue',
-    CONTINUE_EXTRA_LEVELS: 8,
-    EXTRA_LEVEL_MULTIPLIERS: [2.1, 2.2, 2, 2.1, 2.2, 2.3, 2.3], //[2.1, 2.2, 2, 2.3]
+    CONTINUE_EXTRA_LEVELS: 9,
+    EXTRA_LEVEL_MULTIPLIERS: [2.1, 2.2, 2, 2.1, 2.2, 2.3, 2.2, 2.3], //[2.1, 2.2, 2, 2.3]
 
     // Auto-Compounding
     AUTO_COMPOUNDING: false,
     COMPOUND_PERCENTAGE: 0.1,
 
     // Risk Management
-    STOP_LOSS: 208,
+    STOP_LOSS: 508,
 
     // Pattern Analysis Settings — CONSECUTIVE OPPOSITE logic
     // Number of consecutive same candles (B or R) required before opposite trade
@@ -222,13 +226,51 @@ const DEFAULT_ASSET_CONFIG = {
 
 const ASSET_CONFIGS = {
     // Per-asset consecutive count override example:
-    // 'R_75': {
-    //     PATTERN_CONSECUTIVE_COUNT: 5,
-    //     INITIAL_STAKE: 0.35,
-    //     INVESTMENT_AMOUNT: 153,
-    //     MARTINGALE_MULTIPLIER: 1.48,
-    //     MAX_MARTINGALE_LEVEL: 1
-    // },
+    'R_10': {
+        PATTERN_CONSECUTIVE_COUNT: 6
+    },
+    'R_25': {
+        PATTERN_CONSECUTIVE_COUNT: 8
+    },
+    'R_50': {
+        PATTERN_CONSECUTIVE_COUNT: 8
+    },
+    'R_75': {
+        PATTERN_CONSECUTIVE_COUNT: 8
+    },
+    'R_100': {
+        PATTERN_CONSECUTIVE_COUNT: 8
+    },
+    '1HZ10V': {
+        PATTERN_CONSECUTIVE_COUNT: 6
+    },
+    '1HZ25V': {
+        PATTERN_CONSECUTIVE_COUNT: 11
+    },
+    '1HZ50V': {
+        PATTERN_CONSECUTIVE_COUNT: 8
+    },
+    '1HZ75V': {
+        PATTERN_CONSECUTIVE_COUNT: 6
+    },
+    '1HZ100V': {
+        PATTERN_CONSECUTIVE_COUNT: 7
+    },
+    'stpRNG': {
+        PATTERN_CONSECUTIVE_COUNT: 10
+    },
+    'stpRNG2': {
+        PATTERN_CONSECUTIVE_COUNT: 10
+    },
+    'stpRNG3': {
+        PATTERN_CONSECUTIVE_COUNT: 8
+    },
+    'stpRNG4': {
+        PATTERN_CONSECUTIVE_COUNT: 8
+    },
+    'stpRNG5': {
+        PATTERN_CONSECUTIVE_COUNT: 7
+    },
 };
 
 function getAssetConfig(symbol) {
