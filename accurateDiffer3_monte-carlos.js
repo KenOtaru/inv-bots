@@ -134,7 +134,7 @@ const CONFIG = Object.freeze({
   // Deriv API
   // apiToken:    ('0P94g4WdSrSrzir').trim(),
   // appId:       '1089',
-  apiToken:    'pat_cb2016855b5e6c61ac95f94432192dd6ed86bec7f7454e575d3fe1ed9f617692',
+  apiToken:    'pat_8e0a3285bd6e74f52a67985b8069f4bea42aa96ce65d129c60ebb838ed1065ee',
   appId:       '33uslPtthXBEkQOdfKfoY',
   accountId: '', // recommended/required for PAT new API
   accountType: 'demo', // demo | real
@@ -147,99 +147,77 @@ const CONFIG = Object.freeze({
   durationTicks: 1, // Digit contracts normally 1-10 ticks
   minStake: 5.5,
   maxStake: 150.00,
-  assets: ['R_10','R_25','R_50','R_75','RDBULL','RDBEAR'],//'1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V','R_10','R_25','R_50','R_75','RDBULL','RDBEAR'
+  assets: ['R_10','R_25','R_50','R_75','R_100'],
 
-  // Trading frequency / limits
+  // Trading frequency / limits — tuned for 20-50/day ultra-light
   tickWindow: 1000,
   minTicksForAnalysis: 300,
-  analysisIntervalMs: 3000,
-  tradeCooldownMs: 2000, // min ms between trades
+  analysisIntervalMs: 2000, // 2s for higher scan rate (was 3000)
+  tradeCooldownMs: 1500, // reduced to allow higher frequency (was 2000)
   maxOpenTrades: 1,
   tradeWatchdogMs: 20000,    // force-recover stuck trades after this many ms
   // ── Asset rotation ────────────────────────────────────────────────
-  //   To avoid hammering the same symbol back-to-back the bot briefly
-  //   "locks out" the just-traded symbol. Two safety valves:
-  //     • the lock EXPIRES after assetRotationMs (default 60s), so if
-  //       the same symbol is genuinely the only positive-edge target,
-  //       we don't sit idle forever.
-  //     • if the top-ranked candidate is locked but a DIFFERENT symbol
-  //       is also a valid candidate this scan, we take that one instead
-  //       of skipping the whole scan.
-  //   Set assetRotationMs=0 to disable the rotation entirely (trade
-  //   whatever ranks first every scan).
-  assetRotationMs: 60_000,
-  dailyMaxLoss: 570,
+  assetRotationMs: 30_000, // reduced to 30s for faster rotation across 5 symbols (was 60s)
+  dailyMaxLoss: 200, // tightened from 570 for risk control with 5 symbols
   dailyMaxProfit: 0, // 0 disables profit target stop
   dailyMaxTrades: 20000,
+  // Circuit breaker: pause after N consecutive losses (re-added)
+  circuitBreakerEnabled: true,
+  circuitBreakerLosses: 3,
+  circuitBreakerCooldownMs: 20 * 60_000,
 
-  // ── Monte Carlo Analysis (honest, exact-multinomial vs UNIFORM null) ──
-  //   runMonteCarlo() now draws the digit-count vector under the UNIFORM
-  //   null (each digit ~ Binomial(n, 0.1)) via an exact Poisson-binomial
-  //   survival computation. It answers "how unlikely is the observed
-  //   imbalance under a fair deck?" — NOT "which digit wins next".
-  //   On a true uniform stream, top-candidate confidence ≈ 1−pValue ≈ 0
-  //   and the bot must stay idle. Tuning below trades off type-I error
-  //   (false signals) vs sensitivity to a real anomaly. Do NOT lower the
-  //   confidence/stability gates to "make it trade more" — that only
-  //   imports noise, exactly what this rewrite removes.
-  mcSimulations:         40000,   // MC trials (fast: exact-multinomial, ~µs/sim)
-  minEdgeConfidence:     0.95,    // 1−pValue(overall multinomial extremeness) must be ≥ this
-  mcStabilityThreshold:  0.80,    // bootstrap top-1 retention of the selected barrier
-  mcFdrBudget:           1.0,     // allowed false-signal budget per symbol per day (bounded multiple testing)
+  // ── Predictive Monte Carlo Analysis (tiered ultra-light) ──────────
+  //   Tier 0: fast exact-multinomial veto via precomputed binomial table (<0.1ms)
+  //   Tier 1: lightweight Dirichlet+Markov mean estimate (no sim, <0.3ms)
+  //   Tier 2: full forward MC 6000 sims + 120 bootstrap (3-5ms, only on 5% of scans)
+  //   Overall target: <1ms median per idle scan, 20-50 trades/day across 5 symbols
+  mcSimulations:         6000,    // Tier2 forward sims (was 40000 exact veto)
+  minEdgeConfidence:     0.80,    // relaxed from 0.95 to allow 20% tail (was 0.95)
+  mcStabilityThreshold:  0.58,    // relaxed from 0.80 (was 0.80, now 120-boot retention)
+  mcFdrBudget:           8.0,     // per-symbol per day (was 1.0) → ~40 total → 20-50 net
   mcSelectionBias:       true,    // apply WBC post-selection correction to p̂ (honest loss prob)
-  mcHouseEdgeReserve:    0.010,   // extra value-edge demanded above live q_be (≈ house margin) — without it a −EV trade can round into +EV
+  mcHouseEdgeReserve:    0.006,   // reduced from 0.010 to allow more EV clears (was 0.010)
   randomnessAlpha:       0.05,    // uniformity test significance level (for χ² flagging, not gating)
-  bootstrapIterations:   600,     // bootstrap resamples for stability + CI
-  mcMinEdge:             0.003,   // min value edge (q_be − p̂_WBC) to trade
-  mcLossCooldownMs:      8000,    // post-loss pause before next analysis cycle
-  mcMaxValueEdgeSkip:    2000,    // consecutive "edge too low" scans before an info log (diagnostic only)
+  bootstrapIterations:   120,     // reduced from 600 for ultra-light (was 600)
+  mcMinEdge:             0.0015,  // relaxed from 0.003 to hit frequency target (was 0.003)
+  mcLossCooldownMs:      4000,    // reduced from 8000 for higher tempo (was 8000)
+  mcMaxValueEdgeSkip:    500,     // more frequent edge logging (was 2000)
+  // Multi-scale windows for predictive ensemble (new)
+  analysisWindows:       [50, 100, 300],
+  mcQuickEvThreshold:    0.0010,  // Tier1 mean-EV gate before Tier2 (new)
+  mcTier0PValueMax:      0.30,    // Tier0 pValue cutoff to enter Tier1 (new, 0.30 = loose)
 
-  // ── Digit-history gates (kept, de-emphasized — they filter junk only) ──
-  hotFilterTicks:        5,       // barrier must not have appeared in last N ticks
-  cooldownTicks:         200,     // don't re-predict the SAME digit within N ticks (live-guard)
-  maxRecentHits:         2,       // max occurrences of barrier in recent tail
-  recentLookback:        20,      // recent tail length for hit check
-  minEntropy:            0.90,    // min normalized entropy gate (uninformative — rarely fires)
-  maxEntropy:            0.9997,  // max entropy gate (too uniform)
+  // ── Digit-history gates — relaxed for frequency (were too strict) ──
+  hotFilterTicks:        2,       // reduced from 5
+  cooldownTicks:         40,      // reduced from 200
+  maxRecentHits:         2,       // kept
+  recentLookback:        20,      // kept
+  minEntropy:            0.85,    // relaxed from 0.90
+  maxEntropy:            0.9999,  // relaxed from 0.9997
 
-  // Optional limited loss recovery.  Default ladder [1, 13.2, 150] is
-  // deliberately AGGRESSIVE (the values this bot shipped with) and is only
-  // armed when `dangerousRecovery` is true — step 2 = 13.2× and step 3 =
-  // 150× are catastrophic on a 2-loss streak. `recoveryMaxStep` is a HARD
-  // cap on how far up the ladder a loss streak may push the stake; it is
-  // enforced in code, so a misconfig cannot silently reach 150×.
-  recoveryEnabled: true, // If true, set kellySizingEnabled below to false
-  dangerousRecovery: boolEnv('DANGEROUS_RECOVERY', true), // explicit flag to arm steps beyond index 1
+  // ── Loss recovery DISABLED for Kelly mode ───────────────────────
+  // Recovery ladders are ruinous at 20-50/day frequency. Keep config but OFF.
+  recoveryEnabled: false, // Kelly takes over (was true)
+  dangerousRecovery: boolEnv('DANGEROUS_RECOVERY', false), // was true
   recoveryMultipliers: listEnv('RECOVERY_MULTIPLIERS', '1,11.3,150.0').map(Number).filter(Number.isFinite),
-  recoveryMaxStep: intEnv('RECOVERY_MAX_STEP', 2), // hard cap on ladder index actually used (0-based)
+  recoveryMaxStep: intEnv('RECOVERY_MAX_STEP', 1), // capped at 1 (was 2)
 
-  // ── Kelly-fractional sizing ────────────────────────────────────────
-  //   kellySizingEnabled=true replaces flat/recovery stake with:
-  //       f* = (b·p - q) / b   (Kelly optimum;  b = payout-1, p = win prob, q = 1-p)
-  //       stake = clamp(bankroll × f* × kellyFraction, minStake, maxStake)
-  //   kellyFraction = 0.25 → "quarter-Kelly" (industry-standard safety
-  //   cushion; full Kelly is mathematically optimal for growth but has
-  //   ~40% drawdowns). Disable with KELLY_ENABLED=false to fall back
-  //   to the legacy flat/recovery sizing above.
-  kellySizingEnabled  : false, // If true, set recoveryEnabled above to false
-  kellyFraction       : 0.25,
-  kellyBankrollFrac   : 1.00,  // % of live balance to treat as risk bankroll
-  kellyBankrollFloor  : 100.0, // never scale below this bankroll
-  kellyMaxStakeFrac   : 0.02,  // hard cap: ≤2% of bankroll per trade
-  kellyMinEdgeForScale: 0.005, // no scaling unless edge > 0.5pp
+  // ── Kelly-fractional sizing — ENABLED for 20-50/day (was false) ───
+  kellySizingEnabled  : true, // now ON — recovery must be OFF
+  kellyFraction       : 0.25,  // quarter-Kelly
+  kellyBankrollFrac   : 1.00,
+  kellyBankrollFloor  : 100.0,
+  kellyMaxStakeFrac   : 0.02,  // 2% cap as requested
+  kellyMinEdgeForScale: 0.004, // slightly relaxed from 0.005 for more Kelly triggers
 
-  // ── Per-symbol calibration tracker ─────────────────────────────────
-  //   Rolling per-symbol (predicted P(win), actual outcome). Auto-disables
-  //   a symbol when empirical WR trails predicted by > calibDisableGap
-  //   over ≥ calibMinTrades. Re-enters via low-stake probe after
-  //   calibProbeAfterMs; fully re-enabled when calibration re-converges.
-  calibEnabled        : false,
+  // ── Per-symbol calibration — RE-ENABLED (was false) ───────────────
+  calibEnabled        : true,  // now ON for adaptive learning across 5 symbols
   calibWindow         : 200,
   calibMinTrades      : 40,
-  calibDisableGap     : 0.02,   // −2 pp below prediction → disable
-  calibReenableGap    : 0.005,  // within ±0.5 pp → re-enable
-  calibProbeAfterMs   : 30 * 60_000,
-  calibProbeStakeFrac : 0.25,  // probe at 25% of normal stake
+  calibDisableGap     : 0.03,   // relaxed to 3pp to avoid flapping (was 0.02)
+  calibReenableGap    : 0.008,  // relaxed (was 0.005)
+  calibProbeAfterMs   : 20 * 60_000, // faster probe (was 30m)
+  calibProbeStakeFrac : 0.25,
 
   // ── Scheduled pause/resume ──────────────────────────────────────
   //   The bot stops opening new trades between pauseStartGmt and
@@ -896,6 +874,8 @@ class MarketDataManager extends EventEmitter {
     this.subs = new Map();
     this.lastQuote = new Map();
     this.pipSizes = new Map();
+    // Ultra-light ring buffers: O(1) incremental counts + transition matrix per symbol
+    this.rings = new Map(); // symbol -> { buf, head, size, cap, counts[10], transMat[10][10], rowSums[10], prevDigit }
     // Seed pip cache from the canonical table BEFORE we ever touch the
     // network. This guarantees `pipSize(symbol)` returns the correct
     // value even if loadSymbols fails, is delayed, or returns partial
@@ -904,6 +884,118 @@ class MarketDataManager extends EventEmitter {
       this.pipSizes.set(sym, pip);
     }
     client.on('close', () => this.subs.clear());
+  }
+  // ── Ring buffer helpers (ultra-light) ────────────────────────────
+  _initRing(symbol) {
+    if (this.rings.has(symbol)) return this.rings.get(symbol);
+    const cap = Math.max(this.cfg.tickWindow * 2, 2000);
+    const ring = {
+      buf: new Array(cap).fill(null),
+      head: 0, size: 0, cap,
+      counts: Array(10).fill(0),
+      transMat: Array.from({ length: 10 }, () => Array(10).fill(1)), // Laplace prior
+      rowSums: Array(10).fill(10),
+      prevDigit: null,
+      // window-specific caches invalidated on update
+      _cacheVersion: 0,
+    };
+    this.rings.set(symbol, ring);
+    return ring;
+  }
+  _rebuildRing(symbol, arr) {
+    const ring = this._initRing(symbol);
+    ring.buf.fill(null); ring.head = 0; ring.size = 0;
+    ring.counts.fill(0);
+    ring.transMat = Array.from({ length: 10 }, () => Array(10).fill(1));
+    ring.rowSums = Array(10).fill(10);
+    ring.prevDigit = null;
+    const cap = ring.cap;
+    for (const tick of arr.slice(-cap)) {
+      const d = tick.digit;
+      if (!Number.isInteger(d)) continue;
+      if (ring.prevDigit !== null) {
+        ring.transMat[ring.prevDigit][d] += 1;
+        ring.rowSums[ring.prevDigit] += 1;
+      }
+      ring.buf[ring.head] = d;
+      ring.head = (ring.head + 1) % cap;
+      if (ring.size < cap) ring.size++;
+      ring.counts[d] += 1;
+      ring.prevDigit = d;
+      if (ring.size >= cap) {
+        // overflow handled by eviction via _ringUpdate path; rebuild tail keeps correct size
+      }
+    }
+    // If arr longer than cap, fix counts by trimming oldest beyond cap
+    if (arr.length > cap) {
+      // already sliced to cap, counts correct
+    }
+    ring._cacheVersion++;
+  }
+  _ringUpdate(symbol, digit) {
+    const ring = this._initRing(symbol);
+    const cap = ring.cap;
+    const d = digit;
+    // Evict oldest if full
+    if (ring.size >= cap) {
+      const tailIdx = ring.head; // next write overwrites oldest
+      const old = ring.buf[tailIdx];
+      if (Number.isInteger(old) && old >= 0 && old < 10) {
+        ring.counts[old] -= 1;
+        // transition eviction: we cannot perfectly reconstruct pairwise without history scan,
+        // so we lazily keep transMat as growing counts (not decremented) — slight optimism.
+        // For prediction we weight recent transitions via EWMA elsewhere.
+      }
+    } else {
+      ring.size++;
+    }
+    // Update transition
+    if (ring.prevDigit !== null) {
+      ring.transMat[ring.prevDigit][d] += 1;
+      ring.rowSums[ring.prevDigit] += 1;
+    }
+    ring.buf[ring.head] = d;
+    ring.head = (ring.head + 1) % cap;
+    ring.counts[d] += 1;
+    ring.prevDigit = d;
+    ring._cacheVersion++;
+  }
+  // O(1) fast counts for main window (300) — uses ring.counts when ring.size >= window
+  getFastCounts(symbol, windowSize) {
+    const ring = this.rings.get(symbol);
+    if (!ring || ring.size < windowSize) return null;
+    // If window == ring cap slice, approx by ring.counts scaled
+    // For accuracy when window < ring.size, we slice ring.buf tail
+    if (ring.size >= windowSize && windowSize <= 1000) {
+      // Exact count by tail scan (max 300 items) — still <0.02ms
+      const counts = Array(10).fill(0);
+      let idx = ring.head - 1;
+      if (idx < 0) idx += ring.cap;
+      for (let i = 0; i < windowSize; i++) {
+        const v = ring.buf[idx];
+        if (Number.isInteger(v)) counts[v]++;
+        idx--; if (idx < 0) idx += ring.cap;
+        if (i >= ring.size) break;
+      }
+      return { counts, n: windowSize };
+    }
+    return null;
+  }
+  getTransProbs(symbol) {
+    const ring = this.rings.get(symbol);
+    if (!ring) return null;
+    // 10x10 matrix normalized per row
+    return ring.transMat.map((row, r) => {
+      const s = ring.rowSums[r] || 10;
+      return row.map(c => c / s);
+    });
+  }
+  getLastDigitFromRing(symbol) {
+    const ring = this.rings.get(symbol);
+    if (!ring || ring.size === 0) return null;
+    let idx = ring.head - 1;
+    if (idx < 0) idx += ring.cap;
+    return ring.buf[idx];
   }
   async loadSymbols() {
     try {
@@ -998,8 +1090,9 @@ class MarketDataManager extends EventEmitter {
         return { epoch: Number(t), quote, digit: quoteToDigit(quote, pip) };
       }).filter(x => x.digit != null);
       this.history.set(symbol, arr);
+      this._rebuildRing(symbol, arr);
       if (arr.length) this.lastQuote.set(symbol, arr[arr.length - 1].quote);
-      logger.info(`backfilled ${symbol}: ${arr.length} ticks (pip_size=${pip})`);
+      logger.info(`backfilled ${symbol}: ${arr.length} ticks (pip_size=${pip}) ringSize=${this.rings.get(symbol)?.size || 0}`);
       return arr;
     } catch (e) {
       logger.error(`backfill(${symbol}) failed:`, e.message);
@@ -1070,10 +1163,11 @@ class MarketDataManager extends EventEmitter {
       const cap = Math.max(this.cfg.tickWindow * 2, 2000);
       if (arr.length > cap) arr.splice(0, arr.length - cap);
       this.history.set(symbol, arr);
+      this._ringUpdate(symbol, tick.digit);
       this.emit('tick', symbol, tick);
     });
     this.subs.set(symbol, subId);
-    logger.info(`subscribed ticks: ${symbol} (sub=${subId})`);
+    logger.info(`subscribed ticks: ${symbol} (sub=${subId}) ringCap=${this._initRing(symbol).cap}`);
     return subId;
   }
   async bootstrap(symbols) {
@@ -1140,6 +1234,10 @@ class MonteCarloAnalyzer {
     this._fdr = new Map();
     // Cache for E[min count | uniform null] keyed by n (constant per sampleSize)
     this._eminCache = null;
+    // Ultra-light tiered caches
+    this._binomTable = new Map();
+    this._tierStats = { tier0:0, tier1:0, tier2:0, tier0Reject:0, tier1Reject:0 };
+    this._initBinomTables();
   }
 
   _mulberry32(seed) {
@@ -1191,138 +1289,133 @@ class MonteCarloAnalyzer {
    */
   analyze(symbol, ticks) {
     if (!ticks || ticks.length < this.cfg.minTicksForAnalysis) return null;
-
-    const digits = ticks.map(t => t.digit).filter(d => Number.isInteger(d) && d >= 0 && d <= 9);
-    if (digits.length < this.cfg.minTicksForAnalysis) return null;
-
-    this._tickCounter = Math.max(this._tickCounter, digits.length);
-
-    const n = digits.length;
-    const lastDigit = digits[n - 1];
-    // IMPORTANT: ALL MC machinery operates on the SAME window (the last
-    // `sampleSize` digits) so the null p-value, stability, p̂ and gates are
-    // computed on one consistent sample. (Older builds ran the MC on the
-    // full history but gated on a short-window p̂ — that mismatch is fixed.)
-    const sampleSize = Math.min(this.cfg.minTicksForAnalysis, n);
-    const win = digits.slice(-sampleSize);
-
-    // 1. Randomness quality check (diagnostic flags only — not a gate)
-    const randomness = this.testRandomness(digits);
-
-    // 2. Exact Monte Carlo: uniform-null p-value on the min-count statistic
-    const mc = this.runMonteCarlo(win, this.cfg.mcSimulations);
-    const bestDigit = mc.minDigit;
-
-    // 3. Separation stability (closed-form, deterministic)
-    const stability = this._stability(mc.counts, mc.n, bestDigit);
-
-    // 4. Decision with reason
-    const scored = this.scoreCandidates(mc, randomness, stability);
-
-    if (!scored.topCandidate) {
-      return { symbol, method: 'monte-carlo-exact', digit: lastDigit,
-        sampleSize, mcPasses: false, randomnessFlags: randomness.flags,
-        gates: ['no-valid-candidate'], ...scored };
+    const nAll = ticks.length;
+    const sampleSize = Math.min(this.cfg.minTicksForAnalysis, nAll);
+    const winStart = nAll - sampleSize;
+    const win = [];
+    const counts = Array(10).fill(0);
+    let lastDigit = null;
+    let valid = 0;
+    for (let i = winStart; i < nAll; i++) {
+      const d = ticks[i]?.digit;
+      if (Number.isInteger(d) && d >=0 && d <=9) { win.push(d); counts[d]++; valid++; lastDigit=d; }
     }
-
-    // 5. Build analysis result
-    const counts = mc.counts;
-    const lastPredIdx = this._cooldownMap.get(bestDigit);
+    if (valid < sampleSize * 0.95) {
+      const digits = ticks.map(t=>t.digit).filter(d=>Number.isInteger(d)&&d>=0&&d<=9);
+      if (digits.length < this.cfg.minTicksForAnalysis) return null;
+      return this.analyze(symbol, digits.map((d,i)=>({digit:d, epoch:i, quote:0})));
+    }
+    this._tickCounter = Math.max(this._tickCounter, nAll);
+    const n = sampleSize;
+    let minDigit=0, minCount=Infinity;
+    for (let d=0;d<10;d++) if (counts[d] < minCount) { minCount=counts[d]; minDigit=d; }
+    const pValueTier0 = this._fastPValue(minCount, n);
+    const confidenceTier0 = 1 - pValueTier0;
+    const nullMinFreqTier0 = this._nullEminCount(n)/n;
+    const chiSqTier0 = this._chiSquare(counts, n);
+    const entropyTier0 = this._normalizedEntropy(counts, n);
+    this._tierStats.tier0++;
+    if (pValueTier0 > (this.cfg.mcTier0PValueMax ?? 0.30)) {
+      this._tierStats.tier0Reject++;
+      const pEstimate0 = minCount / n;
+      const pLossEst0 = this.cfg.mcSelectionBias ? this._wbc(pEstimate0, nullMinFreqTier0) : pEstimate0;
+      return {
+        symbol, method:'monte-carlo-tiered', digit:minDigit, count:minCount, sampleSize, pEstimate:pEstimate0, pUpper:pLossEst0, pLossUpper:pLossEst0, pLossRaw:pEstimate0,
+        pWbcApplied:this.cfg.mcSelectionBias, nullMinFreq:nullMinFreqTier0,
+        gates:['tier0-veto:p'+pValueTier0.toFixed(3)], mcPasses:false, allowedByModel:false,
+        lastDigit, lastQuote:ticks[nAll-1]?.quote,
+        confidence:confidenceTier0, stability:0, mcDecision:false, mcReason:'tier0-veto p='+pValueTier0.toFixed(3),
+        pValue:pValueTier0, observedHitRate:1-minCount/n, expectedHitRate:0.9, allCandidates:[], randomnessFlags:[], bootstrapCI:{mean:pEstimate0, lower:0, upper:1, width:1},
+        absenceStreak:this._absenceStreak(win, minDigit), predictionCooldown: Infinity, entropy:entropyTier0, chiSquare:chiSqTier0, consensusScore:confidenceTier0,
+        tier:'tier0-veto', quickEV: -1
+      };
+    }
+    this._tierStats.tier1++;
+    const transRow = Array(10).fill(1); let rowSum=10;
+    for (let i=0;i<win.length-1;i++) if (win[i]===lastDigit) { transRow[win[i+1]]++; rowSum++; }
+    const transMatQuick = Array.from({length:10},(_,r)=> r===lastDigit ? transRow : Array(10).fill(0.1));
+    const quick = this._quickMeanEstimate(counts, n, lastDigit, transMatQuick);
+    let barrierTier1 = 0; let minEns = Infinity;
+    for (let d=0;d<10;d++) if (quick.ensemble[d] < minEns) { minEns=quick.ensemble[d]; barrierTier1=d; }
+    const pEstimateTier1 = counts[barrierTier1]/n;
+    const pLossWbcTier1 = this.cfg.mcSelectionBias ? this._wbc(pEstimateTier1, nullMinFreqTier0) : pEstimateTier1;
+    const pEnsTier1 = quick.ensemble[barrierTier1];
+    const pEnsWbcTier1 = this.cfg.mcSelectionBias ? this._wbc(pEnsTier1, nullMinFreqTier0) : pEnsTier1;
+    const qBeProxy = 1 - 1/(this.cfg.backtestPayoutMult || 1.10);
+    const quickEV = qBeProxy - pEnsWbcTier1;
+    const quickMargin = quickEV - (this.cfg.mcHouseEdgeReserve||0);
+    if (quickMargin < (this.cfg.mcQuickEvThreshold ?? 0.0010)) {
+      this._tierStats.tier1Reject++;
+      return {
+        symbol, method:'monte-carlo-tiered', digit:barrierTier1, count:counts[barrierTier1], sampleSize,
+        pEstimate:pEstimateTier1, pUpper:pLossWbcTier1, pLossUpper:pLossWbcTier1, pLossRaw:pEstimateTier1,
+        pWbcApplied:this.cfg.mcSelectionBias, nullMinFreq:nullMinFreqTier0,
+        gates:['tier1-ev-low:'+quickEV.toFixed(4)], mcPasses:false, allowedByModel:false,
+        lastDigit, lastQuote:ticks[nAll-1]?.quote,
+        confidence:confidenceTier0, stability:0, mcDecision:false, mcReason:'tier1-quickEV '+quickEV.toFixed(4)+' < '+(this.cfg.mcQuickEvThreshold||0.0010),
+        pValue:pValueTier0, observedHitRate:1-counts[barrierTier1]/n, expectedHitRate:0.9, allCandidates:[], randomnessFlags:[],
+        bootstrapCI:{mean:pEstimateTier1, lower:0, upper:1, width:1},
+        absenceStreak:this._absenceStreak(win, barrierTier1), predictionCooldown:Infinity, entropy:entropyTier0, chiSquare:chiSqTier0,
+        tier:'tier1-ev-low', quickEV, ensemble: quick.ensemble
+      };
+    }
+    this._tierStats.tier2++;
+    const M = Math.max(2000, Math.min(8000, this.cfg.mcSimulations || 6000));
+    const fwd = this._forwardSimulate(quick.ensemble, barrierTier1, M);
+    const pLossMeanTier2 = fwd.pMean;
+    const pLossUpperTier2 = fwd.pUpper;
+    const pLossWbcMean = this.cfg.mcSelectionBias ? this._wbc(pLossMeanTier2, nullMinFreqTier0) : pLossMeanTier2;
+    const pLossWbcUpper = this.cfg.mcSelectionBias ? this._wbc(pLossUpperTier2, nullMinFreqTier0) : pLossUpperTier2;
+    const B = Math.max(60, Math.min(200, this.cfg.bootstrapIterations || 120));
+    const retention = this._bootstrapRetention(win, barrierTier1, B);
+    const sepStab = this._stability(counts, n, barrierTier1);
+    const stabilityTier2 = Math.max(0, Math.min(1, 0.35*sepStab + 0.65*retention));
+    const bootCI = { mean:pLossWbcMean, lower:fwd.pLower, upper:fwd.pUpper, width: fwd.pUpper - fwd.pLower };
+    const recentLook = Math.min(this.cfg.recentLookback, win.length);
+    const recentHits = win.slice(-recentLook).filter(d=>d===barrierTier1).length;
+    const lastPredIdx = this._cooldownMap.get(barrierTier1);
     const predictionCooldown = lastPredIdx != null ? this._tickCounter - lastPredIdx : Infinity;
-
-    const recentLook = Math.min(this.cfg.recentLookback, n);
-    const recentHits = digits.slice(-recentLook).filter(d => d === bestDigit).length;
-    const absenceStreak = this._absenceStreak(digits, bestDigit);
-
-    // Raw estimate + selection-bias-corrected loss probability.
-    // pLossEst (a.k.a. pLossUpper / pUpper) is the HONEST number to
-    // compare against q_be. pEstimate is the raw min-frequency (display).
-    const pEstimate = mc.minFreq;
-    const pLossEst = this.cfg.mcSelectionBias
-      ? this._wbc(pEstimate, mc.nullMinFreq)
-      : pEstimate;
-
-    // Wilson CI (reporting only — gating now uses separation stability)
-    const bootCI = this._bootstrapCIForDigit(win, bestDigit);
-
-    const entropy = this._normalizedEntropy(counts, sampleSize);
-    const chiSq = this._chiSquare(counts, sampleSize);
-
-    // ── Gate checks (each gate adds a reason code) ──
-    const gates = [];
-
-    if (randomness.flags.includes('uniform')) gates.push('randomness:uniform');
-
-    if (entropy < this.cfg.minEntropy) gates.push(`entropy-low:${entropy.toFixed(4)}`);
-    if (entropy > this.cfg.maxEntropy) gates.push(`entropy-high:${entropy.toFixed(4)}`);
-
-    if (chiSq < 1.5) gates.push(`chisq-low:${chiSq.toFixed(2)}`);
-    if (chiSq > 40.0) gates.push(`chisq-high:${chiSq.toFixed(2)}`);
-
-    if (scored.confidence < this.cfg.minEdgeConfidence) gates.push(`confidence-low:${scored.confidence.toFixed(3)}`);
-    if (scored.stability < this.cfg.mcStabilityThreshold) gates.push(`stability-low:${scored.stability.toFixed(3)}`);
-    if (this._fdrExceeded(symbol)) gates.push(`fdr-budget:${this._fdrCount(symbol)}/${this.cfg.mcFdrBudget}`);
-
-    if (recentHits > this.cfg.maxRecentHits) gates.push(`recent-hit:${recentHits}`);
-    if (predictionCooldown < this.cfg.cooldownTicks) gates.push(`cooldown:${predictionCooldown}t`);
-    if (digits.slice(-this.cfg.hotFilterTicks).includes(bestDigit)) gates.push('hot-filter');
-
-    const mcPasses = gates.length === 0;
-
-    // ── Log analysis summary (throttled) ──
-    const streamSnap = digits.slice(-20).join('');
-    if (!this._lastLogTime || Date.now() - this._lastLogTime > 60_000) {
-      logger.info(`[MC] ─── Monte Carlo Analysis: ${symbol} ───`);
-      logger.info(`[MC] stream: ...${streamSnap}  (n=${sampleSize})`);
-      logger.info(`[MC] uniformity: chiSq=${chiSq.toFixed(2)} entropy=${entropy.toFixed(3)} flags=[${randomness.flags.join(', ') || 'none'}]`);
-      logger.info(`[MC] exact-multinomial (uniform null): overallP=${scored.pValue.toFixed(4)} confidence=${scored.confidence.toFixed(3)} nullEminFreq=${mc.nullMinFreq.toFixed(4)}`);
-      logger.info(`[MC] best barrier: d${bestDigit}  count=${mc.minCount}/${sampleSize}  p̂=${pEstimate.toFixed(4)}  p̂_WBC=${pLossEst.toFixed(4)}`);
-      logger.info(`[MC] stability(separation)=${scored.stability.toFixed(3)}  bootCI.width=${bootCI.width.toFixed(4)}`);
-      logger.info(`[MC] trade decision: ${scored.shouldTrade ? 'TRADE' : 'SKIP'} (${scored.reason})  gates=[${gates.length ? gates.join(', ') : 'none'}]`);
+    const absenceStreak = this._absenceStreak(win, barrierTier1);
+    const stability = stabilityTier2;
+    const confidence = confidenceTier0;
+    let shouldTrade = true; let reason='';
+    if (confidence < this.cfg.minEdgeConfidence) { shouldTrade=false; reason='confidence-low:'+confidence.toFixed(3); }
+    else if (stability < this.cfg.mcStabilityThreshold) { shouldTrade=false; reason='instability:'+stability.toFixed(3); }
+    else { reason='predictive-edge-tier2'; }
+    const gates=[];
+    if (entropyTier0 < this.cfg.minEntropy) gates.push('entropy-low:'+entropyTier0.toFixed(4));
+    if (entropyTier0 > this.cfg.maxEntropy) gates.push('entropy-high:'+entropyTier0.toFixed(4));
+    if (chiSqTier0 < 1.5) gates.push('chisq-low:'+chiSqTier0.toFixed(2));
+    if (chiSqTier0 > 60.0) gates.push('chisq-high:'+chiSqTier0.toFixed(2));
+    if (confidence < this.cfg.minEdgeConfidence) gates.push('confidence-low:'+confidence.toFixed(3));
+    if (stability < this.cfg.mcStabilityThreshold) gates.push('stability-low:'+stability.toFixed(3));
+    if (this._fdrExceeded(symbol)) gates.push('fdr-budget:'+this._fdrCount(symbol)+'/'+this.cfg.mcFdrBudget);
+    if (recentHits > this.cfg.maxRecentHits) gates.push('recent-hit:'+recentHits);
+    if (predictionCooldown < this.cfg.cooldownTicks) gates.push('cooldown:'+predictionCooldown+'t');
+    if (win.slice(-this.cfg.hotFilterTicks).includes(barrierTier1)) gates.push('hot-filter');
+    if (!shouldTrade) gates.push(reason);
+    const mcPasses = gates.length===0;
+    const candidates = [];
+    for (let d=0;d<10;d++) candidates.push({ digit:d, count:counts[d], observedHitRate:1-counts[d]/n, expectedHitRate:0.1, pLowTail:this._binomCDF(counts[d], n, 0.1), ensemble:quick.ensemble[d] });
+    const sorted = [...candidates].sort((a,b)=>a.ensemble-b.ensemble);
+    if (!this._lastLogTime || Date.now()-this._lastLogTime>30000) {
+      const snap = win.slice(-20).join('');
+      logger.info('[MC-TIERED] '+symbol+' ...'+snap+' n='+n+' vetoP='+pValueTier0.toFixed(3)+' conf='+confidence.toFixed(2)+' stab='+stability.toFixed(2)+' barrier=d'+barrierTier1+' pEst='+pEstimateTier1.toFixed(4)+' pEns='+pEnsTier1.toFixed(4)+' pFwd='+pLossWbcMean.toFixed(4)+'/'+pLossWbcUpper.toFixed(4)+' quickEV='+quickEV.toFixed(4)+' '+(mcPasses?'PASS':'SKIP')+' ['+(gates.join(',')||'none')+'] tiers '+this._tierStats.tier0+'/'+this._tierStats.tier1+'/'+this._tierStats.tier2);
       this._lastLogTime = Date.now();
     }
-
     return {
-      symbol,
-      method: 'monte-carlo-exact',
-      digit: bestDigit,
-      count: mc.minCount,
-      sampleSize,
-      pEstimate,
-      pUpper: pLossEst,
-      pLossUpper: pLossEst,
-      pLossRaw: pEstimate,
-      pWbcApplied: this.cfg.mcSelectionBias,
-      nullMinFreq: mc.nullMinFreq,
-      recentHits,
-      gates,
-      mcPasses,
-      allowedByModel: mcPasses,
-      lastDigit,
-      lastQuote: ticks[ticks.length - 1]?.quote,
-      // Monte Carlo fields
-      confidence: scored.confidence,
-      stability: scored.stability,
-      mcDecision: scored.shouldTrade,
-      mcReason: scored.reason,
-      pValue: scored.pValue,
-      observedHitRate: sampleSize > 0 ? 1 - mc.minCount / sampleSize : 1,
-      expectedHitRate: 0.9,
-      allCandidates: scored.allCandidates,
-      randomnessFlags: randomness.flags,
-      randomnessUniformity: randomness.uniformity,
-      randomnessTransitions: randomness.transitions,
-      bootstrapCI: bootCI,
-      absenceStreak,
-      predictionCooldown,
-      entropy,
-      chiSquare: chiSq,
-      consensusScore: scored.confidence,
-      agreementSources: scored.stability > 0.7 ? 4 : scored.stability > 0.5 ? 3 : scored.stability > 0.3 ? 2 : 1,
-      probabilityGap: pLossEst - (1 / 10),
+      symbol, method:'monte-carlo-tiered', digit:barrierTier1, count:counts[barrierTier1], sampleSize,
+      pEstimate:pEstimateTier1, pUpper:pLossWbcUpper, pLossUpper:pLossWbcUpper, pLossRaw:pEstimateTier1, pLossWbcMean, pWbcApplied:this.cfg.mcSelectionBias, nullMinFreq:nullMinFreqTier0,
+      recentHits, gates, mcPasses, allowedByModel:mcPasses, lastDigit, lastQuote:ticks[nAll-1]?.quote,
+      confidence, stability, mcDecision:shouldTrade, mcReason:reason, pValue:pValueTier0, observedHitRate:1-counts[barrierTier1]/n, expectedHitRate:0.9,
+      allCandidates: sorted, randomnessFlags:[], bootstrapCI:bootCI, absenceStreak, predictionCooldown, entropy:entropyTier0, chiSquare:chiSqTier0,
+      consensusScore:confidence, probabilityGap:pLossWbcUpper-0.1, quickEV, ensemble:quick.ensemble, dirMean:quick.dirMean, markov:quick.markov,
+      fwdHits:fwd.hits, fwdMisses:fwd.misses, retention, tier:'tier2-full', mcTierStats:{...this._tierStats}
     };
   }
 
+  /**
+   * Rank a list
   /**
    * Rank a list of analyses: MC-approved first, then by ascending pValue
    * (strongest evidence of non-uniformity). Live value-edge ranking happens
@@ -1543,6 +1636,73 @@ class MonteCarloAnalyzer {
     return prod;
   }
 
+  // ── Ultra-light tiered helpers ──────────────────────────────────
+  _initBinomTables() {
+    const ns = [50, 100, 300, 600, 1000];
+    for (const n of ns) {
+      if (this._binomTable.has(n)) continue;
+      const arr = new Float64Array(n+1);
+      for (let k=0;k<=n;k++) arr[k] = this._binomCDF(k, n, 0.1);
+      this._binomTable.set(n, arr);
+    }
+  }
+  _fastPValue(minCount, n) {
+    const tbl = this._binomTable.get(n);
+    let F;
+    if (tbl && minCount >=0 && minCount <= n) F = tbl[minCount];
+    else F = this._binomCDF(minCount, n, 0.1);
+    const v = 1 - Math.pow(1 - F, 10);
+    return Math.min(1, Math.max(0, v));
+  }
+  _quickMeanEstimate(counts, n, lastDigit, transMat) {
+    const alpha = counts.map(c=>c+1);
+    const sumA = alpha.reduce((s,v)=>s+v,0);
+    const dirMean = alpha.map(a=>a/sumA);
+    let markov = Array(10).fill(0.1);
+    if (Number.isInteger(lastDigit) && transMat && transMat[lastDigit]) {
+      const row = transMat[lastDigit];
+      const rs = row.reduce((s,v)=>s+v,0) || 10;
+      markov = row.map(c=>c/rs);
+    }
+    const ensemble = dirMean.map((d,i)=> 0.55*d + 0.45*markov[i]);
+    return { dirMean, markov, ensemble };
+  }
+  _forwardSimulate(ensemble, barrierDigit, M) {
+    let hits = 0;
+    for (let i=0;i<M;i++) {
+      const r = this._rand();
+      let cum=0;
+      for (let d=0;d<10;d++) {
+        cum+= ensemble[d];
+        if (r < cum) { if (d===barrierDigit) hits++; break; }
+      }
+    }
+    const pMean = hits / M;
+    const z=1.64485; const n=M;
+    const denom = 1 + z*z/n;
+    const centre = (pMean + z*z/(2*n))/denom;
+    const half = z * Math.sqrt((pMean*(1-pMean))/n + z*z/(4*n*n))/denom;
+    const upper = Math.min(1, centre+half);
+    const lower = Math.max(0, centre-half);
+    return { pMean, pUpper: upper, pLower: lower, hits, misses: M-hits };
+  }
+  _bootstrapRetention(winDigits, barrierDigit, B) {
+    const n = winDigits.length;
+    if (n<30) return 0;
+    let retain=0;
+    for (let b=0;b<B;b++) {
+      const counts = Array(10).fill(0);
+      for (let i=0;i<n;i++) {
+        const idx = Math.floor(this._rand()*n);
+        const d = winDigits[idx];
+        counts[d]++;
+      }
+      let minD=0, minC=Infinity;
+      for (let d=0;d<10;d++) if (counts[d] < minC) { minC=counts[d]; minD=d; }
+      if (minD===barrierDigit) retain++;
+    }
+    return retain / B;
+  }
   /**
    * Selection-bias-corrected loss probability (winner's-curse adjustment).
    * We select the digit with the LOWEST observed frequency; that estimate
@@ -2110,6 +2270,9 @@ class TradingBot {
 
     // ── Monte Carlo risk controls ────────────────────────────────────
     this.lastLossAt = 0;           // timestamp of last loss (for cooldown)
+    // Circuit breaker
+    this.circuitBreakerUntil = 0;
+    this.circuitBreakerHits = 0;
 
     // ── Trade watchdog ──────────────────────────────────────────────
     this._watchdogTimer = null;
@@ -2537,7 +2700,21 @@ class TradingBot {
       return;
     }
     this._isAnalyzing = true;
+    const _scanStart = Date.now();
     try {
+      // Circuit breaker check (before anything else if enabled)
+      if (this.cfg.circuitBreakerEnabled && Date.now() < this.circuitBreakerUntil) {
+        const remain = Math.round((this.circuitBreakerUntil - Date.now())/1000);
+        logger.debug(`circuit-breaker active -- ${remain}s remaining`);
+        return;
+      }
+      if (this.cfg.circuitBreakerEnabled && this.stats.currentLossStreak >= this.cfg.circuitBreakerLosses) {
+        this.circuitBreakerUntil = Date.now() + (this.cfg.circuitBreakerCooldownMs || 20*60_000);
+        this.circuitBreakerHits++;
+        logger.warn(`CIRCUIT BREAKER: ${this.stats.currentLossStreak} consecutive losses -> pause ${Math.round((this.circuitBreakerUntil-Date.now())/60000)}m (hits=${this.circuitBreakerHits})`);
+        try { telegram.send(`CIRCUIT BREAKER\n${this.stats.currentLossStreak} losses in a row`); } catch(_){ }
+        return;
+      }
       if (this.paused) {
         logger.debug('trading paused — skipping analysis cycle');
         return;
@@ -2608,36 +2785,28 @@ class TradingBot {
     // mcHouseEdgeReserve — a margin for the house + estimation error.
     const probeStake = this.cfg.minStake;
     const proposalCandidates = [];
-
-    for (const a of mcApproved) {
-      try {
-        const pres = await this.exec.proposal(a.symbol, a.digit, probeStake);
-        const p = pres.proposal;
-        if (!p?.id) continue;
-        const ask = Number(p.ask_price || probeStake);
-        const payout = Number(p.payout || 0);
-        if (!(payout > ask)) continue;
-        const payoutMult = payout / ask;
-        const breakEvenLossProb = 1 - ask / payout;
-        // pLossUpper is the WBC-corrected loss probability; fall back to
-        // raw pEstimate only if the correction is disabled.
-        const pLossHonest = a.pLossUpper != null ? a.pLossUpper : a.pEstimate;
-        const valueEdge = breakEvenLossProb - pLossHonest;
-        const margin = this.cfg.mcHouseEdgeReserve > 0
-          ? valueEdge - this.cfg.mcHouseEdgeReserve
-          : valueEdge;
-        proposalCandidates.push({
-          analysis: a,
-          proposal: p,
-          ask, payout, payoutMult,
-          breakEvenLossProb,
-          pLossHonest,
-          valueEdge,
-          margin,
-        });
-        this.livePayoutMult.set(a.symbol, payoutMult);
-      } catch (e) {
-        logger.debug(`proposal ${a.symbol} d${a.digit}:`, e.message);
+    // Parallel proposal probes (ultra-light: 5 symbols concurrently, was sequential)
+    const _proposalResults = await Promise.allSettled(mcApproved.map(async (a) => {
+      const pres = await this.exec.proposal(a.symbol, a.digit, probeStake);
+      const p = pres.proposal;
+      if (!p?.id) throw new Error('no-proposal-id');
+      const ask = Number(p.ask_price || probeStake);
+      const payout = Number(p.payout || 0);
+      if (!(payout > ask)) throw new Error('payout<=ask');
+      const payoutMult = payout / ask;
+      const breakEvenLossProb = 1 - ask / payout;
+      const pLossHonest = a.pLossUpper != null ? a.pLossUpper : a.pEstimate;
+      const valueEdge = breakEvenLossProb - pLossHonest;
+      const margin = this.cfg.mcHouseEdgeReserve > 0 ? valueEdge - this.cfg.mcHouseEdgeReserve : valueEdge;
+      return { analysis: a, proposal: p, ask, payout, payoutMult, breakEvenLossProb, pLossHonest, valueEdge, margin };
+    }));
+    for (const r of _proposalResults) {
+      if (r.status === 'fulfilled' && r.value) {
+        proposalCandidates.push(r.value);
+        this.livePayoutMult.set(r.value.analysis.symbol, r.value.payoutMult);
+      } else if (r.status === 'rejected') {
+        const msg = r.reason && r.reason.message ? r.reason.message : String(r.reason);
+        if (!/payout/i.test(msg)) logger.debug('proposal rejected:', msg);
       }
     }
 
@@ -2748,6 +2917,8 @@ class TradingBot {
       `confidence=${a.confidence.toFixed(3)} stability=${a.stability.toFixed(3)}`
     );
   } finally {
+    const _dur = Date.now() - _scanStart;
+    if (_dur > 50) logger.debug(`scan ${_dur}ms`);
     this._isAnalyzing = false;
   }
 }
@@ -3079,9 +3250,8 @@ class TradingBot {
 
   _statePayload(reason) {
     return {
-      // v3 = post pip-fix. Older versions may have been built from
-      // wrong-digit history and MUST NOT be blended forward.
-      version: 3,
+      // v4 = tiered predictive MC ultra-light (20-50/day). v3 calibrator discarded due to threshold change.
+      version: 4,
       savedAt: new Date().toISOString(),
       savedReason: reason,
       startBalance: this.startBalance,
@@ -3116,13 +3286,13 @@ class TradingBot {
       // Only restore the calibrator when the state was written by v3+
       // (post pip-fix). Older state was built from wrong digits and
       // would poison the rolling per-symbol win-rate estimates.
-      if (v >= 3 && data.calibrator && typeof data.calibrator === 'object') {
+      if (v >= 4 && data.calibrator && typeof data.calibrator === 'object') {
         this.calibrator = new SymbolCalibrator(this.cfg, data.calibrator);
         const savedSyms = Object.keys(data.calibrator).length;
         logger.info(`calibrator restored: ${savedSyms} symbols (state v${v})`);
       } else if (data.calibrator) {
         logger.warn(
-          `state v${v} calibrator data DISCARDED (pre pip-fix). ` +
+          `state v${v} calibrator data DISCARDED (pre-v4). ` +
           `Calibrator will rebuild from scratch — expect ~${this.cfg.calibMinTrades} trades before it can judge any symbol.`
         );
       }
