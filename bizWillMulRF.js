@@ -91,8 +91,8 @@ class RestClient {
 // ============================================================
 // FILE PATHS  [MULTIPLIER — isolated from Rise/Fall]
 // ============================================================
-const STATE_FILE = path.join(__dirname, 'bizWillMul_02-state.json');
-const HISTORY_FILE = path.join(__dirname, 'bizWillMul_02-history.json');
+const STATE_FILE = path.join(__dirname, 'bizWillMul_001-state.json');
+const HISTORY_FILE = path.join(__dirname, 'bizWillMul_001-history.json');
 const STATE_SAVE_INTERVAL = 5000;  // ms
 
 // ============================================================
@@ -132,7 +132,7 @@ const CONFIG = {
     // ── Session / daily guards ───────────────────
     SESSION_PROFIT_TARGET: 500000,
     SESSION_STOP_LOSS: -208,
-    COOLDOWN_CANDLES: 3,
+    COOLDOWN_CANDLES: 1, // Number of candles to wait after hitting stop loss before resuming trading
 
     // ── Candle / Contract Settings (defaults, overridable per asset) ──
     GRANULARITY: 60,
@@ -146,28 +146,28 @@ const CONFIG = {
     WPR_OVERBOUGHT: -20,
     WPR_OVERSOLD: -80,
     // ── Recovery exit: max consecutive losses (initial + recoveries) before waiting for new signal
-    MAX_CONSECUTIVE_LOSSES: 7,
+    MAX_CONSECUTIVE_LOSSES: 9,
 
     // ── MULTIPLIER SETTINGS (from bizIndexMultiplier.js:102) — user can adjust ──────
     TAKE_PROFIT_MULTIPLIER: 1, // TP = stake * this, SL = stake (1x) — per spec user can set
     MULTIPLIER_VALUES: {
         // Standard volatility indices
-        R_10:    1000, //[400,1000,2000,3000,4000]
+        // R_10:    1000, //[400,1000,2000,3000,4000]
         // R_25:    800, //[160,400,800,1200,1600]
         // R_50:    400, //[80,200,400,600,800]
         R_75:    100, //[50,100,200,300,500]
         R_100:   100, //[40,100,200,300,400]
 
         // 1HZ series
-        '1HZ10V':  2000, //[400,1000,2000,3000,4000]
-        '1HZ25V':  800, //[160,400,800,1200,1600]
-        '1HZ50V':  400, //[80,200,400,600,800]
-        '1HZ75V':  200, //[50,100,200,300,500]
-        '1HZ100V': 200, //[40,100,200,300,400]
+        '1HZ10V':  3000, //[400,1000,2000,3000,4000]
+        '1HZ25V':  1200, //[160,400,800,1200,1600]
+        '1HZ50V':  600, //[80,200,400,600,800]
+        '1HZ75V':  300, //[50,100,200,300,500]
+        // '1HZ100V': 300, //[40,100,200,300,400]
         
         // Step indices
-        stpRNG:  3500, //[750,2000,3500,5500,7500]
-        stpRNG2: 2000, //[400,1000,2000,3000,4000]
+        stpRNG:  5500, //[750,2000,3500,5500,7500]
+        // stpRNG2: 3000, //[400,1000,2000,3000,4000]
         // stpRNG3: 1500, //[300,1000,1500,2000,3000]
         // stpRNG4: 1000, //[200,500,1000,1500,2000]
         // stpRNG5: 500, //[100,300,500,700,1000]
