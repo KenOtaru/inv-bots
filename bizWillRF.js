@@ -2,13 +2,18 @@
 
 /**
  * ╔══════════════════════════════════════════════════════════════════════════╗
- * ║   DERIV SYNTHETIC INDICES CALLE/PUTE BOT — v2  "CONSECUTIVE OPPOSITE"    ║
+ * ║   DERIV SYNTHETIC INDICES CALLE/PUTE BOT — v3  "WILLIAMS %R ONLY"        ║
  * ║  STRATEGY:                                                               ║
- * ║  1. Last N (default 6, per-asset configurable) same candles →            ║
- * ║     opposite trade (6 BULL → PUTE, 6 BEAR → CALLE, Doji breaks streak)  ║
- * ║  2. Recovery (B + Exclusive): on loss → first recovery 58s (finish      ║
- * ║     current candle, no skip), then every next 1m candle 1m until win.  ║
- * ║     While recovery active, ONLY recovery asset trades (exclusive).       ║
+ * ║  WPR_PERIOD (default 14, configurable via CONFIG.WPR_PERIOD)             ║
+ * ║  BUY:  WPR crosses above -20 (prev <= -20 → cur > -20) — FIRST cross     ║
+ * ║        since coming from oversold (-80) → CALLE (Rise)                   ║
+ * ║  SELL: WPR crosses below -80 (prev >= -80 → cur < -80) — FIRST cross     ║
+ * ║        since coming from overbought (-20) → PUTE (Fall)                  ║
+ * ║  Recovery (B + Exclusive): on loss → same direction, first 58s (finish  ║
+ * ║  current candle, no skip), then 1m every candle. If                      ║
+ * ║  MAX_CONSECUTIVE_LOSSES (default 2) reached (initial+recoveries) → exit  ║
+ * ║  recovery, impose COOLDOWN_CANDLES, wait for new WPR signal. Only        ║
+ * ║  recovery asset may trade until win (exclusive).                         ║
  * ╚══════════════════════════════════════════════════════════════════════════╝
  */
 
@@ -82,8 +87,8 @@ class RestClient {
 // ============================================================
 // FILE PATHS  [RETAINED]
 // ============================================================
-const STATE_FILE = path.join(__dirname, 'bizArbitrage_trend3_02-state.json');
-const HISTORY_FILE = path.join(__dirname, 'bizArbitrage_trend3_02-history.json');
+const STATE_FILE = path.join(__dirname, 'bizWillRF_1-state.json');
+const HISTORY_FILE = path.join(__dirname, 'bizWillRF_1-history.json');
 const STATE_SAVE_INTERVAL = 5000;  // ms
 
 // ============================================================
@@ -99,6 +104,7 @@ const LOGGER = {
     error: (msg) => console.error(`\x1b[31m[ERROR] ${getGMTTime()} - ${msg}\x1b[0m`),
     debug: (msg) => { if (CONFIG.DEBUG_MODE) console.log(`\x1b[90m[DEBUG] ${getGMTTime()} - ${msg}\x1b[0m`); },
     signal: (msg) => console.log(`\x1b[36m[SIGNAL]${getGMTTime()} - ${msg}\x1b[0m`),
+    wpr: (msg) => console.log(`\x1b[34m[WPR]   ${getGMTTime()} - ${msg}\x1b[0m`),
     normal: (msg) => console.log(`\x1b[93m[NORM]   ${getGMTTime()} - ${msg}\x1b[0m`),
     recovery: (msg) => console.log(`\x1b[33m[RECOV]  ${getGMTTime()} - ${msg}\x1b[0m`),
     candle: (msg) => console.log(`\x1b[95m[CANDLE] ${getGMTTime()} - ${msg}\x1b[0m`),
@@ -109,35 +115,35 @@ const LOGGER = {
 // ============================================================
 const CONFIG = {
     // ── Deriv API [RETAINED credentials] ─────────────────────
-    API_TOKEN: 'pat_8e0a3285bd6e74f52a67985b8069f4bea42aa96ce65d129c60ebb838ed1065ee',
+    API_TOKEN: 'pat_27a3197287bae3ec6c2c9cbdd68fffaa2a524e3b0a6e1ecf298b5ffb338adb10',
     APP_ID: '33uslPtthXBEkQOdfKfoY',
     ACCOUNT_TYPE: 'demo',
     WS_URL: 'wss://ws.derivws.com/websockets/v3',
 
-    // ── Recovery Strategy (from arbitrageRF.js) ──────────────
+    // ── Recovery Strategy (from willRF.js) ──────────────
     // When enabled: After a loss, trade immediately on next candle in SAME direction (no analysis)
     // When disabled: After a loss, wait for pattern analysis signal
     USE_RECOVERY_STRATEGY: true,
 
     // ── Session / daily guards ───────────────────
     SESSION_PROFIT_TARGET: 500000,
-    SESSION_STOP_LOSS: -508,
-    COOLDOWN_CANDLES: 5,
+    SESSION_STOP_LOSS: -208,
+    COOLDOWN_CANDLES: 1,
 
     // ── Candle / Contract Settings (defaults, overridable per asset) ──
     GRANULARITY: 60,
     TIMEFRAME_LABEL: '1m',
-    CANDLES_TO_LOAD: 15,
-    MAX_CANDLES_STORED: 15,
+    CANDLES_TO_LOAD: 100,
+    MAX_CANDLES_STORED: 100,
     DURATION: 1,
     DURATION_UNIT: 'm',
-    // MIN_CANDLES_REQUIRED: 82,
 
-    // ── Consecutive Candle Pattern (user configurable) ──────────
-    // Number of consecutive same-direction candles to trigger opposite trade
-    PATTERN_CONSECUTIVE_COUNT: 6,
-    // MIN_RECOVERY_SECONDS kept for backward compat (no longer used — recovery always 1m on candle close)
-    MIN_RECOVERY_SECONDS: 10,
+    // ── Williams %R Settings (user configurable) ──────────────
+    WPR_PERIOD: 7,
+    WPR_OVERBOUGHT: -20,
+    WPR_OVERSOLD: -80,
+    // ── Recovery exit: max consecutive losses (initial + recoveries) before waiting for new signal
+    MAX_CONSECUTIVE_LOSSES: 3,
 
     // ── Trading Sessions (synthetics trade 24/7) ─────────────
     USE_TRADING_SESSIONS: true,
@@ -154,8 +160,8 @@ const CONFIG = {
     // ── Active Index Assets ───────────────────────────────────
     ACTIVE_ASSETS: [
         'R_10',
-        'R_25',
-        'R_50',
+        // 'R_25',
+        // 'R_50',
         'R_75',
         'R_100',
         '1HZ10V',
@@ -165,9 +171,9 @@ const CONFIG = {
         '1HZ100V',
         'stpRNG',
         'stpRNG2',
-        'stpRNG3',
-        'stpRNG4',
-        'stpRNG5'
+        // 'stpRNG3',
+        // 'stpRNG4',
+        // 'stpRNG5'
     ],
 
     // ── Misc ──────────────────────────────────────────────────
@@ -175,10 +181,12 @@ const CONFIG = {
     TELEGRAM_ENABLED: true,
     TELEGRAM_BOT_TOKEN: '8565754902:AAHS6UQWEgLJ0DO-JTpAGQhZLs-UDVVNAQc',
     TELEGRAM_CHAT_ID: '752497117',
+    // Set to true to enable /backtest Telegram polling — keep false if same token used by other bots to avoid 409 Conflict
+    TELEGRAM_POLLING_ENABLED: false,
 };
 
 // ============================================================
-// PER-ASSET CONFIGURATION (from arbitrageRF.js)
+// PER-ASSET CONFIGURATION (from willRF.js)
 // ============================================================
 const DEFAULT_ASSET_CONFIG = {
     // Candle Settings
@@ -191,85 +199,28 @@ const DEFAULT_ASSET_CONFIG = {
 
     // Stake Settings
     INITIAL_STAKE: 0.35,
-    INVESTMENT_AMOUNT: 508,
+    INVESTMENT_AMOUNT: 208,
 
     // Martingale Settings
     MARTINGALE_MULTIPLIER: 1.48, //1.48
     MAX_MARTINGALE_LEVEL: 1, //1
     AFTER_MAX_LOSS: 'continue', // 'continue' | 'reset' | 'stop' 
-    CONTINUE_EXTRA_LEVELS: 9,
-    EXTRA_LEVEL_MULTIPLIERS: [2.1, 2.2, 2, 2.1, 2.2, 2.3, 2.2, 2.3], //[2.1, 2.2, 2, 2.3]
+    CONTINUE_EXTRA_LEVELS: 8,
+    EXTRA_LEVEL_MULTIPLIERS: [2.1, 2.2, 2, 2.1, 2.2, 2.3, 2.3], //[2.1, 2.2, 2, 2.3]
 
     // Auto-Compounding
     AUTO_COMPOUNDING: false,
     COMPOUND_PERCENTAGE: 0.1,
 
     // Risk Management
-    STOP_LOSS: 508,
-
-    // Pattern Analysis Settings — CONSECUTIVE OPPOSITE logic
-    // Number of consecutive same candles (B or R) required before opposite trade
-    // Doji breaks the streak (no trade). User can set per-asset via ASSET_CONFIGS.
-    PATTERN_CONSECUTIVE_COUNT: 8,
-    PATTERN_DOJI_THRESHOLD: 0.00001,
-    // MIN_RECOVERY_SECONDS kept for compat (recovery now always 1m on candle close)
-    MIN_RECOVERY_SECONDS: 10,
-    // Legacy fields retained for compat but unused in consecutive mode
-    PATTERN_MIN_CONFIDENCE: 0.10,
-    MIN_PATTERN_CONFIDENCE: 0.10,
-    MIN_PATTERN_CONFIDENCE_STEP_RNG: 0.10,
-    PATTERN_LENGTHS: [2],
-    PATTERN_MIN_OCCURRENCES: 1,
-    PATTERN_RECENCY_DECAY: 0.9990,
+    STOP_LOSS: 208,
 };
 
 const ASSET_CONFIGS = {
     // Per-asset consecutive count override example:
-    'R_10': {
-        PATTERN_CONSECUTIVE_COUNT: 6
-    },
-    'R_25': {
-        PATTERN_CONSECUTIVE_COUNT: 8
-    },
-    'R_50': {
-        PATTERN_CONSECUTIVE_COUNT: 8
-    },
-    'R_75': {
-        PATTERN_CONSECUTIVE_COUNT: 8
-    },
-    'R_100': {
-        PATTERN_CONSECUTIVE_COUNT: 8
-    },
-    '1HZ10V': {
-        PATTERN_CONSECUTIVE_COUNT: 6
-    },
-    '1HZ25V': {
-        PATTERN_CONSECUTIVE_COUNT: 11
-    },
-    '1HZ50V': {
-        PATTERN_CONSECUTIVE_COUNT: 8
-    },
-    '1HZ75V': {
-        PATTERN_CONSECUTIVE_COUNT: 6
-    },
-    '1HZ100V': {
-        PATTERN_CONSECUTIVE_COUNT: 7
-    },
-    'stpRNG': {
-        PATTERN_CONSECUTIVE_COUNT: 10
-    },
-    'stpRNG2': {
-        PATTERN_CONSECUTIVE_COUNT: 10
-    },
-    'stpRNG3': {
-        PATTERN_CONSECUTIVE_COUNT: 8
-    },
-    'stpRNG4': {
-        PATTERN_CONSECUTIVE_COUNT: 8
-    },
-    'stpRNG5': {
-        PATTERN_CONSECUTIVE_COUNT: 7
-    },
+    // 'R_10': {
+    //     PATTERN_CONSECUTIVE_COUNT: 6
+    // },
 };
 
 function getAssetConfig(symbol) {
@@ -278,127 +229,164 @@ function getAssetConfig(symbol) {
 }
 
 // ============================================================
-// CANDLE PATTERN ANALYZER CLASS (from arbitrageRF.js)
+// TECHNICAL INDICATORS — Williams %R ONLY  [WPR]
 // ============================================================
-class CandlePatternAnalyzer {
-  constructor(options = {}) {
-    this.minConfidence = options.minConfidence || 0.60;
-    this.patternLengths = options.patternLengths || [3, 4, 5, 6, 7, 8];
-    this.minOccurrences = options.minOccurrences || 5;
-    this.recencyDecay = options.recencyDecay || 0.9990;
-    this.dojiThreshold = options.dojiThreshold || 0.00001;
-    this.lastAnalysis = null;
-    this.lastAnalysisTime = 0;
-  }
-
-  classifyCandle(candle) {
-    const bodySize = Math.abs(candle.close - candle.open);
-    const threshold = candle.open * this.dojiThreshold;
-    if (bodySize <= threshold) return 'D';
-    if (candle.close > candle.open) return 'B';
-    return 'R';
-  }
-
-  classifyAll(candles) {
-    return candles.map(c => this.classifyCandle(c));
-  }
-
-  // ── CONSECUTIVE OPPOSITE LOGIC (replaces legacy pattern analysis) ──
-  // Checks last N closed candles: if all B → trade PUTE, all R → trade CALLE
-  // Doji breaks streak (no trade). N is configurable per asset.
-  checkConsecutiveOpposite(closedCandles, consecutiveCount) {
-    const N = consecutiveCount || 6;
-    if (!closedCandles || closedCandles.length < N) {
-      return {
-        shouldTrade: false,
-        direction: null,
-        confidence: 0,
-        reason: `Insufficient candles: ${closedCandles ? closedCandles.length : 0} < ${N} required`,
-        details: { consecutiveCount: N, totalCandles: closedCandles ? closedCandles.length : 0 }
-      };
-    }
-    const lastN = closedCandles.slice(-N);
-    const types = this.classifyAll(lastN);
-    const typesStr = types.join('');
-
-    // Doji breaks streak
-    if (types.includes('D')) {
-      return {
-        shouldTrade: false,
-        direction: null,
-        confidence: 0,
-        reason: `Streak broken by Doji in last ${N}: ${typesStr}`,
-        details: { consecutiveCount: N, types: typesStr, totalCandles: closedCandles.length }
-      };
+class TechnicalIndicators {
+    /**
+     * Williams %R calculated from CLOSED candles only.
+     * Formula: WPR = ((HighestHigh - Close) / (HighestHigh - LowestHigh)) * -100
+     * Returns null for insufficient/invalid data to avoid false crosses.
+     */
+    static calculateWPR(candles, period = 14) {
+        if (!Array.isArray(candles) || candles.length < period) return null;
+        const window = candles.slice(-period);
+        let highestHigh = -Infinity;
+        let lowestLow = Infinity;
+        for (const c of window) {
+            const high = Number(c?.high);
+            const low = Number(c?.low);
+            const close = Number(c?.close);
+            if (![high, low, close].every(Number.isFinite) || high < low || close > high || close < low) {
+                return null;
+            }
+            highestHigh = Math.max(highestHigh, high);
+            lowestLow = Math.min(lowestLow, low);
+        }
+        const range = highestHigh - lowestLow;
+        if (!Number.isFinite(range) || range <= 0) return null;
+        const close = Number(window[window.length - 1].close);
+        const value = -100 * ((highestHigh - close) / range);
+        if (!Number.isFinite(value)) return null;
+        return Math.max(-100, Math.min(0, value));
     }
 
-    const allBullish = types.every(t => t === 'B');
-    const allBearish = types.every(t => t === 'R');
-
-    if (allBullish) {
-      const result = {
-        shouldTrade: true,
-        direction: 'PUTE',
-        confidence: 1,
-        reason: `Last ${N} candles all BULLISH (${typesStr}) → opposite PUTE`,
-        details: { consecutiveCount: N, types: typesStr, totalCandles: closedCandles.length }
-      };
-      this.lastAnalysis = result;
-      this.lastAnalysisTime = Date.now();
-      return result;
+    static calculateWPRSeries(candles, period = 14) {
+        if (!Array.isArray(candles) || candles.length < period) return [];
+        const values = [];
+        for (let end = period; end <= candles.length; end++) {
+            const v = this.calculateWPR(candles.slice(0, end), period);
+            if (Number.isFinite(v)) values.push({ candleIndex: end - 1, value: v });
+        }
+        return values;
     }
-    if (allBearish) {
-      const result = {
-        shouldTrade: true,
-        direction: 'CALLE',
-        confidence: 1,
-        reason: `Last ${N} candles all BEARISH (${typesStr}) → opposite CALLE`,
-        details: { consecutiveCount: N, types: typesStr, totalCandles: closedCandles.length }
-      };
-      this.lastAnalysis = result;
-      this.lastAnalysisTime = Date.now();
-      return result;
-    }
+}
 
-    return {
-      shouldTrade: false,
-      direction: null,
-      confidence: 0,
-      reason: `Last ${N} not uniform: ${typesStr}`,
-      details: { consecutiveCount: N, types: typesStr, totalCandles: closedCandles.length }
-    };
-  }
-
-  // Legacy analyze kept for compat but delegates to consecutive logic
-  analyze(closedCandles, consecutiveCount) {
-    const N = consecutiveCount || 6;
-    return this.checkConsecutiveOpposite(closedCandles, N);
-  }
-
-  getAnalysisSummary(result) {
-    if (!result || !result.details || !result.details.patternResults) {
-      return 'No analysis available';
-    }
-
-    const lines = [];
-    lines.push(`📊 Pattern Analysis (${result.details.totalCandlesAnalyzed} candles):`);
-    lines.push(`   Decision: ${result.details.decisionMethod}`);
-
-    for (const r of result.details.patternResults) {
-      const dirIcon = r.direction === 'CALLE' ? '🟢' : '🔴';
-      lines.push(
-        `   L${r.patternLength} "${r.pattern}" → ${dirIcon} ${(r.confidence * 100).toFixed(1)}% (${r.rawOccurrences} matches)`
-      );
+// ============================================================
+// SIGNAL MANAGER — WPR-only signal detection
+// ============================================================
+class SignalManager {
+    static seedWPRState(symbol) {
+        const a = state.assets[symbol];
+        if (!a) return false;
+        const cfg = getAssetConfig(symbol);
+        const period = cfg.WPR_PERIOD ?? CONFIG.WPR_PERIOD ?? 14;
+        const series = TechnicalIndicators.calculateWPRSeries(a.closedCandles, period);
+        if (!series.length) return false;
+        let buyArmed = false;
+        let sellArmed = false;
+        let previous = null;
+        for (const point of series) {
+            const cur = point.value;
+            if (cur <= CONFIG.WPR_OVERSOLD) buyArmed = true;
+            if (cur >= CONFIG.WPR_OVERBOUGHT) sellArmed = true;
+            if (Number.isFinite(previous)) {
+                if (previous <= CONFIG.WPR_OVERBOUGHT && cur > CONFIG.WPR_OVERBOUGHT && buyArmed) {
+                    buyArmed = false;
+                }
+                if (previous >= CONFIG.WPR_OVERSOLD && cur < CONFIG.WPR_OVERSOLD && sellArmed) {
+                    sellArmed = false;
+                }
+            }
+            previous = cur;
+        }
+        a.prevWpr = series.length > 1 ? series[series.length - 2].value : null;
+        a.wpr = series[series.length - 1].value;
+        a.buyFlagActive = buyArmed;
+        a.sellFlagActive = sellArmed;
+        a.indicatorsReady = Number.isFinite(a.prevWpr) && Number.isFinite(a.wpr);
+        return true;
     }
 
-    if (result.shouldTrade) {
-      lines.push(`   ✅ SIGNAL: ${result.direction} @ ${(result.confidence * 100).toFixed(1)}%`);
-    } else {
-      lines.push(`   ⏳ NO TRADE: ${(result.confidence * 100).toFixed(1)}% < ${(this.minConfidence * 100).toFixed(1)}%`);
+    static updateWPRState(symbol) {
+        const a = state.assets[symbol];
+        if (!a || !Number.isFinite(a.wpr)) return false;
+        // Arm flags when entering extremes
+        if (a.wpr <= CONFIG.WPR_OVERSOLD && !a.buyFlagActive) {
+            a.buyFlagActive = true;
+            LOGGER.wpr(`${symbol}: BUY FLAG ARMED — WPR entered oversold (${a.wpr.toFixed(2)})`);
+        }
+        if (a.wpr >= CONFIG.WPR_OVERBOUGHT && !a.sellFlagActive) {
+            a.sellFlagActive = true;
+            LOGGER.wpr(`${symbol}: SELL FLAG ARMED — WPR entered overbought (${a.wpr.toFixed(2)})`);
+        }
+        return false;
     }
 
-    return lines.join('\n');
-  }
+    /**
+     * Check BUY signal: WPR crosses above -20, must be FIRST since oversold.
+     * Returns {shouldTrade, direction, reason, details}
+     */
+    static checkBuySignal(symbol) {
+        const a = state.assets[symbol];
+        const wpr = a?.wpr;
+        const prevWpr = a?.prevWpr;
+        if (!Number.isFinite(wpr) || !Number.isFinite(prevWpr)) {
+            return { shouldTrade: false, reason: `WPR not ready (${String(prevWpr)}→${String(wpr)})`, details: { wpr, prevWpr } };
+        }
+        const isCrossingAbove = prevWpr <= CONFIG.WPR_OVERBOUGHT && wpr > CONFIG.WPR_OVERBOUGHT;
+        if (!isCrossingAbove) {
+            return { shouldTrade: false, reason: `No BUY cross: ${prevWpr.toFixed(2)}→${wpr.toFixed(2)} (need ≤${CONFIG.WPR_OVERBOUGHT}→>${CONFIG.WPR_OVERBOUGHT})`, details: { wpr, prevWpr } };
+        }
+        if (!a.buyFlagActive) {
+            return { shouldTrade: false, reason: `BUY cross ${prevWpr.toFixed(2)}→${wpr.toFixed(2)} but BUY flag not armed (never visited ${CONFIG.WPR_OVERSOLD} since last BUY)`, details: { wpr, prevWpr } };
+        }
+        return {
+            shouldTrade: true,
+            direction: 'CALLE',
+            confidence: 1,
+            reason: `WPR BUY cross ${prevWpr.toFixed(2)}→${wpr.toFixed(2)} above ${CONFIG.WPR_OVERBOUGHT} (first since oversold)`,
+            details: { wpr, prevWpr, buyFlagActive: a.buyFlagActive, sellFlagActive: a.sellFlagActive }
+        };
+    }
+
+    static checkSellSignal(symbol) {
+        const a = state.assets[symbol];
+        const wpr = a?.wpr;
+        const prevWpr = a?.prevWpr;
+        if (!Number.isFinite(wpr) || !Number.isFinite(prevWpr)) {
+            return { shouldTrade: false, reason: `WPR not ready (${String(prevWpr)}→${String(wpr)})`, details: { wpr, prevWpr } };
+        }
+        const isCrossingBelow = prevWpr >= CONFIG.WPR_OVERSOLD && wpr < CONFIG.WPR_OVERSOLD;
+        if (!isCrossingBelow) {
+            return { shouldTrade: false, reason: `No SELL cross: ${prevWpr.toFixed(2)}→${wpr.toFixed(2)} (need ≥${CONFIG.WPR_OVERSOLD}→<${CONFIG.WPR_OVERSOLD})`, details: { wpr, prevWpr } };
+        }
+        if (!a.sellFlagActive) {
+            return { shouldTrade: false, reason: `SELL cross ${prevWpr.toFixed(2)}→${wpr.toFixed(2)} but SELL flag not armed (never visited ${CONFIG.WPR_OVERBOUGHT} since last SELL)`, details: { wpr, prevWpr } };
+        }
+        return {
+            shouldTrade: true,
+            direction: 'PUTE',
+            confidence: 1,
+            reason: `WPR SELL cross ${prevWpr.toFixed(2)}→${wpr.toFixed(2)} below ${CONFIG.WPR_OVERSOLD} (first since overbought)`,
+            details: { wpr, prevWpr, buyFlagActive: a.buyFlagActive, sellFlagActive: a.sellFlagActive }
+        };
+    }
+
+    static analyze(symbol) {
+        const buySig = this.checkBuySignal(symbol);
+        if (buySig.shouldTrade) return buySig;
+        const sellSig = this.checkSellSignal(symbol);
+        if (sellSig.shouldTrade) return sellSig;
+        // Prefer more informative reason
+        const a = state.assets[symbol];
+        return {
+            shouldTrade: false,
+            direction: null,
+            confidence: 0,
+            reason: buySig.reason || sellSig.reason || `No WPR signal wpr=${a?.wpr?.toFixed(2) ?? 'n/a'} prev=${a?.prevWpr?.toFixed(2) ?? 'n/a'}`,
+            details: { wpr: a?.wpr, prevWpr: a?.prevWpr, buyFlag: a?.buyFlagActive, sellFlag: a?.sellFlagActive }
+        };
+    }
 }
 
 // ============================================================
@@ -569,13 +557,13 @@ class BacktestEngine {
     async run(symbol, candles, opts={}) {
         const payoutRatio = Number.isFinite(opts.payoutRatio) ? opts.payoutRatio : (Number.isFinite(opts.payout) ? opts.payout : 0.90);
         const cfg = getAssetConfig(symbol);
-        const N = cfg.PATTERN_CONSECUTIVE_COUNT ?? CONFIG.PATTERN_CONSECUTIVE_COUNT ?? 6;
-        const analyzer = new CandlePatternAnalyzer({dojiThreshold: cfg.PATTERN_DOJI_THRESHOLD});
-        // mirror live state vars
+        const period = cfg.WPR_PERIOD ?? CONFIG.WPR_PERIOD ?? 14;
+        // mirror live state vars — WPR flags
         let investmentRemaining = cfg.INVESTMENT_AMOUNT;
         let martingaleLevel = 0;
-        let isRecovery=false, recoveryFirstDone=false, lastTradeDirection=null;
+        let isRecovery=false, waitingForNewSignal=false, exclusiveLock=false, recoveryFirstDone=false, lastTradeDirection=null;
         let consecutiveLosses=0, cooldownCandles=0;
+        let buyFlagActive=false, sellFlagActive=false;
         let netPL=0, totalStake=0;
         const trades=[];
         const streakCounts={}; let curStreak=0, maxStreak=0;
@@ -586,21 +574,33 @@ class BacktestEngine {
             const c=candles[i];
             closed.push(c);
             if(closed.length>50000) closed.shift();
-            // cooldown
-            // Note: cooldown decremented on candle close before decision, mirror live 1579
-            // For backtest we decrement at start of next iteration if needed
-            if(cooldownCandles>0){ cooldownCandles--; if(cooldownCandles===0) isRecovery=false; continue; }
+            // cooldown — keep exclusiveLock during cooldown, only clear isRecovery/waiting via logic below
+            if(cooldownCandles>0){ cooldownCandles--; continue; }
             // session guard (mirror live SESSION_PROFIT_TARGET / SESSION_STOP_LOSS)
             if(CONFIG.SESSION_PROFIT_TARGET && sessionNetPL >= CONFIG.SESSION_PROFIT_TARGET) { sessionActive=false; }
             if(CONFIG.SESSION_STOP_LOSS && sessionNetPL <= CONFIG.SESSION_STOP_LOSS) { sessionActive=false; }
             if(!sessionActive) continue;
+
+            // ── WPR computation on closed array ──
+            const wpr = TechnicalIndicators.calculateWPR(closed, period);
+            const prevWpr = closed.length >= 2 ? TechnicalIndicators.calculateWPR(closed.slice(0, -1), period) : null;
+            // Arm flags when entering extremes (mirror live SignalManager.updateWPRState)
+            if (Number.isFinite(wpr)) {
+                if (wpr <= CONFIG.WPR_OVERSOLD && !buyFlagActive) buyFlagActive = true;
+                if (wpr >= CONFIG.WPR_OVERBOUGHT && !sellFlagActive) sellFlagActive = true;
+            }
             let direction=null, isRecoveryTrade=false;
-            if(isRecovery && CONFIG.USE_RECOVERY_STRATEGY && lastTradeDirection){
+            // Exclusive lock in backtest is per-asset, but we still model same-direction vs signal-wait
+            if(isRecovery && CONFIG.USE_RECOVERY_STRATEGY && lastTradeDirection && !waitingForNewSignal){
                 direction=lastTradeDirection; isRecoveryTrade=true;
             } else {
-                const r=analyzer.checkConsecutiveOpposite(closed, N);
-                if(!r.shouldTrade) continue;
-                direction=r.direction;
+                // If waitingForNewSignal, force WPR signal (not same-direction)
+                if (!Number.isFinite(wpr) || !Number.isFinite(prevWpr)) continue;
+                const buyCross = prevWpr <= CONFIG.WPR_OVERBOUGHT && wpr > CONFIG.WPR_OVERBOUGHT && buyFlagActive;
+                const sellCross = prevWpr >= CONFIG.WPR_OVERSOLD && wpr < CONFIG.WPR_OVERSOLD && sellFlagActive;
+                if (buyCross) { direction='CALLE'; }
+                else if (sellCross) { direction='PUTE'; }
+                else continue;
             }
             if(!direction) continue;
             if(i+1>=candles.length) break; // need next candle to settle
@@ -617,26 +617,47 @@ class BacktestEngine {
             netPL = Number((netPL + pnl).toFixed(2));
             sessionNetPL = Number((sessionNetPL + pnl).toFixed(2));
             trades.push({idx:i, open_time:c.open_time, close_time:candles[i+1].open_time, direction, stake, won, pnl, level:martingaleLevel, isRecovery:isRecoveryTrade, firstDone:recoveryFirstDone});
-            // update state exactly as SessionManager.recordTradeResult
+            // Consume flag on executed signal (first-cross logic)
+            if (!isRecoveryTrade) {
+                if (direction==='CALLE') buyFlagActive=false;
+                else sellFlagActive=false;
+            }
+            // update state exactly as SessionManager.recordTradeResult (preserves martingale after MAX)
             if(won){
-                // win resets
+                // win resets all locks and martingale — exclusive lock released
                 lastTradeDirection=direction;
-                if(isRecovery){ isRecovery=false; }
+                isRecovery=false; waitingForNewSignal=false; exclusiveLock=false;
                 recoveryFirstDone=false;
                 martingaleLevel=0; consecutiveLosses=0; curStreak=0;
                 investmentRemaining = Number((investmentRemaining + stake + pnl).toFixed(2));
             } else {
                 lastTradeDirection=direction;
                 const wasRec=isRecovery;
-                isRecovery=true;
-                if(!wasRec) recoveryFirstDone=false;
-                // after first recovery execution, mark done (B logic)
-                if(!recoveryFirstDone) recoveryFirstDone=true;
+                exclusiveLock=true;
+                const underLimit = (consecutiveLosses + 1) < CONFIG.MAX_CONSECUTIVE_LOSSES;
+                if (underLimit) {
+                    isRecovery=true;
+                    waitingForNewSignal=false;
+                    if(!wasRec) recoveryFirstDone=false;
+                } else {
+                    // Reach MAX — stop same-direction, wait for new WPR signal but keep exclusive + martingale
+                    isRecovery=false;
+                    waitingForNewSignal=true;
+                    recoveryFirstDone=false;
+                }
+                if(!recoveryFirstDone && isRecovery) recoveryFirstDone=true;
                 martingaleLevel++;
                 consecutiveLosses++; curStreak++; maxStreak=Math.max(maxStreak,curStreak);
                 const key='x'+Math.min(curStreak,12);
                 streakCounts[key]=(streakCounts[key]||0)+1;
-                if(consecutiveLosses>=10){ martingaleLevel=0; cooldownCandles=CONFIG.COOLDOWN_CANDLES; }
+                if(consecutiveLosses>=CONFIG.MAX_CONSECUTIVE_LOSSES){
+                    // Preserve martingaleLevel & stake, impose cooldown, keep exclusiveLock
+                    isRecovery=false;
+                    waitingForNewSignal=true;
+                    exclusiveLock=true;
+                    recoveryFirstDone=false;
+                    cooldownCandles=CONFIG.COOLDOWN_CANDLES;
+                }
                 // loss does not credit pool
             }
             // next trade can only be after next candle (i+1) is close, so i++ already ensures
@@ -653,7 +674,7 @@ class BacktestEngine {
         else if(winRate > breakeven && expectancyPerTrade>0) verdict='POSITIVE EDGE (tentative)';
         else verdict='NO EDGE — do not trade live';
         return {
-            symbol, N, granularity: cfg.GRANULARITY, payoutRatio, breakeven: Number((breakeven*100).toFixed(2)),
+            symbol, wprPeriod: period, WPR_PERIOD: period, granularity: cfg.GRANULARITY, payoutRatio, breakeven: Number((breakeven*100).toFixed(2)),
             periodFrom: candles[0]?.open_time ? new Date(candles[0].open_time*1000).toISOString() : null,
             periodTo: candles[candles.length-1]?.open_time ? new Date(candles[candles.length-1].open_time*1000).toISOString() : null,
             candles: candles.length, trades: total, wins, losses, winRate: Number((winRate*100).toFixed(2)), lossRate: Number(((losses/total)*100||0).toFixed(2)),
@@ -670,7 +691,7 @@ class BacktestEngine {
         const streakStr = filtered.map(k=> `${k}:${r.streakCounts[k]}`).join(' ') || 'none';
         const xn = r.maxConsecutiveLosses ? `x2..x${r.maxConsecutiveLosses}` : 'x2..xn';
         return [
-            `🧪 BACKTEST — ${r.symbol} (N=${r.N}, ${r.granularity}s, payout ${(r.payoutRatio*100).toFixed(0)}%, stake $${getAssetConfig(r.symbol).INITIAL_STAKE}×${getAssetConfig(r.symbol).MARTINGALE_MULTIPLIER})`,
+            `🧪 BACKTEST — ${r.symbol} (WPR=${r.wprPeriod ?? r.WPR_PERIOD ?? CONFIG.WPR_PERIOD} ${CONFIG.WPR_OVERSOLD}/${CONFIG.WPR_OVERBOUGHT}, ${r.granularity}s, payout ${(r.payoutRatio*100).toFixed(0)}%, stake $${getAssetConfig(r.symbol).INITIAL_STAKE}×${getAssetConfig(r.symbol).MARTINGALE_MULTIPLIER})`,
             `Period: ${r.periodFrom} → ${r.periodTo} (${r.candles} candles)`,
             `Trades: ${r.trades} (${r.wins}W / ${r.losses}L)  WinRate ${r.winRate}% / Loss ${r.lossRate}% (need ≥ ${r.breakevenWinRate}% BE)`,
             `Profit Ratio: ${r.profitRatio}%  Expectancy/trade: ${r.expectancyPerTrade>=0?'+':''}${r.expectancyPerTrade}  Net P/L: $${r.netPL.toFixed(2)} (staked $${r.totalStake.toFixed(2)}, avg $${r.avgStake.toFixed(2)})`,
@@ -855,6 +876,8 @@ class StatePersistence {
                     lastTradeDirection: a.lastTradeDirection,
                     lastTradeWasWin: a.lastTradeWasWin,
                     isRecovery: a.isRecovery,
+                    waitingForNewSignal: a.waitingForNewSignal || false,
+                    exclusiveLock: a.exclusiveLock || false,
                     forceRecoverDirection: a.forceRecoverDirection,
                     recoveryStep: a.recoveryStep,
                     currentStake: a.currentStake,
@@ -864,9 +887,12 @@ class StatePersistence {
                     consecutiveWins: a.consecutiveWins,
                     consecutiveLosses: a.consecutiveLosses,
                     cooldownCandles: a.cooldownCandles,
-                    //  state
+                    // WPR state
+                    wpr: a.wpr ?? null,
+                    prevWpr: a.prevWpr ?? null,
                     buyFlagActive: a.buyFlagActive,
                     sellFlagActive: a.sellFlagActive,
+                    indicatorsReady: a.indicatorsReady || false,
                     inTradeCycle: a.inTradeCycle,
                     waitingForReentry: a.waitingForReentry,
                     priceReturnedToZone: a.priceReturnedToZone,
@@ -920,6 +946,8 @@ class StatePersistence {
                         a.lastTradeDirection = saved.lastTradeDirection || null;
                         a.lastTradeWasWin = saved.lastTradeWasWin ?? null;
                         a.isRecovery = saved.isRecovery || false;
+                        a.waitingForNewSignal = saved.waitingForNewSignal || false;
+                        a.exclusiveLock = saved.exclusiveLock || false;
                         a.forceRecoverDirection = saved.forceRecoverDirection ?? null;
                         a.recoveryStep = saved.recoveryStep || 0;
                         a.martingaleLevel = saved.martingaleLevel || 0;
@@ -930,9 +958,12 @@ class StatePersistence {
                         a.consecutiveLosses = saved.consecutiveLosses || 0;
                         a.cooldownCandles = saved.cooldownCandles || 0;
 
-                        // state
+                        // WPR state
+                        a.wpr = Number.isFinite(saved.wpr) ? Number(saved.wpr) : null;
+                        a.prevWpr = Number.isFinite(saved.prevWpr) ? Number(saved.prevWpr) : null;
                         a.buyFlagActive = saved.buyFlagActive || false;
                         a.sellFlagActive = saved.sellFlagActive || false;
+                        a.indicatorsReady = saved.indicatorsReady || false;
                         a.inTradeCycle = saved.inTradeCycle || false;
                         a.waitingForReentry = saved.waitingForReentry || false;
                         a.priceReturnedToZone = saved.priceReturnedToZone || false;
@@ -954,7 +985,9 @@ class StatePersistence {
                         a.loss = saved.loss || 0;
                         a.activePositions = (saved.activePositions || []).map(p => ({ ...p }));
 
-                        LOGGER.info(`${symbol}: Rec=${a.recoveryStep} Stake=$${(a.currentStake || 0).toFixed(2)} P/L=$${(a.netPL || 0).toFixed(2)} | Wins=${a.winsCount} Losses=${a.lossesCount} Trades=${a.tradesCount} | NormalMode=${a.normalModeActive ? 'ON' : 'OFF'}`);
+                        const wprTxt = Number.isFinite(a.wpr) ? a.wpr.toFixed(1) : 'n/a';
+                        const prevTxt = Number.isFinite(a.prevWpr) ? a.prevWpr.toFixed(1) : 'n/a';
+                        LOGGER.info(`${symbol}: Rec=${a.recoveryStep} Stake=$${(a.currentStake || 0).toFixed(2)} P/L=$${(a.netPL || 0).toFixed(2)} | WPR ${prevTxt}→${wprTxt} BuyArm=${a.buyFlagActive} SellArm=${a.sellFlagActive} | Wins=${a.winsCount} Losses=${a.lossesCount} Trades=${a.tradesCount}`);
                     }
                 });
             }
@@ -1013,11 +1046,12 @@ class TelegramService {
         ⚡ Same direction as loss trade (NO pattern analysis)`;
             } else if (details.analysis) {
                 const analysis = details.analysis;
-                const typesStr = analysis?.details?.types || 'N/A';
-                const N = analysis?.details?.consecutiveCount || getAssetConfig(symbol).PATTERN_CONSECUTIVE_COUNT || CONFIG.PATTERN_CONSECUTIVE_COUNT;
+                const wpr = analysis?.details?.wpr;
+                const prevWpr = analysis?.details?.prevWpr;
+                const wprStr = Number.isFinite(wpr) && Number.isFinite(prevWpr) ? `${prevWpr.toFixed(1)}→${wpr.toFixed(1)}` : 'N/A';
                 analysisDetails = `
-        🧠 <b>CONSECUTIVE PATTERN (N=${N}):</b>
-        📊 Last ${N}: ${typesStr}
+        🧠 <b>WPR(${CONFIG.WPR_PERIOD}) Signal:</b>
+        📊 WPR: ${wprStr} (OB ${CONFIG.WPR_OVERBOUGHT} / OS ${CONFIG.WPR_OVERSOLD})
         📊 Signal: ${analysis?.direction || 'N/A'} (${analysis?.reason || ''})`;
             }
         }
@@ -1047,7 +1081,7 @@ class TelegramService {
         const recoveryStatus = a?.isRecovery ? '🔄 RECOVERY' : '🎯 NORMAL';
 
         const msg = `
-        ${emoji} <b>${type} ARBITRAGE3 TRADE ALERT - ${recoveryStatus}</b>
+        ${emoji} <b>${type} WILLRF TRADE ALERT - ${recoveryStatus}</b>
 
         📊 Asset: ${symbol}
         📈 Direction: ${direction === 'CALLE' ? 'RISE 📈' : 'FALL 📉'}
@@ -1077,7 +1111,7 @@ class TelegramService {
         });
 
         await this.sendMessage([
-            `⏰ <b>ARBITRAGE3 PATTERN BOT HOURLY SUMMARY</b>`,
+            `⏰ <b>WILLRF BOT HOURLY SUMMARY</b>`,
             `Last Hour: ${h.trades}t ${h.wins}W/${h.losses}L ${wr}% ${h.pnl >= 0 ? '\u{1f7e2}' : '\u{1f534}'} $${h.pnl.toFixed(2)}`,
             `Today: ${today.tradesCount}t P/L: $${(today.netPL || 0).toFixed(2)}`,
             `Loss Stats: x2:${today.x2Losses || 0} x3:${today.x3Losses || 0} x4:${today.x4Losses || 0} x5:${today.x5Losses || 0} x6:${today.x6Losses || 0} x7:${today.x7Losses || 0} x8:${today.x8Losses || 0} x9:${today.x9Losses || 0}`,
@@ -1105,7 +1139,7 @@ class TelegramService {
         });
 
         await this.sendMessage([
-            `\u{1f4ca} <b>ARBITRAGE3 CANDLE PATTERN BOT SESSION SUMMARY</b>`,
+            `\u{1f4ca} <b>WILLRF BOT SESSION SUMMARY</b>`,
             `Duration: ${stats.duration} | Trades: ${stats.trades}`,
             `W: ${stats.wins} | L: ${stats.losses} | Win Rate: ${stats.winRate}`,
             `Session P/L: $${(stats.netPL || 0).toFixed(2)}`,
@@ -1126,10 +1160,10 @@ class TelegramService {
         });
 
         await this.sendMessage([
-            `\u{1f916} <b>ARBITRAGE3 PATTERN BOT STARTED</b>`,
-            `Strategy: Candle Pattern Recognition + Grid Martingale`,
+            `\u{1f916} <b>WILLRF BOT STARTED</b>`,
+            `Strategy: Williams %R(${CONFIG.WPR_PERIOD}) cross ${CONFIG.WPR_OVERBOUGHT}/${CONFIG.WPR_OVERSOLD} → CALLE/PUTE + Same-direction Recovery`,
+            `Recovery: ${CONFIG.USE_RECOVERY_STRATEGY ? `ENABLED (same direction, max ${CONFIG.MAX_CONSECUTIVE_LOSSES} consec losses → cooldown ${CONFIG.COOLDOWN_CANDLES})` : 'DISABLED'}`,
             `Risk: Martingale progression with cap $${getAssetConfig(CONFIG.ACTIVE_ASSETS[0]).INVESTMENT_AMOUNT}`,
-            `Recovery: ${CONFIG.USE_RECOVERY_STRATEGY ? 'ENABLED (immediate same-direction retry)' : 'DISABLED (wait for pattern analysis)'}`,
             `Capital: $${state.capital.toFixed(2)}`,
             TradingSessionManager.getStatusString(),
             ``,
@@ -1217,7 +1251,7 @@ class SessionManager {
             LOGGER.info(`Day changed: ${state.currentTradeDay} -> ${today}`);
             const dayStats = TradeHistoryManager.getDayStats(state.currentTradeDay);
             TelegramService.sendMessage(
-                `\u{1f319} <b>ARBITRAGE3 PATTERN BOT END OF DAY ${state.currentTradeDay}</b>\nP/L: $${(dayStats?.netPL || 0).toFixed(2)}\nCapital: $${state.capital.toFixed(2)}`
+                `\u{1f319} <b>WILLRF BOT END OF DAY ${state.currentTradeDay}</b>\nP/L: $${(dayStats?.netPL || 0).toFixed(2)}\nCapital: $${state.capital.toFixed(2)}`
             );
             this._resetDailyStats();
             if (!state.session.isActive) {
@@ -1281,10 +1315,17 @@ class SessionManager {
             a.lastTradeWasWin = true;
             a.forceRecoverDirection = null;  // win exits forced recovery mode
 
-            // Exit recovery mode on win — revert to default 1m duration
-            if (a.isRecovery) {
+            // Exit all recovery/exclusive locks on win — revert to default 1m duration, keep martingale reset
+            const wasRecovery = a.isRecovery;
+            const wasWaiting = a.waitingForNewSignal;
+            const wasLocked = a.exclusiveLock;
+            if (wasRecovery || wasWaiting || wasLocked) {
                 a.isRecovery = false;
-                LOGGER.info(`[${symbol}] Recovery mode EXITED - Win achieved → revert to ${getAssetConfig(symbol).DURATION}${getAssetConfig(symbol).DURATION_UNIT}`);
+                a.waitingForNewSignal = false;
+                a.exclusiveLock = false;
+                if (wasRecovery) LOGGER.info(`[${symbol}] Recovery mode EXITED - Win achieved → revert to ${getAssetConfig(symbol).DURATION}${getAssetConfig(symbol).DURATION_UNIT}`);
+                if (wasWaiting) LOGGER.info(`[${symbol}] Waiting-for-signal mode EXITED - Win achieved on exclusive asset`);
+                if (wasLocked) LOGGER.info(`[${symbol}] Exclusive lock RELEASED - Win achieved, other assets may trade again`);
             }
             a.pendingRecovery = false;
             a.recoveryFirstDone = false;
@@ -1311,13 +1352,27 @@ class SessionManager {
             a.forceRecoverDirection = a.lastTradeDirection === 'CALLE' ? 'CALLE' : 'PUTE';
             a.martingaleLevel = (a.martingaleLevel || 0) + 1;
 
-            // Enter recovery mode on loss (if recovery strategy is enabled)
-            if (CONFIG.USE_RECOVERY_STRATEGY) {
+            // Mark exclusive lock immediately — only this asset may trade until win
+            a.exclusiveLock = true;
+
+            // Enter recovery mode on loss (if recovery strategy is enabled and under limit)
+            const underLimit = a.consecutiveLosses < CONFIG.MAX_CONSECUTIVE_LOSSES;
+            if (CONFIG.USE_RECOVERY_STRATEGY && underLimit) {
                 const wasAlreadyRecovery = a.isRecovery;
                 a.isRecovery = true;
+                a.waitingForNewSignal = false;
                 a.pendingRecovery = false;
                 if (!wasAlreadyRecovery) a.recoveryFirstDone = false;
-                LOGGER.info(`[${symbol}] Recovery mode ENTERED - First recovery 58s (finish current candle), then 1m every candle until win (exclusive asset)`);
+                LOGGER.info(`[${symbol}] Recovery mode ENTERED - First recovery 58s (finish current candle), then 1m every candle until win (exclusive asset, ${a.consecutiveLosses}/${CONFIG.MAX_CONSECUTIVE_LOSSES} losses)`);
+            } else if (CONFIG.USE_RECOVERY_STRATEGY && !underLimit) {
+                // At or beyond limit — stop same-direction recovery, wait for new WPR signal but stay exclusive + martingale
+                const wasRecovery = a.isRecovery;
+                a.isRecovery = false;
+                a.waitingForNewSignal = true;
+                a.pendingRecovery = false;
+                a.recoveryFirstDone = false;
+                a.forceRecoverDirection = null;
+                if (wasRecovery) LOGGER.warn(`[${symbol}] ${CONFIG.MAX_CONSECUTIVE_LOSSES} consecutive losses (initial + recoveries) — exiting same-direction recovery, cooling down for ${CONFIG.COOLDOWN_CANDLES} candles, waiting for new WPR signal on same asset (exclusive, martingale L${a.martingaleLevel} preserved)`);
             }
 
             // Pause normal mode during recovery
@@ -1334,16 +1389,19 @@ class SessionManager {
 
             a.currentStake = StakeCalculator.calculate(symbol, a.martingaleLevel, a.investmentRemaining);
 
-            if (a.consecutiveLosses >= 10) {
-                const assetCfg = getAssetConfig(symbol);
-                a.currentStake = assetCfg.INITIAL_STAKE;
+            if (a.consecutiveLosses >= CONFIG.MAX_CONSECUTIVE_LOSSES) {
+                // Impose cooldown but preserve martingale & exclusive lock — will trade next WPR signal on same asset
                 a.cooldownCandles = CONFIG.COOLDOWN_CANDLES;
-                a.forceRecoverDirection = null;
-                LOGGER.warn(`[${symbol}] 10 consecutive losses — cooling down for ${CONFIG.COOLDOWN_CANDLES} candles`);
+                // Ensure same-direction recovery is off, waiting flag stays on
+                a.isRecovery = false;
+                a.waitingForNewSignal = true;
+                a.exclusiveLock = true;
+                LOGGER.warn(`[${symbol}] COOL-DOWN ${CONFIG.COOLDOWN_CANDLES} candle(s) — Martingale L${a.martingaleLevel} ($${a.currentStake.toFixed(2)}) preserved, exclusive lock held, next trade will be WPR signal on same asset`);
                 TelegramService.sendMessage(
-                    `❄️ <b>[${symbol}] ARBITRAGE3 PATTERN BOT COOL-DOWN ACTIVATED</b>\n` +
-                    `10 consecutive losses\n` +
-                    `Pausing for ${CONFIG.COOLDOWN_CANDLES} candles\n` +
+                    `❄️ <b>[${symbol}] WPR BOT COOL-DOWN ACTIVATED</b>\n` +
+                    `${CONFIG.MAX_CONSECUTIVE_LOSSES} consecutive losses (WPR recovery limit)\n` +
+                    `Pausing ${CONFIG.COOLDOWN_CANDLES} candle(s) — martingale L${a.martingaleLevel} preserved, exclusive lock held\n` +
+                    `Next trade: WPR signal on same asset until win\n` +
                     `Capital: $${state.capital.toFixed(2)}`
                 );
             }
@@ -1550,13 +1608,17 @@ class ConnectionManager {
                     currentFormingCandle: null,
                     lastProcessedCandleOpenTime: null,
                     candlesLoaded: false,
-                    // Pattern analyzer — consecutive opposite logic (Doji breaks streak)
-                    patternAnalyzer: new CandlePatternAnalyzer({
-                        dojiThreshold: assetConfig.PATTERN_DOJI_THRESHOLD
-                    }),
+                    // WPR state — Williams %R only
+                    wpr: null,
+                    prevWpr: null,
+                    buyFlagActive: false,
+                    sellFlagActive: false,
+                    indicatorsReady: false,
                     lastTradeDirection: null,
                     lastTradeWasWin: null,
                     isRecovery: false,
+                    waitingForNewSignal: false,
+                    exclusiveLock: false,
                     forceRecoverDirection: null,
                     recoveryStep: 0,
                     currentStake: assetConfig.INITIAL_STAKE,
@@ -1572,8 +1634,6 @@ class ConnectionManager {
                     profit: 0, loss: 0, netPL: 0,
 
                     // state
-                    buyFlagActive: false,
-                    sellFlagActive: false,
                     inTradeCycle: false,
                     waitingForReentry: false,
                     priceReturnedToZone: false,
@@ -1833,6 +1893,31 @@ class ConnectionManager {
                         a.closedCandles = a.closedCandles.slice(-CONFIG.MAX_CANDLES_STORED);
                     }
 
+                    // ── WPR update on closed candle — MT5 exact: recompute both bars from windows ──
+                    const wprCfg = getAssetConfig(symbol);
+                    const wprPeriod = wprCfg.WPR_PERIOD ?? CONFIG.WPR_PERIOD ?? 14;
+                    if (a.closedCandles.length >= wprPeriod) {
+                        // MT5 calculates WPR per bar from its own N-bar window; we recompute prev and current from correct slices
+                        const curWpr = TechnicalIndicators.calculateWPR(a.closedCandles, wprPeriod);
+                        const prevWpr = a.closedCandles.length >= wprPeriod + 1
+                            ? TechnicalIndicators.calculateWPR(a.closedCandles.slice(0, -1), wprPeriod)
+                            : null;
+                        if (Number.isFinite(curWpr) && Number.isFinite(prevWpr)) {
+                            a.prevWpr = prevWpr;
+                            a.wpr = curWpr;
+                            a.indicatorsReady = true;
+                            SignalManager.updateWPRState(symbol);
+                            LOGGER.debug(`[${symbol}] WPR ${a.prevWpr.toFixed(2)}→${a.wpr.toFixed(2)} BuyArm=${a.buyFlagActive} SellArm=${a.sellFlagActive}`);
+                        } else if (Number.isFinite(curWpr)) {
+                            // Not enough history for prev yet — store cur, wait next bar for valid cross
+                            a.prevWpr = null;
+                            a.wpr = curWpr;
+                            a.indicatorsReady = false;
+                            SignalManager.updateWPRState(symbol);
+                            LOGGER.debug(`[${symbol}] WPR n/a→${a.wpr.toFixed(2)} (warming up) BuyArm=${a.buyFlagActive} SellArm=${a.sellFlagActive}`);
+                        }
+                    }
+
                     const dir = closed.close > closed.open ? '\u{1f7e2}' : '\u{1f534}';
                     const time = new Date(closed.epoch * 1000).toISOString();
                     LOGGER.candle(`${dir} [${symbol}] CANDLE CLOSED [${time}] O:${closed.open.toFixed(5)} H:${closed.high.toFixed(5)} L:${closed.low.toFixed(5)} C:${closed.close.toFixed(5)} | Total: ${a.closedCandles.length}`);
@@ -1845,10 +1930,12 @@ class ConnectionManager {
 
                     a.canTrade = true;
 
-                    // Exclusive recovery: if any asset is in recovery, only that asset may trade
-                    const recoveryAsset = bot._getRecoveryAsset ? bot._getRecoveryAsset() : null;
-                    if (recoveryAsset && recoveryAsset !== symbol) {
-                        LOGGER.info(`[${symbol}] Candle closed but blocked — recovery exclusive on ${recoveryAsset} (no skip for ${recoveryAsset}, wait)`);
+                    // Exclusive lock: if any asset is in recovery or waiting-for-signal (post-MAX), only that asset may trade until win
+                    const exclusiveAsset = bot._getExclusiveAsset ? bot._getExclusiveAsset() : (bot._getRecoveryAsset ? bot._getRecoveryAsset() : null);
+                    if (exclusiveAsset && exclusiveAsset !== symbol) {
+                        const ea = state.assets[exclusiveAsset];
+                        const reason = ea?.waitingForNewSignal ? `waiting-for-signal (post-${CONFIG.MAX_CONSECUTIVE_LOSSES} losses, CL=${ea.consecutiveLosses})` : `recovery CL=${ea?.consecutiveLosses ?? 0}`;
+                        LOGGER.info(`[${symbol}] Candle closed but blocked — exclusive lock on ${exclusiveAsset} (${reason}, no skip for ${exclusiveAsset}, wait)`);
                     } else {
                         try {
                             if (a.isRecovery && CONFIG.USE_RECOVERY_STRATEGY && a.lastTradeDirection) {
@@ -1924,6 +2011,12 @@ class ConnectionManager {
 
         a.candlesLoaded = true;
 
+        // ── Seed WPR state from history ──
+        if (a.closedCandles.length >= (getAssetConfig(symbol).WPR_PERIOD ?? CONFIG.WPR_PERIOD ?? 14)) {
+            SignalManager.seedWPRState(symbol);
+            LOGGER.info(`[${symbol}] WPR seeded: ${a.prevWpr?.toFixed(2) ?? 'n/a'}→${a.wpr?.toFixed(2) ?? 'n/a'} BuyArm=${a.buyFlagActive} SellArm=${a.sellFlagActive}`);
+        }
+
         LOGGER.info(
             `[${symbol}] Loaded ${incomingCandles.length} ${CONFIG.TIMEFRAME_LABEL} candles (${addedCount} new merged, total: ${a.closedCandles.length}) |`
         );
@@ -1946,7 +2039,7 @@ class ConnectionManager {
             this.reconnectAttempts++;
             const delay = Math.min(this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1), 30000);
             LOGGER.info(`Reconnecting in ${(delay / 1000).toFixed(1)}s (attempt ${this.reconnectAttempts})`);
-            TelegramService.sendMessage(`⚠️ <b>ARBITRAGE3 PATTERN BOT CONNECTION LOST</b> — Reconnecting (attempt ${this.reconnectAttempts})`);
+            TelegramService.sendMessage(`⚠️ <b>WILLRF BOT CONNECTION LOST</b> — Reconnecting (attempt ${this.reconnectAttempts})`);
 
             this.reconnectTimer = setTimeout(() => {
                 this.reconnectTimer = null;
@@ -1956,7 +2049,7 @@ class ConnectionManager {
             }, delay);
         } else {
             LOGGER.error('Max reconnection attempts reached — giving up');
-            TelegramService.sendMessage(`\u{1f6d1} <b>ARBITRAGE3 PATTERN BOT STOPPED</b> — Max reconnections\nFinal P/L: $${(state.session.netPL || 0).toFixed(2)}`);
+            TelegramService.sendMessage(`\u{1f6d1} <b>WILLRF BOT STOPPED</b> — Max reconnections\nFinal P/L: $${(state.session.netPL || 0).toFixed(2)}`);
             process.exit(1);
         }
     }
@@ -1988,7 +2081,7 @@ class ConnectionManager {
 }
 
 // ============================================================
-// MAIN BOT CLASS — v1 CANDLE DIRECTION (FIXED)
+// MAIN BOT CLASS — v3 WPR ONLY (WILLIAMS %R)
 // ============================================================
 class IndexBot {
 
@@ -2011,12 +2104,11 @@ class IndexBot {
 
     async start() {
         console.log('\n' + '═'.repeat(74));
-        console.log(' DERIV CALLE/PUTE BOT v2 — CONSECUTIVE OPPOSITE + IMMEDIATE RECOVERY');
+        console.log(' DERIV CALLE/PUTE BOT v3 — WILLIAMS %R ONLY + IMMEDIATE RECOVERY');
         console.log('═'.repeat(74));
         console.log(`Assets    : ${CONFIG.ACTIVE_ASSETS.join(', ')}`);
-        const nDefault = CONFIG.PATTERN_CONSECUTIVE_COUNT;
-        console.log(`Pattern   : Last N=${nDefault} same (B→PUTE, R→CALLE, Doji breaks) — per-asset override via ASSET_CONFIGS`);
-        console.log(`Timeframe : ${CONFIG.TIMEFRAME_LABEL} candles | Duration: ${CONFIG.DURATION}${CONFIG.DURATION_UNIT} | Recovery B: first 58s (finish current candle), then 1m every candle (exclusive asset) until win`);
+        console.log(`WPR       : Period=${CONFIG.WPR_PERIOD} OB=${CONFIG.WPR_OVERBOUGHT} OS=${CONFIG.WPR_OVERSOLD} | BUY: cross >-20 (first since -80) → CALLE | SELL: cross <-80 (first since -20) → PUTE`);
+        console.log(`Timeframe : ${CONFIG.TIMEFRAME_LABEL} candles | Duration: ${CONFIG.DURATION}${CONFIG.DURATION_UNIT} | Recovery B: first 58s (finish current candle), then 1m every candle (exclusive asset) until win or ${CONFIG.MAX_CONSECUTIVE_LOSSES} consec losses`);
         console.log(`Risk      : Martingale level progression with cap $${CONFIG.ACTIVE_ASSETS.length ? getAssetConfig(CONFIG.ACTIVE_ASSETS[0]).INVESTMENT_AMOUNT : DEFAULT_ASSET_CONFIG.INVESTMENT_AMOUNT}`);
         console.log(`Capital   : $${state.capital.toFixed(2)}`);
         console.log(`Sessions  : ${TradingSessionManager.getStatusString()}`);
@@ -2033,7 +2125,7 @@ class IndexBot {
         TelegramService.startDailyTimer();
         this.startSessionTimeChecker();
 
-        LOGGER.info('CANDLE DIRECTION BOT v1.0 fully started!');
+        LOGGER.info('WILLRF BOT v1.0 fully started!');
     }
 
     subscribeToCandles(symbol) {
@@ -2072,7 +2164,7 @@ class IndexBot {
         return Math.max(1, Math.min(gran, remaining));
     }
 
-    // ── Exclusive recovery helper (only recovery asset may trade) ──
+    // ── Exclusive helpers — only locked asset may trade until win (covers recovery + post-max signal-wait) ──
     _getRecoveryAsset() {
         for (const sym of CONFIG.ACTIVE_ASSETS) {
             const a = state.assets[sym];
@@ -2080,7 +2172,15 @@ class IndexBot {
         }
         return null;
     }
+    _getExclusiveAsset() {
+        for (const sym of CONFIG.ACTIVE_ASSETS) {
+            const a = state.assets[sym];
+            if (a && (a.exclusiveLock || a.isRecovery || a.waitingForNewSignal)) return sym;
+        }
+        return null;
+    }
     _hasAnyRecovery() { return !!this._getRecoveryAsset(); }
+    _hasExclusiveLock() { return !!this._getExclusiveAsset(); }
 
     _getTradeDuration(symbol) {
         const a = state.assets[symbol];
@@ -2117,9 +2217,10 @@ class IndexBot {
             const firstTag = !assetState.recoveryFirstDone ? ` (FIRST 58s finish current candle)` : ` (1m)`;
             LOGGER.trade(`   Recovery Mode: YES | Same direction ${direction} | Stake: $${stake.toFixed(2)} | Martingale: L${assetState.martingaleLevel} | Duration: ${duration}${durationUnit}${remaining ? ` (${remaining}s)` : ''}${firstTag}`);
         } else {
-            const typesStr = analysis?.details?.types || 'N/A';
-            const N = analysis?.details?.consecutiveCount || getAssetConfig(symbol).PATTERN_CONSECUTIVE_COUNT || CONFIG.PATTERN_CONSECUTIVE_COUNT;
-            LOGGER.trade(`   Recovery Mode: NO | N=${N} ${typesStr} → ${direction} | Stake: $${stake.toFixed(2)} | Martingale: L${assetState.martingaleLevel} | Duration: ${duration}${durationUnit}`);
+            const wprStr = analysis?.details?.wpr != null && analysis?.details?.prevWpr != null
+                ? `${analysis.details.prevWpr.toFixed(2)}→${analysis.details.wpr.toFixed(2)}`
+                : `wpr=${assetState.wpr?.toFixed(2) ?? 'n/a'}`;
+            LOGGER.trade(`   Recovery Mode: NO | WPR(${CONFIG.WPR_PERIOD}) ${wprStr} → ${direction} | Stake: $${stake.toFixed(2)} | Martingale: L${assetState.martingaleLevel} | Duration: ${duration}${durationUnit} | ${analysis?.reason || ''}`);
         }
 
         assetState.canTrade = false;
@@ -2169,10 +2270,10 @@ class IndexBot {
         const a = state.assets[symbol];
         if (!a) return false;
         if (!CONFIG.USE_RECOVERY_STRATEGY || !a.isRecovery || !a.lastTradeDirection) return false;
-        // Exclusive: only recovery asset may trade while any asset is in recovery
-        const recoveryAsset = this._getRecoveryAsset();
-        if (recoveryAsset && recoveryAsset !== symbol) {
-            LOGGER.info(`[${symbol}] Blocked — recovery exclusive on ${recoveryAsset}`);
+        // Exclusive: only exclusive-locked asset may trade while any asset is locked (recovery or post-MAX wait)
+        const exclusiveAsset = this._getExclusiveAsset ? this._getExclusiveAsset() : this._getRecoveryAsset();
+        if (exclusiveAsset && exclusiveAsset !== symbol) {
+            LOGGER.info(`[${symbol}] Blocked — exclusive lock on ${exclusiveAsset} (recovery)`);
             return false;
         }
         if (a.cooldownCandles > 0) {
@@ -2237,10 +2338,12 @@ class IndexBot {
             return;
         }
 
-        // Exclusive recovery: only recovery asset may trade
-        const recoveryAsset = this._getRecoveryAsset();
-        if (recoveryAsset && recoveryAsset !== symbol) {
-            LOGGER.info(`[${symbol}] Blocked — recovery exclusive on ${recoveryAsset} (normal trades paused)`);
+        // Exclusive lock: only locked asset may trade until win (recovery + post-MAX signal-wait)
+        const exclusiveAsset = this._getExclusiveAsset ? this._getExclusiveAsset() : this._getRecoveryAsset();
+        if (exclusiveAsset && exclusiveAsset !== symbol) {
+            const ea = state.assets[exclusiveAsset];
+            const reason = ea?.waitingForNewSignal ? `waiting-for-signal (post-${CONFIG.MAX_CONSECUTIVE_LOSSES}, CL=${ea.consecutiveLosses})` : `recovery CL=${ea?.consecutiveLosses ?? 0}`;
+            LOGGER.info(`[${symbol}] Blocked — exclusive lock on ${exclusiveAsset} (${reason}, only ${exclusiveAsset} may trade until win)`);
             assetState.canTrade = false;
             return;
         }
@@ -2260,9 +2363,20 @@ class IndexBot {
             return;
         }
 
-        // Normal mode: consecutive opposite logic (configurable N per asset)
-        const N = assetConfig.PATTERN_CONSECUTIVE_COUNT ?? CONFIG.PATTERN_CONSECUTIVE_COUNT ?? 6;
-        analysis = assetState.patternAnalyzer.checkConsecutiveOpposite(assetState.closedCandles, N);
+        // Normal mode: WPR-only logic
+        const wprPeriod = assetConfig.WPR_PERIOD ?? CONFIG.WPR_PERIOD ?? 14;
+        if (!assetState.indicatorsReady || !Number.isFinite(assetState.wpr) || !Number.isFinite(assetState.prevWpr)) {
+            LOGGER.info(`[${symbol}] WPR not ready: ${assetState.prevWpr?.toFixed(2) ?? 'n/a'}→${assetState.wpr?.toFixed(2) ?? 'n/a'} (need ${wprPeriod} candles)`);
+            assetState.canTrade = false;
+            return;
+        }
+        // Check cooldown before signal (covers MAX_CONSECUTIVE_LOSSES exit)
+        if (assetState.cooldownCandles > 0) {
+            LOGGER.info(`[${symbol}] Cool-down active ${assetState.cooldownCandles} candles — skipping WPR signal`);
+            assetState.canTrade = false;
+            return;
+        }
+        analysis = SignalManager.analyze(symbol);
         assetState.lastAnalysis = analysis;
 
         if (!analysis.shouldTrade) {
@@ -2272,8 +2386,10 @@ class IndexBot {
         }
 
         direction = analysis.direction;
-        // Doji already handled as break; opposite direction already chosen
-        LOGGER.trade(`🎯 [${symbol}] CONSECUTIVE SIGNAL N=${N} ${analysis.details.types} → ${direction} | ${analysis.reason}`);
+        LOGGER.trade(`🎯 [${symbol}] WPR SIGNAL WPR(${wprPeriod}) ${analysis.details.prevWpr?.toFixed(2) ?? ''}→${analysis.details.wpr?.toFixed(2) ?? ''} → ${direction} | ${analysis.reason}`);
+        // Consume flag — first-cross logic (only first cross since extreme fires)
+        if (direction === 'CALLE') assetState.buyFlagActive = false;
+        else assetState.sellFlagActive = false;
 
         this._executeBuy(symbol, direction, false, analysis);
     }
@@ -2341,7 +2457,7 @@ class IndexBot {
         state.tradeStartTime = null;
 
         TelegramService.sendMessage(
-            `⚠️ <b>ARBITRAGE3 PATTERN STUCK TRADE RECOVERED [${reason}]</b>\n` +
+            `⚠️ <b>WILLRF BOT STUCK TRADE RECOVERED [${reason}]</b>\n` +
             `Contract: ${contractId}\n` +
             `⚠️ VERIFY OUTCOME MANUALLY ON DERIV\n` +
             `Capital: $${state.capital.toFixed(2)}`
@@ -2354,6 +2470,7 @@ class IndexBot {
         LOGGER.info('Stopping bot...');
         CONFIG.ACTIVE_ASSETS.forEach(sym => { if (state.assets[sym]) state.assets[sym].canTrade = false; });
         TelegramService.clearTimers();
+        if (typeof stopTelegramPolling === 'function') { try { stopTelegramPolling(); } catch(_){} }
         this._clearAllWatchdogTimers();
         if (this.statusDisplayIntervalId) clearInterval(this.statusDisplayIntervalId);
         if (this.sessionTimeCheckerId) clearInterval(this.sessionTimeCheckerId);
@@ -2379,9 +2496,15 @@ class IndexBot {
             if (a) {
                 pairStatuses[sym] = {
                     recoveryStep: a.recoveryStep,
+                    isRecovery: a.isRecovery,
+                    waitingForNewSignal: a.waitingForNewSignal || false,
+                    exclusiveLock: a.exclusiveLock || false,
                     currentStake: a.currentStake,
                     activePositions: a.activePositions.length,
                     cooldownCandles: a.cooldownCandles,
+                    consecutiveLosses: a.consecutiveLosses,
+                    wpr: a.wpr,
+                    prevWpr: a.prevWpr,
                     trades: a.tradesCount, wins: a.winsCount, losses: a.lossesCount, netPL: a.netPL,
                     lastDirection: a.lastTradeDirection,
                     buyFlag: a.buyFlagActive,
@@ -2450,12 +2573,28 @@ async function runBacktestCLI(opts) {
         console.log('══════════════════════════════════════════\n');
     }
 }
+// Singleton to prevent duplicate polling within same process
+let _tgPollingBot = null;
+let _tgPollingActive = false;
 function startTelegramBacktestPolling(){
-    if(!CONFIG.TELEGRAM_ENABLED || !CONFIG.TELEGRAM_BOT_TOKEN || CONFIG.TELEGRAM_BOT_TOKEN.includes('8565754902')===false) return;
+    if(!CONFIG.TELEGRAM_ENABLED || !CONFIG.TELEGRAM_BOT_TOKEN) return;
+    if(CONFIG.TELEGRAM_POLLING_ENABLED === false) {
+        LOGGER.info('Telegram polling disabled (CONFIG.TELEGRAM_POLLING_ENABLED=false) — send-only mode, no 409 risk');
+        return;
+    }
+    if(_tgPollingActive && _tgPollingBot) {
+        LOGGER.warn('Telegram polling already active — skipping duplicate start');
+        return;
+    }
     try {
         const TelegramBot = require('node-telegram-bot-api');
-        const tbot = new TelegramBot(CONFIG.TELEGRAM_BOT_TOKEN, {polling:true});
+        const tbot = new TelegramBot(CONFIG.TELEGRAM_BOT_TOKEN, {
+            polling: { interval: 2000, params: { timeout: 10 } }
+        });
+        _tgPollingBot = tbot;
+        _tgPollingActive = true;
         LOGGER.info('Telegram backtest polling started (/backtest)');
+        let conflictCount = 0;
         tbot.on('message', async (msg) => {
             const chatId = String(msg.chat?.id||'');
             if(chatId !== String(CONFIG.TELEGRAM_CHAT_ID)) return;
@@ -2490,8 +2629,32 @@ function startTelegramBacktestPolling(){
                 await tbot.sendMessage(chatId, `Backtest failed: ${e.message}`);
             }
         });
-        tbot.on('polling_error', e=> LOGGER.error(`TG poll: ${e.message}`));
+        tbot.on('polling_error', e=> {
+            const msg = e?.message || String(e);
+            if(msg.includes('409') || msg.includes('Conflict') || msg.includes('terminated by other getUpdates')) {
+                conflictCount++;
+                LOGGER.warn(`TG poll 409 Conflict (#${conflictCount}): another bot instance is polling this token — stopping polling on this instance to avoid spam. Fix: kill other bot processes using the same TELEGRAM_BOT_TOKEN (${CONFIG.TELEGRAM_BOT_TOKEN.slice(0,12)}...) or set TELEGRAM_POLLING_ENABLED=false on one, or use a separate token per bot.`);
+                try { tbot.stopPolling({ cancel: true }); } catch(_){}
+                _tgPollingActive = false;
+                if(conflictCount >= 1) {
+                    // Prevent retry spam — keep polling off for this run
+                    try { tbot.removeAllListeners('polling_error'); } catch(_){}
+                    LOGGER.warn('TG polling disabled for this run due to 409 — send-only Telegram (alerts) still works');
+                }
+                return;
+            }
+            LOGGER.error(`TG poll: ${msg}`);
+        });
+        tbot.on('error', e=> LOGGER.error(`TG error: ${e?.message || e}`));
     } catch(e){ LOGGER.error(`Telegram backtest poll init failed: ${e.message}`); }
+}
+function stopTelegramPolling(){
+    if(_tgPollingBot) {
+        try { _tgPollingBot.stopPolling({ cancel: true }); } catch(_){}
+        try { _tgPollingBot.removeAllListeners(); } catch(_){}
+        _tgPollingBot = null;
+    }
+    _tgPollingActive = false;
 }
 
 // ============================================================
@@ -2500,8 +2663,8 @@ function startTelegramBacktestPolling(){
 tradeHistory = TradeHistoryManager.loadHistory();
 const bot = new IndexBot();
 
-process.on('SIGINT', () => { bot.stop(); bot.connection.shutdown(); setTimeout(() => process.exit(0), 3000); });
-process.on('SIGTERM', () => { bot.stop(); bot.connection.shutdown(); setTimeout(() => process.exit(0), 3000); });
+process.on('SIGINT', () => { try{ stopTelegramPolling(); }catch(_){} bot.stop(); bot.connection.shutdown(); setTimeout(() => process.exit(0), 3000); });
+process.on('SIGTERM', () => { try{ stopTelegramPolling(); }catch(_){} bot.stop(); bot.connection.shutdown(); setTimeout(() => process.exit(0), 3000); });
 process.on('uncaughtException', (err) => { LOGGER.error(`UNCAUGHT: ${err.message}\n${err.stack}`); try { StatePersistence.saveState(); } catch { } });
 process.on('unhandledRejection', (reason) => { LOGGER.error(`UNHANDLED: ${reason}`); try { StatePersistence.saveState(); } catch { } });
 
@@ -2520,7 +2683,7 @@ if (cliArgs.backtest) {
         process.exit(1);
     }
 
-    console.log('\n\u{1f680} Starting CANDLE DIRECTION BOT v1.0...\n');
+    console.log('\n\u{1f680} Starting WPR BOT v3.0 (Williams %R)...\n');
     bot.connection.connect();
     // start Telegram backtest listener in live mode (optional)
     startTelegramBacktestPolling();
@@ -2548,10 +2711,12 @@ if (cliArgs.backtest) {
         CONFIG.ACTIVE_ASSETS.forEach(sym => {
             const p = status.pairs[sym];
             if (p) {
-                const normal = p.normalMode ? `Nrm:${p.normalTrades}/${CONFIG.MAX_TRADES_PER_CYCLE}` : '';
+                const wpr = p.wpr != null ? `WPR:${p.wpr.toFixed(1)}` : 'WPR:n/a';
                 const cdwn = p.cooldownCandles > 0 ? `❄️CD:${p.cooldownCandles}` : '';
+                const rec = p.isRecovery ? '🔄REC' : (p.waitingForNewSignal ? '⏳WAIT' : '');
+                const lock = p.exclusiveLock ? '🔒EXCL' : '';
 
-                pairLines += `\n  ${sym}: ${p.buyFlag ? '\u{1f7e2}BF' : ''} ${p.sellFlag ? '\u{1f534}SF' : ''} Rec${p.recoveryStep} $${(p.currentStake || 0).toFixed(2)} | ${p.trades}t ${p.wins}W/${p.losses}L $${(p.netPL || 0).toFixed(2)} | Pos:${p.activePositions} ${normal}${cdwn}`;
+                pairLines += `\n  ${sym}: ${wpr} ${p.buyFlag ? '\u{1f7e2}BF' : ''} ${p.sellFlag ? '\u{1f534}SF' : ''} ${rec}${lock} Rec${p.recoveryStep} $${(p.currentStake || 0).toFixed(2)} | ${p.trades}t ${p.wins}W/${p.losses}L $${(p.netPL || 0).toFixed(2)} | Pos:${p.activePositions} ${cdwn} CL:${p.consecutiveLosses}/${CONFIG.MAX_CONSECUTIVE_LOSSES}`;
             }
         });
 
