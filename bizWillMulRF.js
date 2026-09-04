@@ -91,8 +91,8 @@ class RestClient {
 // ============================================================
 // FILE PATHS  [MULTIPLIER — isolated from Rise/Fall]
 // ============================================================
-const STATE_FILE = path.join(__dirname, 'bizWillMul-state.json');
-const HISTORY_FILE = path.join(__dirname, 'bizWillMul-history.json');
+const STATE_FILE = path.join(__dirname, 'bizWillMul_02-state.json');
+const HISTORY_FILE = path.join(__dirname, 'bizWillMul_02-history.json');
 const STATE_SAVE_INTERVAL = 5000;  // ms
 
 // ============================================================
@@ -159,15 +159,15 @@ const CONFIG = {
         R_100:   100, //[40,100,200,300,400]
 
         // 1HZ series
-        '1HZ10V':  1000, //[400,1000,2000,3000,4000]
-        '1HZ25V':  400, //[160,400,800,1200,1600]
-        '1HZ50V':  200, //[80,200,400,600,800]
-        '1HZ75V':  100, //[50,100,200,300,500]
-        '1HZ100V': 100, //[40,100,200,300,400]
+        '1HZ10V':  2000, //[400,1000,2000,3000,4000]
+        '1HZ25V':  800, //[160,400,800,1200,1600]
+        '1HZ50V':  400, //[80,200,400,600,800]
+        '1HZ75V':  200, //[50,100,200,300,500]
+        '1HZ100V': 200, //[40,100,200,300,400]
         
         // Step indices
-        stpRNG:  2000, //[750,2000,3500,5500,7500]
-        stpRNG2: 1000, //[400,1000,2000,3000,4000]
+        stpRNG:  3500, //[750,2000,3500,5500,7500]
+        stpRNG2: 2000, //[400,1000,2000,3000,4000]
         // stpRNG3: 1500, //[300,1000,1500,2000,3000]
         // stpRNG4: 1000, //[200,500,1000,1500,2000]
         // stpRNG5: 500, //[100,300,500,700,1000]
@@ -226,7 +226,7 @@ const DEFAULT_ASSET_CONFIG = {
     DURATION_UNIT: 'm',
 
     // Stake Settings
-    INITIAL_STAKE: 0.35,
+    INITIAL_STAKE: 1.00,
     INVESTMENT_AMOUNT: 208,
 
     // Martingale Settings
