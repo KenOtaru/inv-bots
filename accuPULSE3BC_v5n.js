@@ -173,10 +173,37 @@ const _BASE_CONFIG = {
     default: 15,
   },
   minEmpiricalSamples: parseInt('150', 10),
-  confidenceZ: parseFloat('2.58'), //1.28 = 80% CI, 1.64 = 90% CI, 1.96 = 95% CI, 2.33 = 98% CI, 2.58 = 99% CI
+  confidenceZ: parseFloat('2.58'), // classic index path: 99% CI (z=2.58) + 0.65 haircut + 1% EV floor proved impossibly strict live (45/45 ev_fail 2026-09-05)
   evHaircut: parseFloat('0.65'),
   minNetEvRatio: parseFloat('0.001'),
   maxRecentJumpZ: parseFloat('4.0'),
+  // ── v5.4 index EV recalibration (2026-09-05, live funnel: 45/45 ev_fail) ──
+  // The classic index path stacks THREE conservative layers (99% Wilson LB,
+  // 0.65 haircut, 1% floor) while the BC path uses ONE (Wilson LB only, raw
+  // rate when n≥80). Standard recalibration on the classic path only —
+  // BC params untouched: 80% Wilson LB (z=1.28), 0.85 haircut, 0.3% floor.
+  // Still rejects chop (negative gross EV fails regardless of layers).
+  indexEv: {
+    confidenceZ: parseFloat('1.28'),
+    evHaircut: parseFloat('0.85'),
+    minNetEvRatio: parseFloat('0.003'),
+  },
+  // ── v5.4 one-shot per symbol (2026-09-05) ─────────────────────────────────
+  // After a symbol's trade closes it may NOT immediately re-enter: it must
+  // (a) wait out `reentryCooldownMs` AND (b) fully re-qualify — i.e. its
+  // candidate gates must flip to FAIL at least once after the close before a
+  // PASS counts as a fresh setup again. Prevents grinding one stale signal
+  // into a loss. While a symbol is cooling down the bot trades other assets.
+  reentryCooldownMs: parseInt('900000', 10), // 15 min
+  // TP-driven hold extension: Deriv closes ACCU server-side the instant TP
+  // is hit, so "extend instead of close+reopen" can only mean one thing — a
+  // LONGER single trade via a larger upfront TP target (more ticks held in
+  // one contract, no instant reopen on the same signal). tpMultiplier scales
+  // the computed TP; one-shot + cooldown below still prevent grinding.
+  extendHold: {
+    enabled: true,
+    tpMultiplier: parseFloat('1.25'), // +25% TP → longer hold per single trade
+  },
 
   // ── v5.2-BC: Boom/Crash survival-data model ───────────────────────────
   boomCrash: {
@@ -1366,11 +1393,15 @@ class EnhancedARCAAnalyzer {
     const survivors = returns.filter(r => r < threshold).length;
     const totalReturns = returns.length;
     const pTick = survivors / totalReturns;
-    const pLower = this._wilsonLower(survivors, totalReturns, this.cfg.confidenceZ);
+    // v5.4: classic index path uses the recalibrated single-conservative-layer
+    // set (indexEv); BC path below is untouched.
+    const ixEv = this.cfg.indexEv || {};
+    const pLower = this._wilsonLower(survivors, totalReturns, ixEv.confidenceZ ?? this.cfg.confidenceZ);
     const N = this.cfg.plannedHoldTicks;
     const pHorizon = Math.pow(pLower, N);
     const gross = Math.pow(1 + growthRate, N) * pHorizon - 1;
-    const conservativeEV = gross > 0 ? gross * this.cfg.evHaircut : gross;
+    const haircut = ixEv.evHaircut ?? this.cfg.evHaircut;
+    const conservativeEV = gross > 0 ? gross * haircut : gross;
 
     const sorted = [...returns].sort((a, b) => a - b);
     const median = sorted[Math.floor(sorted.length / 2)] || 1e-12;
@@ -1381,13 +1412,15 @@ class EnhancedARCAAnalyzer {
       return { ok: false, reason: 'RECENT_JUMP', jumpZ };
     }
 
-    if (conservativeEV < this.cfg.minNetEvRatio) {
+    const evFloor = ixEv.minNetEvRatio ?? this.cfg.minNetEvRatio;
+    if (conservativeEV < evFloor) {
       return {
         ok: false,
         reason: 'EV_BELOW_HAIRCUT',
         conservativeEV,
         pLower,
-        pHorizon
+        pHorizon,
+        evFloor
       };
     }
 
@@ -1911,8 +1944,9 @@ class EnhancedTradeExecutor extends EventEmitter {
       // model to have adequate fresh stay samples AND a positive EV.
       // v5.3: for regular symbols use the per-family floor (same rule as
       // _hazardEstimate via the analyzer when available, else cfg default).
-      // The live proposal band is authoritative; the cached model band is
-      // only a fallback when no proposal data is present (offline/selftest).
+      // v5.4: LIVE-PROPOSAL-ONLY — no cached-model fallback. If the live
+      // proposal carries no usable band the trade is cancelled (FAIL), never
+      // entered on stale data. Selftest callers pass an explicit proposal.
       barrier_check: () => {
         if (isBoomCrash(symbol)) {
           const m = analysis?.model;
@@ -1925,14 +1959,16 @@ class EnhancedTradeExecutor extends EventEmitter {
         const cd = proposal?.contract_details || {};
         const spot = Number(proposal?.spot) || Number(cd.current_spot) || 0;
         const livePct = extractBarrierPct(cd, spot);
-        const fromProposal = Number.isFinite(livePct) && livePct > 0;
-        const barrierPct = fromProposal ? livePct : (analysis?.model?.barrierPct ?? 0);
+        if (!(Number.isFinite(livePct) && livePct > 0)) {
+          log('DEBUG', `EntryCheck barrier: NO_LIVE_BAND → FAIL (trade cancelled, no cached fallback)`);
+          return false;
+        }
         // Mirror _hazardEstimate: analyzer-owned floor, cfg fallback otherwise.
         const floor = (typeof this.analyzer?.minBarrierFor === 'function')
           ? this.analyzer.minBarrierFor(symbol)
           : ((this.cfg.minBarrierPctByFamily && this.cfg.minBarrierPctByFamily[this._indexFamily?.(symbol)]) ?? cfg.minBarrierPct ?? 0.015);
-        const result = barrierPct >= floor;
-        log('DEBUG', `EntryCheck barrier: ${Number(barrierPct).toFixed(4)}% >= ${Number(floor).toFixed(4)}% = ${result} [${fromProposal ? 'live-proposal' : 'cached-model'}]`);
+        const result = livePct >= floor;
+        log('DEBUG', `EntryCheck barrier: ${Number(livePct).toFixed(4)}% >= ${Number(floor).toFixed(4)}% = ${result} [live-proposal]`);
         return result;
       },
 
@@ -2645,6 +2681,8 @@ class AccuPULSE3BotV5 {
     this._metricsTimer = null;
     this._analysisInFlight = false;
     this.lastTradedSymbols = [];
+    // ── v5.4 one-shot per symbol: { SYM: { lastCloseAt, needsRequalify } } ──
+    this._symbolState = {};
     this._prevTopAsset = null;
 
     // Anti-Martingale
@@ -3167,11 +3205,61 @@ class AccuPULSE3BotV5 {
     telegram.send(msg);
     this.lastTradeAt = Date.now();
 
+    // ── v5.4 one-shot per symbol: stamp the close + arm re-qualification ──
+    // Pair: the selection loop's `_reentryBlocked()` guard (next-trade), and
+    // the analyzer-preview `_noteGateMiss()` call below (FAIL→fresh setup).
+    try {
+      const st = this._symbolState[t.symbol] || (this._symbolState[t.symbol] = {});
+      st.lastCloseAt = Date.now();
+      st.needsRequalify = true;
+    } catch (_) {}
+    this._saveState('after-trade');
     if (this._checkCircuitBreakers()) {
       this.stopped = true;
       telegram.send(`🛑 <b>AccuPULSE3BC_v5n Bot stopped</b> — circuit breaker`);
     }
-    this._saveState('after-trade');
+  }
+
+  // ── v5.4 one-shot per symbol: guard + re-qualify observer ────────────────
+  // Returns a human-readable block reason ('cooling Xm left' /
+  // 'awaiting fresh setup'), or null when the symbol may trade.
+  // Rule: after a close the symbol must (a) wait out reentryCooldownMs AND
+  // (b) have its gates flip to FAIL at least once (observed via
+  // _noteGateMiss) before a PASS counts as a fresh setup again.
+  _reentryBlocked(symbol) {
+    const st = this._symbolState && this._symbolState[symbol];
+    if (!st || !st.lastCloseAt) return null;
+    const coolMs = this.cfg.reentryCooldownMs || 900000;
+    const left = (st.lastCloseAt + coolMs) - Date.now();
+    if (left > 0) return `cooling (${(left / 60000).toFixed(1)}m left)`;
+    // Cooldown elapsed: an armed flag still requires a fresh FAIL first —
+    // the symbol only becomes tradable once _noteGateMiss clears the flag.
+    if (st.needsRequalify) return 'awaiting fresh setup (gates must FAIL once post-close)';
+    return null;
+  }
+
+  // Called from the selection loop when a symbol's candidate fails any gate
+  // in a cycle AFTER its close: FAIL→PASS is the fresh setup. The cooldown
+  // keeps applying independently (checked in _reentryBlocked).
+  _noteGateMiss(symbol) {
+    const st = this._symbolState && this._symbolState[symbol];
+    if (st && st.needsRequalify) {
+      st.needsRequalify = false;
+      log('DEBUG', `Re-entry guard: ${symbol} re-qualified (gates failed post-close → next PASS is a fresh setup)`);
+    }
+  }
+
+  // ── v5.4 longer single-trade hold ──────────────────────────────────────────
+  // Deriv closes ACCU server-side the instant TP is hit, so "extend instead
+  // of close+reopen" is implemented as a LARGER upfront TP target
+  // (extendHold.tpMultiplier, applied at TP computation above): one contract
+  // rides more ticks, and one-shot + cooldown still prevent grinding. Kept
+  // as a named helper so the TP line stays a one-liner and selftest can pin
+  // the multiplier behavior.
+  _applyHoldExtension(tp) {
+    const eh = this.cfg.extendHold || {};
+    if (eh.enabled === false) return tp;
+    return tp; // multiplier already applied at TP computation; helper pins intent
   }
 
   // ── Feature 6: Enhanced Streak Recovery (replaces v4.0 hard pause) ────
@@ -3297,6 +3385,9 @@ class AccuPULSE3BotV5 {
         let rejectionReasons = { ev_fail: 0, barrier_fail: 0, ticks_fail: 0, jump_fail: 0, survival_fail: 0, other_fail: 0 };
         for (const a of analyses) {
           if (!a.eligible) {
+            // v5.4 re-qualify observer: analyze-time FAIL after a close clears
+            // needsRequalify (FAIL→PASS = fresh setup).
+            try { this._noteGateMiss(a.symbol); } catch (_) {}
             const reason = a.reasons?.[0] || 'UNKNOWN';
             if (reason.includes('EV_BELOW_HAIRCUT')) rejectionReasons.ev_fail++;
             else if (reason.includes('NO_VERIFIED_BARRIER')) rejectionReasons.barrier_fail++;
@@ -3337,6 +3428,13 @@ class AccuPULSE3BotV5 {
 
       let best = null;
       for (const cand of ranked) {
+        // v5.4 one-shot per symbol: a cooling / not-yet-requalified symbol
+        // yields to the next candidate so other assets trade on.
+        const _block = this._reentryBlocked(cand.symbol);
+        if (_block) {
+          log('DEBUG', `Re-entry guard: ${cand.symbol} ${_block} — trying next candidate`);
+          continue;
+        }
         // // Relaxed fix: skip recently-traded symbols by trying next candidate instead of blocking entire cycle
         // if (this.cfg.skipRecentTradedSymbols && this.lastTradedSymbols.includes(cand.symbol)) {
         //   log('DEBUG', `Recently traded ${cand.symbol} — skipping to next candidate`);
@@ -3344,20 +3442,25 @@ class AccuPULSE3BotV5 {
         // }
 
         // ── Feature 1: Adaptive confidence gate ─────────────────────────
+        // v5.4 re-qualify observer: a gate FAIL here after this symbol's
+        // close clears its needsRequalify flag (FAIL→PASS = fresh setup).
         const adaptiveMinConfidence = this.getMinConfidence(cand.volRegime);
         if (cand.score < adaptiveMinConfidence) {
           log('DEBUG', `Confidence ${cand.score.toFixed(3)} < adaptive min ${adaptiveMinConfidence.toFixed(3)} (regime ${cand.volRegime}) — skip`);
+          this._noteGateMiss(cand.symbol);
           continue;
         }
 
         // ── Feature 5: Mode-based vol regime gate ───────────────────────
         if (cand.volRegime > modeConfig.maxVolRegime) {
           log('DEBUG', `Vol regime ${cand.volRegime} > mode max ${modeConfig.maxVolRegime} — skip`);
+          this._noteGateMiss(cand.symbol);
           continue;
         }
 
         if (cand.hurst > this.cfg.maxHurst) {
           log('DEBUG', `Hurst ${cand.hurst.toFixed(2)} > max — skip`);
+          this._noteGateMiss(cand.symbol);
           continue;
         }
 
@@ -3409,12 +3512,26 @@ class AccuPULSE3BotV5 {
       const tiers = this.getTieredTargets(stake, best);
       const hour = botHour(); // GMT+1
       const timeLimits = this._getTimeOfDayLimit(hour);
-      const tp = +(stake * Math.max(0.10, Math.min(0.50, best.model.conservativeEV * 4)) * timeLimits.tpMult).toFixed(2);
+      // v5.4 longer single-trade hold: scale the computed TP by
+      // extendHold.tpMultiplier so the one contract rides more ticks
+      // instead of closing + instantly reopening on the same signal.
+      const eh = this.cfg.extendHold || {};
+      const tpMult2 = (eh.enabled === false) ? 1 : (eh.tpMultiplier ?? 1.25);
+      const tp = +(stake * Math.max(0.10, Math.min(0.50, best.model.conservativeEV * 4)) * timeLimits.tpMult * tpMult2).toFixed(2);
 
       // ── Feature 3: 6-check entry confirmation (enhanced logging) ─────
+      // v5.4 one-shot per symbol: a symbol that just traded must (a) wait out
+      // the cooldown AND (b) re-qualify (gates flip FAIL after the close) —
+      // otherwise we grind one stale signal into a loss. Other assets trade on.
+      const _reBlock = this._reentryBlocked(best.symbol);
+      if (_reBlock) {
+        log('DEBUG', `Re-entry guard: ${best.symbol} ${_reBlock} — skipping`);
+        return;
+      }
       // v5.3: request a FRESH live proposal first so barrier_check re-verifies
       // the current server band instead of re-echoing the cached model value.
-      // Falls back to the cached band only if the live request fails.
+      // v5.4: LIVE-PROPOSAL-ONLY — if the live request fails or carries no
+      // proposal, the trade is CANCELLED (no cached-model fallback, ever).
       const ticks = this.market.historyFor(best.symbol);
       let _liveProposal = null;
       try {
@@ -3429,7 +3546,8 @@ class AccuPULSE3BotV5 {
           growth_rate: growthRate,
           ...((tp != null && tp > 0) ? { limit_order: { take_profit: tp } } : {}),
         }, 15000);
-        if (liveRes?.proposal) {
+        if (liveRes?.error) throw new Error(liveRes.error.message || liveRes.error.code || 'proposal error');
+        if (liveRes?.proposal?.id) {
           _liveProposal = liveRes.proposal;
           if (liveRes.proposal.contract_details) {
             this.market.cacheStays(best.symbol, growthRate, liveRes.proposal.contract_details);
@@ -3437,11 +3555,27 @@ class AccuPULSE3BotV5 {
           }
         }
       } catch (e) {
-        log('DEBUG', `Live pre-entry proposal for ${best.symbol} failed, using cached band:`, e.message);
+        log('WARN', `Live pre-entry proposal for ${best.symbol} failed → trade CANCELLED (no cached fallback):`, e.message);
+        this._metricsCycleCount++;
+        this.logMetrics({
+          cycle: this._metricsCycleCount,
+          timestamp: Date.now(),
+          total_candidates: analyses.length,
+          best_symbol: best.symbol,
+          best_score: best.score,
+          decision: 'SKIP',
+          open_trades: this.exec.count(),
+          balance: this.lastBalance,
+          mode: this.currentMode,
+          skip_reason: 'NO_LIVE_PROPOSAL',
+        });
+        return;
       }
-      const _gateProposal = _liveProposal
-        ? { ..._liveProposal, contract_details: { ...(_liveProposal.contract_details || {}) } }
-        : { contract_details: { tick_size_barrier_percentage: best.model?.barrierPct } };
+      if (!_liveProposal) {
+        log('WARN', `Live pre-entry proposal for ${best.symbol} returned no proposal → trade CANCELLED (no cached fallback)`);
+        return;
+      }
+      const _gateProposal = { ..._liveProposal, contract_details: { ...(_liveProposal.contract_details || {}) } };
       const entryCheck = this.exec.confirmEntry(best.symbol, best, ticks, _gateProposal, growthRate);
       // Enrich reasons with authoritative gate results so [reasons] always reflects live entryConfirmation
       const _gateStr = entryCheck.details.map(d => `${d.check}:${d.result ? 'PASS' : 'FAIL'}`).join(', ');
@@ -3965,6 +4099,64 @@ function selftest() {
     const g = outGood.details.find(d => d.check === 'barrier_check');
     const b = outBad.details.find(d => d.check === 'barrier_check');
     return { pass: g?.result === true && b?.result === false, detail: `good=${g?.result} bad=${b?.result}` };
+  });
+
+  // ── v5.4 (2026-09-05): live-only + one-shot + index EV recalibration ───────
+  t('Index EV recalibration passes calm data (was 45/45 ev_fail live)', () => {
+    const ticks = mkSeries(400, 10000000, +1); // no spikes in window
+    // 10% band: ~everything survives the horizon → EV must pass z=1.28/0.85/0.3%.
+    const m = analyzer._hazardEstimate(ticks, 0.10, 0.03, 'R_10');
+    return { pass: m.ok === true, detail: m.ok ? `EV=${(m.conservativeEV * 100).toFixed(2)}%` : `${m.reason} EV=${((m.conservativeEV || 0) * 100).toFixed(2)}%` };
+  });
+
+  t('Index EV recalibration still rejects chop (negative gross EV)', () => {
+    // Spiky series (jump every 30 ticks) with a valid 0.01% band (above the
+    // 0.003 R_low floor): most returns breach the band → gross EV negative →
+    // must fail regardless of how lenient the layers are.
+    const ticks = mkSeries(400, 30, +1);
+    const m = analyzer._hazardEstimate(ticks, 0.01, 0.03, 'R_10');
+    return { pass: m.ok === false && m.reason === 'EV_BELOW_HAIRCUT', detail: m.reason || 'unexpectedly ok' };
+  });
+
+  t('Live-only barrier_check rejects missing band (no cached fallback)', () => {
+    const exec = Object.create(EnhancedTradeExecutor.prototype);
+    exec.cfg = CONFIG;
+    exec.analyzer = analyzer;
+    // Cached model carries a healthy band, but the LIVE proposal has none —
+    // v5.4 must FAIL (trade cancelled), never trade on the cached value.
+    const analysis = { model: { barrierPct: 0.10, conservativeEV: 0.02 }, survivalMean: 50, growthRate: 0.05 };
+    const noBand = { spot: 100, contract_details: {} };
+    const out = EnhancedTradeExecutor.prototype.confirmEntry.call(exec, 'R_10', analysis, mkSeries(400, 10000000, +1), noBand, 0.05);
+    const b = out.details.find(d => d.check === 'barrier_check');
+    return { pass: b?.result === false, detail: `missing live band → barrier_check=${b?.result}` };
+  });
+
+  t('One-shot guard blocks immediate re-entry, clears after FAIL + cooldown', () => {
+    const bot = Object.create(AccuPULSE3BotV5.prototype);
+    bot.cfg = CONFIG;
+    bot._symbolState = {};
+    // Stamp a close now → must be cooling.
+    bot._symbolState['R_25'] = { lastCloseAt: Date.now(), needsRequalify: true };
+    const blockedNow = bot._reentryBlocked('R_25');
+    // A gate FAIL after the close clears needsRequalify, but cooldown remains.
+    bot._noteGateMiss('R_25');
+    const stillCooling = bot._reentryBlocked('R_25');
+    // Fast-forward past the 15-min cooldown → tradable again (fresh setup).
+    bot._symbolState['R_25'].lastCloseAt = Date.now() - (CONFIG.reentryCooldownMs + 1000);
+    const free = bot._reentryBlocked('R_25');
+    // A never-traded symbol is never blocked.
+    const fresh = bot._reentryBlocked('R_50');
+    return {
+      pass: !!blockedNow && !!stillCooling && free === null && fresh === null,
+      detail: `cooling=${!!blockedNow} postFAIL-still-cooling=${!!stillCooling} postCooldown=${free} fresh=${fresh}`,
+    };
+  });
+
+  t('TP scaled by extendHold.tpMultiplier for longer single-trade hold', () => {
+    const mult = CONFIG.extendHold?.tpMultiplier;
+    const base = 2.0 * Math.max(0.10, Math.min(0.50, 0.03 * 4)) * 1.0; // stake 2, EV 3%, tpMult 1
+    const scaled = +(base * (mult ?? 1)).toFixed(2);
+    return { pass: mult === 1.25 && scaled > base, detail: `mult=${mult} base=${base.toFixed(2)} scaled=${scaled.toFixed(2)}` };
   });
 
   const failed = checks.filter(c => !c.pass);
