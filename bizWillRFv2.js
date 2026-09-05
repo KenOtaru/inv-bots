@@ -163,7 +163,7 @@ const CONFIG = {
     // TRUE MULTI-ASSET: each asset trades independently (max 1 open each).
     // Total = number of active assets so assets never block each other.
     MAX_OPEN_POSITIONS_PER_ASSET: 1,
-    MAX_TOTAL_POSITIONS: 5,
+    MAX_TOTAL_POSITIONS: 15,
     MAX_TRADES_PER_CYCLE: 1,
 
     // ── Active Index Assets ───────────────────────────────────
