@@ -122,10 +122,10 @@ const _BASE_CONFIG = {
   maxWinStakeMultiplier: parseFloat('4.0'),
 
   // Assets
-  // assets: ('R_10,R_25,R_50,R_75,R_100,BOOM50,BOOM300,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH50,CRASH300,CRASH500,CRASH600,CRASH900,CRASH1000')
+  // assets: ('R_10,R_25,R_50,R_75,R_100,BOOM50,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH50,CRASH500,CRASH600,CRASH900,CRASH1000')
   //   .split(',').map(s => s.trim()).filter(Boolean),
   // assets: ('R_10,R_25,R_50,R_75,R_100').split(',').map(s => s.trim()).filter(Boolean),
-  assets: ('BOOM50,BOOM300,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH50,CRASH300,CRASH500,CRASH600,CRASH900,CRASH1000')
+  assets: ('R_10,R_25,R_50,R_75,R_100,BOOM50,BOOM500,BOOM600,BOOM900,BOOM1000')
     .split(',').map(s => s.trim()).filter(Boolean),
 
   // Telegram
@@ -160,8 +160,8 @@ const _BASE_CONFIG = {
     // server-recorded survival history of previous contracts at this exact
     // symbol + growth rate. No fabricated barriers, no abs() log-ret math.
     nominalSpikeInterval: {
-      BOOM50: 50, BOOM300: 50, BOOM500: 500, BOOM600: 600, BOOM900: 900, BOOM1000: 1000,
-      CRASH50: 50, CRASH300: 50, CRASH500: 500, CRASH600: 600, CRASH900: 900, CRASH1000: 1000,
+      BOOM50: 50, BOOM500: 500, BOOM600: 600, BOOM900: 900, BOOM1000: 1000,
+      CRASH50: 50, CRASH500: 500, CRASH600: 600, CRASH900: 900, CRASH1000: 1000,
     },
     // nominalSpikeInterval: {
     //   BOOM1000: 1000,
@@ -203,7 +203,7 @@ const _BASE_CONFIG = {
   },
 
   // ARCA gates (v4.0 relaxations + v5.0 adaptive)
-  minConfidence: parseFloat('0.95'),   //0.07 fallback if regime lookup fails
+  minConfidence: parseFloat('0.07'),   //0.07 fallback if regime lookup fails
   maxVolRegime: parseInt('3', 10),     // ALLOW all regimes (scale stake instead)
   maxHurst: parseFloat('0.70'),
   bestScore: parseFloat('0.81'),//0.88
