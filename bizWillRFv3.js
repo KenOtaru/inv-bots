@@ -156,7 +156,7 @@ const CONFIG = {
     MAX_CONSECUTIVE_LOSSES: 9,
 
     // ── Trading Sessions (synthetics trade 24/7) ─────────────
-    USE_TRADING_SESSIONS: true,
+    USE_TRADING_SESSIONS: false,
     SESSIONS: [
         { name: 'LONDON_OPEN', start: 1, end: 17 },
         { name: 'NY_OPEN', start: 12, end: 23 },
@@ -171,21 +171,21 @@ const CONFIG = {
 
     // ── Active Index Assets ───────────────────────────────────
     ACTIVE_ASSETS: [
-        // 'R_10',
-        // 'R_25',
+        'R_10',
+        'R_25',
         'R_50',
-        // 'R_75',
+        'R_75',
         'R_100',
         '1HZ10V',
         '1HZ25V',
         '1HZ50V',
-        // '1HZ75V',
-        // '1HZ100V',
-        // 'stpRNG',
-        // 'stpRNG2',
-        // 'stpRNG3',
-        // 'stpRNG4',
-        // 'stpRNG5'
+        '1HZ75V',
+        '1HZ100V',
+        'stpRNG',
+        'stpRNG2',
+        'stpRNG3',
+        'stpRNG4',
+        'stpRNG5'
     ],
 
     // ── Misc ──────────────────────────────────────────────────
