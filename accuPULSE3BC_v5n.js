@@ -52,7 +52,7 @@ const PROFILE_DEFS = Object.freeze({
     minMomentum: 0.000007,
     minMomentum2: -0.000007,
     minSurvivalMean: 30.0, //26.0
-    kellyFraction: 0.15,
+    kellyFraction: 0.25,
     maxStakeMultiplier: 1.5,
     tpProfitPct: 0.25,
   }),
@@ -145,7 +145,7 @@ const _BASE_CONFIG = {
   // Hazard Model (v4.0 fixes)
   candidateGrowthRates: [0.05, 0.04, 0.03, 0.02, 0.01], //[0.05, 0.04, 0.03, 0.02, 0.01]
   hazardWindow: parseInt('600', 10),
-  plannedHoldTicks: parseInt('2', 10), //15
+  plannedHoldTicks: parseInt('15', 10), //15
   minBarrierPct: parseFloat('0.015'),
   // ── v5.3 index gates (2026-09-05, from live probe: 75 asset×rate combos) ──
   // Deriv's own per-tick band for low-vol indices is legitimately small
@@ -194,7 +194,7 @@ const _BASE_CONFIG = {
   // candidate gates must flip to FAIL at least once after the close before a
   // PASS counts as a fresh setup again. Prevents grinding one stale signal
   // into a loss. While a symbol is cooling down the bot trades other assets.
-  reentryCooldownMs: parseInt('900000', 10), // 15 min
+  reentryCooldownMs: parseInt('120000', 10), // 15 min (900000)
   // TP-driven hold extension: Deriv closes ACCU server-side the instant TP
   // is hit, so "extend instead of close+reopen" can only mean one thing — a
   // LONGER single trade via a larger upfront TP target (more ticks held in
@@ -202,7 +202,7 @@ const _BASE_CONFIG = {
   // the computed TP; one-shot + cooldown below still prevent grinding.
   extendHold: {
     enabled: true,
-    tpMultiplier: parseFloat('1.25'), // +25% TP → longer hold per single trade
+    tpMultiplier: parseFloat('1.50'), //1.25 +25% TP → longer hold per single trade
   },
 
   // ── v5.2-BC: Boom/Crash survival-data model ───────────────────────────
@@ -281,8 +281,8 @@ const _BASE_CONFIG = {
   scaleOutFractions: [0.30, 0.50, 0.20],
 
   // Asset Selection
-  sharpeWindow: parseInt('100', 10),
-  maxAssetCorrelation: parseFloat('0.70'),
+  sharpeWindow: parseInt('100', 10), //100
+  maxAssetCorrelation: parseFloat('0.70'), //0.70
 
   // Time-of-Day (keys = GMT+1 hours; hour is derived via botHour())
   timeOfDayLimits: {
@@ -301,23 +301,23 @@ const _BASE_CONFIG = {
   },
 
   // Streak Recovery (v4.0 base)
-  streakPauseMinutes: parseInt('20', 10),
+  streakPauseMinutes: parseInt('0', 10), //20
   streakReduceStake: parseInt('5', 10), //3
   streakStopDay: parseInt('15', 10), //7
 
   // Daily limits
   dailyMaxLoss: parseFloat('250'),
-  dailyMaxTrades: parseInt('12000'),
+  dailyMaxTrades: parseInt('1200000', 10),
 
   // System
   barrierRefreshMs: parseInt('45000', 10),
   tradeWatchdogMs: parseInt('120000', 10),
   maxTelegramQueue: parseInt('100', 10),
-  logFile: 'accuPULSE3BC_v5n_0001.log',
+  logFile: 'accuPULSE3BC_v5n_0003.log',
   logLevel: 'INFO3BC_v5n',
-  stateFile: 'accuPULSE3BC_state_v5n_0001.json',
-  metricsFile: 'metricsBC_v5n_0001.json',
-  metricsFileV5: 'accuPULSE3BC_analysis_v5n_0001.jsonl',  // Feature 7: Full metrics logging
+  stateFile: 'accuPULSE3BC_state_v5n_0003.json',
+  metricsFile: 'metricsBC_v5n_0003.json',
+  metricsFileV5: 'accuPULSE3BC_analysis_v5n_0003.jsonl',  // Feature 7: Full metrics logging
   // All wall-clock times below are GMT+1 (see BOT_TZ_OFFSET_HOURS).
   // eodTimeGmt '00:00' = midnight GMT+1. pauseWindowsGmt entries are
   // [from, to] pairs in GMT+1 'HH:MM'. timeOfDayLimits keys are GMT+1 hours.
@@ -3307,7 +3307,8 @@ class AccuPULSE3BotV5 {
     // Time-of-day limit (GMT+1 hour)
     const hour = botHour();
     const timeLimits = this._getTimeOfDayLimit(hour);
-    const finalStake = Math.min(stake, this.cfg.baseStake * timeLimits.maxStake);
+    // const finalStake = Math.min(stake, this.cfg.baseStake * timeLimits.maxStake);
+    const finalStake = Math.min(stake, this.cfg.baseStake);
 
     return +finalStake.toFixed(2);
   }
@@ -3517,7 +3518,8 @@ class AccuPULSE3BotV5 {
       // instead of closing + instantly reopening on the same signal.
       const eh = this.cfg.extendHold || {};
       const tpMult2 = (eh.enabled === false) ? 1 : (eh.tpMultiplier ?? 1.25);
-      const tp = +(stake * Math.max(0.10, Math.min(0.50, best.model.conservativeEV * 4)) * timeLimits.tpMult * tpMult2).toFixed(2);
+      // const tp = +(stake * Math.max(0.10, Math.min(0.50, best.model.conservativeEV * 4)) * timeLimits.tpMult * tpMult2).toFixed(2);
+      const tp = +(stake * Math.max(0.10, Math.min(0.50, best.model.conservativeEV * 4)) * tpMult2).toFixed(2);
 
       // ── Feature 3: 6-check entry confirmation (enhanced logging) ─────
       // v5.4 one-shot per symbol: a symbol that just traded must (a) wait out
