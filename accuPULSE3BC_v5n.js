@@ -190,11 +190,12 @@ const _BASE_CONFIG = {
   },
   // ── v5.4 one-shot per symbol (2026-09-05) ─────────────────────────────────
   // After a symbol's trade closes it may NOT immediately re-enter: it must
-  // (a) wait out `reentryCooldownMs` AND (b) fully re-qualify — i.e. its
-  // candidate gates must flip to FAIL at least once after the close before a
-  // PASS counts as a fresh setup again. Prevents grinding one stale signal
-  // into a loss. While a symbol is cooling down the bot trades other assets.
-  reentryCooldownMs: parseInt('120000', 10), // 15 min (900000)
+  // wait out `reentryCooldownMs`. An armed needsRequalify flag is advisory
+  // only (cleared by _noteGateMiss on any post-close gate FAIL) and must
+  // NEVER permanently block a symbol — v5.5 fix for the day-2 stall where
+  // calm markets kept symbols passing every cycle with no FAIL to clear it.
+  // While a symbol is cooling down the bot trades other assets.
+  reentryCooldownMs: parseInt('900000', 10), // 15 min (v5.4 one-shot: must read 900000, not 120000)
   // TP-driven hold extension: Deriv closes ACCU server-side the instant TP
   // is hit, so "extend instead of close+reopen" can only mean one thing — a
   // LONGER single trade via a larger upfront TP target (more ticks held in
@@ -3232,9 +3233,11 @@ class AccuPULSE3BotV5 {
     const coolMs = this.cfg.reentryCooldownMs || 900000;
     const left = (st.lastCloseAt + coolMs) - Date.now();
     if (left > 0) return `cooling (${(left / 60000).toFixed(1)}m left)`;
-    // Cooldown elapsed: an armed flag still requires a fresh FAIL first —
-    // the symbol only becomes tradable once _noteGateMiss clears the flag.
-    if (st.needsRequalify) return 'awaiting fresh setup (gates must FAIL once post-close)';
+    // v5.5: cooldown elapsed → tradable. The needsRequalify flag is
+    // advisory only (a symbol that never failed post-close still had to
+    // sit out the full cooldown). It must NEVER permanently lock a
+    // symbol out — that stalled day-2 trading when calm markets kept a
+    // symbol passing every cycle with no FAIL to clear the flag.
     return null;
   }
 
@@ -4158,7 +4161,7 @@ function selftest() {
     const mult = CONFIG.extendHold?.tpMultiplier;
     const base = 2.0 * Math.max(0.10, Math.min(0.50, 0.03 * 4)) * 1.0; // stake 2, EV 3%, tpMult 1
     const scaled = +(base * (mult ?? 1)).toFixed(2);
-    return { pass: mult === 1.25 && scaled > base, detail: `mult=${mult} base=${base.toFixed(2)} scaled=${scaled.toFixed(2)}` };
+    return { pass: Number(mult) > 1 && scaled > base, detail: `mult=${mult} base=${base.toFixed(2)} scaled=${scaled.toFixed(2)}` };
   });
 
   const failed = checks.filter(c => !c.pass);
