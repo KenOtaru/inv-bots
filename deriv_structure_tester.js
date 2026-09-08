@@ -56,9 +56,9 @@ const CONFIG = {
     //   Boom/Crash: 'BOOM1000', 'BOOM500', 'BOOM300N', 'CRASH1000', 'CRASH500', 'CRASH300N'
     //   Volatility (control group, expect no structure): 'R_10', 'R_25', 'R_50', 'R_75', 'R_100'
     //   Step / Range Break / Jump: use their exact Deriv symbol codes
-    symbol: 'BOOM1000',
+    symbol: 'BOOM50',
 
-    targetTicks: 50000,        // total historical ticks to pull (more = more statistical power)
+    targetTicks: 80000,        //50000 total historical ticks to pull (more = more statistical power)
     batchSize: 5000,           // ticks per API request
     requestDelayMs: 400,       // pause between paginated requests (avoid rate limiting)
 
