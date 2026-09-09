@@ -1,39 +1,42 @@
 /**
  * ╔══════════════════════════════════════════════════════════════════════╗
- * ║  DERIV SYNTHETIC INDEX — STATISTICAL STRUCTURE TESTER  (v3)          ║
+ * ║  DERIV SYNTHETIC INDEX — STATISTICAL STRUCTURE TESTER  (v2)          ║
  * ╠══════════════════════════════════════════════════════════════════════╣
  * ║                                                                      ║
- * ║  CHANGELOG vs v2 — fixes found by comparing against a working        ║
- * ║  reference bot (accuPULSE3.js) that correctly trades ACCU on         ║
- * ║  Boom/Crash:                                                         ║
+ * ║  CHANGELOG vs v1 — fixes two confirmed bugs found when reviewing     ║
+ * ║  real BOOM50/CRASH50 output:                                         ║
  * ║                                                                      ║
- * ║  BUG #3 (wrong auth flow): v2 always connected via the classic       ║
- * ║  wss://ws.derivws.com/websockets/v3?app_id=X flow. If your token is  ║
- * ║  a PAT (format "pat_..."), Deriv's newer Options API instead         ║
- * ║  requires: REST GET /trading/v1/options/accounts to find your        ║
- * ║  account, then REST POST .../otp to obtain a one-time WebSocket URL  ║
- * ║  — you connect to THAT url, not the generic one. Public calls        ║
- * ║  (ticks_history) worked fine either way, which is why the historical ║
- * ║  analysis succeeded while anything requiring real authorization      ║
- * ║  (accumulator proposals) silently failed to resolve the asset.       ║
- * ║  FIX: token type is now auto-detected and the correct flow is used.  ║
+ * ║  BUG #1 (baseline self-contamination): v1 used a 50-tick rolling     ║
+ * ║  MAD window to define "normal" move size — comparable to the mean    ║
+ * ║  spike spacing (~57 ticks). Right after a real spike, that huge      ║
+ * ║  move sat inside the lookback window and inflated the baseline,      ║
+ * ║  making the NEXT spike harder to detect for ~50 ticks. This alone    ║
+ * ║  explained the suppressed hazard in the first hazard bucket.         ║
+ * ║  FIX: the baseline is now a stable value recomputed periodically     ║
+ * ║  from a large trailing sample, with any tick within                  ║
+ * ║  `excludeBufferAfterSpike` ticks of a known spike excluded from      ║
+ * ║  that calculation — a spike can no longer contaminate its own        ║
+ * ║  detection threshold.                                                ║
  * ║                                                                      ║
- * ║  BUG #4 (wrong field name): ACCU proposals need `underlying_symbol`  ║
- * ║  instead of `symbol` when authenticated via the PAT/Options flow.    ║
- * ║  FIX: symbol field name now matches the active auth mode.            ║
+ * ║  BUG #2 (impossible bin): v1's `minSpikeSeparation: 5` guarantees    ║
+ * ║  no interval can be < 5 ticks, but the chi-square test binned        ║
+ * ║  against an UNSHIFTED geometric distribution whose first quantile    ║
+ * ║  bin was (0, 4] — a bin that could never contain a single            ║
+ * ║  observation. In the real output this single empty bin accounted    ║
+ * ║  for ~70% of the "significant" chi-square statistic on both assets.  ║
+ * ║  FIX: all three tests (dispersion/CV, chi-square, KS) now fit a      ║
+ * ║  SHIFTED geometric distribution whose support correctly starts at    ║
+ * ║  `minSpikeSeparation`, not 1.                                        ║
  * ║                                                                      ║
- * ║  BUG #5 (wrong response path): barrier data is nested under          ║
- * ║  `proposal.contract_details`, not top-level on `proposal`. v2 was    ║
- * ║  reading fields that don't exist at that path. FIX: extraction now   ║
- * ║  reads `contract_details.{high_barrier, low_barrier,                 ║
- * ║  tick_size_barrier_percentage, barrier_spot_distance,                ║
- * ║  maximum_payout, ticks_stayed_in}` — the last of which appears to be ║
- * ║  Deriv's own rolling array of recent real survival durations for     ║
- * ║  that symbol/growth-rate, now pulled and summarized as an            ║
- * ║  independent cross-check against our own hazard estimate.            ║
- * ║                                                                      ║
- * ║  SECURITY: put your token in an environment variable                 ║
- * ║  (DERIV_API_TOKEN) rather than hardcoding it here.                   ║
+ * ║  NEW: Accumulator (ACCU) support.                                    ║
+ * ║   - Checks live via `contracts_for` whether ACCU is actually         ║
+ * ║     offered on the configured symbol before assuming anything.       ║
+ * ║   - If available, pulls live proposals for growth rates 1–5% and     ║
+ * ║     empirically compares each barrier against your real historical   ║
+ * ║     tick data: what fraction of ORDINARY ticks would breach it       ║
+ * ║     (vs. the theoretical zero-edge rate g/(1+g)), and what fraction  ║
+ * ║     of DETECTED SPIKES would breach it (the number that matters for  ║
+ * ║     connecting the spike-timing hypothesis to accumulator risk).     ║
  * ║                                                                      ║
  * ║  THIS SCRIPT DOES NOT TRADE. Read-only historical + proposal calls.  ║
  * ║                                                                      ║
@@ -43,8 +46,6 @@
 'use strict';
 
 const WebSocket = require('ws');
-const https = require('https');
-const { URL } = require('url');
 const fs = require('fs');
 const path = require('path');
 
@@ -52,125 +53,37 @@ const path = require('path');
 // CONFIG
 // ═══════════════════════════════════════════════════════════════════════════
 const CONFIG = {
-    symbol: 'BOOM50',
+    symbol: 'BOOM50',   // run once per symbol; also test 'CRASH50', etc.
 
-    // ── Credentials — set via environment variables, do not hardcode ────
-    apiToken: 'pat_cb2016855b5e6c61ac95f94432192dd6ed86bec7f7454e575d3fe1ed9f617692',   // classic token OR a "pat_..." token
-    appId: '33uslPtthXBEkQOdfKfoY',  // classic app_id (not needed for PAT/Options flow)
-    wsUrl: 'wss://ws.derivws.com/websockets/v3',
-    accountType: 'demo',
+    // Optional: set your Deriv DEMO account API token here if proposal
+    // requests below fail with an authorization error. Historical ticks
+    // and contracts_for do not require it; ACCU proposals may.
+    demoToken: null,
 
     targetTicks: 80000,
     batchSize: 5000,
     requestDelayMs: 400,
 
     // ── Spike / event detection ──────────────────────────────────────────
-    minSpikeSeparation: 2,
+    minSpikeSeparation: 2,      // now safe to keep low — tests account for it
     spikeThresholdMAD: 10,
-    spikeDirection: 'auto',
+    spikeDirection: 'auto',     // 'up' | 'down' | 'both' | 'auto'
 
-    baselineWindow: 2000,
-    recomputeBaselineEvery: 2000,
-    excludeBufferAfterSpike: 20,
+    // ── Baseline (fixed, contamination-resistant) ───────────────────────
+    baselineWindow: 2000,         // ticks used to compute each baseline recalculation
+    recomputeBaselineEvery: 2000, // how often the baseline is refreshed
+    excludeBufferAfterSpike: 20,  // ticks after a spike excluded from baseline calc
 
     hazardBuckets: [0, 0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 6, Infinity],
 
     // ── Accumulator analysis ─────────────────────────────────────────────
     accumulator: {
         growthRates: [0.01, 0.02, 0.03, 0.04, 0.05],
-        testStake: 10,
+        testStake: 10, // only used to request price quotes, nothing is bought
     },
 
-    outputFile: path.join(__dirname, `structure_report_v3_${Date.now()}.json`),
+    outputFile: path.join(__dirname, `structure_report_v2_${Date.now()}.json`),
 };
-
-// ═══════════════════════════════════════════════════════════════════════════
-// CONNECTION — auto-detects classic token vs PAT/Options-API token
-// ═══════════════════════════════════════════════════════════════════════════
-function isPatToken(token) {
-    return typeof token === 'string' && /^pat_[a-z0-9_\-]{16,}$/i.test(token.trim());
-}
-
-class RestClient {
-    constructor(baseUrl, appId, token) {
-        this.baseUrl = baseUrl || 'https://api.derivws.com';
-        this.appId = appId || '1089';
-        this.token = token || '';
-    }
-    _request(method, reqPath, body = null) {
-        return new Promise((resolve, reject) => {
-            let url;
-            try { url = new URL(reqPath, this.baseUrl); } catch (e) {
-                return reject(new Error(`Invalid URL: ${reqPath}`));
-            }
-            const isHttps = url.protocol === 'https:';
-            const lib = isHttps ? https : require('http');
-            const opts = {
-                method,
-                hostname: url.hostname,
-                port: url.port || (isHttps ? 443 : 80),
-                path: url.pathname + url.search,
-                headers: {
-                    'Deriv-App-ID': this.appId,
-                    'Authorization': 'Bearer ' + this.token,
-                    'Accept': 'application/json',
-                    ...(body ? { 'Content-Type': 'application/json' } : {}),
-                },
-                timeout: 15000,
-            };
-            const req = lib.request(opts, res => {
-                let data = '';
-                res.on('data', d => data += d);
-                res.on('end', () => {
-                    let parsed = data;
-                    try { parsed = JSON.parse(data); } catch (_) {}
-                    resolve({ status: res.statusCode, body: parsed });
-                });
-            });
-            req.on('timeout', () => req.destroy(new Error('REST timeout')));
-            req.on('error', reject);
-            if (body) req.write(JSON.stringify(body));
-            req.end();
-        });
-    }
-    get(p) { return this._request('GET', p); }
-    post(p, b) { return this._request('POST', p, b); }
-}
-
-/**
- * Resolves the correct WebSocket URL + auth mode for the configured token.
- * Returns { url, needsAuthorize, isPat, account? }.
- */
-async function resolveConnection(cfg) {
-    if (!cfg.apiToken) {
-        const sep = cfg.wsUrl.includes('?') ? '&' : '?';
-        return { url: `${cfg.wsUrl}${sep}app_id=${encodeURIComponent(cfg.appId)}`, needsAuthorize: false, isPat: false, noToken: true };
-    }
-
-    if (!isPatToken(cfg.apiToken)) {
-        const sep = cfg.wsUrl.includes('?') ? '&' : '?';
-        return { url: `${cfg.wsUrl}${sep}app_id=${encodeURIComponent(cfg.appId)}`, needsAuthorize: true, isPat: false };
-    }
-
-    // PAT token → REST account lookup + OTP handshake (Deriv's Options API) — aligned with accuPULSE3.js _newApiConnect
-    const rest = new RestClient('https://api.derivws.com', cfg.appId, cfg.apiToken);
-    const accRes = await rest.get('/trading/v1/options/accounts');
-    if (accRes.status !== 200) {
-        const msg = accRes.body?.errors?.[0]?.message || accRes.body?.message || JSON.stringify(accRes.body);
-        throw new Error(`Account list failed (${accRes.status}): ${msg}`);
-    }
-    const accounts = Array.isArray(accRes.body?.data) ? accRes.body.data : [];
-    if (!accounts.length) throw new Error('No Options accounts found for this token');
-    const desired = (cfg.accountType || 'demo').toLowerCase();
-    const acct = accounts.find(a => (a.account_type || '').toLowerCase() === desired) || accounts[0];
-
-    const otpRes = await rest.post(`/trading/v1/options/accounts/${encodeURIComponent(acct.account_id)}/otp`);
-    if (otpRes.status !== 200) throw new Error(`OTP failed (${otpRes.status}): ${JSON.stringify(otpRes.body)}`);
-    const wsUrl = otpRes.body?.data?.url;
-    if (!wsUrl || !/^wss?:/i.test(wsUrl)) throw new Error('OTP response missing data.url');
-
-    return { url: wsUrl, needsAuthorize: false, isPat: true, account: acct };
-}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // WEBSOCKET HELPERS
@@ -221,7 +134,7 @@ async function collectTicks(ws, symbol, targetCount, batchSize, delayMs) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// SPIKE / EVENT DETECTION  (contamination-resistant baseline, from v2)
+// SPIKE / EVENT DETECTION  (contamination-resistant baseline)
 // ═══════════════════════════════════════════════════════════════════════════
 function median(arr) {
     if (arr.length === 0) return 0;
@@ -289,7 +202,7 @@ function computeIntervals(spikeIndices) {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// STATISTICAL MACHINERY  (unchanged from v2 — already validated)
+// STATISTICAL MACHINERY
 // ═══════════════════════════════════════════════════════════════════════════
 function gammln(xx) {
     const cof = [
@@ -347,6 +260,7 @@ function erf(x) {
 }
 function normalCDF(x) { return 0.5 * (1 + erf(x / Math.SQRT2)); }
 
+// ── Dispersion / CV — now shift-aware ───────────────────────────────────────
 function dispersionStats(intervals, floor) {
     const shifted = intervals.map(v => v - floor + 1);
     const n = shifted.length;
@@ -358,6 +272,7 @@ function dispersionStats(intervals, floor) {
     return { n, mean: sMean + floor - 1, shiftedMean: sMean, variance, cv, theoreticalCV, pHat, floor };
 }
 
+// ── Chi-square GOF — now shift-aware (fixes the impossible-bin bug) ───────
 function chiSquareGoodnessOfFitGeometric(intervals, floor) {
     const shifted = intervals.map(v => v - floor + 1);
     const n = shifted.length;
@@ -393,6 +308,7 @@ function chiSquareGoodnessOfFitGeometric(intervals, floor) {
     return { chiSq, df, pValue, numBins, observed, expected, pHat, mean: mean + floor - 1, floor };
 }
 
+// ── KS test — now shift-aware ────────────────────────────────────────────
 function ksTestGeometric(intervals, floor) {
     const shifted = intervals.map(v => v - floor + 1);
     const n = shifted.length;
@@ -457,55 +373,32 @@ function lag1Autocorrelation(values) {
     return { r1, z, pValue, n };
 }
 
-function summarizeArray(arr) {
-    if (!Array.isArray(arr) || arr.length === 0) return null;
-    const sorted = [...arr].sort((a, b) => a - b);
-    const n = arr.length;
-    const mean = arr.reduce((s, v) => s + v, 0) / n;
-    return { n, mean, median: sorted[Math.floor(n / 2)], min: sorted[0], max: sorted[n - 1] };
-}
-
 // ═══════════════════════════════════════════════════════════════════════════
-// SYMBOL / ACCUMULATOR AVAILABILITY  (now checks active_symbols too)
+// ACCUMULATOR: AVAILABILITY CHECK + GROWTH-RATE BARRIER ANALYSIS
 // ═══════════════════════════════════════════════════════════════════════════
-async function checkSymbolAvailability(ws, symbol) {
-    console.log(`\n🔍 Verifying symbol "${symbol}" (active_symbols + contracts_for)...`);
-
-    let foundInActive = null;
+async function checkAccumulatorAvailability(ws, symbol) {
+    console.log(`\n🔍 Checking contract availability for ${symbol} (contracts_for)...`);
     try {
-        const msg = await send(ws, { active_symbols: 'brief' });
-        const list = msg.active_symbols ?? [];
-        const keys = list.map(s => s.underlying_symbol || s.symbol).filter(Boolean);
-        foundInActive = keys.includes(symbol);
-        console.log(`  active_symbols: ${foundInActive ? '✅ found' : '❌ NOT found'} (${keys.length} symbols returned)`);
-        if (!foundInActive) {
-            const related = keys.filter(k => k.toUpperCase().includes('BOOM') || k.toUpperCase().includes('CRASH'));
-            console.log(`  Boom/Crash symbols Deriv actually returned: ${related.join(', ') || '(none)'}`);
-        }
-    } catch (e) {
-        console.log(`  ⚠️  active_symbols failed: ${e.message}`);
-    }
-
-    let hasAccu = null;
-    try {
-        // Aligned with accuPULSE3.js: contracts_for does not take currency; OTP API rejects unknown props
-        const msg = await send(ws, { contracts_for: symbol });
+        const msg = await send(ws, { contracts_for: symbol, currency: 'USD' });
         const available = msg.contracts_for?.available ?? [];
         const types = [...new Set(available.map(c => c.contract_type))];
-        hasAccu = types.includes('ACCU');
-        console.log(`  contracts_for: contract types = ${types.join(', ') || '(none)'}`);
-        console.log(`  Accumulators (ACCU): ${hasAccu ? '✅ AVAILABLE' : '❌ NOT AVAILABLE'}`);
+        const hasAccu = types.includes('ACCU');
+        console.log(`  Contract types found: ${types.join(', ') || '(none returned)'}`);
+        console.log(`  Accumulators (ACCU): ${hasAccu ? '✅ AVAILABLE' : '❌ NOT AVAILABLE'} on ${symbol}`);
+        return hasAccu;
     } catch (e) {
-        console.log(`  ⚠️  contracts_for failed: ${e.message}`);
+        console.log(`  ⚠️  contracts_for check failed: ${e.message}`);
+        console.log('  Proceeding, but the accumulator barrier analysis below may also fail.');
+        return null; // unknown — let the proposal calls below settle it definitively
     }
-
-    return { foundInActive, hasAccu };
 }
 
-async function analyzeAccumulatorBarriers(ws, symbol, cfg, diffs, prices, spikeIndices, symbolKey) {
+async function analyzeAccumulatorBarriers(ws, symbol, cfg, diffs, prices, spikeIndices) {
     console.log('\n' + '─'.repeat(72));
     console.log('ACCUMULATOR GROWTH-RATE BARRIER ANALYSIS');
     console.log('─'.repeat(72));
+    console.log('(Field names below are our best understanding of the ACCU proposal');
+    console.log(' response. Raw JSON is printed per growth rate so you can verify.)\n');
 
     const percentMoves = [];
     for (let i = 1; i < prices.length; i++) percentMoves.push(diffs[i] / prices[i - 1]);
@@ -518,7 +411,7 @@ async function analyzeAccumulatorBarriers(ws, symbol, cfg, diffs, prices, spikeI
             const msg = await send(ws, {
                 proposal: 1,
                 contract_type: 'ACCU',
-                [symbolKey]: symbol,
+                symbol,
                 amount: cfg.testStake,
                 basis: 'stake',
                 currency: 'USD',
@@ -531,28 +424,23 @@ async function analyzeAccumulatorBarriers(ws, symbol, cfg, diffs, prices, spikeI
             continue;
         }
 
-        const cd = proposal?.contract_details || {};
-        console.log(`\n  Growth rate ${(g * 100).toFixed(0)}% — contract_details: ${JSON.stringify(cd)}`);
+        console.log(`  Growth rate ${(g * 100).toFixed(0)}% — raw proposal: ${JSON.stringify(proposal)}`);
 
-        const spot = parseFloat(cd.current_spot || 0);
-        const distance = parseFloat(cd.barrier_spot_distance || 0);
-        const highBarrier = parseFloat(cd.high_barrier || 0);
-        const tickBarrierPct = parseFloat(cd.tick_size_barrier_percentage || 0);
-        const maxPayout = parseFloat(cd.maximum_payout || 0);
-        const ticksStayedIn = Array.isArray(cd.ticks_stayed_in) ? cd.ticks_stayed_in : null;
+        const spot = parseFloat(proposal.spot ?? proposal.spot_price ?? NaN);
+        const highBarrier = parseFloat(proposal.high_barrier ?? NaN);
 
         let barrierPercent = null;
-        if (tickBarrierPct > 0) barrierPercent = tickBarrierPct / 100;
-        else if (spot > 0 && distance > 0) barrierPercent = distance / spot;
-        else if (spot > 0 && highBarrier > 0) barrierPercent = Math.abs(highBarrier - spot) / spot;
+        if (!isNaN(spot) && !isNaN(highBarrier) && spot > 0) {
+            barrierPercent = Math.abs(highBarrier - spot) / spot;
+        }
 
         if (barrierPercent === null) {
-            console.log('    ⚠️  Could not extract a barrier percentage — inspect contract_details above.');
-            results.push({ growthRate: g, available: true, rawContractDetails: cd, barrierPercent: null });
+            console.log('    ⚠️  Could not auto-extract a barrier percentage — inspect the raw fields above.\n');
+            results.push({ growthRate: g, available: true, rawProposal: proposal, barrierPercent: null });
             continue;
         }
 
-        const fairKnockoutProb = g / (1 + g);
+        const fairKnockoutProb = g / (1 + g); // zero-edge per-tick knockout probability
 
         let ordinaryBreaches = 0, ordinaryCount = 0;
         let spikeBreaches = 0, spikeCount = 0;
@@ -564,19 +452,16 @@ async function analyzeAccumulatorBarriers(ws, symbol, cfg, diffs, prices, spikeI
         }
         const empOrdinary = ordinaryCount > 0 ? ordinaryBreaches / ordinaryCount : null;
         const empSpike = spikeCount > 0 ? spikeBreaches / spikeCount : null;
-        const stayedSummary = summarizeArray(ticksStayedIn);
 
-        console.log(`    Barrier                      : ±${(barrierPercent * 100).toFixed(6)}% per tick`);
-        console.log(`    Max payout                   : ${maxPayout || 'n/a'}`);
-        console.log(`    Fair (zero-edge) knockout     : ${(fairKnockoutProb * 100).toFixed(4)}% per tick`);
-        console.log(`    Empirical ordinary knockout   : ${empOrdinary !== null ? (empOrdinary * 100).toFixed(4) + '%' : 'n/a'}`);
-        console.log(`    Empirical SPIKE-tick knockout  : ${empSpike !== null ? (empSpike * 100).toFixed(2) + '%' : 'n/a'} (${spikeCount} spikes checked)`);
-        console.log(`    Deriv's ticks_stayed_in sample : ${stayedSummary ? `n=${stayedSummary.n} mean=${stayedSummary.mean.toFixed(1)} median=${stayedSummary.median} range=[${stayedSummary.min},${stayedSummary.max}]` : 'not returned'}`);
+        console.log(`    Barrier                 : ±${(barrierPercent * 100).toFixed(6)}% per tick`);
+        console.log(`    Fair (zero-edge) knockout: ${(fairKnockoutProb * 100).toFixed(4)}% per tick`);
+        console.log(`    Empirical ordinary-tick knockout rate: ${empOrdinary !== null ? (empOrdinary * 100).toFixed(4) + '%' : 'n/a'}`);
+        console.log(`    Empirical SPIKE-tick knockout rate   : ${empSpike !== null ? (empSpike * 100).toFixed(2) + '%' : 'n/a'} (${spikeCount} spikes checked)\n`);
 
         results.push({
-            growthRate: g, available: true, barrierPercent, fairKnockoutProb, maxPayout,
+            growthRate: g, available: true, barrierPercent, fairKnockoutProb,
             empiricalOrdinaryKnockoutProb: empOrdinary, empiricalSpikeKnockoutProb: empSpike,
-            spikeCount, ordinaryCount, ticksStayedInSummary: stayedSummary,
+            spikeCount, ordinaryCount,
         });
     }
     return results;
@@ -587,43 +472,28 @@ async function analyzeAccumulatorBarriers(ws, symbol, cfg, diffs, prices, spikeI
 // ═══════════════════════════════════════════════════════════════════════════
 async function main() {
     console.log('═'.repeat(72));
-    console.log('  DERIV SYNTHETIC INDEX — STATISTICAL STRUCTURE TESTER (v3)');
+    console.log('  DERIV SYNTHETIC INDEX — STATISTICAL STRUCTURE TESTER (v2)');
     console.log('═'.repeat(72));
     console.log(`  Symbol       : ${CONFIG.symbol}`);
     console.log(`  Target ticks : ${CONFIG.targetTicks}`);
     console.log('═'.repeat(72));
 
-    const conn = await resolveConnection(CONFIG);
-    console.log(`\n🔌 Connecting (${conn.noToken ? 'no token — public data only' : conn.isPat ? 'PAT/OTP flow' : 'classic app_id flow'})...`);
+    const ws = new WebSocket('wss://ws.derivws.com/websockets/v3?app_id=1089');
+    await new Promise((resolve, reject) => { ws.on('open', resolve); ws.on('error', reject); });
 
-    const ws = new WebSocket(conn.url, {
-        headers: { 'User-Agent': 'AccuPULSE3/3.1 (+Node.js)' },
-        handshakeTimeout: 15000,
-    });
-    await new Promise((resolve, reject) => {
-        ws.on('open', resolve);
-        ws.on('error', reject);
-        ws.on('unexpected-response', (_, res) => {
-            try { res.destroy(); } catch (_) {}
-            reject(new Error(`WS handshake failed: ${res.statusCode} ${res.statusMessage}`));
-        });
-    });
-
-    if (conn.needsAuthorize) {
+    if (CONFIG.demoToken) {
+        console.log('\n🔑 Authorizing with demo token...');
         try {
-            await send(ws, { authorize: CONFIG.apiToken });
+            await send(ws, { authorize: CONFIG.demoToken });
             console.log('  ✅ Authorized');
         } catch (e) {
             console.log(`  ⚠️  Authorization failed: ${e.message} — continuing unauthorized`);
         }
-    } else if (conn.isPat) {
-        console.log(`  ✅ Connected via OTP session (account ${conn.account?.account_id || 'unknown'})`);
     }
 
-    const symbolKey = conn.isPat ? 'underlying_symbol' : 'symbol';
-    const avail = await checkSymbolAvailability(ws, CONFIG.symbol);
+    const accuAvailable = await checkAccumulatorAvailability(ws, CONFIG.symbol);
 
-    console.log('\n📡 Collecting tick history...');
+    console.log('\n📡 Collecting tick history (read-only, no account needed)...');
     const { times, prices } = await collectTicks(
         ws, CONFIG.symbol, CONFIG.targetTicks, CONFIG.batchSize, CONFIG.requestDelayMs
     );
@@ -637,10 +507,7 @@ async function main() {
     const hoursSpanned = (times[times.length - 1] - times[0]) / 3600;
     console.log(`✅ Collected ${prices.length} ticks spanning ${hoursSpanned.toFixed(1)} hours\n`);
 
-    const report = {
-        symbol: CONFIG.symbol, ticksCollected: prices.length, hoursSpanned,
-        symbolFoundInActiveList: avail.foundInActive, accumulatorAvailable: avail.hasAccu,
-    };
+    const report = { symbol: CONFIG.symbol, ticksCollected: prices.length, hoursSpanned, accumulatorAvailable: accuAvailable };
 
     // ── General randomness checks ────────────────────────────────────────
     console.log('─'.repeat(72));
@@ -658,7 +525,7 @@ async function main() {
 
     // ── Spike/event timing analysis ──────────────────────────────────────
     console.log('─'.repeat(72));
-    console.log('SPIKE / EVENT TIMING ANALYSIS');
+    console.log('SPIKE / EVENT TIMING ANALYSIS  (contamination-resistant baseline)');
     console.log('─'.repeat(72));
 
     const { spikeIndices, direction, diffs } = detectSpikes(prices, CONFIG, CONFIG.symbol);
@@ -672,14 +539,22 @@ async function main() {
     } else {
         const intervals = computeIntervals(spikeIndices);
         const floor = CONFIG.minSpikeSeparation;
-        const disp = dispersionStats(intervals, floor);
+        const disp = chiSquareAwareDispersion(intervals, floor);
 
         console.log(`\nInterval count          : ${intervals.length}`);
         console.log(`Mean spacing            : ${disp.mean.toFixed(1)} ticks`);
         console.log(`Coefficient of Variation: ${disp.cv.toFixed(3)}  (shifted-geometric expects ≈ ${disp.theoreticalCV.toFixed(3)})`);
+        if (disp.cv < disp.theoreticalCV * 0.85) {
+            console.log('  → CV notably BELOW expectation: spacing more REGULAR than memoryless — possible structure.');
+        } else if (disp.cv > disp.theoreticalCV * 1.15) {
+            console.log('  → CV notably ABOVE expectation: events CLUSTER more than memoryless — possible burstiness.');
+        } else {
+            console.log('  → CV consistent with memoryless spacing once the separation floor is accounted for.');
+        }
 
         const chiSq = chiSquareGoodnessOfFitGeometric(intervals, floor);
         console.log(`\nChi-Square GOF (shifted) : χ²=${chiSq.chiSq.toFixed(2)}  df=${chiSq.df}  p=${chiSq.pValue.toFixed(4)}  ${chiSq.pValue < 0.05 ? '⚠️  REJECTS memoryless' : '✓  fails to reject memoryless'}`);
+        console.log(`  Bin 0 observed: ${chiSq.observed[0]} (expected ${chiSq.expected[0].toFixed(1)}) — should no longer be forced to 0`);
 
         const ks = ksTestGeometric(intervals, floor);
         console.log(`KS Test (shifted)        : D=${ks.D.toFixed(4)}  p=${ks.pValue.toFixed(4)}  ${ks.pValue < 0.05 ? '⚠️  REJECTS memoryless' : '✓  fails to reject memoryless'}`);
@@ -699,19 +574,16 @@ async function main() {
         report.hazardTable = hazard;
 
         const structureFound = chiSq.pValue < 0.05 || ks.pValue < 0.05;
+        console.log(`\n${structureFound ? '⚠️  Still shows possible structure after fixes — worth an out-of-sample split.' : '✓  No significant deviation from memoryless once the bugs are fixed.'}`);
         report.verdict = structureFound ? 'possible_structure_needs_validation' : 'no_structure_detected';
-        console.log(`\n${structureFound ? '⚠️  Possible structure — worth an out-of-sample split.' : '✓  No significant deviation from memoryless.'}`);
 
         // ── Accumulator barrier analysis ───────────────────────────────────
-        if (!CONFIG.apiToken) {
-            console.log('\n(Skipping accumulator analysis — no apiToken configured. Set DERIV_API_TOKEN.)');
-            report.accumulatorAnalysis = null;
-        } else if (avail.hasAccu === false) {
-            console.log('\n(Skipping accumulator analysis — ACCU not available on this symbol.)');
+        if (accuAvailable === false) {
+            console.log('\n(Skipping accumulator barrier analysis — ACCU not available on this symbol.)');
             report.accumulatorAnalysis = null;
         } else {
             const accuResults = await analyzeAccumulatorBarriers(
-                ws, CONFIG.symbol, CONFIG.accumulator, diffs, prices, spikeIndices, symbolKey
+                ws, CONFIG.symbol, CONFIG.accumulator, diffs, prices, spikeIndices
             );
             report.accumulatorAnalysis = accuResults;
         }
@@ -721,6 +593,9 @@ async function main() {
     fs.writeFileSync(CONFIG.outputFile, JSON.stringify(report, null, 2));
     console.log(`\n📁 Full report saved to: ${CONFIG.outputFile}`);
 }
+
+// Small alias so main() reads cleanly — same function as dispersionStats
+function chiSquareAwareDispersion(intervals, floor) { return dispersionStats(intervals, floor); }
 
 main().catch(err => {
     console.error('\n❌ Fatal error:', err.message);
