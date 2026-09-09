@@ -112,8 +112,8 @@ const CONFIG = Object.freeze({
 
   reconnect: { initialDelayMs:1000, maxDelayMs:60000, backoffFactor:2, jitterMs:750 },
   watchdogMs: 90000,
-  stateFile: 'hazardBot_v2_state.json',
-  logFile: 'hazardBot_v2.log',
+  stateFile: 'hazardBot_v2_01_state.json',
+  logFile: 'hazardBot_v2_01.log',
   logLevel: 'INFO',
   telegram: {
     enabled: true,
