@@ -59,7 +59,7 @@ const CONFIG = {
 
     // ── Credentials — PAT/OTP flow auto-detected (aligned with accuPULSE3.js) ─
     // Set DERIV_API_TOKEN env var or edit here. Supports classic token OR "pat_..." .
-    apiToken: process.env.DERIV_API_TOKEN || 'pat_cb2016855b5e6c61ac95f94432192dd6ed86bec7f7454e575d3fe1ed9f617692',
+    apiToken: 'pat_cb2016855b5e6c61ac95f94432192dd6ed86bec7f7454e575d3fe1ed9f617692',
     demoToken: null, // legacy alias — if apiToken empty, demoToken is used
     appId: '33uslPtthXBEkQOdfKfoY',
     wsUrl: 'wss://ws.derivws.com/websockets/v3',
@@ -72,7 +72,7 @@ const CONFIG = {
     // ── Spike / event detection ──────────────────────────────────────────
     minSpikeSeparation: 2,      // now safe to keep low — tests account for it
     spikeThresholdMAD: 10,
-    spikeDirection: 'auto',     // 'up' | 'down' | 'both' | 'auto'
+    spikeDirection: 'both',     // 'up' | 'down' | 'both' | 'auto'
 
     // ── Baseline (fixed, contamination-resistant) ───────────────────────
     baselineWindow: 2000,         // ticks used to compute each baseline recalculation
