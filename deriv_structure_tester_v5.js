@@ -46,7 +46,7 @@ const path = require('path');
 // CONFIG
 // ═══════════════════════════════════════════════════════════════════════════
 const CONFIG = {
-    symbol: 'BOOM50',
+    symbol: 'BOOM500',
 
     apiToken: process.env.DERIV_API_TOKEN || 'pat_cb2016855b5e6c61ac95f94432192dd6ed86bec7f7454e575d3fe1ed9f617692',
     appId: process.env.DERIV_APP_ID || '33uslPtthXBEkQOdfKfoY',
