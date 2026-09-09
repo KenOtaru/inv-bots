@@ -485,9 +485,10 @@ function maybeResetDaily(){
 }
 
 // ────────────────────────────────────────────────────────────────────
-//  Watchdog
+//  Watchdog — idempotent settlement (accuAPEX-style)
 // ────────────────────────────────────────────────────────────────────
 const openContracts = new Map();
+const settledIds = new Set();
 let watchdogTimer=null;
 function startWatchdog(client){
   if(watchdogTimer) clearInterval(watchdogTimer);
@@ -508,18 +509,20 @@ function startWatchdog(client){
   client.on('close', ()=>{ openContracts.clear(); });
 }
 function finalizeContract(cid, poc){
+  if(settledIds.has(cid)) return;
   const rec=openContracts.get(cid); if(!rec) return;
+  settledIds.add(cid);
   const profit=Number(poc.profit ?? 0);
   const outcome= poc.status==='won' || profit>0 ? 'won' : 'lost';
   const win= outcome==='won';
   // Duration: prefer poc sell/buy times if available else wall clock
+  // Ticks Held: actual ticks held (rec.ticksHeld from tick-driven tracking), fallback to poc.tick_count
   const buyTime = rec.entryLog?.ts || rec.entryLog?.buyTime || Date.now();
   const sellTime = poc.sell_time ? Number(poc.sell_time)*1000 : Date.now();
-  // sell_time may be seconds epoch, convert
   const durationSec = Math.max(0, Math.round((sellTime - buyTime)/1000));
-  const durationTicks = poc.tick_count ?? poc.tick_count ?? rec.entryLog?.plannedHold ?? '?';
+  const ticksHeldVal = Number.isFinite(rec.ticksHeld) ? rec.ticksHeld : (poc.tick_count ?? rec.entryLog?.plannedHold ?? '?');
 
-  log('INFO',`Contract ${cid} settled: ${outcome} profit ${profit.toFixed(2)} ${CONFIG.currency} status=${poc.status||'?'} duration ${durationSec}s`);
+  log('INFO',`Contract ${cid} settled: ${outcome} profit ${profit.toFixed(2)} ${CONFIG.currency} status=${poc.status||'?'} duration ${durationSec}s ticksHeld ${ticksHeldVal}`);
 
   const entry=rec.entryLog;
   if(entry){ entry.outcome=outcome; entry.profit=profit; entry.settledAt=Date.now(); entry.status=poc.status||'unknown'; entry.durationSec=durationSec; entry.ticksHeld=ticksHeldVal; }
