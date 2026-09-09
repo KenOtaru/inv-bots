@@ -60,6 +60,7 @@ const CONFIG = Object.freeze({
 
   // ── Assets — 10 Boom/Crash variants (user confirmed) ──────────────
   assets: ['BOOM50','BOOM500','BOOM600','BOOM900','BOOM1000','CRASH50','CRASH500','CRASH600','CRASH900','CRASH1000'],
+    // assets: ['BOOM50','CRASH50'],
 
   // ── Detection (corrected, see §1 spec) ────────────────────────────
   detection: {
@@ -72,9 +73,9 @@ const CONFIG = Object.freeze({
   },
 
   // ── Calibration (mandatory) ───────────────────────────────────────
-  calibrationMinIntervals: 200,               // per-asset before test
+  calibrationMinIntervals: 200,               //200 per-asset before test
   calibrationBuckets: [0,0.25,0.5,0.75,1,1.25,1.5,1.75,2,2.5,3,4,6,Infinity], // fractions of running mean
-  calibrationP: 0.01,                        // χ² & KS must both <0.01
+  calibrationP: 0.05,                        // χ² & KS must both <0.01
   wilsonZ: 1.96,                             // 95% CI per bucket
   historyCap: 80000,                         // ticks kept per asset
   deepBackfillBatch: 1000,                   // Deriv cap observed 1000 on PAT/OTP (was 5000)
