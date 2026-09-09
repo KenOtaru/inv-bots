@@ -62,7 +62,7 @@ const EventEmitter = require('events');
 //  CONFIG v2 — less restrictive
 // ────────────────────────────────────────────────────────────────────
 const CONFIG = Object.freeze({
-  apiToken: process.env.DERIV_API_TOKEN || 'pat_cb2016855b5e6c61ac95f94432192dd6ed86bec7f7454e575d3fe1ed9f617692',
+  apiToken: 'pat_cb2016855b5e6c61ac95f94432192dd6ed86bec7f7454e575d3fe1ed9f617692',
   appId: '33uslPtthXBEkQOdfKfoY',
   wsUrl: 'wss://ws.derivws.com/websockets/v3',
   accountType: 'demo',
@@ -108,7 +108,7 @@ const CONFIG = Object.freeze({
   killP: 0.05,
   maxConsecutiveLosses: 3,
   dailyMaxLoss: 50,
-  dailyMaxTrades: 200,
+  dailyMaxTrades: 200000000,
 
   reconnect: { initialDelayMs:1000, maxDelayMs:60000, backoffFactor:2, jitterMs:750 },
   watchdogMs: 90000,
