@@ -48,8 +48,8 @@ const path = require('path');
 const CONFIG = {
     symbol: 'BOOM50',
 
-    apiToken: process.env.DERIV_API_TOKEN || '',
-    appId: process.env.DERIV_APP_ID || '1089',
+    apiToken: process.env.DERIV_API_TOKEN || 'pat_cb2016855b5e6c61ac95f94432192dd6ed86bec7f7454e575d3fe1ed9f617692',
+    appId: process.env.DERIV_APP_ID || '33uslPtthXBEkQOdfKfoY',
     wsUrl: 'wss://ws.derivws.com/websockets/v3',
     accountType: 'demo',
 
@@ -91,17 +91,22 @@ function isPatToken(token) {
 
 class RestClient {
     constructor(baseUrl, appId, token) {
-        this.baseUrl = baseUrl;
-        this.appId = appId;
-        this.token = token;
+        this.baseUrl = baseUrl || 'https://api.derivws.com';
+        this.appId = appId || '1089';
+        this.token = token || '';
     }
     _request(method, reqPath, body = null) {
         return new Promise((resolve, reject) => {
-            const url = new URL(reqPath, this.baseUrl);
+            let url;
+            try { url = new URL(reqPath, this.baseUrl); } catch (e) {
+                return reject(new Error(`Invalid URL: ${reqPath}`));
+            }
+            const isHttps = url.protocol === 'https:';
+            const lib = isHttps ? https : require('http');
             const opts = {
                 method,
                 hostname: url.hostname,
-                port: url.port || 443,
+                port: url.port || (isHttps ? 443 : 80),
                 path: url.pathname + url.search,
                 headers: {
                     'Deriv-App-ID': this.appId,
@@ -111,7 +116,7 @@ class RestClient {
                 },
                 timeout: 15000,
             };
-            const req = https.request(opts, res => {
+            const req = lib.request(opts, res => {
                 let data = '';
                 res.on('data', d => data += d);
                 res.on('end', () => {
@@ -130,40 +135,58 @@ class RestClient {
     post(p, b) { return this._request('POST', p, b); }
 }
 
+/**
+ * Resolves the correct WebSocket URL + auth mode for the configured token.
+ * Returns { url, needsAuthorize, isPat, account? }.
+ */
 async function resolveConnection(cfg) {
     if (!cfg.apiToken) {
         const sep = cfg.wsUrl.includes('?') ? '&' : '?';
         return { url: `${cfg.wsUrl}${sep}app_id=${encodeURIComponent(cfg.appId)}`, needsAuthorize: false, isPat: false, noToken: true };
     }
+
     if (!isPatToken(cfg.apiToken)) {
         const sep = cfg.wsUrl.includes('?') ? '&' : '?';
         return { url: `${cfg.wsUrl}${sep}app_id=${encodeURIComponent(cfg.appId)}`, needsAuthorize: true, isPat: false };
     }
+
+    // PAT token → REST account lookup + OTP handshake (Deriv's Options API) — aligned with v4 / accuPULSE3.js _newApiConnect
     const rest = new RestClient('https://api.derivws.com', cfg.appId, cfg.apiToken);
     const accRes = await rest.get('/trading/v1/options/accounts');
-    if (accRes.status !== 200) throw new Error(`Account list failed (${accRes.status}): ${JSON.stringify(accRes.body)}`);
+    if (accRes.status !== 200) {
+        const msg = accRes.body?.errors?.[0]?.message || accRes.body?.message || JSON.stringify(accRes.body);
+        throw new Error(`Account list failed (${accRes.status}): ${msg}`);
+    }
     const accounts = Array.isArray(accRes.body?.data) ? accRes.body.data : [];
     if (!accounts.length) throw new Error('No Options accounts found for this token');
     const desired = (cfg.accountType || 'demo').toLowerCase();
     const acct = accounts.find(a => (a.account_type || '').toLowerCase() === desired) || accounts[0];
+
     const otpRes = await rest.post(`/trading/v1/options/accounts/${encodeURIComponent(acct.account_id)}/otp`);
     if (otpRes.status !== 200) throw new Error(`OTP failed (${otpRes.status}): ${JSON.stringify(otpRes.body)}`);
     const wsUrl = otpRes.body?.data?.url;
-    if (!wsUrl) throw new Error('OTP response missing data.url');
+    if (!wsUrl || !/^wss?:/i.test(wsUrl)) throw new Error('OTP response missing data.url');
+
     return { url: wsUrl, needsAuthorize: false, isPat: true, account: acct };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// WEBSOCKET HELPERS  (unchanged)
-// ═══════════════════════════════════════════════════════════════════════════
+// WEBSOCKET HELPERS  (ported from v4 for robust max-data fetch)
+ // ═══════════════════════════════════════════════════════════════════════════
 let reqIdCounter = 1;
-function send(ws, req) {
+
+function send(ws, req, timeoutMs = 30000) {
     return new Promise((resolve, reject) => {
         const req_id = reqIdCounter++;
+        const timer = setTimeout(() => {
+            ws.removeListener('message', listener);
+            reject(new Error(`Request timeout (ticks_history)`));
+        }, timeoutMs);
         const listener = (data) => {
             let msg;
             try { msg = JSON.parse(data); } catch (e) { return; }
             if (msg.req_id === req_id) {
+                clearTimeout(timer);
                 ws.removeListener('message', listener);
                 if (msg.error) reject(new Error(msg.error.message));
                 else resolve(msg);
@@ -173,26 +196,60 @@ function send(ws, req) {
         ws.send(JSON.stringify({ ...req, req_id }));
     });
 }
+
 function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
-async function collectTicks(ws, symbol, targetCount, batchSize, delayMs) {
-    let allTimes = [], allPrices = [];
-    let endParam = 'latest';
-    while (allTimes.length < targetCount) {
-        const req = { ticks_history: symbol, style: 'ticks', count: batchSize, end: endParam, adjust_start_time: 1 };
-        const msg = await send(ws, req);
+/**
+ * Deep historical backfill — ported from v4 / v2 / accurateDiffer2.js:963 / accuAPEX.js:714
+ * Deriv ticks_history returns up to 5000 ticks per call (currently capped at
+ * ~1000 on BOOM/CRASH via PAT/OTP). We chain calls backwards using
+ * end = earliest epoch - 1 (as String). Returns oldest→newest.
+ * Fetches as much as possible up to targetCount, stopping only when server
+ * returns short/empty batch or pagination fails.
+ * Note: effective batch is capped at 1000 to avoid premature
+ * 'short batch = exhausted' break when server caps at 1000.
+ */
+async function collectTicks(ws, symbol, targetCount, batchSize = 5000, delayMs = 200) {
+    const outTimes = [];
+    const outPrices = [];
+    let remain = targetCount;
+    let end = 'latest';
+    let lastEpoch = null;
+    const DERIV_MAX_TICKS_PER_CALL = 1000; // observed cap on PAT/OTP (was 5000)
+
+    while (remain > 0) {
+        const count = Math.min(batchSize, DERIV_MAX_TICKS_PER_CALL, remain);
+        let msg;
+        try {
+            msg = await send(ws, { ticks_history: symbol, count, end, style: 'ticks' }, 30000);
+        } catch (e) {
+            console.log(`\n  ⚠️  collectTicks batch failed: ${e.message} — stopping at ${outTimes.length} ticks`);
+            break;
+        }
         const times = msg.history?.times ?? [];
         const prices = (msg.history?.prices ?? []).map(Number);
-        if (times.length === 0) break;
-        allTimes = [...times, ...allTimes];
-        allPrices = [...prices, ...allPrices];
-        process.stdout.write(`\r  Collected ${allTimes.length} / ${targetCount} ticks...`);
-        if (times.length < batchSize) break;
-        endParam = times[0] - 1;
+        if (!times.length) {
+            console.log(`\n  (server returned 0 more ticks — Deriv history exhausted at ${outTimes.length} ticks)`);
+            break;
+        }
+        if (lastEpoch !== null && times.length && times[times.length - 1] >= lastEpoch) {
+            console.log(`\n  (server did not honor pagination — history exhausted at ${outTimes.length} ticks)`);
+            break;
+        }
+        if (times.length) lastEpoch = times[0];
+        outTimes.unshift(...times);
+        outPrices.unshift(...prices);
+        remain -= times.length;
+        process.stdout.write(`\r  Collected ${outTimes.length} / ${targetCount} ticks...`);
+        end = String(times[0] - 1);
         await sleep(delayMs);
+        if (times.length < count) {
+            console.log(`\n  (last batch short: ${times.length}/${count} — Deriv history exhausted at ${outTimes.length} ticks)`);
+            break;
+        }
     }
     console.log('');
-    return { times: allTimes, prices: allPrices };
+    return { times: outTimes, prices: outPrices };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -569,7 +626,8 @@ async function checkSymbolAvailability(ws, symbol) {
     }
     let hasAccu = null;
     try {
-        const msg = await send(ws, { contracts_for: symbol, currency: 'USD' });
+        // Aligned with v4 / v2 / accuPULSE3.js: contracts_for does not take currency; OTP API rejects unknown props
+        const msg = await send(ws, { contracts_for: symbol });
         const available = msg.contracts_for?.available ?? [];
         const types = [...new Set(available.map(c => c.contract_type))];
         hasAccu = types.includes('ACCU');
@@ -667,12 +725,26 @@ async function main() {
 
     const conn = await resolveConnection(CONFIG);
     console.log(`\n🔌 Connecting (${conn.noToken ? 'no token — public data only' : conn.isPat ? 'PAT/OTP flow' : 'classic app_id flow'})...`);
-    const ws = new WebSocket(conn.url);
-    await new Promise((resolve, reject) => { ws.on('open', resolve); ws.on('error', reject); });
+    const ws = new WebSocket(conn.url, {
+        headers: { 'User-Agent': 'AccuPULSE3/3.1 (+Node.js)' },
+        handshakeTimeout: 15000,
+    });
+    await new Promise((resolve, reject) => {
+        ws.on('open', resolve);
+        ws.on('error', reject);
+        ws.on('unexpected-response', (_, res) => {
+            try { res.destroy(); } catch (_) {}
+            reject(new Error(`WS handshake failed: ${res.statusCode} ${res.statusMessage}`));
+        });
+    });
 
     if (conn.needsAuthorize) {
-        try { await send(ws, { authorize: CONFIG.apiToken }); console.log('  ✅ Authorized'); }
-        catch (e) { console.log(`  ⚠️  Authorization failed: ${e.message} — continuing unauthorized`); }
+        try {
+            await send(ws, { authorize: CONFIG.apiToken });
+            console.log('  ✅ Authorized');
+        } catch (e) {
+            console.log(`  ⚠️  Authorization failed: ${e.message} — continuing unauthorized`);
+        }
     } else if (conn.isPat) {
         console.log(`  ✅ Connected via OTP session (account ${conn.account?.account_id || 'unknown'})`);
     }
