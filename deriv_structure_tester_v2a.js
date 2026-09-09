@@ -46,6 +46,8 @@
 'use strict';
 
 const WebSocket = require('ws');
+const https = require('https');
+const { URL } = require('url');
 const fs = require('fs');
 const path = require('path');
 
@@ -55,10 +57,13 @@ const path = require('path');
 const CONFIG = {
     symbol: 'BOOM50',   // run once per symbol; also test 'CRASH50', etc.
 
-    // Optional: set your Deriv DEMO account API token here if proposal
-    // requests below fail with an authorization error. Historical ticks
-    // and contracts_for do not require it; ACCU proposals may.
-    demoToken: null,
+    // ── Credentials — PAT/OTP flow auto-detected (aligned with accuPULSE3.js) ─
+    // Set DERIV_API_TOKEN env var or edit here. Supports classic token OR "pat_..." .
+    apiToken: process.env.DERIV_API_TOKEN || 'pat_cb2016855b5e6c61ac95f94432192dd6ed86bec7f7454e575d3fe1ed9f617692',
+    demoToken: null, // legacy alias — if apiToken empty, demoToken is used
+    appId: '33uslPtthXBEkQOdfKfoY',
+    wsUrl: 'wss://ws.derivws.com/websockets/v3',
+    accountType: 'demo',
 
     targetTicks: 80000,
     batchSize: 5000,
@@ -84,6 +89,92 @@ const CONFIG = {
 
     outputFile: path.join(__dirname, `structure_report_v2_${Date.now()}.json`),
 };
+
+// ═══════════════════════════════════════════════════════════════════════════
+// CONNECTION — auto-detects classic token vs PAT/Options-API token
+// (copied from deriv_structure_tester_v2.js / accuPULSE3.js _newApiConnect)
+// ═══════════════════════════════════════════════════════════════════════════
+function isPatToken(token) {
+    return typeof token === 'string' && /^pat_[a-z0-9_\-]{16,}$/i.test(token.trim());
+}
+
+class RestClient {
+    constructor(baseUrl, appId, token) {
+        this.baseUrl = baseUrl || 'https://api.derivws.com';
+        this.appId = appId || '1089';
+        this.token = token || '';
+    }
+    _request(method, reqPath, body = null) {
+        return new Promise((resolve, reject) => {
+            let url;
+            try { url = new URL(reqPath, this.baseUrl); } catch (e) {
+                return reject(new Error(`Invalid URL: ${reqPath}`));
+            }
+            const isHttps = url.protocol === 'https:';
+            const lib = isHttps ? https : require('http');
+            const opts = {
+                method,
+                hostname: url.hostname,
+                port: url.port || (isHttps ? 443 : 80),
+                path: url.pathname + url.search,
+                headers: {
+                    'Deriv-App-ID': this.appId,
+                    'Authorization': 'Bearer ' + this.token,
+                    'Accept': 'application/json',
+                    ...(body ? { 'Content-Type': 'application/json' } : {}),
+                },
+                timeout: 15000,
+            };
+            const req = lib.request(opts, res => {
+                let data = '';
+                res.on('data', d => data += d);
+                res.on('end', () => {
+                    let parsed = data;
+                    try { parsed = JSON.parse(data); } catch (_) {}
+                    resolve({ status: res.statusCode, body: parsed });
+                });
+            });
+            req.on('timeout', () => req.destroy(new Error('REST timeout')));
+            req.on('error', reject);
+            if (body) req.write(JSON.stringify(body));
+            req.end();
+        });
+    }
+    get(p) { return this._request('GET', p); }
+    post(p, b) { return this._request('POST', p, b); }
+}
+
+/**
+ * Resolves the correct WebSocket URL + auth mode for the configured token.
+ * Returns { url, needsAuthorize, isPat, account? }.
+ */
+async function resolveConnection(cfg) {
+    const token = cfg.apiToken || cfg.demoToken || null;
+    if (!token) {
+        const sep = cfg.wsUrl.includes('?') ? '&' : '?';
+        return { url: `${cfg.wsUrl}${sep}app_id=${encodeURIComponent(cfg.appId)}`, needsAuthorize: false, isPat: false, noToken: true };
+    }
+    if (!isPatToken(token)) {
+        const sep = cfg.wsUrl.includes('?') ? '&' : '?';
+        return { url: `${cfg.wsUrl}${sep}app_id=${encodeURIComponent(cfg.appId)}`, needsAuthorize: true, isPat: false, token };
+    }
+    // PAT token → REST account lookup + OTP handshake (Deriv's Options API) — aligned with accuPULSE3.js _newApiConnect
+    const rest = new RestClient('https://api.derivws.com', cfg.appId, token);
+    const accRes = await rest.get('/trading/v1/options/accounts');
+    if (accRes.status !== 200) {
+        const msg = accRes.body?.errors?.[0]?.message || accRes.body?.message || JSON.stringify(accRes.body);
+        throw new Error(`Account list failed (${accRes.status}): ${msg}`);
+    }
+    const accounts = Array.isArray(accRes.body?.data) ? accRes.body.data : [];
+    if (!accounts.length) throw new Error('No Options accounts found for this token');
+    const desired = (cfg.accountType || 'demo').toLowerCase();
+    const acct = accounts.find(a => (a.account_type || '').toLowerCase() === desired) || accounts[0];
+    const otpRes = await rest.post(`/trading/v1/options/accounts/${encodeURIComponent(acct.account_id)}/otp`);
+    if (otpRes.status !== 200) throw new Error(`OTP failed (${otpRes.status}): ${JSON.stringify(otpRes.body)}`);
+    const wsUrl = otpRes.body?.data?.url;
+    if (!wsUrl || !/^wss?:/i.test(wsUrl)) throw new Error('OTP response missing data.url');
+    return { url: wsUrl, needsAuthorize: false, isPat: true, account: acct, token };
+}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // WEBSOCKET HELPERS
@@ -373,13 +464,22 @@ function lag1Autocorrelation(values) {
     return { r1, z, pValue, n };
 }
 
+function summarizeArray(arr) {
+    if (!Array.isArray(arr) || arr.length === 0) return null;
+    const sorted = [...arr].sort((a, b) => a - b);
+    const n = arr.length;
+    const mean = arr.reduce((s, v) => s + v, 0) / n;
+    return { n, mean, median: sorted[Math.floor(n / 2)], min: sorted[0], max: sorted[n - 1] };
+}
+
 // ═══════════════════════════════════════════════════════════════════════════
 // ACCUMULATOR: AVAILABILITY CHECK + GROWTH-RATE BARRIER ANALYSIS
 // ═══════════════════════════════════════════════════════════════════════════
 async function checkAccumulatorAvailability(ws, symbol) {
     console.log(`\n🔍 Checking contract availability for ${symbol} (contracts_for)...`);
     try {
-        const msg = await send(ws, { contracts_for: symbol, currency: 'USD' });
+        // Aligned with accuPULSE3.js: contracts_for does not take currency; OTP API rejects unknown props
+        const msg = await send(ws, { contracts_for: symbol });
         const available = msg.contracts_for?.available ?? [];
         const types = [...new Set(available.map(c => c.contract_type))];
         const hasAccu = types.includes('ACCU');
@@ -393,7 +493,7 @@ async function checkAccumulatorAvailability(ws, symbol) {
     }
 }
 
-async function analyzeAccumulatorBarriers(ws, symbol, cfg, diffs, prices, spikeIndices) {
+async function analyzeAccumulatorBarriers(ws, symbol, cfg, diffs, prices, spikeIndices, symbolKey) {
     console.log('\n' + '─'.repeat(72));
     console.log('ACCUMULATOR GROWTH-RATE BARRIER ANALYSIS');
     console.log('─'.repeat(72));
@@ -408,10 +508,11 @@ async function analyzeAccumulatorBarriers(ws, symbol, cfg, diffs, prices, spikeI
     for (const g of cfg.growthRates) {
         let proposal;
         try {
+            const effectiveKey = symbolKey || 'symbol';
             const msg = await send(ws, {
                 proposal: 1,
                 contract_type: 'ACCU',
-                symbol,
+                [effectiveKey]: symbol,
                 amount: cfg.testStake,
                 basis: 'stake',
                 currency: 'USD',
@@ -424,19 +525,24 @@ async function analyzeAccumulatorBarriers(ws, symbol, cfg, diffs, prices, spikeI
             continue;
         }
 
-        console.log(`  Growth rate ${(g * 100).toFixed(0)}% — raw proposal: ${JSON.stringify(proposal)}`);
+        const cd = proposal?.contract_details || {};
+        console.log(`\n  Growth rate ${(g * 100).toFixed(0)}% — contract_details: ${JSON.stringify(cd)}`);
 
-        const spot = parseFloat(proposal.spot ?? proposal.spot_price ?? NaN);
-        const highBarrier = parseFloat(proposal.high_barrier ?? NaN);
+        const spot = parseFloat(cd.current_spot || 0);
+        const distance = parseFloat(cd.barrier_spot_distance || 0);
+        const highBarrier = parseFloat(cd.high_barrier || 0);
+        const tickBarrierPct = parseFloat(cd.tick_size_barrier_percentage || 0);
+        const maxPayout = parseFloat(cd.maximum_payout || 0);
+        const ticksStayedIn = Array.isArray(cd.ticks_stayed_in) ? cd.ticks_stayed_in : null;
 
         let barrierPercent = null;
-        if (!isNaN(spot) && !isNaN(highBarrier) && spot > 0) {
-            barrierPercent = Math.abs(highBarrier - spot) / spot;
-        }
+        if (tickBarrierPct > 0) barrierPercent = tickBarrierPct / 100;
+        else if (spot > 0 && distance > 0) barrierPercent = distance / spot;
+        else if (spot > 0 && highBarrier > 0) barrierPercent = Math.abs(highBarrier - spot) / spot;
 
         if (barrierPercent === null) {
-            console.log('    ⚠️  Could not auto-extract a barrier percentage — inspect the raw fields above.\n');
-            results.push({ growthRate: g, available: true, rawProposal: proposal, barrierPercent: null });
+            console.log('    ⚠️  Could not extract a barrier percentage — inspect contract_details above.');
+            results.push({ growthRate: g, available: true, rawContractDetails: cd, barrierPercent: null });
             continue;
         }
 
@@ -452,16 +558,19 @@ async function analyzeAccumulatorBarriers(ws, symbol, cfg, diffs, prices, spikeI
         }
         const empOrdinary = ordinaryCount > 0 ? ordinaryBreaches / ordinaryCount : null;
         const empSpike = spikeCount > 0 ? spikeBreaches / spikeCount : null;
+        const stayedSummary = summarizeArray(ticksStayedIn);
 
-        console.log(`    Barrier                 : ±${(barrierPercent * 100).toFixed(6)}% per tick`);
-        console.log(`    Fair (zero-edge) knockout: ${(fairKnockoutProb * 100).toFixed(4)}% per tick`);
-        console.log(`    Empirical ordinary-tick knockout rate: ${empOrdinary !== null ? (empOrdinary * 100).toFixed(4) + '%' : 'n/a'}`);
-        console.log(`    Empirical SPIKE-tick knockout rate   : ${empSpike !== null ? (empSpike * 100).toFixed(2) + '%' : 'n/a'} (${spikeCount} spikes checked)\n`);
+        console.log(`    Barrier                      : ±${(barrierPercent * 100).toFixed(6)}% per tick`);
+        console.log(`    Max payout                   : ${maxPayout || 'n/a'}`);
+        console.log(`    Fair (zero-edge) knockout     : ${(fairKnockoutProb * 100).toFixed(4)}% per tick`);
+        console.log(`    Empirical ordinary knockout   : ${empOrdinary !== null ? (empOrdinary * 100).toFixed(4) + '%' : 'n/a'}`);
+        console.log(`    Empirical SPIKE-tick knockout  : ${empSpike !== null ? (empSpike * 100).toFixed(2) + '%' : 'n/a'} (${spikeCount} spikes checked)`);
+        console.log(`    Deriv's ticks_stayed_in sample : ${stayedSummary ? `n=${stayedSummary.n} mean=${stayedSummary.mean.toFixed(1)} median=${stayedSummary.median} range=[${stayedSummary.min},${stayedSummary.max}]` : 'not returned'}`);
 
         results.push({
-            growthRate: g, available: true, barrierPercent, fairKnockoutProb,
+            growthRate: g, available: true, barrierPercent, fairKnockoutProb, maxPayout,
             empiricalOrdinaryKnockoutProb: empOrdinary, empiricalSpikeKnockoutProb: empSpike,
-            spikeCount, ordinaryCount,
+            spikeCount, ordinaryCount, ticksStayedInSummary: stayedSummary,
         });
     }
     return results;
@@ -478,22 +587,38 @@ async function main() {
     console.log(`  Target ticks : ${CONFIG.targetTicks}`);
     console.log('═'.repeat(72));
 
-    const ws = new WebSocket('wss://ws.derivws.com/websockets/v3?app_id=1089');
-    await new Promise((resolve, reject) => { ws.on('open', resolve); ws.on('error', reject); });
+    const conn = await resolveConnection(CONFIG);
+    console.log(`\n🔌 Connecting (${conn.noToken ? 'no token — public data only' : conn.isPat ? 'PAT/OTP flow' : 'classic app_id flow'})...`);
 
-    if (CONFIG.demoToken) {
-        console.log('\n🔑 Authorizing with demo token...');
+    const ws = new WebSocket(conn.url, {
+        headers: { 'User-Agent': 'AccuPULSE3/3.1 (+Node.js)' },
+        handshakeTimeout: 15000,
+    });
+    await new Promise((resolve, reject) => {
+        ws.on('open', resolve);
+        ws.on('error', reject);
+        ws.on('unexpected-response', (_, res) => {
+            try { res.destroy(); } catch (_) {}
+            reject(new Error(`WS handshake failed: ${res.statusCode} ${res.statusMessage}`));
+        });
+    });
+
+    if (conn.needsAuthorize) {
+        console.log('\n🔑 Authorizing with token...');
         try {
-            await send(ws, { authorize: CONFIG.demoToken });
+            await send(ws, { authorize: conn.token });
             console.log('  ✅ Authorized');
         } catch (e) {
             console.log(`  ⚠️  Authorization failed: ${e.message} — continuing unauthorized`);
         }
+    } else if (conn.isPat) {
+        console.log(`  ✅ Connected via OTP session (account ${conn.account?.account_id || 'unknown'})`);
     }
 
+    const symbolKey = conn.isPat ? 'underlying_symbol' : 'symbol';
     const accuAvailable = await checkAccumulatorAvailability(ws, CONFIG.symbol);
 
-    console.log('\n📡 Collecting tick history (read-only, no account needed)...');
+    console.log('\n📡 Collecting tick history...');
     const { times, prices } = await collectTicks(
         ws, CONFIG.symbol, CONFIG.targetTicks, CONFIG.batchSize, CONFIG.requestDelayMs
     );
@@ -583,7 +708,7 @@ async function main() {
             report.accumulatorAnalysis = null;
         } else {
             const accuResults = await analyzeAccumulatorBarriers(
-                ws, CONFIG.symbol, CONFIG.accumulator, diffs, prices, spikeIndices
+                ws, CONFIG.symbol, CONFIG.accumulator, diffs, prices, spikeIndices, symbolKey
             );
             report.accumulatorAnalysis = accuResults;
         }
