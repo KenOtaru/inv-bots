@@ -68,7 +68,7 @@ const CONFIG = Object.freeze({
   accountType: 'demo',
   currency: 'USD',
 
-  assets: ['BOOM50','BOOM500','BOOM600','BOOM900','BOOM1000','CRASH50','CRASH500','CRASH600','CRASH900','CRASH1000'],
+  assets: ['BOOM500','BOOM600','BOOM900','BOOM1000','CRASH500','CRASH600','CRASH900','CRASH1000'],
 
   detection: {
     baselineWindow: 2000,
@@ -80,9 +80,9 @@ const CONFIG = Object.freeze({
   },
 
   // ── Calibration v2 (relaxed) ──────────────────────────────────────
-  calibrationMinIntervals: 50,                          // was 200 — now 50
+  calibrationMinIntervals: 5,                          // was 200 — now 50
   calibrationBuckets: [0,0.25,0.5,0.75,1,1.25,1.5,1.75,2,2.5,3,4,6,Infinity],
-  calibrationP: 0.01,                                   // was 0.01 — now 0.05
+  calibrationP: 0.05,                                   // was 0.01 — now 0.05
   wilsonZ: 1.96,
   historyCap: 80000,
   deepBackfillBatch: 1000,
@@ -92,7 +92,7 @@ const CONFIG = Object.freeze({
   stake: 1,
   growthRate: 0.02, // 0.02
   minBarrierPct: 0.00001,
-  maxOpenTrades: 2,                // allow 2 concurrent (10 assets, hold 5-15 ticks)
+  maxOpenTrades: 1,                // allow 2 concurrent (10 assets, hold 5-15 ticks)
   tradeCooldownMs: 800,
   elevatedMinLift: 0.01,
   // fallback fractions when no elevated bucket (now adaptive, not fixed):
