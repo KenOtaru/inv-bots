@@ -181,13 +181,18 @@ async function resolveConnection(cfg) {
 // ═══════════════════════════════════════════════════════════════════════════
 let reqIdCounter = 1;
 
-function send(ws, req) {
+function send(ws, req, timeoutMs = 30000) {
     return new Promise((resolve, reject) => {
         const req_id = reqIdCounter++;
+        const timer = setTimeout(() => {
+            ws.removeListener('message', listener);
+            reject(new Error(`Request timeout (ticks_history)`));
+        }, timeoutMs);
         const listener = (data) => {
             let msg;
             try { msg = JSON.parse(data); } catch (e) { return; }
             if (msg.req_id === req_id) {
+                clearTimeout(timer);
                 ws.removeListener('message', listener);
                 if (msg.error) reject(new Error(msg.error.message));
                 else resolve(msg);
@@ -200,28 +205,57 @@ function send(ws, req) {
 
 function sleep(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
 
-async function collectTicks(ws, symbol, targetCount, batchSize, delayMs) {
-    let allTimes = [];
-    let allPrices = [];
-    let endParam = 'latest';
+/**
+ * Deep historical backfill — ported from accurateDiffer2.js:963 / accuAPEX.js:714
+ * Deriv ticks_history returns up to 5000 ticks per call (currently capped at
+ * ~1000 on BOOM/CRASH via PAT/OTP). We chain calls backwards using
+ * end = earliest epoch - 1 (as String). Returns oldest→newest.
+ * Fetches as much as possible up to targetCount, stopping only when server
+ * returns short/empty batch or pagination fails.
+ * Note: effective batch is capped at 1000 to avoid premature
+ * 'short batch = exhausted' break when server caps at 1000.
+ */
+async function collectTicks(ws, symbol, targetCount, batchSize = 5000, delayMs = 200) {
+    const outTimes = [];
+    const outPrices = [];
+    let remain = targetCount;
+    let end = 'latest';
+    let lastEpoch = null;
+    const DERIV_MAX_TICKS_PER_CALL = 1000; // observed cap on PAT/OTP (was 5000)
 
-    while (allTimes.length < targetCount) {
-        const req = { ticks_history: symbol, style: 'ticks', count: batchSize, end: endParam, adjust_start_time: 1 };
-        const msg = await send(ws, req);
+    while (remain > 0) {
+        const count = Math.min(batchSize, DERIV_MAX_TICKS_PER_CALL, remain);
+        let msg;
+        try {
+            msg = await send(ws, { ticks_history: symbol, count, end, style: 'ticks' }, 30000);
+        } catch (e) {
+            console.log(`\n  ⚠️  collectTicks batch failed: ${e.message} — stopping at ${outTimes.length} ticks`);
+            break;
+        }
         const times = msg.history?.times ?? [];
         const prices = (msg.history?.prices ?? []).map(Number);
-        if (times.length === 0) break;
-
-        allTimes = [...times, ...allTimes];
-        allPrices = [...prices, ...allPrices];
-        process.stdout.write(`\r  Collected ${allTimes.length} / ${targetCount} ticks...`);
-
-        if (times.length < batchSize) break;
-        endParam = times[0] - 1;
-        await sleep(delayMs);
+        if (!times.length) {
+            console.log(`\n  (server returned 0 more ticks — Deriv history exhausted at ${outTimes.length} ticks)`);
+            break;
+        }
+        if (lastEpoch !== null && times.length && times[times.length - 1] >= lastEpoch) {
+            console.log(`\n  (server did not honor pagination — history exhausted at ${outTimes.length} ticks)`);
+            break;
+        }
+        if (times.length) lastEpoch = times[0];
+        outTimes.unshift(...times);
+        outPrices.unshift(...prices);
+        remain -= times.length;
+        process.stdout.write(`\r  Collected ${outTimes.length} / ${targetCount} ticks...`);
+        end = String(times[0] - 1);
+        await sleep(200);
+        if (times.length < count) {
+            console.log(`\n  (last batch short: ${times.length}/${count} — Deriv history exhausted at ${outTimes.length} ticks)`);
+            break;
+        }
     }
     console.log('');
-    return { times: allTimes, prices: allPrices };
+    return { times: outTimes, prices: outPrices };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
