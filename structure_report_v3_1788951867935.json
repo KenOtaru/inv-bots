@@ -1,0 +1,265 @@
+{
+  "symbol": "CRASH600",
+  "ticksCollected": 80000,
+  "hoursSpanned": 22.221944444444443,
+  "symbolFoundInActiveList": true,
+  "accumulatorAvailable": true,
+  "runsTest": {
+    "n1": 79295,
+    "n2": 126,
+    "runs": 253,
+    "meanR": 252.60020649450396,
+    "z": 0.44869834470669023,
+    "pValue": 0.6536493310781162
+  },
+  "autocorrelation": {
+    "r1": -0.0011453739579193774,
+    "z": -0.3239586522951478,
+    "pValue": 0.7459694754943365,
+    "n": 79999
+  },
+  "spikeDirection": "down",
+  "spikesDetected": 124,
+  "intervals": {
+    "count": 123,
+    "mean": 628.3333333333334,
+    "cv": 0.834698845752821,
+    "theoreticalCV": 0.9992026576805298,
+    "floor": 2
+  },
+  "chiSquareTest": {
+    "chiSq": 15.658536585365852,
+    "df": 13,
+    "pValue": 0.26806135909746676,
+    "numBins": 15,
+    "observed": [
+      6,
+      12,
+      3,
+      4,
+      8,
+      9,
+      8,
+      8,
+      11,
+      13,
+      5,
+      12,
+      8,
+      10,
+      6
+    ],
+    "expected": [
+      8.2,
+      8.2,
+      8.2,
+      8.2,
+      8.2,
+      8.2,
+      8.2,
+      8.2,
+      8.2,
+      8.2,
+      8.2,
+      8.2,
+      8.2,
+      8.2,
+      8.2
+    ],
+    "pHat": 0.001594048884165781,
+    "mean": 628.3333333333334,
+    "floor": 2
+  },
+  "ksTest": {
+    "D": 0.08026094334947428,
+    "pValue": 0.3919520449933289,
+    "pHat": 0.001594048884165781,
+    "floor": 2
+  },
+  "hazardTable": [
+    {
+      "range": "0-157",
+      "survivors": 123,
+      "events": 21,
+      "empiricalHazard": 0.17073170731707318,
+      "theoreticalHazard": 0.22156155137705802
+    },
+    {
+      "range": "157-314",
+      "survivors": 102,
+      "events": 20,
+      "empiricalHazard": 0.19607843137254902,
+      "theoreticalHazard": 0.22156155137705802
+    },
+    {
+      "range": "314-471",
+      "survivors": 82,
+      "events": 17,
+      "empiricalHazard": 0.2073170731707317,
+      "theoreticalHazard": 0.22156155137705802
+    },
+    {
+      "range": "471-628",
+      "survivors": 65,
+      "events": 17,
+      "empiricalHazard": 0.26153846153846155,
+      "theoreticalHazard": 0.22156155137705802
+    },
+    {
+      "range": "628-785",
+      "survivors": 48,
+      "events": 10,
+      "empiricalHazard": 0.20833333333333334,
+      "theoreticalHazard": 0.22156155137705802
+    },
+    {
+      "range": "785-943",
+      "survivors": 38,
+      "events": 10,
+      "empiricalHazard": 0.2631578947368421,
+      "theoreticalHazard": 0.2228024203174772
+    },
+    {
+      "range": "943-1100",
+      "survivors": 28,
+      "events": 10,
+      "empiricalHazard": 0.35714285714285715,
+      "theoreticalHazard": 0.22156155137705802
+    },
+    {
+      "range": "1100-1257",
+      "survivors": 18,
+      "events": 2,
+      "empiricalHazard": 0.1111111111111111,
+      "theoreticalHazard": 0.22156155137705802
+    },
+    {
+      "range": "1257-1571",
+      "survivors": 16,
+      "events": 8,
+      "empiricalHazard": 0.5,
+      "theoreticalHazard": 0.3940335817055074
+    },
+    {
+      "range": "1571-1885",
+      "survivors": 8,
+      "events": 5,
+      "empiricalHazard": 0.625,
+      "theoreticalHazard": 0.3940335817055074
+    },
+    {
+      "range": "1885-2513",
+      "survivors": 3,
+      "events": 3,
+      "empiricalHazard": 1,
+      "theoreticalHazard": 0.632804699899344
+    },
+    {
+      "range": "2513-3770",
+      "survivors": 0,
+      "events": 0,
+      "empiricalHazard": null,
+      "theoreticalHazard": 0.8653825410022931
+    },
+    {
+      "range": "3770-∞",
+      "survivors": 0,
+      "events": 0,
+      "empiricalHazard": null,
+      "theoreticalHazard": null
+    }
+  ],
+  "verdict": "no_structure_detected",
+  "accumulatorAnalysis": [
+    {
+      "growthRate": 0.01,
+      "available": true,
+      "barrierPercent": 0.0000046,
+      "fairKnockoutProb": 0.009900990099009901,
+      "maxPayout": 3000,
+      "empiricalOrdinaryKnockoutProb": 0.01235680751173709,
+      "empiricalSpikeKnockoutProb": 1,
+      "spikeCount": 124,
+      "ordinaryCount": 79875,
+      "ticksStayedInSummary": {
+        "n": 100,
+        "mean": 75.83,
+        "median": 45,
+        "min": 0,
+        "max": 535
+      }
+    },
+    {
+      "growthRate": 0.02,
+      "available": true,
+      "barrierPercent": 0.0000042999999999999995,
+      "fairKnockoutProb": 0.0196078431372549,
+      "maxPayout": 3000,
+      "empiricalOrdinaryKnockoutProb": 0.020807511737089203,
+      "empiricalSpikeKnockoutProb": 1,
+      "spikeCount": 124,
+      "ordinaryCount": 79875,
+      "ticksStayedInSummary": {
+        "n": 100,
+        "mean": 48.66,
+        "median": 38,
+        "min": 0,
+        "max": 308
+      }
+    },
+    {
+      "growthRate": 0.03,
+      "available": true,
+      "barrierPercent": 0.0000041,
+      "fairKnockoutProb": 0.029126213592233007,
+      "maxPayout": 3000,
+      "empiricalOrdinaryKnockoutProb": 0.0295962441314554,
+      "empiricalSpikeKnockoutProb": 1,
+      "spikeCount": 124,
+      "ordinaryCount": 79875,
+      "ticksStayedInSummary": {
+        "n": 100,
+        "mean": 33.95,
+        "median": 27,
+        "min": 0,
+        "max": 147
+      }
+    },
+    {
+      "growthRate": 0.04,
+      "available": true,
+      "barrierPercent": 0.0000039,
+      "fairKnockoutProb": 0.038461538461538464,
+      "maxPayout": 3000,
+      "empiricalOrdinaryKnockoutProb": 0.04196557120500782,
+      "empiricalSpikeKnockoutProb": 1,
+      "spikeCount": 124,
+      "ordinaryCount": 79875,
+      "ticksStayedInSummary": {
+        "n": 100,
+        "mean": 25.6,
+        "median": 15,
+        "min": 0,
+        "max": 147
+      }
+    },
+    {
+      "growthRate": 0.05,
+      "available": true,
+      "barrierPercent": 0.0000038,
+      "fairKnockoutProb": 0.047619047619047616,
+      "maxPayout": 3000,
+      "empiricalOrdinaryKnockoutProb": 0.04818779342723005,
+      "empiricalSpikeKnockoutProb": 1,
+      "spikeCount": 124,
+      "ordinaryCount": 79875,
+      "ticksStayedInSummary": {
+        "n": 100,
+        "mean": 19.11,
+        "median": 11,
+        "min": 0,
+        "max": 147
+      }
+    }
+  ]
+}
