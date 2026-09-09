@@ -108,7 +108,7 @@ const CONFIG = Object.freeze({
   stake              : parseFloat('2.00'),
   takeProfitMultiple : parseFloat('1.50'),   // sell when payout ≥ stake × this
   tickCapFraction    : parseFloat('0.55'),   // tick-cap = frac × live ticks_stayed_in median
-  growthRate         : parseFloat('0.02'),   // one of {0.01, 0.02, 0.03, 0.04, 0.05}
+  growthRate         : parseFloat('0.01'),   // one of {0.01, 0.02, 0.03, 0.04, 0.05}
 
   // ── Rate-limited entry ──
   perSymbolCooldownMs : parseInt('8000',  10),   // between trades on the same symbol
@@ -141,9 +141,9 @@ const CONFIG = Object.freeze({
   proposalRefreshMs: parseInt('60000', 10),   // refresh barrier + ticks_stayed_in cache
 
   // ── Scheduled pause/resume (GMT) ──
-  pauseEnabled : false,
-  pauseStartGmt: '08:00',
-  pauseEndGmt  : '18:00',
+  pauseEnabled : true,
+  pauseStartGmt: '23:00',
+  pauseEndGmt  : '1:00',
 
   // ── Day-of-week filter (GMT) ──
   tradeSunday: true, tradeMonday: true, tradeTuesday: true,

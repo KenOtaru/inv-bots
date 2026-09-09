@@ -92,7 +92,7 @@ const CONFIG = Object.freeze({
   stake: 1,
   growthRate: 0.01,
   minBarrierPct: 0.00001,
-  maxOpenTrades: 2,                // allow 2 concurrent across 10 assets
+  maxOpenTrades: 1,                // allow 1 concurrent across 10 assets
   tradeCooldownMs: 800,            // short — post-spike entry is the throttle
   elevatedMinLift: 0.01,           // was 0.02 — more permissive
   // fallback fractions when no elevated bucket:
@@ -522,7 +522,7 @@ function finalizeContract(cid, poc){
   log('INFO',`Contract ${cid} settled: ${outcome} profit ${profit.toFixed(2)} ${CONFIG.currency} status=${poc.status||'?'} duration ${durationSec}s`);
 
   const entry=rec.entryLog;
-  if(entry){ entry.outcome=outcome; entry.profit=profit; entry.settledAt=Date.now(); entry.status=poc.status||'unknown'; entry.durationSec=durationSec; }
+  if(entry){ entry.outcome=outcome; entry.profit=profit; entry.settledAt=Date.now(); entry.status=poc.status||'unknown'; entry.durationSec=durationSec; entry.ticksHeld=ticksHeldVal; }
   dailyLoss += (profit<0? profit: 0);
   if(!win){ rec.assetState.consecutiveLosses=(rec.assetState.consecutiveLosses||0)+1; consecutiveLossesGlobal++; }else{ rec.assetState.consecutiveLosses=0; consecutiveLossesGlobal=0; }
 
@@ -538,10 +538,11 @@ function finalizeContract(cid, poc){
   const netProfit = settledAll.reduce((s,t)=> s + Number(t.profit||0), 0);
 
   // Detailed CLOSE telegram per spec: asset, P/L, NetProfit, Duration, Total Trades Win/Loss (Win Ratio)
+  // Ticks is ticks Held per user request
   {
     const closeMsg = `${win?'✅':'❌'} <b>CLOSE ${rec.symbol} #${cid} ${outcome.toUpperCase()}</b>\n`+
       `P/L <code>${profit>=0?'+':''}${profit.toFixed(2)} ${CONFIG.currency}</code> NetProfit <code>${netProfit>=0?'+':''}${netProfit.toFixed(2)} ${CONFIG.currency}</code>\n`+
-      `Duration <code>${durationSec}s</code> ticks <code>${durationTicks}</code> Stake <code>${rec.entryLog?.stake ?? CONFIG.stake} ${CONFIG.currency}</code>\n`+
+      `Duration <code>${durationSec}s</code> ticks Held <code>${ticksHeldVal}</code> Stake <code>${rec.entryLog?.stake ?? CONFIG.stake} ${CONFIG.currency}</code>\n`+
       `Total <code>${totalTrades}</code> W <code>${wins}</code> L <code>${losses}</code> WR <code>${winRatio}%</code> Consecutive losses <code>${rec.assetState.consecutiveLosses}</code>`;
     telegram.send(closeMsg);
   }
