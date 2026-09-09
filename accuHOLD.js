@@ -673,6 +673,14 @@ class TradeExecutor extends EventEmitter {
         proposalId: p.id,
         balanceAfter: parseFloat(b.balance_after ?? this.client.balance),
         ticksHeld: 0, peakProfit: 0, lastBid: null,
+        // Tick-anchor: `c.tick_count` on the proposal_open_contract stream
+        // reports the SERVER's counter from the moment of purchase, which
+        // can be a huge number by the time our subscription actually
+        // attaches (the first message we see is often "tick 250+"). The
+        // tick-cap exit is meant to fire after WE have observed N ticks,
+        // so we anchor to the first tick_count we see on the stream and
+        // count up from there.
+        _tickAnchor: null,
         lastUpdateAt: Date.now(),
         _exitReason: null,
       };
@@ -796,11 +804,20 @@ class TradeExecutor extends EventEmitter {
     const status = c.status;
 
     if (status === 'open') {
-      // ticksHeld: derive from server tick_count, NOT stream message count.
-      // (Message frequency ≠ tick frequency; duplicates would over-count.)
-      const fromServer = (c.tick_count != null && c.tick_count > 0) ? c.tick_count
-        : (Array.isArray(c.ticks_stayed_in) ? c.ticks_stayed_in.length : 0);
-      info.ticksHeld = Math.max(info.ticksHeld ?? 0, fromServer);
+      // ticksHeld: count ticks observed by OUR subscription, starting at 1
+      // on the first message we see. The server's `tick_count` is anchored
+      // to purchase time, so reading it raw makes the tick-cap fire on the
+      // entry tick (and Deriv rejects sells at the entry tick with
+      // `InvalidtoSell – Contract cannot be sold at entry tick`).
+      if (c.tick_count != null && c.tick_count > 0) {
+        if (info._tickAnchor == null) info._tickAnchor = c.tick_count;
+        info.ticksHeld = Math.max(0, c.tick_count - info._tickAnchor) + 1;
+      } else if (Array.isArray(c.ticks_stayed_in) && c.ticks_stayed_in.length) {
+        // Fallback when the stream doesn't expose tick_count: use the
+        // survival array length, also anchored to its first observed size.
+        if (info._tickAnchor == null) info._tickAnchor = c.ticks_stayed_in.length;
+        info.ticksHeld = Math.max(0, c.ticks_stayed_in.length - info._tickAnchor) + 1;
+      }
       info.peakProfit = Math.max(info.peakProfit ?? 0, profit);
       info.lastUpdateAt = Date.now();
     }
@@ -895,6 +912,16 @@ class TradeExecutor extends EventEmitter {
           sellTime: Date.now() / 1000, currentSpot: info?.entrySpot ?? 0,
           exitReason: 'already-closed-on-server',
         });
+        return null;
+      }
+      // Deriv rejects sells on the entry tick (the very first message after
+      // buy). If the caller's exit was tick-cap / take-profit, the next
+      // stream tick will re-trigger the same exit; if it was a manual or
+      // emergency sell, rethrow so the caller knows.
+      if (/cannot be sold at entry tick/i.test(msg)) {
+        logger.info(`sell #${contractId} deferred (entry-tick) — will retry on next stream tick`);
+        // Caller is the one-and-done exit path; let the next _onUpdate re-fire
+        // the exit logic. The _selling guard prevents a thundering herd.
         return null;
       }
       logger.error(`sell(${contractId}) failed:`, e.message);
