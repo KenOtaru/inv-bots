@@ -42,15 +42,20 @@
  *                     LIVE-FETCHED `ticks_stayed_in` for that trade's
  *                     (symbol, growth_rate) bucket. Median, not mean
  *                     (right-skewed survival distribution).
- *  Flat stake. No martingale, no escalation. If neither exit fires and
- *  the contract is knocked out, it's a loss — logged plainly, never
- *  dressed up as a "signal failure", because no signal was tested.
+ *  Martingale (optional): base stake × (multiplier ^ step).
+ *    • On LOSS: step +=1, next stake = base × multiplier^step (capped by martingaleSteps).
+ *    • On WIN:  step =0, next stake = base.
+ *    • If max steps hit and another loss occurs → reset to base (cycle).
+ *    • Disabled when martingaleMultiplier ≤1 or martingaleSteps =0.
+ *  If neither exit fires and the contract is knocked out, it's a loss —
+ *  logged plainly, never dressed up as a "signal failure".
  *
  *  ─ RISK CONTROLS ─────────────────────────────────────────────────
- *  Flat stake, per-symbol cooldown, max consecutive losses (pause +
+ *  Martingale-aware stake, per-symbol cooldown, max consecutive losses (pause +
  *  require manual restart), small daily loss cap, max concurrent open
- *  trades. Telegram (queue-bounded) reports each open/close, every
- *  risk-control pause, and EOD / hourly summaries.
+ *  trades. Loss histogram tracks max streak + x2-x7 events. Telegram
+ *  (queue-bounded) reports each open/close with martingale & streak
+ *  info, every risk-control pause, and EOD / hourly summaries.
  *
  *  ─ DO NOT ADD ────────────────────────────────────────────────────
  *  Hazard, timing, or pattern-based entry logic — even if it looks
@@ -105,10 +110,18 @@ const CONFIG = Object.freeze({
   accountType: 'demo',   // 'demo' | 'real' — keep demo for testing
 
   // ── Trade parameters (memoryless, non-signal) ──
-  stake              : parseFloat('1.00'),   // flat stake per trade
-  takeProfitMultiple : parseFloat('2.50'),   // sell when payout ≥ stake × this
+  stake              : parseFloat('1.00'),   // base stake per trade (reset value for martingale)
+  takeProfitMultiple : parseFloat('1.50'),   // sell when payout ≥ stake × this
   tickCapFraction    : parseFloat('1.20'),   //0.55 tick-cap = frac × live ticks_stayed_in median
   growthRate         : parseFloat('0.01'),   // one of {0.01, 0.02, 0.03, 0.04, 0.05}
+
+  // ── Martingale ──────────────────────────────────────────────────
+  // On every loss: next stake = base stake × (multiplier ^ step).
+  // On win: reset to base stake (step = 0).
+  // User-configurable multiplier and max steps.
+  // Set steps = 0 or multiplier <= 1.0 to disable martingale (flat stake).
+  martingaleMultiplier : parseFloat('2.10'), // e.g. 2.10 means stake ×2.10 after each loss
+  martingaleSteps      : parseInt('8', 10),  // max consecutive martingale multiplications (0 = disabled)
 
   // ── Rate-limited entry ──
   perSymbolCooldownMs : parseInt('8000',  10),   // between trades on the same symbol
@@ -116,8 +129,8 @@ const CONFIG = Object.freeze({
   maxOpenTrades       : parseInt('1',     10),   // concurrent open contracts across the bot
 
   // ── Risk controls ──
-  maxConsecutiveLosses : parseInt('7', 10),      // pause + require manual restart
-  dailyMaxLoss        : parseFloat('50'),         // demo-appropriate cap
+  maxConsecutiveLosses : parseInt('8', 10),      // pause + require manual restart
+  dailyMaxLoss        : parseFloat('150'),         // demo-appropriate cap
   dailyMaxTrades      : parseInt('120000', 10),      // daily cap
   stopLossPerContract : parseFloat('0'),         // 0 = disabled (rely on knockout)
 
@@ -141,7 +154,7 @@ const CONFIG = Object.freeze({
   proposalRefreshMs: parseInt('60000', 10),   // refresh barrier + ticks_stayed_in cache
 
   // ── Scheduled pause/resume (GMT) ──
-  pauseEnabled : true,
+  pauseEnabled : false,
   pauseStartGmt: '23:00',
   pauseEndGmt  : '1:00',
 
@@ -155,9 +168,9 @@ const CONFIG = Object.freeze({
   hourlySummary      : true,
 
   // ── Logging / state ──
-  logFile           : 'accuHOLD_04.log',
+  logFile           : 'accuHOLD2_01.log',
   logLevel          : 'INFO',
-  stateFile         : 'accuHOLD_state_04.json',
+  stateFile         : 'accuHOLD2_state_01.json',
   stateSaveOnTrade  : true,
   stateSaveOnShutdown: true,
 });
@@ -1044,6 +1057,9 @@ class StatisticsManager {
     this.overallProfit = 0;
     this.currentLossStreak = 0;
     this.maxLossStreak = 0;
+    // Histogram of consecutive-loss events: increments each time streak reaches N.
+    // e.g. a 5-loss streak increments x2,x3,x4,x5 (one event per threshold).
+    this.lossStreakEvents = { x2: 0, x3: 0, x4: 0, x5: 0, x6: 0, x7: 0 };
     this.eodSentDates = [];
     this.dailyState = {};   // date -> { trades, pnl, lossStreak, settledIds, ... }  for cap math
     if (saved) this.load(saved);
@@ -1054,6 +1070,12 @@ class StatisticsManager {
     this.overallProfit = Number(s.overallProfit || 0);
     this.currentLossStreak = Number(s.currentLossStreak || 0);
     this.maxLossStreak = Number(s.maxLossStreak || 0);
+    // backwards-compat: older state may have only x2-x4 or no histogram at all
+    const e = s.lossStreakEvents || {};
+    this.lossStreakEvents = {
+      x2: Number(e.x2 || 0), x3: Number(e.x3 || 0), x4: Number(e.x4 || 0),
+      x5: Number(e.x5 || 0), x6: Number(e.x6 || 0), x7: Number(e.x7 || 0),
+    };
     this.eodSentDates = Array.isArray(s.eodSentDates) ? s.eodSentDates : [];
     this.dailyState = s.dailyState || {};
   }
@@ -1062,9 +1084,15 @@ class StatisticsManager {
       trades: this.trades.slice(-5000), dailySummaries: this.dailySummaries,
       overallProfit: this.overallProfit, currentLossStreak: this.currentLossStreak,
       maxLossStreak: this.maxLossStreak,
+      lossStreakEvents: { ...this.lossStreakEvents },
       eodSentDates: this.eodSentDates.slice(-400),
       dailyState: this.dailyState,
     };
+  }
+  // Human-readable loss-streak breakdown: "x2=3 x3=1 x4=0 ..."
+  lossStreakLine() {
+    const e = this.lossStreakEvents;
+    return `x2=${e.x2} x3=${e.x3} x4=${e.x4} x5=${e.x5} x6=${e.x6} x7=${e.x7}`;
   }
   record(trade) {
     const tsMs = Number(trade.sellTime || trade.buyTime || Date.now() / 1000) * 1000;
@@ -1077,6 +1105,13 @@ class StatisticsManager {
     if (rec.status === 'lost') {
       this.currentLossStreak += 1;
       this.maxLossStreak = Math.max(this.maxLossStreak, this.currentLossStreak);
+      // increment histogram exactly when streak hits threshold (cumulative)
+      if (this.currentLossStreak === 2) this.lossStreakEvents.x2 += 1;
+      else if (this.currentLossStreak === 3) this.lossStreakEvents.x3 += 1;
+      else if (this.currentLossStreak === 4) this.lossStreakEvents.x4 += 1;
+      else if (this.currentLossStreak === 5) this.lossStreakEvents.x5 += 1;
+      else if (this.currentLossStreak === 6) this.lossStreakEvents.x6 += 1;
+      else if (this.currentLossStreak >= 7) this.lossStreakEvents.x7 += 1;
     } else if (rec.status === 'won') {
       this.currentLossStreak = 0;
     }
@@ -1147,6 +1182,61 @@ class AccuHoldBot {
     this.paused = false;
     this._pauseStartTimer = null;
     this._pauseEndTimer = null;
+    // ── Martingale state ──────────────────────────────────
+    this.baseStake = Number(cfg.stake) || 1.0;
+    this.currentStake = this.baseStake;
+    this.martingaleStep = 0; // 0 = base, 1..martingaleSteps
+  }
+
+  // ── Martingale helpers ──────────────────────────────────
+  _isMartingaleEnabled() {
+    return Number(this.cfg.martingaleMultiplier) > 1.0 && parseInt(this.cfg.martingaleSteps, 10) > 0;
+  }
+  _martingaleLabel() {
+    if (!this._isMartingaleEnabled()) return 'OFF';
+    return `×${Number(this.cfg.martingaleMultiplier).toFixed(2)} (step ${this.martingaleStep}/${this.cfg.martingaleSteps})`;
+  }
+  _calcMartingaleStake(step) {
+    const base = this.baseStake;
+    const mult = Number(this.cfg.martingaleMultiplier) || 1;
+    if (step <= 0 || mult <= 1) return +base.toFixed(2);
+    // stake = base × multiplier^step, rounded to 2dp, capped at 2dp precision
+    return +(base * Math.pow(mult, step)).toFixed(2);
+  }
+  _updateMartingaleOnResult(status) {
+    if (!this._isMartingaleEnabled()) {
+      this.martingaleStep = 0;
+      this.currentStake = this.baseStake;
+      return { changed: false, reason: 'disabled' };
+    }
+    const maxSteps = parseInt(this.cfg.martingaleSteps, 10);
+    if (status === 'won') {
+      if (this.martingaleStep > 0) {
+        logger.info(`martingale RESET: win after ${this.martingaleStep} steps → stake ${this.currentStake.toFixed(2)} → ${this.baseStake.toFixed(2)}`);
+        this.martingaleStep = 0;
+        this.currentStake = this.baseStake;
+        return { changed: true, reason: 'win-reset' };
+      }
+      this.martingaleStep = 0;
+      this.currentStake = this.baseStake;
+      return { changed: false, reason: 'win-base' };
+    }
+    if (status === 'lost') {
+      if (this.martingaleStep < maxSteps) {
+        this.martingaleStep += 1;
+        const prev = this.currentStake;
+        this.currentStake = this._calcMartingaleStake(this.martingaleStep);
+        logger.info(`martingale STEP UP: loss streak → step ${this.martingaleStep}/${maxSteps} stake ${prev.toFixed(2)} → ${this.currentStake.toFixed(2)} (×${this.cfg.martingaleMultiplier})`);
+        return { changed: true, reason: 'loss-step-up', prev };
+      }
+      // reached max steps → reset to base (classic martingale cycle)
+      logger.warn(`martingale MAX STEPS hit (${this.martingaleStep}/${maxSteps}) on loss — resetting to base stake ${this.baseStake.toFixed(2)}`);
+      telegram.send(`⚠️ <b>Martingale Max Steps Reached</b>\nStep ${this.martingaleStep}/${maxSteps} lost. Resetting stake to base <b>${this.baseStake.toFixed(2)} ${this.currencyStr()}</b>.`);
+      this.martingaleStep = 0;
+      this.currentStake = this.baseStake;
+      return { changed: true, reason: 'max-reset' };
+    }
+    return { changed: false, reason: 'no-op' };
   }
 
   async start() {
@@ -1155,6 +1245,11 @@ class AccuHoldBot {
     logger.info('═══════════════════════════════════════════');
     logger.info(`assets: ${this.cfg.assets.join(', ')}`);
     logger.info(`growth rate: ${(this.cfg.growthRate*100).toFixed(0)}%  TP ×${this.cfg.takeProfitMultiple}  tick-cap ${(this.cfg.tickCapFraction*100).toFixed(0)}% of live median`);
+    if (this._isMartingaleEnabled()) {
+      logger.info(`martingale: ON  multiplier ×${this.cfg.martingaleMultiplier}  steps ${this.cfg.martingaleSteps}  base stake ${this.baseStake.toFixed(2)}`);
+    } else {
+      logger.info(`martingale: OFF (flat stake ${this.baseStake.toFixed(2)})`);
+    }
 
     if (!this.cfg.apiToken) { logger.error('API token missing'); process.exit(1); }
 
@@ -1273,9 +1368,13 @@ class AccuHoldBot {
     if (this._lastDayISODate && this._lastDayISODate !== today) {
       logger.info(`new day detected: ${this._lastDayISODate} → ${today}`);
       this.consecutiveLosses = 0;
+      // Note: martingale state is NOT auto-reset on day change; stake cycle continues.
+      // Uncomment next two lines if you want day-bound reset:
+      // this.martingaleStep = 0;
+      // this.currentStake = this.baseStake;
       this._dailyStopUntil = 0;
       this._dailyStopNotified = false;
-      telegram.send(`📅 <b>New trade day: ${today}</b>\nOverall: ${money(this.overallProfit, this.currencyStr())}`);
+      telegram.send(`📅 <b>New trade day: ${today}</b>\nOverall: ${money(this.overallProfit, this.currencyStr())}\n♻️ Martingale: ${this._martingaleLabel()} · Stake ${this.currentStake.toFixed(2)} ${this.currencyStr()}`);
     }
     this._lastDayISODate = today;
   }
@@ -1285,6 +1384,10 @@ class AccuHoldBot {
     if (this.startBalance == null) this.startBalance = this.balance ?? this.client.balance;
     this.lastBalance = this.startBalance;
 
+    const martingaleLine = this._isMartingaleEnabled()
+      ? `♻️ <b>Martingale:</b> ON  ×${Number(this.cfg.martingaleMultiplier).toFixed(2)}  steps ${this.cfg.martingaleSteps}  (base ${this.baseStake.toFixed(2)} → now ${this.currentStake.toFixed(2)} step ${this.martingaleStep})\n`
+      : `♻️ <b>Martingale:</b> OFF  (flat stake ${this.baseStake.toFixed(2)})\n`;
+    const lossLine = `📉 <b>Loss Streak:</b> ${this.consecutiveLosses} (max ${this.stats.maxLossStreak}) · ${this.stats.lossStreakLine()}\n`;
     if (!this._bootedOnce) {
       this._bootedOnce = true;
       telegram.send(
@@ -1293,12 +1396,14 @@ class AccuHoldBot {
         `<b>Balance:</b> ${(this.startBalance ?? 0).toFixed(2)} ${this.currencyStr()}\n` +
         `<b>Assets:</b> ${this.cfg.assets.length} (BOOM + CRASH)\n` +
         `<b>Growth rate:</b> ${(this.cfg.growthRate*100).toFixed(0)}% · <b>TP:</b> ×${this.cfg.takeProfitMultiple} · <b>tick-cap:</b> ${(this.cfg.tickCapFraction*100).toFixed(0)}% of live median\n` +
-        `<b>Stake:</b> ${this.cfg.stake} (flat) · <b>cooldown:</b> ${this.cfg.perSymbolCooldownMs/1000}s/symbol\n` +
+        martingaleLine +
+        lossLine +
+        `<b>Cooldown:</b> ${this.cfg.perSymbolCooldownMs/1000}s/symbol\n` +
         `<b>Daily caps:</b> ${this.cfg.dailyMaxTrades} trades / ${this.cfg.dailyMaxLoss} ${this.currencyStr()}\n` +
         `<b>Overall:</b> ${money(this.overallProfit, this.currencyStr())}`,
       );
     } else {
-      telegram.send(`🔄 <b>Reconnected</b> (${info.loginid}, ${info.isVirtual ? 'DEMO' : 'REAL'})`);
+      telegram.send(`🔄 <b>Reconnected</b> (${info.loginid}, ${info.isVirtual ? 'DEMO' : 'REAL'})\n${martingaleLine.trim()}\n${lossLine.trim()}`);
     }
 
     // Load symbols + fetch the live ticks_stayed_in for the configured
@@ -1335,14 +1440,24 @@ class AccuHoldBot {
 
   // ── Trade callbacks ─────────────────────────────────────────────
   _onTradeOpen(t) {
+    const martingaleNote = this._isMartingaleEnabled()
+      ? `♻️ <b>Martingale:</b> ${this._martingaleLabel()} · base ${this.baseStake.toFixed(2)} → <b>${t.stake.toFixed(2)} ${this.currencyStr()}</b>${this.martingaleStep > 0 ? ` (step ${this.martingaleStep}/${this.cfg.martingaleSteps})` : ' (base)'}\n`
+      : '';
+    const lossNote = `📉 <b>Loss Streak:</b> ${this.consecutiveLosses} · max ${this.stats.maxLossStreak} · ${this.stats.lossStreakLine()}\n`;
+    const nextStakeNote = this._isMartingaleEnabled()
+      ? `➡️ <b>Next stake (if loss):</b> ${this._calcMartingaleStake(Math.min(this.martingaleStep + 1, this.cfg.martingaleSteps)).toFixed(2)} ${this.currencyStr()}${this.martingaleStep + 1 > this.cfg.martingaleSteps ? ' (would reset to base)' : ''}\n`
+      : '';
     const msg =
       `🟢 <b>TRADE OPENED</b>\n\n` +
       `<b>Contract:</b> #${t.contractId}\n` +
       `<b>Symbol:</b> <code>${t.symbol}</code>\n` +
       `<b>Growth Rate:</b> ${(t.growthRate*100).toFixed(2)}%\n` +
-      `<b>Stake:</b> ${t.stake.toFixed(2)} ${this.currencyStr()}\n` +
+      `<b>Stake:</b> ${t.stake.toFixed(2)} ${this.currencyStr()}${this.martingaleStep > 0 ? ` <i>(martingale ×${Math.pow(this.cfg.martingaleMultiplier, this.martingaleStep).toFixed(2)})</i>` : ''}\n` +
+      martingaleNote +
       `<b>Take-Profit floor:</b> ${(t.stake * (t.takeProfitMultiple ?? this.cfg.takeProfitMultiple)).toFixed(2)} ${this.currencyStr()}\n` +
       `<b>Tick-cap:</b> ${t.tickCapTicks ?? 'n/a'} ticks (${(this.cfg.tickCapFraction*100).toFixed(0)}% × live median <code>${t.ticksStayedInMedian ?? 'n/a'}</code>)\n` +
+      lossNote +
+      nextStakeNote +
       `<b>Overall:</b> ${money(this.overallProfit, this.currencyStr())}\n\n` +
       `<i>No timing signal — entry is rate-limited only. Exits arm immediately on every tick.</i>`;
     telegram.send(msg);
@@ -1361,6 +1476,11 @@ class AccuHoldBot {
     this.overallProfit += t.profit;
     if (t.status === 'lost') this.consecutiveLosses += 1;
     else if (t.status === 'won') this.consecutiveLosses = 0;
+
+    // ── Martingale update (stake for NEXT trade) ──────────
+    const prevStake = this.currentStake;
+    const prevStep = this.martingaleStep;
+    const mg = this._updateMartingaleOnResult(t.status);
 
     // Risk halt: max consecutive losses → require manual restart.
     if (this.consecutiveLosses >= this.cfg.maxConsecutiveLosses && !this.manualRestartRequired) {
@@ -1392,6 +1512,29 @@ class AccuHoldBot {
     const durationLine = durationSec != null
       ? `⏱️ <b>Duration:</b> ${formatDuration(durationSec)}\n`
       : `⏱️ <b>Duration:</b> n/a\n`;
+    // Martingale display for this result
+    let martingaleLine = '';
+    if (this._isMartingaleEnabled()) {
+      if (t.status === 'lost') {
+        if (mg.reason === 'loss-step-up') {
+          martingaleLine = `♻️ <b>Martingale:</b> STEP UP  ${prevStep}/${this.cfg.martingaleSteps} → ${this.martingaleStep}/${this.cfg.martingaleSteps}  stake ${prevStake.toFixed(2)} → <b>${this.currentStake.toFixed(2)} ${this.currencyStr()}</b> (×${this.cfg.martingaleMultiplier})\n`;
+        } else if (mg.reason === 'max-reset') {
+          martingaleLine = `♻️ <b>Martingale:</b> MAX STEPS hit → RESET to base <b>${this.currentStake.toFixed(2)} ${this.currencyStr()}</b>\n`;
+        } else {
+          martingaleLine = `♻️ <b>Martingale:</b> ${this._martingaleLabel()}  stake now ${this.currentStake.toFixed(2)} ${this.currencyStr()}\n`;
+        }
+      } else {
+        if (mg.reason === 'win-reset') {
+          martingaleLine = `♻️ <b>Martingale:</b> WIN → RESET  ${prevStake.toFixed(2)} → <b>${this.currentStake.toFixed(2)} ${this.currencyStr()}</b> (base)\n`;
+        } else {
+          martingaleLine = `♻️ <b>Martingale:</b> WIN at base — stake stays <b>${this.currentStake.toFixed(2)} ${this.currencyStr()}</b>\n`;
+        }
+      }
+    } else {
+      martingaleLine = `♻️ <b>Martingale:</b> OFF  (flat stake)\n`;
+    }
+    const lossBreakdown = `📉 <b>Loss Streak:</b> ${this.consecutiveLosses} · max ${this.stats.maxLossStreak}\n` +
+                          `   ${this.stats.lossStreakLine()}\n`;
     const msg =
       `${emoji} <b>TRADE ${label}</b>\n\n` +
       `<b>Contract:</b> #${t.contractId} · <b>Symbol:</b> <code>${t.symbol}</code>\n` +
@@ -1403,12 +1546,13 @@ class AccuHoldBot {
       `<b>Ticks held:</b> ${t.ticksHeld ?? '?'} (tick-cap was ${t.tickCapTicks ?? '?'})` +
       (t.ticksHeldOpen != null && t.ticksHeld !== t.ticksHeldOpen ? ` · since-sub: ${t.ticksHeldOpen}` : '') +
       `\n` +
+      martingaleLine +
+      lossBreakdown +
       `<b>Balance:</b> ${(this.lastBalance ?? 0).toFixed(2)} ${this.currencyStr()}\n\n` +
       `<b>GMT Day (${rec.date})</b>\n` +
       `• Trades: ${todayStats.count} (✅${todayStats.wins} ❌${todayStats.losses}) | WR ${todayStats.winRate.toFixed(1)}%\n` +
       `• Net: ${money(todayStats.totalProfit, this.currencyStr())} | PF ${todayStats.profitFactor === Infinity ? '∞' : todayStats.profitFactor.toFixed(2)}\n\n` +
-      `<b>Overall:</b> ${money(this.overallProfit, this.currencyStr())}\n` +
-      `<b>Consecutive losses:</b> ${this.consecutiveLosses} | max ${this.stats.maxLossStreak}`;
+      `<b>Overall:</b> ${money(this.overallProfit, this.currencyStr())}`;
     telegram.send(msg);
     this.lastTradeAt = Date.now();
     this._saveState('after-trade');
@@ -1468,17 +1612,18 @@ class AccuHoldBot {
       candidates.sort((a, b) => (this.lastEntryBySymbol.get(a.sym) || 0) - (this.lastEntryBySymbol.get(b.sym) || 0));
       const sym = candidates[0].sym;
 
+      const entryStake = this.currentStake;
       logger.info(
-        `ENTRY ${sym} g=${this.cfg.growthRate} stake=${this.cfg.stake} ` +
+        `ENTRY ${sym} g=${this.cfg.growthRate} stake=${entryStake.toFixed(2)} (base ${this.baseStake.toFixed(2)} martingale ${this._martingaleLabel()}) ` +
         `tp=×${this.cfg.takeProfitMultiple} (tick-cap and median will be live-fetched from the proposal)`,
       );
 
       if (this.dryRun) {
-        logger.info(`DRY-RUN would buy ${sym}`);
+        logger.info(`DRY-RUN would buy ${sym} stake=${entryStake.toFixed(2)}`);
         return;
       }
 
-      const trade = await this.exec.buy(sym, this.cfg.growthRate, this.cfg.stake, {});
+      const trade = await this.exec.buy(sym, this.cfg.growthRate, entryStake, {});
       this.lastEntryAt = Date.now();
       this.lastEntryBySymbol.set(sym, this.lastEntryAt);
     } catch (e) {
@@ -1526,14 +1671,19 @@ class AccuHoldBot {
     const date = utcDateStr(prev), hour = utcHour(prev);
     const list = this.stats.tradesForHour(date, hour);
     const s = this.stats.stats(list);
+    const martingaleInfo = this._isMartingaleEnabled()
+      ? `♻️ Martingale: ${this._martingaleLabel()} · base ${this.baseStake.toFixed(2)} → now ${this.currentStake.toFixed(2)} ${this.currencyStr()}\n`
+      : `♻️ Martingale: OFF\n`;
+    const lossInfo = `📉 Loss streak: ${this.consecutiveLosses} · max ${this.stats.maxLossStreak} · ${this.stats.lossStreakLine()}\n`;
     if (!list.length) {
-      telegram.send(`⏰ <b>${date} ${pad(hour)}:00</b> — No trades\n💼 Overall: ${money(this.overallProfit, this.currencyStr())}`);
+      telegram.send(`⏰ <b>${date} ${pad(hour)}:00</b> — No trades\n${martingaleInfo}${lossInfo}💼 Overall: ${money(this.overallProfit, this.currencyStr())}`);
       return;
     }
-    let msg = `⏰ <b>${date} ${pad(hour)}:00</b>\n\n📊 ${s.count} trades (✅${s.wins} ❌${s.losses})\n📈 WR: ${s.winRate.toFixed(1)}%\n💰 P/L: <b>${money(s.totalProfit, this.currencyStr())}</b>\n💼 Overall: <b>${money(this.overallProfit, this.currencyStr())}</b>\n`;
+    let msg = `⏰ <b>${date} ${pad(hour)}:00</b>\n\n📊 ${s.count} trades (✅${s.wins} ❌${s.losses})\n📈 WR: ${s.winRate.toFixed(1)}%\n💰 P/L: <b>${money(s.totalProfit, this.currencyStr())}</b>\n💼 Overall: <b>${money(this.overallProfit, this.currencyStr())}</b>\n${martingaleInfo}${lossInfo}\n`;
     list.slice(-15).forEach((t, i) => {
       const exit = (t.exitReason || '').split(':')[0];
-      msg += `${i + 1}. ${t.status === 'won' ? '✅' : '❌'} #${t.contractId} ${t.symbol} ticks=${t.ticksHeld ?? '?'} exit=${exit} ${money(t.profit, this.currencyStr())}\n`;
+      const mgTag = t.martingaleStep != null && t.martingaleStep > 0 ? ` MG×${Number(t.martingaleMultiplier || 1).toFixed(2)}` : '';
+      msg += `${i + 1}. ${t.status === 'won' ? '✅' : '❌'} #${t.contractId} ${t.symbol} ticks=${t.ticksHeld ?? '?'} exit=${exit}${mgTag} ${money(t.profit, this.currencyStr())}\n`;
     });
     telegram.send(msg);
   }
@@ -1550,7 +1700,12 @@ class AccuHoldBot {
     else msg += `No trades.\n`;
     msg += `\n💼 ${balStart.toFixed(2)} → ${balNow.toFixed(2)} (${balDelta >= 0 ? '+' : ''}${balDelta.toFixed(2)})\n`;
     msg += `💼 Overall: <b>${money(this.overallProfit, this.currencyStr())}</b>\n`;
-    msg += `❌ Consec losses: ${this.consecutiveLosses} | max ${this.stats.maxLossStreak}`;
+    if (this._isMartingaleEnabled()) {
+      msg += `♻️ Martingale: ${this._martingaleLabel()} · base ${this.baseStake.toFixed(2)} → now ${this.currentStake.toFixed(2)} ${this.currencyStr()}\n`;
+    } else {
+      msg += `♻️ Martingale: OFF (flat stake)\n`;
+    }
+    msg += `📉 Loss streak: current ${this.consecutiveLosses} · max ${this.stats.maxLossStreak} · ${this.stats.lossStreakLine()}`;
     telegram.send(msg);
     this.stats.markEodSent(date);
     this._saveState(`eod-${reason}`);
@@ -1565,12 +1720,16 @@ class AccuHoldBot {
     if (!this.cfg.stateSaveOnShutdown && reason === 'shutdown') return;
     try {
       const payload = {
-        version: 1, engine: 'accuHOLD v1', savedAt: new Date().toISOString(), savedReason: reason,
+        version: 2, engine: 'accuHOLD v1', savedAt: new Date().toISOString(), savedReason: reason,
         startBalance: this.startBalance, lastBalance: this.lastBalance, overallProfit: this.overallProfit,
         consecutiveLosses: this.consecutiveLosses,
         manualRestartRequired: this.manualRestartRequired,
         manualRestartReason: this.manualRestartReason,
         lastEntryBySymbol: Array.from(this.lastEntryBySymbol.entries()),
+        // Martingale persistence
+        baseStake: this.baseStake,
+        currentStake: this.currentStake,
+        martingaleStep: this.martingaleStep,
         stats: this.stats.serialize(),
       };
       const tmp = this.cfg.stateFile + '.tmp';
@@ -1590,10 +1749,23 @@ class AccuHoldBot {
       if (d.consecutiveLosses != null) this.consecutiveLosses = d.consecutiveLosses;
       if (d.manualRestartRequired) { this.manualRestartRequired = true; this.manualRestartReason = d.manualRestartReason || ''; }
       if (Array.isArray(d.lastEntryBySymbol)) this.lastEntryBySymbol = new Map(d.lastEntryBySymbol);
+      // Martingale restore
+      if (d.baseStake != null) this.baseStake = Number(d.baseStake);
+      if (d.currentStake != null) this.currentStake = Number(d.currentStake);
+      else this.currentStake = this.baseStake;
+      if (d.martingaleStep != null) this.martingaleStep = Number(d.martingaleStep) || 0;
+      // reconcile with current config if base stake changed
+      if (Number(this.cfg.stake) !== this.baseStake) {
+        // keep persisted cycle but ensure base matches config
+        this.baseStake = Number(this.cfg.stake);
+        this.currentStake = this._calcMartingaleStake(this.martingaleStep);
+      }
       this.stats = new StatisticsManager(d.stats || {});
       logger.info(
         `state restored: overallProfit=${this.stats.overallProfit.toFixed(2)} ` +
-        `consecLosses=${this.consecutiveLosses} halt=${this.manualRestartRequired}`,
+        `consecLosses=${this.consecutiveLosses} halt=${this.manualRestartRequired} ` +
+        `martingale step=${this.martingaleStep} stake=${this.currentStake.toFixed(2)}/${this.baseStake.toFixed(2)} ` +
+        `maxStreak=${this.stats.maxLossStreak} ${this.stats.lossStreakLine()}`,
       );
     } catch (e) { logger.warn('state load:', e.message); }
   }
@@ -1615,7 +1787,11 @@ class AccuHoldBot {
     this.exec.cleanupAllSubscriptions().catch(e => logger.warn('cleanup failed:', e.message)).finally(() => {
       const today = this.stats.todayTrades();
       const s = this.stats.stats(today);
-      const msg = `🌙 <b>SESSION END</b>\n📊 ${s.count} trades (✅${s.wins} ❌${s.losses}) | WR ${s.winRate.toFixed(1)}%\n💰 Net: ${money(s.totalProfit, this.currencyStr())}\n💼 Overall: ${money(this.overallProfit, this.currencyStr())}`;
+      const mgLine = this._isMartingaleEnabled()
+        ? `♻️ Martingale: ${this._martingaleLabel()} · base ${this.baseStake.toFixed(2)} → now ${this.currentStake.toFixed(2)}\n`
+        : `♻️ Martingale: OFF\n`;
+      const lossLine = `📉 Loss streak: ${this.consecutiveLosses} · max ${this.stats.maxLossStreak} · ${this.stats.lossStreakLine()}\n`;
+      const msg = `🌙 <b>SESSION END</b>\n📊 ${s.count} trades (✅${s.wins} ❌${s.losses}) | WR ${s.winRate.toFixed(1)}%\n💰 Net: ${money(s.totalProfit, this.currencyStr())}\n💼 Overall: ${money(this.overallProfit, this.currencyStr())}\n${mgLine}${lossLine}`;
       telegram.send(msg);
       this._saveState('shutdown');
       this.client.stop();
@@ -1703,6 +1879,53 @@ async function runSelfTest() {
   test('live median from proposal', liveMed === 12.5, `liveMed=${liveMed}`);
   const liveCap = Math.max(1, Math.floor(liveMed * 0.55));
   test('live tick-cap = floor(0.55 × 12.5)', liveCap === 6, `liveCap=${liveCap}`);
+
+  // 11. Martingale stake progression: base × multiplier^step
+  {
+    const cfg = { stake: 1.00, martingaleMultiplier: 2.10, martingaleSteps: 4 };
+    const bot = new AccuHoldBot(cfg);
+    bot.baseStake = cfg.stake; bot.currentStake = cfg.stake; bot.martingaleStep = 0;
+    test('martingale off at step 0 → base', bot._calcMartingaleStake(0) === 1.00);
+    test('martingale step 1 → 2.10', bot._calcMartingaleStake(1) === 2.10);
+    test('martingale step 2 → 4.41', bot._calcMartingaleStake(2) === 4.41);
+    test('martingale step 3 → 9.26', bot._calcMartingaleStake(3) === 9.26, `got ${bot._calcMartingaleStake(3)}`);
+    // Simulate 3 losses then win
+    bot._updateMartingaleOnResult('lost'); // step1
+    test('mg after 1st loss step=1 stake=2.10', bot.martingaleStep === 1 && bot.currentStake === 2.10, `step=${bot.martingaleStep} stake=${bot.currentStake}`);
+    bot._updateMartingaleOnResult('lost'); // step2
+    test('mg after 2nd loss step=2 stake=4.41', bot.martingaleStep === 2 && bot.currentStake === 4.41);
+    bot._updateMartingaleOnResult('lost'); // step3
+    bot._updateMartingaleOnResult('won');  // reset
+    test('mg after win resets to base', bot.martingaleStep === 0 && bot.currentStake === 1.00, `step=${bot.martingaleStep} stake=${bot.currentStake}`);
+    // Max steps reset
+    bot.martingaleStep = 4; bot.currentStake = bot._calcMartingaleStake(4);
+    bot._updateMartingaleOnResult('lost'); // should reset
+    test('mg max steps → reset to base', bot.martingaleStep === 0 && bot.currentStake === 1.00);
+    // Disabled when multiplier <=1
+    const botOff = new AccuHoldBot({ stake: 1, martingaleMultiplier: 1.0, martingaleSteps: 4 });
+    botOff.baseStake = 1; botOff.currentStake = 1;
+    test('martingale disabled when multiplier=1', botOff._isMartingaleEnabled() === false);
+    const botOff2 = new AccuHoldBot({ stake: 1, martingaleMultiplier: 2.1, martingaleSteps: 0 });
+    botOff2.baseStake = 1; botOff2.currentStake = 1;
+    test('martingale disabled when steps=0', botOff2._isMartingaleEnabled() === false);
+  }
+
+  // 12. Loss streak histogram x2-x7 and max streak
+  {
+    const sm = new StatisticsManager();
+    // Simulate: win, loss, loss (x2), loss (x3), win, loss, loss (x2), loss (x3), loss (x4), loss (x5), loss (x6), loss (x7), loss (x7 again)
+    const seq = ['lost','lost','lost','won','lost','lost','lost','lost','lost','lost','lost','lost'];
+    // 8 consecutive losses after the win: streak reaches 2,3,4,5,6,7,7,7...
+    seq.forEach((st, i) => sm.record({ contractId: 100+i, status: st, profit: st==='won'?1:-1, sellTime: Date.now()/1000 }));
+    test('histogram max streak is 8', sm.maxLossStreak === 8, `max=${sm.maxLossStreak}`);
+    test('histogram x2 increments', sm.lossStreakEvents.x2 === 2, `x2=${sm.lossStreakEvents.x2}`);
+    test('histogram x3 increments', sm.lossStreakEvents.x3 === 2, `x3=${sm.lossStreakEvents.x3}`);
+    test('histogram x7 increments for >=7', sm.lossStreakEvents.x7 === 2, `x7=${sm.lossStreakEvents.x7}`);
+    // Serialize round-trip preserves histogram
+    const ser = sm.serialize();
+    const sm2 = new StatisticsManager(ser);
+    test('histogram persists after serialize/load', sm2.lossStreakEvents.x2===2 && sm2.lossStreakEvents.x7===2 && sm2.maxLossStreak===8);
+  }
 
   const passed = results.filter(r => r.pass).length;
   console.log(`\nSelf-test: ${passed}/${results.length} passed`);
