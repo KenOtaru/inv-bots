@@ -382,12 +382,47 @@ class DerivClient extends EventEmitter {
     else this._authorize();
   }
 
+  // The new-API (OTP) WebSocket drops idle connections after ~60s if there
+  // is no active subscription. With no contract open yet, the bot has no
+  // proposal_open_contract stream, so we keep ONE ticks subscription alive
+  // for the lifetime of the socket and refresh it on every (re)connect.
+  async _startKeepAlive() {
+    if (this._keepAliveSubId) return;
+    const assets = (this.cfg && Array.isArray(this.cfg.assets) && this.cfg.assets.length) ? this.cfg.assets : ['BOOM1000'];
+    const symbol = assets[0];
+    try {
+      const subId = await this.subscribe({ ticks: symbol }, () => { /* noop — just keeps the socket warm */ });
+      this._keepAliveSubId = subId;
+      logger.info(`keep-alive: subscribed ticks:${symbol} (subId=${subId})`);
+    } catch (e) {
+      logger.warn(`keep-alive subscribe failed (${symbol}):`, e.message);
+    }
+  }
+  _stopKeepAlive() {
+    if (this._keepAliveSubId) { try { this.forget(this._keepAliveSubId); } catch (_) {} this._keepAliveSubId = null; }
+    if (this._keepAliveTimer) { clearInterval(this._keepAliveTimer); this._keepAliveTimer = null; }
+  }
+  // Belt-and-braces ping: if we ever lose the keep-alive sub for any
+  // reason, an app-level ping every 25s prevents the OTP socket from
+  // sitting idle for the full 60s timeout window.
+  _startPing() {
+    this._stopPing();
+    this._keepAliveTimer = setInterval(() => {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        try { this.ws.ping(); } catch (_) {}
+      }
+    }, 25000);
+  }
+  _stopPing() { if (this._keepAliveTimer) { clearInterval(this._keepAliveTimer); this._keepAliveTimer = null; } }
+
   _newApiMarkAuthorized() {
     if (!this.accountInfo) return;
     this.authorized = true;
     this.balance = this.accountInfo.balance ?? null;
     this.currency = this.accountInfo.currency || this.cfg.currency;
     logger.info(`authorized ${this.accountInfo.loginid} (${this.accountInfo.isVirtual ? 'DEMO' : 'REAL'}) bal=${this.balance}`);
+    this._startPing();
+    this._startKeepAlive().catch(e => logger.debug('keep-alive start:', e.message));
     this.emit('authorized', this.accountInfo);
   }
 
@@ -399,6 +434,8 @@ class DerivClient extends EventEmitter {
       this.currency = res.authorize.currency || this.cfg.currency;
       this.accountInfo = { loginid: res.authorize.loginid, email: res.authorize.email, isVirtual: !!res.authorize.is_virtual, accountType: res.authorize.account_type };
       logger.info(`authorized ${res.authorize.loginid} (${this.accountInfo.isVirtual ? 'DEMO' : 'REAL'}) bal=${this.balance}`);
+      this._startPing();
+      this._startKeepAlive().catch(e => logger.debug('keep-alive start:', e.message));
       this.emit('authorized', this.accountInfo);
     } catch (e) { logger.error('auth failed:', e.message); this.authorized = false; this._scheduleReconnect(); }
   }
@@ -433,6 +470,7 @@ class DerivClient extends EventEmitter {
     logger.warn(`ws closed code=${code} reason=${r || 'none'}`);
     const wasAuth = this.authorized;
     this.connected = false; this.authorized = false;
+    this._stopKeepAlive();
     for (const [, p] of this._pending) { clearTimeout(p.timer); p.reject(new Error('Connection closed')); }
     this._pending.clear(); this._subs.clear();
     this.emit('close', code, reason, wasAuth);
@@ -489,7 +527,7 @@ class DerivClient extends EventEmitter {
     return Array.isArray(res.portfolio?.contracts) ? res.portfolio.contracts : [];
   }
 
-  stop() { this._stopped = true; try { this.ws?.close(); } catch (_) {} }
+  stop() { this._stopped = true; this._stopKeepAlive(); try { this.ws?.close(); } catch (_) {} }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
