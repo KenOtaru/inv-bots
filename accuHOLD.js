@@ -309,6 +309,8 @@ class DerivClient extends EventEmitter {
     this._rest = this._isPat ? new RestClient('https://api.derivws.com', cfg.appId, cfg.apiToken) : null;
     this._otpUrl = null;
     this._targetAccount = null;
+    this._keepAliveSubId = null;
+    this._keepAliveTimer = null;
   }
 
   _nextReqId() { return ++this._reqId; }
