@@ -113,12 +113,12 @@ const CONFIG = Object.freeze({
   // ── Rate-limited entry ──
   perSymbolCooldownMs : parseInt('8000',  10),   // between trades on the same symbol
   perSymbolEntryGapMs : parseInt('30000', 10),   // min gap between any two new entries (global)
-  maxOpenTrades       : parseInt('2',     10),   // concurrent open contracts across the bot
+  maxOpenTrades       : parseInt('1',     10),   // concurrent open contracts across the bot
 
   // ── Risk controls ──
-  maxConsecutiveLosses : parseInt('4', 10),      // pause + require manual restart
+  maxConsecutiveLosses : parseInt('7', 10),      // pause + require manual restart
   dailyMaxLoss        : parseFloat('50'),         // demo-appropriate cap
-  dailyMaxTrades      : parseInt('120', 10),      // daily cap
+  dailyMaxTrades      : parseInt('120000', 10),      // daily cap
   stopLossPerContract : parseFloat('0'),         // 0 = disabled (rely on knockout)
 
   // ── Instruments (BOOM + CRASH families, run both) ──
@@ -141,7 +141,7 @@ const CONFIG = Object.freeze({
   proposalRefreshMs: parseInt('60000', 10),   // refresh barrier + ticks_stayed_in cache
 
   // ── Scheduled pause/resume (GMT) ──
-  pauseEnabled : true,
+  pauseEnabled : false,
   pauseStartGmt: '08:00',
   pauseEndGmt  : '18:00',
 

@@ -403,11 +403,13 @@ class AssetState{
     this.lastCalibrationAt=null;
     this.consecutiveLosses=0;
     this.lastTradeAt=0;
-    // v2: post-spike scheduling
+    // v2: post-spike scheduling — 1 trade per spike enforcement
     this.pendingEntryAfter=null;   // ticksSinceSpike target to enter (int)
     this.pendingHoldTicks=null;    // planned hold for that entry
     this.pendingEntryReason=null;  // string audit
     this.entryScheduledAt=null;    // epoch when spike occurred
+    this.lastTradedSpikeAbsIdx=null; // abs idx of last spike that was traded (1-per-spike guard)
+    this.lastTradeSpikeMean=null;
   }
 }
 
@@ -420,6 +422,7 @@ let tradeLog=[];
 let dailyLoss=0, dailyTrades=0, lastDailyReset=utcDateStr();
 let consecutiveLossesGlobal=0;
 let killed=false;
+let globalClient=null; // set in main for tick-driven sell
 
 function utcDateStr(d=new Date()){ return d.toISOString().slice(0,10); }
 function saveState(reason='tick'){
@@ -442,6 +445,7 @@ function saveState(reason='tick'){
       elevatedBuckets: st.elevatedBuckets,
       pendingEntryAfter: st.pendingEntryAfter,
       pendingHoldTicks: st.pendingHoldTicks,
+      lastTradedSpikeAbsIdx: st.lastTradedSpikeAbsIdx,
     })),
     tradeLog: tradeLog.slice(-500),
   };
@@ -469,6 +473,7 @@ function loadState(){
       st.elevatedBuckets=Array.isArray(a.elevatedBuckets)? a.elevatedBuckets: [];
       st.pendingEntryAfter=a.pendingEntryAfter??null;
       st.pendingHoldTicks=a.pendingHoldTicks??null;
+      st.lastTradedSpikeAbsIdx=a.lastTradedSpikeAbsIdx??null;
       if(st.calibrationStatus==='PAUSED') killed=true;
     }
     log('INFO',`State loaded: ${d.assets?.length||0} assets, ${tradeLog.length} trades, killed=${killed}`);
@@ -507,16 +512,40 @@ function finalizeContract(cid, poc){
   const profit=Number(poc.profit ?? 0);
   const outcome= poc.status==='won' || profit>0 ? 'won' : 'lost';
   const win= outcome==='won';
-  log('INFO',`Contract ${cid} settled: ${outcome} profit ${profit.toFixed(2)} ${CONFIG.currency} status=${poc.status||'?'}`);
-  telegram.send(`${win?'✅':'❌'} <b>${rec.symbol} ${outcome.toUpperCase()}</b> profit <code>${profit.toFixed(2)} ${CONFIG.currency}</code> ${poc.status||''} hold ${rec.entryLog?.plannedHold||'?'} entryAfter ${rec.entryLog?.entryAfter||'?'}`);
+  // Duration: prefer poc sell/buy times if available else wall clock
+  const buyTime = rec.entryLog?.ts || rec.entryLog?.buyTime || Date.now();
+  const sellTime = poc.sell_time ? Number(poc.sell_time)*1000 : Date.now();
+  // sell_time may be seconds epoch, convert
+  const durationSec = Math.max(0, Math.round((sellTime - buyTime)/1000));
+  const durationTicks = poc.tick_count ?? poc.tick_count ?? rec.entryLog?.plannedHold ?? '?';
+
+  log('INFO',`Contract ${cid} settled: ${outcome} profit ${profit.toFixed(2)} ${CONFIG.currency} status=${poc.status||'?'} duration ${durationSec}s`);
 
   const entry=rec.entryLog;
-  if(entry){ entry.outcome=outcome; entry.profit=profit; entry.settledAt=Date.now(); entry.status=poc.status||'unknown'; }
+  if(entry){ entry.outcome=outcome; entry.profit=profit; entry.settledAt=Date.now(); entry.status=poc.status||'unknown'; entry.durationSec=durationSec; }
   dailyLoss += (profit<0? profit: 0);
   if(!win){ rec.assetState.consecutiveLosses=(rec.assetState.consecutiveLosses||0)+1; consecutiveLossesGlobal++; }else{ rec.assetState.consecutiveLosses=0; consecutiveLossesGlobal=0; }
 
-  tradeLog.push(entry||{symbol:rec.symbol, outcome, profit, ts:Date.now()});
+  // Push before computing totals so totals include this trade
+  tradeLog.push(entry||{symbol:rec.symbol, outcome, profit, ts:Date.now(), durationSec});
   dailyTrades++;
+  // Totals for telegram
+  const settledAll = tradeLog.filter(t=>t.outcome);
+  const totalTrades = settledAll.length;
+  const wins = settledAll.filter(t=>t.outcome==='won').length;
+  const losses = totalTrades - wins;
+  const winRatio = totalTrades ? (wins/totalTrades*100).toFixed(1) : '0.0';
+  const netProfit = settledAll.reduce((s,t)=> s + Number(t.profit||0), 0);
+
+  // Detailed CLOSE telegram per spec: asset, P/L, NetProfit, Duration, Total Trades Win/Loss (Win Ratio)
+  {
+    const closeMsg = `${win?'✅':'❌'} <b>CLOSE ${rec.symbol} #${cid} ${outcome.toUpperCase()}</b>\n`+
+      `P/L <code>${profit>=0?'+':''}${profit.toFixed(2)} ${CONFIG.currency}</code> NetProfit <code>${netProfit>=0?'+':''}${netProfit.toFixed(2)} ${CONFIG.currency}</code>\n`+
+      `Duration <code>${durationSec}s</code> ticks <code>${durationTicks}</code> Stake <code>${rec.entryLog?.stake ?? CONFIG.stake} ${CONFIG.currency}</code>\n`+
+      `Total <code>${totalTrades}</code> W <code>${wins}</code> L <code>${losses}</code> WR <code>${winRatio}%</code> Consecutive losses <code>${rec.assetState.consecutiveLosses}</code>`;
+    telegram.send(closeMsg);
+  }
+
   if(rec.subId) rec.client.forget(rec.subId).catch(()=>{});
   openContracts.delete(cid);
   saveState('settle');
@@ -714,6 +743,47 @@ function processNewTicksForAsset(st, newTicks){
   if(st.history.length > CONFIG.historyCap) st.history.splice(0, st.history.length - CONFIG.historyCap);
   st.totalTicksSeen += newTicks.length;
 
+  // ── Timed close for ACCU: sell when plannedHold ticks elapsed (accuAPEX-style) ──
+  // Must run on every tick, even if history too short for detector
+  for(const [cid, rec] of openContracts){
+    if(rec.symbol !== st.symbol) continue;
+    if(rec._selling) continue;
+    // rec.buyAbsIdx set at buy time; fallback to buyTime
+    const ticksHeld = st.totalTicksSeen - (rec.buyAbsIdx ?? st.totalTicksSeen);
+    rec.ticksHeld = ticksHeld;
+    const targetHold = rec.entryLog?.plannedHold ?? CONFIG.holdMin;
+    if(ticksHeld >= targetHold){
+      log('INFO',`Timed close ${st.symbol} #${cid} ticksHeld ${ticksHeld}/${targetHold} — selling`);
+      rec._selling = true;
+      // async sell without blocking tick processing
+      (async ()=>{
+        try{
+          const res = await rec.client._send({sell: cid, price: 0}, 15000);
+          const sold = res.sell || {};
+          const soldFor = parseFloat(sold.sold_for ?? sold.sell_price ?? 0);
+          log('INFO',`sold #${cid} for ${soldFor}`);
+          // finalize will be triggered by proposal_open_contract is_sold, but force if needed
+          // If stream doesn't fire, finalize here
+          setTimeout(()=>{
+            if(openContracts.has(cid)){
+              // fallback: query contract
+              rec.client._send({proposal_open_contract:1, contract_id: cid}, 10000).then(r=>{
+                const poc=r.proposal_open_contract;
+                if(poc && poc.is_sold) finalizeContract(cid, poc);
+                else if(poc) finalizeContract(cid, {profit: poc.profit ?? 0, status: poc.status||'sold', sell_price: soldFor, sell_time: Date.now()/1000});
+              }).catch(()=> finalizeContract(cid, {profit: 0, status: 'sold', sell_price: soldFor, sell_time: Date.now()/1000}));
+            }
+          }, 2000);
+        }catch(e){
+          log('WARN',`Timed sell #${cid} failed:`,e.message);
+          rec._selling = false;
+          // retry next tick
+          rec.lastUpdate = Date.now() - CONFIG.watchdogMs + 5000; // force watchdog check
+        }
+      })();
+    }
+  }
+
   if(st.history.length < CONFIG.detection.baselineWindow + 100) return;
 
   const prices=st.history.map(t=>t.quote);
@@ -743,13 +813,13 @@ function processNewTicksForAsset(st, newTicks){
         }
       }
       // v2: even when ACTIVE, after each spike we refresh hazard incrementally every 20 intervals
+      // Do NOT overwrite pendingEntry — that is driven strictly by schedulePostSpikeEntry (1-per-spike).
+      // Just refresh hazard stats for next spike's scheduling.
       if((st.calibrationStatus==='ACTIVE' || st.calibrationStatus==='ACTIVE_RELAXED') && st.intervals.length % 20 === 0){
         const res=rebuildCalibration(st);
         if(res.ready){
           st.hazardTable=res.hazard; st.dispersion=res.disp; st.chi=res.chi; st.ks=res.ks; st.meanInterval=res.mean; st.pHat=res.disp.pHat; st.elevatedBuckets=res.elevatedIdx;
-          const post=computePostSpikeParams(st,res);
-          st.pendingEntryAfter=post.entryAfter; st.pendingHoldTicks=post.holdTicks;
-          log('INFO',`${st.symbol} hazard refreshed intervals ${st.intervals.length} entryAfter ${post.entryAfter} hold ${post.holdTicks}`);
+          log('INFO',`${st.symbol} hazard refreshed intervals ${st.intervals.length} mean ${res.mean.toFixed(1)} elevated [${res.elevatedIdx.map(i=>res.hazard[i].range).join(',')||'none'}] — pending untouched (1-per-spike)`);
           saveState('hazardRefresh:'+st.symbol);
         }
       }
@@ -773,6 +843,15 @@ async function tryTradeForAsset(client, st){
   if(openContracts.size >= CONFIG.maxOpenTrades) return;
   if(Date.now() - st.lastTradeAt < CONFIG.tradeCooldownMs) return;
   if(st.pendingEntryAfter===null || st.pendingHoldTicks===null) return;
+  // Strict 1-trade-per-spike guard — if this spike already traded, ignore
+  if(st.lastSpikeAbsIdx!==null && st.lastTradedSpikeAbsIdx!==null && st.lastSpikeAbsIdx===st.lastTradedSpikeAbsIdx){
+    // already traded this spike — clear pending and wait for next spike
+    if(st.ticksSinceSpike > st.pendingEntryAfter+2){
+      log('DEBUG',`${st.symbol} already traded spike ${st.lastSpikeAbsIdx} — clearing pending`);
+      st.pendingEntryAfter=null; st.pendingHoldTicks=null;
+    }
+    return;
+  }
   // Only fire when we have reached exactly the scheduled ticksSinceSpike
   // Allow a 2-tick window to avoid missing due to async/proposal retry
   const target=st.pendingEntryAfter;
@@ -842,14 +921,25 @@ async function tryTradeForAsset(client, st){
     return;
   }
   const cid=buyRes.contract_id;
-  log('INFO',`Bought v2 ${st.symbol} ACCU #${cid} stake ${buyRes.buy_price} growth ${CONFIG.growthRate*100}% entryAfter ${entryAfter} hold ${holdTicks}`);
-  telegram.send(`🟢 <b>v2 BUY ${st.symbol} #${cid}</b> entryAfter <code>${entryAfter}</code> hold <code>${holdTicks}</code> hazard <code>${Number(hazard).toFixed(4)}</code> payout <code>${payout}</code> ev <code>${(ev*100).toFixed(1)}%</code>`);
+  // Mark this spike as traded (strict 1-per-spike)
+  st.lastTradedSpikeAbsIdx=st.lastSpikeAbsIdx;
+  st.lastTradeAt=Date.now();
+  log('INFO',`Bought v2 ${st.symbol} ACCU #${cid} stake ${buyRes.buy_price} growth ${CONFIG.growthRate*100}% entryAfter ${entryAfter} hold ${holdTicks} barrier ${(barrierPct*100).toFixed(5)}%`);
+  // ── Detailed OPEN telegram per spec: asset, Stake, Trade Analysis, Consecutive losses ──
+  {
+    const consLoss = st.consecutiveLosses||0;
+    const meanTxt = st.meanInterval ? `mean ${st.meanInterval.toFixed(1)}` : 'mean n/a';
+    const bucketInfo = st.hazardTable?.find(b=>entryAfter>=b.lo&&entryAfter<b.hi);
+    const bucketTxt = bucketInfo ? `${bucketInfo.range} emp ${Number(hazard).toFixed(4)} theo ${(bucketInfo.theoretical??0).toFixed(4)}` : `${entryAfter}`;
+    const analysis = `Bucket <code>${bucketTxt}</code>\nHazard emp <code>${Number(hazard).toFixed(4)}</code> theo <code>${(bucketInfo?.theoretical??st.pHat??0).toFixed(4)}</code>\nBarrier <code>${(barrierPct*100).toFixed(5)}%</code> Hold <code>${holdTicks}</code> ticks\nEV <code>${(ev*100).toFixed(2)}%</code> ${entryReason} | ${meanTxt} pHat <code>${(st.pHat??0).toFixed(5)}</code>`;
+    telegram.send(`🟢 <b>OPEN ${st.symbol} #${cid}</b>\nStake <code>${buyRes.buy_price} ${CONFIG.currency}</code> Growth <code>${(CONFIG.growthRate*100).toFixed(2)}%</code>\n${analysis}\nConsecutive losses <code>${consLoss}</code> (global <code>${consecutiveLossesGlobal}</code>)`);
+  }
 
   const entry={
     ts:Date.now(), symbol:st.symbol, ticksSinceSpike: entryAfter, bucketRange: st.hazardTable?.find(b=>entryAfter>=b.lo&&entryAfter<b.hi)?.range||`${entryAfter}`, plannedHold: holdTicks, entryAfter,
     hazardEmp: hazard, hazardTheo: st.hazardTable?.find(b=>entryAfter>=b.lo&&entryAfter<b.hi)?.theoretical||null,
     barrierPct, growthRate: CONFIG.growthRate, ask, payout, breakeven: breakevenLocal,
-    outcome:null, profit:null, contractId: cid, v2:true, entryReason,
+    outcome:null, profit:null, contractId: cid, v2:true, entryReason, stake: parseFloat(buyRes.buy_price||CONFIG.stake), buyTime: Date.now(),
   };
 
   let subId=null;
@@ -866,7 +956,10 @@ async function tryTradeForAsset(client, st){
 
   openContracts.set(cid, {
     symbol: st.symbol, client, subId, lastUpdate: Date.now(),
-    assetState: st, entryLog: entry
+    assetState: st, entryLog: entry,
+    buyAbsIdx: st.totalTicksSeen,
+    ticksHeld: 0,
+    _selling: false,
   });
   st.lastTradeAt=Date.now();
   saveState('buy:'+cid);
@@ -916,6 +1009,7 @@ async function main(){
   maybeResetDaily();
 
   const client=new DerivClient(CONFIG);
+  globalClient=client;
   client.connect();
 
   await new Promise((resolve,reject)=>{
