@@ -806,19 +806,22 @@ async function tryTradeForAsset(client, st){
   const barrierPct= parseFloat(cd.tick_size_barrier_percentage||0)/100 || (parseFloat(cd.current_spot||0)>0 && parseFloat(cd.barrier_spot_distance||0)>0 ? parseFloat(cd.barrier_spot_distance)/parseFloat(cd.current_spot) : null);
   if(!(barrierPct>CONFIG.minBarrierPct)){
     log('WARN',`Skip ${st.symbol} barrier too small ${barrierPct} — proposal: ${JSON.stringify(proposal).slice(0,400)}`);
-    // barrier issue is transient (tick-specific) — keep retry for 1 more tick
     if(st.ticksSinceSpike > target+1){ st.pendingEntryAfter=null; st.pendingHoldTicks=null; }
     return;
   }
-  const ask=parseFloat(proposal.ask_price||CONFIG.stake);
-  const payout=parseFloat(proposal.payout||0);
-  const breakevenLocal= payout>0 ? 1 - ask/payout : null;
-  if(breakevenLocal===null){
-    log('WARN',`No payout for ${st.symbol} ask ${ask} payout ${payout} — raw: ${JSON.stringify(proposal).slice(0,600)}`);
-    if(st.ticksSinceSpike > target+1){ st.pendingEntryAfter=null; st.pendingHoldTicks=null; }
-    return;
+  const ask=parseFloat(proposal.ask_price ?? CONFIG.stake);
+  // For ACCU, proposal.payout may be missing/0 — use contract_details.maximum_payout per accuAPEX.js:1129
+  const payoutRaw = proposal.payout ?? cd.maximum_payout ?? 0;
+  const payout=parseFloat(payoutRaw||0);
+  let breakevenLocal=null;
+  if(payout>0 && ask>0) breakevenLocal= 1 - ask/payout;
+  else {
+    // ACCU payout not fixed at proposal — estimate breakeven from hazard or set null
+    // accuAPEX does NOT gate on payout at proposal; proceed and validate on settlement
+    breakevenLocal=null;
+    log('INFO',`ACCU proposal ${st.symbol} has no fixed payout (ask ${ask} maxPayout ${cd.maximum_payout||'?'}) — proceeding per accuAPEX reference, breakeven N/A`);
   }
-  // Success — now consume the scheduled entry
+  // Success — now consume the scheduled entry (before buy, per accuAPEX: buy uses p.id/ask)
   st.pendingEntryAfter=null; st.pendingHoldTicks=null;
 
   // Hazard-implied survival for this hold
