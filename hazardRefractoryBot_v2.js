@@ -774,38 +774,52 @@ async function tryTradeForAsset(client, st){
   if(Date.now() - st.lastTradeAt < CONFIG.tradeCooldownMs) return;
   if(st.pendingEntryAfter===null || st.pendingHoldTicks===null) return;
   // Only fire when we have reached exactly the scheduled ticksSinceSpike
-  // Allow a 1-tick window to avoid missing due to async (ticksSinceSpike == entryAfter or entryAfter+1)
+  // Allow a 2-tick window to avoid missing due to async/proposal retry
   const target=st.pendingEntryAfter;
   if(st.ticksSinceSpike < target) return;
-  if(st.ticksSinceSpike > target+1){
+  if(st.ticksSinceSpike > target+2){
     // Missed window — clear and wait for next spike
     log('DEBUG',`${st.symbol} missed entry window ${target} now ${st.ticksSinceSpike} — clearing`);
     st.pendingEntryAfter=null; st.pendingHoldTicks=null;
     return;
   }
-  // One-shot: consume the scheduled entry
+  // One-shot: capture the scheduled entry (keep pending until we confirm proposal has payout)
   const holdTicks=st.pendingHoldTicks;
   const entryAfter=st.pendingEntryAfter;
   const entryReason=st.pendingEntryReason;
-  st.pendingEntryAfter=null; st.pendingHoldTicks=null; // consume
 
   // Fetch proposal with derived hold? For ACCU, growthRate is fixed 1%, but hold informs EV calc and logging.
   // Deriv ACCU payout is stake-based, not tick-based, but we log hold for audit.
   const key=client.symbolKey;
   let proposal;
+  let rawRes;
   try{
-    const res=await client._send({proposal:1, amount:CONFIG.stake, basis:'stake', contract_type:'ACCU', currency:CONFIG.currency, [key]:st.symbol, growth_rate: CONFIG.growthRate}, 8000);
-    proposal=res.proposal;
+    rawRes=await client._send({proposal:1, amount:CONFIG.stake, basis:'stake', contract_type:'ACCU', currency:CONFIG.currency, [key]:st.symbol, growth_rate: CONFIG.growthRate}, 15000);
+    proposal=rawRes.proposal;
   }catch(e){
-    log('WARN',`Proposal ${st.symbol} failed:`,e.message); return;
+    log('WARN',`Proposal ${st.symbol} failed:`,e.message, rawRes? JSON.stringify(rawRes).slice(0,400):'');
+    // keep pending for one more tick retry (don't consume yet) — only clear if window fully missed
+    if(st.ticksSinceSpike > target+1){ st.pendingEntryAfter=null; st.pendingHoldTicks=null; }
+    return;
   }
   const cd=proposal?.contract_details||{};
   const barrierPct= parseFloat(cd.tick_size_barrier_percentage||0)/100 || (parseFloat(cd.current_spot||0)>0 && parseFloat(cd.barrier_spot_distance||0)>0 ? parseFloat(cd.barrier_spot_distance)/parseFloat(cd.current_spot) : null);
-  if(!(barrierPct>CONFIG.minBarrierPct)){ log('DEBUG',`Skip ${st.symbol} barrier too small`, barrierPct); return; }
+  if(!(barrierPct>CONFIG.minBarrierPct)){
+    log('WARN',`Skip ${st.symbol} barrier too small ${barrierPct} — proposal: ${JSON.stringify(proposal).slice(0,400)}`);
+    // barrier issue is transient (tick-specific) — keep retry for 1 more tick
+    if(st.ticksSinceSpike > target+1){ st.pendingEntryAfter=null; st.pendingHoldTicks=null; }
+    return;
+  }
   const ask=parseFloat(proposal.ask_price||CONFIG.stake);
   const payout=parseFloat(proposal.payout||0);
   const breakevenLocal= payout>0 ? 1 - ask/payout : null;
-  if(breakevenLocal===null){ log('WARN',`No payout for ${st.symbol}`); return; }
+  if(breakevenLocal===null){
+    log('WARN',`No payout for ${st.symbol} ask ${ask} payout ${payout} — raw: ${JSON.stringify(proposal).slice(0,600)}`);
+    if(st.ticksSinceSpike > target+1){ st.pendingEntryAfter=null; st.pendingHoldTicks=null; }
+    return;
+  }
+  // Success — now consume the scheduled entry
+  st.pendingEntryAfter=null; st.pendingHoldTicks=null;
 
   // Hazard-implied survival for this hold
   const hazard = st.hazardTable ? (st.hazardTable.find(b=> entryAfter>=b.lo && entryAfter<b.hi)?.empirical ?? st.pHat ?? 0.02) : (st.pHat ?? 0.02);
