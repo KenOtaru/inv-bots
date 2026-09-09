@@ -88,22 +88,27 @@ const CONFIG = {
 // CONNECTION — auto-detects classic token vs PAT/Options-API token
 // ═══════════════════════════════════════════════════════════════════════════
 function isPatToken(token) {
-    return typeof token === 'string' && /^pat_[a-z0-9_-]{16,}$/i.test(token.trim());
+    return typeof token === 'string' && /^pat_[a-z0-9_\-]{16,}$/i.test(token.trim());
 }
 
 class RestClient {
     constructor(baseUrl, appId, token) {
-        this.baseUrl = baseUrl;
-        this.appId = appId;
-        this.token = token;
+        this.baseUrl = baseUrl || 'https://api.derivws.com';
+        this.appId = appId || '1089';
+        this.token = token || '';
     }
     _request(method, reqPath, body = null) {
         return new Promise((resolve, reject) => {
-            const url = new URL(reqPath, this.baseUrl);
+            let url;
+            try { url = new URL(reqPath, this.baseUrl); } catch (e) {
+                return reject(new Error(`Invalid URL: ${reqPath}`));
+            }
+            const isHttps = url.protocol === 'https:';
+            const lib = isHttps ? https : require('http');
             const opts = {
                 method,
                 hostname: url.hostname,
-                port: url.port || 443,
+                port: url.port || (isHttps ? 443 : 80),
                 path: url.pathname + url.search,
                 headers: {
                     'Deriv-App-ID': this.appId,
@@ -113,7 +118,7 @@ class RestClient {
                 },
                 timeout: 15000,
             };
-            const req = https.request(opts, res => {
+            const req = lib.request(opts, res => {
                 let data = '';
                 res.on('data', d => data += d);
                 res.on('end', () => {
@@ -147,11 +152,12 @@ async function resolveConnection(cfg) {
         return { url: `${cfg.wsUrl}${sep}app_id=${encodeURIComponent(cfg.appId)}`, needsAuthorize: true, isPat: false };
     }
 
-    // PAT token → REST account lookup + OTP handshake (Deriv's Options API)
+    // PAT token → REST account lookup + OTP handshake (Deriv's Options API) — aligned with accuPULSE3.js _newApiConnect
     const rest = new RestClient('https://api.derivws.com', cfg.appId, cfg.apiToken);
     const accRes = await rest.get('/trading/v1/options/accounts');
     if (accRes.status !== 200) {
-        throw new Error(`Account list failed (${accRes.status}): ${JSON.stringify(accRes.body)}`);
+        const msg = accRes.body?.errors?.[0]?.message || accRes.body?.message || JSON.stringify(accRes.body);
+        throw new Error(`Account list failed (${accRes.status}): ${msg}`);
     }
     const accounts = Array.isArray(accRes.body?.data) ? accRes.body.data : [];
     if (!accounts.length) throw new Error('No Options accounts found for this token');
@@ -161,7 +167,7 @@ async function resolveConnection(cfg) {
     const otpRes = await rest.post(`/trading/v1/options/accounts/${encodeURIComponent(acct.account_id)}/otp`);
     if (otpRes.status !== 200) throw new Error(`OTP failed (${otpRes.status}): ${JSON.stringify(otpRes.body)}`);
     const wsUrl = otpRes.body?.data?.url;
-    if (!wsUrl) throw new Error('OTP response missing data.url');
+    if (!wsUrl || !/^wss?:/i.test(wsUrl)) throw new Error('OTP response missing data.url');
 
     return { url: wsUrl, needsAuthorize: false, isPat: true, account: acct };
 }
@@ -482,7 +488,8 @@ async function checkSymbolAvailability(ws, symbol) {
 
     let hasAccu = null;
     try {
-        const msg = await send(ws, { contracts_for: symbol, currency: 'USD' });
+        // Aligned with accuPULSE3.js: contracts_for does not take currency; OTP API rejects unknown props
+        const msg = await send(ws, { contracts_for: symbol });
         const available = msg.contracts_for?.available ?? [];
         const types = [...new Set(available.map(c => c.contract_type))];
         hasAccu = types.includes('ACCU');
@@ -589,8 +596,18 @@ async function main() {
     const conn = await resolveConnection(CONFIG);
     console.log(`\n🔌 Connecting (${conn.noToken ? 'no token — public data only' : conn.isPat ? 'PAT/OTP flow' : 'classic app_id flow'})...`);
 
-    const ws = new WebSocket(conn.url);
-    await new Promise((resolve, reject) => { ws.on('open', resolve); ws.on('error', reject); });
+    const ws = new WebSocket(conn.url, {
+        headers: { 'User-Agent': 'AccuPULSE3/3.1 (+Node.js)' },
+        handshakeTimeout: 15000,
+    });
+    await new Promise((resolve, reject) => {
+        ws.on('open', resolve);
+        ws.on('error', reject);
+        ws.on('unexpected-response', (_, res) => {
+            try { res.destroy(); } catch (_) {}
+            reject(new Error(`WS handshake failed: ${res.statusCode} ${res.statusMessage}`));
+        });
+    });
 
     if (conn.needsAuthorize) {
         try {
