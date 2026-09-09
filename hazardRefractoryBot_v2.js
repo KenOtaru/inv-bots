@@ -91,7 +91,7 @@ const CONFIG = Object.freeze({
   // ── Trading v2 — per-spike, hold derived from mean + EV search (adaptive) ─
   stake: 1,
   growthRate: 0.02, // 0.02
-  minBarrierPct: 0.00001,
+  minBarrierPct: 0.000006,
   maxOpenTrades: 1,                // allow 2 concurrent (10 assets, hold 5-15 ticks)
   tradeCooldownMs: 800,
   elevatedMinLift: 0.01,

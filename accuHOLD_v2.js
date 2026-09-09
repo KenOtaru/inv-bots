@@ -137,7 +137,7 @@ const CONFIG = Object.freeze({
   spikeHistoryFile: 'accuHOLD_v2_spikes.json',
 
   // ── Hourly summary + EOD ──
-  hourlyStatsEnabled: false,
+  hourlyStatsEnabled: true,
   eodStatsEnabled   : true,
 });
 
@@ -172,7 +172,7 @@ const logger = {
 };
 
 // ═══════════════════════════════════════════════════════════════════════
-// 4. TELEGRAM NOTIFIER
+// 4. TELEGRAM NOTIFIER (with retry and timeout handling)
 // ═══════════════════════════════════════════════════════════════════════
 class TelegramNotifier {
   constructor(botToken, chatId, maxQueue = 200) {
@@ -190,14 +190,14 @@ class TelegramNotifier {
       logger.warn(`[telegram] queue full (${this.maxQueue}), dropping message`);
       return;
     }
-    this.queue.push({ text, parseMode });
+    this.queue.push({ text, parseMode, retries: 0 });
     this._process();
   }
   async _process() {
     if (this.sending || !this.queue.length) return;
     this.sending = true;
     while (this.queue.length) {
-      const msg = this.queue.shift();
+      const msg = this.queue[0];
       try {
         const body = JSON.stringify({
           chat_id   : this.chatId,
@@ -208,6 +208,7 @@ class TelegramNotifier {
           const req = https.request('https://api.telegram.org/bot' + this.botToken + '/sendMessage', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+            timeout: 15000,
           }, res => {
             let data = '';
             res.on('data', chunk => data += chunk);
@@ -217,12 +218,24 @@ class TelegramNotifier {
             });
           });
           req.on('error', reject);
+          req.on('timeout', () => {
+            req.destroy();
+            reject(new Error('Telegram request timeout'));
+          });
           req.write(body);
           req.end();
         });
+        this.queue.shift(); // success
         await new Promise(r => setTimeout(r, 100));
       } catch (e) {
-        logger.warn('[telegram] send failed:', e.message);
+        msg.retries++;
+        if (msg.retries >= 3) {
+          logger.warn('[telegram] send failed after 3 retries:', e.message);
+          this.queue.shift(); // give up
+        } else {
+          logger.warn(`[telegram] send failed (retry ${msg.retries}/3):`, e.message);
+          await new Promise(r => setTimeout(r, 2000 * msg.retries)); // backoff
+        }
       }
     }
     this.sending = false;
@@ -231,7 +244,49 @@ class TelegramNotifier {
 const telegram = new TelegramNotifier(CONFIG.telegram.botToken, CONFIG.telegram.chatId, CONFIG.telegram.maxQueue);
 
 // ═══════════════════════════════════════════════════════════════════════
-// 5. DERIV CLIENT (PAT/OAuth, reconnect, keep-alive)
+// 5. DERIV REST CLIENT (PAT/OAuth)
+// ═══════════════════════════════════════════════════════════════════════
+class RestClient {
+  constructor(baseUrl, appId, token) {
+    this.baseUrl = baseUrl || 'https://api.derivws.com';
+    this.appId = appId || '1089';
+    this.token = token || '';
+  }
+  static isPat(token) {
+    return typeof token === 'string' && /^pat_[a-z0-9_\-]{16,}$/i.test(token.trim());
+  }
+  _request(method, reqPath, body = null) {
+    return new Promise((resolve, reject) => {
+      let url;
+      try { url = new URL(reqPath, this.baseUrl); } catch (e) { return reject(new Error(`Invalid URL: ${reqPath}`)); }
+      const isHttps = url.protocol === 'https:';
+      const lib = isHttps ? https : require('http');
+      const opts = {
+        method, hostname: url.hostname, port: url.port || (isHttps ? 443 : 80),
+        path: url.pathname + url.search,
+        headers: {
+          'Deriv-App-ID': this.appId, 'Authorization': 'Bearer ' + this.token,
+          'Accept': 'application/json', ...(body ? { 'Content-Type': 'application/json' } : {}),
+        },
+        timeout: 15000,
+      };
+      const req = lib.request(opts, res => {
+        let data = '';
+        res.on('data', d => data += d);
+        res.on('end', () => { let parsed = data; try { parsed = JSON.parse(data); } catch (_) {} resolve({ status: res.statusCode, body: parsed }); });
+      });
+      req.on('timeout', () => { req.destroy(new Error('REST timeout')); });
+      req.on('error', reject);
+      if (body) req.write(JSON.stringify(body));
+      req.end();
+    });
+  }
+  async get(p) { return this._request('GET', p); }
+  async post(p, b) { return this._request('POST', p, b); }
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// 6. DERIV WEBSOCKET CLIENT (PAT/OAuth, reconnect, keep-alive)
 // ═══════════════════════════════════════════════════════════════════════
 class DerivClient extends EventEmitter {
   constructor(wsUrl, appId, apiToken) {
@@ -248,6 +303,12 @@ class DerivClient extends EventEmitter {
     this.reconnecting   = false;
     this.keepAliveTicksSub = null;
     this.keepAlivePingTimer = null;
+    this.accountInfo = null;
+    this.balance = null;
+    this._isPat = RestClient.isPat(apiToken);
+    this._rest = this._isPat ? new RestClient('https://api.derivws.com', appId, apiToken) : null;
+    this._otpUrl = null;
+    this._targetAccount = null;
   }
   start() {
     if (this.ws) return;
@@ -272,7 +333,11 @@ class DerivClient extends EventEmitter {
     const id = ++this.reqId;
     const req = { [method]: 1, ...params, req_id: id };
     return new Promise((resolve, reject) => {
-      this.pending.set(id, { resolve, reject });
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`${method} timeout`));
+      }, 30000);
+      this.pending.set(id, { resolve, reject, timer });
       this.ws.send(JSON.stringify(req));
     });
   }
@@ -291,40 +356,134 @@ class DerivClient extends EventEmitter {
       logger.warn(`[deriv] unsub ${subId} failed:`, e.message);
     }
   }
+  _redact(url) { return url.replace(/([?&])(otp|app_id|token)=[^&]+/g, '$1$2=***'); }
   _connect() {
     if (this.stopped || this.reconnecting) return;
     this.reconnecting = true;
-    const url = `${this.wsUrl}?app_id=${this.appId}`;
-    logger.info('[deriv] connecting...');
-    this.ws = new WebSocket(url);
+    if (this._isPat) {
+      logger.info('[deriv] PAT token detected → new API (OTP flow)');
+      this._newApiConnect().catch(e => {
+        logger.error('[deriv] new API connect failed:', e.message);
+        this._scheduleReconnect();
+      });
+    } else {
+      const url = `${this.wsUrl}?app_id=${this.appId}`;
+      logger.info(`[deriv] connecting → ${this._redact(url)}`);
+      this._openWs(url);
+    }
+  }
+  async _newApiConnect() {
+    const desiredType = (CONFIG.accountType || 'demo').toLowerCase();
+    const accRes = await this._rest.get('/trading/v1/options/accounts');
+    if (accRes.status !== 200) {
+      const msg = accRes.body?.errors?.[0]?.message || accRes.body?.message || JSON.stringify(accRes.body);
+      throw new Error(`account list failed (${accRes.status}): ${msg}`);
+    }
+    const accounts = Array.isArray(accRes.body?.data) ? accRes.body.data : [];
+    if (!accounts.length) throw new Error('no Options accounts found');
+    const acct = accounts.find(a => (a.account_type || '').toLowerCase() === desiredType) || accounts[0];
+    this._targetAccount = acct;
+    this.accountInfo = {
+      loginid: acct.account_id,
+      email: acct.email,
+      isVirtual: (acct.account_type || '').toLowerCase() === 'demo',
+      accountType: acct.account_type,
+      currency: acct.currency,
+      balance: parseFloat(acct.balance),
+      group: acct.group,
+    };
+    const otpPath = `/trading/v1/options/accounts/${encodeURIComponent(acct.account_id)}/otp`;
+    const otpRes = await this._rest.post(otpPath);
+    if (otpRes.status !== 200) throw new Error(`OTP failed (${otpRes.status}): ${JSON.stringify(otpRes.body)}`);
+    const wsUrl = otpRes.body?.data?.url;
+    if (!wsUrl || !/^wss?:/i.test(wsUrl)) throw new Error('OTP missing data.url');
+    this._otpUrl = wsUrl;
+    logger.info(`[deriv] connecting OTP → ${this._redact(wsUrl)}`);
+    this._openWs(wsUrl);
+  }
+  _openWs(url) {
+    try {
+      this.ws = new WebSocket(url, {
+        headers: { 'User-Agent': 'accuHOLD_v2/1.0 (+Node.js)' },
+        handshakeTimeout: 15000,
+      });
+    } catch (e) {
+      logger.error('[deriv] ws construct failed:', e.message);
+      this._scheduleReconnect();
+      return false;
+    }
     this.ws.on('open', () => this._onOpen());
     this.ws.on('message', data => this._onMessage(data));
     this.ws.on('error', err => this._onError(err));
     this.ws.on('close', (code, reason) => this._onClose(code, reason));
+    this.ws.on('unexpected-response', (_, res) => {
+      logger.error('[deriv] ws handshake failed:', res.statusCode, res.statusMessage);
+      try { res.destroy(); } catch (_) {}
+      this._scheduleReconnect();
+    });
+    return true;
   }
   async _onOpen() {
     this.reconnecting = false;
     this.reconnectDelay = CONFIG.reconnect.initialDelayMs;
-    logger.info('[deriv] connected');
+    logger.info('[deriv] ws connected');
+    if (this._isPat) {
+      this._newApiMarkAuthorized();
+    } else {
+      this._authorize();
+    }
+  }
+  _newApiMarkAuthorized() {
+    if (!this.accountInfo) return;
+    this.authorized = true;
+    this.balance = this.accountInfo.balance ?? null;
+    logger.info(`[deriv] authorized ${this.accountInfo.loginid} (${this.accountInfo.isVirtual ? 'DEMO' : 'REAL'}) bal=${this.balance}`);
+    this._startPing();
+    this._startKeepAlive().catch(e => logger.debug('[deriv] keep-alive start:', e.message));
+    this.emit('authorized', this.accountInfo);
+  }
+  async _authorize() {
     try {
       const authResp = await this.call('authorize', { authorize: this.apiToken });
       if (authResp.error) throw new Error(authResp.error.message);
       this.authorized = true;
-      logger.info(`[deriv] authorized: ${authResp.authorize.loginid}`);
-      this._startKeepAlive();
-      this.emit('authorized', authResp.authorize);
+      this.balance = parseFloat(authResp.authorize.balance);
+      this.accountInfo = {
+        loginid: authResp.authorize.loginid,
+        email: authResp.authorize.email,
+        isVirtual: !!authResp.authorize.is_virtual,
+        accountType: authResp.authorize.account_type,
+        currency: authResp.authorize.currency,
+      };
+      logger.info(`[deriv] authorized ${this.accountInfo.loginid} (${this.accountInfo.isVirtual ? 'DEMO' : 'REAL'}) bal=${this.balance}`);
+      this._startPing();
+      this._startKeepAlive().catch(e => logger.debug('[deriv] keep-alive start:', e.message));
+      this.emit('authorized', this.accountInfo);
     } catch (e) {
       logger.error('[deriv] auth failed:', e.message);
-      this.stop();
+      this.authorized = false;
+      this._scheduleReconnect();
     }
   }
   _onMessage(data) {
     let msg;
     try { msg = JSON.parse(data); } catch { return; }
+    if (msg.error) {
+      const code = msg.error.code;
+      logger.error(`[deriv] api error: ${code} – ${msg.error.message}`);
+      if (msg.req_id && this.pending.has(msg.req_id)) {
+        const p = this.pending.get(msg.req_id);
+        clearTimeout(p.timer);
+        this.pending.delete(msg.req_id);
+        p.reject(new Error(msg.error.message || code));
+      }
+      return;
+    }
     if (msg.req_id && this.pending.has(msg.req_id)) {
-      const { resolve } = this.pending.get(msg.req_id);
+      const p = this.pending.get(msg.req_id);
+      clearTimeout(p.timer);
       this.pending.delete(msg.req_id);
-      resolve(msg);
+      p.resolve(msg);
     }
     if (msg.subscription) {
       this.emit(`sub:${msg.subscription.id}`, msg);
@@ -342,22 +501,33 @@ class DerivClient extends EventEmitter {
     this.authorized = false;
     this.ws = null;
     if (!this.stopped) {
-      const delay = this.reconnectDelay + Math.random() * CONFIG.reconnect.jitterMs;
-      logger.info(`[deriv] reconnect in ${(delay/1000).toFixed(1)}s`);
-      setTimeout(() => this._connect(), delay);
-      this.reconnectDelay = Math.min(this.reconnectDelay * CONFIG.reconnect.backoffFactor, CONFIG.reconnect.maxDelayMs);
+      this._scheduleReconnect();
     }
   }
-  _startKeepAlive() {
-    this._stopKeepAlive();
-    // Subscribe to ticks on BOOM500 to keep WS alive
-    this.call('ticks', { ticks: 'BOOM500', subscribe: 1 })
-      .then(resp => {
-        this.keepAliveTicksSub = resp.subscription?.id;
-        logger.debug('[deriv] keep-alive ticks started');
-      })
-      .catch(e => logger.warn('[deriv] keep-alive ticks failed:', e.message));
-    // Ping every 25s
+  _scheduleReconnect() {
+    if (this.stopped || this.reconnecting) return;
+    const delay = this.reconnectDelay + Math.random() * CONFIG.reconnect.jitterMs;
+    logger.info(`[deriv] reconnect in ${(delay/1000).toFixed(1)}s`);
+    setTimeout(() => {
+      this.reconnecting = false;
+      this._connect();
+    }, delay);
+    this.reconnectDelay = Math.min(this.reconnectDelay * CONFIG.reconnect.backoffFactor, CONFIG.reconnect.maxDelayMs);
+  }
+  async _startKeepAlive() {
+    if (this.keepAliveTicksSub) return;
+    // Use a symbol NOT in the spike detector's list to avoid AlreadySubscribed
+    const symbol = 'R_10';
+    try {
+      const resp = await this.call('ticks', { ticks: symbol, subscribe: 1 });
+      this.keepAliveTicksSub = resp.subscription?.id;
+      logger.debug(`[deriv] keep-alive ticks started (${symbol})`);
+    } catch (e) {
+      logger.warn('[deriv] keep-alive ticks failed:', e.message);
+    }
+  }
+  _startPing() {
+    this._stopPing();
     this.keepAlivePingTimer = setInterval(() => {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         try { this.ws.ping(); } catch {}
@@ -369,6 +539,9 @@ class DerivClient extends EventEmitter {
       this._unsub(this.keepAliveTicksSub).catch(() => {});
       this.keepAliveTicksSub = null;
     }
+    this._stopPing();
+  }
+  _stopPing() {
     if (this.keepAlivePingTimer) {
       clearInterval(this.keepAlivePingTimer);
       this.keepAlivePingTimer = null;
@@ -424,7 +597,7 @@ class SpikeDetector extends EventEmitter {
           growthPct: growthPct,
           direction: growthPct > 0 ? 'up' : 'down',
         };
-        logger.info(`[spike] detected ${symbol} ${growthPct.toFixed(2)}% @ ${quote}`);
+        logger.info(`[spike] detected ${symbol} ${growthPct > 0 ? '📈' : '📉'} ${growthPct.toFixed(2)}% (${last.toFixed(2)} → ${quote.toFixed(2)})`);
         this.emit('spike', spike);
       }
     }
@@ -499,6 +672,7 @@ class PatternAnalyzer {
   analyze(symbol) {
     const recent = this.history.getRecentSpikes(symbol, CONFIG.spikeHistoryCount);
     if (recent.length < CONFIG.minSpikesForTrade) {
+      logger.debug(`[pattern] ${symbol}: insufficient data (${recent.length}/${CONFIG.minSpikesForTrade})`);
       return null; // not enough data
     }
 
@@ -508,6 +682,9 @@ class PatternAnalyzer {
     if (successfulTrades.length > 0) {
       const delays = successfulTrades.map(s => s.tradeOutcome.entryDelaySec || 3);
       entryDelaySec = delays.reduce((a, b) => a + b, 0) / delays.length;
+      logger.debug(`[pattern] ${symbol}: entry delay from ${successfulTrades.length} wins → ${entryDelaySec.toFixed(1)}s`);
+    } else {
+      logger.debug(`[pattern] ${symbol}: no wins yet, using default entry delay ${entryDelaySec}s`);
     }
 
     // Compute mean hold ticks from all completed trades
@@ -517,13 +694,20 @@ class PatternAnalyzer {
       const ticks = completedTrades.map(s => s.tradeOutcome.ticksHeld);
       const meanTicks = ticks.reduce((a, b) => a + b, 0) / ticks.length;
       holdTicks = Math.max(5, Math.floor(meanTicks * this.holdFactor));
+      logger.info(`[pattern] ${symbol}: hold duration from ${completedTrades.length} trades → mean=${meanTicks.toFixed(1)} × ${this.holdFactor} = ${holdTicks} ticks`);
+    } else {
+      logger.debug(`[pattern] ${symbol}: no completed trades yet, using default hold ${holdTicks} ticks`);
     }
 
-    return {
+    const pattern = {
       entryDelaySec: Math.max(1, Math.floor(entryDelaySec)),
       holdTicks,
       sampleSize: recent.length,
+      winRate: successfulTrades.length / recent.length,
     };
+
+    logger.info(`[pattern] ${symbol}: delay=${pattern.entryDelaySec}s hold=${pattern.holdTicks}t sample=${pattern.sampleSize} wr=${(pattern.winRate*100).toFixed(0)}%`);
+    return pattern;
   }
 }
 
@@ -822,6 +1006,8 @@ class AccuHoldV2Bot {
   }
   _onSpikeDetected(spike) {
     this.spikeHistory.addSpike(spike);
+    const totalSpikes = this.spikeHistory.spikes.filter(s => s.symbol === spike.symbol).length;
+    logger.info(`[bot] spike ${spike.symbol} recorded (total for ${spike.symbol}: ${totalSpikes})`);
 
     // Check if we can trade (warm-up, pause, max open)
     if (this.paused) {
@@ -862,12 +1048,13 @@ class AccuHoldV2Bot {
     // Analyze pattern
     const pattern = this.analyzer.analyze(spike.symbol);
     if (!pattern) {
-      logger.info(`[bot] spike ${spike.symbol} ignored: insufficient history (need ${CONFIG.minSpikesForTrade})`);
-      telegram.send(`📊 <b>Spike detected: ${spike.symbol}</b>\nWaiting for ${CONFIG.minSpikesForTrade} spikes before first trade.\nCurrent: ${this.spikeHistory.getRecentSpikes(spike.symbol).length}`);
+      const current = this.spikeHistory.spikes.filter(s => s.symbol === spike.symbol && s.tradeExecuted).length;
+      logger.info(`[bot] spike ${spike.symbol} ignored: warm-up (${current}/${CONFIG.minSpikesForTrade} spikes needed)`);
+      telegram.send(`📊 <b>Spike detected: ${spike.symbol}</b>\n${spike.growthPct > 0 ? '📈' : '📉'} ${spike.growthPct.toFixed(2)}%\n\nWarm-up phase: ${current}/${CONFIG.minSpikesForTrade} spikes needed before trading.`);
       return;
     }
 
-    logger.info(`[bot] spike ${spike.symbol}: pattern entryDelay=${pattern.entryDelaySec}s hold=${pattern.holdTicks} ticks (n=${pattern.sampleSize})`);
+    logger.info(`[bot] spike ${spike.symbol}: scheduling trade (delay=${pattern.entryDelaySec}s hold=${pattern.holdTicks}t wr=${(pattern.winRate*100).toFixed(0)}%)`);
 
     // Schedule trade entry
     const executeAt = Date.now() + (pattern.entryDelaySec * 1000);
@@ -875,10 +1062,10 @@ class AccuHoldV2Bot {
 
     telegram.send(
       `🎯 <b>Spike detected: ${spike.symbol}</b>\n` +
-      `Growth: ${spike.growthPct.toFixed(2)}%\n` +
+      `${spike.growthPct > 0 ? '📈' : '📉'} Growth: ${spike.growthPct.toFixed(2)}%\n` +
       `Entry in: ${pattern.entryDelaySec}s\n` +
       `Hold target: ${pattern.holdTicks} ticks\n` +
-      `Pattern sample: ${pattern.sampleSize} spikes`
+      `Pattern: ${pattern.sampleSize} spikes, WR ${(pattern.winRate*100).toFixed(0)}%`
     );
 
     // Process pending entries
