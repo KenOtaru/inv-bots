@@ -48,8 +48,8 @@ const path = require('path');
 const CONFIG = {
     symbol: 'BOOM500',
 
-    apiToken: process.env.DERIV_API_TOKEN || 'pat_cb2016855b5e6c61ac95f94432192dd6ed86bec7f7454e575d3fe1ed9f617692',
-    appId: process.env.DERIV_APP_ID || '33uslPtthXBEkQOdfKfoY',
+    apiToken: 'pat_cb2016855b5e6c61ac95f94432192dd6ed86bec7f7454e575d3fe1ed9f617692',
+    appId: '33uslPtthXBEkQOdfKfoY',
     wsUrl: 'wss://ws.derivws.com/websockets/v3',
     accountType: 'demo',
 
