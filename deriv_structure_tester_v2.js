@@ -52,7 +52,7 @@ const path = require('path');
 // CONFIG
 // ═══════════════════════════════════════════════════════════════════════════
 const CONFIG = {
-    symbol: 'CRASH50',
+    symbol: 'BOOM50', // BOOM50,CRASH50
 
     // ── Credentials — set via environment variables, do not hardcode ────
     apiToken: 'pat_cb2016855b5e6c61ac95f94432192dd6ed86bec7f7454e575d3fe1ed9f617692',   // classic token OR a "pat_..." token
