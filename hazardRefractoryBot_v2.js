@@ -104,9 +104,9 @@ const CONFIG = Object.freeze({
   entryDelayMax: 15,
 
   // Validation & kill-switch (unchanged, user adjustable)
-  validationN: 30,
+  validationN: 100, // 30-trade binomial test vs breakeven
   killP: 0.05,
-  maxConsecutiveLosses: 3,
+  maxConsecutiveLosses: 7,
   dailyMaxLoss: 50,
   dailyMaxTrades: 200000000,
 
