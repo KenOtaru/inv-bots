@@ -48,7 +48,7 @@ const path = require('path');
 // CONFIG
 // ═══════════════════════════════════════════════════════════════════════════
 const CONFIG = {
-    symbol: 'BOOM500',  // BOOM500, CRASH500, BOOM1000, CRASH1000, BOOM300, CRASH300
+    symbol: 'CRASH500',  // BOOM500, CRASH500, BOOM1000, CRASH1000, BOOM300, CRASH300
 
     apiToken: 'pat_cb2016855b5e6c61ac95f94432192dd6ed86bec7f7454e575d3fe1ed9f617692',   // classic token OR a "pat_..." token
     appId: '33uslPtthXBEkQOdfKfoY',  // classic app_id (not needed for PAT/Options flow)
