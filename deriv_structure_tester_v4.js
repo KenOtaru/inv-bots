@@ -48,10 +48,10 @@ const path = require('path');
 // CONFIG
 // ═══════════════════════════════════════════════════════════════════════════
 const CONFIG = {
-    symbol: 'BOOM50',
+    symbol: 'BOOM500',  // any Deriv synthetic index (BOOM/CRASH, 10/25/50/100/500)
 
-    apiToken: process.env.DERIV_API_TOKEN || '',
-    appId: process.env.DERIV_APP_ID || '1089',
+    piToken: 'pat_cb2016855b5e6c61ac95f94432192dd6ed86bec7f7454e575d3fe1ed9f617692',   // classic token OR a "pat_..." token
+    appId: '33uslPtthXBEkQOdfKfoY',  // classic app_id (not needed for PAT/Options flow)
     wsUrl: 'wss://ws.derivws.com/websockets/v3',
     accountType: 'demo',
 
