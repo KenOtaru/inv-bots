@@ -107,8 +107,8 @@ const CONFIG = Object.freeze({
   // ── Trade parameters (memoryless, non-signal) ──
   stake              : parseFloat('1.00'),   // flat stake per trade
   takeProfitMultiple : parseFloat('1.50'),   // sell when payout ≥ stake × this
-  tickCapFraction    : parseFloat('0.55'),   // tick-cap = frac × live ticks_stayed_in median
-  growthRate         : parseFloat('0.01'),   // one of {0.01, 0.02, 0.03, 0.04, 0.05}
+  tickCapFraction    : parseFloat('0.20'),   //0.55 tick-cap = frac × live ticks_stayed_in median
+  growthRate         : parseFloat('0.02'),   // one of {0.01, 0.02, 0.03, 0.04, 0.05}
 
   // ── Rate-limited entry ──
   perSymbolCooldownMs : parseInt('8000',  10),   // between trades on the same symbol
@@ -835,11 +835,18 @@ class TradeExecutor extends EventEmitter {
     }
 
     if (status === 'open' && !this._selling.has(cid)) {
-      // A) Take-profit: current payout ≥ stake × takeProfitMultiple.
-      //    `payout` on an open ACCU contract = bid_price; sell if it crosses the floor.
-      const tpFloor = +(info.stake * (info.takeProfitMultiple ?? this.cfg.takeProfitMultiple)).toFixed(2);
-      if (tpFloor > 0 && info.lastBid != null && info.lastBid >= tpFloor) {
-        info._exitReason = `take-profit: bid ${info.lastBid.toFixed(2)} ≥ ${tpFloor.toFixed(2)}`;
+      // A) Take-profit: payout ≥ stake × takeProfitMultiple.
+      //    Use `c.profit` (Deriv-computed: payout − buy_price), NOT
+      //    `c.bid_price`. The bid_price field is the spot-multiplied-by-
+      //    growth_price, which is NOT the same as the multiplier-grown
+      //    payout value you receive on sell, and exits the trade after
+      //    a single tick on wide-barrier symbols. `profit` is the field
+      //    the server keeps aligned with `bid_price` on `sell_price`, so
+      //    checking `profit ≥ stake × (multiple − 1)` is the right rule.
+      const tpMult = info.takeProfitMultiple ?? this.cfg.takeProfitMultiple;
+      const tpProfitFloor = +(info.stake * (tpMult - 1)).toFixed(2);
+      if (tpMult > 1 && profit >= tpProfitFloor) {
+        info._exitReason = `take-profit: profit ${profit.toFixed(2)} ≥ ${tpProfitFloor.toFixed(2)} (×${tpMult} of ${info.stake.toFixed(2)})`;
         logger.info(`exit #${cid}: ${info._exitReason}`);
         this._selling.add(cid);
         this.sell(cid, 0, info).catch(e => logger.error(`tp sell #${cid} failed:`, e.message))
@@ -1016,6 +1023,19 @@ class TradeExecutor extends EventEmitter {
 const utcDateStr = (d = new Date()) => d.toISOString().slice(0, 10);
 const utcHour    = (d = new Date()) => d.getUTCHours();
 const money = (n, c = CONFIG.currency) => `${n >= 0 ? '+' : ''}${Number(n || 0).toFixed(2)} ${c}`;
+
+// Human-readable duration formatter for trade-held time. Uses the largest
+// unit that's ≥ 1, with up to one level of sub-unit precision so
+// "1m 23s" wins over "83s" but "23s" doesn't get padded to "0m 23s".
+function formatDuration(totalSec) {
+  if (!Number.isFinite(totalSec) || totalSec < 0) return 'n/a';
+  const s = Math.floor(totalSec);
+  if (s < 1)    return '<1s';
+  if (s < 60)   return `${s}s`;
+  if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+  return `${Math.floor(s / 86400)}d ${Math.floor((s % 86400) / 3600)}h`;
+}
 
 class StatisticsManager {
   constructor(saved = null) {
@@ -1361,6 +1381,17 @@ class AccuHoldBot {
                   : exit.startsWith('tick-cap')     ? '⏱️ tick-cap'
                   : exit.startsWith('knockout')     ? '💥 knockout'
                   : exit;
+    // Duration = sell_time − buy_time. `sellTime` and `buyTime` are
+    // populated by every finalize path (terminal status, voluntary sell,
+    // already-closed-on-server) so this is the canonical "how long was
+    // the trade held" number — independent of how many proposal_open_
+    // contract updates arrived in the meantime.
+    const buyTs  = Number(t.buyTime  || 0);
+    const sellTs = Number(t.sellTime || 0);
+    const durationSec = (buyTs > 0 && sellTs > 0 && sellTs >= buyTs) ? (sellTs - buyTs) : null;
+    const durationLine = durationSec != null
+      ? `⏱️ <b>Duration:</b> ${formatDuration(durationSec)}\n`
+      : `⏱️ <b>Duration:</b> n/a\n`;
     const msg =
       `${emoji} <b>TRADE ${label}</b>\n\n` +
       `<b>Contract:</b> #${t.contractId} · <b>Symbol:</b> <code>${t.symbol}</code>\n` +
@@ -1368,6 +1399,7 @@ class AccuHoldBot {
       `<b>Sell:</b> ${Number(t.sellPrice ?? 0).toFixed(2)} ${this.currencyStr()}\n` +
       `${t.profit >= 0 ? '💚' : '💔'} <b>Profit:</b> ${t.profit >= 0 ? '+' : ''}${t.profit.toFixed(2)} ${this.currencyStr()}\n` +
       `<b>Exit:</b> ${exitLine}\n` +
+      durationLine +
       `<b>Ticks held:</b> ${t.ticksHeld ?? '?'} (tick-cap was ${t.tickCapTicks ?? '?'})` +
       (t.ticksHeldOpen != null && t.ticksHeld !== t.ticksHeldOpen ? ` · since-sub: ${t.ticksHeldOpen}` : '') +
       `\n` +

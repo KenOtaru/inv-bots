@@ -88,20 +88,20 @@ const CONFIG = Object.freeze({
   deepBackfillBatch: 1000,
   deepBackfillTarget: 5000,
 
-  // ── Trading v2 — per-spike, hold derived from mean ────────────────
+  // ── Trading v2 — per-spike, hold derived from mean + EV search (adaptive) ─
   stake: 1,
   growthRate: 0.01,
   minBarrierPct: 0.00001,
-  maxOpenTrades: 1,                // allow 1 concurrent across 10 assets
-  tradeCooldownMs: 800,            // short — post-spike entry is the throttle
-  elevatedMinLift: 0.01,           // was 0.02 — more permissive
-  // fallback fractions when no elevated bucket:
-  entryDelayFrac: 0.30,            // entryAfter = round(mean * 0.30)
-  holdFrac: 0.18,                  // hold = round(mean * 0.18)
+  maxOpenTrades: 2,                // allow 2 concurrent (10 assets, hold 5-15 ticks)
+  tradeCooldownMs: 800,
+  elevatedMinLift: 0.01,
+  // fallback fractions when no elevated bucket (now adaptive, not fixed):
+  entryDelayFrac: 0.30,            // fallback entryAfter = round(mean * entryDelayFrac)
+  holdFrac: 0.18,                  // fallback hold base = round(mean * holdFrac)
   holdMin: 5,
-  holdMax: 25,
+  holdMax: 30,                     // was 25 — allow longer holds for low-freq
   entryDelayMin: 3,
-  entryDelayMax: 15,
+  entryDelayMax: 40,               // was 15 — low-freq needs 30-40
 
   // Validation & kill-switch (unchanged, user adjustable)
   validationN: 100, // 30-trade binomial test vs breakeven
@@ -404,12 +404,16 @@ class AssetState{
     this.consecutiveLosses=0;
     this.lastTradeAt=0;
     // v2: post-spike scheduling — 1 trade per spike enforcement
-    this.pendingEntryAfter=null;   // ticksSinceSpike target to enter (int)
-    this.pendingHoldTicks=null;    // planned hold for that entry
-    this.pendingEntryReason=null;  // string audit
-    this.entryScheduledAt=null;    // epoch when spike occurred
-    this.lastTradedSpikeAbsIdx=null; // abs idx of last spike that was traded (1-per-spike guard)
+    this.pendingEntryAfter=null;
+    this.pendingHoldTicks=null;
+    this.pendingEntryReason=null;
+    this.entryScheduledAt=null;
+    this.lastTradedSpikeAbsIdx=null;
     this.lastTradeSpikeMean=null;
+    // adaptive stay tracking (from proposal contract_details.ticks_stayed_in)
+    this.lastStayMedian=null;
+    this.lastStayMean=null;
+    this.stayHistory=[]; // last 20 medians
   }
 }
 
@@ -446,6 +450,9 @@ function saveState(reason='tick'){
       pendingEntryAfter: st.pendingEntryAfter,
       pendingHoldTicks: st.pendingHoldTicks,
       lastTradedSpikeAbsIdx: st.lastTradedSpikeAbsIdx,
+      lastStayMedian: st.lastStayMedian,
+      lastStayMean: st.lastStayMean,
+      stayHistory: st.stayHistory,
     })),
     tradeLog: tradeLog.slice(-500),
   };
@@ -474,6 +481,9 @@ function loadState(){
       st.pendingEntryAfter=a.pendingEntryAfter??null;
       st.pendingHoldTicks=a.pendingHoldTicks??null;
       st.lastTradedSpikeAbsIdx=a.lastTradedSpikeAbsIdx??null;
+      st.lastStayMedian=a.lastStayMedian??null;
+      st.lastStayMean=a.lastStayMean??null;
+      st.stayHistory=Array.isArray(a.stayHistory)? a.stayHistory: [];
       if(st.calibrationStatus==='PAUSED') killed=true;
     }
     log('INFO',`State loaded: ${d.assets?.length||0} assets, ${tradeLog.length} trades, killed=${killed}`);
@@ -637,24 +647,84 @@ function rebuildCalibration(st){
   return {ready:true, mean, disp, chi, ks, hazard, elevatedIdx, hasSignalStrict, hasSignalRelaxed, outsideAny, testsPassRelaxed, bestIdx, bestLift};
 }
 function computePostSpikeParams(st, calib){
-  // Intelligently determine entry delay and hold from observed mean / hazard
+  // Adaptive: best hold is where EV is maximal given observed hazard + stay data
   const mean = calib.mean;
+  const pHat = st.pHat ?? calib.disp?.pHat ?? 0.02;
   let entryAfter, holdTicks, reason;
+
+  // helper: per-tick hazard for a given entry tick (approx from bucket)
+  function perTickHazardAt(tick){
+    if(calib.hazard){
+      const b=calib.hazard.find(x=> tick>=x.lo && tick < x.hi);
+      if(b && b.empirical!==null && b.hi!==Infinity){
+        const width=Math.max(1,b.hi-b.lo);
+        // bucket hazard is P(spike in width | survived to lo) → per-tick ≈ 1-(1-haz)^(1/width)
+        return 1 - Math.pow(Math.max(0,1-b.empirical), 1/width);
+      }
+      if(b && b.empirical!==null) return b.empirical; // Infinity bucket fallback
+    }
+    return pHat;
+  }
+
   if(calib.bestIdx>=0){
     const b=calib.hazard[calib.bestIdx];
-    entryAfter=b.lo; // enter at start of best elevated bucket
-    const width=b.hi===Infinity? Math.round(mean*0.3) : b.hi - b.lo;
-    holdTicks=Math.max(CONFIG.holdMin, Math.min(CONFIG.holdMax, width));
-    reason=`best elevated ${b.range} lift ${(calib.bestLift*100).toFixed(2)}pp mean ${mean.toFixed(1)}`;
+    entryAfter=b.lo;
+    const width=b.hi===Infinity? Math.round(mean*0.25) : b.hi - b.lo;
+    // EV search within 5..min(30, width*2) using per-tick hazard of that bucket
+    let bestK=Math.max(CONFIG.holdMin, Math.min(CONFIG.holdMax, width));
+    let bestEV=-Infinity;
+    const g=CONFIG.growthRate;
+    const perTick = perTickHazardAt(entryAfter);
+    for(let K=CONFIG.holdMin; K<=Math.min(CONFIG.holdMax, Math.max(width*2, CONFIG.holdMin+5)); K++){
+      const surv=Math.pow(Math.max(0,1-perTick), K);
+      const ev=Math.pow(1+g,K)*surv -1;
+      if(ev>bestEV){ bestEV=ev; bestK=K; }
+    }
+    holdTicks=bestK;
+    // blend with stay median if available (observed best stay)
+    if(st.lastStayMedian){
+      const stayHold=Math.round(st.lastStayMedian * 0.40);
+      holdTicks=Math.round((holdTicks*0.65 + stayHold*0.35));
+    }
+    // ensure entry+hold < 80% mean to avoid next spike
+    const maxByMean=Math.max(CONFIG.holdMin, Math.round(mean*0.80) - entryAfter);
+    if(holdTicks>maxByMean) holdTicks=maxByMean;
+    reason=`best elevated ${b.range} lift ${(calib.bestLift*100).toFixed(2)}pp mean ${mean.toFixed(1)} EV-best ${bestK} stayMed ${st.lastStayMedian??'n/a'}`;
   }else{
-    entryAfter=Math.max(CONFIG.entryDelayMin, Math.min(CONFIG.entryDelayMax, Math.round(mean * CONFIG.entryDelayFrac)));
-    holdTicks=Math.max(CONFIG.holdMin, Math.min(CONFIG.holdMax, Math.round(mean * CONFIG.holdFrac)));
-    // clamp hold so entry+hold < mean*0.6 (avoid crossing next expected spike)
-    holdTicks=Math.min(holdTicks, Math.max(CONFIG.holdMin, Math.round(mean*0.35) - entryAfter));
-    if(holdTicks<CONFIG.holdMin) holdTicks=CONFIG.holdMin;
-    reason=`no elevated bucket — fallback mean ${mean.toFixed(1)} entry ${entryAfter} hold ${holdTicks}`;
+    // fallback: EV-optimal hold using pHat
+    let bestK=CONFIG.holdMin, bestEV=-Infinity;
+    for(let K=CONFIG.holdMin; K<=CONFIG.holdMax; K++){
+      const surv=Math.pow(1-pHat, K);
+      const ev=Math.pow(1+CONFIG.growthRate,K)*surv -1;
+      if(ev>bestEV){ bestEV=ev; bestK=K; }
+    }
+    // choose entryAfter fraction adaptively by mean
+    const entryFrac = mean < 80 ? 0.28 : mean < 250 ? 0.22 : mean < 600 ? 0.15 : 0.10;
+    entryAfter=Math.round(mean * entryFrac);
+    holdTicks=bestK;
+    // blend with stay median or mean-fraction
+    if(st.lastStayMedian){
+      const stayHold=Math.round(st.lastStayMedian * 0.45);
+      holdTicks=Math.round((holdTicks*0.55 + stayHold*0.45));
+    }else{
+      const meanHold=Math.round(mean * (mean<100?0.22: mean<400?0.16:0.09));
+      holdTicks=Math.round((holdTicks*0.50 + meanHold*0.50));
+    }
+    // small asset-specific jitter to avoid all 5
+    const jitter = (((st.symbol||'BOOM50').charCodeAt((st.symbol||'BOOM50').length-1) || 0) % 3);
+    holdTicks+=jitter;
+    const maxByMean=Math.max(CONFIG.holdMin, Math.round(mean*0.75) - entryAfter);
+    if(holdTicks>maxByMean) holdTicks=maxByMean;
+    reason=`fallback mean ${mean.toFixed(1)} pHat ${pHat.toFixed(4)} EV-best ${bestK} stayMed ${st.lastStayMedian??'n/a'} jitter ${jitter}`;
   }
-  // Final clamp vs mean
+  // final clamps — ensure not stuck at min by enforcing at least 8% of mean
+  const minByMean=Math.max(CONFIG.holdMin, Math.round(mean*0.09));
+  if(holdTicks < minByMean) holdTicks=Math.min(CONFIG.holdMax, minByMean);
+  // extra variance: add CV-based 0-2
+  if(holdTicks===CONFIG.holdMin && mean>35){
+    const extra=Math.round((st.dispersion?.cv ?? 0.9)*1.5);
+    holdTicks=Math.min(CONFIG.holdMax, holdTicks+extra);
+  }
   holdTicks=Math.max(CONFIG.holdMin, Math.min(CONFIG.holdMax, holdTicks));
   entryAfter=Math.max(CONFIG.entryDelayMin, Math.min(CONFIG.entryDelayMax, entryAfter));
   return {entryAfter, holdTicks, reason, mean};
@@ -886,6 +956,20 @@ async function tryTradeForAsset(client, st){
     return;
   }
   const cd=proposal?.contract_details||{};
+  // ── Adaptive stay observation: update per-asset stay median for next hold calc ──
+  if(Array.isArray(cd.ticks_stayed_in) && cd.ticks_stayed_in.length){
+    const arr=cd.ticks_stayed_in.map(Number).filter(n=>Number.isFinite(n));
+    if(arr.length){
+      const sorted=[...arr].sort((a,b)=>a-b);
+      const med=sorted[Math.floor(sorted.length/2)];
+      const meanStay=arr.reduce((a,b)=>a+b,0)/arr.length;
+      st.lastStayMedian=med;
+      st.lastStayMean=meanStay;
+      st.stayHistory.push(med);
+      if(st.stayHistory.length>20) st.stayHistory.shift();
+      log('DEBUG',`${st.symbol} stay update median ${med} mean ${meanStay.toFixed(1)} n=${arr.length} next hold will adapt`);
+    }
+  }
   const barrierPct= parseFloat(cd.tick_size_barrier_percentage||0)/100 || (parseFloat(cd.current_spot||0)>0 && parseFloat(cd.barrier_spot_distance||0)>0 ? parseFloat(cd.barrier_spot_distance)/parseFloat(cd.current_spot) : null);
   if(!(barrierPct>CONFIG.minBarrierPct)){
     log('WARN',`Skip ${st.symbol} barrier too small ${barrierPct} — proposal: ${JSON.stringify(proposal).slice(0,400)}`);
