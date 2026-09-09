@@ -105,7 +105,7 @@ const CONFIG = Object.freeze({
   accountType: 'demo',   // 'demo' | 'real' — keep demo for testing
 
   // ── Trade parameters (memoryless, non-signal) ──
-  stake              : parseFloat('2.00'),
+  stake              : parseFloat('1.00'),   // flat stake per trade
   takeProfitMultiple : parseFloat('1.50'),   // sell when payout ≥ stake × this
   tickCapFraction    : parseFloat('0.55'),   // tick-cap = frac × live ticks_stayed_in median
   growthRate         : parseFloat('0.01'),   // one of {0.01, 0.02, 0.03, 0.04, 0.05}
@@ -866,9 +866,19 @@ class TradeExecutor extends EventEmitter {
         ? soldFor - parseFloat(info.buyPrice)
         : profit;
       const finalStatus = status === 'sold' ? (terminalProfit >= 0 ? 'won' : 'lost') : status;
+      // ticksHeld at the moment of settlement: server's tick_count is
+      // anchored to purchase time and is the authoritative duration. We
+      // also keep the open-time-anchored value in `_ticksHeldOpen` for
+      // logging; users care about "how long did this trade run" and the
+      // terminal tick_count is exactly that.
+      const terminalTicks = (c.tick_count != null && c.tick_count > 0)
+        ? c.tick_count
+        : (info.ticksHeld ?? 0);
       this._finalizeContract(cid, {
         profit: terminalProfit, status: finalStatus, sellPrice: soldFor,
         sellTime: c.sell_time ?? (Date.now() / 1000), currentSpot,
+        ticksHeld: terminalTicks,
+        ticksHeldOpen: info.ticksHeld ?? 0,
         exitReason: info._exitReason ?? (status === 'lost' ? 'knockout' : status),
       });
     }
@@ -898,6 +908,7 @@ class TradeExecutor extends EventEmitter {
         status: soldFor > 0 && info?.buyPrice > 0 && soldFor >= info.buyPrice ? 'won' : 'lost',
         sellPrice: soldFor, sellTime: Date.now() / 1000,
         currentSpot: info?.entrySpot ?? 0,
+        ticksHeld: info?.ticksHeld ?? 0,
         exitReason: info?._exitReason ?? 'manual-sell',
       });
       return sold;
@@ -1357,7 +1368,9 @@ class AccuHoldBot {
       `<b>Sell:</b> ${Number(t.sellPrice ?? 0).toFixed(2)} ${this.currencyStr()}\n` +
       `${t.profit >= 0 ? '💚' : '💔'} <b>Profit:</b> ${t.profit >= 0 ? '+' : ''}${t.profit.toFixed(2)} ${this.currencyStr()}\n` +
       `<b>Exit:</b> ${exitLine}\n` +
-      `<b>Ticks held:</b> ${t.ticksHeld ?? '?'} (tick-cap was ${t.tickCapTicks ?? '?'})\n` +
+      `<b>Ticks held:</b> ${t.ticksHeld ?? '?'} (tick-cap was ${t.tickCapTicks ?? '?'})` +
+      (t.ticksHeldOpen != null && t.ticksHeld !== t.ticksHeldOpen ? ` · since-sub: ${t.ticksHeldOpen}` : '') +
+      `\n` +
       `<b>Balance:</b> ${(this.lastBalance ?? 0).toFixed(2)} ${this.currencyStr()}\n\n` +
       `<b>GMT Day (${rec.date})</b>\n` +
       `• Trades: ${todayStats.count} (✅${todayStats.wins} ❌${todayStats.losses}) | WR ${todayStats.winRate.toFixed(1)}%\n` +
