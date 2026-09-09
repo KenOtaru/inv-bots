@@ -915,15 +915,49 @@ async function tryTradeForAsset(client, st){
   log('INFO',`v2 Signal ${st.symbol} post-spike entryAfter ${entryAfter} hold ${holdTicks} hazard ${Number(hazard).toFixed(4)} barrier ${(barrierPct*100).toFixed(5)}% payout ${payout} ev ${ (ev*100).toFixed(2)}% (${entryReason})`);
 
   let buyRes;
-  try{
-    const buy=await client._send({buy: proposal.id, price: ask}, 20000);
-    buyRes=buy.buy;
-    if(!buyRes?.contract_id) throw new Error('No contract_id');
-  }catch(e){
-    log('ERROR',`Buy ${st.symbol} failed:`,e.message);
-    telegram.send(`❌ <b>Buy failed ${st.symbol}</b> ${e.message}`);
-    return;
+  let buyAttempts=0;
+  while(buyAttempts<2){
+    try{
+      const buy=await client._send({buy: proposal.id, price: ask}, 20000);
+      buyRes=buy.buy;
+      if(!buyRes?.contract_id) throw new Error('No contract_id');
+      break; // success
+    }catch(e){
+      const msg=String(e.message||'');
+      const isRace = /BetExpired|TradingDurationNotAllowed|ContractNotFound|InvalidContract|Unknown contract proposal/i.test(msg);
+      const isLimit = /OpenPositionLimitExceeded|too many open positions/i.test(msg);
+      if(isLimit){
+        log('WARN',`Buy ${st.symbol} blocked (limit):`,msg,'— pending cleared till next spike/close');
+        // clear pending so we don't hammer Deriv while at limit; wait for close or next spike
+        st.pendingEntryAfter=null; st.pendingHoldTicks=null;
+        return;
+      }
+      if(isRace && buyAttempts===0){
+        log('WARN',`Buy ${st.symbol} race (${msg}) — fetching fresh proposal and retrying once`);
+        // fetch fresh proposal
+        try{
+          const fresh=await client._send({proposal:1, amount:CONFIG.stake, basis:'stake', contract_type:'ACCU', currency:CONFIG.currency, [client.symbolKey]:st.symbol, growth_rate: CONFIG.growthRate}, 15000);
+          proposal=fresh.proposal;
+          if(!proposal?.id) throw new Error('No fresh proposal id');
+          // re-extract ask/payout/barrier for fresh proposal (keep same hold)
+          const cd2=proposal.contract_details||{};
+          const barrier2= parseFloat(cd2.tick_size_barrier_percentage||0)/100 || (parseFloat(cd2.current_spot||0)>0 && parseFloat(cd2.barrier_spot_distance||0)>0 ? parseFloat(cd2.barrier_spot_distance)/parseFloat(cd2.current_spot) : null);
+          if(barrier2) { /* keep original barrierPct for logging but update proposal reference */ }
+        }catch(e2){
+          log('WARN',`Fresh proposal retry for ${st.symbol} failed:`,e2.message);
+          return;
+        }
+        buyAttempts++;
+        continue;
+      }
+      // non-race or second failure
+      const level = isRace ? 'WARN' : 'ERROR';
+      log(level,`Buy ${st.symbol} failed:`,msg);
+      if(!isRace) telegram.send(`❌ <b>Buy failed ${st.symbol}</b> ${msg.slice(0,120)}`);
+      return;
+    }
   }
+  if(!buyRes) return;
   const cid=buyRes.contract_id;
   // Mark this spike as traded (strict 1-per-spike)
   st.lastTradedSpikeAbsIdx=st.lastSpikeAbsIdx;
