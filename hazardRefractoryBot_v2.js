@@ -99,12 +99,12 @@ const CONFIG = Object.freeze({
   entryDelayFrac: 0.30,            // fallback entryAfter = round(mean * entryDelayFrac)
   holdFrac: 0.18,                  // fallback hold base = round(mean * holdFrac)
   holdMin: 5,
-  holdMax: 30,                     // was 25 — allow longer holds for low-freq
+  holdMax: 20,                     // was 25 — allow longer holds for low-freq
   entryDelayMin: 3,
   entryDelayMax: 40,               // was 15 — low-freq needs 30-40
 
   // Validation & kill-switch (unchanged, user adjustable)
-  validationN: 100, // 30-trade binomial test vs breakeven
+  validationN: 30, // 30-trade binomial test vs breakeven
   killP: 0.05,
   maxConsecutiveLosses: 7,
   dailyMaxLoss: 50,
@@ -112,8 +112,8 @@ const CONFIG = Object.freeze({
 
   reconnect: { initialDelayMs:1000, maxDelayMs:60000, backoffFactor:2, jitterMs:750 },
   watchdogMs: 90000,
-  stateFile: 'hazardBot_v2_02_state.json',
-  logFile: 'hazardBot_v2_02.log',
+  stateFile: 'hazardBot_v2_03_state.json',
+  logFile: 'hazardBot_v2_03.log',
   logLevel: 'INFO',
   telegram: {
     enabled: true,
@@ -971,11 +971,11 @@ async function tryTradeForAsset(client, st){
     }
   }
   const barrierPct= parseFloat(cd.tick_size_barrier_percentage||0)/100 || (parseFloat(cd.current_spot||0)>0 && parseFloat(cd.barrier_spot_distance||0)>0 ? parseFloat(cd.barrier_spot_distance)/parseFloat(cd.current_spot) : null);
-  if(!(barrierPct>CONFIG.minBarrierPct)){
-    log('WARN',`Skip ${st.symbol} barrier too small ${barrierPct} — proposal: ${JSON.stringify(proposal).slice(0,400)}`);
-    if(st.ticksSinceSpike > target+1){ st.pendingEntryAfter=null; st.pendingHoldTicks=null; }
-    return;
-  }
+  // if(!(barrierPct>CONFIG.minBarrierPct)){
+  //   log('WARN',`Skip ${st.symbol} barrier too small ${barrierPct} — proposal: ${JSON.stringify(proposal).slice(0,400)}`);
+  //   if(st.ticksSinceSpike > target+1){ st.pendingEntryAfter=null; st.pendingHoldTicks=null; }
+  //   return;
+  // }
   const ask=parseFloat(proposal.ask_price ?? CONFIG.stake);
   // For ACCU, proposal.payout may be missing/0 — use contract_details.maximum_payout per accuAPEX.js:1129
   const payoutRaw = proposal.payout ?? cd.maximum_payout ?? 0;
