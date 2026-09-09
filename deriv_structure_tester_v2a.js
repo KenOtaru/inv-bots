@@ -72,7 +72,7 @@ const CONFIG = {
     // ── Spike / event detection ──────────────────────────────────────────
     minSpikeSeparation: 2,      // now safe to keep low — tests account for it
     spikeThresholdMAD: 10,
-    spikeDirection: 'both',     // 'up' | 'down' | 'both' | 'auto'
+    spikeDirection: 'auto',     // 'up' | 'down' | 'both' | 'auto'
 
     // ── Baseline (fixed, contamination-resistant) ───────────────────────
     baselineWindow: 2000,         // ticks used to compute each baseline recalculation
