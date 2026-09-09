@@ -82,7 +82,7 @@ const CONFIG = Object.freeze({
   // ── Calibration v2 (relaxed) ──────────────────────────────────────
   calibrationMinIntervals: 5,                          // was 200 — now 50
   calibrationBuckets: [0,0.25,0.5,0.75,1,1.25,1.5,1.75,2,2.5,3,4,6,Infinity],
-  calibrationP: 0.05,                                   // was 0.01 — now 0.05
+  calibrationP: 0.01,                                   // was 0.01 — now 0.05
   wilsonZ: 1.96,
   historyCap: 80000,
   deepBackfillBatch: 1000,
