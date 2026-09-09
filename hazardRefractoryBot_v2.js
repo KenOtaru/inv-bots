@@ -89,7 +89,7 @@ const CONFIG = Object.freeze({
   deepBackfillTarget: 5000,
 
   // ── Trading v2 — per-spike, hold derived from mean ────────────────
-  stake: 1,
+  stake: 2,
   growthRate: 0.01,
   minBarrierPct: 0.00001,
   maxOpenTrades: 2,                // allow 2 concurrent across 10 assets

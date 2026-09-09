@@ -105,7 +105,7 @@ const CONFIG = Object.freeze({
   accountType: 'demo',   // 'demo' | 'real' — keep demo for testing
 
   // ── Trade parameters (memoryless, non-signal) ──
-  stake              : parseFloat('1.00'),
+  stake              : parseFloat('2.00'),
   takeProfitMultiple : parseFloat('1.50'),   // sell when payout ≥ stake × this
   tickCapFraction    : parseFloat('0.55'),   // tick-cap = frac × live ticks_stayed_in median
   growthRate         : parseFloat('0.02'),   // one of {0.01, 0.02, 0.03, 0.04, 0.05}
@@ -122,7 +122,7 @@ const CONFIG = Object.freeze({
   stopLossPerContract : parseFloat('0'),         // 0 = disabled (rely on knockout)
 
   // ── Instruments (BOOM + CRASH families, run both) ──
-  assets: ('BOOM500,BOOM1000,CRASH500,CRASH1000')
+  assets: ('BOOM50,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH50,CRASH500,CRASH600,CRASH900,CRASH1000')
     .split(',').map(s => s.trim()).filter(Boolean),
 
   // ── Telegram (existing hardcoded values) ──
