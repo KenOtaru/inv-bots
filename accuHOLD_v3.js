@@ -104,7 +104,7 @@ loadEnv();
 // ═══════════════════════════════════════════════════════════════════════
 const CONFIG = Object.freeze({
   // ── Deriv API ──
-  apiToken   : (process.env.DERIV_PAT || process.env.DERIV_API_TOKEN || 'pat_8e0a3285bd6e74f52a67985b8069f4bea42aa96ce65d129c60ebb838ed1065ee'),
+  apiToken   : 'pat_27a3197287bae3ec6c2c9cbdd68fffaa2a524e3b0a6e1ecf298b5ffb338adb10',
   appId      : '33uslPtthXBEkQOdfKfoY',
   wsUrl      : 'wss://ws.derivws.com/websockets/v3',
   currency   : 'USD',
