@@ -149,8 +149,8 @@ const CONFIG = Object.freeze({
   watchdogMs: 90000,
   tradeWatchdogMs: 90000,
   proposalRefreshMs: 60000,
-  stateFile: 'hazardBot_v3_03_state.json',
-  logFile: 'hazardBot_v3_03.log',
+  stateFile: 'hazardBot_v3_06_state.json',
+  logFile: 'hazardBot_v3_06.log',
   logLevel: 'INFO',
   telegram: {
     enabled: true,
@@ -408,7 +408,7 @@ class DerivClient extends EventEmitter{
   }
   _openWs(url){
     try{
-      this.ws=new WebSocket(url,{headers:{'User-Agent':'hazardRefractoryBot/v2'},handshakeTimeout:15000});
+      this.ws=new WebSocket(url,{headers:{'User-Agent':'hazardBot_v3'},handshakeTimeout:15000});
       this.ws.on('open',()=>this._onOpen()); this.ws.on('message',d=>this._onMessage(d));
       this.ws.on('error',e=>this._onError(e)); this.ws.on('close',(c,r)=>this._onClose(c,r));
       this.ws.on('unexpected-response',(_,res)=>{ log('ERROR','WS handshake',res.statusCode); try{res.destroy();}catch(_){} this._scheduleReconnect();});
@@ -1650,7 +1650,7 @@ if(process.argv.includes('--reset')){ try{fs.unlinkSync(CONFIG.stateFile);}catch
 // ────────────────────────────────────────────────────────────────────
 async function main(){
   console.log('═'.repeat(72));
-  console.log('  Hazard-Refractory Bot v2 — post-spike less restrictive');
+  console.log('  HazardBot_v3 — post-spike less restrictive');
   console.log('═'.repeat(72));
   console.log(`  Assets: ${CONFIG.assets.join(', ')}`);
   console.log(`  Calibration: ${CONFIG.calibrationMinIntervals} intervals relaxed p<${CONFIG.calibrationP} entryAfter mean*${CONFIG.entryDelayFrac} hold mean*${CONFIG.holdFrac}`);
@@ -1788,7 +1788,7 @@ async function main(){
     const pauseLine = CONFIG.pauseEnabled ? `⏸️ <b>Pause:</b> ${CONFIG.pauseStartGmt}–${CONFIG.pauseEndGmt} GMT\n` : '';
     const dowLine = `📅 <b>DOW:</b> ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].filter((_,i)=> [CONFIG.tradeSunday,CONFIG.tradeMonday,CONFIG.tradeTuesday,CONFIG.tradeWednesday,CONFIG.tradeThursday,CONFIG.tradeFriday,CONFIG.tradeSaturday][i]).join(', ') || 'none'}\n`;
     telegram.send(
-      `<b>hazardRefractoryBot v3 — Online</b>\n\n`+
+      `<b>hazardBot_v3 — Online</b>\n\n`+
       `<b>Account:</b> ${globalClient?.accountInfo?.loginid || globalClient?._account?.account_id || 'n/a'} (${globalClient?.accountInfo?.isVirtual? '🟡 DEMO':'DEMO'})\n`+
       `<b>Balance:</b> ${Number(bal).toFixed(2)} ${currency}\n`+
       `<b>Assets:</b> ${CONFIG.assets.join(', ')}\n`+
