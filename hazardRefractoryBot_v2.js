@@ -88,7 +88,7 @@ const CONFIG = Object.freeze({
   accountType: 'demo',
   currency: 'USD',
 
-  assets: ['BOOM900','BOOM1000','CRASH900','CRASH1000'],
+  assets: ['BOOM50','CRASH50'],
 
   detection: {
     baselineWindow: 2000,
@@ -125,7 +125,7 @@ const CONFIG = Object.freeze({
   martingaleSteps: 6,
   martingaleMaxStake: 200,
   growthRate: 0.01,
-  minBarrierPct: 0.000006,
+  minBarrierPct: 0.00001, // 0.0001
   maxOpenTrades: 1,
   tradeCooldownMs: 800,
   perSymbolCooldownMs: 8000,
@@ -149,8 +149,8 @@ const CONFIG = Object.freeze({
   watchdogMs: 90000,
   tradeWatchdogMs: 90000,
   proposalRefreshMs: 60000,
-  stateFile: 'hazardBot_v2_007_state.json',
-  logFile: 'hazardBot_v2_007.log',
+  stateFile: 'hazardBot_v2_009_state.json',
+  logFile: 'hazardBot_v2_009.log',
   logLevel: 'INFO',
   telegram: {
     enabled: true,
@@ -1423,11 +1423,11 @@ async function tryTradeForAsset(client, st){
     }
   }
   const barrierPct= parseFloat(cd.tick_size_barrier_percentage||0)/100 || (parseFloat(cd.current_spot||0)>0 && parseFloat(cd.barrier_spot_distance||0)>0 ? parseFloat(cd.barrier_spot_distance)/parseFloat(cd.current_spot) : null);
-  // if(!(barrierPct>CONFIG.minBarrierPct)){
-  //   log('WARN',`Skip ${st.symbol} barrier too small ${barrierPct} — proposal: ${JSON.stringify(proposal).slice(0,400)}`);
-  //   if(st.ticksSinceSpike > target+1){ st.pendingEntryAfter=null; st.pendingHoldTicks=null; }
-  //   return;
-  // }
+  if(!(barrierPct>CONFIG.minBarrierPct)){
+    log('WARN',`Skip ${st.symbol} barrier too small ${barrierPct} — proposal: ${JSON.stringify(proposal).slice(0,400)}`);
+    if(st.ticksSinceSpike > target+1){ st.pendingEntryAfter=null; st.pendingHoldTicks=null; }
+    return;
+  }
   const ask=parseFloat(proposal.ask_price ?? martingaleStake);
   // For ACCU, proposal.payout may be missing/0 — use contract_details.maximum_payout per accuAPEX.js:1129
   const payoutRaw = proposal.payout ?? cd.maximum_payout ?? 0;
