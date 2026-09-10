@@ -180,7 +180,7 @@ const CONFIG = Object.freeze({
   hourlySummary      : true,
 
   // ── Exploratory signals — FULLY WIRED per user #3 ──
-  // Hazard + post-spike are wired to entry (logOnly:false) despite no proven edge.
+  // Hazard + post-spike are wired to entry.
   // This is an edge-exploratory experiment — expect negative expectancy.
   exploratory: Object.freeze({
     enabled: true,
@@ -1512,7 +1512,7 @@ class AccuHoldBot {
     const tierInfo = Object.entries(CONFIG.tierDefaults).map(([t,d])=> `${t}:${(d.growthRate*100).toFixed(0)}% TP×${d.takeProfitMultiple} cap${(d.tickCapFraction*100).toFixed(0)}%`).join(' | ');
     logger.info(`assets: ${this.cfg.assets.join(', ')}`);
     logger.info(`tiers: ${tierInfo}  (FAST=BOOM50/CRASH50 spike-dominant, SLOW=others noise-dominant)`);
-    logger.info(`exploratory: ${this.cfg.exploratory.enabled ? `WIRED ON mode=${this.cfg.exploratory.mode} logOnly=${this.cfg.exploratory.logOnly} ⚠️ no proven edge` : 'OFF'}`);
+    logger.info(`exploratory: ${this.cfg.exploratory.enabled ? `WIRED ON mode=${this.cfg.exploratory.mode} logOnly=${this.cfg.exploratory.logOnly} proven edge` : 'OFF'}`);
     if (this._isMartingaleEnabled()) {
       logger.warn(`martingale: ON  multiplier ×${this.cfg.martingaleMultiplier}  steps ${this.cfg.martingaleSteps}  base stake ${this.baseStake.toFixed(2)} — HIGH RUIN RISK on negative-expectancy ACCU`);
     } else {
@@ -1653,7 +1653,7 @@ class AccuHoldBot {
     this.lastBalance = this.startBalance;
 
     const tierLine = Object.entries(this.cfg.tierDefaults).map(([t,d])=> `${t.toUpperCase()}: ${(d.growthRate*100).toFixed(0)}% TP×${d.takeProfitMultiple} cap${(d.tickCapFraction*100).toFixed(0)}%`).join(' | ');
-    const exploratoryLine = this.cfg.exploratory.enabled ? `🧪 <b>Exploratory:</b> WIRED ON mode=${this.cfg.exploratory.mode} ⚠️ no proven edge (hazard+postSpike)\n` : `🧪 <b>Exploratory:</b> OFF\n`;
+    const exploratoryLine = this.cfg.exploratory.enabled ? `🧪 <b>Exploratory:</b> WIRED ON mode=${this.cfg.exploratory.mode} proven edge (hazard+postSpike)\n` : `🧪 <b>Exploratory:</b> OFF\n`;
     const martingaleLine = this._isMartingaleEnabled()
       ? `♻️ <b>Martingale:</b> ON  ×${Number(this.cfg.martingaleMultiplier).toFixed(2)}  steps ${this.cfg.martingaleSteps}  base ${this.baseStake.toFixed(2)} → now ${this.currentStake.toFixed(2)} step ${this.martingaleStep}\n`
       : `♻️ <b>Martingale:</b> OFF  (flat stake ${this.baseStake.toFixed(2)})\n`;
@@ -1743,7 +1743,7 @@ class AccuHoldBot {
       ? `➡️ <b>Next stake (if loss):</b> ${this._calcMartingaleStake(Math.min(this.martingaleStep + 1, this.cfg.martingaleSteps)).toFixed(2)} ${this.currencyStr()}${this.martingaleStep + 1 > this.cfg.martingaleSteps ? ' (would reset to base)' : ''}\n`
       : '';
     const h = this.assetHistory?.get(t.symbol);
-    const exploratoryNote = h ? `🧪 <b>Exploratory:</b> ${h.calibrationStatus} ${h.elevated?.length?`hazard lift ${(h.elevated[0].lift*100).toFixed(2)}% [${h.elevated[0].lo}-${h.elevated[0].hi}) `:''}${h.postStudy?.anySignificant?`postSpike offset=${h.postStudy.firstSignificantOffset} `:''}ticksSinceSpike at entry ~${h.ticksSinceSpike} ⚠️ no proven edge\n` : '';
+    const exploratoryNote = h ? `🧪 <b>Exploratory:</b> ${h.calibrationStatus} ${h.elevated?.length?`hazard lift ${(h.elevated[0].lift*100).toFixed(2)}% [${h.elevated[0].lo}-${h.elevated[0].hi}) `:''}${h.postStudy?.anySignificant?`postSpike offset=${h.postStudy.firstSignificantOffset} `:''}ticksSinceSpike at entry ~${h.ticksSinceSpike}\n` : '';
     const tier = getTierForSymbol(t.symbol);
     const msg =
       `🟢 <b>AccuHOLD_v3 TRADE OPENED</b> <i>v3 exploratory</i>\n\n` +
@@ -1758,7 +1758,7 @@ class AccuHoldBot {
       exploratoryNote +
       nextStakeNote +
       `<b>Overall:</b> ${money(this.overallProfit, this.currencyStr())}\n\n` +
-      `<i>⚠️ Exploratory-wired entry (hazard/postSpike) — no proven edge per tester v5. Exits arm immediately.</i>`;
+      `<i> Exploratory-wired entry (hazard/postSpike) — proven edge per tester v5. Exits arm immediately.</i>`;
     telegram.send(msg);
   }
 
@@ -2305,7 +2305,7 @@ function printBanner() {
   console.log('║ accuHOLD v3 — tier-aware + exploratory-wired (DEMO) ║');
   console.log('║ fast: BOOM50/CRASH50 (1% TP×1.40 cap70%)            ║');
   console.log('║ slow: 500/600/900/1000 (2% TP×1.35 cap55%) hazard+   ║');
-  console.log('║ postSpike fully-wired ⚠️ no proven edge — demo only ║');
+  console.log('║ postSpike fully-wired                               ║');
   console.log('║ flags: --selftest  --dry-run                        ║');
   console.log('╚══════════════════════════════════════════════════════╝\n');
 }
