@@ -185,7 +185,7 @@ const CONFIG = Object.freeze({
   // User 2026-09-10: only trade when hazard lift >= threshold (default 60%).
   exploratory: Object.freeze({
     enabled: true,
-    mode: 'both',          // 'hazard' | 'postSpike' | 'both'  (user 60% lift => hazard only)
+    mode: 'hazard',          // 'hazard' | 'postSpike' | 'both'  (user 60% lift => hazard only)
     logOnly: false,          // false = actually gates entry (user #3)
     hazardBuckets: [0,0.25,0.5,0.75,1,1.25,1.5,1.75,2,2.5,3,4,6,Infinity],
     hazardMinLift: parseFloat(process.env.HAZARD_MIN_LIFT || '0.60'), // 0.60 = 60% — USER CONFIGURABLE via env or edit here
@@ -1770,7 +1770,6 @@ class AccuHoldBot {
       exploratoryNote +
       nextStakeNote +
       `<b>Overall:</b> ${money(this.overallProfit, this.currencyStr())}\n\n` +
-      `<i> Exploratory-wired entry (hazard/postSpike) — proven edge per tester v5. Exits arm immediately.</i>`;
     telegram.send(msg);
   }
 
