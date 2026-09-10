@@ -147,7 +147,7 @@ const CONFIG = Object.freeze({
   stopLossPerContract : parseFloat('0'),         // 0 = disabled (rely on knockout)
 
   // ── Instruments — 10 symbols (fast + slow) per user #1 ──
-  assets: ('BOOM500,BOOM600,BOOM900,BOOM1000,CRASH500,CRASH600,CRASH900,CRASH1000')
+  assets: ('BOOM50,CRASH50,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH500,CRASH600,CRASH900,CRASH1000')
     .split(',').map(s => s.trim()).filter(Boolean),
 
   // ── Telegram (existing hardcoded values) ──
@@ -185,7 +185,7 @@ const CONFIG = Object.freeze({
   // User 2026-09-10: only trade when hazard lift >= threshold (default 60%).
   exploratory: Object.freeze({
     enabled: true,
-    mode: 'hazard',          // 'hazard' | 'postSpike' | 'both'  (user 60% lift => hazard only)
+    mode: 'both',          // 'hazard' | 'postSpike' | 'both'  (user 60% lift => hazard only)
     logOnly: false,          // false = actually gates entry (user #3)
     hazardBuckets: [0,0.25,0.5,0.75,1,1.25,1.5,1.75,2,2.5,3,4,6,Infinity],
     hazardMinLift: parseFloat(process.env.HAZARD_MIN_LIFT || '0.60'), // 0.60 = 60% — USER CONFIGURABLE via env or edit here
@@ -204,9 +204,9 @@ const CONFIG = Object.freeze({
   }),
 
   // ── Logging / state — FRESH per user #4 ──
-  logFile           : 'accuHOLD3_04.log',
+  logFile           : 'accuHOLD3_06.log',
   logLevel          : 'INFO',
-  stateFile         : 'accuHOLD3_state_04.json', // fresh start, v2 state ignored
+  stateFile         : 'accuHOLD3_state_06.json', // fresh start, v2 state ignored
   stateSaveOnTrade  : true,
   stateSaveOnShutdown: true,
 });
