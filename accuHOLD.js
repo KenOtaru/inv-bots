@@ -124,8 +124,8 @@ const CONFIG = Object.freeze({
   martingaleSteps      : parseInt('9', 10),  // max consecutive martingale multiplications (0 = disabled)
 
   // ── Rate-limited entry ──
-  perSymbolCooldownMs : parseInt('8000',  10),   // between trades on the same symbol
-  perSymbolEntryGapMs : parseInt('30000', 10),   // min gap between any two new entries (global)
+  perSymbolCooldownMs : parseInt('100',  10),   // between trades on the same symbol
+  perSymbolEntryGapMs : parseInt('100', 10),   // min gap between any two new entries (global)
   maxOpenTrades       : parseInt('1',     10),   // concurrent open contracts across the bot
 
   // ── Risk controls ──
