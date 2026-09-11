@@ -130,7 +130,7 @@ const CONFIG = Object.freeze({
 
   // ── Risk controls ──
   maxConsecutiveLosses : parseInt('3', 10),      // pause + require manual restart
-  dailyMaxLoss        : parseFloat('150'),         // demo-appropriate cap
+  dailyMaxLoss        : parseFloat('450'),         // demo-appropriate cap
   dailyMaxTrades      : parseInt('120000', 10),      // daily cap
   stopLossPerContract : parseFloat('0'),         // 0 = disabled (rely on knockout)
 
@@ -171,9 +171,9 @@ const CONFIG = Object.freeze({
   hourlySummary      : true,
 
   // ── Logging / state ──
-  logFile           : 'accuHOLD2_001.log',
+  logFile           : 'accuHOLD_v2_001.log',
   logLevel          : 'INFO',
-  stateFile         : 'accuHOLD2_state_001.json',
+  stateFile         : 'accuHOLD_v2_state_001.json',
   stateSaveOnTrade  : true,
   stateSaveOnShutdown: true,
 });
