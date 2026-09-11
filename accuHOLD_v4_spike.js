@@ -7,7 +7,7 @@
  * =====================================================================
  *
  *  Single-file Deriv Accumulator (ACCU) bot — TEST/DEMO ONLY.
- *  Forked from accuHOLD_v3.js (tier-aware, watchdog-fixed) per user
+ *  Forked from accuHOLD_v4.js (tier-aware, watchdog-fixed) per user
  *  request 2026-09-11: SPIKE-TRIGGERED ENTRY ONLY.
  *
  *  ENTRY RULES (new in v4):
@@ -18,7 +18,7 @@
  *    • After a LOSS: place a NEW trade IMMEDIATELY on the SAME asset
  *      (martingale step, bypasses spike wait, respects maxOpenTrades).
  *  This is a pure spike-triggered martingale variant — not hazard-gated.
- *  It keeps tier-aware exits (TP + tick-cap live median) and the v3
+ *  It keeps tier-aware exits (TP + tick-cap live median) and the v4
  *  watchdog/stuck fixes and backfill.
  *
  *  ─ HONESTY (load-bearing — read before enabling live) ────────────
@@ -32,7 +32,7 @@
  *      contaminated exclusion, Bonferroni ~200 offsets) → no
  *      significant offsets after correction.
  *  ⇒ "Ticks since last spike" tells you nothing about the next spike.
- *  There is NO timing or price-pattern edge to trade on. This v3 build
+ *  There is NO timing or price-pattern edge to trade on. This v4 build
  *  wires those signals anyway as an EDGE-EXPLORATORY experiment at
  *  your explicit request — expect theoretical negative expectancy.
  *  Run DEMO only; validate with deriv_structure_tester_v5.js first.
@@ -50,7 +50,7 @@
  *      uses per-tier growthRate + tickCapFraction + TP as a stated risk
  *      preference, not a timing edge.
  *
- *  ─ STRATEGY (v3 — tier-aware + exploratory) ─────────────────────
+ *  ─ STRATEGY (v4 — tier-aware + exploratory) ─────────────────────
  *  Per-tier growthRate (fast:0.01, slow:0.02), per-tier tickCapFraction
  *  (fast:0.70, slow:0.55) and TP (fast:1.40, slow:1.35). On buy, two
  *  exits armed on every proposal_open_contract tick:
@@ -71,7 +71,7 @@
  *  (30s), maxOpenTrades 1, maxConsecutiveLosses 8 (halt), dailyMaxLoss
  *  150, loss histogram x2-x7, watchdog, stuck-sweep, pause/DOW, Telegram.
  *
- *  Author: Cowork 3P (v3 exploratory fork) | License: MIT
+ *  Author: Cowork 3P (v4 exploratory fork) | License: MIT
  * =====================================================================
  */
 
@@ -125,7 +125,7 @@ const CONFIG = Object.freeze({
   growthRate         : parseFloat('0.05'),   // fallback default; tierGrowthRate below is authoritative
 
   // Per-tier overrides — user #5 (per-tier override) + #1 (include BOOM50/CRASH50 fast tier)
-  tierGrowthRate: Object.freeze({ fast: 0.01, slow: 0.02 }), // fast=1% widest barrier (spike-dominant), slow=2% (noise-dominant)
+  tierGrowthRate: Object.freeze({ fast: 0.05, slow: 0.05 }), // fast=1% widest barrier (spike-dominant), slow=2% (noise-dominant)
   tierDefaults: Object.freeze({
     fast: { tickCapFraction: 0.70, takeProfitMultiple: 1.40, growthRate: 0.01 }, // BOOM50/CRASH50
     slow: { tickCapFraction: 0.55, takeProfitMultiple: 1.35, growthRate: 0.02 }, // BOOM/CRASH 500/600/900/1000
@@ -716,7 +716,7 @@ class MarketDataManager extends EventEmitter {
     } finally { this._refreshInFlight = false; }
   }
 
-  // Refresh per-tier growth buckets in one sweep (v3 tier-aware)
+  // Refresh per-tier growth buckets in one sweep (v4 tier-aware)
   async refreshStaysPerTier(assets) {
     if (this._refreshInFlight || !this.client.authorized) return;
     // group by growthRate to avoid duplicate calls
@@ -1407,7 +1407,7 @@ class AccuHoldBot {
       }
       // reached max steps → reset to base (classic martingale cycle)
       logger.warn(`martingale MAX STEPS hit (${this.martingaleStep}/${maxSteps}) on loss — resetting to base stake ${this.baseStake.toFixed(2)}`);
-      telegram.send(`⚠️ <b>AccuHOLD_v3 Martingale Max Steps Reached</b>\nStep ${this.martingaleStep}/${maxSteps} lost. Resetting stake to base <b>${this.baseStake.toFixed(2)} ${this.currencyStr()}</b>.`);
+      telegram.send(`⚠️ <b>AccuHOLD_v4 Martingale Max Steps Reached</b>\nStep ${this.martingaleStep}/${maxSteps} lost. Resetting stake to base <b>${this.baseStake.toFixed(2)} ${this.currencyStr()}</b>.`);
       this.martingaleStep = 0;
       this.currentStake = this.baseStake;
       return { changed: true, reason: 'max-reset' };
@@ -1777,13 +1777,13 @@ class AccuHoldBot {
     if (action === 'pause') {
       this.paused = true;
       logger.info(`TRADING PAUSED at ${this.cfg.pauseStartGmt} GMT until ${this.cfg.pauseEndGmt} GMT`);
-      telegram.send(`⏸️ <b>AccuHOLD_v3 TRADING PAUSED</b>\nPaused from <b>${this.cfg.pauseStartGmt}</b> to <b>${this.cfg.pauseEndGmt}</b> GMT.`);
+      telegram.send(`⏸️ <b>AccuHOLD_v4 TRADING PAUSED</b>\nPaused from <b>${this.cfg.pauseStartGmt}</b> to <b>${this.cfg.pauseEndGmt}</b> GMT.`);
       const end = this._parsePauseTime(this.cfg.pauseEndGmt);
       if (end) this._pauseEndTimer = setTimeout(() => this._onPauseResume('resume'), this._msToTarget(end.h, end.min));
     } else {
       this.paused = false;
       logger.info(`TRADING RESUMED at ${this.cfg.pauseEndGmt} GMT`);
-      telegram.send(`▶️ <b>AccuHOLD_v3 TRADING RESUMED</b>\nOverall: ${money(this.overallProfit, this.currencyStr())}`);
+      telegram.send(`▶️ <b>AccuHOLD_v4 TRADING RESUMED</b>\nOverall: ${money(this.overallProfit, this.currencyStr())}`);
       const start = this._parsePauseTime(this.cfg.pauseStartGmt);
       if (start) this._pauseStartTimer = setTimeout(() => this._onPauseResume('pause'), this._msToTarget(start.h, start.min));
     }
@@ -1804,7 +1804,7 @@ class AccuHoldBot {
       // this.currentStake = this.baseStake;
       this._dailyStopUntil = 0;
       this._dailyStopNotified = false;
-      telegram.send(`📅 <b>AccuHOLD_v3 New trade day: ${today}</b>\nOverall: ${money(this.overallProfit, this.currencyStr())}\n♻️ Martingale: ${this._martingaleLabel()} · Stake ${this.currentStake.toFixed(2)} ${this.currencyStr()}`);
+      telegram.send(`📅 <b>AccuHOLD_v4 New trade day: ${today}</b>\nOverall: ${money(this.overallProfit, this.currencyStr())}\n♻️ Martingale: ${this._martingaleLabel()} · Stake ${this.currentStake.toFixed(2)} ${this.currencyStr()}`);
     }
     this._lastDayISODate = today;
   }
@@ -1835,7 +1835,7 @@ class AccuHoldBot {
         `<b>Overall:</b> ${money(this.overallProfit, this.currencyStr())}`,
       );
     } else {
-      telegram.send(`🔄 <b>AccuHOLD_v3 Reconnected</b> (${info.loginid}, ${info.isVirtual ? 'DEMO' : 'REAL'})\n${martingaleLine.trim()}\n${exploratoryLine.trim()}${lossLine.trim()}`);
+      telegram.send(`🔄 <b>AccuHOLD_v4 Reconnected</b> (${info.loginid}, ${info.isVirtual ? 'DEMO' : 'REAL'})\n${martingaleLine.trim()}\n${exploratoryLine.trim()}${lossLine.trim()}`);
     }
 
     // Fetch live ticks_stayed_in per-tier buckets BEFORE entry
@@ -1911,7 +1911,7 @@ class AccuHoldBot {
     this._clearStuckSweep();
     this._clearPauseTimers();
     if (this._exploratoryT) { clearInterval(this._exploratoryT); this._exploratoryT=null; }
-    telegram.send(`⚠️ <b>AccuHOLD_v3 Connection lost</b> — reconnecting…`);
+    telegram.send(`⚠️ <b>AccuHOLD_v4 Connection lost</b> — reconnecting…`);
     if (this._analysisT) { clearInterval(this._analysisT); this._analysisT = null; }
     if (this._proposalT) { clearInterval(this._proposalT); this._proposalT = null; }
     // keep tick subs map but clear WS subs; will re-sub on auth
@@ -1934,7 +1934,7 @@ class AccuHoldBot {
     const exploratoryNote = h ? `🧪 <b>Exploratory:</b> ${h.calibrationStatus} ${h.elevated?.length?`hazard lift ${(h.elevated[0].lift*100).toFixed(2)}% [${h.elevated[0].lo}-${h.elevated[0].hi}) `:''}${h.postStudy?.anySignificant?`postSpike offset=${h.postStudy.firstSignificantOffset} `:''}ticksSinceSpike at entry ~${h.ticksSinceSpike}\n` : '';
     const tier = getTierForSymbol(t.symbol);
     const msg =
-      `🟢 <b>AccuHOLD_v3 TRADE OPENED</b> <i>v3 exploratory</i>\n\n` +
+      `🟢 <b>AccuHOLD_v4 TRADE OPENED</b> <i>v4 exploratory</i>\n\n` +
       `<b>Contract:</b> #${t.contractId}\n` +
       `<b>Symbol:</b> <code>${t.symbol}</code> <i>(${tier})</i>\n` +
       `<b>Growth Rate:</b> ${(t.growthRate*100).toFixed(2)}% <i>(${tier} tier)</i>\n` +
@@ -1955,7 +1955,7 @@ class AccuHoldBot {
     if (t.status === 'unknown') {
       // Booked as unknown so it cannot corrupt P&L or streaks.
       logger.warn(`trade #${t.contractId} unconfirmable — recorded as 'unknown', excluded from P&L/streaks`);
-      telegram.send(`⚠️ <b>AccuHOLD_v3 UNCONFIRMABLE CONTRACT</b> #${t.contractId} ${t.symbol}\nRecorded as 'unknown' — excluded from P&L and streaks.`);
+      telegram.send(`⚠️ <b>AccuHOLD_v4 UNCONFIRMABLE CONTRACT</b> #${t.contractId} ${t.symbol}\nRecorded as 'unknown' — excluded from P&L and streaks.`);
       this._saveState('after-trade');
       return;
     }
@@ -1975,7 +1975,7 @@ class AccuHoldBot {
       this.manualRestartReason = `${this.consecutiveLosses} consecutive losses (cap ${this.cfg.maxConsecutiveLosses})`;
       logger.error(`RISK HALT: ${this.manualRestartReason} — manual restart required`);
       telegram.send(
-        `⛔ <b>AccuHOLD_v3 RISK HALT</b>\n${this.manualRestartReason}.\n` +
+        `⛔ <b>AccuHOLD_v4 RISK HALT</b>\n${this.manualRestartReason}.\n` +
         `Trading is paused. Restart the bot to clear the halt.`,
       );
     }
@@ -2023,7 +2023,7 @@ class AccuHoldBot {
     const lossBreakdown = `📉 <b>Loss Streak:</b> ${this.consecutiveLosses} · max ${this.stats.maxLossStreak}\n` +
                           `   ${this.stats.lossStreakLine()}\n`;
     const msg =
-      `${emoji} <b>AccuHOLD_v3 TRADE ${label}</b>\n\n` +
+      `${emoji} <b>AccuHOLD_v4 TRADE ${label}</b>\n\n` +
       `<b>Contract:</b> #${t.contractId} · <b>Symbol:</b> <code>${t.symbol}</code>\n` +
       `<b>Growth:</b> ${(t.growthRate*100).toFixed(0)}% · <b>Stake:</b> ${Number(t.stake).toFixed(2)} ${this.currencyStr()}\n` +
       `<b>Sell:</b> ${Number(t.sellPrice ?? 0).toFixed(2)} ${this.currencyStr()}\n` +
@@ -2086,7 +2086,7 @@ class AccuHoldBot {
           this._dailyStopUntil = this._nextUtcMidnight();
           const pl = today.reduce((s, t) => s + (t.profit || 0), 0);
           logger.warn(`daily hard stop: ${today.length} trades / P/L ${pl.toFixed(2)} — paused until next UTC day`);
-          telegram.send(`⛔ <b>AccuHOLD_v3 Daily hard stop</b>\n${today.length} trades, net ${money(pl, this.currencyStr())}.\nPaused until next UTC day.`);
+          telegram.send(`⛔ <b>AccuHOLD_v4 Daily hard stop</b>\n${today.length} trades, net ${money(pl, this.currencyStr())}.\nPaused until next UTC day.`);
         }
         return;
       }
@@ -2207,10 +2207,10 @@ class AccuHoldBot {
       : `♻️ Martingale: OFF\n`;
     const lossInfo = `📉 Loss streak: ${this.consecutiveLosses} · max ${this.stats.maxLossStreak} · ${this.stats.lossStreakLine()}\n`;
     if (!list.length) {
-      telegram.send(`⏰ AccuHOLD_v3 <b>${date} ${pad(hour)}:00</b> — No trades\n${martingaleInfo}${lossInfo}💼 Overall: ${money(this.overallProfit, this.currencyStr())}`);
+      telegram.send(`⏰ AccuHOLD_v4 <b>${date} ${pad(hour)}:00</b> — No trades\n${martingaleInfo}${lossInfo}💼 Overall: ${money(this.overallProfit, this.currencyStr())}`);
       return;
     }
-    let msg = `⏰ AccuHOLD_v3 <b>${date} ${pad(hour)}:00</b>\n\n📊 ${s.count} trades (✅${s.wins} ❌${s.losses})\n📈 WR: ${s.winRate.toFixed(1)}%\n💰 P/L: <b>${money(s.totalProfit, this.currencyStr())}</b>\n💼 Overall: <b>${money(this.overallProfit, this.currencyStr())}</b>\n${martingaleInfo}${lossInfo}\n`;
+    let msg = `⏰ AccuHOLD_v4 <b>${date} ${pad(hour)}:00</b>\n\n📊 ${s.count} trades (✅${s.wins} ❌${s.losses})\n📈 WR: ${s.winRate.toFixed(1)}%\n💰 P/L: <b>${money(s.totalProfit, this.currencyStr())}</b>\n💼 Overall: <b>${money(this.overallProfit, this.currencyStr())}</b>\n${martingaleInfo}${lossInfo}\n`;
     list.slice(-15).forEach((t, i) => {
       const exit = (t.exitReason || '').split(':')[0];
       const mgTag = t.martingaleStep != null && t.martingaleStep > 0 ? ` MG×${Number(t.martingaleMultiplier || 1).toFixed(2)}` : '';
@@ -2226,7 +2226,7 @@ class AccuHoldBot {
     const ds = summary.stats;
     const balStart = this.startBalance ?? 0, balNow = this.lastBalance ?? balStart;
     const balDelta = balNow - balStart;
-    let msg = `🌙 AccuHOLD_v3 <b>DAILY REPORT — ${date}</b>\n\n`;
+    let msg = `🌙 AccuHOLD_v4 <b>DAILY REPORT — ${date}</b>\n\n`;
     if (ds.count) msg += `📊 ${ds.count} trades (✅${ds.wins} ❌${ds.losses}) | WR ${ds.winRate.toFixed(1)}%\n💰 Net: <b>${money(ds.totalProfit, this.currencyStr())}</b> | PF ${ds.profitFactor === Infinity ? '∞' : ds.profitFactor.toFixed(2)}\n`;
     else msg += `No trades.\n`;
     msg += `\n💼 ${balStart.toFixed(2)} → ${balNow.toFixed(2)} (${balDelta >= 0 ? '+' : ''}${balDelta.toFixed(2)})\n`;
@@ -2245,7 +2245,7 @@ class AccuHoldBot {
 
   currencyStr() { return this.client.currency || this.cfg.currency; }
 
-  // ── State persistence (atomic write) — FRESH v3 (user #4) ──
+  // ── State persistence (atomic write) — FRESH v4 (user #4) ──
   _saveState(reason = 'checkpoint') {
     if (!this.cfg.stateSaveOnTrade && reason === 'after-trade') return;
     if (!this.cfg.stateSaveOnShutdown && reason === 'shutdown') return;
@@ -2271,10 +2271,10 @@ class AccuHoldBot {
 
   _loadState() {
     const file = this.cfg.stateFile;
-    if (!fs.existsSync(file)) { logger.info('fresh state (v3) — no prior state file, starting clean per user #4'); return; }
+    if (!fs.existsSync(file)) { logger.info('fresh state (v4) — no prior state file, starting clean per user #4'); return; }
     try {
       const d = JSON.parse(fs.readFileSync(file, 'utf8'));
-      if (d.version && d.version < 3) { logger.info(`ignoring v${d.version} state (fresh v3 start) — archiving old state`); try{ fs.renameSync(file, file+'.v2bak'); }catch(_){} return; }
+      if (d.version && d.version < 4) { logger.info(`ignoring v${d.version} state (fresh v4 start) — archiving old state`); try{ fs.renameSync(file, file+'.v3bak'); }catch(_){} return; }
       if (d.startBalance != null) this.startBalance = d.startBalance;
       if (d.lastBalance != null) this.lastBalance = d.lastBalance;
       if (d.overallProfit != null) this.overallProfit = d.overallProfit;
@@ -2311,7 +2311,7 @@ class AccuHoldBot {
     if (this._exploratoryT) { clearInterval(this._exploratoryT); this._exploratoryT=null; }
     this._unsubscribeTicks().catch(()=>{});
     logger.info(`stopping (${signal})`);
-    telegram.send(`<b>AccuHOLD_v3 Bot stopped</b>\nSignal: ${signal}`);
+    telegram.send(`<b>AccuHOLD_v4 Bot stopped</b>\nSignal: ${signal}`);
     if (this._analysisT) clearInterval(this._analysisT);
     if (this._proposalT) clearInterval(this._proposalT);
     if (this._hourlyT) clearInterval(this._hourlyT);
@@ -2325,7 +2325,7 @@ class AccuHoldBot {
         ? `♻️ Martingale: ${this._martingaleLabel()} · base ${this.baseStake.toFixed(2)} → now ${this.currentStake.toFixed(2)}\n`
         : `♻️ Martingale: OFF\n`;
       const lossLine = `📉 Loss streak: ${this.consecutiveLosses} · max ${this.stats.maxLossStreak} · ${this.stats.lossStreakLine()}\n`;
-      const msg = `🌙 <b>AccuHOLD_v3 SESSION END</b>\n📊 ${s.count} trades (✅${s.wins} ❌${s.losses}) | WR ${s.winRate.toFixed(1)}%\n💰 Net: ${money(s.totalProfit, this.currencyStr())}\n💼 Overall: ${money(this.overallProfit, this.currencyStr())}\n${mgLine}${lossLine}`;
+      const msg = `🌙 <b>AccuHOLD_v4 SESSION END</b>\n📊 ${s.count} trades (✅${s.wins} ❌${s.losses}) | WR ${s.winRate.toFixed(1)}%\n💰 Net: ${money(s.totalProfit, this.currencyStr())}\n💼 Overall: ${money(this.overallProfit, this.currencyStr())}\n${mgLine}${lossLine}`;
       telegram.send(msg);
       this._saveState('shutdown');
       this.client.stop();
@@ -2461,7 +2461,7 @@ async function runSelfTest() {
     test('histogram persists after serialize/load', sm2.lossStreakEvents.x2===2 && sm2.lossStreakEvents.x7===2 && sm2.maxLossStreak===8);
   }
 
-  // 13. v3 tier-aware helpers
+  // 13. v4 tier-aware helpers
   {
     test('tier fast BOOM50', getTierForSymbol('BOOM50')==='fast');
     test('tier fast CRASH50', getTierForSymbol('CRASH50')==='fast');
