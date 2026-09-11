@@ -112,19 +112,19 @@ const CONFIG = Object.freeze({
 
   // ── Trade parameters — tier-aware (per-tier growth + cap/TP) ──
   stake              : parseFloat('1.00'),   // base stake per trade (reset value for martingale)
-  takeProfitMultiple : parseFloat('1.35'),   // fallback (tier overrides below)
-  tickCapFraction    : parseFloat('0.55'),   // fallback (tier overrides below)
-  growthRate         : parseFloat('0.02'),   // fallback default; tierGrowthRate below is authoritative
+  takeProfitMultiple : parseFloat('1.01'),   //1.35 fallback (tier overrides below)
+  tickCapFraction    : parseFloat('0.01'),   //0.55 fallback (tier overrides below)
+  growthRate         : parseFloat('0.01'),   // fallback default; tierGrowthRate below is authoritative
 
   // Per-tier overrides — user #5 (per-tier override) + #1 (include BOOM50/CRASH50 fast tier)
-  tierGrowthRate: Object.freeze({ fast: 0.01, slow: 0.02 }), // fast=1% widest barrier (spike-dominant), slow=2% (noise-dominant)
+  tierGrowthRate: Object.freeze({ fast: 0.01, slow: 0.01 }), // fast=1% widest barrier (spike-dominant), slow=2% (noise-dominant)
   tierDefaults: Object.freeze({
     fast: { tickCapFraction: 0.70, takeProfitMultiple: 1.40, growthRate: 0.01 }, // BOOM50/CRASH50
     slow: { tickCapFraction: 0.55, takeProfitMultiple: 1.35, growthRate: 0.02 }, // BOOM/CRASH 500/600/900/1000
   }),
   symbolTiers: Object.freeze({
     fast: ['BOOM50','CRASH50'],
-    slow: ['BOOM500','BOOM600','BOOM900','BOOM1000','CRASH500','CRASH600','CRASH900','CRASH1000'],
+    slow: ['BOOM500','BOOM600','BOOM900','BOOM1000','CRASH500','CRASH600','CRASH900','CRASH1000, R_10,R_25,R_50,R_75,R_100'],
   }),
 
   // ── Martingale (kept per user #2) ───────────────────────────────
@@ -169,7 +169,7 @@ const CONFIG = Object.freeze({
   proposalRefreshMs: parseInt('60000', 10),   // refresh barrier + ticks_stayed_in cache
 
   // ── Scheduled pause/resume (GMT) ──
-  pauseEnabled : true,
+  pauseEnabled : false,  // true = pause bot between pauseStartGmt and pauseEndGmt
   pauseStartGmt: '23:00',
   pauseEndGmt  : '1:00',
 
