@@ -120,7 +120,7 @@ const CONFIG = Object.freeze({
 
   // ── Trade parameters — tier-aware (per-tier growth + cap/TP) ──
   stake              : parseFloat('1.00'),   // base stake per trade (reset value for martingale)
-  takeProfitMultiple : parseFloat('1.35'),   // fallback (tier overrides below)
+  takeProfitMultiple : parseFloat('1.01'),   // fallback (tier overrides below)
   tickCapFraction    : parseFloat('0.55'),   // fallback (tier overrides below)
   growthRate         : parseFloat('0.02'),   // fallback default; tierGrowthRate below is authoritative
 
@@ -139,17 +139,17 @@ const CONFIG = Object.freeze({
   // On every loss: next stake = base stake × (multiplier ^ step).
   // On win: reset to base stake (step = 0).
   // WARNING: ×3.10 ^8 on negative-expectancy ACCU has high ruin risk.
-  martingaleMultiplier : parseFloat('3.10'), // e.g. 3.10 means stake ×3.10 after each loss
-  martingaleSteps      : parseInt('7', 10),  // max consecutive martingale multiplications (0 = disabled)
+  martingaleMultiplier : parseFloat('2.50'), // e.g. 3.10 means stake ×3.10 after each loss
+  martingaleSteps      : parseInt('9', 10),  // max consecutive martingale multiplications (0 = disabled)
   martingaleMaxStake   : parseFloat('500'),  // cap to bound ruin (null to disable)
 
   // ── Rate-limited entry ──
   perSymbolCooldownMs : parseInt('8000',  10),   // between trades on the same symbol
-  perSymbolEntryGapMs : parseInt('30000', 10),   // min gap between any two new entries (global)
+  perSymbolEntryGapMs : parseInt('100', 10),   // min gap between any two new entries (global)
   maxOpenTrades       : parseInt('1',     10),   // concurrent open contracts across the bot
 
   // ── Risk controls ──
-  maxConsecutiveLosses : parseInt('7', 10),      // pause + require manual restart
+  maxConsecutiveLosses : parseInt('9', 10),      // pause + require manual restart
   dailyMaxLoss        : parseFloat('500'),         // demo-appropriate cap
   dailyMaxTrades      : parseInt('120000', 10),      // daily cap
   stopLossPerContract : parseFloat('0'),         // 0 = disabled (rely on knockout)
@@ -174,7 +174,7 @@ const CONFIG = Object.freeze({
   proposalRefreshMs: parseInt('60000', 10),   // refresh barrier + ticks_stayed_in cache
 
   // ── Scheduled pause/resume (GMT) ──
-  pauseEnabled : true,
+  pauseEnabled : false,  // if true, bot will pause/resume automatically per below
   pauseStartGmt: '23:00',
   pauseEndGmt  : '1:00',
 
