@@ -227,11 +227,17 @@ function getGrowthRateForSymbol(symbol) {
   return CONFIG.growthRate;
 }
 function getTickCapFractionForSymbol(symbol) {
+  const envVal = parseFloat(process.env.TICK_CAP_FRACTION);
+  if (!isNaN(envVal) && envVal > 0) return envVal;
+  if (CONFIG.tickCapFraction != null && CONFIG.tickCapFraction > 0 && CONFIG.tickCapFraction < 0.10) return CONFIG.tickCapFraction;
   const tier = getTierForSymbol(symbol);
   const d = CONFIG.tierDefaults && CONFIG.tierDefaults[tier];
   return d ? d.tickCapFraction : CONFIG.tickCapFraction;
 }
 function getTPForSymbol(symbol) {
+  const envVal = parseFloat(process.env.TAKE_PROFIT_MULTIPLE);
+  if (!isNaN(envVal) && envVal > 1) return envVal;
+  if (CONFIG.takeProfitMultiple != null && CONFIG.takeProfitMultiple > 1 && CONFIG.takeProfitMultiple < 1.10) return CONFIG.takeProfitMultiple;
   const tier = getTierForSymbol(symbol);
   const d = CONFIG.tierDefaults && CONFIG.tierDefaults[tier];
   return d ? d.takeProfitMultiple : CONFIG.takeProfitMultiple;
