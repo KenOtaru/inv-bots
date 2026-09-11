@@ -131,8 +131,8 @@ const CONFIG = Object.freeze({
   // On every loss: next stake = base stake × (multiplier ^ step).
   // On win: reset to base stake (step = 0).
   // WARNING: ×3.10 ^8 on negative-expectancy ACCU has high ruin risk.
-  martingaleMultiplier : parseFloat('3.10'), // e.g. 3.10 means stake ×3.10 after each loss
-  martingaleSteps      : parseInt('7', 10),  // max consecutive martingale multiplications (0 = disabled)
+  martingaleMultiplier : parseFloat('21.00'), // e.g. 3.10 means stake ×3.10 after each loss
+  martingaleSteps      : parseInt('3', 10),  // max consecutive martingale multiplications (0 = disabled)
   martingaleMaxStake   : parseFloat('500'),  // cap to bound ruin (null to disable)
 
   // ── Rate-limited entry ──
@@ -141,13 +141,16 @@ const CONFIG = Object.freeze({
   maxOpenTrades       : parseInt('1',     10),   // concurrent open contracts across the bot
 
   // ── Risk controls ──
-  maxConsecutiveLosses : parseInt('7', 10),      // pause + require manual restart
-  dailyMaxLoss        : parseFloat('500'),         // demo-appropriate cap
+  maxConsecutiveLosses : parseInt('3', 10),      // pause + require manual restart
+  dailyMaxLoss        : parseFloat('400'),         // demo-appropriate cap
   dailyMaxTrades      : parseInt('120000', 10),      // daily cap
   stopLossPerContract : parseFloat('0'),         // 0 = disabled (rely on knockout)
 
   // ── Instruments — 10 symbols (fast + slow) per user #1 ──
-  assets: ('BOOM50,CRASH50')
+  // assets: ('BOOM500,BOOM600,BOOM900,BOOM1000,CRASH500,CRASH600,CRASH900,CRASH1000')
+  //   .split(',').map(s => s.trim()).filter(Boolean),
+
+  assets: ('R_10,R_25,R_50,R_75,R_100')
     .split(',').map(s => s.trim()).filter(Boolean),
 
   // ── Telegram (existing hardcoded values) ──
@@ -187,7 +190,7 @@ const CONFIG = Object.freeze({
     mode: 'hazard',            // 'hazard' | 'postSpike' | 'both'
     logOnly: false,          // false = actually gates entry (user #3)
     hazardBuckets: [0,0.25,0.5,0.75,1,1.25,1.5,1.75,2,2.5,3,4,6,Infinity],
-    hazardMinLift: 0.60,     //0.01 min emp-theo lift to count as elevated
+    hazardMinLift: 0.01,     //0.01 min emp-theo lift to count as elevated
     hazardP: 0.05,           // single-test p threshold for relaxed signal
     postSpikeHorizon: 200,
     postSpikeMaxControl: 8000,
@@ -203,9 +206,9 @@ const CONFIG = Object.freeze({
   }),
 
   // ── Logging / state — FRESH per user #4 ──
-  logFile           : 'accuHOLD3_03.log',
+  logFile           : 'accuHOLD3a_01.log',
   logLevel          : 'INFO',
-  stateFile         : 'accuHOLD3_state_03.json', // fresh start, v2 state ignored
+  stateFile         : 'accuHOLD3a_state_01.json', // fresh start, v2 state ignored
   stateSaveOnTrade  : true,
   stateSaveOnShutdown: true,
 });
