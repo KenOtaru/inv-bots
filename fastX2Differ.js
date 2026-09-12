@@ -70,8 +70,8 @@ const CONFIG = Object.freeze({
   tradeWatchdogMs: intEnv('WATCHDOG_MS', 20000),
 
   // ── Martingale (optional) ────────────────────────────────────────
-  martingaleEnabled:  boolEnv('MARTINGALE_ENABLED', true),
-  martingaleStep:     numEnv('MARTINGALE_STEP', 2.1),           // multiplier per loss, e.g. 2.1
+  martingaleEnabled:  boolEnv('MARTINGALE_ENABLED', false),
+  martingaleStep:     numEnv('MARTINGALE_STEP', 11.0),           // multiplier per loss, e.g. 2.1
   martingaleFilter:   intEnv('MARTINGALE_FILTER', 0),           // losses before multiplier starts (0=immediate, 1=after 1 loss, 2=after 2 losses…)
   martingaleMaxSteps: intEnv('MARTINGALE_MAX_STEPS', 7),        // cap exponent on the *scaled* steps (0 = uncapped)
   martingaleMaxStake: numEnv('MARTINGALE_MAX_STAKE', 150),      // hard cap (also limited by maxStake)
@@ -562,9 +562,9 @@ class TradingBot{
     const e=this.stats.lossStreakEvents;
     const total = this.stats.wins + this.stats.losses + this.stats.unknowns;
     const wr = this.stats.winRate().toFixed(1);
-    const tradesLine = `📊 Trades: ${total} (✅${this.stats.wins} ❌${this.stats.losses}${this.stats.unknowns?` ❓${this.stats.unknowns}`:''}) | WR ${wr}%`;
-    const streakLine=`❌ Losses: x2=${e.x2} x3=${e.x3} x4=${e.x4} x5=${e.x5} x6=${e.x6} x7=${e.x7} (Max: ${this.stats.maxLossStreak})`;
-    const mgLine=this.cfg.martingaleEnabled ? `🧮 Martingale next: ${this._getStake().toFixed(2)} (step ${this.cfg.martingaleStep} filter ${this.cfg.martingaleFilter})` : '';
+    const tradesLine = `📊 Trades: ${total} (W:${this.stats.wins} L:${this.stats.losses}${this.stats.unknowns?` ❓${this.stats.unknowns}`:''}) | WR ${wr}%`;
+    const streakLine=`x2=${e.x2} x3=${e.x3} x4=${e.x4} x5=${e.x5} x6=${e.x6} x7=${e.x7} (Max: ${this.stats.maxLossStreak})`;
+    const mgLine=this.cfg.martingaleEnabled ? `🧮 Martingale: ${this._getStake().toFixed(2)} (mul: ${this.cfg.martingaleStep} filter: ${this.cfg.martingaleFilter})` : '';
     telegram.send(
       `${won?'✅ WIN':'❌ LOSS'} <b>#${t.contractId}</b> ${t.symbol} differs ${t.digit} | ${money(profit,this.currency())}\n`+
       `${tradesLine}\n`+
