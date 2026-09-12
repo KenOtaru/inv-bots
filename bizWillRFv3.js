@@ -91,8 +91,8 @@ class RestClient {
 // ============================================================
 // FILE PATHS  [RETAINED]
 // ============================================================
-const STATE_FILE = path.join(__dirname, 'bizWillRFv3_01-state.json');
-const HISTORY_FILE = path.join(__dirname, 'bizWillRFv3_01-history.json');
+const STATE_FILE = path.join(__dirname, 'bizWillRFv3_02-state.json');
+const HISTORY_FILE = path.join(__dirname, 'bizWillRFv3_02-history.json');
 const STATE_SAVE_INTERVAL = 5000;  // ms
 
 // ============================================================
@@ -197,7 +197,7 @@ const CONFIG = {
         'stpRNG2',
         'stpRNG3',
         'stpRNG4',
-        'stpRNG5'
+        // 'stpRNG5'
     ],
 
     // ── Misc ──────────────────────────────────────────────────
