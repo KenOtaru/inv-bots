@@ -80,8 +80,8 @@ const CONFIG = Object.freeze({
   dailyMaxProfit: numEnv('DAILY_MAX_PROFIT', 0),   // 0 = off
   dailyMaxTrades: intEnv('DAILY_MAX_TRADES', 0),   // 0 = off
 
-  stateFile: strEnv('STATE_FILE', 'simpleX2Differ_state_01.json'),
-  logFile:   strEnv('LOG_FILE',   'simpleX2Differ_bot_01.log'),
+  stateFile: strEnv('STATE_FILE', 'simpleX2Differ_state_02.json'),
+  logFile:   strEnv('LOG_FILE',   'simpleX2Differ_bot_02.log'),
   logLevel:  strEnv('LOG_LEVEL',  'INFO').toUpperCase(),
 
   telegram: {
