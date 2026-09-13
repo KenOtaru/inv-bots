@@ -85,6 +85,10 @@ const CONFIG = Object.freeze({
   eodTimeGmt: strEnv('EOD_TIME_GMT', '00:00'), // report date = previous UTC day when 00:00
   eodSendDelaySeconds: intEnv('EOD_SEND_DELAY_S', 10),
 
+  // ── Per-trade telegram notifications (user-toggleable) ────────────
+  notifyTradeOpen: boolEnv('NOTIFY_TRADE_OPEN', true),     // false = silent on open (still logs)
+  notifyTradeResult: boolEnv('NOTIFY_TRADE_RESULT', true), // false = silent on result (still logs + saves)
+
   stateFile: strEnv('STATE_FILE', 'simpleX2Differ_state_001.json'),
   logFile:   strEnv('LOG_FILE',   'simpleX2Differ_bot_001.log'),
   logLevel:  strEnv('LOG_LEVEL',  'INFO').toUpperCase(),
@@ -517,6 +521,7 @@ class TradingBot{
     logger.info('===== Digit Differ FAST bot starting =====');
     logger.info(`asset=${this.cfg.asset} stake=${this.cfg.stake} duration=${this.cfg.durationTicks}t cooldown=${this.cfg.tradeCooldownMs}ms`);
     logger.info(`martingale=${this._martingaleLabel()} | streak x2..x7 tracking ON`);
+    logger.info(`notify: tradeOpen=${this.cfg.notifyTradeOpen?'ON':'OFF'} tradeResult=${this.cfg.notifyTradeResult?'ON':'OFF'} hourly=${this.cfg.hourlySummary?'ON':'OFF'} eod=${this.cfg.eodTimeGmt}`);
     if(!this.cfg.apiToken){ logger.error('API token missing'); process.exit(1); }
     this._loadState();
     this.client.on('authorized',i=>this._onAuth(i));
@@ -557,6 +562,7 @@ class TradingBot{
       `${st}\n`+
       `${wrLine}\n`+
       `💼 Overall: ${money(this.stats.overallProfit,this.currency())}\n`+
+      `🔔 Notify: open ${this.cfg.notifyTradeOpen?'ON':'OFF'} | result ${this.cfg.notifyTradeResult?'ON':'OFF'} | hourly ${this.cfg.hourlySummary?'ON':'OFF'}\n`+
       `🕒 Trade day clock: <b>GMT/UTC</b> | EOD: ${this.cfg.eodTimeGmt} GMT\n`+
       `🕒 ${utcTs()}`
     );
@@ -669,6 +675,11 @@ class TradingBot{
 
   _onOpen(t){
     this._startWatchdog(t.contractId);
+    logger.info(`OPEN #${t.contractId} ${t.symbol} differs ${t.digit} stake=${t.stake.toFixed(2)} payout=${t.payout.toFixed(2)}`);
+    if(!this.cfg.notifyTradeOpen){
+      logger.debug('trade-open telegram suppressed (NOTIFY_TRADE_OPEN=false)');
+      return;
+    }
     const mgInfo = this.cfg.martingaleEnabled ? ` | MG x${this.stats.currentLossStreak}` : '';
     telegram.send(
       `🟢 <b>Fast x2Differ TRADE OPEN</b> #${t.contractId} <code>${t.symbol}</code> differs <b>${t.digit}</b>${mgInfo}\n`+
@@ -697,6 +708,12 @@ class TradingBot{
     const tradesLine = `📊 Trades: ${total} (W:${this.stats.wins} L:${this.stats.losses}${this.stats.unknowns?` ❓${this.stats.unknowns}`:''}) | WR ${wr}%`;
     const streakLine=`x2=${e.x2} x3=${e.x3} x4=${e.x4} x5=${e.x5} x6=${e.x6} x7=${e.x7} (Max: ${this.stats.maxLossStreak})`;
     const mgLine=this.cfg.martingaleEnabled ? `🧮 Martingale: ${this._getStake().toFixed(2)} (mul: ${this.cfg.martingaleStep} filter: ${this.cfg.martingaleFilter})` : '';
+    logger.info(`${won?'WIN':'LOSS'} #${t.contractId} P/L=${profit.toFixed(2)} | ${tradesLine} | ${streakLine} | overall=${this.stats.overallProfit.toFixed(2)}`);
+    if(!this.cfg.notifyTradeResult){
+      logger.debug('trade-result telegram suppressed (NOTIFY_TRADE_RESULT=false)');
+      this._save('after-trade');
+      return;
+    }
     telegram.send(
       `${won?'✅ WIN':'❌ LOSS'} <b>#${t.contractId}</b> ${t.symbol} differs ${t.digit} | ${money(profit,this.currency())}\n`+
       `${tradesLine}\n`+
@@ -705,7 +722,6 @@ class TradingBot{
       `${mgLine}\n`+
       `🕒 ${utcTs()}`
     );
-    logger.info(`${won?'WIN':'LOSS'} #${t.contractId} P/L=${profit.toFixed(2)} | ${tradesLine} | ${streakLine} | overall=${this.stats.overallProfit.toFixed(2)}`);
     this._save('after-trade');
   }
 
@@ -872,6 +888,7 @@ async function main(){
   console.log(CONFIG.telegram.enabled?'✅ Telegram: ON':'ℹ️ Telegram: OFF');
   console.log(`   asset=${CONFIG.asset} stake=${CONFIG.stake} duration=${CONFIG.durationTicks}t cooldown=${CONFIG.tradeCooldownMs}ms`);
   console.log(`   martingale=${CONFIG.martingaleEnabled ? `ON step=${CONFIG.martingaleStep} filter=${CONFIG.martingaleFilter} maxSteps=${CONFIG.martingaleMaxSteps} cap=${CONFIG.martingaleMaxStake}` : 'OFF'}`);
+  console.log(`   notify: tradeOpen=${CONFIG.notifyTradeOpen?'ON':'OFF'} tradeResult=${CONFIG.notifyTradeResult?'ON':'OFF'} hourly=${CONFIG.hourlySummary?'ON':'OFF'}`);
   const bot=new TradingBot(); await bot.start();
 }
 main().catch(e=>{ console.error('fatal:',e); process.exit(1); });
