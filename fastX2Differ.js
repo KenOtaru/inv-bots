@@ -80,6 +80,11 @@ const CONFIG = Object.freeze({
   dailyMaxProfit: numEnv('DAILY_MAX_PROFIT', 0),   // 0 = off
   dailyMaxTrades: intEnv('DAILY_MAX_TRADES', 0),   // 0 = off
 
+  // ── Hourly / EOD summaries (GMT, same pattern as newDifferX2.js) ───
+  hourlySummary: boolEnv('HOURLY_SUMMARY', true),
+  eodTimeGmt: strEnv('EOD_TIME_GMT', '00:00'), // report date = previous UTC day when 00:00
+  eodSendDelaySeconds: intEnv('EOD_SEND_DELAY_S', 10),
+
   stateFile: strEnv('STATE_FILE', 'simpleX2Differ_state_05.json'),
   logFile:   strEnv('LOG_FILE',   'simpleX2Differ_bot_05.log'),
   logLevel:  strEnv('LOG_LEVEL',  'INFO').toUpperCase(),
@@ -112,6 +117,9 @@ function log(lv,msg,...r){
 const logger={ error:(m,...a)=>log('ERROR',m,...a), warn:(m,...a)=>log('WARN',m,...a), info:(m,...a)=>log('INFO',m,...a), debug:(m,...a)=>log('DEBUG',m,...a) };
 function money(n,c=CONFIG.currency){ const x=Number(n||0); return `${x>=0?'+':''}${x.toFixed(2)} ${c}`; }
 function htmlEscape(s){ return String(s).replace(/[&<>]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[ch])); }
+function utcDateStr(d = new Date()) { return d.toISOString().slice(0, 10); }
+function previousUtcDateStr(d = new Date()) { return new Date(d.getTime() - 86_400_000).toISOString().slice(0, 10); }
+function utcHour(d = new Date()) { return d.getUTCHours(); }
 
 // ── 4. TELEGRAM ───────────────────────────────────────────────────────
 class TelegramNotifier extends EventEmitter{
@@ -341,17 +349,22 @@ class TradeExecutor extends EventEmitter{
   count(){ return this.open.size; }
 }
 
-// ── 8. STATS (minimal + consecutive-loss tracking x2..x7 + WR) ──────
+// ── 8. STATS (consecutive-loss x2..x7 + WR + hourly/EOD queries) ────
+//    Pattern from newDifferX2.js: status 'won'|'lost'|'unknown'.
+//    'unknown' is audit-only — never counted in WR/streaks, never fabricated.
 class StatisticsManager{
   constructor(saved=null){
     this.trades=[]; this.overallProfit=0; this.todayCount=0; this._todayStr=null;
     this.wins=0; this.losses=0; this.unknowns=0;
     this.currentLossStreak=0; this.maxLossStreak=0;
     this.lossStreakEvents={ x2:0, x3:0, x4:0, x5:0, x6:0, x7:0 };
+    this.dailySummaries={}; // date -> stats snapshot (for EOD history)
+    this.eodSentDates=[];
     if(saved) this.load(saved);
   }
   load(s){
     if(Array.isArray(s.trades)) this.trades=s.trades;
+    if(s.dailySummaries && typeof s.dailySummaries === 'object') this.dailySummaries=s.dailySummaries;
     this.overallProfit=Number(s.overallProfit||0);
     // recover wins/losses if missing (backwards compat: derive from trades)
     if(Number.isFinite(s.wins) && Number.isFinite(s.losses)){
@@ -370,26 +383,34 @@ class StatisticsManager{
       x6:Number(s.lossStreakEvents?.x6||0),
       x7:Number(s.lossStreakEvents?.x7||0),
     };
+    this.eodSentDates=Array.isArray(s.eodSentDates)?s.eodSentDates:[];
   }
   serialize(){
     return {
       trades:this.trades.slice(-3000),
+      dailySummaries:this.dailySummaries,
       overallProfit:this.overallProfit,
       wins:this.wins, losses:this.losses, unknowns:this.unknowns,
       currentLossStreak:this.currentLossStreak,
       maxLossStreak:this.maxLossStreak,
       lossStreakEvents:{ ...this.lossStreakEvents },
+      eodSentDates:this.eodSentDates.slice(-400),
     };
   }
   winRate(){
     const decided=this.wins+this.losses;
     return decided ? (this.wins/decided*100) : 0;
   }
+  _stamp(t){
+    const tsMs=Number(t.sellTime||t.buyTime||Date.now()/1000)*1000;
+    const d=new Date(tsMs);
+    return { timestamp:tsMs, date:utcDateStr(d), hour:utcHour(d) };
+  }
   record(t){
-    const d=new Date((t.sellTime||t.buyTime||Date.now()/1000)*1000); const date=d.toISOString().slice(0,10);
-    if(this._todayStr!==date){ this._todayStr=date; this.todayCount=0; }
+    const stamp=this._stamp(t);
+    if(this._todayStr!==stamp.date){ this._todayStr=stamp.date; this.todayCount=0; }
     this.todayCount++;
-    const rec={...t,date,timestamp:Date.now()};
+    const rec={...t,date:stamp.date,hour:stamp.hour,timestamp:stamp.timestamp};
     this.trades.push(rec); this.overallProfit+=Number(rec.profit||0);
     if(t.status==='won') this.wins+=1;
     else if(t.status==='lost') this.losses+=1;
@@ -406,8 +427,48 @@ class StatisticsManager{
       if(this.currentLossStreak===7) this.lossStreakEvents.x7+=1;
     } else if(t.status==='won'){
       this.currentLossStreak=0;
-    } // 'unknown' does not affect streak
+    } // 'unknown' does not affect streak / WR
     return rec;
+  }
+  // ── Hourly / daily queries (same shape as newDifferX2.js) ──────────
+  tradesForDate(date){ return this.trades.filter(t=>t.date===date); }
+  tradesForHour(date,hour){ return this.trades.filter(t=>t.date===date && t.hour===hour); }
+  todayTrades(date=utcDateStr()){ return this.tradesForDate(date); }
+  stats(list){
+    const wins=list.filter(t=>t.status==='won');
+    const losses=list.filter(t=>t.status==='lost');
+    const unknown=list.filter(t=>t.status==='unknown');
+    const total=list.reduce((s,t)=>s+Number(t.profit||0),0);
+    const grossWin=wins.reduce((s,t)=>s+Number(t.profit||0),0);
+    const grossLoss=Math.abs(losses.reduce((s,t)=>s+Number(t.profit||0),0));
+    const stake=list.reduce((s,t)=>s+Number(t.stake||0),0);
+    const maxLossStreak=(()=>{ let cur=0,max=0; for(const t of list){ if(t.status==='lost'){cur+=1;max=Math.max(max,cur);} else if(t.status==='won') cur=0; } return max; })();
+    const decided=wins.length+losses.length;
+    return {
+      count:list.length, decided,
+      wins:wins.length, losses:losses.length, unknown:unknown.length,
+      winRate:decided?wins.length/decided*100:0,
+      grossWin, grossLoss, totalProfit:total, netPL:total,
+      profitFactor:grossLoss>0?grossWin/grossLoss:(grossWin>0?Infinity:0),
+      avgProfit:decided?total/decided:0,
+      stake, maxLossStreak,
+    };
+  }
+  summaryForDate(date){ const list=this.tradesForDate(date); return { date, trades:list, stats:this.stats(list) }; }
+  archiveDate(date){ const summary=this.summaryForDate(date); this.dailySummaries[date]=summary.stats; return summary; }
+  markEodSent(date){ if(!this.eodSentDates.includes(date)) this.eodSentDates.push(date); this.eodSentDates=this.eodSentDates.slice(-400); }
+  isEodSent(date){ return this.eodSentDates.includes(date); }
+  allDailyRows(includeDate=null){
+    const rows=[]; const dates=new Set(Object.keys(this.dailySummaries));
+    for(const t of this.trades) dates.add(t.date);
+    if(includeDate) dates.add(includeDate);
+    [...dates].sort().forEach(date=>{
+      let s=this.dailySummaries[date];
+      const live=this.tradesForDate(date);
+      if(live.length) s=this.stats(live);
+      if(s && s.count>0) rows.push({ date, stats:s });
+    });
+    return rows;
   }
 }
 
@@ -423,6 +484,8 @@ class TradingBot{
     this._buying=false; this.lastTradeAt=0; this.stopped=false;
     this._watchdog=null; this._watchdogPoll=null;
     this._dayStartStr=null; this._dayStartBal=null; this._todayPL=0; this._todayTrades=0;
+    // ── Hourly / EOD scheduler timers (GMT, same as newDifferX2.js) ──
+    this._hourlyBoot=null; this._hourlyT=null; this._eodBoot=null;
   }
 
   // ── Martingale stake: base * step^effectiveLosses, capped ─────────
@@ -465,6 +528,7 @@ class TradingBot{
     process.on('uncaughtException',e=>{ logger.error('uncaught:',e); this._save('uncaught'); });
     process.on('unhandledRejection',e=>{ logger.error('unhandled:',e); this._save('unhandled'); });
     this.client.connect();
+    this._scheduleSummaries();
   }
 
   async _onAuth(info){
@@ -474,6 +538,9 @@ class TradingBot{
     this._dayStartBal=this.lastBalance;
     this._todayPL=0; this._todayTrades=0;
     logger.info(`start balance ${this.startBalance} ${this.currency()}`);
+    // Reconcile any contracts left open across a disconnect BEFORE resuming,
+    // so maxOpenTrades and P&L stay accurate (pattern from newDifferX2.js).
+    await this._reconcileOpenContracts();
     await this.market.loadSymbols();
     const mg = this.cfg.martingaleEnabled ? `🧮 Martingale: <b>ON</b> step ${this.cfg.martingaleStep} filter ${this.cfg.martingaleFilter} (maxSteps ${this.cfg.martingaleMaxSteps}, cap ${this.cfg.martingaleMaxStake})` : `🧮 Martingale: <b>OFF</b>`;
     const st = `❌ Streak: cur ${this.stats.currentLossStreak} | max ${this.stats.maxLossStreak} | x2=${this.stats.lossStreakEvents.x2} x3=${this.stats.lossStreakEvents.x3} x4=${this.stats.lossStreakEvents.x4} x5=${this.stats.lossStreakEvents.x5} x6=${this.stats.lossStreakEvents.x6} x7=${this.stats.lossStreakEvents.x7}`;
@@ -490,11 +557,69 @@ class TradingBot{
       `${st}\n`+
       `${wrLine}\n`+
       `💼 Overall: ${money(this.stats.overallProfit,this.currency())}\n`+
+      `🕒 Trade day clock: <b>GMT/UTC</b> | EOD: ${this.cfg.eodTimeGmt} GMT\n`+
       `🕒 ${utcTs()}`
     );
     await this.market.subscribe(CONFIG.asset);
   }
-  _onDisc(code,reason,was){ telegram.send(`⚠️ <b>FAST x2Differ disconnected</b> code=${code} wasAuth=${was?'yes':'no'} — reconnecting…`); }
+  _onDisc(code,reason,was){
+    telegram.send(`⚠️ <b>FAST x2Differ disconnected</b> code=${code} wasAuth=${was?'yes':'no'} — reconnecting…`);
+    // NOTE: deliberately do NOT clear exec.open here. Any contract open when
+    // the socket drops is reconciled on reconnect via _reconcileOpenContracts();
+    // clearing the map would orphan the P&L and choke entry (maxOpenTrades).
+  }
+
+  /**
+   * Reconcile tracked open contracts against Deriv after a (re)connect.
+   * Same pattern as newDifferX2.js: settle finished ones via the idempotent
+   * settleFromContract path, re-subscribe to still-open ones, and record an
+   * explicit status:'unknown' audit entry for anything unconfirmable —
+   * never a fabricated win/loss.
+   */
+  async _reconcileOpenContracts(){
+    const openIds=[...this.exec.open.keys()];
+    if(!openIds.length) return;
+    logger.info(`reconcile: ${openIds.length} tracked open contract(s) after (re)connect`);
+    for(const cid of openIds){
+      const info=this.exec.open.get(cid);
+      if(!info) continue;
+      try{
+        const res=await this.client._send({ proposal_open_contract:1, contract_id:cid },15000);
+        const c=res?.proposal_open_contract;
+        if(c && (c.status==='won'||c.status==='lost')){
+          const finished=this.exec.settleFromContract(info,c);
+          if(finished) logger.info(`reconcile: settled #${cid} → ${c.status} profit=${finished.profit}`);
+          continue;
+        }
+        if(c){
+          // Still open → re-subscribe to its settlement stream.
+          const subId=await this.client.subscribe({ proposal_open_contract:1, contract_id:cid },msg=>this.exec._onUpdate(msg,info)).catch(()=>null);
+          if(subId){ info.subId=subId; logger.info(`reconcile: re-subscribed #${cid}`); }
+          continue;
+        }
+        // No detail for this id — check the account-wide open list.
+        const listRes=await this.client._send({ proposal_open_contract:1 },15000).catch(()=>null);
+        const listed=(listRes?.proposal_open_contracts||[]).some(x=>Number(x.contract_id)===Number(cid));
+        if(listed){
+          const subId=await this.client.subscribe({ proposal_open_contract:1, contract_id:cid },msg=>this.exec._onUpdate(msg,info)).catch(()=>null);
+          if(subId) info.subId=subId;
+          continue;
+        }
+        logger.error(`reconcile: #${cid} unconfirmed after reconnect — recording UNKNOWN (no fabricated P&L)`);
+        this.stats.record({ ...info, contractId:cid, status:'unknown', profit:0, sellTime:Date.now()/1000, _unconfirmed:true });
+        this.exec.open.delete(cid);
+        telegram.send(
+          `⚠️ <b>FAST x2Differ UNCONFIRMED CONTRACT</b>\n\n` +
+          `Contract <code>#${cid}</code> (${info.symbol}) could not be confirmed after reconnect.\n` +
+          `Recorded as <b>UNKNOWN</b> — no P&L fabricated. Balance stays authoritative server-side.\n\n` +
+          `🕒 ${utcTs()}`
+        );
+      }catch(e){
+        logger.warn(`reconcile #${cid}: ${e.message}`);
+      }
+    }
+    this._save('post-reconcile');
+  }
 
   // ── Hot path: called on every tick ──────────────────────────────────
   async _onTick(symbol,tick){
@@ -552,6 +677,13 @@ class TradingBot{
     );
   }
   _onResult(t){
+    if(t.status==='unknown'){
+      // Already recorded as UNKNOWN by reconcile/watchdog — never fabricate
+      // a win/loss, never touch streaks/WR/balance (same as newDifferX2.js).
+      logger.error(`UNKNOWN settlement for #${t.contractId} — excluded from WR/streaks`);
+      this._save('unknown-trade');
+      return;
+    }
     const rec=this.stats.record(t);
     const profit=Number(t.profit||0);
     if(t.balanceAfter!=null) this.lastBalance=Number(t.balanceAfter)+profit+Number(t.stake||0);
@@ -577,28 +709,159 @@ class TradingBot{
     this._save('after-trade');
   }
 
-  // ── Watchdog (poll if settlement subscription silent) ─────────────────
+  // ── Trade watchdog (same contract as newDifferX2.js) ────────────────
+  // A 1-tick DIGITDIFF settles within seconds. If a contract is still open
+  // at tradeWatchdogMs we poll it directly. We NEVER fabricate a win/loss:
+  // after 3 empty polls we record an explicit 'unknown' and let the
+  // (authoritative) server balance absorb the rest. Unknowns are excluded
+  // from WR/streaks by StatisticsManager.record().
   _startWatchdog(cid){ this._clearWatchdog(); this._watchdog=setTimeout(()=>this._poll(cid), this.cfg.tradeWatchdogMs); }
   _clearWatchdog(){ if(this._watchdog) clearTimeout(this._watchdog); if(this._watchdogPoll) clearTimeout(this._watchdogPoll); this._watchdog=null; this._watchdogPoll=null; }
   async _poll(cid){
     this._clearWatchdog();
     const open=[...this.exec.open.values()]; const t=open.find(x=>Number(x.contractId)===Number(cid))||open[0]; if(!t) return;
     t._polls=(t._polls||0)+1;
-    logger.warn(`watchdog #${t.contractId} open ${this.cfg.tradeWatchdogMs/1000}s poll #${t._polls}`);
-    if(!this.client.authorized||!this.client.connected){ logger.warn('watchdog: offline, defer to reconnect'); return; }
+    logger.warn(`WATCHDOG FIRED — #${t.contractId} ${t.symbol} open for ${(this.cfg.tradeWatchdogMs/1000).toFixed(0)}s without settlement (poll #${t._polls})`);
+    if(!this.client.authorized||!this.client.connected){
+      logger.warn(`watchdog: connection down — deferring #${t.contractId} to reconnect reconciliation`);
+      return;
+    }
     try{
       const res=await this.client._send({proposal_open_contract:1,contract_id:t.contractId},15000);
       const c=res?.proposal_open_contract;
-      if(c){ const fin=this.exec.settleFromContract(t,c); if(fin){ logger.info(`watchdog settled #${fin.contractId} ${fin.status} ${fin.profit}`); return; } }
+      if(c){
+        const fin=this.exec.settleFromContract(t,c);
+        if(fin){ logger.info(`watchdog: settled #${fin.contractId} → ${fin.status} profit=${fin.profit}`); return; }
+      }
+      logger.warn(`watchdog: #${t.contractId} still open after poll`);
     }catch(e){ logger.warn(`watchdog poll #${t.contractId}: ${e.message}`); }
-    if(t._polls>=3){ logger.error(`watchdog unresolved #${t.contractId} → UNKNOWN`); this.stats.record({...t,status:'unknown',profit:0,sellTime:Date.now()/1000}); this.exec.open.delete(t.contractId); this._save('unknown'); return; }
+    if(t._polls>=3){
+      logger.error(`watchdog: #${t.contractId} unresolved after 3 polls — recording UNKNOWN (no fabricated P&L)`);
+      this.stats.record({ ...t, contractId:t.contractId, status:'unknown', profit:0, sellTime:Date.now()/1000, _unconfirmed:true });
+      this.exec.open.delete(t.contractId);
+      telegram.send(
+        `⚠️ <b>FAST x2Differ UNRESOLVED CONTRACT</b>\n\n` +
+        `Contract <code>#${t.contractId}</code> (${t.symbol}) never returned a settlement after repeated polls.\n` +
+        `Recorded as <b>UNKNOWN</b> — no P&L was fabricated. The account balance remains authoritative server-side.\n\n` +
+        `🕒 ${utcTs()}`
+      );
+      this._save('unresolved-trade');
+      return;
+    }
     this._watchdogPoll=setTimeout(()=>this._poll(t.contractId),15000);
+  }
+
+  // ── Hourly / EOD summaries (GMT, same scheduling as newDifferX2.js) ─
+  _scheduleSummaries(){
+    if(this.cfg.hourlySummary){
+      const now=new Date();
+      const msToNextHour=((59-now.getUTCMinutes())*60_000)+((60-now.getUTCSeconds())*1000)+50;
+      this._hourlyBoot=setTimeout(()=>{
+        this._sendHourly();
+        this._hourlyT=setInterval(()=>this._sendHourly(),3600_000);
+      },Math.max(1000,msToNextHour));
+    }
+    const scheduleNextEod=()=>{
+      const delay=this._msToNextEod();
+      this._eodBoot=setTimeout(()=>{ this._sendEod('scheduled'); scheduleNextEod(); },delay);
+      logger.info(`next GMT EOD report in ${(delay/3600000).toFixed(2)}h`);
+    };
+    scheduleNextEod();
+  }
+  _parseEodTime(){
+    const m=String(this.cfg.eodTimeGmt||'00:00').match(/^(\d{1,2}):(\d{2})$/);
+    if(!m) return { h:0, min:0 };
+    return { h:Math.max(0,Math.min(23,Number(m[1]))), min:Math.max(0,Math.min(59,Number(m[2]))) };
+  }
+  _msToNextEod(now=new Date()){
+    const { h, min }=this._parseEodTime();
+    const target=new Date(Date.UTC(now.getUTCFullYear(),now.getUTCMonth(),now.getUTCDate(),h,min,this.cfg.eodSendDelaySeconds,0));
+    if(target<=now) target.setUTCDate(target.getUTCDate()+1);
+    return target.getTime()-now.getTime();
+  }
+  _eodReportDate(now=new Date()){
+    const { h, min }=this._parseEodTime();
+    if(h===0 && min===0) return previousUtcDateStr(now);
+    return utcDateStr(now);
+  }
+  _streakLine(){
+    const e=this.stats.lossStreakEvents;
+    return `❌ Streak cur ${this.stats.currentLossStreak} | max ${this.stats.maxLossStreak} | x2=${e.x2} x3=${e.x3} x4=${e.x4} x5=${e.x5} x6=${e.x6} x7=${e.x7}`;
+  }
+  _sendHourly(){
+    const now=new Date();
+    const prev=new Date(now.getTime()-3600_000);
+    const date=utcDateStr(prev);
+    const hour=utcHour(prev);
+    const list=this.stats.tradesForHour(date,hour);
+    const s=this.stats.stats(list);
+    const wrLine=`📊 Trades: ${this.stats.wins+this.stats.losses+this.stats.unknowns} (✅${this.stats.wins} ❌${this.stats.losses}${this.stats.unknowns?` ❓${this.stats.unknowns}`:''}) | WR ${this.stats.winRate().toFixed(1)}%`;
+    if(!list.length){
+      telegram.send(
+        `⏰ <b>FAST x2Differ Hourly Summary GMT (${date} ${pad(hour)}:00-${pad(hour)}:59)</b>\n\n` +
+        `No trades this hour.\n\n${wrLine}\n💼 Overall Profit: ${money(this.stats.overallProfit,this.currency())}\n${this._streakLine()}`
+      );
+      return;
+    }
+    let msg=`⏰ <b>FAST x2Differ Hourly Summary GMT (${date} ${pad(hour)}:00-${pad(hour)}:59)</b>\n\n` +
+      `📊 Trades: ${s.count} (✅${s.wins} ❌${s.losses}${s.unknown?` ❓${s.unknown}`:''}) | WR ${s.winRate.toFixed(1)}%\n` +
+      `💰 P/L: <b>${money(s.totalProfit,this.currency())}</b>\n` +
+      `💼 Overall Profit: <b>${money(this.stats.overallProfit,this.currency())}</b>\n` +
+      `${wrLine} (lifetime)\n` +
+      `${this._streakLine()}\n\n` +
+      `📋 Detail:\n`;
+    list.slice(-20).forEach((t,i)=>{
+      msg+=`${i+1}. ${t.status==='won'?'✅':t.status==='lost'?'❌':'❓'} #${t.contractId} ${t.symbol} d${t.digit} ${money(t.profit,this.currency())}\n`;
+    });
+    telegram.send(msg);
+  }
+  _sendEod(reason='manual'){
+    const date=this._eodReportDate(new Date());
+    if(this.stats.isEodSent(date) && reason==='scheduled'){
+      logger.info(`EOD ${date} already sent; skipping duplicate`);
+      return;
+    }
+    const summary=this.stats.archiveDate(date);
+    const ds=summary.stats;
+    const e=this.stats.lossStreakEvents;
+    let msg=`🌙 <b>FAST x2Differ END OF TRADE DAY — GMT</b>\n` +
+      `📅 Trade day ended: <b>${date}</b>\n\n` +
+      `<b>── Current Day Stats ──</b>\n`;
+    if(ds.count){
+      msg+=`📊 Trades: ${ds.count} (✅${ds.wins} ❌${ds.losses}${ds.unknown?` ❓${ds.unknown}`:''}) | WR ${ds.winRate.toFixed(1)}%\n` +
+        `💵 Total stake: ${ds.stake.toFixed(2)} ${this.currency()}\n` +
+        `💰 Gross win: +${ds.grossWin.toFixed(2)}\n` +
+        `📉 Gross loss: -${ds.grossLoss.toFixed(2)}\n` +
+        `💼 <b>Net P/L: ${money(ds.totalProfit,this.currency())}</b>\n` +
+        `🏆 Profit factor: ${ds.profitFactor===Infinity?'∞':ds.profitFactor.toFixed(2)}\n` +
+        `❌ Max loss streak today: ${ds.maxLossStreak}\n\n`;
+    } else {
+      msg+=`No trades recorded for this GMT trade day.\n\n`;
+    }
+    msg+=`<b>── FAST x2Differ Overall / Stored Stats ──</b>\n` +
+      `📊 Trades: ${this.stats.wins+this.stats.losses+this.stats.unknowns} (✅${this.stats.wins} ❌${this.stats.losses}${this.stats.unknowns?` ❓${this.stats.unknowns}`:''}) | WR ${this.stats.winRate().toFixed(1)}%\n` +
+      `💼 Overall Profit: <b>${money(this.stats.overallProfit,this.currency())}</b>\n` +
+      `❌ Consecutive losses: current ${this.stats.currentLossStreak} | max ${this.stats.maxLossStreak}\n` +
+      `   x2=${e.x2} x3=${e.x3} x4=${e.x4} x5=${e.x5} x6=${e.x6} x7=${e.x7}\n\n`;
+    const rows=this.stats.allDailyRows(date);
+    if(rows.length){
+      msg+=`<b>── All Trade Days By Date ──</b>\n`;
+      for(const row of rows.slice(-60)){
+        const s=row.stats;
+        msg+=`${row.date}: ${s.count} trades (✅${s.wins}/❌${s.losses}) | WR ${s.winRate.toFixed(1)}% | P/L ${money(s.totalProfit,this.currency())}\n`;
+      }
+      if(rows.length>60) msg+=`…showing last 60 of ${rows.length} stored trade days.\n`;
+    }
+    telegram.send(msg);
+    this.stats.markEodSent(date);
+    this._save(`eod-${reason}`);
+    this.startBalance=this.client.balance ?? this.lastBalance ?? this.startBalance;
   }
 
   _save(reason){ try{ const f=this.cfg.stateFile, tmp=f+'.tmp'; fs.writeFileSync(tmp,JSON.stringify({ version:1, savedAt:new Date().toISOString(), reason, startBalance:this.startBalance, lastBalance:this.lastBalance, stats:this.stats.serialize() },null,2)); fs.renameSync(tmp,f); }catch(e){ logger.warn('save fail:',e.message);} }
   _loadState(){ const f=this.cfg.stateFile; if(!fs.existsSync(f)) return; try{ const d=JSON.parse(fs.readFileSync(f,'utf8')); this.startBalance=d.startBalance??null; this.lastBalance=d.lastBalance??null; this.stats=new StatisticsManager(d.stats||d); const e=this.stats.lossStreakEvents; const wr=this.stats.winRate().toFixed(1); const tot=this.stats.wins+this.stats.losses+this.stats.unknowns; logger.info(`state restored overall=${this.stats.overallProfit.toFixed(2)} trades ${tot} (✅${this.stats.wins} ❌${this.stats.losses}) WR ${wr}% streak cur=${this.stats.currentLossStreak} max=${this.stats.maxLossStreak} x2=${e.x2} x3=${e.x3} x4=${e.x4} x5=${e.x5} x6=${e.x6} x7=${e.x7}`);}catch(e){ logger.warn('load state:',e.message);} }
   currency(){ return this.client.currency||this.cfg.currency; }
-  stop(sig){ if(this.stopped) return; this.stopped=true; logger.info(`stopping ${sig}`); telegram.send(`🛑 <b>FAST x2Differ stopped</b> ${htmlEscape(sig)} | Overall ${money(this.stats.overallProfit,this.currency())}`); this._clearWatchdog(); this._save('shutdown'); this.client.stop(); setTimeout(()=>process.exit(0),2000); }
+  stop(sig){ if(this.stopped) return; this.stopped=true; logger.info(`stopping ${sig}`); telegram.send(`🛑 <b>FAST x2Differ stopped</b> ${htmlEscape(sig)} | Overall ${money(this.stats.overallProfit,this.currency())}`); this._clearWatchdog(); if(this._hourlyBoot) clearTimeout(this._hourlyBoot); if(this._hourlyT) clearInterval(this._hourlyT); if(this._eodBoot) clearTimeout(this._eodBoot); this._save('shutdown'); this.client.stop(); setTimeout(()=>process.exit(0),2000); }
 }
 
 // ── BOOT ────────────────────────────────────────────────────────────────
