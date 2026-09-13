@@ -86,7 +86,7 @@ const CONFIG = Object.freeze({
   eodSendDelaySeconds: intEnv('EOD_SEND_DELAY_S', 10),
 
   // ── Per-trade telegram notifications (user-toggleable) ────────────
-  notifyTradeOpen: boolEnv('NOTIFY_TRADE_OPEN', true),     // false = silent on open (still logs)
+  notifyTradeOpen: boolEnv('NOTIFY_TRADE_OPEN', false),     // false = silent on open (still logs)
   notifyTradeResult: boolEnv('NOTIFY_TRADE_RESULT', true), // false = silent on result (still logs + saves)
 
   stateFile: strEnv('STATE_FILE', 'simpleX2Differ_state_001.json'),
@@ -95,7 +95,7 @@ const CONFIG = Object.freeze({
 
   telegram: {
     enabled:  true,
-    botToken: '8106601008:AAEMyCma6mvPYIHEvw3RHQX2tkD5-wUe1o0',
+    botToken: '8306232249:AAGMwjFngs68Lcq27oGmqewQgthXTJJRxP0',
     chatId:   '752497117',
   },
   reconnect: {
