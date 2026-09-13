@@ -72,9 +72,9 @@ const CONFIG = Object.freeze({
   // ── Martingale (optional) ────────────────────────────────────────
   martingaleEnabled:  boolEnv('MARTINGALE_ENABLED', true),
   martingaleStep:     numEnv('MARTINGALE_STEP', 11.3),           // multiplier per loss, e.g. 2.1
-  martingaleFilter:   intEnv('MARTINGALE_FILTER', 1),           // losses before multiplier starts (0=immediate, 1=after 1 loss, 2=after 2 losses…)
-  martingaleMaxSteps: intEnv('MARTINGALE_MAX_STEPS', 3),        // cap exponent on the *scaled* steps (0 = uncapped)
-  martingaleMaxStake: numEnv('MARTINGALE_MAX_STAKE', 150),      // hard cap (also limited by maxStake)
+  martingaleFilter:   intEnv('MARTINGALE_FILTER', 0),           // losses before multiplier starts (0=immediate, 1=after 1 loss, 2=after 2 losses…)
+  martingaleMaxSteps: intEnv('MARTINGALE_MAX_STEPS', 4),        // cap exponent on the *scaled* steps (0 = uncapped)
+  martingaleMaxStake: numEnv('MARTINGALE_MAX_STAKE', 906),      // hard cap (also limited by maxStake)
   // ── Safety (lightweight, does not slow hot path) ──────────────────
   dailyMaxLoss:   numEnv('DAILY_MAX_LOSS', 2000),  // 0 = off
   dailyMaxProfit: numEnv('DAILY_MAX_PROFIT', 0),   // 0 = off
@@ -85,8 +85,8 @@ const CONFIG = Object.freeze({
   eodTimeGmt: strEnv('EOD_TIME_GMT', '00:00'), // report date = previous UTC day when 00:00
   eodSendDelaySeconds: intEnv('EOD_SEND_DELAY_S', 10),
 
-  stateFile: strEnv('STATE_FILE', 'simpleX2Differ_state_05.json'),
-  logFile:   strEnv('LOG_FILE',   'simpleX2Differ_bot_05.log'),
+  stateFile: strEnv('STATE_FILE', 'simpleX2Differ_state_001.json'),
+  logFile:   strEnv('LOG_FILE',   'simpleX2Differ_bot_001.log'),
   logLevel:  strEnv('LOG_LEVEL',  'INFO').toUpperCase(),
 
   telegram: {
