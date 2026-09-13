@@ -134,7 +134,15 @@ class TelegramNotifier extends EventEmitter{
       try{
         const payload=JSON.stringify({ chat_id:this.chatId, text, parse_mode:'HTML', disable_web_page_preview:true });
         const u=new URL(`https://api.telegram.org/bot${this.botToken}/sendMessage`);
-        const req=https.request({ method:'POST', hostname:u.hostname, path:u.pathname, headers:{'Content-Type':'application/json','Content-Length':Buffer.byteLength(payload)}, timeout:15000 }, r=>{ r.on('data',()=>{}); r.on('end',()=>res(r.statusCode===200)); });
+        const req=https.request({ method:'POST', hostname:u.hostname, path:u.pathname, headers:{'Content-Type':'application/json','Content-Length':Buffer.byteLength(payload)}, timeout:15000 }, r=>{
+          let body='';
+          r.on('data',c=>{ body+=c; if(body.length>500) body=body.slice(0,500); });
+          r.on('end',()=>{
+            const ok=r.statusCode===200;
+            if(!ok) logger.warn(`telegram send failed: http=${r.statusCode} body=${body.slice(0,200)}`);
+            res(ok);
+          });
+        });
         req.on('error',e=>{ logger.warn('telegram:',e.message); res(false); });
         req.on('timeout',()=>{ req.destroy(new Error('tg timeout')); res(false); });
         req.write(payload); req.end();
@@ -142,7 +150,14 @@ class TelegramNotifier extends EventEmitter{
     });
   }
   async _drain(){ if(this.sending||!this.q.length) return; this.sending=true; try{ while(this.q.length){ await this._post(this.q.shift()); await new Promise(r=>setTimeout(r,1100)); } }finally{this.sending=false;} }
-  send(t){ if(!this.enabled){ logger.debug('tg(dry):',String(t).slice(0,160).replace(/\n/g,' | ')); return; } this.q.push(String(t)); this._drain().catch(e=>logger.warn('tg drain:',e.message)); }
+  send(t){
+    if(!this.enabled){ logger.warn('telegram send skipped: notifier disabled (check botToken/chatId)'); return; }
+    this.q.push(String(t));
+    // Fast bot emits 2 msgs/trade but drain is ~1 msg/1.1s — a deep queue
+    // means notifications arrive minutes late and look "not working".
+    if(this.q.length>20 && this.q.length%10===1) logger.warn(`telegram queue backlogged (depth=${this.q.length}) — notifications will be delayed; consider NOTIFY_TRADE_OPEN=false`);
+    this._drain().catch(e=>logger.warn('tg drain:',e.message));
+  }
 }
 const telegram=new TelegramNotifier(CONFIG.telegram);
 
