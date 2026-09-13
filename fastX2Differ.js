@@ -59,10 +59,10 @@ const CONFIG = Object.freeze({
 
   // ── Single asset — change via env SINGLE_ASSET or edit here ────────
   asset:         strEnv('SINGLE_ASSET', 'R_25'),
-  stake:         numEnv('STAKE', 1.00),
+  stake:         numEnv('STAKE', 0.62),
   durationTicks: intEnv('DURATION_TICKS', 1),
-  minStake:      1.00,
-  maxStake:      150,
+  minStake:      0.62,
+  maxStake:      1000,
 
   // ── Speed / throttle ───────────────────────────────────────────────
   tradeCooldownMs: intEnv('TRADE_COOLDOWN_MS', 800), // min gap between buys
@@ -74,7 +74,7 @@ const CONFIG = Object.freeze({
   martingaleStep:     numEnv('MARTINGALE_STEP', 11.3),           // multiplier per loss, e.g. 2.1
   martingaleFilter:   intEnv('MARTINGALE_FILTER', 0),           // losses before multiplier starts (0=immediate, 1=after 1 loss, 2=after 2 losses…)
   martingaleMaxSteps: intEnv('MARTINGALE_MAX_STEPS', 4),        // cap exponent on the *scaled* steps (0 = uncapped)
-  martingaleMaxStake: numEnv('MARTINGALE_MAX_STAKE', 906),      // hard cap (also limited by maxStake)
+  martingaleMaxStake: numEnv('MARTINGALE_MAX_STAKE', 1000),      // hard cap (also limited by maxStake)
   // ── Safety (lightweight, does not slow hot path) ──────────────────
   dailyMaxLoss:   numEnv('DAILY_MAX_LOSS', 2000),  // 0 = off
   dailyMaxProfit: numEnv('DAILY_MAX_PROFIT', 0),   // 0 = off
@@ -86,8 +86,8 @@ const CONFIG = Object.freeze({
   eodSendDelaySeconds: intEnv('EOD_SEND_DELAY_S', 10),
 
   // ── Per-trade telegram notifications (user-toggleable) ────────────
-  notifyTradeOpen: true,     // false = silent on open (still logs)
-  notifyTradeResult: true, // false = silent on result (still logs + saves)
+  notifyTradeOpen: boolEnv('NOTIFY_TRADE_OPEN', true),     // false = silent on open (still logs)
+  notifyTradeResult: boolEnv('NOTIFY_TRADE_RESULT', true), // false = silent on result (still logs + saves)
 
   stateFile: strEnv('STATE_FILE', 'simpleX2Differ_state_001.json'),
   logFile:   strEnv('LOG_FILE',   'simpleX2Differ_bot_001.log'),
