@@ -125,12 +125,36 @@ function utcDateStr(d = new Date()) { return d.toISOString().slice(0, 10); }
 function previousUtcDateStr(d = new Date()) { return new Date(d.getTime() - 86_400_000).toISOString().slice(0, 10); }
 function utcHour(d = new Date()) { return d.getUTCHours(); }
 
-// ── 4. TELEGRAM ───────────────────────────────────────────────────────
+// ── 4. TELEGRAM (flood-aware) ─────────────────────────────────────────
+// Telegram bans bots that exceed ~20 msgs/min to one chat (HTTP 429 with
+// retry_after). A fast bot emitting open+result per trade WILL hit that,
+// and hammering through the ban both loses messages AND extends the ban
+// (retry_after stops counting down). This notifier therefore:
+//   • spaces sends ≥ TELEGRAM_GAP_MS (default 3000 → ≤20/min max),
+//   • on 429 pauses ALL sends until retry_after expires (ban decays),
+//   • bounds the queue (TELEGRAM_MAX_QUEUE, default 100), dropping the
+//     oldest low-priority trade chatter first,
+//   • on long bans (>5 min) drops queued routine chatter and keeps only
+//     alerts, so the post-ban flush can't instantly re-trigger the ban.
+// Priorities: 'low' = per-trade open chatter, 'normal' = trade results +
+// routine notes, 'high' = hourly/EOD/online/alerts (never dropped).
 class TelegramNotifier extends EventEmitter{
-  constructor(cfg){ super(); this.enabled=cfg.enabled&&!!cfg.botToken&&!!cfg.chatId; this.botToken=cfg.botToken; this.chatId=cfg.chatId; this.q=[]; this.sending=false; }
+  constructor(cfg){
+    super();
+    this.enabled=cfg.enabled&&!!cfg.botToken&&!!cfg.chatId;
+    this.botToken=cfg.botToken; this.chatId=cfg.chatId;
+    this.q=[]; this.sending=false;
+    this.gapMs=Math.max(1000,numEnv('TELEGRAM_GAP_MS',3000));
+    this.maxQ=Math.max(10,intEnv('TELEGRAM_MAX_QUEUE',100));
+    this.bannedUntil=0; this._lastBanLog=0;
+  }
+  _parseRetryAfter(body){
+    try{ const j=JSON.parse(String(body||'')); const s=j?.parameters?.retry_after; if(Number.isFinite(Number(s))) return Number(s); }catch(_){}
+    const m=String(body||'').match(/retry after (\d+)/i); return m?Number(m[1]):0;
+  }
   _post(text){
     return new Promise(res=>{
-      if(!this.enabled) return res(false);
+      if(!this.enabled) return res({ok:false,retryAfter:0});
       try{
         const payload=JSON.stringify({ chat_id:this.chatId, text, parse_mode:'HTML', disable_web_page_preview:true });
         const u=new URL(`https://api.telegram.org/bot${this.botToken}/sendMessage`);
@@ -139,23 +163,71 @@ class TelegramNotifier extends EventEmitter{
           r.on('data',c=>{ body+=c; if(body.length>500) body=body.slice(0,500); });
           r.on('end',()=>{
             const ok=r.statusCode===200;
-            if(!ok) logger.warn(`telegram send failed: http=${r.statusCode} body=${body.slice(0,200)}`);
-            res(ok);
+            let retryAfter=0;
+            if(!ok){
+              retryAfter=(r.statusCode===429)?(this._parseRetryAfter(body)||60):0;
+              logger.warn(`telegram send failed: http=${r.statusCode} retryAfter=${retryAfter}s body=${body.slice(0,200)}`);
+            }
+            res({ok,retryAfter});
           });
         });
-        req.on('error',e=>{ logger.warn('telegram:',e.message); res(false); });
-        req.on('timeout',()=>{ req.destroy(new Error('tg timeout')); res(false); });
+        req.on('error',e=>{ logger.warn('telegram:',e.message); res({ok:false,retryAfter:0}); });
+        req.on('timeout',()=>{ req.destroy(new Error('tg timeout')); res({ok:false,retryAfter:0}); });
         req.write(payload); req.end();
-      }catch(e){ logger.warn('telegram exc:',e.message); res(false); }
+      }catch(e){ logger.warn('telegram exc:',e.message); res({ok:false,retryAfter:0}); }
     });
   }
-  async _drain(){ if(this.sending||!this.q.length) return; this.sending=true; try{ while(this.q.length){ await this._post(this.q.shift()); await new Promise(r=>setTimeout(r,1100)); } }finally{this.sending=false;} }
-  send(t){
+  _sleep(ms){ return new Promise(r=>setTimeout(r,ms)); }
+  async _drain(){
+    if(this.sending||!this.q.length) return;
+    this.sending=true;
+    try{
+      while(this.q.length){
+        // Honor flood bans: ANY send during a ban extends it. Wait it out.
+        const waitMs=this.bannedUntil-Date.now();
+        if(waitMs>0){
+          if(Date.now()-this._lastBanLog>60000){ this._lastBanLog=Date.now(); logger.warn(`telegram flood ban active — pausing sends for ${(waitMs/1000).toFixed(0)}s (queue=${this.q.length})`); }
+          await this._sleep(Math.min(waitMs,30000));
+          continue;
+        }
+        const msg=this.q.shift();
+        const r=await this._post(msg.text);
+        if(!r.ok && r.retryAfter>0){
+          this.bannedUntil=Date.now()+r.retryAfter*1000;
+          this._lastBanLog=0;
+          if(r.retryAfter>300){
+            // Long ban: queued routine chatter would be hours stale on
+            // delivery AND its flush would re-trigger the ban. Drop it,
+            // keep alerts. The log file remains the full audit trail.
+            const kept=this.q.filter(m=>m.pr==='high');
+            const dropped=this.q.length-kept.length;
+            this.q.length=0; this.q.push(...kept);
+            if(msg.pr==='high') this.q.unshift(msg);
+            logger.warn(`telegram flood ban ${r.retryAfter}s — dropped ${dropped} queued routine notification(s), kept ${kept.length} alert(s)`);
+          } else {
+            this.q.unshift(msg); // short ban: retry the failed message after the pause
+            logger.warn(`telegram 429 — retry_after ${r.retryAfter}s, pausing (queue=${this.q.length})`);
+          }
+          continue;
+        }
+        await this._sleep(this.gapMs);
+      }
+    }finally{this.sending=false;}
+  }
+  send(t,pr='normal'){
     if(!this.enabled){ logger.warn('telegram send skipped: notifier disabled (check botToken/chatId)'); return; }
-    this.q.push(String(t));
-    // Fast bot emits 2 msgs/trade but drain is ~1 msg/1.1s — a deep queue
-    // means notifications arrive minutes late and look "not working".
-    if(this.q.length>20 && this.q.length%10===1) logger.warn(`telegram queue backlogged (depth=${this.q.length}) — notifications will be delayed; consider NOTIFY_TRADE_OPEN=false`);
+    if(pr!=='low'&&pr!=='high') pr='normal';
+    this.q.push({text:String(t),pr});
+    // Bound the queue so a fast market can't build a backlog that floods
+    // on flush. Drop oldest low-priority chatter first, then oldest normal.
+    // High-priority alerts (hourly/EOD/online) are never dropped for chatter.
+    while(this.q.length>this.maxQ){
+      const li=this.q.findIndex(m=>m.pr==='low');
+      if(li>=0){ this.q.splice(li,1); continue; }
+      const ni=this.q.findIndex(m=>m.pr==='normal');
+      this.q.splice(ni>=0?ni:0,1);
+    }
+    if(this.q.length>20 && this.q.length%10===1) logger.warn(`telegram queue backlogged (depth=${this.q.length}) — notifications will lag; consider NOTIFY_TRADE_OPEN=false`);
     this._drain().catch(e=>logger.warn('tg drain:',e.message));
   }
 }
@@ -579,12 +651,13 @@ class TradingBot{
       `💼 Overall: ${money(this.stats.overallProfit,this.currency())}\n`+
       `🔔 Notify: open ${this.cfg.notifyTradeOpen?'ON':'OFF'} | result ${this.cfg.notifyTradeResult?'ON':'OFF'} | hourly ${this.cfg.hourlySummary?'ON':'OFF'}\n`+
       `🕒 Trade day clock: <b>GMT/UTC</b> | EOD: ${this.cfg.eodTimeGmt} GMT\n`+
-      `🕒 ${utcTs()}`
+      `🕒 ${utcTs()}`,
+      'high'
     );
     await this.market.subscribe(CONFIG.asset);
   }
   _onDisc(code,reason,was){
-    telegram.send(`⚠️ <b>FAST x2Differ disconnected</b> code=${code} wasAuth=${was?'yes':'no'} — reconnecting…`);
+    telegram.send(`⚠️ <b>FAST x2Differ disconnected</b> code=${code} wasAuth=${was?'yes':'no'} — reconnecting…`, 'high');
     // NOTE: deliberately do NOT clear exec.open here. Any contract open when
     // the socket drops is reconciled on reconnect via _reconcileOpenContracts();
     // clearing the map would orphan the P&L and choke entry (maxOpenTrades).
@@ -633,7 +706,8 @@ class TradingBot{
           `⚠️ <b>FAST x2Differ UNCONFIRMED CONTRACT</b>\n\n` +
           `Contract <code>#${cid}</code> (${info.symbol}) could not be confirmed after reconnect.\n` +
           `Recorded as <b>UNKNOWN</b> — no P&L fabricated. Balance stays authoritative server-side.\n\n` +
-          `🕒 ${utcTs()}`
+          `🕒 ${utcTs()}`,
+          'high'
         );
       }catch(e){
         logger.warn(`reconcile #${cid}: ${e.message}`);
@@ -699,7 +773,8 @@ class TradingBot{
     telegram.send(
       `🟢 <b>Fast x2Differ TRADE OPEN</b> #${t.contractId} <code>${t.symbol}</code> differs <b>${t.digit}</b>${mgInfo}\n`+
       `💵 ${t.stake.toFixed(2)} → payout ${t.payout.toFixed(2)} ${this.currency()} | ${t.durationTicks}t | next stake ${this._getStake().toFixed(2)}\n`+
-      `🕒 ${utcTs()}`
+      `🕒 ${utcTs()}`,
+      'low'
     );
   }
   _onResult(t){
@@ -735,7 +810,8 @@ class TradingBot{
       `📅 Today: ${this._todayTrades} trades P/L ${money(this._todayPL,this.currency())} | Overall ${money(this.stats.overallProfit,this.currency())}\n`+
       `${streakLine}\n`+
       `${mgLine}\n`+
-      `🕒 ${utcTs()}`
+      `🕒 ${utcTs()}`,
+      'normal'
     );
     this._save('after-trade');
   }
@@ -774,7 +850,8 @@ class TradingBot{
         `⚠️ <b>FAST x2Differ UNRESOLVED CONTRACT</b>\n\n` +
         `Contract <code>#${t.contractId}</code> (${t.symbol}) never returned a settlement after repeated polls.\n` +
         `Recorded as <b>UNKNOWN</b> — no P&L was fabricated. The account balance remains authoritative server-side.\n\n` +
-        `🕒 ${utcTs()}`
+        `🕒 ${utcTs()}`,
+        'high'
       );
       this._save('unresolved-trade');
       return;
@@ -830,7 +907,8 @@ class TradingBot{
     if(!list.length){
       telegram.send(
         `⏰ <b>FAST x2Differ Hourly Summary GMT (${date} ${pad(hour)}:00-${pad(hour)}:59)</b>\n\n` +
-        `No trades this hour.\n\n${wrLine}\n💼 Overall Profit: ${money(this.stats.overallProfit,this.currency())}\n${this._streakLine()}`
+        `No trades this hour.\n\n${wrLine}\n💼 Overall Profit: ${money(this.stats.overallProfit,this.currency())}\n${this._streakLine()}`,
+        'high'
       );
       return;
     }
@@ -844,7 +922,7 @@ class TradingBot{
     list.slice(-20).forEach((t,i)=>{
       msg+=`${i+1}. ${t.status==='won'?'✅':t.status==='lost'?'❌':'❓'} #${t.contractId} ${t.symbol} d${t.digit} ${money(t.profit,this.currency())}\n`;
     });
-    telegram.send(msg);
+    telegram.send(msg, 'high');
   }
   _sendEod(reason='manual'){
     const date=this._eodReportDate(new Date());
@@ -883,7 +961,7 @@ class TradingBot{
       }
       if(rows.length>60) msg+=`…showing last 60 of ${rows.length} stored trade days.\n`;
     }
-    telegram.send(msg);
+    telegram.send(msg, 'high');
     this.stats.markEodSent(date);
     this._save(`eod-${reason}`);
     this.startBalance=this.client.balance ?? this.lastBalance ?? this.startBalance;
@@ -892,7 +970,7 @@ class TradingBot{
   _save(reason){ try{ const f=this.cfg.stateFile, tmp=f+'.tmp'; fs.writeFileSync(tmp,JSON.stringify({ version:1, savedAt:new Date().toISOString(), reason, startBalance:this.startBalance, lastBalance:this.lastBalance, stats:this.stats.serialize() },null,2)); fs.renameSync(tmp,f); }catch(e){ logger.warn('save fail:',e.message);} }
   _loadState(){ const f=this.cfg.stateFile; if(!fs.existsSync(f)) return; try{ const d=JSON.parse(fs.readFileSync(f,'utf8')); this.startBalance=d.startBalance??null; this.lastBalance=d.lastBalance??null; this.stats=new StatisticsManager(d.stats||d); const e=this.stats.lossStreakEvents; const wr=this.stats.winRate().toFixed(1); const tot=this.stats.wins+this.stats.losses+this.stats.unknowns; logger.info(`state restored overall=${this.stats.overallProfit.toFixed(2)} trades ${tot} (✅${this.stats.wins} ❌${this.stats.losses}) WR ${wr}% streak cur=${this.stats.currentLossStreak} max=${this.stats.maxLossStreak} x2=${e.x2} x3=${e.x3} x4=${e.x4} x5=${e.x5} x6=${e.x6} x7=${e.x7}`);}catch(e){ logger.warn('load state:',e.message);} }
   currency(){ return this.client.currency||this.cfg.currency; }
-  stop(sig){ if(this.stopped) return; this.stopped=true; logger.info(`stopping ${sig}`); telegram.send(`🛑 <b>FAST x2Differ stopped</b> ${htmlEscape(sig)} | Overall ${money(this.stats.overallProfit,this.currency())}`); this._clearWatchdog(); if(this._hourlyBoot) clearTimeout(this._hourlyBoot); if(this._hourlyT) clearInterval(this._hourlyT); if(this._eodBoot) clearTimeout(this._eodBoot); this._save('shutdown'); this.client.stop(); setTimeout(()=>process.exit(0),2000); }
+  stop(sig){ if(this.stopped) return; this.stopped=true; logger.info(`stopping ${sig}`); telegram.send(`🛑 <b>FAST x2Differ stopped</b> ${htmlEscape(sig)} | Overall ${money(this.stats.overallProfit,this.currency())}`, 'high'); this._clearWatchdog(); if(this._hourlyBoot) clearTimeout(this._hourlyBoot); if(this._hourlyT) clearInterval(this._hourlyT); if(this._eodBoot) clearTimeout(this._eodBoot); this._save('shutdown'); this.client.stop(); setTimeout(()=>process.exit(0),2000); }
 }
 
 // ── BOOT ────────────────────────────────────────────────────────────────
@@ -904,6 +982,7 @@ async function main(){
   console.log(`   asset=${CONFIG.asset} stake=${CONFIG.stake} duration=${CONFIG.durationTicks}t cooldown=${CONFIG.tradeCooldownMs}ms`);
   console.log(`   martingale=${CONFIG.martingaleEnabled ? `ON step=${CONFIG.martingaleStep} filter=${CONFIG.martingaleFilter} maxSteps=${CONFIG.martingaleMaxSteps} cap=${CONFIG.martingaleMaxStake}` : 'OFF'}`);
   console.log(`   notify: tradeOpen=${CONFIG.notifyTradeOpen?'ON':'OFF'} tradeResult=${CONFIG.notifyTradeResult?'ON':'OFF'} hourly=${CONFIG.hourlySummary?'ON':'OFF'}`);
+  console.log(`   telegram: gap=${telegram.gapMs}ms maxQueue=${telegram.maxQ} (tune via TELEGRAM_GAP_MS / TELEGRAM_MAX_QUEUE)`);
   const bot=new TradingBot(); await bot.start();
 }
 main().catch(e=>{ console.error('fatal:',e); process.exit(1); });
