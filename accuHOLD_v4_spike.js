@@ -150,7 +150,7 @@ const CONFIG = Object.freeze({
 
   // ── Risk controls ──
   maxConsecutiveLosses : parseInt('3', 10),      // pause + require manual restart
-  dailyMaxLoss        : parseFloat('500'),         // demo-appropriate cap
+  dailyMaxLoss        : parseFloat('300'),         // demo-appropriate cap
   dailyMaxTrades      : parseInt('120000', 10),      // daily cap
   stopLossPerContract : parseFloat('0'),         // 0 = disabled (rely on knockout)
 
@@ -170,7 +170,7 @@ const CONFIG = Object.freeze({
   reconnect: { initialDelayMs: 1000, maxDelayMs: 60000, backoffFactor: 2, jitterMs: 750 },
 
   // ── Open-contract stream watchdog ──
-  tradeWatchdogMs  : parseInt('90000', 10),
+  tradeWatchdogMs  : parseInt('5000', 10),
   proposalRefreshMs: parseInt('60000', 10),   // refresh barrier + ticks_stayed_in cache
 
   // ── Scheduled pause/resume (GMT) ──
@@ -197,10 +197,10 @@ const CONFIG = Object.freeze({
   }),
   exploratory: Object.freeze({
     enabled: true,                // keep true so spike detector runs; hazard not used to gate
-    mode: 'hazard',
+    mode: 'hazard',               // 'hazard' = hazardRefractoryBot_v2, 'postSpike' = post-spike Bonferroni, 'relaxed' = mean-derived fallback
     logOnly: true,                // hazard only logs, does NOT gate (v4 gates on spike only)
     hazardBuckets: [0,0.25,0.5,0.75,1,1.25,1.5,1.75,2,2.5,3,4,6,Infinity],
-    hazardMinLift: parseFloat(process.env.HAZARD_MIN_LIFT || '0.60'),
+    hazardMinLift: parseFloat('0.60'),
     hazardP: 0.05,
     postSpikeHorizon: 200,
     postSpikeMaxControl: 8000,
@@ -216,9 +216,9 @@ const CONFIG = Object.freeze({
   }),
 
   // ── Logging / state — FRESH v4 spike ──
-  logFile           : 'accuHOLD4_spike.log',
+  logFile           : 'accuHOLD4_spike_04.log',
   logLevel          : 'INFO',
-  stateFile         : 'accuHOLD4_spike_state.json',
+  stateFile         : 'accuHOLD4_spike_state_04.json',
   stateSaveOnTrade  : true,
   stateSaveOnShutdown: true,
 });
@@ -1280,8 +1280,14 @@ class StatisticsManager {
     const d = new Date(tsMs);
     const rec = { ...trade, timestamp: tsMs, date: utcDateStr(d), hour: utcHour(d) };
     this.trades.push(rec);
-    // 'unknown' results do not contribute to P&L or streak (we never confirmed them).
-    if (rec.status === 'unknown') return rec;
+    // 'unknown' (unconfirmable/stuck) results are booked as a LOSS of the stake:
+    // they hit P&L below but never advance the loss streak or martingale.
+    if (rec.status === 'unknown') {
+      const stakeLoss = -Number(rec.stake || 0);
+      rec.profit = stakeLoss;
+      this.overallProfit += stakeLoss;
+      return rec;
+    }
     this.overallProfit += Number(rec.profit || 0);
     if (rec.status === 'lost') {
       this.currentLossStreak += 1;
@@ -1960,9 +1966,13 @@ class AccuHoldBot {
   _onTradeResult(t) {
     const rec = this.stats.record(t);
     if (t.status === 'unknown') {
-      // Booked as unknown so it cannot corrupt P&L or streaks.
-      logger.warn(`trade #${t.contractId} unconfirmable — recorded as 'unknown', excluded from P&L/streaks`);
-      telegram.send(`⚠️ <b>AccuHOLD_v4 UNCONFIRMABLE CONTRACT</b> #${t.contractId} ${t.symbol}\nRecorded as 'unknown' — excluded from P&L and streaks.`);
+      // Unconfirmable / stuck contract — booked as a LOSS of the stake. It
+      // counts in P&L below but never touches the loss streak or martingale.
+      const stakeLoss = -Number(t.stake || 0);
+      this.lastBalance = (this.lastBalance ?? this.balance ?? 0) + stakeLoss;
+      this.overallProfit += stakeLoss;
+      logger.warn(`trade #${t.contractId} unconfirmable — booked as loss of ${(-stakeLoss).toFixed(2)}, excluded from streaks/martingale`);
+      telegram.send(`⚠️ <b>AccuHOLD_v4 UNCONFIRMABLE CONTRACT</b> #${t.contractId} ${t.symbol}\nBooked as a <b>loss</b> of ${(-stakeLoss).toFixed(2)} ${this.currencyStr()} in P&L — excluded from loss streak & martingale.`);
       this._saveState('after-trade');
       return;
     }
@@ -2391,7 +2401,7 @@ async function runSelfTest() {
   test('settle emits result once', emitted === 1, `emitted=${emitted}`);
   test('settle frees slot', ex.count() === 0);
 
-  // 8. already-closed sell path → 'unknown' finalize (excluded from P&L/streaks).
+  // 8. already-closed sell path → 'unknown' finalize (loss-only, no streak hit).
   const stuckClient = {
     forget: () => Promise.resolve(),
     _send: () => Promise.reject(new Error('not found among your open positions')),
@@ -2406,12 +2416,15 @@ async function runSelfTest() {
   test('already-closed → unknown emitted', uEmitted === 1 && uInfo && uInfo.status === 'unknown', `emitted=${uEmitted} status=${uInfo?.status}`);
   test('already-closed → local slot freed', ex2.count() === 0);
 
-  // 9. unknown results are excluded from overall P&L.
+  // 9. unknown (unconfirmable/stuck) is booked as a stake LOSS in P&L, but never touches streaks.
   const s = new StatisticsManager();
   s.record({ contractId: 1, status: 'won',  profit:  2.0, sellTime: Date.now() / 1000 });
   s.record({ contractId: 2, status: 'lost', profit: -1.0, sellTime: Date.now() / 1000 });
-  s.record({ contractId: 3, status: 'unknown', profit: 0, sellTime: Date.now() / 1000 });
-  test('unknown excluded from P&L', Math.abs(s.overallProfit - 1.0) < 1e-9, `overallProfit=${s.overallProfit}`);
+  const streakBeforeUnknown = s.currentLossStreak;
+  s.record({ contractId: 3, status: 'unknown', profit: 0, stake: 0.5, sellTime: Date.now() / 1000 });
+  test('unknown booked as stake loss in P&L', Math.abs(s.overallProfit - 0.5) < 1e-9, `overallProfit=${s.overallProfit}`);
+  test('unknown normalized to negative profit', s.trades[2].profit === -0.5, `profit=${s.trades[2].profit}`);
+  test('unknown does not touch loss streak', s.currentLossStreak === streakBeforeUnknown, `streak=${s.currentLossStreak}`);
 
   // 10. live median from a fake proposal (simulates the buy() path).
   const fakeMarket = new MarketDataManager(new EventEmitter(), CONFIG);
