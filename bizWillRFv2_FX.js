@@ -87,8 +87,8 @@ class RestClient {
 // ============================================================
 // FILE PATHS  [RETAINED]
 // ============================================================
-const STATE_FILE = path.join(__dirname, 'bizWillRFv2FX_01-state.json');
-const HISTORY_FILE = path.join(__dirname, 'bizWillRFv2FX_01-history.json');
+const STATE_FILE = path.join(__dirname, 'bizWillRFv2FX_02-state.json');
+const HISTORY_FILE = path.join(__dirname, 'bizWillRFv2FX_02-history.json');
 const STATE_SAVE_INTERVAL = 5000;  // ms
 
 // ============================================================
@@ -145,8 +145,8 @@ const CONFIG = {
     COOLDOWN_CANDLES: 0,
 
     // ── Candle / Contract Settings (defaults, overridable per asset) ──
-    GRANULARITY: 300,
-    TIMEFRAME_LABEL: '5m',
+    GRANULARITY: 900,
+    TIMEFRAME_LABEL: '15m',
     CANDLES_TO_LOAD: 100,
     MAX_CANDLES_STORED: 100,
     DURATION: 15,
@@ -177,7 +177,7 @@ const CONFIG = {
     // ── Active Index Assets ───────────────────────────────────
     ACTIVE_ASSETS: [
         // 'frxEURUSD',    // Euro/Dollar — most liquid, tightest spread
-        // 'frxGBPUSD',    // Cable — high volatility, good signals
+        'frxGBPUSD',    // Cable — high volatility, good signals
         // 'frxUSDJPY',    // Dollar/Yen — excellent trending behavior
         // 'frxUSDCHF',    // Dollar/Swiss — safe haven dynamics
         // 'frxAUDUSD',    // Aussie — commodity-linked, clear trends
@@ -185,7 +185,15 @@ const CONFIG = {
         // 'frxEURGBP',    // Euro/Cable — range-bound, good for reversals
         // 'frxEURJPY',    // Euro/Yen — high volatility cross
         'frxXAUUSD',    // Gold — commodity-linked, clear trends
-
+        // 'frxXAUEUR',    // Gold/Euro — commodity-linked, clear trends
+        // 'frxNZDUSD',    // NZD/Dollar — most liquid, tightest spread
+        'frxNZDJPY',    // NZD/JPY — most liquid, tightest spread
+            'frxNZDCAD',    // NZD/CAD — most liquid, tightest spread
+            // 'frxGBPNZD',    // GBP/NZD — high volatility, good signals
+            // 'frxGBPCHF',    // GBP/CHF — high volatility, good signals
+            'frxGBPCAD',    // GBP/CAD — high volatility, good signals
+            'frxGBPJPY',    // GBP/JPY — high volatility, good signals
+            // 'frxEURNZD',    // EUR/NZD — high volatility, good signals
     ],
 
     // ── Misc ──────────────────────────────────────────────────
@@ -202,8 +210,8 @@ const CONFIG = {
 // ============================================================
 const DEFAULT_ASSET_CONFIG = {
     // Candle Settings
-    GRANULARITY: 300,
-    TIMEFRAME_LABEL: '5m',
+    GRANULARITY: 900,
+    TIMEFRAME_LABEL: '15m',
 
     // Trade Duration
     DURATION: 15,

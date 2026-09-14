@@ -120,15 +120,15 @@ const CONFIG = Object.freeze({
 
   // ── Trade parameters — tier-aware (per-tier growth + cap/TP) ──
   stake              : parseFloat('1.00'),   // base stake per trade (reset value for martingale)
-  takeProfitMultiple : parseFloat('1.01'),   // fallback (tier overrides below)
+  takeProfitMultiple : parseFloat('1.35'),   // fallback (tier overrides below)
   tickCapFraction    : parseFloat('0.01'),   // fallback (tier overrides below)
   growthRate         : parseFloat('0.05'),   // fallback default; tierGrowthRate below is authoritative
 
   // Per-tier overrides — user #5 (per-tier override) + #1 (include BOOM50/CRASH50 fast tier)
   tierGrowthRate: Object.freeze({ fast: 0.05, slow: 0.05 }), // fast=1% widest barrier (spike-dominant), slow=2% (noise-dominant)
   tierDefaults: Object.freeze({
-    fast: { tickCapFraction: 0.70, takeProfitMultiple: 1.40, growthRate: 0.01 }, // BOOM50/CRASH50
-    slow: { tickCapFraction: 0.55, takeProfitMultiple: 1.35, growthRate: 0.01 }, // BOOM/CRASH 500/600/900/1000
+    fast: { tickCapFraction: 0.01, takeProfitMultiple: 1.40, growthRate: 0.05 }, // BOOM50/CRASH50
+    slow: { tickCapFraction: 0.01, takeProfitMultiple: 1.35, growthRate: 0.05 }, // BOOM/CRASH 500/600/900/1000
   }),
   symbolTiers: Object.freeze({
     fast: ['BOOM50','CRASH50'],
