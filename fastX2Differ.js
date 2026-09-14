@@ -67,7 +67,7 @@ const CONFIG = Object.freeze({
   // ── Speed / throttle ───────────────────────────────────────────────
   tradeCooldownMs: intEnv('TRADE_COOLDOWN_MS', 800), // min gap between buys
   maxOpenTrades:   1,
-  tradeWatchdogMs: intEnv('WATCHDOG_MS', 2000),
+  tradeWatchdogMs: intEnv('WATCHDOG_MS', 20000),
 
   // ── Martingale (optional) ────────────────────────────────────────
   martingaleEnabled:  boolEnv('MARTINGALE_ENABLED', true),
