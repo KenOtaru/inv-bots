@@ -216,9 +216,9 @@ const CONFIG = Object.freeze({
   }),
 
   // ── Logging / state — FRESH v4 spike ──
-  logFile           : 'accuHOLD4_spike_04.log',
+  logFile           : 'accuHOLD4_spike_05.log',
   logLevel          : 'INFO',
-  stateFile         : 'accuHOLD4_spike_state_04.json',
+  stateFile         : 'accuHOLD4_spike_state_05.json',
   stateSaveOnTrade  : true,
   stateSaveOnShutdown: true,
 });
