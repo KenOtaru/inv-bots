@@ -179,10 +179,10 @@ assets: envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,
 
   // ── Telegram (optional) ──
   telegram: {
-    enabled : envBool('TELEGRAM_ENABLED', true),
-    botToken: envStr('TELEGRAM_BOT_TOKEN', '8196927342:AAHa8d0OrF3D6yYTA_QcCPOzz5G0SPj82xE'),
-    chatId  : envStr('TELEGRAM_CHAT_ID', '752497117'),
-    maxQueue: envInt('TELEGRAM_MAX_QUEUE', 200),
+    enabled : true,
+    botToken: '8196927342:AAHa8d0OrF3D6yYTA_QcCPOzz5G0SPj82xE',
+    chatId  : '752497117',
+    maxQueue: 200,
   },
 
   // ── Reconnect ──
@@ -1629,7 +1629,7 @@ class AccuApexV5 {
 
     await this.client.connect();
 
-    if (this.cfg.mode === 'live' && this.client.isVirtual === false) {
+    if (this.cfg.mode === 'live') {
       logger.warn('!!! LIVE MODE ON A REAL-MONEY ACCOUNT !!!');
       telegram.send('⚠️ AccuAPEX v5 started in <b>LIVE</b> mode on a real-money account.');
     }
