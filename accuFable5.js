@@ -723,6 +723,56 @@ class DerivClient extends EventEmitter {
     return h.prices.map((p, i) => ({ quote: parseFloat(p), epoch: h.times[i] }));
   }
 
+  /**
+   * Deep historical backfill — ported from deriv_structure_tester_v5.js
+   * `collectTicks`. Deriv ticks_history advertises up to 5000 ticks/call but
+   * is currently capped at ~1000 via the PAT/OTP flow. To reach the target
+   * we chain calls BACKWARDS using end = earliest_epoch - 1 and unshift each
+   * batch so the result stays oldest→newest. Returns [] at the first empty
+   * or short batch (history exhausted) or when Deriv refuses pagination.
+   */
+  async collectTicks(symbol, targetCount, batchSize = 1000, delayMs = 250) {
+    const out = [];
+    let remain = targetCount;
+    let end = 'latest';
+    let lastEpoch = null;
+    let batches = 0;
+
+    while (remain > 0) {
+      const count = Math.min(batchSize, 1000, remain); // 1000 = observed PAT/OTP cap
+      let msg;
+      try {
+        msg = await this._send({ ticks_history: symbol, count, end, style: 'ticks' }, 30000);
+      } catch (e) {
+        logger.warn(`history paging ${symbol}: ${e.message} — stopped at ${out.length}/${targetCount} ticks`);
+        break;
+      }
+      const times = msg.history?.times ?? [];
+      const prices = (msg.history?.prices ?? []).map(Number);
+      if (!times.length) {
+        logger.info(`history ${symbol}: server returned 0 more ticks — exhausted at ${out.length}`);
+        break;
+      }
+      if (lastEpoch !== null && times[times.length - 1] >= lastEpoch) {
+        logger.warn(`history paging ${symbol}: server did not honor pagination — stopped at ${out.length}/${targetCount} ticks`);
+        break;
+      }
+      lastEpoch = times[0];
+      batches++;
+      out.unshift(...times.map((t, i) => ({ quote: prices[i], epoch: t })));
+      remain -= times.length;
+      logger.info(`history ${symbol}: fetched ${out.length}/${targetCount} ticks (batch ${batches})`);
+      end = String(times[0] - 1);
+      await sleep(delayMs);
+      if (times.length < count) {
+        logger.info(`history ${symbol}: last batch short (${times.length}/${count}) — exhausted at ${out.length}`);
+        break;
+      }
+    }
+
+    return out;
+  }
+
   async subscribeTicks(symbol, handler) {
     return this.subscribe({ ticks: symbol }, msg => {
       if (msg.tick) handler({ quote: parseFloat(msg.tick.quote), epoch: msg.tick.epoch, symbol });
@@ -761,11 +811,13 @@ class MarketData extends EventEmitter {
   historyFor(symbol) { return this.history.get(symbol) ?? []; }
 
   async bootstrap(symbols) {
+    const want = this.cfg.calibMinTicks;
+    const cap = this.cfg.calibWindow;
     for (const s of symbols) {
       try {
-        const h = await this.client.ticksHistory(s, this.cfg.calibWindow);
+        const h = await this.client.collectTicks(s, Math.min(want, cap));
         this.history.set(s, h);
-        logger.info(`history ${s}: ${h.length} ticks`);
+        logger.info(`history ${s}: ${h.length} ticks (target ${Math.min(want, cap)})`);
         await this._attachTicks(s);
       } catch (e) {
         logger.warn(`history ${s} failed: ${e.message}`);
