@@ -188,7 +188,7 @@ assets: envStr('ASSETS', '1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V')
   //   • its N most-current values are each < stayMaxValue, AND
   //   • its single most-current value is < stayCurrentMax, AND
   //   • its calibrated evLowerPerTick is <= evLowerGateMax (e.g. -1.4547%).
-  stayWindowN    : 3,     //5 N most-current values to check
+  stayWindowN    : 3,     //6 N most-current values to check
   stayMaxValue   : 10,    //20 every one of those N must be < this
   stayCurrentMax : 1,   //2 the most-current value must be < this
   stayStaleMs    : 240000, // stays older than this are ignored
