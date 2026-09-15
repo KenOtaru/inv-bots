@@ -58,7 +58,7 @@ const CONFIG = Object.freeze({
   currency:   'USD',
 
   // ── Single asset — change via env SINGLE_ASSET or edit here ────────
-  asset:         strEnv('SINGLE_ASSET', 'R_25'),
+  asset:         strEnv('SINGLE_ASSET', 'R_10'),
   stake:         numEnv('STAKE', 0.62),
   durationTicks: intEnv('DURATION_TICKS', 1),
   minStake:      0.62,
@@ -89,8 +89,8 @@ const CONFIG = Object.freeze({
   notifyTradeOpen: boolEnv('NOTIFY_TRADE_OPEN', false),     // false = silent on open (still logs)
   notifyTradeResult: boolEnv('NOTIFY_TRADE_RESULT', false), // false = silent on result (still logs + saves)
 
-  stateFile: strEnv('STATE_FILE', 'simpleX2Differ_state_003.json'),
-  logFile:   strEnv('LOG_FILE',   'simpleX2Differ_bot_003.log'),
+  stateFile: strEnv('STATE_FILE', 'simpleX2Differ_state_004.json'),
+  logFile:   strEnv('LOG_FILE',   'simpleX2Differ_bot_004.log'),
   logLevel:  strEnv('LOG_LEVEL',  'INFO').toUpperCase(),
 
   telegram: {
