@@ -130,22 +130,22 @@ const CONFIG = Object.freeze({
   confirmLive  : 'i-understand',
 
   // ── Assets: volatility indices ONLY. Accumulators exist nowhere else. ──
-//   assets: envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V')
+//   assets: envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,BOOM900,BOOM1000,CRASH900,CRASH1000')
 //     .split(',').map(s => s.trim()).filter(Boolean),
 
 assets: envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V')
     .split(',').map(s => s.trim()).filter(Boolean),
 
   // ── Growth-rate grid. 0.01 measured cheapest; 0.05 measured dearest. ──
-  growthRates: envStr('GROWTH_RATES', '0.01,0.02,0.03,0.04,0.05') //0.01,0.02,0.03
+  growthRates: envStr('GROWTH_RATES', '0.01,0.02,0.03') //0.01,0.02,0.03
     .split(',').map(s => parseFloat(s.trim())).filter(v => v >= 0.01 && v <= 0.05),
 
   // ── Sizing. Flat or fixed-fraction only. Martingale is not implemented. ──
   sizing        : 'flat',   // 'flat' | 'fraction'
   stake         : 1.0,
   riskFraction  : 0.005,           // 0.5% of balance
-  minStake      : 0.35,
-  maxStake      : 5.0,
+  minStake      : 1.0,
+  maxStake      : 15.0,
 
   // ── Hard risk rails (all enforced, all halt the bot) ──
   dailyMaxLoss      : 200,
@@ -168,7 +168,7 @@ assets: envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,
   minHoldTicks      : 1,
 
   // ── Live edge monitor: halt when realized edge is significantly bad ──
-  edgeMonitorMinTrades : 40,
+  edgeMonitorMinTrades : 40,    // 40  minimum trades before edge monitor is active
   edgeMonitorZStop     : 2.0,  // 95% confidence that EV < 0),
 
   // ── Timing ──
