@@ -159,7 +159,7 @@ assets: envStr('ASSETS', 'BOOM500,BOOM600,BOOM900,BOOM1000,CRASH500,CRASH600,CRA
   // growth rate) on the very next tick, skipping the stay/ev gates. It keeps
   // re-trading that same asset after each loss until a win, then returns to
   // the normal gate-based selection.
-  chaseOnLoss         : envBool('CHASE_ON_LOSS', false),
+  chaseOnLoss         : true,
 
   // ── EOD / hourly summaries (GMT) ──
   eodTimeGmt         : '00:00',
