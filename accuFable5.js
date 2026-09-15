@@ -115,7 +115,7 @@ const envBool = (k, d) => {
 // ═══════════════════════════════════════════════════════════════════════
 const CONFIG = Object.freeze({
   // ── Credentials (REQUIRED via .env — never commit these) ──
-  apiToken : envStr('DERIV_API_TOKEN', 'pat_27a3197287bae3ec6c2c9cbdd68fffaa2a524e3b0a6e1ecf298b5ffb338adb10'),
+  apiToken : envStr('DERIV_API_TOKEN', 'pat_cb2016855b5e6c61ac95f94432192dd6ed86bec7f7454e575d3fe1ed9f617692'),
   appId    : envStr('DERIV_APP_ID', '33uslPtthXBEkQOdfKfoY'),
   wsUrl    : envStr('DERIV_WS_URL', 'wss://ws.derivws.com/websockets/v3'),
   currency : envStr('DERIV_CURRENCY', 'USD'),
@@ -133,11 +133,11 @@ const CONFIG = Object.freeze({
 //   assets: envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V')
 //     .split(',').map(s => s.trim()).filter(Boolean),
 
-assets: envStr('ASSETS', '1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V')
+assets: envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH500,CRASH600,CRASH900,CRASH1000')
     .split(',').map(s => s.trim()).filter(Boolean),
 
   // ── Growth-rate grid. 0.01 measured cheapest; 0.05 measured dearest. ──
-  growthRates: envStr('GROWTH_RATES', '0.01,0.02') //0.01,0.02,0.03
+  growthRates: envStr('GROWTH_RATES', '0.01,0.02,0.03,0.04,0.05') //0.01,0.02,0.03
     .split(',').map(s => parseFloat(s.trim())).filter(v => v >= 0.01 && v <= 0.05),
 
   // ── Sizing. Flat or fixed-fraction only. Martingale is not implemented. ──
@@ -148,9 +148,9 @@ assets: envStr('ASSETS', '1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V')
   maxStake      : envNum('MAX_STAKE', 5.0),
 
   // ── Hard risk rails (all enforced, all halt the bot) ──
-  dailyMaxLoss      : envNum('DAILY_MAX_LOSS', 20),
-  dailyMaxTrades    : envInt('DAILY_MAX_TRADES', 400),
-  sessionMaxDrawdown: envNum('SESSION_MAX_DRAWDOWN', 30),
+  dailyMaxLoss      : envNum('DAILY_MAX_LOSS', 200),
+  dailyMaxTrades    : envInt('DAILY_MAX_TRADES', 40000000),
+  sessionMaxDrawdown: envNum('SESSION_MAX_DRAWDOWN', 300),
   maxOpenTrades     : envInt('MAX_OPEN_TRADES', 1),
   maxConsecLosses   : envInt('MAX_CONSEC_LOSSES', 8),
 
@@ -179,10 +179,10 @@ assets: envStr('ASSETS', '1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V')
 
   // ── Telegram (optional) ──
   telegram: {
-    enabled : envBool('TELEGRAM_ENABLED', false),
-    botToken: envStr('TELEGRAM_BOT_TOKEN', ''),
-    chatId  : envStr('TELEGRAM_CHAT_ID', ''),
-    maxQueue: envInt('TELEGRAM_MAX_QUEUE', 100),
+    enabled : envBool('TELEGRAM_ENABLED', true),
+    botToken: envStr('TELEGRAM_BOT_TOKEN', '8196927342:AAHa8d0OrF3D6yYTA_QcCPOzz5G0SPj82xE'),
+    chatId  : envStr('TELEGRAM_CHAT_ID', '752497117'),
+    maxQueue: envInt('TELEGRAM_MAX_QUEUE', 200),
   },
 
   // ── Reconnect ──
