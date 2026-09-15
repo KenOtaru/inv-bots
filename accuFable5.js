@@ -755,6 +755,7 @@ class MarketData extends EventEmitter {
     this.tickSubs = new Map();   // symbol -> subscription id
     this.barriers = new Map();   // `${symbol}|${gr}` -> {halfBarrierFrac, spot, at}
     this.deadAssets = new Set(); // symbols Deriv permanently rejects for ACCU
+    this._barrierSeen = new Set(); // keys whose first barrier fetch has already been logged
   }
 
   historyFor(symbol) { return this.history.get(symbol) ?? []; }
@@ -848,6 +849,19 @@ class MarketData extends EventEmitter {
         at: Date.now(),
       };
       this.barriers.set(this.barrierKey(symbol, growthRate), rec);
+      const key = this.barrierKey(symbol, growthRate);
+      if (!this._barrierSeen.has(key)) {
+        this._barrierSeen.add(key);
+        logger.info(
+          `barrier ${symbol}@g=${(growthRate * 100).toFixed(0)}% FOUND → ` +
+          `±${(halfFrac * 100).toFixed(6)}% spot=${spot.toPrecision(6)} ` +
+          `maxTicks=${rec.maxTicks ?? 'n/a'}`,
+        );
+      } else {
+        logger.debug(
+          `barrier refresh ${symbol}@g=${(growthRate * 100).toFixed(0)}% → ±${(halfFrac * 100).toFixed(6)}%`,
+        );
+      }
       return rec;
     } catch (e) {
       // Permanent rejections mean this symbol will never support ACCU.
@@ -1526,8 +1540,10 @@ class AccuApexV5 {
     this.lastTradeAt = 0;
     this.loopTimer = null;
     this.barrierTimer = null;
+    this.calibTimer = null;
     this.running = false;
     this.calibrations = new Map();  // key -> calibration result
+    this._lastTradeableKeys = new Set(); // for edge-transition logging
     this.stats = { opened: 0, closed: 0, wins: 0, losses: 0, pnl: 0 };
     this.startedAt = Date.now();
 
@@ -1576,6 +1592,7 @@ class AccuApexV5 {
     this.running = true;
     this.loopTimer = setInterval(() => this._tick().catch(e => logger.error('loop:', e.message)),
       this.cfg.analysisIntervalMs);
+    this.calibTimer = setInterval(() => this._reportCalibration(), 5 * 60 * 1000);
     logger.info(`running in ${this.cfg.mode.toUpperCase()} mode`);
     this._reportCalibration();
   }
@@ -1607,29 +1624,99 @@ class AccuApexV5 {
     return this.calib.rank(out);
   }
 
-  _reportCalibration() {
-    const ranked = this._calibrateAll();
-    const withData = ranked.filter(c => c.n);
-    logger.info('──── CALIBRATION ────');
-    if (!withData.length) {
-      logger.info('no calibrated pairs yet (waiting on history and barriers)');
-      return ranked;
-    }
-    for (const c of withData.slice(0, 12)) {
-      logger.info(
-        `${c.tradeable ? 'TRADEABLE' : '  no-edge'} ${c.symbol.padEnd(8)} ` +
-        `g=${(c.growthRate * 100).toFixed(0)}% ` +
-        `n=${String(c.n).padStart(6)} ` +
-        `surv=${c.survivalPoint.toFixed(6)} ` +
-        `lower=${c.survivalLower.toFixed(6)} ` +
-        `breakeven=${c.breakEven.toFixed(6)} ` +
-        `evLower/tick=${(c.evLowerPerTick * 100).toFixed(4)}% ` +
+  /** Human-readable one-line status for one (symbol, growth rate) calibration. */
+  _calibrationLine(c) {
+    const sym = c.symbol.padEnd(9);
+    const g = `g=${(c.growthRate * 100).toFixed(0)}%`;
+    if (c.n) {
+      return (
+        `${c.tradeable ? 'TRADEABLE' : '  no-edge'} ${sym} ${g} ` +
+        `n=${String(c.n).padStart(6)} breach=${String(c.breaches).padStart(5)} ` +
+        `surv=${c.survivalPoint.toFixed(6)} lower=${c.survivalLower.toFixed(6)} ` +
+        `breakEven=${c.breakEven.toFixed(6)} evL/t=${(c.evLowerPerTick * 100).toFixed(4)}% ` +
         `barrier=±${c.halfBarrierPct.toFixed(6)}% (${c.barrierSigmas.toFixed(3)}σ) ` +
-        `acf|r|=${c.acfAbs.toFixed(4)}`,
+        `acf|r|=${c.acfAbs.toFixed(4)} maxTicks=${c.maxTicks ?? 'n/a'}`
       );
     }
+    const m = /^insufficient-history:(\d+)\/(\d+)$/.exec(c.reason || '');
+    if (m) {
+      const have = +m[1], need = +m[2];
+      const rem = Math.max(0, need - have);
+      const est = rem > 0
+        ? ` (~${Math.max(1, Math.round(rem / 3600))}h @1 tick/s)`
+        : '';
+      return `WAIT-HISTORY ${sym} ${g} — ${have}/${need} ticks, ${rem} more needed${est}`;
+    }
+    if (/^no-barrier$/.test(c.reason || '')) {
+      return `WAIT-BARRIER ${sym} ${g} — no live ACCU proposal yet (check refresh logs)`;
+    }
+    return `${'?'.padEnd(13)} ${sym} ${g} — ${c.reason || 'unknown state'}`;
+  }
+
+  /** Compact tally of what the calibration grid is waiting on. */
+  _pendingSummary(ranked) {
+    const tally = { calibrated: 0, 'insufficient-history': 0, 'no-barrier': 0, other: 0 };
+    for (const c of ranked) {
+      if (c.n) tally.calibrated++;
+      else if (/insufficient-history/.test(c.reason || '')) tally['insufficient-history']++;
+      else if (/no-barrier/.test(c.reason || '')) tally['no-barrier']++;
+      else tally.other++;
+    }
+    const parts = [];
+    for (const k of ['calibrated', 'insufficient-history', 'no-barrier', 'other']) {
+      if (tally[k] > 0) parts.push(`${tally[k]} ${k}`);
+    }
+    return `${parts.join(', ')} (${ranked.length} pairs total)`;
+  }
+
+  /**
+   * Log a transition the moment a pair first clears the edge gate (or stops
+   * clearing it), so a status change is visible immediately and not only on
+   * the periodic re-report.
+   */
+  _trackCalibTransitions(ranked) {
+    const now = new Set(ranked.filter(c => c.tradeable).map(c => `${c.symbol}|${c.growthRate}`));
+    for (const k of now) {
+      if (!this._lastTradeableKeys.has(k)) {
+        const c = ranked.find(x => `${x.symbol}|${x.growthRate}` === k);
+        logger.info(
+          `edge confirmed ${c.symbol} g=${(c.growthRate * 100).toFixed(0)}% — ` +
+          `lower=${c.survivalLower.toFixed(6)} breakeven=${c.breakEven.toFixed(6)} ` +
+          `evLower/tick=${(c.evLowerPerTick * 100).toFixed(4)}%`,
+        );
+      }
+    }
+    for (const k of this._lastTradeableKeys) {
+      if (!now.has(k)) {
+        const [symbol, gStr] = k.split('|');
+        logger.info(`edge LOST ${symbol} g=${(parseFloat(gStr) * 100).toFixed(0)}% — no longer clears the gate`);
+      }
+    }
+    this._lastTradeableKeys = now;
+  }
+
+  _reportCalibration() {
+    const ranked = this._calibrateAll();
+    logger.info('──── CALIBRATION ────');
+    const withData = ranked.filter(c => c.n);
+    if (!withData.length) {
+      logger.info(`no calibrated pairs yet — waiting on: ${this._pendingSummary(ranked)}`);
+      for (const c of ranked) logger.info('  ' + this._calibrationLine(c));
+      logger.info('calibration resumes automatically as live ticks accumulate and barriers refresh');
+      return ranked;
+    }
+    for (const c of withData.slice(0, 20)) logger.info('  ' + this._calibrationLine(c));
+    const pending = ranked.filter(c => !c.n);
+    if (pending.length > 0) {
+      logger.info(`${pending.length} pair(s) still pending — ${this._pendingSummary(pending)}`);
+      for (const c of pending) logger.info('  ' + this._calibrationLine(c));
+    }
     const tradeable = withData.filter(c => c.tradeable);
-    if (!tradeable.length) {
+    if (tradeable.length) {
+      logger.info(
+        `${tradeable.length} pair(s) clear the edge gate — the bot will act on the top-ranked one.`,
+      );
+    } else {
       logger.warn(
         'No pair clears the edge gate. This is the expected result: Deriv prices ' +
         'the barrier at the fair quantile minus a haircut. The bot will not trade.',
@@ -1652,6 +1739,7 @@ class AccuApexV5 {
     if (Date.now() - this.lastTradeAt < this.cfg.tradeCooldownMs) return;
 
     const ranked = this._calibrateAll();
+    this._trackCalibTransitions(ranked);
     const best = ranked.find(c => c.tradeable);
     if (!best) {
       logger.debug('no tradeable pair this cycle');
@@ -1734,6 +1822,7 @@ class AccuApexV5 {
     this.running = false;
     if (this.loopTimer) clearInterval(this.loopTimer);
     if (this.barrierTimer) clearInterval(this.barrierTimer);
+    if (this.calibTimer) clearInterval(this.calibTimer);
     await this.exec.closeAll();
     this.report();
     this._saveState();
