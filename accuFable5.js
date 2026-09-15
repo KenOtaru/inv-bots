@@ -1562,40 +1562,63 @@ class TradeExecutor extends EventEmitter {
   // ─────────────────────────── LIVE ──────────────────────────
   async _watchLive(trade) {
     let subId = null;
+
+    // Count ticks from the regular tick stream — NOT from Deriv's tick_count
+    // in proposal_open_contract, which for ACCU contracts reports unreliable
+    // values (often starting at 1 immediately after purchase).
+    let lastSpot = 0;
+    const onTick = (sym, tick) => {
+      if (sym !== trade.symbol || !this.open.has(trade.contractId)) return;
+      const prev = lastSpot;
+      lastSpot = tick.quote;
+      if (!(prev > 0)) return;
+
+      // If contract already settled, ignore stale ticks.
+      if (!this.open.has(trade.contractId)) return;
+
+      trade.ticksHeld++;
+      trade.profit = trade.stake * (Math.pow(1 + trade.growthRate, trade.ticksHeld) - 1);
+
+      if (trade.ticksHeld >= trade.targetTicks && !trade._closing) {
+        trade._closing = true;
+        trade._exitReason = trade._exitReason || `take-profit: held ${trade.ticksHeld} ticks`;
+        this._sell(trade).catch(e => {
+          trade._closing = false;
+          logger.warn(`sell ${trade.contractId}: ${e.message}`);
+        });
+      }
+    };
+    this.md.on('tick', onTick);
+    trade._detachTick = () => this.md.off('tick', onTick);
+
+    // Also subscribe to proposal_open_contract for settlement detection.
     try {
       subId = await this.client.subscribe(
         { proposal_open_contract: 1, contract_id: trade.contractId },
         msg => {
           const c = msg.proposal_open_contract;
           if (!c) return;
-          trade.ticksHeld = parseInt(c.tick_count ?? trade.ticksHeld, 10) || trade.ticksHeld;
+          // Update profit from the API (authoritative once sold).
           trade.profit = parseFloat(c.profit ?? trade.profit) || 0;
           const status = String(c.status ?? 'open').toLowerCase();
 
           if (c.is_sold === 1 || TERMINAL_STATUSES.has(status)) {
             const finalProfit = parseFloat(c.profit ?? 0) || 0;
             if (subId) this.client.forget(subId);
+            trade._detachTick();
             this._settle(trade, {
               status,
               profit: finalProfit,
               sellPrice: parseFloat(c.sell_price ?? 0) || 0,
-              exitReason: c.exit_reason || status,
+              exitReason: c.exit_reason || trade._exitReason || status,
             });
             return;
-          }
-
-          // Target reached -> close manually.
-          if (trade.ticksHeld >= trade.targetTicks && !trade._closing) {
-            trade._closing = true;
-            this._sell(trade).catch(e => {
-              trade._closing = false;
-              logger.warn(`sell ${trade.contractId}: ${e.message}`);
-            });
           }
         },
       );
       trade._subId = subId;
     } catch (e) {
+      this.md.off('tick', onTick);
       logger.error(`watch ${trade.contractId} failed: ${e.message} — will reconcile`);
     }
 
@@ -1647,6 +1670,7 @@ class TradeExecutor extends EventEmitter {
     this.settled.add(trade.contractId);
     if (trade._watchdog) clearTimeout(trade._watchdog);
     if (trade._detach) trade._detach();
+    if (trade._detachTick) trade._detachTick();
     if (trade._subId) this.client.forget(trade._subId);
     this.open.delete(trade.contractId);
 
