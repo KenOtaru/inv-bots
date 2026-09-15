@@ -75,6 +75,7 @@ const WebSocket    = require('ws');
 const https        = require('https');
 const fs           = require('fs');
 const path         = require('path');
+const { URL }      = require('url');
 const EventEmitter = require('events');
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -115,9 +116,12 @@ const envBool = (k, d) => {
 const CONFIG = Object.freeze({
   // ── Credentials (REQUIRED via .env — never commit these) ──
   apiToken : envStr('DERIV_API_TOKEN', 'pat_27a3197287bae3ec6c2c9cbdd68fffaa2a524e3b0a6e1ecf298b5ffb338adb10'),
-  appId    : envStr('DERIV_APP_ID', '33uslPtthXBEkQOdfKfoY1089'),
+  appId    : envStr('DERIV_APP_ID', '33uslPtthXBEkQOdfKfoY'),
   wsUrl    : envStr('DERIV_WS_URL', 'wss://ws.derivws.com/websockets/v3'),
   currency : envStr('DERIV_CURRENCY', 'USD'),
+  // PAT-token (new API) only: which account type the OTP flow selects when
+  // the token owns both types. 'demo' | 'real'.
+  accountType: envStr('DERIV_ACCOUNT_TYPE', 'demo'),
 
   // ── Execution mode ──
   //   'paper' — full pipeline, simulated fills, ZERO money at risk (DEFAULT)
@@ -126,7 +130,10 @@ const CONFIG = Object.freeze({
   confirmLive  : envStr('CONFIRM_LIVE', 'i-understand').toLowerCase(),
 
   // ── Assets: volatility indices ONLY. Accumulators exist nowhere else. ──
-  assets: envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V')
+//   assets: envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V')
+//     .split(',').map(s => s.trim()).filter(Boolean),
+
+assets: envStr('ASSETS', '1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V')
     .split(',').map(s => s.trim()).filter(Boolean),
 
   // ── Growth-rate grid. 0.01 measured cheapest; 0.05 measured dearest. ──
@@ -350,6 +357,62 @@ const telegram = new TelegramNotifier(CONFIG.telegram);
 // ═══════════════════════════════════════════════════════════════════════
 // 6. DERIV WEBSOCKET CLIENT
 // ═══════════════════════════════════════════════════════════════════════
+// The new-API (PAT) flow swaps the legacy `wss://…?app_id=…` + `authorize`
+// handshake for a REST OTP handshake: list accounts, request a one-time
+// session URL, then connect with that URL. The OTP socket is already
+// authenticated — never send `authorize` on it.
+class RestClient {
+  constructor(baseUrl, appId, token) {
+    this.baseUrl = baseUrl || 'https://api.derivws.com';
+    this.appId = appId || '1089';
+    this.token = token || '';
+  }
+
+  async _request(method, reqPath, body = null) {
+    return new Promise((resolve, reject) => {
+      let url;
+      try { url = new URL(reqPath, this.baseUrl); } catch (e) {
+        return reject(new Error(`Invalid URL: ${reqPath}`));
+      }
+      const isHttps = url.protocol === 'https:';
+      const lib = isHttps ? https : require('http');
+      const opts = {
+        method,
+        hostname: url.hostname,
+        port: url.port || (isHttps ? 443 : 80),
+        path: url.pathname + url.search,
+        headers: {
+          'Deriv-App-ID': this.appId,
+          'Authorization': 'Bearer ' + this.token,
+          'Accept': 'application/json',
+          ...(body ? { 'Content-Type': 'application/json' } : {}),
+        },
+        timeout: 20000,
+      };
+      const req = lib.request(opts, res => {
+        let data = '';
+        res.on('data', d => data += d);
+        res.on('end', () => {
+          let parsed = data;
+          try { parsed = JSON.parse(data); } catch (_) {}
+          resolve({ status: res.statusCode, body: parsed });
+        });
+      });
+      req.on('timeout', () => req.destroy(new Error('REST timeout')));
+      req.on('error', reject);
+      if (body) req.write(JSON.stringify(body));
+      req.end();
+    });
+  }
+
+  async get(p) { return this._request('GET', p); }
+  async post(p, b) { return this._request('POST', p, b); }
+
+  static isPat(token) {
+    return typeof token === 'string' && /^pat_[a-z0-9_\-]{16,}$/i.test(token.trim());
+  }
+}
+
 class DerivClient extends EventEmitter {
   constructor(cfg) {
     super();
@@ -359,37 +422,114 @@ class DerivClient extends EventEmitter {
     this.authorized = false;
     this.reqId = 1;
     this.pending = new Map();       // reqId -> {resolve, reject, timer}
-    this.subs = new Map();          // reqId -> handler
+    this.subs = new Map();          // reqId/subscriptionId -> handler
     this.balance = 0;
     this.loginId = null;
     this.isVirtual = null;
     this._reconnectDelay = cfg.reconnect.initialDelayMs;
     this._shuttingDown = false;
     this._heartbeat = null;
+    this._reconnecting = false;
+    this._reconnectAttempt = 0;
     // Deriv's newer token format uses `underlying_symbol`; legacy uses `symbol`.
-    this._isPat = /^pat_/i.test(cfg.apiToken || '');
+    this._isPat = RestClient.isPat(cfg.apiToken);
+    this._rest = this._isPat ? new RestClient('https://api.derivws.com', cfg.appId, cfg.apiToken) : null;
+    this._otpUrl = null;
+    this._targetAccount = null;
   }
 
   get symbolKey() { return this._isPat ? 'underlying_symbol' : 'symbol'; }
 
   connect() {
-    return new Promise((resolve, reject) => {
-      const url = `${this.cfg.wsUrl}?app_id=${encodeURIComponent(this.cfg.appId)}`;
-      logger.info(`connecting to ${this.cfg.wsUrl} (app_id=${this.cfg.appId})`);
-      this.ws = new WebSocket(url);
-      let settled = false;
+    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+      return Promise.resolve();
+    }
+    if (!this.cfg.apiToken) {
+      return Promise.reject(new Error('DERIV_API_TOKEN is not set. Put it in .env — never in the source file.'));
+    }
+    if (this._isPat) {
+      logger.info('PAT token detected → new API (OTP flow)');
+      return this._newApiConnect().catch(e => {
+        this._scheduleReconnect();
+        throw e;
+      });
+    }
+    const url = this._getWsUrl();
+    logger.info(`connecting to ${url.replace(/([?&])app_id=[^&]+/, '$1app_id=***')}`);
+    return this._openWs(url);
+  }
 
-      this.ws.on('open', async () => {
+  _getWsUrl() {
+    const sep = this.cfg.wsUrl.includes('?') ? '&' : '?';
+    return `${this.cfg.wsUrl}${sep}app_id=${encodeURIComponent(this.cfg.appId)}`;
+  }
+
+  async _newApiConnect() {
+    const desiredType = (this.cfg.accountType || 'demo').toLowerCase();
+    const accRes = await this._rest.get('/trading/v1/options/accounts');
+    if (accRes.status !== 200) {
+      const msg = accRes.body?.errors?.[0]?.message || accRes.body?.message || JSON.stringify(accRes.body);
+      throw new Error(`Account list failed (${accRes.status}): ${msg}`);
+    }
+    const accounts = Array.isArray(accRes.body?.data) ? accRes.body.data : [];
+    if (!accounts.length) throw new Error('No Options accounts found');
+    const acct = accounts.find(a => (a.account_type || '').toLowerCase() === desiredType) || accounts[0];
+    this._targetAccount = acct;
+    this.accountInfo = {
+      loginid: acct.account_id,
+      email: acct.email,
+      isVirtual: (acct.account_type || '').toLowerCase() === 'demo',
+      accountType: acct.account_type,
+      currency: acct.currency,
+      balance: parseFloat(acct.balance),
+      group: acct.group,
+    };
+    const otpPath = `/trading/v1/options/accounts/${encodeURIComponent(acct.account_id)}/otp`;
+    const otpRes = await this._rest.post(otpPath);
+    if (otpRes.status !== 200) {
+      throw new Error(`OTP failed (${otpRes.status}): ${JSON.stringify(otpRes.body)}`);
+    }
+    const wsUrl = otpRes.body?.data?.url;
+    if (!wsUrl || !/^wss?:/i.test(wsUrl)) throw new Error('OTP missing data.url');
+    this._otpUrl = wsUrl;
+    logger.info(`connecting via OTP (new API) — session URL obtained for ${acct.account_type}`);
+    return this._openWs(wsUrl);
+  }
+
+  _openWs(url) {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      try {
+        this.ws = new WebSocket(url, {
+          headers: { 'User-Agent': 'AccuAPEX-v5/5.0 (+Node.js)' },
+          handshakeTimeout: 15000,
+        });
+      } catch (e) {
+        return reject(e);
+      }
+
+      this.ws.on('open', () => {
         this.connected = true;
+        this._reconnecting = false;
+        this._reconnectAttempt = 0;
         this._reconnectDelay = this.cfg.reconnect.initialDelayMs;
         logger.info('websocket open');
         this._startHeartbeat();
-        try {
-          await this.authorize();
+
+        const ready = () => {
           if (!settled) { settled = true; resolve(); }
           this.emit('ready');
-        } catch (e) {
-          if (!settled) { settled = true; reject(e); }
+        };
+
+        if (this._isPat) {
+          // OTP sockets arrive already authorised.
+          this._newApiMarkAuthorized();
+          ready();
+        } else {
+          this._authorize().then(ready).catch(e => {
+            logger.error('authorize:', e.message);
+            if (!settled) { settled = true; reject(e); }
+          });
         }
       });
 
@@ -400,16 +540,40 @@ class DerivClient extends EventEmitter {
         this.authorized = false;
         this._stopHeartbeat();
         this._failAllPending(new Error(`socket closed (${code})`));
+        this.subs.clear();
         logger.warn(`websocket closed code=${code} reason=${String(reason || '').slice(0, 120)}`);
         this.emit('disconnected');
+        if (!settled) { settled = true; reject(new Error(`socket closed (${code})`)); }
         if (!this._shuttingDown) this._scheduleReconnect();
       });
 
       this.ws.on('error', err => {
         logger.error('websocket error:', err.message);
+        this.emit('error', err);
         if (!settled) { settled = true; reject(err); }
       });
+
+      this.ws.on('unexpected-response', (_, res) => {
+        logger.error('WS handshake failed:', res.statusCode, res.statusMessage);
+        try { res.destroy(); } catch (_) {}
+        if (!settled) { settled = true; reject(new Error(`handshake failed (${res.statusCode})`)); }
+        if (!this._shuttingDown) this._scheduleReconnect();
+      });
     });
+  }
+
+  _newApiMarkAuthorized() {
+    if (!this.accountInfo) return;
+    this.authorized = true;
+    this.balance = this.accountInfo.balance ?? 0;
+    this.loginId = this.accountInfo.loginid;
+    this.isVirtual = this.accountInfo.isVirtual;
+    this.currency = this.accountInfo.currency || this.cfg.currency;
+    logger.info(
+      `authorized ${this.accountInfo.loginid} (${this.accountInfo.isVirtual ? 'DEMO' : 'REAL'}) ` +
+      `balance=${this.balance.toFixed(2)} ${this.currency}`,
+    );
+    this._subscribeBalance().catch(() => {});
   }
 
   _startHeartbeat() {
@@ -421,16 +585,25 @@ class DerivClient extends EventEmitter {
   _stopHeartbeat() { if (this._heartbeat) { clearInterval(this._heartbeat); this._heartbeat = null; } }
 
   _scheduleReconnect() {
+    if (this._shuttingDown || this._reconnecting) return;
+    this._reconnecting = true;
+    this._reconnectAttempt++;
     const jitter = Math.random() * this.cfg.reconnect.jitterMs;
-    const delay = Math.min(this._reconnectDelay + jitter, this.cfg.reconnect.maxDelayMs);
+    const delay = Math.min(
+      this.cfg.reconnect.initialDelayMs * Math.pow(this.cfg.reconnect.backoffFactor, this._reconnectAttempt - 1) + jitter,
+      this.cfg.reconnect.maxDelayMs,
+    );
     logger.info(`reconnecting in ${Math.round(delay)}ms`);
     setTimeout(() => {
-      this._reconnectDelay = Math.min(
-        this._reconnectDelay * this.cfg.reconnect.backoffFactor,
-        this.cfg.reconnect.maxDelayMs,
-      );
-      this.connect().catch(e => logger.error('reconnect failed:', e.message));
+      this._reconnecting = false;
+      if (!this._shuttingDown) {
+        this.connect().catch(e => logger.error('reconnect failed:', e.message));
+      }
     }, delay);
+  }
+
+  _closeAndReconnect() {
+    try { this.ws?.close(); } catch (_) {}
   }
 
   _failAllPending(err) {
@@ -443,20 +616,28 @@ class DerivClient extends EventEmitter {
     try { msg = JSON.parse(raw); } catch { return; }
     const id = msg.req_id;
 
-    // Streaming update for an active subscription.
-    if (id != null && this.subs.has(id)) {
-      try { this.subs.get(id)(msg); } catch (e) { logger.debug('sub handler:', e.message); }
-      // A subscription's first message also resolves the original request.
-    }
-
+    // One-shot request resolved by req_id (both APIs).
     if (id != null && this.pending.has(id)) {
       const p = this.pending.get(id);
       this.pending.delete(id);
       clearTimeout(p.timer);
-      if (msg.error) p.reject(Object.assign(new Error(msg.error.message || 'API error'), {
-        code: msg.error.code, details: msg.error.details,
-      }));
-      else p.resolve(msg);
+      if (msg.error) {
+        const code = msg.error.code;
+        if (['AuthorizationRequired', 'InvalidToken', 'InvalidAppID'].includes(code)) this._closeAndReconnect();
+        p.reject(Object.assign(new Error(msg.error.message || 'API error'), {
+          code, details: msg.error.details,
+        }));
+      } else {
+        p.resolve(msg);
+      }
+    }
+
+    // Streaming update. Legacy streams carry the subscribing req_id; the new
+    // API carries subscription.id (the initial response carries both, and the
+    // pending resolution above maps that id onto the handler).
+    const subKey = msg.subscription ? msg.subscription.id : (id != null && this.subs.has(id) ? id : null);
+    if (subKey != null && this.subs.has(subKey)) {
+      try { this.subs.get(subKey)(msg); } catch (e) { logger.debug('sub handler:', e.message); }
     }
   }
 
@@ -478,7 +659,7 @@ class DerivClient extends EventEmitter {
 
   async subscribe(payload, handler) {
     const id = this.reqId++;
-    this.subs.set(id, handler);
+    this.subs.set(id, handler);     // legacy-stream key
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
@@ -486,7 +667,15 @@ class DerivClient extends EventEmitter {
         reject(new Error('subscribe timeout'));
       }, 20000);
       this.pending.set(id, {
-        resolve: msg => resolve(msg?.subscription?.id ?? id),
+        resolve: msg => {
+          const subId = msg?.subscription?.id;
+          if (subId) {
+            // new-API stream key: remap the handler from req_id to subscription.id
+            this.subs.set(subId, handler);
+            this.subs.delete(id);
+          }
+          resolve(subId ?? id);
+        },
         reject: err => { this.subs.delete(id); reject(err); },
         timer,
       });
@@ -496,6 +685,8 @@ class DerivClient extends EventEmitter {
   }
 
   async forget(subscriptionId) {
+    if (subscriptionId == null) return;
+    this.subs.delete(subscriptionId);
     try { await this._send({ forget: subscriptionId }, 10000); } catch (_) {}
   }
 
