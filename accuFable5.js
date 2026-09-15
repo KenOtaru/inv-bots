@@ -114,16 +114,16 @@ const envBool = (k, d) => {
 // ═══════════════════════════════════════════════════════════════════════
 const CONFIG = Object.freeze({
   // ── Credentials (REQUIRED via .env — never commit these) ──
-  apiToken : envStr('DERIV_API_TOKEN', ''),
-  appId    : envStr('DERIV_APP_ID', '1089'),
+  apiToken : envStr('DERIV_API_TOKEN', 'pat_27a3197287bae3ec6c2c9cbdd68fffaa2a524e3b0a6e1ecf298b5ffb338adb10'),
+  appId    : envStr('DERIV_APP_ID', '33uslPtthXBEkQOdfKfoY1089'),
   wsUrl    : envStr('DERIV_WS_URL', 'wss://ws.derivws.com/websockets/v3'),
   currency : envStr('DERIV_CURRENCY', 'USD'),
 
   // ── Execution mode ──
   //   'paper' — full pipeline, simulated fills, ZERO money at risk (DEFAULT)
   //   'live'  — real orders. Requires MODE=live AND CONFIRM_LIVE=i-understand
-  mode         : envStr('MODE', 'paper').toLowerCase(),
-  confirmLive  : envStr('CONFIRM_LIVE', ''),
+  mode         : envStr('MODE', 'live').toLowerCase(),
+  confirmLive  : envStr('CONFIRM_LIVE', 'i-understand').toLowerCase(),
 
   // ── Assets: volatility indices ONLY. Accumulators exist nowhere else. ──
   assets: envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V')
