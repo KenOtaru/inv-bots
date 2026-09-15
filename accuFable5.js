@@ -150,9 +150,16 @@ assets: envStr('ASSETS', '1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V')
   maxStake      : 15.0,
 
   // Martingale (accuHOLD_v2 semantics) ──
-  martingaleMultiplier : 2.0, // stake × multiplier each loss step
-  martingaleSteps      : 8,        // 0 = disabled
+  martingaleMultiplier : 4.0, // stake × multiplier each loss step
+  martingaleSteps      : 4,        // 0 = disabled
   martingaleBaseStake  : 0,   // 0 → use CONFIG.stake
+
+  // ── Chase-on-loss ──
+  // When ON, a losing trade immediately re-trades the SAME asset (same
+  // growth rate) on the very next tick, skipping the stay/ev gates. It keeps
+  // re-trading that same asset after each loss until a win, then returns to
+  // the normal gate-based selection.
+  chaseOnLoss         : envBool('CHASE_ON_LOSS', false),
 
   // ── EOD / hourly summaries (GMT) ──
   eodTimeGmt         : '00:00',
@@ -181,16 +188,16 @@ assets: envStr('ASSETS', '1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V')
   //   • its N most-current values are each < stayMaxValue, AND
   //   • its single most-current value is < stayCurrentMax, AND
   //   • its calibrated evLowerPerTick is <= evLowerGateMax (e.g. -1.4547%).
-  stayWindowN    : 5,     // N most-current values to check
-  stayMaxValue   : 20,    // every one of those N must be < this
-  stayCurrentMax : 2,   // the most-current value must be < this
+  stayWindowN    : 3,     //5 N most-current values to check
+  stayMaxValue   : 10,    //20 every one of those N must be < this
+  stayCurrentMax : 1,   //2 the most-current value must be < this
   stayStaleMs    : 240000, // stays older than this are ignored
   evLowerGateMax : -0.010547, //-0.014547 evLower/tick gate: trade only when ≤ this
 
   // ── Take-profit ──
   // TP exits the trade after takeProfitTicks ticks (the hold target). The
   // same value feeds the live limit_order take-profit price.
-  takeProfitTicks      : 20,  // sell after this many ticks
+  takeProfitTicks      : 10,  // sell after this many ticks
 
   // ── Hold-time policy ──
   maxHoldTicks      : 12,
@@ -1825,6 +1832,12 @@ class AccuApexV5 {
     this.currentStake    = this.martingaleBase;
     this.consecutiveLosses = 0;
 
+    // ── Chase-on-loss: when active, re-trade this same pair after each loss
+    //    until a win, skipping the gates. ──
+    this.chaseActive     = false;
+    this.chaseSymbol     = null;
+    this.chaseGrowthRate = null;
+
     // ── Balance / P&L tracking for telegram reports ──
     this.startBalance  = null;
     this.lastBalance   = null;
@@ -1855,6 +1868,25 @@ class AccuApexV5 {
     });
     if (trade.profit > 0) this.consecutiveLosses = 0;
     else if (trade.profit < 0) this.consecutiveLosses += 1;
+
+    // ── Chase-on-loss: on a loss, re-trade the SAME pair immediately (the
+    //    gates are suspended until a win). On a win, return to gated mode. ──
+    if (this.cfg.chaseOnLoss) {
+      if (trade.profit < 0 && !this.risk.halted) {
+        this.chaseActive     = true;
+        this.chaseSymbol     = trade.symbol;
+        this.chaseGrowthRate = trade.growthRate;
+        logger.warn(
+          `chaseON: loss on ${trade.symbol}@${String(trade.growthRate)} — ` +
+          `next trade reopens ${trade.symbol} at ${String(trade.growthRate)} without gates until a win`,
+        );
+      } else if (trade.profit > 0 && this.chaseActive) {
+        this.chaseActive     = false;
+        this.chaseSymbol     = null;
+        this.chaseGrowthRate = null;
+        logger.info(`chaseOFF: win on ${trade.symbol} — returning to gate-based selection`);
+      }
+    }
 
     // ── Martingale: stake for the NEXT trade ──
     const prevStep = this.martingaleStep;
@@ -1924,6 +1956,9 @@ class AccuApexV5 {
   // ── Telegram: trade opened ──
   _sendTradeOpen(t) {
     const c = this.currencyStr();
+    const chaseNote = this.cfg.chaseOnLoss && this.chaseActive
+      ? `🔥 <b>Chase:</b> re-trading ${this.chaseSymbol} after loss (gates suspended)\n`
+      : '';
     const martingaleNote = this._isMartingaleEnabled()
       ? `♻️ <b>Martingale:</b> ${this._martingaleLabel()} · base ${this.martingaleBase.toFixed(2)} → <b>${t.stake.toFixed(2)} ${c}</b>${this.martingaleStep > 0 ? ` (step ${this.martingaleStep}/${this.cfg.martingaleSteps})` : ' (base)'}\n`
       : '';
@@ -1937,6 +1972,7 @@ class AccuApexV5 {
       `<b>Symbol:</b> <code>${t.symbol}</code>\n` +
       `<b>Growth Rate:</b> ${(t.growthRate * 100).toFixed(2)}%\n` +
       `<b>Stake:</b> ${t.stake.toFixed(2)} ${c}${this.martingaleStep > 0 ? ` <i>(martingale ×${Math.pow(this.cfg.martingaleMultiplier, this.martingaleStep).toFixed(2)})</i>` : ''}\n` +
+      chaseNote +
       martingaleNote +
       `<b>Take-Profit:</b> sell after <b>${this.cfg.takeProfitTicks}</b> ticks\n` +
       lossNote +
@@ -2089,6 +2125,7 @@ class AccuApexV5 {
       `<b>Growth rate:</b> ${this.cfg.growthRates.map(g => (g * 100) + '%').join(', ')} · <b>TP:</b> ${this.cfg.takeProfitTicks} ticks\n` +
       `<b>ev gate:</b> evLower/tick ≤ ${(this.cfg.evLowerGateMax * 100).toFixed(4)}%\n` +
       `<b>stay gate:</b> ${this.cfg.stayWindowN} most-current < ${this.cfg.stayMaxValue}, latest < ${this.cfg.stayCurrentMax}\n` +
+      `<b>Chase on loss:</b> ${this.cfg.chaseOnLoss ? '🟢 ON (re-trade same asset until win)' : 'OFF'}\n` +
       martingaleLine +
       lossLine +
       `<b>Daily caps:</b> ${this.cfg.dailyMaxTrades} trades / ${this.cfg.dailyMaxLoss} ${c}\n` +
@@ -2334,6 +2371,36 @@ class AccuApexV5 {
   async _tick() {
     if (!this.running || !this.client.authorized) return;
 
+    // ── CHASE-ON-LOSS MODE ──
+    // After a loss, re-trade the SAME pair immediately. Gates (stay + ev)
+    // are suspended; we keep re-trading that pair on every tick until a win,
+    // then fall back to normal analysis.
+    if (this.cfg.chaseOnLoss && this.chaseActive && this.chaseSymbol) {
+      const g = this.chaseGrowthRate;
+      const barrier = this.md.getBarrier(this.chaseSymbol, g)
+        ?? await this.md.refreshBarrier(this.chaseSymbol, g, this.currentStake);
+      const stayArr = this.md.getStayedIn(this.chaseSymbol, g) ?? [];
+      logger.warn(
+        `CHASE trade ${this.chaseSymbol}@${(g * 100).toFixed(0)}% (skip gates) ` +
+        `stayedIn(len=${stayArr.length})=[${stayArr.join(',')}]`,
+      );
+      try {
+        this.lastTradeAt = Date.now();
+        await this.exec.openTrade({
+          symbol: this.chaseSymbol,
+          growthRate: g,
+          stake: this.currentStake,
+          targetTicks: this.cfg.takeProfitTicks,
+          calibration: { symbol: this.chaseSymbol, growthRate: g, chase: true },
+        });
+        this.stats.opened++;
+        this.risk.onTradeOpened();
+      } catch (e) {
+        logger.warn(`chase open failed: ${e.message}`);
+      }
+      return;
+    }
+
     // StayedInArray must reflect the current breakout history, so re-request
     // fresh ACCU proposals every tick (not just on the 60s barrier timer).
     await this._refreshStayedIn();
@@ -2417,6 +2484,10 @@ class AccuApexV5 {
         startBalance: this.startBalance,
         lastBalance: this.lastBalance,
         statsLog: this.statsLog.serialize(),
+        // Chase-on-loss state
+        chaseActive: this.chaseActive,
+        chaseSymbol: this.chaseSymbol,
+        chaseGrowthRate: this.chaseGrowthRate,
       }, null, 2));
       fs.renameSync(tmp, this.cfg.stateFile);
     } catch (e) { logger.debug('state save:', e.message); }
@@ -2435,6 +2506,15 @@ class AccuApexV5 {
       if (d.martingaleStep != null) this.martingaleStep = Number(d.martingaleStep) || 0;
       if (d.statsLog) this.statsLog = new StatisticsManager(d.statsLog);
       if (d.stats) this.stats = d.stats;
+      if (typeof d.chaseActive === 'boolean' && d.chaseActive && d.chaseSymbol) {
+        this.chaseActive = true;
+        this.chaseSymbol = String(d.chaseSymbol);
+        this.chaseGrowthRate = Number(d.chaseGrowthRate) ?? null;
+      } else if (d.chaseActive === false) {
+        this.chaseActive = false;
+        this.chaseSymbol = null;
+        this.chaseGrowthRate = null;
+      }
       // Ensure martingale base matches current config
       if (Number(this.cfg.stake) !== this.martingaleBase) {
         this.martingaleBase = Number(this.cfg.martingaleBaseStake) > 0 ? Number(this.cfg.martingaleBaseStake) : Number(this.cfg.stake) || 1.0;
@@ -2763,6 +2843,7 @@ function printBanner() {
 │  assets        ${String(CONFIG.assets.length + ' volatility indices').padEnd(46)}│
 │  growth rates  ${CONFIG.growthRates.map(g => (g * 100) + '%').join(', ').padEnd(46)}│
 │  sizing        ${String(CONFIG.sizing + (CONFIG.martingaleSteps > 0 ? ` (martingale ×${CONFIG.martingaleMultiplier}, ${CONFIG.martingaleSteps} steps)` : ' (no martingale)')).padEnd(46)}│
+│  chase-on-loss ${String(CONFIG.chaseOnLoss ? 'ON (re-trade same asset until win)' : 'OFF').padEnd(46)}│
 │  stake         ${String(CONFIG.stake + ' ' + CONFIG.currency).padEnd(46)}│
 │  take profit   ${String(CONFIG.takeProfitTicks + ' ticks').padEnd(46)}│
 │  daily max loss${String(' ' + CONFIG.dailyMaxLoss + ' ' + CONFIG.currency).padEnd(46)}│
