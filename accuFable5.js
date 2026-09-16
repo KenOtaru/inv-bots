@@ -225,10 +225,10 @@ assets: envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100')
   reconnect: { initialDelayMs: 1000, maxDelayMs: 60000, backoffFactor: 2, jitterMs: 750 },
 
   // ── Logging / state ──
-  logFile   : envStr('LOG_FILE', 'accuapex-v5_05.log'),
+  logFile   : envStr('LOG_FILE', 'accuapex-v5_06.log'),
   logLevel  : envStr('LOG_LEVEL', 'INFO'),
-  stateFile : envStr('STATE_FILE', 'accuapex-v5-state_05.json'),
-  edgeFile  : envStr('EDGE_FILE', 'accuapex-v5-edge_05.json'),
+  stateFile : envStr('STATE_FILE', 'accuapex-v5-state_06.json'),
+  edgeFile  : envStr('EDGE_FILE', 'accuapex-v5-edge_06.json'),
 });
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -1985,6 +1985,18 @@ class AccuApexV5 {
     const nextStakeNote = this._isMartingaleEnabled()
       ? `➡️ <b>Next stake (if loss):</b> ${this._calcMartingaleStake(Math.min(this.martingaleStep + 1, this.cfg.martingaleSteps)).toFixed(2)} ${c}${this.martingaleStep + 1 > this.cfg.martingaleSteps ? ' (would reset to base)' : ''}\n`
       : '';
+
+    // ── Trade analysis stats (shown alongside the entry signal) ──
+    const stayed = this.md.getStayedIn(t.symbol, t.growthRate) ?? [];
+    const stayedRecent = stayed.slice(-10).join(',') || 'n/a';
+    const evLower = t.calibration?.evLowerPerTick;
+    const evLine = evLower == null
+      ? `<b>evLower/tick:</b> n/a (chase)\n`
+      : `<b>evLower/tick:</b> <code>${(evLower * 100).toFixed(4)}%</code> (gate ≤ ${(this.cfg.evLowerGateMax * 100).toFixed(4)}% · ${evLower <= this.cfg.evLowerGateMax ? '✅ in' : '❌ out'})\n`;
+    const analysisNote =
+      evLine +
+      `<b>stayedInArray (last 10 / ${stayed.length}):</b> <code>${stayedRecent}</code>\n`;
+
     const msg =
       `🟢 <b>AccuAPEX v5 TRADE OPENED</b>\n\n` +
       `<b>Contract:</b> #${t.contractId}\n` +
@@ -1994,6 +2006,7 @@ class AccuApexV5 {
       chaseNote +
       martingaleNote +
       `<b>Take-Profit:</b> sell after <b>${this.cfg.takeProfitTicks}</b> ticks\n` +
+      analysisNote +
       lossNote +
       nextStakeNote +
       `<b>Overall:</b> ${money(this.statsLog.overallProfit, c)}\n\n` +
