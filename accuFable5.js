@@ -135,7 +135,7 @@ const CONFIG = Object.freeze({
 //   assets: envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,BOOM900,BOOM1000,CRASH900,CRASH1000')
 //     .split(',').map(s => s.trim()).filter(Boolean),
 
-assets: envStr('ASSETS', 'R_50')
+assets: envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100')
     .split(',').map(s => s.trim()).filter(Boolean),
 
   // ── Growth-rate grid. 0.01 measured cheapest; 0.05 measured dearest. ──
@@ -182,17 +182,20 @@ assets: envStr('ASSETS', 'R_50')
   edgeMarginPerTick : 0.6000, // required cushion
   sellSpreadCost    : 0.0002, // modelled round-trip cost
 
-  // ── Stayed-in array + evLower/tick gates (the ONLY entry gates) ──
+  // ── Stayed-in array + evLower/tick + breachCount gates ──
   // The ACCU proposal returns contract_details.ticks_stayed_in — the last
   // barrier-stay durations, most current value last. Trade only when:
   //   • its N most-current values are each < stayMaxValue, AND
   //   • its single most-current value is < stayCurrentMax, AND
-  //   • its calibrated evLowerPerTick is <= evLowerGateMax (e.g. -1.4547%).
-  stayWindowN    : 2,     //6 N most-current values to check
+  //   • its calibrated evLowerPerTick is <= evLowerGateMax (e.g. -1.4547%), AND
+  //   • its calibrated single-tick breachCount is >= breachMinCount (need a
+  //     large enough sample of barrier hits to trust the survival estimate).
+  stayWindowN    : 1,     //6 N most-current values to check
   stayMaxValue   : 10,    //20 every one of those N must be < this
   stayCurrentMax : 1,   //2 the most-current value must be < this
   stayStaleMs    : 240000, // stays older than this are ignored
-  evLowerGateMax : -0.023547, //-0.014547 evLower/tick gate: trade only when ≤ this
+  evLowerGateMax : -0.013547, //-0.014547 evLower/tick gate: trade only when ≤ this
+  breachMinCount : 62, // trade only when historical single-tick barrier hits ≥ this
 
   // ── Take-profit ──
   // TP exits the trade after takeProfitTicks ticks (the hold target). The
@@ -1993,8 +1996,13 @@ class AccuApexV5 {
     const evLine = evLower == null
       ? `<b>evLower/tick:</b> n/a (chase)\n`
       : `<b>evLower/tick:</b> <code>${(evLower * 100).toFixed(4)}%</code> (gate ≤ ${(this.cfg.evLowerGateMax * 100).toFixed(4)}% · ${evLower <= this.cfg.evLowerGateMax ? '✅ in' : '❌ out'})\n`;
+    const breachCount = t.calibration?.breaches;
+    const breachLine = breachCount == null
+      ? `<b>breachCount:</b> n/a (chase)\n`
+      : `<b>breachCount:</b> <code>${breachCount}</code> (gate ≥ ${this.cfg.breachMinCount} · ${breachCount >= this.cfg.breachMinCount ? '✅ in' : '❌ out'})\n`;
     const analysisNote =
       evLine +
+      breachLine +
       `<b>stayedInArray (last 10 / ${stayed.length}):</b> <code>${stayedRecent}</code>\n`;
 
     const msg =
@@ -2010,7 +2018,7 @@ class AccuApexV5 {
       lossNote +
       nextStakeNote +
       `<b>Overall:</b> ${money(this.statsLog.overallProfit, c)}\n\n` +
-      `<i>Entry: stays + evL/t gates only. Exit: TP at ${this.cfg.takeProfitTicks} ticks.</i>`;
+      `<i>Entry: stays + evL/t + breachCount gates. Exit: TP at ${this.cfg.takeProfitTicks} ticks.</i>`;
     telegram.send(msg);
   }
 
@@ -2157,6 +2165,7 @@ class AccuApexV5 {
       `<b>Growth rate:</b> ${this.cfg.growthRates.map(g => (g * 100) + '%').join(', ')} · <b>TP:</b> ${this.cfg.takeProfitTicks} ticks\n` +
       `<b>ev gate:</b> evLower/tick ≤ ${(this.cfg.evLowerGateMax * 100).toFixed(4)}%\n` +
       `<b>stay gate:</b> ${this.cfg.stayWindowN} most-current < ${this.cfg.stayMaxValue}, latest < ${this.cfg.stayCurrentMax}\n` +
+      `<b>breach gate:</b> breachCount ≥ ${this.cfg.breachMinCount}\n` +
       `<b>Chase on loss:</b> ${this.cfg.chaseOnLoss ? '🟢 ON (re-trade same asset until win)' : 'OFF'}\n` +
       martingaleLine +
       lossLine +
@@ -2381,20 +2390,26 @@ class AccuApexV5 {
         ? 'ev=n/a'
         : `evL/t=${(c.evLowerPerTick * 100).toFixed(4)}% (${c.evLowerPerTick <= this.cfg.evLowerGateMax ? '≤' : '>'}` +
           `${(this.cfg.evLowerGateMax * 100).toFixed(4)}%)`;
+      const bc = c.breaches == null
+        ? 'breach=n/a'
+        : `breach=${c.breaches} (${c.breaches >= this.cfg.breachMinCount ? '≥' : '<'}` +
+          `${this.cfg.breachMinCount})`;
       logger.info(
         `STAYED-IN ${c.symbol}@g=${(c.growthRate * 100).toFixed(0)}% len=${arr.length} ` +
-        `latest=${stay.latest} gate=${stay.pass ? 'PASS' : `BLOCKED(${stay.reason})`} ${ev} ` +
+        `latest=${stay.latest} gate=${stay.pass ? 'PASS' : `BLOCKED(${stay.reason})`} ${ev} ${bc} ` +
         `arr=[${arr.join(',')}]`,
       );
     }
     const passing = rankCandidate =>
       stayOf(rankCandidate).pass && rankCandidate.evLowerPerTick != null &&
-      rankCandidate.evLowerPerTick <= this.cfg.evLowerGateMax;
+      rankCandidate.evLowerPerTick <= this.cfg.evLowerGateMax &&
+      rankCandidate.breaches >= this.cfg.breachMinCount;
     const passed = withData.filter(passing);
     logger.info(
-      `${passed.length} of ${withData.length} calibrated pair(s) pass BOTH gates ` +
+      `${passed.length} of ${withData.length} calibrated pair(s) pass ALL gates ` +
       `(stayed-in N=${this.cfg.stayWindowN} most-current < ${this.cfg.stayMaxValue} ` +
-      `& latest < ${this.cfg.stayCurrentMax}; evLowerPerTick ≤ ${(this.cfg.evLowerGateMax * 100).toFixed(4)}%). ` +
+      `& latest < ${this.cfg.stayCurrentMax}; evLowerPerTick ≤ ${(this.cfg.evLowerGateMax * 100).toFixed(4)}%; ` +
+      `breachCount ≥ ${this.cfg.breachMinCount}). ` +
       'The bot acts on the LOWEST evLowerPerTick among those.',
     );
     return ranked;
@@ -2450,14 +2465,22 @@ class AccuApexV5 {
     // ── ONLY TWO GATES: StayedInArray + evLower/tick (≤ evLowerGateMax) ──
     const ranked = this._calibrateAll();
 
-    const evGate = c => {
+const evGate = c => {
       if (c.evLowerPerTick == null) return { pass: false, reason: 'no-ev (uncalibrated)' };
       return c.evLowerPerTick <= this.cfg.evLowerGateMax
-        ? { pass: true, reason: `ev-ok (${(c.evLowerPerTick * 100).toFixed(4)}%>${(this.cfg.evLowerGateMax * 100).toFixed(4)}%)` }
+        ? { pass: true, reason: 'ev-ok' }
         : {
             pass: false,
             reason: `ev-over:${(c.evLowerPerTick * 100).toFixed(4)}%>${(this.cfg.evLowerGateMax * 100).toFixed(4)}%`,
           };
+    };
+
+    const breachGate = c => {
+      const bc = c.breaches;
+      if (bc == null) return { pass: false, reason: 'no-breach-count' };
+      return bc >= this.cfg.breachMinCount
+        ? { pass: true, reason: 'breach-ok' }
+        : { pass: false, reason: `breach-low:${bc}<${this.cfg.breachMinCount}` };
     };
 
     const candidates = ranked
@@ -2465,11 +2488,11 @@ class AccuApexV5 {
         ...c,
         stay: this.calib.stayAnalysis(this.md.getStayedIn(c.symbol, c.growthRate)),
       }))
-      .filter(c => c.stay.pass && evGate(c).pass);
+      .filter(c => c.stay.pass && evGate(c).pass && breachGate(c).pass);
     if (!candidates.length) {
       const verdicts = ranked.map(c => {
         const stay = this.calib.stayAnalysis(this.md.getStayedIn(c.symbol, c.growthRate));
-        return `${c.symbol}@${(c.growthRate * 100).toFixed(0)}% stay=${stay.reason} ev=${evGate(c).reason}`;
+        return `${c.symbol}@${(c.growthRate * 100).toFixed(0)}% stay=${stay.reason} ev=${evGate(c).reason} breach=${breachGate(c).reason}`;
       }).join(' | ');
       logger.info(`gates blocked all pairs — ${verdicts}`);
       return;
@@ -2482,6 +2505,7 @@ class AccuApexV5 {
       `OPEN ${best.symbol} g=${(best.growthRate * 100).toFixed(0)}% ` +
       `evL/t=${(best.evLowerPerTick * 100).toFixed(4)}% (gate ≤ ${(this.cfg.evLowerGateMax * 100).toFixed(4)}%) ` +
       `stay=PASS latest=${best.stay.latest} ` +
+      `breaches=${best.breaches} (gate ≥ ${this.cfg.breachMinCount}) ` +
       `stayedIn(len=${stayArr.length})=[${stayArr.join(',')}]`,
     );
 
@@ -2752,7 +2776,7 @@ function runSelfTest() {
   ok('5% barrier is priced tighter than fair relative to 1%', barrierRatio < fairRatio);
 
   console.log('\n[CalibrationEngine]');
-  const ce = new CalibrationEngine({ ...CONFIG, calibMinTicks: 10 });
+  const ce = new CalibrationEngine({ ...CONFIG, calibMinTicks: 10, edgeMarginPerTick: -0.6 });
 
   // A synthetic series that NEVER breaches: survival 1.0 -> must be tradeable.
   const flat = Array.from({ length: 500 }, (_, i) => ({ quote: 100 + (i % 2) * 1e-9, epoch: i }));
