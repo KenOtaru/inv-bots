@@ -2450,7 +2450,7 @@ logger.warn(`martingale MAX STEPS hit (${this.martingaleStep}/${maxSteps}) on lo
     const evGate = c => {
       if (c.evLowerPerTick == null) return { pass: false, reason: 'no-ev (uncalibrated)' };
       return c.evLowerPerTick <= this.cfg.evLowerGateMax
-        ? { pass: true, reason: 'ev-ok' }
+        ? { pass: true, reason: `ev-ok (${(c.evLowerPerTick * 100).toFixed(4)}%>${(this.cfg.evLowerGateMax * 100).toFixed(4)}%)` }
         : {
             pass: false,
             reason: `ev-over:${(c.evLowerPerTick * 100).toFixed(4)}%>${(this.cfg.evLowerGateMax * 100).toFixed(4)}%`,

@@ -135,7 +135,7 @@ const CONFIG = Object.freeze({
 //   assets: envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,BOOM900,BOOM1000,CRASH900,CRASH1000')
 //     .split(',').map(s => s.trim()).filter(Boolean),
 
-assets: envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100')
+assets: envStr('ASSETS', 'R_50')
     .split(',').map(s => s.trim()).filter(Boolean),
 
   // ── Growth-rate grid. 0.01 measured cheapest; 0.05 measured dearest. ──
@@ -188,11 +188,11 @@ assets: envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100')
   //   • its N most-current values are each < stayMaxValue, AND
   //   • its single most-current value is < stayCurrentMax, AND
   //   • its calibrated evLowerPerTick is <= evLowerGateMax (e.g. -1.4547%).
-  stayWindowN    : 4,     //6 N most-current values to check
+  stayWindowN    : 2,     //6 N most-current values to check
   stayMaxValue   : 10,    //20 every one of those N must be < this
   stayCurrentMax : 1,   //2 the most-current value must be < this
   stayStaleMs    : 240000, // stays older than this are ignored
-  evLowerGateMax : -0.013547, //-0.014547 evLower/tick gate: trade only when ≤ this
+  evLowerGateMax : -0.023547, //-0.014547 evLower/tick gate: trade only when ≤ this
 
   // ── Take-profit ──
   // TP exits the trade after takeProfitTicks ticks (the hold target). The
@@ -2453,7 +2453,7 @@ class AccuApexV5 {
     const evGate = c => {
       if (c.evLowerPerTick == null) return { pass: false, reason: 'no-ev (uncalibrated)' };
       return c.evLowerPerTick <= this.cfg.evLowerGateMax
-        ? { pass: true, reason: 'ev-ok' }
+        ? { pass: true, reason: `ev-ok (${(c.evLowerPerTick * 100).toFixed(4)}%>${(this.cfg.evLowerGateMax * 100).toFixed(4)}%)` }
         : {
             pass: false,
             reason: `ev-over:${(c.evLowerPerTick * 100).toFixed(4)}%>${(this.cfg.evLowerGateMax * 100).toFixed(4)}%`,
