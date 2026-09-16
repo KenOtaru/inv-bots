@@ -176,10 +176,10 @@ assets: envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100')
   // ── Calibration (the core of this build) ──
   // Trade only when the LOWER confidence bound on per-tick survival beats
   // the break-even survival 1/(1+g) by at least edgeMarginPerTick.
-  calibMinTicks     : 5000,   // min history per symbol
-  calibWindow       : 5000,     // max history retained
+  calibMinTicks     : 1000,   // min history per symbol
+  calibWindow       : 1000,     // max history retained
   calibConfidenceZ  : 0.96,      // 95% Wilson bound
-  edgeMarginPerTick : -0.6000, // required cushion
+  edgeMarginPerTick : 0.6000, // required cushion
   sellSpreadCost    : 0.0002, // modelled round-trip cost
 
   // ── Stayed-in array + evLower/tick gates (the ONLY entry gates) ──
