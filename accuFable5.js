@@ -117,8 +117,8 @@ const envBool = (k, d) => {
 // ═══════════════════════════════════════════════════════════════════════
 const CONFIG = Object.freeze({
   // ── Credentials (REQUIRED via .env — never commit these) ──
-  apiToken : 'pat_cb2016855b5e6c61ac95f94432192dd6ed86bec7f7454e575d3fe1ed9f617692',
-  appId    : '33uslPtthXBEkQOdfKfoY',
+  apiToken : 'pat_e02a554e3b6f9f939c07855fe28c91c68e58ea14f741f45f675f82de96da4289',
+  appId    : '33uslPtthXBEkQOdfKfoY', //1089 | 33uslPtthXBEkQOdfKfoY
   wsUrl    : 'wss://ws.derivws.com/websockets/v3',
   currency : 'USD',
   // PAT-token (new API) only: which account type the OTP flow selects when
@@ -195,7 +195,7 @@ assets: envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100')
   stayCurrentMax : 1,   //2 the most-current value must be < this
   stayStaleMs    : 240000, // stays older than this are ignored
   evLowerGateMax : -0.013547, //-0.014547 evLower/tick gate: trade only when ≤ this
-  breachMinCount : 65, // trade only when historical single-tick barrier hits ≥ this
+  breachMinCount : 65, //65 trade only when historical single-tick barrier hits ≥ this
 
   // ── Take-profit ──
   // TP exits the trade after takeProfitTicks ticks (the hold target). The

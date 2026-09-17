@@ -117,7 +117,7 @@ const envBool = (k, d) => {
 // ═══════════════════════════════════════════════════════════════════════
 const CONFIG = Object.freeze({
   // ── Credentials (REQUIRED via .env — never commit these) ──
-  apiToken : 'pat_27a3197287bae3ec6c2c9cbdd68fffaa2a524e3b0a6e1ecf298b5ffb338adb10',
+  apiToken : 'pat_a4392c86309361a50eca82c1ea872127636b84070f6c45295459ffb83de31360',
   appId    : '33uslPtthXBEkQOdfKfoY',
   wsUrl    : 'wss://ws.derivws.com/websockets/v3',
   currency : 'USD',
