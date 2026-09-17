@@ -228,10 +228,10 @@ assets: envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100')
   reconnect: { initialDelayMs: 1000, maxDelayMs: 60000, backoffFactor: 2, jitterMs: 750 },
 
   // ── Logging / state ──
-  logFile   : envStr('LOG_FILE', 'accuapex-v5_08.log'),
+  logFile   : envStr('LOG_FILE', 'accuapex-v5_09.log'),
   logLevel  : envStr('LOG_LEVEL', 'INFO'),
-  stateFile : envStr('STATE_FILE', 'accuapex-v5-state_08.json'),
-  edgeFile  : envStr('EDGE_FILE', 'accuapex-v5-edge_08.json'),
+  stateFile : envStr('STATE_FILE', 'accuapex-v5-state_09.json'),
+  edgeFile  : envStr('EDGE_FILE', 'accuapex-v5-edge_09.json'),
 });
 
 // ═══════════════════════════════════════════════════════════════════════

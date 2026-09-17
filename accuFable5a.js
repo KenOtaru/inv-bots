@@ -228,10 +228,10 @@ assets: envStr('ASSETS', '1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V')
   reconnect: { initialDelayMs: 1000, maxDelayMs: 60000, backoffFactor: 2, jitterMs: 750 },
 
   // ── Logging / state ──
-  logFile   : envStr('LOG_FILE', 'accuFable5_005.log'),
+  logFile   : envStr('LOG_FILE', 'accuFable5_006.log'),
   logLevel  : envStr('LOG_LEVEL', 'INFO'),
-  stateFile : envStr('STATE_FILE', 'accuFable5-state_005.json'),
-  edgeFile  : envStr('EDGE_FILE', 'accuFable5-edge_005.json'),
+  stateFile : envStr('STATE_FILE', 'accuFable5-state_006.json'),
+  edgeFile  : envStr('EDGE_FILE', 'accuFable5-edge_006.json'),
 });
 
 // ═══════════════════════════════════════════════════════════════════════
