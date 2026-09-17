@@ -176,10 +176,10 @@ assets: envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100')
   // ── Calibration (the core of this build) ──
   // Trade only when the LOWER confidence bound on per-tick survival beats
   // the break-even survival 1/(1+g) by at least edgeMarginPerTick.
-  calibMinTicks     : 1000,   // min history per symbol
-  calibWindow       : 2000,     // max history retained
+  calibMinTicks     : 1001,   // min history per symbol
+  calibWindow       : 1001,     // max history retained
   calibConfidenceZ  : 0.96,      // 95% Wilson bound
-  edgeMarginPerTick : 0.6000, // required cushion
+  edgeMarginPerTick : -0.6000, // required cushion
   sellSpreadCost    : 0.0002, // modelled round-trip cost
 
   // ── Stayed-in array + evLower/tick + breachCount gates ──
@@ -2462,13 +2462,13 @@ class AccuApexV5 {
     // fresh ACCU proposals every tick (not just on the 60s barrier timer).
     await this._refreshStayedIn();
 
-    // ── ONLY TWO GATES: StayedInArray + evLower/tick (≤ evLowerGateMax) ──
+    // ── ONLY THREE GATES: StayedInArray + evLower/tick (≤ evLowerGateMax) + breachCount ──
     const ranked = this._calibrateAll();
 
 const evGate = c => {
       if (c.evLowerPerTick == null) return { pass: false, reason: 'no-ev (uncalibrated)' };
       return c.evLowerPerTick <= this.cfg.evLowerGateMax
-        ? { pass: true, reason: 'ev-ok' }
+        ? { pass: true, reason: `ev-ok: (${(c.evLowerPerTick * 100).toFixed(4)}%<=${(this.cfg.evLowerGateMax * 100).toFixed(4)}%)` }
         : {
             pass: false,
             reason: `ev-over:${(c.evLowerPerTick * 100).toFixed(4)}%>${(this.cfg.evLowerGateMax * 100).toFixed(4)}%`,
@@ -2479,7 +2479,7 @@ const evGate = c => {
       const bc = c.breaches;
       if (bc == null) return { pass: false, reason: 'no-breach-count' };
       return bc >= this.cfg.breachMinCount
-        ? { pass: true, reason: 'breach-ok' }
+        ? { pass: true, reason: `breach-ok: (${bc}>=${this.cfg.breachMinCount})` }
         : { pass: false, reason: `breach-low:${bc}<${this.cfg.breachMinCount}` };
     };
 

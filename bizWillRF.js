@@ -2664,7 +2664,7 @@ class IndexBot {
                     lastDirection: a.lastTradeDirection,
                     buyFlag: a.buyFlagActive,
                     sellFlag: a.sellFlagActive,
-                    x2: a.x2Losses || 0, x3: a.x3Losses || 0, x4: a.x4Losses || 0,
+                    x2: a.x2Losses || 0, x3: a.x3Losses || 0, x4: a.x4Losses || 0, x5: a.x5Losses || 0, x6: a.x6Losses || 0, x7: a.x7Losses || 0, x8: a.x8Losses || 0,
                 };
             }
         });
