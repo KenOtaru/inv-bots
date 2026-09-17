@@ -177,7 +177,7 @@ assets: envStr('ASSETS', '1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V')
   // Trade only when the LOWER confidence bound on per-tick survival beats
   // the break-even survival 1/(1+g) by at least edgeMarginPerTick.
   calibMinTicks     : 1000,   // min history per symbol
-  calibWindow       : 1000,     // max history retained
+  calibWindow       : 2000,     // max history retained
   calibConfidenceZ  : 0.96,      // 95% Wilson bound
   edgeMarginPerTick : -0.6000, // required cushion
   sellSpreadCost    : 0.0002, // modelled round-trip cost
@@ -195,7 +195,7 @@ assets: envStr('ASSETS', '1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V')
   stayCurrentMax : 1,   //2 the most-current value must be < this
   stayStaleMs    : 240000, // stays older than this are ignored
   evLowerGateMax : -0.013547, //-0.014547 evLower/tick gate: trade only when ≤ this
-  breachMinCount : 68, // trade only when historical single-tick barrier hits ≥ this
+  breachMinCount : 70, // trade only when historical single-tick barrier hits ≥ this
 
   // ── Take-profit ──
   // TP exits the trade after takeProfitTicks ticks (the hold target). The
@@ -228,10 +228,10 @@ assets: envStr('ASSETS', '1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V')
   reconnect: { initialDelayMs: 1000, maxDelayMs: 60000, backoffFactor: 2, jitterMs: 750 },
 
   // ── Logging / state ──
-  logFile   : envStr('LOG_FILE', 'accuFable5_004.log'),
+  logFile   : envStr('LOG_FILE', 'accuFable5_005.log'),
   logLevel  : envStr('LOG_LEVEL', 'INFO'),
-  stateFile : envStr('STATE_FILE', 'accuFable5-state_004.json'),
-  edgeFile  : envStr('EDGE_FILE', 'accuFable5-edge_004.json'),
+  stateFile : envStr('STATE_FILE', 'accuFable5-state_005.json'),
+  edgeFile  : envStr('EDGE_FILE', 'accuFable5-edge_005.json'),
 });
 
 // ═══════════════════════════════════════════════════════════════════════
