@@ -87,8 +87,8 @@ class RestClient {
 // ============================================================
 // FILE PATHS  [RETAINED]
 // ============================================================
-const STATE_FILE = path.join(__dirname, 'bizWillRFv2FX_08-state.json');
-const HISTORY_FILE = path.join(__dirname, 'bizWillRFv2FX_08-history.json');
+const STATE_FILE = path.join(__dirname, 'bizWillRFv2FX_001-state.json');
+const HISTORY_FILE = path.join(__dirname, 'bizWillRFv2FX_001-history.json');
 const STATE_SAVE_INTERVAL = 5000;  // ms
 
 // ============================================================
@@ -177,14 +177,14 @@ const CONFIG = {
     // ── Active Index Assets ───────────────────────────────────
     ACTIVE_ASSETS: [
         // 'frxEURUSD',    // Euro/Dollar — most liquid, tightest spread
-        'frxGBPUSD',    // Cable — high volatility, good signals
+        // 'frxGBPUSD',    // Cable — high volatility, good signals
         // 'frxUSDJPY',    // Dollar/Yen — excellent trending behavior
         // 'frxUSDCHF',    // Dollar/Swiss — safe haven dynamics
         // 'frxAUDUSD',    // Aussie — commodity-linked, clear trends
         // 'frxUSDCAD',    // Dollar/Loonie — oil-correlated trends
         // 'frxEURGBP',    // Euro/Cable — range-bound, good for reversals
         // 'frxEURJPY',    // Euro/Yen — high volatility cross
-        'frxXAUUSD',    // Gold — commodity-linked, clear trends
+        // 'frxXAUUSD',    // Gold — commodity-linked, clear trends
         // 'frxXAUEUR',    // Gold/Euro — commodity-linked, clear trends
         // 'frxNZDUSD',    // NZD/Dollar — most liquid, tightest spread
         'frxNZDJPY',    // NZD/JPY — most liquid, tightest spread
