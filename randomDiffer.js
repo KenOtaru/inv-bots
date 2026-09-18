@@ -274,9 +274,9 @@ class EnhancedDigitDifferTradingBot {
         this.assets = config.assets || [
             // 'R_10','R_25','R_50','R_75', 'R_100', 
             // 'RDBULL', 'RDBEAR', 
-            // '1HZ10V', '1HZ15V', '1HZ25V', '1HZ30V', '1HZ50V', '1HZ75V', '1HZ90V', '1HZ100V',
+            'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR', '1HZ10V', '1HZ15V', '1HZ25V', '1HZ30V', '1HZ50V', '1HZ75V', '1HZ90V', '1HZ100V',
             // 'JD10', 'JD25', 'JD50', 'JD75', 'JD100',
-            'R_10','R_25','R_50','R_75', 'R_100', 'RDBULL', 'RDBEAR',
+            // 'R_10','R_25','R_50','R_75', 'R_100', 'RDBULL', 'RDBEAR',
             // 'R_75',
         ];
 
@@ -297,6 +297,9 @@ class EnhancedDigitDifferTradingBot {
         this.currentStake = this.config.initialStake;
         this.consecutiveLosses = 0;
         this.currentTradeId = null;
+        this.currentAsset = null;
+        this.lastOpenDigits = [];
+        this.lastOpenStake = 0;
         this.digitCounts = {};
         this.tickSubscriptionIds = {};
         this.tickHistories = {};
@@ -325,6 +328,7 @@ class EnhancedDigitDifferTradingBot {
         this.isExcluded = [];
         // Add new property to track suspended assets
         this.suspendedAssets = new Set();
+        this.settledContracts = new Set();
         this.rStats = {};
         this.sys = 1;
 
@@ -359,6 +363,9 @@ class EnhancedDigitDifferTradingBot {
         this.Pause = false;
 
         this.todayPnL = 0;
+        this.dailyStats = {};
+        this.eodTimeGmt = '00:00';
+        this._eodBoot = null;
 
         this.startTelegramTimer();
     }
@@ -586,6 +593,10 @@ class EnhancedDigitDifferTradingBot {
 
             console.log('Trade placed successfully');
             this.currentTradeId = buy.contract_id;
+            this.currentAsset = asset;
+            this.lastOpenStake = Number(proposal.ask_price || this.currentStake);
+            this.lastOpenDigits = (this.tickHistories[asset] || []).slice(-10);
+            this.sendTradeOpenNotification(asset, predictedDigit, this.lastOpenStake, Number(proposal.payout || 0));
             await this.subscribeToOpenContract(this.currentTradeId);
         } catch (e) {
             console.error('Error placing trade:', e.message);
@@ -599,19 +610,37 @@ class EnhancedDigitDifferTradingBot {
                 const contract = msg.proposal_open_contract;
                 if (contract) this.handleContractUpdate(contract);
             }, 15000);
+            // The first response resolves the subscribe request and never reaches
+            // the callback above. A 1-tick contract can already be sold in it, so
+            // poll once after a short delay to catch that settlement (no-op if the
+            // live subscription already reported it).
+            setTimeout(() => {
+                this.client._send({ proposal_open_contract: 1, contract_id: contractId }, 15000)
+                    .then(res => {
+                        const contract = res && res.proposal_open_contract;
+                        if (contract) this.handleContractUpdate(contract);
+                    })
+                    .catch(() => {});
+            }, 2000);
         } catch (e) {
             console.warn(`Failed to subscribe to open contract #${contractId}:`, e.message);
         }
     }
 
     handleContractUpdate(contract) {
-        if (contract.is_sold) {
+        const contractId = contract.contract_id;
+        if (contract.is_sold && !this.settledContracts.has(contractId)) {
+            this.settledContracts.add(contractId);
+            if (this.settledContracts.size > 5000) {
+                const first = this.settledContracts.values().next().value;
+                this.settledContracts.delete(first);
+            }
             this.handleTradeResult(contract);
         }
     }
 
     handleTradeResult(contract) {
-        const asset = contract.underlying;
+        const asset = this.currentAsset || contract.underlying || contract.symbol;
         const won = contract.status === 'won';
         const profit = parseFloat(contract.profit);
 
@@ -649,15 +678,15 @@ class EnhancedDigitDifferTradingBot {
         this.todayPnL += profit;
         this.Pause = true;
 
+        this._trackDaily(asset, contract, won, profit);
+
         const randomWaitTime = Math.floor(Math.random() * (this.config.maxWaitTime - this.config.minWaitTime + 1)) + this.config.minWaitTime;
         const waitTimeMinutes = Math.round(randomWaitTime / 60000);
 
         this.waitTime = waitTimeMinutes;
         this.waitSeconds = randomWaitTime;
 
-        if (!won) {
-            this.sendLossNotification(asset);
-        }
+        this.sendTradeResultNotification(asset, contract, won, profit);
 
         this.logTradingSummary(asset);
 
@@ -794,14 +823,46 @@ class EnhancedDigitDifferTradingBot {
         }
     }
 
+    _dayKey(date = new Date()) {
+        return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
+    }
+
+    _trackDaily(asset, contract, won, profit) {
+        const key = this._dayKey();
+        if (!this.dailyStats[key]) {
+            this.dailyStats[key] = { trades: 0, wins: 0, losses: 0, netPL: 0, stakes: 0, list: [] };
+        }
+        const d = this.dailyStats[key];
+        d.trades++;
+        if (won) d.wins++; else d.losses++;
+        d.netPL += profit;
+        d.stakes += this.lastOpenStake || Number(contract.stake) || this.currentStake;
+        d.list.push({ asset, won, profit, digit: this.xDigit });
+        if (d.list.length > 50) d.list.shift();
+    }
+
+    _todayStats() {
+        const d = this.dailyStats[this._dayKey()] || { trades: 0, wins: 0, losses: 0, netPL: 0 };
+        return {
+            trades: d.trades,
+            wins: d.wins,
+            losses: d.losses,
+            netPL: d.netPL,
+            winRate: d.trades ? ((d.wins / d.trades) * 100).toFixed(2) : '0.00'
+        };
+    }
+
     sendTelegramSummary() {
         const winRate = this.totalTrades ? ((this.totalWins / this.totalTrades) * 100).toFixed(2) : '0.00';
+        const today = this._todayStats();
 
         const summaryText =
             '📊 <b>Random Digit Multi-Asset Bot — Summary</b>\n' +
             'Total Trades: ' + this.totalTrades + ' | ✅ ' + this.totalWins + ' | ❌ ' + this.totalLosses + '\n' +
             'x2 Losses: ' + this.consecutiveLosses2 + ' | x3: ' + this.consecutiveLosses3 +
             ' | x4: ' + this.consecutiveLosses4 + ' | x5: ' + this.consecutiveLosses5 + '\n\n' +
+            '📅 Today (UTC ' + this._dayKey() + '): ' + today.trades + ' trades (✅' + today.wins + ' ❌' + today.losses +
+            ') | P/L <b>' + today.netPL.toFixed(2) + '</b>\n\n' +
             'Currently Suspended Assets: <code>' + (Array.from(this.suspendedAssets).join(', ') || 'None') + '</code>\n\n' +
             'Current Stake: <b>$' + this.currentStake.toFixed(2) + '</b>\n' +
             'Total Profit/Loss Amount: <b>' + this.totalProfitLoss.toFixed(2) + '</b>\n' +
@@ -811,27 +872,41 @@ class EnhancedDigitDifferTradingBot {
         telegram.send(summaryText, 'high');
     }
 
-    sendLossNotification(asset) {
+    sendTradeOpenNotification(asset, digit, stake, payout) {
+        const last10 = this.lastOpenDigits && this.lastOpenDigits.length ? this.lastOpenDigits.join(', ') : (this.tickHistories[asset] || []).slice(-10).join(', ') || '—';
+
+        telegram.send(
+            '🟢 <b>Random Digit Multi-Asset Bot — OPEN</b>\n' +
+            'Asset: <code>' + htmlEscape(asset) + '</code>\n' +
+            'Predicted digit: <b>' + digit + '</b>\n' +
+            'Stake: <b>$' + stake.toFixed(2) + '</b> → payout ' + (payout ? payout.toFixed(2) : '—') + '\n\n' +
+            'Last 10 digits: <code>' + last10 + '</code>\n' +
+            '🕒 ' + utcTs(),
+            'low'
+        );
+    }
+
+    sendTradeResultNotification(asset, contract, won, profit) {
         const winRate = this.totalTrades ? ((this.totalWins / this.totalTrades) * 100).toFixed(2) : '0.00';
-        const history = this.tickHistories[asset];
+        const history = this.tickHistories[asset] || [];
         const lastFewTicks = history.slice(-20);
+        const tradeId = contract.contract_id;
 
         const summaryText =
-            '📉 <b>Random Digit Multi-Asset Bot — Loss</b>\n\n' +
+            (won ? '✅ <b>Random Digit Multi-Asset Bot — WIN</b>' : '❌ <b>Random Digit Multi-Asset Bot — LOSS</b>') + '\n\n' +
+            'Trade #' + tradeId + '\n' +
+            'Asset: <code>' + htmlEscape(asset) + '</code>\n' +
+            'Predicted digit: <b>' + this.xDigit + '</b>\n' +
+            'Result P/L: <b>' + (won ? '+' : '') + profit.toFixed(2) + '</b>\n\n' +
             'Total Trades: ' + this.totalTrades + ' | ✅ ' + this.totalWins + ' | ❌ ' + this.totalLosses + '\n' +
-            'x2 Losses: ' + this.consecutiveLosses2 + ' | x3: ' + this.consecutiveLosses3 +
-            ' | x4: ' + this.consecutiveLosses4 + ' | x5: ' + this.consecutiveLosses5 + '\n\n' +
-            'Total Profit/Loss Amount: <b>' + this.totalProfitLoss.toFixed(2) + '</b>\n' +
-            'Win Rate: <b>' + winRate + '%</b>\n\n' +
-            'Last Digit Analysis:\n' +
-            'Asset: <code>' + asset + '</code>\n' +
-            'Predicted Digit: <b>' + this.xDigit + '</b>\n\n' +
-            'Last 20 Digits: <code>' + lastFewTicks.join(', ') + '</code>\n\n' +
+            'Win Rate: <b>' + winRate + '%</b>\n' +
+            'Total P/L: <b>' + this.totalProfitLoss.toFixed(2) + '</b>\n\n' +
+            'Last 20 digits: <code>' + (lastFewTicks.join(', ') || '—') + '</code>\n\n' +
             'Current Stake: <b>$' + this.currentStake.toFixed(2) + '</b>\n' +
-            'Waiting for: ' + this.waitTime + ' minutes before next trade...\n' +
+            'Waiting: ' + this.waitTime + ' minutes before next trade...\n' +
             '🕒 ' + utcTs();
 
-        telegram.send(summaryText, 'high');
+        telegram.send(summaryText, won ? 'low' : 'high');
     }
 
     sendErrorNotification(errorMessage) {
@@ -843,9 +918,58 @@ class EnhancedDigitDifferTradingBot {
         );
     }
 
+    // ── End-of-Day summary (GMT) ───────────────────────────────────────
+    _msToNextEod(now = new Date()) {
+        const [h, min] = String(this.eodTimeGmt || '00:00').split(':').map(Number);
+        const target = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), h || 0, min || 0, 0, 0));
+        if (target <= now) target.setUTCDate(target.getUTCDate() + 1);
+        return target.getTime() - now.getTime();
+    }
+    _eodReportDate(now = new Date()) {
+        // At 00:00 GMT the just-finished trade day is yesterday (UTC).
+        return this._dayKey(new Date(now.getTime() - 3600 * 1000));
+    }
+    _scheduleEod() {
+        const delay = this._msToNextEod();
+        console.log(`Next GMT EOD report in ${(delay / 3600000).toFixed(2)}h`);
+        this._eodBoot = setTimeout(() => {
+            this._sendEod();
+            this._scheduleEod();
+        }, delay);
+    }
+    _sendEod() {
+        const date = this._eodReportDate();
+        const d = this.dailyStats[date] || { trades: 0, wins: 0, losses: 0, netPL: 0, list: [] };
+        const winRate = d.trades ? ((d.wins / d.trades) * 100).toFixed(2) : '0.00';
+
+        let msg = '🌙 <b>Random Digit Multi-Asset Bot — END OF TRADE DAY</b>\n' +
+            '📅 Trade day (UTC): <b>' + date + '</b>\n\n';
+
+        if (d.trades === 0) {
+            msg += 'No trades recorded for this trade day.\n\n';
+        } else {
+            msg += '📊 Trades: ' + d.trades + ' (✅' + d.wins + ' ❌' + d.losses + ') | WR <b>' + winRate + '%</b>\n' +
+                '💰 Net P/L: <b>' + (d.netPL >= 0 ? '+' : '') + d.netPL.toFixed(2) + '</b>\n\n';
+
+            if (d.list.length) {
+                msg += '📋 Trades:\n';
+                d.list.slice(-25).forEach((t, i) => {
+                    msg += (i + 1) + '. ' + (t.won ? '✅' : '❌') + ' <code>' + htmlEscape(t.asset) + '</code> d' + t.digit + ' ' + (t.profit >= 0 ? '+' : '') + t.profit.toFixed(2) + '\n';
+                });
+            }
+        }
+
+        msg += '\n💼 Lifetime: ' + this.totalTrades + ' trades (✅' + this.totalWins + ' ❌' + this.totalLosses +
+            ') | Net P/L <b>' + this.totalProfitLoss.toFixed(2) + '</b>\n' +
+            '🕒 ' + utcTs();
+
+        telegram.send(msg, 'high');
+    }
+
     start() {
         this.connect();
         this.checkTimeForDisconnectReconnect();
+        this._scheduleEod();
     }
 }
 
