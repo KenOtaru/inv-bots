@@ -779,7 +779,7 @@ class TradingBot{
     const verdict=newLast!=null
       ? `${won?'✅ WON':'❌ LOST'} — <b>${t.digit}</b>/<b>${newLast}</b> → ${won?'unequal':'equal'}`
       : '❓ settlement digit unavailable';
-    return `🎯 last 10: ${span}\n   ${verdict}${prevLine}`;
+    return `🎯 last 10: ${span}\n   ${verdict}`;
   }
 
   // ── Martingale stake: base * step^effectiveLosses, capped ─────────
