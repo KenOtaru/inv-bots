@@ -1,6 +1,7 @@
 require('dotenv').config();
 const WebSocket = require('ws');
 const https = require('https');
+const fs = require('fs');
 const { URL } = require('url');
 const EventEmitter = require('events');
 const crypto = require('crypto');
@@ -8,6 +9,8 @@ const crypto = require('crypto');
 // ── env + logging helpers ───────────────────────────────────────────────
 function numEnv(n, d) { const v = process.env[n]; if (v == null || v === '') return d; const x = Number(v); return Number.isFinite(x) ? x : d; }
 function intEnv(n, d) { const v = process.env[n]; if (v == null || v === '') return d; const x = parseInt(v, 10); return Number.isFinite(x) ? x : d; }
+function strEnv(n, d) { const v = process.env[n]; return v == null || v === '' ? d : String(v).trim(); }
+function boolEnv(n, d) { const v = process.env[n]; if (v == null || v === '') return d; return ['1', 'true', 'yes', 'on'].includes(String(v).trim().toLowerCase()); }
 const logger = {
     error: (...a) => console.error(...a),
     warn: (...a) => console.warn(...a),
@@ -27,6 +30,17 @@ const CONFIG = Object.freeze({
     legacyWsUrl: 'wss://ws.derivws.com/websockets/v3',
     restBaseUrl: 'https://api.derivws.com',
     currency:    'USD',
+
+    // ── persistence (survive restart / network drop) ───────────────────
+    stateFile: strEnv('STATE_FILE', 'randomDiffer_state.json'),
+
+    // ── multi-asset selection / suspension ─────────────────────────────
+    randomAssetSelection:   boolEnv('RANDOM_ASSET_SELECTION', true), // pick a random asset each trade
+    suspendAssetAfterTrade: boolEnv('SUSPEND_AFTER_TRADE', false),   // suspend traded asset after each trade
+
+    // ── SESSION takeProfit cooldown (random) ───────────────────────────
+    takeProfitCooldownMinMs: intEnv('TAKE_PROFIT_COOLDOWN_MS_MIN', 15 * 60 * 1000), // 15 min
+    takeProfitCooldownMaxMs: intEnv('TAKE_PROFIT_COOLDOWN_MS_MAX', 60 * 60 * 1000), // 60 min
 
     telegram: {
         enabled:  true,
@@ -285,14 +299,20 @@ class EnhancedDigitDifferTradingBot {
             multiplier: config.multiplier || 11.3,
             maxConsecutiveLosses: config.maxConsecutiveLosses || 5,
             stopLoss: config.stopLoss || 50,
-            takeProfit: config.takeProfit || 1,
+            takeProfit: config.takeProfit != null ? config.takeProfit : 25,
+            takeProfitCooldownMinMs: config.takeProfitCooldownMinMs || CONFIG.takeProfitCooldownMinMs,
+            takeProfitCooldownMaxMs: config.takeProfitCooldownMaxMs || CONFIG.takeProfitCooldownMaxMs,
             requiredHistoryLength: config.requiredHistoryLength || 200,
             winProbabilityThreshold: config.winProbabilityThreshold || 100,
+            randomAssetSelection: config.randomAssetSelection != null ? config.randomAssetSelection : CONFIG.randomAssetSelection,
+            suspendAssetAfterTrade: config.suspendAssetAfterTrade != null ? config.suspendAssetAfterTrade : CONFIG.suspendAssetAfterTrade,
             maxReconnectAttempts: config.maxReconnectAttempts || 10000,
             reconnectInterval: config.reconnectInterval || 5000,
             minWaitTime: config.minWaitTime || 200 * 1000,
             maxWaitTime: config.maxWaitTime || 500 * 1000,
         };
+
+        this.stateFile = config.stateFile || CONFIG.stateFile;
 
         this.currentStake = this.config.initialStake;
         this.consecutiveLosses = 0;
@@ -332,6 +352,23 @@ class EnhancedDigitDifferTradingBot {
         this.rStats = {};
         this.sys = 1;
 
+        // ── session / takeProfit state (V2) ─────────────────────────────
+        this._sessionNum = 1;
+        this._sessionStartAt = Date.now();
+        this._sessionStartBal = 0;
+        this._sessionPL = 0;
+        this._sessionTrades = 0;
+        this._tpAwaiting = false;
+        this._tpPauseUntil = 0;
+        this._tpResumeT = null;
+        this._stopped = false;
+        this.startBalance = null;
+
+        // ── in-flight contract reconciliation (survive restart/drop) ────
+        this.pendingContractId = null;
+        this.pendingContractAsset = null;
+        this.pendingContractDigit = null;
+
         this.assets.forEach(asset => {
             this.tickHistories[asset] = [];
             this.tickHistories2[asset] = [];
@@ -366,6 +403,8 @@ class EnhancedDigitDifferTradingBot {
         this.dailyStats = {};
         this.eodTimeGmt = '00:00';
         this._eodBoot = null;
+
+        this._loadState();
 
         this.startTelegramTimer();
     }
@@ -416,12 +455,29 @@ class EnhancedDigitDifferTradingBot {
         this.retryCount = 0;
         await this.initializeSubscriptions();
 
+        if (this.startBalance == null && this.client.balance != null) this.startBalance = this.client.balance;
+
+        // If a session takeProfit pause survived the restart, honor it;
+        // resume immediately only when the persisted cooldown already elapsed.
+        if (this._tpAwaiting && Date.now() >= this._tpPauseUntil) {
+            this._startNewSession('pause elapsed during restart');
+        }
+
+        // Reconcile any contract left open across a restart / network drop.
+        await this._reconcilePendingContract();
+
+        const sessionLine = this._tpAwaiting
+            ? '⏸ ' + this._sessionLine() + ' — resumes ' + new Date(this._tpPauseUntil).toUTCString()
+            : '▶ ' + this._sessionLine();
+
         telegram.send(
             '🤖 <b>Random Digit Multi-Asset Bot — ONLINE</b>\n' +
             '👤 <code>' + htmlEscape(this.client.accountInfo?.loginid || '?') + '</code> ' + (this.client.accountInfo?.isVirtual ? '🟡 DEMO' : '🔴 REAL') + '\n' +
             '💰 ' + Number(this.client.balance ?? 0).toFixed(2) + ' ' + this.currency + '\n' +
-            '📊 Assets: <code>' + this.assets.join(', ') + '</code>\n' +
+            '📊 Assets: <code>' + this.assets.join(', ') + '</code> (' + (this.config.randomAssetSelection ? 'random pick' : 'tick-driven') + ')\n' +
             '💵 Base stake: ' + this.config.initialStake.toFixed(2) + ' | next: ' + this.currentStake.toFixed(2) + '\n' +
+            sessionLine + '\n' +
+            '💼 Lifetime: ' + this.totalTrades + ' trades (✅' + this.totalWins + ' ❌' + this.totalLosses + ') | P/L <b>' + this.totalProfitLoss.toFixed(2) + '</b>\n' +
             '🕒 ' + utcTs(),
             'high'
         );
@@ -500,13 +556,36 @@ class EnhancedDigitDifferTradingBot {
             return;
         }
 
-        if (!this.tradeInProgress) {
-            this.analyzeTicks(asset);
+        // While a session takeProfit pause is active, do not trade at all.
+        if (this.tradeInProgress || this._tpAwaiting) {
+            return;
         }
+
+        // Random asset selection: pick a fresh asset from the eligible pool
+        // each time (suspended assets excluded). Fall back to tick-driven
+        // selection when disabled.
+        const tradeAsset = this.config.randomAssetSelection ? this.pickRandomAsset() : asset;
+        if (tradeAsset) this.analyzeTicks(tradeAsset);
+    }
+
+    pickRandomAsset() {
+        const pool = this.assets.filter(a =>
+            !this.suspendedAssets.has(a) &&
+            Array.isArray(this.tickHistories[a]) &&
+            this.tickHistories[a].length >= this.config.requiredHistoryLength
+        );
+        if (pool.length) return pool[Math.floor(Math.random() * pool.length)];
+        // Everything is suspended — reactivate one so trading can continue.
+        if (this.suspendedAssets.size) {
+            const revived = Array.from(this.suspendedAssets)[0];
+            this.reactivateAsset(revived);
+            return revived;
+        }
+        return null;
     }
 
     analyzeTicks(asset) {
-        if (this.tradeInProgress) {
+        if (this.tradeInProgress || this._tpAwaiting) {
             return;
         }
 
@@ -555,7 +634,7 @@ class EnhancedDigitDifferTradingBot {
     }
 
     async placeTrade(asset, predictedDigit) {
-        if (this.tradeInProgress) {
+        if (this.tradeInProgress || this._tpAwaiting) {
             return;
         }
 
@@ -596,6 +675,12 @@ class EnhancedDigitDifferTradingBot {
             this.currentAsset = asset;
             this.lastOpenStake = Number(proposal.ask_price || this.currentStake);
             this.lastOpenDigits = (this.tickHistories[asset] || []).slice(-10);
+            // Remember the in-flight contract so a restart / network drop can
+            // reconcile its result instead of losing it (persisted below).
+            this.pendingContractId = this.currentTradeId;
+            this.pendingContractAsset = asset;
+            this.pendingContractDigit = predictedDigit;
+            this._save('trade-open');
             this.sendTradeOpenNotification(asset, predictedDigit, this.lastOpenStake, Number(proposal.payout || 0));
             await this.subscribeToOpenContract(this.currentTradeId);
         } catch (e) {
@@ -678,7 +763,16 @@ class EnhancedDigitDifferTradingBot {
         this.todayPnL += profit;
         this.Pause = true;
 
+        // ── session tracking + durable checkpoint ───────────────────────
+        this._sessionPL += profit;
+        this._sessionTrades++;
         this._trackDaily(asset, contract, won, profit);
+        // Contract settled — clear the in-flight marker and persist the result
+        // so a restart/network drop never loses this trade.
+        this.pendingContractId = null;
+        this.pendingContractAsset = null;
+        this.pendingContractDigit = null;
+        this._save('after-trade');
 
         const randomWaitTime = Math.floor(Math.random() * (this.config.maxWaitTime - this.config.minWaitTime + 1)) + this.config.minWaitTime;
         const waitTimeMinutes = Math.round(randomWaitTime / 60000);
@@ -696,8 +790,10 @@ class EnhancedDigitDifferTradingBot {
             this.reactivateAsset(firstSuspendedAsset);
         }
 
-        // Suspend the asset after a trade
-        this.suspendAsset(asset);
+        // Suspend the asset after a trade — optional (SUSPEND_AFTER_TRADE).
+        if (this.config.suspendAssetAfterTrade) {
+            this.suspendAsset(asset);
+        }
 
         if (this.consecutiveLosses >= this.config.maxConsecutiveLosses || this.totalProfitLoss <= -this.config.stopLoss) {
             console.log('Stop condition reached. Stopping trading.');
@@ -705,10 +801,13 @@ class EnhancedDigitDifferTradingBot {
             return;
         }
 
-        if (this.totalProfitLoss >= this.config.takeProfit) {
-            console.log('Take Profit Reached... Stopping trading.');
+        // Session takeProfit: pause with a random cooldown, then start a new
+        // session. Lifetime P/L is never reset by a session rollover.
+        if (this.config.takeProfit > 0 && this._sessionPL >= this.config.takeProfit) {
+            console.log(`Session takeProfit hit — session #${this._sessionNum} P/L ${this._sessionPL.toFixed(2)}. Pausing.`);
             this.sendTelegramSummary();
-            this.stopTrading();
+            this._pauseForTakeProfit();
+            this.disconnect();
             return;
         }
 
@@ -721,7 +820,9 @@ class EnhancedDigitDifferTradingBot {
             setTimeout(() => {
                 this.tradeInProgress = false;
                 this.Pause = false;
-                this.connect();
+                // resume() (not connect()) so auto-reconnect stays armed for
+                // any network/server drop after this manual cycle.
+                this.client.resume();
             }, nextTradeAfter);
         }
     }
@@ -736,6 +837,170 @@ class EnhancedDigitDifferTradingBot {
     reactivateAsset(asset) {
         this.suspendedAssets.delete(asset);
         console.log(`✅ Reactivated asset: ${asset}`);
+    }
+
+    // ── Session takeProfit: random cooldown, then a fresh session ───────
+    _randomCooldownMs() {
+        const min = Math.max(0, Number(this.config.takeProfitCooldownMinMs) || 0);
+        const max = Math.max(min, Number(this.config.takeProfitCooldownMaxMs) || min);
+        if (!(max > min)) return min;
+        return min + Math.floor(Math.random() * (max - min + 1));
+    }
+
+    _sessionLine() {
+        const target = this.config.takeProfit > 0 ? '$' + this.config.takeProfit.toFixed(2) : '∞';
+        return '🚀 Session #' + this._sessionNum + ': $' + this._sessionPL.toFixed(2) + ' / ' + target;
+    }
+
+    _pauseForTakeProfit() {
+        if (this._tpAwaiting) return;
+        this._tpAwaiting = true;
+        const cooldownMs = this._randomCooldownMs();
+        this._tpPauseUntil = Date.now() + cooldownMs;
+        const mins = Math.max(1, Math.round(cooldownMs / 60000));
+        logger.warn(`session takeProfit ${this.config.takeProfit} hit — session #${this._sessionNum} paused for ${mins} min (random)`);
+        telegram.send(
+            '🎯 <b>SESSION TAKE PROFIT HIT</b> — Session #' + this._sessionNum + '\n\n' +
+            'Session P/L: <b>$' + this._sessionPL.toFixed(2) + '</b> (target $' + this.config.takeProfit.toFixed(2) + ')\n' +
+            'Trades this session: ' + this._sessionTrades + '\n' +
+            '💼 Lifetime P/L: <b>$' + this.totalProfitLoss.toFixed(2) + '</b>\n\n' +
+            '⏸ Trading paused until <b>' + new Date(this._tpPauseUntil).toUTCString() + '</b> (~' + mins + ' min, random cooldown)\n' +
+            '🕒 ' + utcTs(),
+            'high'
+        );
+        this._save('tp-pause');
+    }
+
+    _checkTpResume() {
+        if (this._tpAwaiting && Date.now() >= this._tpPauseUntil) this._startNewSession('timer');
+    }
+
+    _startNewSession(reason = 'cooldown elapsed') {
+        if (!this._tpAwaiting) return;
+        this._sessionNum++;
+        this._sessionStartAt = Date.now();
+        this._sessionStartBal = this.client.balance != null ? this.client.balance : 0;
+        this._sessionPL = 0;
+        this._sessionTrades = 0;
+        this._tpAwaiting = false;
+        this._tpPauseUntil = 0;
+        logger.warn(`takeProfit cooldown over — new session #${this._sessionNum} started (${reason})`);
+        telegram.send(
+            '🚀 <b>NEW SESSION #' + this._sessionNum + '</b>\n\n' +
+            'takeProfit cooldown ended (' + reason + '). Trading resumes — session P/L reset.\n' +
+            'Start balance: <b>$' + (this._sessionStartBal || 0).toFixed(2) + '</b> | Target: ' +
+            (this.config.takeProfit > 0 ? '$' + this.config.takeProfit.toFixed(2) : '∞') + '\n' +
+            '💼 Lifetime P/L carried over: <b>$' + this.totalProfitLoss.toFixed(2) + '</b>\n' +
+            '🕒 ' + utcTs(),
+            'high'
+        );
+        this._save('session-start');
+        this.tradeInProgress = false;
+        this.Pause = false;
+        this.client.resume();
+    }
+
+    // ── Reconcile a contract left open across a restart / network drop ──
+    async _reconcilePendingContract() {
+        const cid = this.pendingContractId;
+        if (!cid || this.settledContracts.has(cid)) return;
+        logger.info(`reconcile pending contract #${cid} after (re)connect`);
+        try {
+            const res = await this.client._send({ proposal_open_contract: 1, contract_id: cid }, 15000);
+            const c = res && res.proposal_open_contract;
+            if (c && c.is_sold) {
+                this.currentAsset = this.pendingContractAsset || this.currentAsset;
+                if (this.pendingContractDigit != null) this.xDigit = this.pendingContractDigit;
+                this.handleContractUpdate(c);
+                return;
+            }
+            if (c) {
+                this.currentAsset = this.pendingContractAsset || this.currentAsset;
+                await this.subscribeToOpenContract(cid);
+            }
+            // Unconfirmed — keep pendingContractId so a later reconnect retries.
+        } catch (e) {
+            logger.warn(`reconcile #${cid} failed:`, e.message);
+        }
+    }
+
+    // ── State persistence — survive restart / server & network drops ────
+    _save(reason) {
+        try {
+            const f = this.stateFile, tmp = f + '.tmp';
+            fs.writeFileSync(tmp, JSON.stringify({
+                version: 1, savedAt: new Date().toISOString(), reason,
+                totalTrades: this.totalTrades, totalWins: this.totalWins, totalLosses: this.totalLosses,
+                consecutiveLosses: this.consecutiveLosses,
+                consecutiveLosses2: this.consecutiveLosses2, consecutiveLosses3: this.consecutiveLosses3,
+                consecutiveLosses4: this.consecutiveLosses4, consecutiveLosses5: this.consecutiveLosses5,
+                totalProfitLoss: this.totalProfitLoss, currentStake: this.currentStake,
+                todayPnL: this.todayPnL,
+                suspendedAssets: Array.from(this.suspendedAssets),
+                settledContracts: Array.from(this.settledContracts).slice(-1000),
+                dailyStats: this.dailyStats,
+                startBalance: this.startBalance, lastBalance: this.client ? this.client.balance : null,
+                sessionNum: this._sessionNum, sessionStartAt: this._sessionStartAt,
+                sessionStartBal: this._sessionStartBal, sessionPL: this._sessionPL,
+                sessionTrades: this._sessionTrades,
+                tpAwaiting: this._tpAwaiting, tpPauseUntil: this._tpPauseUntil,
+                pendingContractId: this.pendingContractId,
+                pendingContractAsset: this.pendingContractAsset,
+                pendingContractDigit: this.pendingContractDigit,
+            }, null, 2));
+            fs.renameSync(tmp, f);
+        } catch (e) { logger.warn('save state:', e.message); }
+    }
+
+    _loadState() {
+        const f = this.stateFile;
+        if (!fs.existsSync(f)) return;
+        try {
+            const d = JSON.parse(fs.readFileSync(f, 'utf8'));
+            if (Number.isFinite(Number(d.totalTrades))) this.totalTrades = Number(d.totalTrades);
+            if (Number.isFinite(Number(d.totalWins))) this.totalWins = Number(d.totalWins);
+            if (Number.isFinite(Number(d.totalLosses))) this.totalLosses = Number(d.totalLosses);
+            if (Number.isFinite(Number(d.consecutiveLosses))) this.consecutiveLosses = Number(d.consecutiveLosses);
+            if (Number.isFinite(Number(d.consecutiveLosses2))) this.consecutiveLosses2 = Number(d.consecutiveLosses2);
+            if (Number.isFinite(Number(d.consecutiveLosses3))) this.consecutiveLosses3 = Number(d.consecutiveLosses3);
+            if (Number.isFinite(Number(d.consecutiveLosses4))) this.consecutiveLosses4 = Number(d.consecutiveLosses4);
+            if (Number.isFinite(Number(d.consecutiveLosses5))) this.consecutiveLosses5 = Number(d.consecutiveLosses5);
+            if (Number.isFinite(Number(d.totalProfitLoss))) this.totalProfitLoss = Number(d.totalProfitLoss);
+            if (Number.isFinite(Number(d.currentStake)) && Number(d.currentStake) > 0) this.currentStake = Number(d.currentStake);
+            if (Number.isFinite(Number(d.todayPnL))) this.todayPnL = Number(d.todayPnL);
+            if (Array.isArray(d.suspendedAssets)) this.suspendedAssets = new Set(d.suspendedAssets);
+            if (Array.isArray(d.settledContracts)) this.settledContracts = new Set(d.settledContracts);
+            if (d.dailyStats && typeof d.dailyStats === 'object') this.dailyStats = d.dailyStats;
+            if (d.startBalance != null) this.startBalance = Number(d.startBalance);
+            if (Number.isFinite(Number(d.sessionNum))) this._sessionNum = Math.max(1, Number(d.sessionNum));
+            if (Number.isFinite(Number(d.sessionStartAt))) this._sessionStartAt = Number(d.sessionStartAt);
+            this._sessionStartBal = Number(d.sessionStartBal || 0);
+            this._sessionPL = Number(d.sessionPL || 0);
+            this._sessionTrades = Number(d.sessionTrades || 0);
+            this._tpAwaiting = !!d.tpAwaiting;
+            this._tpPauseUntil = Number(d.tpPauseUntil || 0);
+            this.pendingContractId = d.pendingContractId || null;
+            this.pendingContractAsset = d.pendingContractAsset || null;
+            this.pendingContractDigit = d.pendingContractDigit != null ? Number(d.pendingContractDigit) : null;
+            logger.info(
+                `state restored: ${this.totalTrades} trades (✅${this.totalWins} ❌${this.totalLosses}) | ` +
+                `P/L $${this.totalProfitLoss.toFixed(2)} | next stake $${this.currentStake.toFixed(2)} | ` +
+                `${this._sessionLine()} | tpPause=${this._tpAwaiting}` +
+                (this._tpAwaiting ? ' until ' + new Date(this._tpPauseUntil).toUTCString() : '') +
+                (this.pendingContractId ? ` | pending #${this.pendingContractId}` : '')
+            );
+        } catch (e) { logger.warn('load state:', e.message); }
+    }
+
+    stop(sig = 'shutdown') {
+        if (this._stopped) return;
+        this._stopped = true;
+        logger.info(`stopping (${sig})`);
+        if (this._tpResumeT) clearInterval(this._tpResumeT);
+        if (this._eodBoot) clearTimeout(this._eodBoot);
+        this._save('shutdown');
+        this.client.stop();
+        setTimeout(() => process.exit(0), 1500);
     }
 
     unsubscribeAllTicks() {
@@ -795,6 +1060,7 @@ class EnhancedDigitDifferTradingBot {
     }
 
     stopTrading() {
+        this._save('stop-trading');
         this.client.stop();
     }
 
@@ -964,12 +1230,24 @@ class EnhancedDigitDifferTradingBot {
             '🕒 ' + utcTs();
 
         telegram.send(msg, 'high');
+        this._save(`eod-${date}`);
     }
 
     start() {
+        console.log('Random asset selection: ' + (this.config.randomAssetSelection ? 'ON' : 'OFF (tick-driven)'));
+        console.log('Suspend asset after trade: ' + (this.config.suspendAssetAfterTrade ? 'ON' : 'OFF'));
+        console.log(`Session takeProfit: ${this.config.takeProfit > 0 ? '$' + this.config.takeProfit.toFixed(2) : 'OFF'} | cooldown ${Math.round(this.config.takeProfitCooldownMinMs / 60000)}-${Math.round(this.config.takeProfitCooldownMaxMs / 60000)} min (random)`);
+        console.log('State file: ' + this.stateFile);
+
         this.connect();
         this.checkTimeForDisconnectReconnect();
         this._scheduleEod();
+        this._tpResumeT = setInterval(() => this._checkTpResume(), 10000);
+
+        process.on('SIGINT', () => this.stop('SIGINT'));
+        process.on('SIGTERM', () => this.stop('SIGTERM'));
+        process.on('uncaughtException', (e) => { logger.error('uncaught:', e); this._save('uncaught'); });
+        process.on('unhandledRejection', (e) => { logger.error('unhandled:', e); this._save('unhandled'); });
     }
 }
 
@@ -979,12 +1257,15 @@ const bot = new EnhancedDigitDifferTradingBot({
     multiplier: 11.3,
     maxConsecutiveLosses: 3,
     stopLoss: 129,
-    takeProfit: 25,
+    takeProfit: 25,              // per-session profit target (0 = off)
     requiredHistoryLength: 1000,
     winProbabilityThreshold: 100,
     minWaitTime: 12000,
     maxWaitTime: 30000,
     minOccurrencesThreshold: 1,
+    // randomAssetSelection / suspendAssetAfterTrade / cooldown default from
+    // CONFIG (env RANDOM_ASSET_SELECTION, SUSPEND_AFTER_TRADE,
+    // TAKE_PROFIT_COOLDOWN_MS_MIN/MAX). Pass explicit booleans here to override.
 });
 
 bot.start();
