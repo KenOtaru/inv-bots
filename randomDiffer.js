@@ -288,7 +288,7 @@ class EnhancedDigitDifferTradingBot {
         this.assets = config.assets || [
             // 'R_10','R_25','R_50','R_75', 'R_100', 
             // 'RDBULL', 'RDBEAR', 
-            'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR', '1HZ10V', '1HZ15V', '1HZ25V', '1HZ30V', '1HZ50V', '1HZ75V', '1HZ90V', '1HZ100V', 'JD10', 'JD25', 'JD50', 'JD75', 'JD100'
+            'JD10', 'JD25', 'JD50', 'JD75', 'JD100'
             // 'JD10', 'JD25', 'JD50', 'JD75', 'JD100',
             // 'R_10','R_25','R_50','R_75', 'R_100', 'RDBULL', 'RDBEAR',
             // 'R_75',
@@ -1258,7 +1258,7 @@ const bot = new EnhancedDigitDifferTradingBot({
     maxConsecutiveLosses: 3,
     stopLoss: 129,
     takeProfit: 25,              // per-session profit target (0 = off)
-    requiredHistoryLength: 1000,
+    requiredHistoryLength: 100,
     winProbabilityThreshold: 100,
     minWaitTime: 12000,
     maxWaitTime: 30000,
