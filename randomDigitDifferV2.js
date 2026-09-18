@@ -82,7 +82,7 @@ const CONFIG = Object.freeze({
   currency:   'USD',
 
   // ── MULTI asset — comma-separated env ASSETS (like newDifferX2.js) ─
-  assets: (process.env.ASSETS || 'R_10,R_25,R_50,R_75,R_100').split(',').map(s=>s.trim()).filter(Boolean),
+  assets: ('R_10,R_25,R_50,R_75,R_100,RDBULL,RDBEAR').split(',').map(s=>s.trim()).filter(Boolean),
   // Asset rotation lockout + recent-symbol skip — same knobs/semantics
   // as newDifferX2.js. Default = OFF so the symbol pick is pure random.
   assetRotationMs:         intEnv('ASSET_ROTATION_MS', 0),   // lock recently-traded symbol for N ms (0 = off)
@@ -95,8 +95,8 @@ const CONFIG = Object.freeze({
 
   // ── TRULY RANDOM throttle (replaces fixed tradeCooldownMs) ─────────
   ticksBetweenMin:  intEnv('TICKS_BETWEEN_MIN', 1),      // skip N random ticks before next trade
-  ticksBetweenMax:  intEnv('TICKS_BETWEEN_MAX', 4),
-  tradeIntervalMinS: numEnv('TRADE_INTERVAL_MIN_S', 20),  // plus a random seconds delay
+  ticksBetweenMax:  intEnv('TICKS_BETWEEN_MAX', 1),
+  tradeIntervalMinS: numEnv('TRADE_INTERVAL_MIN_S', 60),  // plus a random seconds delay
   tradeIntervalMaxS: numEnv('TRADE_INTERVAL_MAX_S', 80),
   maxOpenTrades:   1,
   tradeWatchdogMs: intEnv('WATCHDOG_MS', 20000),
@@ -115,7 +115,7 @@ const CONFIG = Object.freeze({
   // ── SESSION takeProfit ────────────────────────────────────────────
   // When the current session's net P/L reaches takeProfit the bot stops
   // trading and waits takeProfitCooldownMs before starting a new session.
-  takeProfit:           numEnv('TAKE_PROFIT', 10),                          // session profit target (0 = off)
+  takeProfit:           numEnv('TAKE_PROFIT', 1),                          // session profit target (0 = off)
   takeProfitCooldownMs: intEnv('TAKE_PROFIT_COOLDOWN_MS', 1 * 60 * 1000),  // default 30 minutes
 
   // ── Hourly / EOD summaries (GMT) ───────────────────────────────────
