@@ -3,12 +3,18 @@
 
 /**
  * =====================================================================
- *  Deriv Digit Predictor — V2 (Random Digit Differs, Session takeProfit)
+ *  Deriv Digit Predictor — V2 (Multi-Asset Random Digit Differs,
+ *  Session takeProfit)
  * =====================================================================
  *  Strategy:
  *    • Every trade picks a TRULY RANDOM digit 0-9 barrier and bets the
  *      NEXT tick's last digit will DIFFER from it (DIGITDIFF). A 1-tick
  *      DIGITDIFF on a random barrier is a ~90% hit, small payout.
+ *    • MULTI ASSET (like newDifferX2.js): subscribes to every symbol in
+ *      ASSETS. Each trade picks a random symbol from the pool — no
+ *      market analysis, no edge ranking. Optional anti-hammer knobs
+ *      carried over identically: ASSET_ROTATION_MS lockout after a
+ *      trade, and SKIP_RECENT_TRADED window of recent symbols.
  *    • THROTTLE IS RANDOM TOO: between trades the bot waits a random
  *      number of ticks (TICKS_BETWEEN_MIN..MAX) PLUS a random seconds
  *      delay (TRADE_INTERVAL_MIN_S..MAX_S). No fixed cadence, no
@@ -18,6 +24,10 @@
  *      TAKE_PROFIT_COOLDOWN_MS (default 30 min) before starting a new
  *      session (balance/P-L reset). Sessions are persisted so a restart
  *      mid-pause honors the remaining cooldown.
+ *    • NOTIFICATIONS show the asset's last 10 digits (rolling window,
+ *      current + previous 9). The TRADE RESULT re-reads the window at
+ *      settlement time so it plainly shows whether the PREDICTED digit
+ *      and the NEW last digit differed (win) or matched (loss).
  *
  *  All battle-tested infra from fastX2Differ.js is preserved verbatim:
  *  PAT+legacy auth, reconcile-on-reconnect (never fabricate P/L),
@@ -71,8 +81,13 @@ const CONFIG = Object.freeze({
   restBaseUrl: 'https://api.derivws.com',
   currency:   'USD',
 
-  // ── Single asset — change via env SINGLE_ASSET or edit here ────────
-  asset:         strEnv('SINGLE_ASSET', 'R_10'),
+  // ── MULTI asset — comma-separated env ASSETS (like newDifferX2.js) ─
+  assets: (process.env.ASSETS || 'R_10,R_25,R_50,R_75,R_100').split(',').map(s=>s.trim()).filter(Boolean),
+  // Asset rotation lockout + recent-symbol skip — same knobs/semantics
+  // as newDifferX2.js. Default = OFF so the symbol pick is pure random.
+  assetRotationMs:         intEnv('ASSET_ROTATION_MS', 0),   // lock recently-traded symbol for N ms (0 = off)
+  skipRecentTradedSymbols: boolEnv('SKIP_RECENT_TRADED', false),
+  recentTradedSymbolsLen:  intEnv('RECENT_TRADED_LEN', 2),   // rolling window of symbols to avoid
   stake:         numEnv('STAKE', 0.62),
   durationTicks: intEnv('DURATION_TICKS', 1),
   minStake:      0.62,
@@ -380,8 +395,9 @@ class DerivClient extends EventEmitter{
   symbolField(){ return this._isPat?'underlying_symbol':'symbol'; }
 }
 
-// ── 6. MARKET DATA — single asset, last-digit only ────────────────────
+// ── 6. MARKET DATA — multi asset, last-digit + rolling 10-digit window ──
 const KNOWN_PIP_SIZES=Object.freeze({ R_10:3,R_25:3,R_50:4,R_75:4,R_100:2,'1HZ10V':2,'1HZ25V':2,'1HZ50V':2,'1HZ75V':2,'1HZ100V':2,RDBULL:4,RDBEAR:4 });
+const DIGIT_WINDOW=10; // current last digit + previous 9
 
 function quoteToDigit(quote,pipSize=2){
   const n=Number(quote); if(!Number.isFinite(n)) return null;
@@ -392,45 +408,68 @@ function quoteToDigit(quote,pipSize=2){
 
 class MarketDataManager extends EventEmitter{
   constructor(client){
-    super(); this.client=client; this.lastTick=null; this.lastDigit=null; this.pip=null; this.subId=null;
-    this.pip=KNOWN_PIP_SIZES[client.cfg?.asset] ?? KNOWN_PIP_SIZES[CONFIG.asset] ?? 4;
-    client.on('close',()=>{ this.subId=null; });
+    super();
+    this.client=client;
+    this.subs=new Map();               // symbol -> subId (single live subscription per symbol)
+    this.lastTick=new Map();           // symbol -> {epoch,quote,digit}
+    this.lastDigit=new Map();          // symbol -> digit
+    this.pips=new Map();               // symbol -> pip size
+    this.digitHistory=new Map();       // symbol -> rolling array of last DIGIT_WINDOW digits (oldest→newest)
+    const assets=client.cfg?.assets||(Array.isArray(CONFIG.assets)?CONFIG.assets:[]);
+    for(const s of assets){ if(KNOWN_PIP_SIZES[s]!=null) this.pips.set(s,KNOWN_PIP_SIZES[s]); }
+    client.on('close',()=>{ this.subs.clear(); });
   }
   pipSize(symbol){
-    if(Number.isFinite(this.pip)) return this.pip;
+    if(this.pips.has(symbol)) return this.pips.get(symbol);
     const raw=Number(this.client.symbols.get(symbol)?.pip_size);
-    if(Number.isFinite(raw)&&raw>=1&&raw<=8){ this.pip=raw; return raw; }
-    return 2;
+    if(Number.isFinite(raw)&&raw>=1&&raw<=8){ this.pips.set(symbol,raw); return raw; }
+    const known=KNOWN_PIP_SIZES[symbol]??2;
+    this.pips.set(symbol,known); return known;
   }
   async loadSymbols(){
     try{
       const res=await this.client._send({active_symbols:'full'},15000);
       for(const s of res.active_symbols||[]){ const k=s.underlying_symbol||s.symbol; if(k) this.client.symbols.set(k,s); }
-      const sym=CONFIG.asset; const raw=Number(this.client.symbols.get(sym)?.pip_size);
-      if(Number.isFinite(raw)&&raw>=1&&raw<=8) this.pip=raw; else if(KNOWN_PIP_SIZES[sym]) this.pip=KNOWN_PIP_SIZES[sym];
-      logger.info(`symbol ${sym} pip_size=${this.pip}`);
+      for(const sym of (CONFIG.assets||[])){
+        const raw=Number(this.client.symbols.get(sym)?.pip_size);
+        if(Number.isFinite(raw)&&raw>=1&&raw<=8) this.pips.set(sym,raw);
+        else if(KNOWN_PIP_SIZES[sym]) this.pips.set(sym,KNOWN_PIP_SIZES[sym]);
+      }
+      logger.info(`symbols loaded: ${(CONFIG.assets||[]).map(s=>`${s}(pip=${this.pipSize(s)})`).join(', ')}`);
     }catch(e){ logger.warn('loadSymbols:',e.message); }
   }
   async subscribe(symbol){
-    if(this.subId) return this.subId;
+    if(this.subs.has(symbol)) return this.subs.get(symbol);
     const pip=this.pipSize(symbol);
-    this.subId=await this.client.subscribe({ticks:symbol},msg=>{
+    const subId=await this.client.subscribe({ticks:symbol},msg=>{
       const t=msg.tick; if(!t) return;
       const quote=Number(t.quote); const digit=quoteToDigit(quote,pip);
       if(digit==null) return;
-      this.lastTick={ epoch:Number(t.epoch), quote, digit };
-      this.lastDigit=digit;
-      this.emit('tick',symbol,this.lastTick);
+      const tick={ epoch:Number(t.epoch), quote, digit };
+      this.lastTick.set(symbol,tick);
+      this.lastDigit.set(symbol,digit);
+      let hist=this.digitHistory.get(symbol);
+      if(!hist){ hist=[]; this.digitHistory.set(symbol,hist); }
+      hist.push(digit);
+      if(hist.length>DIGIT_WINDOW) hist.splice(0,hist.length-DIGIT_WINDOW);
+      this.emit('tick',symbol,tick);
     });
-    logger.info(`subscribed ticks: ${symbol} sub=${this.subId} pip=${pip}`);
-    return this.subId;
+    this.subs.set(symbol,subId);
+    logger.info(`subscribed ticks: ${symbol} sub=${subId} pip=${pip}`);
+    return subId;
   }
+  async subscribeAll(symbols){
+    const need=symbols.filter(s=>!this.subs.has(s));
+    if(need.length) await Promise.all(need.map(s=>this.subscribe(s).catch(e=>logger.warn(`subscribe(${s}) failed:`,e.message))));
+    return this;
+  }
+  historyOf(symbol){ return this.digitHistory.get(symbol)||[]; } // up to DIGIT_WINDOW digits
 }
 
 // ── 7. TRADE EXECUTOR ──────────────────────────────────────────────────
 class TradeExecutor extends EventEmitter{
   constructor(client,cfg){ super(); this.client=client; this.cfg=cfg; this.open=new Map(); this._settled=new Set(); }
-  async buy(symbol,barrierDigit,stake){
+  async buy(symbol,barrierDigit,stake,digits){
     stake=Math.max(this.cfg.minStake,Math.min(this.cfg.maxStake,Number(stake)));
     const k=this.client.symbolField();
     const pres=await this.client._send({ proposal:1, amount:stake, basis:'stake', contract_type:'DIGITDIFF', currency:this.cfg.currency, duration:this.cfg.durationTicks, duration_unit:'t', barrier:String(barrierDigit), [k]:symbol },15000);
@@ -438,7 +477,7 @@ class TradeExecutor extends EventEmitter{
     const ask=Number(p.ask_price||stake), payout=Number(p.payout||0);
     const bres=await this.client._send({buy:p.id,price:ask},15000);
     const b=bres.buy; if(!b?.contract_id) throw new Error('Buy no contract_id');
-    const info={ contractId:b.contract_id, symbol, digit:barrierDigit, stake:ask, buyPrice:Number(b.buy_price||ask), payout:Number(b.payout||payout), buyTime:Number(b.purchase_time||Date.now()/1000), durationTicks:this.cfg.durationTicks, balanceAfter:b.balance_after!=null?Number(b.balance_after):null };
+    const info={ contractId:b.contract_id, symbol, digit:barrierDigit, stake:ask, buyPrice:Number(b.buy_price||ask), payout:Number(b.payout||payout), buyTime:Number(b.purchase_time||Date.now()/1000), durationTicks:this.cfg.durationTicks, balanceAfter:b.balance_after!=null?Number(b.balance_after):null, digits:Array.isArray(digits)?digits.slice(-10):[] };
     this.open.set(info.contractId,info);
     logger.info(`bought #${info.contractId} ${symbol} differs ${barrierDigit} stake=${ask} payout=${info.payout}`);
     try{ const sid=await this.client.subscribe({proposal_open_contract:1,contract_id:info.contractId},m=>this._onUpdate(m,info)); info.subId=sid; }catch(e){ logger.warn(`sub settle #${info.contractId} fail: ${e.message} — watchdog will poll`); }
@@ -595,6 +634,9 @@ class TradingBot{
     this._dayStartStr=null; this._dayStartBal=null; this._todayPL=0; this._todayTrades=0;
     // ── V2 random throttle state ──
     this._ticksToWait=0; this._nextTradeAt=0;
+    // ── Multi-asset state (random pick + anti-hammer knobs) ──
+    this.tradedAsset=null; this.tradedAssetAt=0;
+    this.lastTradedSymbols=[];
     // ── Session / takeProfit state ──
     this._sessionNum=1; this._sessionStartAt=Date.now(); this._sessionStartBal=0;
     this._sessionPL=0; this._sessionTrades=0;
@@ -615,6 +657,56 @@ class TradingBot{
   _sessionLine(){
     const target=this.cfg.takeProfit>0?money(this.cfg.takeProfit,this.currency()):'∞';
     return `🚀 Session #${this._sessionNum}: ${money(this._sessionPL,this.currency())} / ${target}`;
+  }
+
+  // ── V2 multi-asset: uniformly random symbol pick, optional anti-hammer ──
+  // Same knobs/semantics as newDifferX2.js (ASSET_ROTATION_MS lockout,
+  // SKIP_RECENT_TRADED window) but the selection itself is TRULY RANDOM —
+  // no edge ranking, no analysis.
+  _pickSymbol(){
+    const pool=this.cfg.assets||[];
+    if(!pool.length) return null;
+    if(pool.length===1) return pool[0];
+    let candidates=pool.slice();
+    if(this.cfg.skipRecentTradedSymbols && this.lastTradedSymbols.length){
+      candidates=candidates.filter(s=>!this.lastTradedSymbols.includes(s));
+    }
+    const rotationMs=Math.max(0,this.cfg.assetRotationMs||0);
+    if(rotationMs>0 && this.tradedAsset && candidates.length>1 &&
+       (Date.now()-(this.tradedAssetAt||0))<rotationMs){
+      candidates=candidates.filter(s=>s!==this.tradedAsset);
+    }
+    if(!candidates.length) candidates=pool.slice();
+    return candidates[Math.floor(Math.random()*candidates.length)];
+  }
+  _assetsLine(){
+    const pool=this.cfg.assets||[];
+    let s=`📊 Assets (<b>${pool.length}</b>): <code>${pool.join(', ')}</code>`;
+    if(this.cfg.assetRotationMs>0) s+=`\n🔄 Rotation lockout: ${(this.cfg.assetRotationMs/1000)}s | skip-recent: ${this.cfg.skipRecentTradedSymbols?'ON ('+this.cfg.recentTradedSymbolsLen+')':'OFF'}`;
+    return s;
+  }
+
+  // ── V2 last-10 digit window (for notifications) ─────────────────────
+  _digitsSpan(arr,barrier,highlightLast=false){
+    if(!arr||!arr.length) return '—';
+    return arr.map((d,i)=>{
+      let s = (d===barrier)?`<b>${d}</b>`:`<code>${d}</code>`;
+      if(highlightLast && i===arr.length-1) s=`<u>${s}</u>`;
+      return s;
+    }).join(' ');
+  }
+  _last10Of(symbol){ return this.market.historyOf(symbol).slice(-10); }
+  _digitsOpenLine(t){
+    return `🎯 last 10: ${this._digitsSpan(t.digits, t.digit, false)}`; // open-time window snapshot
+  }
+  _digitsResultLine(t){
+    const cur=this._last10Of(t.symbol);                 // updated window at settlement
+    const newLast=cur.length?cur[cur.length-1]:null;
+    const span=this._digitsSpan(cur, t.digit, true);    // new last underlined, barrier digits bolded
+    const verdict=(newLast!=null && newLast!==t.digit)
+      ? `✅ new last <b>${newLast}</b> ≠ barrier <b>${t.digit}</b>`
+      : (newLast!=null ? `❌ new last <b>${newLast}</b> = barrier <b>${t.digit}</b>` : '❓ window unavailable');
+    return `🎯 last 10: ${span}\n   ${verdict}`;
   }
 
   // ── Martingale stake: base * step^effectiveLosses, capped ─────────
@@ -641,9 +733,10 @@ class TradingBot{
   }
 
   async start(){
-    logger.info('===== Digit Predictor V2 (random digit / random spacing / session TP) starting =====');
-    logger.info(`asset=${this.cfg.asset} stake=${this.cfg.stake} duration=${this.cfg.durationTicks}t`);
+    logger.info('===== Digit Predictor V2 (multi-asset random digit / random spacing / session TP) starting =====');
+    logger.info(`assets=[${this.cfg.assets.join(', ')}] stake=${this.cfg.stake} duration=${this.cfg.durationTicks}t`);
     logger.info(`random spacing: ${this.cfg.ticksBetweenMin}-${this.cfg.ticksBetweenMax} tick(s) + ${this.cfg.tradeIntervalMinS}-${this.cfg.tradeIntervalMaxS}s`);
+    logger.info(`asset rotation: ${this.cfg.assetRotationMs>0?(this.cfg.assetRotationMs/1000)+'s lockout': 'OFF (pure random)'} | skipRecent=${this.cfg.skipRecentTradedSymbols?'ON (len '+this.cfg.recentTradedSymbolsLen+')':'OFF'}`);
     logger.info(`session takeProfit=${this.cfg.takeProfit>0?this.cfg.takeProfit+' '+this.currency():'OFF'} cooldown=${Math.round((this.cfg.takeProfitCooldownMs||0)/60000)}min`);
     logger.info(`martingale=${this._martingaleLabel()} | streak x2..x7 tracking ON`);
     logger.info(`notify: tradeOpen=${this.cfg.notifyTradeOpen?'ON':'OFF'} tradeResult=${this.cfg.notifyTradeResult?'ON':'OFF'} hourly=${this.cfg.hourlySummary?'ON':'OFF'} eod=${this.cfg.eodTimeGmt}`);
@@ -687,7 +780,7 @@ class TradingBot{
       `🤖 <b>Digit Predictor V2</b>\n`+
       `👤 <code>${htmlEscape(info.loginid||'?')}</code> ${info.isVirtual?'🟡 DEMO':'🔴 REAL'}\n`+
       `💰 ${Number(this.client.balance??0).toFixed(2)} ${this.currency()}\n`+
-      `📊 Asset: <code>${CONFIG.asset}</code> | DIGITDIFF | ${CONFIG.durationTicks}t\n`+
+      `${this._assetsLine()}\n`+
       `${rnd}\n`+
       `💵 Base stake: ${CONFIG.stake.toFixed(2)} | next: ${this._getStake().toFixed(2)}\n`+
       `${mg}\n`+
@@ -700,7 +793,7 @@ class TradingBot{
       `🕒 ${utcTs()}`,
       'high'
     );
-    await this.market.subscribe(CONFIG.asset);
+    await this.market.subscribeAll(CONFIG.assets);
   }
   _onDisc(code,reason,was){
     telegram.send(`⚠️ <b>Digit Predictor V2 disconnected</b> code=${code} wasAuth=${was?'yes':'no'} — reconnecting…`, 'high');
@@ -786,6 +879,8 @@ class TradingBot{
     const today=new Date().toISOString().slice(0,10);
     if(this._dayStartStr!==today){ this._dayStartStr=today; this._dayStartBal=this.lastBalance??this.client.balance??0; this._todayPL=0; this._todayTrades=0; }
 
+    const tradeSymbol=this._pickSymbol(); // multi-asset: random symbol each trade
+    if(!tradeSymbol) return;
     const digit = this._randDigit(); // truly random barrier each trade
     const stake = this._getStake();
     if(!Number.isFinite(stake) || stake < this.cfg.minStake){
@@ -799,10 +894,15 @@ class TradingBot{
     }
     this._buying=true;
     try{
-      const trade=await this.exec.buy(symbol,digit,stake);
+      const digitsSnap=this.market.historyOf(tradeSymbol).slice(-10);
+      const trade=await this.exec.buy(tradeSymbol,digit,stake,digitsSnap);
       this.lastTradeAt=Date.now();
       this._todayTrades++;
       this._sessionTrades++;
+      // Track picked symbols for Auto-Rotation / recent-symbol skip (newDifferX2 semantics).
+      this.tradedAsset=tradeSymbol; this.tradedAssetAt=Date.now();
+      this.lastTradedSymbols.push(tradeSymbol);
+      if(this.lastTradedSymbols.length>(this.cfg.recentTradedSymbolsLen||2)) this.lastTradedSymbols.shift();
       if(this.cfg.martingaleEnabled && this.stats.currentLossStreak>0){
         const f = Math.max(0, Number(this.cfg.martingaleFilter)||0);
         const eff = Math.max(0, this.stats.currentLossStreak - f);
@@ -816,7 +916,7 @@ class TradingBot{
       this._startWatchdog(trade.contractId);
     }catch(e){
       const m=String(e.message||'');
-      if(!/AlreadySubscribed|Not connected|timeout/i.test(m)) logger.error(`buy fail differs ${digit} stake=${stake}:`,m);
+      if(!/AlreadySubscribed|Not connected|timeout/i.test(m)) logger.error(`buy fail ${tradeSymbol} differs ${digit} stake=${stake}:`,m);
     }finally{ this._buying=false; }
   }
 
@@ -831,6 +931,7 @@ class TradingBot{
     telegram.send(
       `🟢 <b>Predictor V2 OPEN</b> #${t.contractId} <code>${t.symbol}</code> differs <b>${t.digit}</b>${mgInfo}\n`+
       `💵 ${t.stake.toFixed(2)} → payout ${t.payout.toFixed(2)} ${this.currency()} | ${t.durationTicks}t | next stake ${this._getStake().toFixed(2)}\n`+
+      `${this._digitsOpenLine(t)}\n`+
       `🚀 Session #${this._sessionNum} P/L ${money(this._sessionPL,this.currency())}\n`+
       `🕒 ${utcTs()}`,
       'low'
@@ -868,6 +969,7 @@ class TradingBot{
     }
     telegram.send(
       `${won?'✅ WIN':'❌ LOSS'} <b>#${t.contractId}</b> ${t.symbol} differs ${t.digit} | ${money(profit,this.currency())}\n`+
+      `${this._digitsResultLine(t)}\n`+
       `${tradesLine}\n`+
       `📅 Today: ${this._todayTrades} trades P/L ${money(this._todayPL,this.currency())}\n`+
       `${this._sessionLine()} | Trades: ${this._sessionTrades}\n`+
@@ -1127,7 +1229,7 @@ async function main(){
   banner();
   if(!CONFIG.apiToken){ console.error('DERIV_API_TOKEN missing'); process.exit(1); }
   console.log(CONFIG.telegram.enabled?'✅ Telegram: ON':'ℹ️ Telegram: OFF');
-  console.log(`   asset=${CONFIG.asset} stake=${CONFIG.stake} duration=${CONFIG.durationTicks}t`);
+  console.log(`   assets=[${CONFIG.assets.join(', ')}] stake=${CONFIG.stake} duration=${CONFIG.durationTicks}t`);
   console.log(`   spacing: ${CONFIG.ticksBetweenMin}-${CONFIG.ticksBetweenMax} ticks + ${CONFIG.tradeIntervalMinS}-${CONFIG.tradeIntervalMaxS}s`);
   console.log(`   takeProfit=${CONFIG.takeProfit>0?CONFIG.takeProfit+' '+CONFIG.currency:'OFF'} cooldown=${Math.round((CONFIG.takeProfitCooldownMs||0)/60000)}min`);
   console.log(`   martingale=${CONFIG.martingaleEnabled ? `ON step=${CONFIG.martingaleStep} filter=${CONFIG.martingaleFilter} maxSteps=${CONFIG.martingaleMaxSteps} cap=${CONFIG.martingaleMaxStake}` : 'OFF'}`);
