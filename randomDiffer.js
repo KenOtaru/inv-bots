@@ -31,17 +31,18 @@ const CONFIG = Object.freeze({
     restBaseUrl: 'https://api.derivws.com',
     currency:    'USD',
 
-    // ── persistence (survive restart / network drop) ───────────────────
-    stateFile: strEnv('STATE_FILE', 'randomDiffer_state.json'),
-
+    
     // ── multi-asset selection / suspension ─────────────────────────────
     randomAssetSelection:   boolEnv('RANDOM_ASSET_SELECTION', true), // pick a random asset each trade
     suspendAssetAfterTrade: boolEnv('SUSPEND_AFTER_TRADE', false),   // suspend traded asset after each trade
-    singleActiveAsset:      boolEnv('ONE_ASSET_AT_A_TIME', true),     // subscribe + trade ONE random asset per cycle
+    singleActiveAsset:      boolEnv('ONE_ASSET_AT_A_TIME', false),     // subscribe + trade ONE random asset per cycle
 
     // ── SESSION takeProfit cooldown (random) ───────────────────────────
     takeProfitCooldownMinMs: intEnv('TAKE_PROFIT_COOLDOWN_MS_MIN', 15 * 60 * 1000), // 15 min
     takeProfitCooldownMaxMs: intEnv('TAKE_PROFIT_COOLDOWN_MS_MAX', 60 * 60 * 1000), // 60 min
+
+    // ── persistence (survive restart / network drop) ───────────────────
+    stateFile: strEnv('STATE_FILE', 'randomDiffer_state_01.json'),
 
     telegram: {
         enabled:  true,
@@ -289,7 +290,7 @@ class EnhancedDigitDifferTradingBot {
         this.assets = config.assets || [
             // 'R_10','R_25','R_50','R_75', 'R_100', 
             // 'RDBULL', 'RDBEAR', 
-            'JD10', 'JD25', 'JD50', 'JD75', 'JD100'
+            'R_10','R_25','R_50','R_75', 'R_100', 'RDBULL', 'RDBEAR', '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V', 'JD10', 'JD25', 'JD50', 'JD75', 'JD100'
             // 'JD10', 'JD25', 'JD50', 'JD75', 'JD100',
             // 'R_10','R_25','R_50','R_75', 'R_100', 'RDBULL', 'RDBEAR',
             // 'R_75',
@@ -1306,6 +1307,11 @@ const bot = new EnhancedDigitDifferTradingBot({
     minWaitTime: 12000,
     maxWaitTime: 30000,
     minOccurrencesThreshold: 1,
+    assets: [
+        'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR', 
+        '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V', 
+        'JD10', 'JD25', 'JD50', 'JD75', 'JD100'
+    ],
     // singleActiveAsset (ONE_ASSET_AT_A_TIME, default true): subscribes to and
     // trades one randomly selected asset per cycle for lowest latency.
     // randomAssetSelection / suspendAssetAfterTrade / cooldown default from
