@@ -88,7 +88,7 @@ const CONFIG = Object.freeze({
 
   // ── Martingale (optional) ────────────────────────────────────────
   martingaleEnabled:  boolEnv('MARTINGALE_ENABLED', true),
-  martingaleStep:     numEnv('MARTINGALE_STEP', 2.1),            // multiplier per loss
+  martingaleStep:     numEnv('MARTINGALE_STEP', 11.3),            // multiplier per loss
   martingaleFilter:   intEnv('MARTINGALE_FILTER', 0),           // losses before multiplier starts
   martingaleMaxSteps: intEnv('MARTINGALE_MAX_STEPS', 4),        // cap exponent on the scaled steps (0 = uncapped)
   martingaleMaxStake: numEnv('MARTINGALE_MAX_STAKE', 1000),      // hard cap (also limited by maxStake)
