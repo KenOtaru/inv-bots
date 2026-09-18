@@ -37,6 +37,7 @@ const CONFIG = Object.freeze({
     // ── multi-asset selection / suspension ─────────────────────────────
     randomAssetSelection:   boolEnv('RANDOM_ASSET_SELECTION', true), // pick a random asset each trade
     suspendAssetAfterTrade: boolEnv('SUSPEND_AFTER_TRADE', false),   // suspend traded asset after each trade
+    singleActiveAsset:      boolEnv('ONE_ASSET_AT_A_TIME', true),     // subscribe + trade ONE random asset per cycle
 
     // ── SESSION takeProfit cooldown (random) ───────────────────────────
     takeProfitCooldownMinMs: intEnv('TAKE_PROFIT_COOLDOWN_MS_MIN', 15 * 60 * 1000), // 15 min
@@ -306,6 +307,7 @@ class EnhancedDigitDifferTradingBot {
             winProbabilityThreshold: config.winProbabilityThreshold || 100,
             randomAssetSelection: config.randomAssetSelection != null ? config.randomAssetSelection : CONFIG.randomAssetSelection,
             suspendAssetAfterTrade: config.suspendAssetAfterTrade != null ? config.suspendAssetAfterTrade : CONFIG.suspendAssetAfterTrade,
+            singleActiveAsset: config.singleActiveAsset != null ? config.singleActiveAsset : CONFIG.singleActiveAsset,
             maxReconnectAttempts: config.maxReconnectAttempts || 10000,
             reconnectInterval: config.reconnectInterval || 5000,
             minWaitTime: config.minWaitTime || 200 * 1000,
@@ -318,6 +320,7 @@ class EnhancedDigitDifferTradingBot {
         this.consecutiveLosses = 0;
         this.currentTradeId = null;
         this.currentAsset = null;
+        this.activeAsset = null; // single-active-asset mode: the one asset subscribed + traded this cycle
         this.lastOpenDigits = [];
         this.lastOpenStake = 0;
         this.digitCounts = {};
@@ -453,6 +456,14 @@ class EnhancedDigitDifferTradingBot {
         });
         this.tickSubscriptionIds = {};
         this.retryCount = 0;
+
+        // Single-active-asset mode: randomly select ONE asset to subscribe to
+        // and trade this cycle (fresh random pick on every reconnect).
+        if (this.config.singleActiveAsset) {
+            this.activeAsset = this._pickActiveAsset();
+            console.log(`🎲 Active asset this cycle: ${this.activeAsset}`);
+        }
+
         await this.initializeSubscriptions();
 
         if (this.startBalance == null && this.client.balance != null) this.startBalance = this.client.balance;
@@ -470,11 +481,15 @@ class EnhancedDigitDifferTradingBot {
             ? '⏸ ' + this._sessionLine() + ' — resumes ' + new Date(this._tpPauseUntil).toUTCString()
             : '▶ ' + this._sessionLine();
 
+        const assetsLine = this.config.singleActiveAsset
+            ? '📊 Active asset (<b>1</b>): <code>' + htmlEscape(this.activeAsset || '?') + '</code> | pool: <code>' + this.assets.join(', ') + '</code>'
+            : '📊 Assets: <code>' + this.assets.join(', ') + '</code> (' + (this.config.randomAssetSelection ? 'random pick' : 'tick-driven') + ')';
+
         telegram.send(
             '🤖 <b>Random Digit Multi-Asset Bot — ONLINE</b>\n' +
             '👤 <code>' + htmlEscape(this.client.accountInfo?.loginid || '?') + '</code> ' + (this.client.accountInfo?.isVirtual ? '🟡 DEMO' : '🔴 REAL') + '\n' +
             '💰 ' + Number(this.client.balance ?? 0).toFixed(2) + ' ' + this.currency + '\n' +
-            '📊 Assets: <code>' + this.assets.join(', ') + '</code> (' + (this.config.randomAssetSelection ? 'random pick' : 'tick-driven') + ')\n' +
+            assetsLine + '\n' +
             '💵 Base stake: ' + this.config.initialStake.toFixed(2) + ' | next: ' + this.currentStake.toFixed(2) + '\n' +
             sessionLine + '\n' +
             '💼 Lifetime: ' + this.totalTrades + ' trades (✅' + this.totalWins + ' ❌' + this.totalLosses + ') | P/L <b>' + this.totalProfitLoss.toFixed(2) + '</b>\n' +
@@ -497,8 +512,13 @@ class EnhancedDigitDifferTradingBot {
     }
 
     async initializeSubscriptions() {
-        console.log('Initializing subscriptions for all assets...');
-        for (const asset of this.assets) {
+        // Single-active-asset mode: subscribe ONLY to the randomly selected
+        // asset this cycle (one ticks_history + one ticks stream) to cut latency.
+        const targets = this.config.singleActiveAsset
+            ? (this.activeAsset ? [this.activeAsset] : [])
+            : this.assets;
+        console.log(`Initializing subscriptions for ${targets.length} asset(s): ${targets.join(', ')}...`);
+        for (const asset of targets) {
             await this.subscribeToTickHistory(asset);
             await this.subscribeToTicks(asset);
         }
@@ -537,6 +557,13 @@ class EnhancedDigitDifferTradingBot {
 
     handleTickUpdate(tick) {
         const asset = tick.symbol;
+
+        // Single-active-asset mode: only the selected asset is subscribed and
+        // traded; ignore anything else that might arrive on the wire.
+        if (this.config.singleActiveAsset && asset !== this.activeAsset) {
+            return;
+        }
+
         const lastDigit = this.getLastDigit(tick.quote, asset);
 
         this.lastDigits[asset] = lastDigit;
@@ -562,9 +589,11 @@ class EnhancedDigitDifferTradingBot {
         }
 
         // Random asset selection: pick a fresh asset from the eligible pool
-        // each time (suspended assets excluded). Fall back to tick-driven
-        // selection when disabled.
-        const tradeAsset = this.config.randomAssetSelection ? this.pickRandomAsset() : asset;
+        // each time (suspended assets excluded). In single-active-asset mode
+        // we only ever trade the one asset we subscribed to this cycle.
+        const tradeAsset = this.config.singleActiveAsset
+            ? this.activeAsset
+            : (this.config.randomAssetSelection ? this.pickRandomAsset() : asset);
         if (tradeAsset) this.analyzeTicks(tradeAsset);
     }
 
@@ -582,6 +611,19 @@ class EnhancedDigitDifferTradingBot {
             return revived;
         }
         return null;
+    }
+
+    // Single-active-asset mode: choose ONE random asset to subscribe to and
+    // trade this cycle (no history requirement — we seed history on connect).
+    _pickActiveAsset() {
+        const pool = this.assets.filter(a => !this.suspendedAssets.has(a));
+        if (pool.length) return pool[Math.floor(Math.random() * pool.length)];
+        if (this.suspendedAssets.size) {
+            const revived = Array.from(this.suspendedAssets)[0];
+            this.reactivateAsset(revived);
+            return revived;
+        }
+        return this.assets[0] || null;
     }
 
     analyzeTicks(asset) {
@@ -1234,6 +1276,7 @@ class EnhancedDigitDifferTradingBot {
     }
 
     start() {
+        console.log('Asset mode: ' + (this.config.singleActiveAsset ? 'ONE asset per cycle (random pick, lowest latency)' : 'ALL assets subscribed'));
         console.log('Random asset selection: ' + (this.config.randomAssetSelection ? 'ON' : 'OFF (tick-driven)'));
         console.log('Suspend asset after trade: ' + (this.config.suspendAssetAfterTrade ? 'ON' : 'OFF'));
         console.log(`Session takeProfit: ${this.config.takeProfit > 0 ? '$' + this.config.takeProfit.toFixed(2) : 'OFF'} | cooldown ${Math.round(this.config.takeProfitCooldownMinMs / 60000)}-${Math.round(this.config.takeProfitCooldownMaxMs / 60000)} min (random)`);
@@ -1258,11 +1301,13 @@ const bot = new EnhancedDigitDifferTradingBot({
     maxConsecutiveLosses: 3,
     stopLoss: 129,
     takeProfit: 25,              // per-session profit target (0 = off)
-    requiredHistoryLength: 100,
+    requiredHistoryLength: 1000,
     winProbabilityThreshold: 100,
     minWaitTime: 12000,
     maxWaitTime: 30000,
     minOccurrencesThreshold: 1,
+    // singleActiveAsset (ONE_ASSET_AT_A_TIME, default true): subscribes to and
+    // trades one randomly selected asset per cycle for lowest latency.
     // randomAssetSelection / suspendAssetAfterTrade / cooldown default from
     // CONFIG (env RANDOM_ASSET_SELECTION, SUSPEND_AFTER_TRADE,
     // TAKE_PROFIT_COOLDOWN_MS_MIN/MAX). Pass explicit booleans here to override.
