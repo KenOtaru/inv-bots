@@ -173,7 +173,7 @@ const CONFIG = Object.freeze({
   durationTicks: 1, // Digit contracts normally 1-10 ticks
   minStake: 5.5,
   maxStake: 150.00,
-  assets: ['R_50'], //'1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V','R_10','R_25','R_50','R_75','R_100','RDBULL','RDBEAR'
+  assets: ['R_10','R_25','R_50','R_75','R_100','RDBULL','RDBEAR'], //'1HZ10V','1HZ25V','1HZ50V','1HZ75V','1HZ100V','R_10','R_25','R_50','R_75','R_100','RDBULL','RDBEAR'
 
   // Trading frequency / limits
   tickWindow: 1000,
