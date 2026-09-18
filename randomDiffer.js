@@ -274,7 +274,7 @@ class EnhancedDigitDifferTradingBot {
         this.assets = config.assets || [
             // 'R_10','R_25','R_50','R_75', 'R_100', 
             // 'RDBULL', 'RDBEAR', 
-            'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR', '1HZ10V', '1HZ15V', '1HZ25V', '1HZ30V', '1HZ50V', '1HZ75V', '1HZ90V', '1HZ100V',
+            'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR', '1HZ10V', '1HZ15V', '1HZ25V', '1HZ30V', '1HZ50V', '1HZ75V', '1HZ90V', '1HZ100V', 'JD10', 'JD25', 'JD50', 'JD75', 'JD100'
             // 'JD10', 'JD25', 'JD50', 'JD75', 'JD100',
             // 'R_10','R_25','R_50','R_75', 'R_100', 'RDBULL', 'RDBEAR',
             // 'R_75',
@@ -926,8 +926,8 @@ class EnhancedDigitDifferTradingBot {
         return target.getTime() - now.getTime();
     }
     _eodReportDate(now = new Date()) {
-        // At 00:00 GMT the just-finished trade day is yesterday (UTC).
-        return this._dayKey(new Date(now.getTime() - 3600 * 1000));
+        // Report the trade day that just closed (roll back past the trigger moment).
+        return this._dayKey(new Date(now.getTime() - 60 * 1000));
     }
     _scheduleEod() {
         const delay = this._msToNextEod();
