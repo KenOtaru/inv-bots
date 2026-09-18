@@ -96,8 +96,8 @@ const CONFIG = Object.freeze({
   // ── TRULY RANDOM throttle (replaces fixed tradeCooldownMs) ─────────
   ticksBetweenMin:  intEnv('TICKS_BETWEEN_MIN', 1),      // skip N random ticks before next trade
   ticksBetweenMax:  intEnv('TICKS_BETWEEN_MAX', 1),
-  tradeIntervalMinS: numEnv('TRADE_INTERVAL_MIN_S', 60),  // plus a random seconds delay
-  tradeIntervalMaxS: numEnv('TRADE_INTERVAL_MAX_S', 80),
+  tradeIntervalMinS: numEnv('TRADE_INTERVAL_MIN_S', 10),  // plus a random seconds delay
+  tradeIntervalMaxS: numEnv('TRADE_INTERVAL_MAX_S', 60),
   maxOpenTrades:   1,
   tradeWatchdogMs: intEnv('WATCHDOG_MS', 20000),
 
@@ -116,7 +116,7 @@ const CONFIG = Object.freeze({
   // When the current session's net P/L reaches takeProfit the bot stops
   // trading and waits takeProfitCooldownMs before starting a new session.
   takeProfit:           numEnv('TAKE_PROFIT', 1),                          // session profit target (0 = off)
-  takeProfitCooldownMs: intEnv('TAKE_PROFIT_COOLDOWN_MS', 1 * 60 * 1000),  // default 30 minutes
+  takeProfitCooldownMs: intEnv('TAKE_PROFIT_COOLDOWN_MS', 30 * 60 * 1000),  // default 30 minutes
 
   // ── Hourly / EOD summaries (GMT) ───────────────────────────────────
   hourlySummary: boolEnv('HOURLY_SUMMARY', true),
