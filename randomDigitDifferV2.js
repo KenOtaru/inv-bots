@@ -132,8 +132,8 @@ const CONFIG = Object.freeze({
   notifyTradeOpen: boolEnv('NOTIFY_TRADE_OPEN', true),
   notifyTradeResult: boolEnv('NOTIFY_TRADE_RESULT', true),
 
-  stateFile: strEnv('STATE_FILE', 'randomDigitDiffer_state_002.json'),
-  logFile:   strEnv('LOG_FILE',   'randomDigitDiffer_bot_002.log'),
+  stateFile: strEnv('STATE_FILE', 'randomDigitDiffer_state_003.json'),
+  logFile:   strEnv('LOG_FILE',   'randomDigitDiffer_bot_003.log'),
   logLevel:  strEnv('LOG_LEVEL',  'INFO').toUpperCase(),
 
   telegram: {
@@ -777,9 +777,8 @@ class TradingBot{
     const span=this._digitsSpan(ts, t.digit, hl);                  // barrier digits bolded
     const won=(newLast!=null && newLast!==t.digit);
     const verdict=newLast!=null
-      ? `${won?'✅ WON':'❌ LOST'} — predicted differs <b>${t.digit}</b> vs new last <b>${newLast}</b> → ${won?'unequal':'equal'}`
+      ? `${won?'✅ WON':'❌ LOST'} — <b>${t.digit}</b>/<b>${newLast}</b> → ${won?'unequal':'equal'}`
       : '❓ settlement digit unavailable';
-    const prevLine=preceding!=null?`\n   ↳ preceding digit: <b>${preceding}</b>`:'';
     return `🎯 last 10: ${span}\n   ${verdict}${prevLine}`;
   }
 
