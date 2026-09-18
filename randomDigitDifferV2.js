@@ -19,11 +19,13 @@
  *      number of ticks (TICKS_BETWEEN_MIN..MAX) PLUS a random seconds
  *      delay (TRADE_INTERVAL_MIN_S..MAX_S). No fixed cadence, no
  *      correlation with market structure.
- *    • SESSION takeProfit: once the session's net P/L reaches
- *      TAKE_PROFIT, the bot stops trading and waits
- *      TAKE_PROFIT_COOLDOWN_MS (default 30 min) before starting a new
- *      session (balance/P-L reset). Sessions are persisted so a restart
- *      mid-pause honors the remaining cooldown.
+*    • SESSION takeProfit: once the session's net P/L reaches
+  *      TAKE_PROFIT, the bot stops trading and waits a RANDOM cooldown
+  *      drawn from TAKE_PROFIT_COOLDOWN_MS_MIN..MAX (default 30-60 min)
+  *      before starting a new session. Only the session's P/L resets —
+  *      the lifetime Net P/L (stats.overallProfit) carries over forever.
+  *      Sessions are persisted so a restart mid-pause honors the
+  *      remaining cooldown.
  *    • NOTIFICATIONS show the asset's last 10 digits (rolling window,
  *      current + previous 9). The TRADE RESULT re-reads the window at
  *      settlement time so it plainly shows whether the PREDICTED digit
@@ -114,9 +116,12 @@ const CONFIG = Object.freeze({
 
   // ── SESSION takeProfit ────────────────────────────────────────────
   // When the current session's net P/L reaches takeProfit the bot stops
-  // trading and waits takeProfitCooldownMs before starting a new session.
-  takeProfit:           numEnv('TAKE_PROFIT', 1),                          // session profit target (0 = off)
-  takeProfitCooldownMs: intEnv('TAKE_PROFIT_COOLDOWN_MS', 30 * 60 * 1000),  // default 30 minutes
+  // trading and waits a RANDOM cooldown drawn uniformly from
+  // [TAKE_PROFIT_COOLDOWN_MS_MIN, TAKE_PROFIT_COOLDOWN_MS_MAX] before
+  // starting a new session. Overall Net P/L is lifetime and never resets.
+  takeProfit:              numEnv('TAKE_PROFIT', 1),                                // session profit target (0 = off)
+  takeProfitCooldownMinMs: intEnv('TAKE_PROFIT_COOLDOWN_MS_MIN', 15 * 60 * 1000),  // default 15 minutes
+  takeProfitCooldownMaxMs: intEnv('TAKE_PROFIT_COOLDOWN_MS_MAX', 60 * 60 * 1000),  // default 60 minutes
 
   // ── Hourly / EOD summaries (GMT) ───────────────────────────────────
   hourlySummary: boolEnv('HOURLY_SUMMARY', true),
@@ -127,8 +132,8 @@ const CONFIG = Object.freeze({
   notifyTradeOpen: boolEnv('NOTIFY_TRADE_OPEN', true),
   notifyTradeResult: boolEnv('NOTIFY_TRADE_RESULT', true),
 
-  stateFile: strEnv('STATE_FILE', 'randomDigitDiffer_state_001.json'),
-  logFile:   strEnv('LOG_FILE',   'randomDigitDiffer_bot_001.log'),
+  stateFile: strEnv('STATE_FILE', 'randomDigitDiffer_state_002.json'),
+  logFile:   strEnv('LOG_FILE',   'randomDigitDiffer_bot_002.log'),
   logLevel:  strEnv('LOG_LEVEL',  'INFO').toUpperCase(),
 
   telegram: {
@@ -654,9 +659,20 @@ class TradingBot{
     const maxS=Math.max(minS,Number(this.cfg.tradeIntervalMaxS)||0);
     return this._randInt(Math.round(minS*1000),Math.round(maxS*1000));
   }
+  // Random takeProfit cooldown drawn uniformly from the configured min/max.
+  _randomCooldownMs(){
+    const min=Math.max(0,Number(this.cfg.takeProfitCooldownMinMs)||0);
+    const max=Math.max(min,Number(this.cfg.takeProfitCooldownMaxMs)||min);
+    return this._randInt(min,max);
+  }
   _sessionLine(){
     const target=this.cfg.takeProfit>0?money(this.cfg.takeProfit,this.currency()):'∞';
     return `🚀 Session #${this._sessionNum}: ${money(this._sessionPL,this.currency())} / ${target}`;
+  }
+  // Lifetime Net P/L — persisted in stats.overallProfit and NEVER reset by
+  // _startNewSession (only session P/L resets between sessions).
+  _netLine(){
+    return `💼 Net P/L (lifetime): ${money(this.stats.overallProfit,this.currency())}`;
   }
 
   // ── V2 multi-asset: uniformly random symbol pick, optional anti-hammer ──
@@ -700,13 +716,16 @@ class TradingBot{
     return `🎯 last 10: ${this._digitsSpan(t.digits, t.digit, false)}`; // open-time window snapshot
   }
   _digitsResultLine(t){
-    const cur=this._last10Of(t.symbol);                 // updated window at settlement
-    const newLast=cur.length?cur[cur.length-1]:null;
-    const span=this._digitsSpan(cur, t.digit, true);    // new last underlined, barrier digits bolded
-    const verdict=(newLast!=null && newLast!==t.digit)
-      ? `✅ new last <b>${newLast}</b> ≠ barrier <b>${t.digit}</b>`
-      : (newLast!=null ? `❌ new last <b>${newLast}</b> = barrier <b>${t.digit}</b>` : '❓ window unavailable');
-    return `🎯 last 10: ${span}\n   ${verdict}`;
+    const cur=this._last10Of(t.symbol);                  // updated window at settlement
+    const newLast=cur.length?cur[cur.length-1]:null;     // settlement tick (duration = 1 tick)
+    const preceding=cur.length>1?cur[cur.length-2]:null; // tick immediately before settlement (entry tick)
+    const span=this._digitsSpan(cur, t.digit, true);     // new last underlined, barrier digits bolded
+    const won=(newLast!=null && newLast!==t.digit);
+    const verdict=newLast!=null
+      ? `${won?'✅ WON':'❌ LOST'} — predicted differs <b>${t.digit}</b> vs new last <b>${newLast}</b> → ${won?'unequal':'equal'}`
+      : '❓ window unavailable';
+    const prevLine=preceding!=null?`\n   ↳ preceding digit: <b>${preceding}</b>`:'';
+    return `🎯 last 10: ${span}\n   ${verdict}${prevLine}`;
   }
 
   // ── Martingale stake: base * step^effectiveLosses, capped ─────────
@@ -737,7 +756,7 @@ class TradingBot{
     logger.info(`assets=[${this.cfg.assets.join(', ')}] stake=${this.cfg.stake} duration=${this.cfg.durationTicks}t`);
     logger.info(`random spacing: ${this.cfg.ticksBetweenMin}-${this.cfg.ticksBetweenMax} tick(s) + ${this.cfg.tradeIntervalMinS}-${this.cfg.tradeIntervalMaxS}s`);
     logger.info(`asset rotation: ${this.cfg.assetRotationMs>0?(this.cfg.assetRotationMs/1000)+'s lockout': 'OFF (pure random)'} | skipRecent=${this.cfg.skipRecentTradedSymbols?'ON (len '+this.cfg.recentTradedSymbolsLen+')':'OFF'}`);
-    logger.info(`session takeProfit=${this.cfg.takeProfit>0?this.cfg.takeProfit+' '+this.currency():'OFF'} cooldown=${Math.round((this.cfg.takeProfitCooldownMs||0)/60000)}min`);
+    logger.info(`session takeProfit=${this.cfg.takeProfit>0?this.cfg.takeProfit+' '+this.currency():'OFF'} cooldown=${Math.round((this.cfg.takeProfitCooldownMinMs||0)/60000)}-${Math.round((this.cfg.takeProfitCooldownMaxMs||0)/60000)}min (random)`);
     logger.info(`martingale=${this._martingaleLabel()} | streak x2..x7 tracking ON`);
     logger.info(`notify: tradeOpen=${this.cfg.notifyTradeOpen?'ON':'OFF'} tradeResult=${this.cfg.notifyTradeResult?'ON':'OFF'} hourly=${this.cfg.hourlySummary?'ON':'OFF'} eod=${this.cfg.eodTimeGmt}`);
     if(!this.cfg.apiToken){ logger.error('API token missing'); process.exit(1); }
@@ -973,6 +992,7 @@ class TradingBot{
       `${tradesLine}\n`+
       `📅 Today: ${this._todayTrades} trades P/L ${money(this._todayPL,this.currency())}\n`+
       `${this._sessionLine()} | Trades: ${this._sessionTrades}\n`+
+      `${this._netLine()}\n`+
       `${streakLine}\n`+
       `${mgLine}\n`+
       `🕒 ${utcTs()}`,
@@ -983,16 +1003,19 @@ class TradingBot{
 
   // ── V2 session / takeProfit ─────────────────────────────────────────
   // When session P/L reaches takeProfit: stop trading, send an alert, and
-  // wait takeProfitCooldownMs before starting a brand-new session.
+  // wait a RANDOM cooldown (takeProfitCooldownMinMs..MaxMs) before starting
+  // a brand-new session. Overall Net P/L is unaffected by session resets.
   _pauseForTakeProfit(){
     if(this._tpAwaiting) return;
     this._tpAwaiting=true;
-    this._tpPauseUntil=Date.now()+Math.max(0,this.cfg.takeProfitCooldownMs||0);
-    const mins=Math.round(Math.max(0,this.cfg.takeProfitCooldownMs||0)/60000);
-    logger.warn(`takeProfit ${this.cfg.takeProfit} ${this.currency()} hit — session #${this._sessionNum} paused for ${mins} min`);
+    const cooldownMs=this._randomCooldownMs();
+    this._tpPauseUntil=Date.now()+cooldownMs;
+    const mins=Math.max(1,Math.round(cooldownMs/60000));
+    logger.warn(`takeProfit ${this.cfg.takeProfit} ${this.currency()} hit — session #${this._sessionNum} paused for ${mins} min (random)`);
     telegram.send(
       `🎯 <b>TAKE PROFIT HIT</b> — Session #${this._sessionNum}\n\n`+
       `Session P/L: <b>${money(this._sessionPL,this.currency())}</b> (target ${money(this.cfg.takeProfit,this.currency())})\n`+
+      this._netLine()+`\n`+
       `Trades this session: ${this._sessionTrades}\n\n`+
       `⏸ Trading paused until <b>${new Date(this._tpPauseUntil).toUTCString()}</b> (~${mins} min)\n`,
       'high'
@@ -1016,7 +1039,8 @@ class TradingBot{
     telegram.send(
       `🚀 <b>NEW SESSION #${this._sessionNum}</b>\n\n`+
       `takeProfit cooldown ended (${reason}). Trading resumes — session P/L reset.\n`+
-      `Start balance: <b>${money(this._sessionStartBal,this.currency())}</b> | Target: ${this.cfg.takeProfit>0?money(this.cfg.takeProfit,this.currency()):'∞'}\n\n`+
+      `Start balance: <b>${money(this._sessionStartBal,this.currency())}</b> | Target: ${this.cfg.takeProfit>0?money(this.cfg.takeProfit,this.currency()):'∞'}\n`+
+      `${this._netLine()} <i>(carried over — not reset)</i>\n\n`+
       `🕒 ${utcTs()}`,
       'high'
     );
@@ -1231,7 +1255,7 @@ async function main(){
   console.log(CONFIG.telegram.enabled?'✅ Telegram: ON':'ℹ️ Telegram: OFF');
   console.log(`   assets=[${CONFIG.assets.join(', ')}] stake=${CONFIG.stake} duration=${CONFIG.durationTicks}t`);
   console.log(`   spacing: ${CONFIG.ticksBetweenMin}-${CONFIG.ticksBetweenMax} ticks + ${CONFIG.tradeIntervalMinS}-${CONFIG.tradeIntervalMaxS}s`);
-  console.log(`   takeProfit=${CONFIG.takeProfit>0?CONFIG.takeProfit+' '+CONFIG.currency:'OFF'} cooldown=${Math.round((CONFIG.takeProfitCooldownMs||0)/60000)}min`);
+  console.log(`   takeProfit=${CONFIG.takeProfit>0?CONFIG.takeProfit+' '+CONFIG.currency:'OFF'} cooldown=${Math.round((CONFIG.takeProfitCooldownMinMs||0)/60000)}-${Math.round((CONFIG.takeProfitCooldownMaxMs||0)/60000)}min (random)`);
   console.log(`   martingale=${CONFIG.martingaleEnabled ? `ON step=${CONFIG.martingaleStep} filter=${CONFIG.martingaleFilter} maxSteps=${CONFIG.martingaleMaxSteps} cap=${CONFIG.martingaleMaxStake}` : 'OFF'}`);
   console.log(`   notify: tradeOpen=${CONFIG.notifyTradeOpen?'ON':'OFF'} tradeResult=${CONFIG.notifyTradeResult?'ON':'OFF'} hourly=${CONFIG.hourlySummary?'ON':'OFF'}`);
   const bot=new TradingBot(); await bot.start();
