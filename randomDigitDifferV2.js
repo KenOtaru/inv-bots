@@ -446,6 +446,23 @@ class MarketDataManager extends EventEmitter{
   async subscribe(symbol){
     if(this.subs.has(symbol)) return this.subs.get(symbol);
     const pip=this.pipSize(symbol);
+    // Warm the 10-digit window with recent server ticks so the very first
+    // OPEN notification (and any immediate result) never shows an empty
+    // window — same history warm-up approach as x2Differ4.js.
+    try{
+      const res=await this.client._send({ticks_history:symbol, adjust_start_time:1, end:'latest', count:50, style:'ticks'},15000);
+      const arr=res?.history?.ticks;
+      if(Array.isArray(arr)&&arr.length){
+        const hist=[];
+        for(const t of arr){
+          const d=quoteToDigit(Number(t.quote),pip);
+          if(d!=null) hist.push({d, epoch:Number(t.epoch)});
+        }
+        if(hist.length>DIGIT_WINDOW) hist.splice(0,hist.length-DIGIT_WINDOW);
+        if(hist.length) this.digitHistory.set(symbol,hist);
+        const last=hist[hist.length-1]; if(last!=null){ this.lastTick.set(symbol,{epoch:last.epoch,digit:last.d}); this.lastDigit.set(symbol,last.d); }
+      }
+    }catch(e){ logger.warn(`history warm-up ${symbol}:`,e.message); }
     const subId=await this.client.subscribe({ticks:symbol},msg=>{
       const t=msg.tick; if(!t) return;
       const quote=Number(t.quote); const digit=quoteToDigit(quote,pip);
@@ -455,7 +472,7 @@ class MarketDataManager extends EventEmitter{
       this.lastDigit.set(symbol,digit);
       let hist=this.digitHistory.get(symbol);
       if(!hist){ hist=[]; this.digitHistory.set(symbol,hist); }
-      hist.push(digit);
+      hist.push({d:digit, epoch:tick.epoch});
       if(hist.length>DIGIT_WINDOW) hist.splice(0,hist.length-DIGIT_WINDOW);
       this.emit('tick',symbol,tick);
     });
@@ -468,7 +485,18 @@ class MarketDataManager extends EventEmitter{
     if(need.length) await Promise.all(need.map(s=>this.subscribe(s).catch(e=>logger.warn(`subscribe(${s}) failed:`,e.message))));
     return this;
   }
-  historyOf(symbol){ return this.digitHistory.get(symbol)||[]; } // up to DIGIT_WINDOW digits
+  historyOf(symbol){ return (this.digitHistory.get(symbol)||[]).map(h=>h.d); }       // up to DIGIT_WINDOW digits (numbers)
+  windowOf(symbol){ return this.digitHistory.get(symbol)||[]; }                      // {d,epoch} objects, newest last
+  // Digits up to AND including the exiting tick (removes any post-settlement
+  // ticks that arrived before we rendered the notification). Falls back to
+  // the full window when the exit tick epoch is unknown/not present.
+  windowSlice(symbol,exitTick){
+    const hist=this.digitHistory.get(symbol)||[];
+    if(exitTick!=null){
+      for(let i=hist.length-1;i>=0;i--){ if(hist[i].epoch===exitTick) return hist.slice(0,i+1).map(h=>h.d); }
+    }
+    return hist.map(h=>h.d);
+  }
 }
 
 // ── 7. TRADE EXECUTOR ──────────────────────────────────────────────────
@@ -493,7 +521,21 @@ class TradeExecutor extends EventEmitter{
     if(this._settled.has(cid)) return null;
     if(c.status!=='won'&&c.status!=='lost') return null;
     this._settled.add(cid); if(this._settled.size>5000){ const f=this._settled.values().next().value; if(f!=null) this._settled.delete(f); }
-    const fin={ ...info, contractId:cid, status:c.status, profit:Number(c.profit||0), sellPrice:Number(c.sell_price||0), sellTime:Number(c.sell_time||Date.now()/1000) };
+    // Authoritative entry/exit ticks from the server contract. The live tick
+    // stream races ahead of the notification, so the result digits must come
+    // from the contract itself (exit_tick_display_value / entry_spot), same
+    // discipline as x2Differ4.js which reads WON/LOST from contract.status.
+    const fin={
+      ...info, contractId:cid,
+      status:c.status,
+      profit:Number(c.profit||0),
+      sellPrice:Number(c.sell_price||0),
+      sellTime:Number(c.sell_time||Date.now()/1000),
+      entryTick:c.entry_tick!=null?Number(c.entry_tick):null,
+      exitTick:c.exit_tick!=null?Number(c.exit_tick):null,
+      entrySpot:c.entry_spot!=null?Number(c.entry_spot):null,
+      exitSpot:(c.exit_tick_display_value!=null?Number(c.exit_tick_display_value):(c.exit_spot!=null?Number(c.exit_spot):null)),
+    };
     this.open.delete(cid); this.emit('result',fin); return fin;
   }
   _onUpdate(msg,info){
@@ -712,18 +754,31 @@ class TradingBot{
     }).join(' ');
   }
   _last10Of(symbol){ return this.market.historyOf(symbol).slice(-10); }
+  _digitOfPrice(spot,symbol){
+    if(spot==null || !Number.isFinite(spot)) return null;
+    return quoteToDigit(spot, this.market.pipSize(symbol));
+  }
   _digitsOpenLine(t){
     return `🎯 last 10: ${this._digitsSpan(t.digits, t.digit, false)}`; // open-time window snapshot
   }
   _digitsResultLine(t){
-    const cur=this._last10Of(t.symbol);                  // updated window at settlement
-    const newLast=cur.length?cur[cur.length-1]:null;     // settlement tick (duration = 1 tick)
-    const preceding=cur.length>1?cur[cur.length-2]:null; // tick immediately before settlement (entry tick)
-    const span=this._digitsSpan(cur, t.digit, true);     // new last underlined, barrier digits bolded
+    // Authoritative settlement digits from the CONTRACT (entry_spot /
+    // exit_tick_display_value) — the live tick stream may have advanced
+    // several ticks past the exit tick by the time we render, so judging
+    // from the live window's newest digit is what produced the wrong
+    // "WON/new last 8" verdict on what was actually a LOSS (exit digit 6).
+    const ts=this.market.windowSlice(t.symbol,t.exitTick);         // trimmed to the real exit tick
+    const exitDigit=this._digitOfPrice(t.exitSpot,t.symbol);       // digit that actually settled it
+    const entryDigit=this._digitOfPrice(t.entrySpot,t.symbol);     // digit right before settlement
+    const newLast=exitDigit!=null?exitDigit:(ts.length?ts[ts.length-1]:null);
+    const preceding=entryDigit!=null?entryDigit:(ts.length>1?ts[ts.length-2]:null);
+    const spanLast=ts.length?ts[ts.length-1]:null;
+    const hl=(exitDigit==null||spanLast===exitDigit);              // underline only if display matches settlement
+    const span=this._digitsSpan(ts, t.digit, hl);                  // barrier digits bolded
     const won=(newLast!=null && newLast!==t.digit);
     const verdict=newLast!=null
       ? `${won?'✅ WON':'❌ LOST'} — predicted differs <b>${t.digit}</b> vs new last <b>${newLast}</b> → ${won?'unequal':'equal'}`
-      : '❓ window unavailable';
+      : '❓ settlement digit unavailable';
     const prevLine=preceding!=null?`\n   ↳ preceding digit: <b>${preceding}</b>`:'';
     return `🎯 last 10: ${span}\n   ${verdict}${prevLine}`;
   }
