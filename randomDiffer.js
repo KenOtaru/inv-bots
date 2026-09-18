@@ -35,7 +35,7 @@ const CONFIG = Object.freeze({
     // ── multi-asset selection / suspension ─────────────────────────────
     randomAssetSelection:   boolEnv('RANDOM_ASSET_SELECTION', true), // pick a random asset each trade
     suspendAssetAfterTrade: boolEnv('SUSPEND_AFTER_TRADE', false),   // suspend traded asset after each trade
-    singleActiveAsset:      boolEnv('ONE_ASSET_AT_A_TIME', false),     // subscribe + trade ONE random asset per cycle
+    singleActiveAsset:      boolEnv('ONE_ASSET_AT_A_TIME', true),     // subscribe + trade ONE random asset per cycle
 
     // ── SESSION takeProfit cooldown (random) ───────────────────────────
     takeProfitCooldownMinMs: intEnv('TAKE_PROFIT_COOLDOWN_MS_MIN', 15 * 60 * 1000), // 15 min
@@ -290,7 +290,7 @@ class EnhancedDigitDifferTradingBot {
         this.assets = config.assets || [
             // 'R_10','R_25','R_50','R_75', 'R_100', 
             // 'RDBULL', 'RDBEAR', 
-            // 'R_10','R_25','R_50','R_75', 'R_100', 'RDBULL', 'RDBEAR', '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V', 'JD10', 'JD25', 'JD50', 'JD75', 'JD100'
+            'R_10','R_25','R_50','R_75', 'R_100', 'RDBULL', 'RDBEAR', '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V', 'JD10', 'JD25', 'JD50', 'JD75', 'JD100'
             // 'JD10', 'JD25', 'JD50', 'JD75', 'JD100',
             // 'R_10','R_25','R_50','R_75', 'R_100', 'RDBULL', 'RDBEAR',
             // 'R_75',
@@ -405,7 +405,10 @@ class EnhancedDigitDifferTradingBot {
 
         this.todayPnL = 0;
         this.dailyStats = {};
+        this.hourlyStats = {};
         this.eodTimeGmt = '00:00';
+        this._hourlyBoot = null;
+        this._hourlyT = null;
         this._eodBoot = null;
 
         this._loadState();
@@ -458,11 +461,13 @@ class EnhancedDigitDifferTradingBot {
         this.tickSubscriptionIds = {};
         this.retryCount = 0;
 
-        // Single-active-asset mode: randomly select ONE asset to subscribe to
-        // and trade this cycle (fresh random pick on every reconnect).
+        // Every reconnect is a NEW trade cycle. Single-active-asset mode picks
+        // a fresh random asset for THIS trade and subscribes only to it; the
+        // previous cycle's asset is discarded (subscriptions die with the old
+        // socket — the bot disconnects after every trade).
         if (this.config.singleActiveAsset) {
             this.activeAsset = this._pickActiveAsset();
-            console.log(`🎲 Active asset this cycle: ${this.activeAsset}`);
+            console.log(`🎲 Next trade asset (random pick per trade): ${this.activeAsset}`);
         }
 
         await this.initializeSubscriptions();
@@ -483,7 +488,7 @@ class EnhancedDigitDifferTradingBot {
             : '▶ ' + this._sessionLine();
 
         const assetsLine = this.config.singleActiveAsset
-            ? '📊 Active asset (<b>1</b>): <code>' + htmlEscape(this.activeAsset || '?') + '</code> | pool: <code>' + this.assets.join(', ') + '</code>'
+            ? '🎲 This trade: <code>' + htmlEscape(this.activeAsset || '?') + '</code> (random pick per trade) | pool: <code>' + this.assets.join(', ') + '</code>'
             : '📊 Assets: <code>' + this.assets.join(', ') + '</code> (' + (this.config.randomAssetSelection ? 'random pick' : 'tick-driven') + ')';
 
         telegram.send(
@@ -863,6 +868,13 @@ class EnhancedDigitDifferTradingBot {
             setTimeout(() => {
                 this.tradeInProgress = false;
                 this.Pause = false;
+                // Fresh random pick per TRADE (not per session): clear the
+                // previous cycle's asset so handleAuthorized must select a new
+                // one on reconnect and subscribe only to it.
+                if (this.config.singleActiveAsset) {
+                    this.activeAsset = null;
+                    console.log('🎲 Next trade: fresh random asset will be picked on reconnect');
+                }
                 // resume() (not connect()) so auto-reconnect stays armed for
                 // any network/server drop after this manual cycle.
                 this.client.resume();
@@ -982,6 +994,7 @@ class EnhancedDigitDifferTradingBot {
                 suspendedAssets: Array.from(this.suspendedAssets),
                 settledContracts: Array.from(this.settledContracts).slice(-1000),
                 dailyStats: this.dailyStats,
+                hourlyStats: this.hourlyStats,
                 startBalance: this.startBalance, lastBalance: this.client ? this.client.balance : null,
                 sessionNum: this._sessionNum, sessionStartAt: this._sessionStartAt,
                 sessionStartBal: this._sessionStartBal, sessionPL: this._sessionPL,
@@ -1014,6 +1027,7 @@ class EnhancedDigitDifferTradingBot {
             if (Array.isArray(d.suspendedAssets)) this.suspendedAssets = new Set(d.suspendedAssets);
             if (Array.isArray(d.settledContracts)) this.settledContracts = new Set(d.settledContracts);
             if (d.dailyStats && typeof d.dailyStats === 'object') this.dailyStats = d.dailyStats;
+            if (d.hourlyStats && typeof d.hourlyStats === 'object') this.hourlyStats = d.hourlyStats;
             if (d.startBalance != null) this.startBalance = Number(d.startBalance);
             if (Number.isFinite(Number(d.sessionNum))) this._sessionNum = Math.max(1, Number(d.sessionNum));
             if (Number.isFinite(Number(d.sessionStartAt))) this._sessionStartAt = Number(d.sessionStartAt);
@@ -1040,6 +1054,8 @@ class EnhancedDigitDifferTradingBot {
         this._stopped = true;
         logger.info(`stopping (${sig})`);
         if (this._tpResumeT) clearInterval(this._tpResumeT);
+        if (this._hourlyBoot) clearTimeout(this._hourlyBoot);
+        if (this._hourlyT) clearInterval(this._hourlyT);
         if (this._eodBoot) clearTimeout(this._eodBoot);
         this._save('shutdown');
         this.client.stop();
@@ -1126,10 +1142,57 @@ class EnhancedDigitDifferTradingBot {
 
     startTelegramTimer() {
         if (!this.endOfDay) {
-            setInterval(() => {
-                this.sendTelegramSummary();
-            }, 1800000); // 30 minutes
+            // Align to the top of the GMT hour (same scheduling as randomDigitDifferV2.js)
+            const now = new Date();
+            const msToNextHour = ((59 - now.getUTCMinutes()) * 60_000) + ((60 - now.getUTCSeconds()) * 1000) + 50;
+            this._hourlyBoot = setTimeout(() => {
+                this._sendHourly();
+                this._hourlyT = setInterval(() => this._sendHourly(), 3600_000); // 1 hour
+            }, Math.max(1000, msToNextHour));
         }
+    }
+
+    // ── Hourly trade summary (GMT), mirrors randomDigitDifferV2.js ─────
+    _sendHourly() {
+        const now = new Date();
+        const prev = new Date(now.getTime() - 3600_000);
+        const date = this._dayKey(prev);
+        const hour = prev.getUTCHours();
+        const bucket = this.hourlyStats[date + '|' + pad(hour)];
+        const h = bucket || { trades: 0, wins: 0, losses: 0, netPL: 0 };
+        const winRateLifetime = this.totalTrades ? ((this.totalWins / this.totalTrades) * 100).toFixed(1) : '0.0';
+        const sessLine = this._tpAwaiting
+            ? '⏸ ' + this._sessionLine() + ' — paused until ' + new Date(this._tpPauseUntil).toUTCString()
+            : this._sessionLine();
+
+        if (!h.trades) {
+            telegram.send(
+                '⏰ <b>Random Digit Multi-Asset Bot — Hourly Summary GMT (' + date + ' ' + pad(hour) + ':00-' + pad(hour) + ':59)</b>\n\n' +
+                'No trades this hour.\n\n' +
+                '📊 Trades: ' + this.totalTrades + ' (✅' + this.totalWins + ' ❌' + this.totalLosses + ') | WR ' + winRateLifetime + '%\n' +
+                sessLine + '\n' +
+                '💼 Overall P/L: <b>' + this.totalProfitLoss.toFixed(2) + '</b>\n' +
+                '🕒 ' + utcTs(),
+                'high'
+            );
+            return;
+        }
+
+        const hWR = ((h.wins / h.trades) * 100).toFixed(1);
+        let msg =
+            '⏰ <b>Random Digit Multi-Asset Bot — Hourly Summary GMT (' + date + ' ' + pad(hour) + ':00-' + pad(hour) + ':59)</b>\n\n' +
+            '📊 Trades: ' + h.trades + ' (✅' + h.wins + ' ❌' + h.losses + ') | WR ' + hWR + '%\n' +
+            '💰 P/L: <b>' + (h.netPL >= 0 ? '+' : '') + h.netPL.toFixed(2) + '</b>\n' +
+            sessLine + '\n' +
+            '💼 Overall P/L: <b>' + this.totalProfitLoss.toFixed(2) + '</b>\n' +
+            '📊 Lifetime: ' + this.totalTrades + ' trades (✅' + this.totalWins + ' ❌' + this.totalLosses + ') | WR ' + winRateLifetime + '%\n' +
+            '❌ Streaks: x2=' + this.consecutiveLosses2 + ' x3=' + this.consecutiveLosses3 + ' x4=' + this.consecutiveLosses4 + ' x5=' + this.consecutiveLosses5 + '\n\n' +
+            '📋 Detail:\n';
+
+        bucket.list.slice(-20).forEach((t, i) => {
+            msg += (i + 1) + '. ' + (t.won ? '✅' : '❌') + ' #' + (t.cid != null ? t.cid : '?') + ' ' + htmlEscape(t.asset) + ' d' + t.digit + ' ' + (t.profit >= 0 ? '+' : '') + t.profit.toFixed(2) + '\n';
+        });
+        telegram.send(msg, 'high');
     }
 
     _dayKey(date = new Date()) {
@@ -1146,8 +1209,26 @@ class EnhancedDigitDifferTradingBot {
         if (won) d.wins++; else d.losses++;
         d.netPL += profit;
         d.stakes += this.lastOpenStake || Number(contract.stake) || this.currentStake;
-        d.list.push({ asset, won, profit, digit: this.xDigit });
+        d.list.push({ asset, won, profit, digit: this.xDigit, cid: contract.contract_id });
         if (d.list.length > 50) d.list.shift();
+
+        const now = new Date();
+        const hkey = key + '|' + pad(now.getUTCHours());
+        if (!this.hourlyStats[hkey]) {
+            this.hourlyStats[hkey] = { trades: 0, wins: 0, losses: 0, netPL: 0, stakes: 0, list: [] };
+        }
+        const h = this.hourlyStats[hkey];
+        h.trades++;
+        if (won) h.wins++; else h.losses++;
+        h.netPL += profit;
+        h.stakes += this.lastOpenStake || Number(contract.stake) || this.currentStake;
+        h.list.push({ asset, won, profit, digit: this.xDigit, cid: contract.contract_id });
+        if (h.list.length > 50) h.list.shift();
+
+        const cutoff = this._dayKey(new Date(now.getTime() - 48 * 3600_000));
+        for (const bk of Object.keys(this.hourlyStats)) {
+            if (bk < cutoff) delete this.hourlyStats[bk];
+        }
     }
 
     _todayStats() {
@@ -1212,7 +1293,7 @@ class EnhancedDigitDifferTradingBot {
             'Total P/L: <b>' + this.totalProfitLoss.toFixed(2) + '</b>\n\n' +
             'Last 20 digits: <code>' + (lastFewTicks.join(', ') || '—') + '</code>\n\n' +
             'Current Stake: <b>$' + this.currentStake.toFixed(2) + '</b>\n' +
-            'Waiting: ' + this.waitTime + ' minutes before next trade...\n' +
+            'Waiting for: ' + this.waitTime + ' (' + this.waitSeconds + ' ms)  before next trade...\n' +
             '🕒 ' + utcTs();
 
         telegram.send(summaryText, won ? 'low' : 'high');
@@ -1305,7 +1386,7 @@ const bot = new EnhancedDigitDifferTradingBot({
     requiredHistoryLength: 1000,
     winProbabilityThreshold: 100,
     minWaitTime: 12000,
-    maxWaitTime: 30000,
+    maxWaitTime: 120000,
     minOccurrencesThreshold: 1,
     assets: [
         'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR', 
