@@ -1385,8 +1385,8 @@ const bot = new EnhancedDigitDifferTradingBot({
     takeProfit: 1,              // per-session profit target (0 = off)
     requiredHistoryLength: 1000,
     winProbabilityThreshold: 100,
-    minWaitTime: 6000,
-    maxWaitTime: 60000,
+    minWaitTime: 12000,
+    maxWaitTime: 120000,
     minOccurrencesThreshold: 1,
     assets: [
         'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR', 
