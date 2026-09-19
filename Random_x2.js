@@ -289,7 +289,7 @@ class RandomRepeatTradingBot {
         this.assets = config.assets || [
             // 'R_10','R_25','R_50','R_75', 'R_100', 
             // 'RDBULL', 'RDBEAR', 
-            'R_10','R_25','R_50','R_75', 'R_100', 'RDBULL', 'RDBEAR', '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V', 'JD10', 'JD25', 'JD50', 'JD75', 'JD100'
+            // 'R_10','R_25','R_50','R_75', 'R_100', 'RDBULL', 'RDBEAR', '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V', 'JD10', 'JD25', 'JD50', 'JD75', 'JD100'
             // 'JD10', 'JD25', 'JD50', 'JD75', 'JD100',
             // 'R_10','R_25','R_50','R_75', 'R_100', 'RDBULL', 'RDBEAR',
             // 'R_75',
@@ -1348,7 +1348,8 @@ const bot = new RandomRepeatTradingBot({
         // 'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR', 
         // '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V', 
         // 'JD10', 'JD25', 'JD50', 'JD75', 'JD100'
-        'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR'
+        // 'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR'
+        'JD100'
     ],
     // singleActiveAsset is HARDWIRED to true (one random asset per trade).
     // suspendAssetAfterTrade / cooldown default from CONFIG
