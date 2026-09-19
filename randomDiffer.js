@@ -308,7 +308,7 @@ class EnhancedDigitDifferTradingBot {
             winProbabilityThreshold: config.winProbabilityThreshold || 100,
             randomAssetSelection: config.randomAssetSelection != null ? config.randomAssetSelection : CONFIG.randomAssetSelection,
             suspendAssetAfterTrade: config.suspendAssetAfterTrade != null ? config.suspendAssetAfterTrade : CONFIG.suspendAssetAfterTrade,
-            singleActiveAsset: config.singleActiveAsset != null ? config.singleActiveAsset : CONFIG.singleActiveAsset,
+            singleActiveAsset: config.singleActiveAsset || CONFIG.singleActiveAsset,
             maxReconnectAttempts: config.maxReconnectAttempts || 10000,
             reconnectInterval: config.reconnectInterval || 5000,
             minWaitTime: config.minWaitTime || 200 * 1000,
