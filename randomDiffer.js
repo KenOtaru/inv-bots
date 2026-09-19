@@ -1394,11 +1394,11 @@ const bot = new EnhancedDigitDifferTradingBot({
         // 'JD10', 'JD25', 'JD50', 'JD75', 'JD100'
         'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR'
     ],
-    // singleActiveAsset (ONE_ASSET_AT_A_TIME, default true): subscribes to and
-    // trades one randomly selected asset per cycle for lowest latency.
-    // randomAssetSelection / suspendAssetAfterTrade / cooldown default from
-    // CONFIG (env RANDOM_ASSET_SELECTION, SUSPEND_AFTER_TRADE,
-    // TAKE_PROFIT_COOLDOWN_MS_MIN/MAX). Pass explicit booleans here to override.
+    // singleActiveAsset: ONE random asset subscribed + traded per trade, dropped
+    // on disconnect, re-picked on reconnect (default true; hard-pinned below).
+    // suspendAssetAfterTrade / cooldown default from CONFIG
+    // (env SUSPEND_AFTER_TRADE, TAKE_PROFIT_COOLDOWN_MS_MIN/MAX).
+    singleActiveAsset: true,
 });
 
 bot.start();
