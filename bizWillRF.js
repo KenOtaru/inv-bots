@@ -151,7 +151,7 @@ const CONFIG = {
     // ── Session / daily guards (global aggregates = reporting only) ──
     // Per-asset guards live in DEFAULT_ASSET_CONFIG.SESSION_PROFIT_TARGET/STOP_LOSS.
     SESSION_PROFIT_TARGET: 500000,
-    SESSION_STOP_LOSS: -208,
+    SESSION_STOP_LOSS: -126,
     COOLDOWN_CANDLES: 0,
 
     // ── Candle / Contract Settings (defaults, overridable per asset) ──
@@ -168,7 +168,7 @@ const CONFIG = {
     WPR_OVERSOLD: -80,
     // Deprecated: MAX_CONSECUTIVE_LOSSES removed — v4 recovers until win
     // (capped only by CONTINUE_EXTRA_LEVELS / investment pool per asset).
-    MAX_CONSECUTIVE_LOSSES: 9,
+    MAX_CONSECUTIVE_LOSSES: 7,
 
     // ── Trading Sessions (synthetics trade 24/7) ─────────────
     USE_TRADING_SESSIONS: true,
@@ -227,8 +227,8 @@ const DEFAULT_ASSET_CONFIG = {
     // Stake Settings
     INITIAL_STAKE: 0.35,
     // MAIN (martingale) token first trade stake — user settable, per-asset overridable.
-    MAIN_INITIAL_STAKE: 0.50,
-    INVESTMENT_AMOUNT: 208,
+    MAIN_INITIAL_STAKE: 1.00,
+    INVESTMENT_AMOUNT: 126,
 
     // Dual-token switch: consecutive REGULAR losses before switching to MAIN.
     LOSSES_BEFORE_MAIN_SWITCH: 2,
@@ -237,15 +237,15 @@ const DEFAULT_ASSET_CONFIG = {
     MARTINGALE_MULTIPLIER: 1.48, //1.48
     MAX_MARTINGALE_LEVEL: 1, //1
     AFTER_MAX_LOSS: 'continue', // 'continue' | 'reset' | 'stop' 
-    CONTINUE_EXTRA_LEVELS: 8,
-    EXTRA_LEVEL_MULTIPLIERS: [2.1, 2.2, 2, 2.1, 2.2, 2.3, 2.3], //[2.1, 2.2, 2, 2.3]
+    CONTINUE_EXTRA_LEVELS: 6,
+    EXTRA_LEVEL_MULTIPLIERS: [2.1, 2.2, 2, 2.2, 2.3], //2.1, 2.2, 2, 2.1, 2.2, 2.3, 2.3]
 
     // Auto-Compounding
     AUTO_COMPOUNDING: false,
     COMPOUND_PERCENTAGE: 0.1,
 
     // Risk Management
-    STOP_LOSS: 208,
+    STOP_LOSS: 126,
 
     // Per-asset session guards (independent — one asset hitting these
     // never affects the others; global SESSION_* in CONFIG is report-only)

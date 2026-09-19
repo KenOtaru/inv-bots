@@ -163,7 +163,7 @@ const CONFIG = {
     WPR_OVERSOLD: -80,
     // Deprecated: MAX_CONSECUTIVE_LOSSES removed — v4 recovers until win
     // (capped only by CONTINUE_EXTRA_LEVELS / investment pool per asset).
-    MAX_CONSECUTIVE_LOSSES: 9,
+    MAX_CONSECUTIVE_LOSSES: 7,
 
     // ── Trading Sessions (synthetics trade 24/7) ─────────────
     USE_TRADING_SESSIONS: true,
@@ -222,29 +222,29 @@ const DEFAULT_ASSET_CONFIG = {
     // Stake Settings
     INITIAL_STAKE: 0.35,
     // Dual-token: stakes opened on the MAIN token start at this base (then ladder).
-    MAIN_INITIAL_STAKE: 0.50,
+    MAIN_INITIAL_STAKE: 1.00,
     // Per-asset override of CONFIG.LOSSES_BEFORE_MAIN_SWITCH.
     LOSSES_BEFORE_MAIN_SWITCH: 2,
-    INVESTMENT_AMOUNT: 208,
+    INVESTMENT_AMOUNT: 126,
 
     // Martingale Settings
     MARTINGALE_MULTIPLIER: 1.48, //1.48
     MAX_MARTINGALE_LEVEL: 1, //1
     AFTER_MAX_LOSS: 'continue', // 'continue' | 'reset' | 'stop' 
-    CONTINUE_EXTRA_LEVELS: 8,
-    EXTRA_LEVEL_MULTIPLIERS: [2.1, 2.2, 2, 2.1, 2.2, 2.3, 2.3], //[2.1, 2.2, 2, 2.3]
+    CONTINUE_EXTRA_LEVELS: 7,
+    EXTRA_LEVEL_MULTIPLIERS: [2.1, 2.2, 2, 2.2, 2.3], //2.1, 2.2, 2, 2.1, 2.2, 2.3, 2.3]
 
     // Auto-Compounding
     AUTO_COMPOUNDING: false,
     COMPOUND_PERCENTAGE: 0.1,
 
     // Risk Management
-    STOP_LOSS: 208,
+    STOP_LOSS: 126,
 
     // Per-asset session guards (independent — one asset hitting these
     // never affects the others; global SESSION_* in CONFIG is report-only)
     SESSION_PROFIT_TARGET: 500000,
-    SESSION_STOP_LOSS: -208,
+    SESSION_STOP_LOSS: -126,
 };
 
 const ASSET_CONFIGS = {
