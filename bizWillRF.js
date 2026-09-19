@@ -11,12 +11,16 @@
  * ║        since coming from overbought (-20) → PUTE (Fall)                  ║
  * ║  MULTI-ASSET: each asset fully independent — own stake, martingale      ║
  * ║  level, x2/x3.. loss counters, investment pool. One asset's win/loss    ║
- * ║  never touches another asset. Concurrent positions allowed (1/asset).   ║
- * ║  RECOVERY (signal-wait): after a loss, WAIT for next valid WPR signal;  ║
- * ║  trade that signal's direction with multiplied stake. Repeat on each    ║
- * ║  new signal until a win → stake resets to default. No same-direction,   ║
- * ║  no 58s immediate trade, no exclusive lock, no cooldown exit.           ║
- * ╚══════════════════════════════════════════════════════════════════════════╝
+*  ║  never touches another asset. Concurrent positions allowed (1/asset).   ║
+ *  ║  RECOVERY (signal-wait): after a loss, WAIT for next valid WPR signal;  ║
+ *  ║  trade that signal's direction with multiplied stake. Repeat on each    ║
+ *  ║  new signal until a win → stake resets to default. No same-direction,   ║
+ *  ║  no 58s immediate trade, no exclusive lock, no cooldown exit.           ║
+ *  ║  DUAL TOKEN: REGULAR token trades default stake (no multiplier); after  ║
+ *  ║  LOSSES_BEFORE_MAIN_SWITCH consecutive losses the asset switches to the ║
+ *  ║  MAIN token (first stake MAIN_INITIAL_STAKE, then the martingale ladder ║
+ *  ║  per further loss) until a win switches back to REGULAR.                ║
+ *  ╚══════════════════════════════════════════════════════════════════════════╝
  */
 
 const WebSocket = require('ws');
@@ -89,8 +93,8 @@ class RestClient {
 // ============================================================
 // FILE PATHS  [RETAINED]
 // ============================================================
-const STATE_FILE = path.join(__dirname, 'bizWillRF_003-state.json');
-const HISTORY_FILE = path.join(__dirname, 'bizWillRF_003-history.json');
+const STATE_FILE = path.join(__dirname, 'bizWillRFn_01-state.json');
+const HISTORY_FILE = path.join(__dirname, 'bizWillRFn_01-history.json');
 const STATE_SAVE_INTERVAL = 5000;  // ms
 
 // ============================================================
@@ -116,11 +120,23 @@ const LOGGER = {
 // CONFIGURATION
 // ============================================================
 const CONFIG = {
-    // ── Deriv API [RETAINED credentials] ─────────────────────
+    // ── Deriv API — DUAL TOKEN [REGULAR + MAIN] ──────────────
+    // REGULAR_TOKEN: normal trading at default stake, NO martingale multiplier.
+    // MAIN_TOKEN:    martingale recovery account — first trade at MAIN_INITIAL_STAKE,
+    //                then the existing ladder (MARTINGALE_MULTIPLIER / MAX_MARTINGALE_LEVEL
+    //                / EXTRA_LEVEL_MULTIPLIERS) drawn from the per-asset INVESTMENT_AMOUNT pool.
+    // API_TOKEN kept as alias of REGULAR_TOKEN for back-compat (single-token mode if MAIN_TOKEN empty).
+    REGULAR_TOKEN: 'pat_27a3197287bae3ec6c2c9cbdd68fffaa2a524e3b0a6e1ecf298b5ffb338adb10',
+    MAIN_TOKEN: 'pat_a4392c86309361a50eca82c1ea872127636b84070f6c45295459ffb83de31360',
     API_TOKEN: 'pat_27a3197287bae3ec6c2c9cbdd68fffaa2a524e3b0a6e1ecf298b5ffb338adb10',
     APP_ID: '33uslPtthXBEkQOdfKfoY',
     ACCOUNT_TYPE: 'demo',
     WS_URL: 'wss://ws.derivws.com/websockets/v3',
+
+    // ── Dual-token switch threshold (user configurable) ──────
+    // After this many CONSECUTIVE losses on REGULAR, the asset switches to the
+    // MAIN token (martingale). Per-asset override via DEFAULT_ASSET_CONFIG / ASSET_CONFIGS.
+    LOSSES_BEFORE_MAIN_SWITCH: 2,
 
     // ── Recovery Strategy ─────────────────────────────────────
     // TRUE MULTI-ASSET v4: after a loss, WAIT for a new valid WPR signal,
@@ -210,7 +226,12 @@ const DEFAULT_ASSET_CONFIG = {
 
     // Stake Settings
     INITIAL_STAKE: 0.35,
+    // MAIN (martingale) token first trade stake — user settable, per-asset overridable.
+    MAIN_INITIAL_STAKE: 0.50,
     INVESTMENT_AMOUNT: 208,
+
+    // Dual-token switch: consecutive REGULAR losses before switching to MAIN.
+    LOSSES_BEFORE_MAIN_SWITCH: 2,
 
     // Martingale Settings
     MARTINGALE_MULTIPLIER: 1.48, //1.48
@@ -417,22 +438,29 @@ class SignalManager {
 //
 class StakeCalculator {
 
-    static getBaseStake(symbol, investmentRemaining) {
+    // DUAL TOKEN: REGULAR mode always bases on INITIAL_STAKE (no multiplier).
+    // MAIN mode bases on MAIN_INITIAL_STAKE (the martingale base on the MAIN token).
+    static getBaseStake(symbol, investmentRemaining, mode = 'REGULAR') {
         const cfg = getAssetConfig(symbol);
-        if (cfg.AUTO_COMPOUNDING && investmentRemaining > 0) {
+        const base = mode === 'MAIN'
+            ? (cfg.MAIN_INITIAL_STAKE ?? 0.50)
+            : cfg.INITIAL_STAKE;
+        if (cfg.AUTO_COMPOUNDING && mode === 'MAIN' && investmentRemaining > 0) {
             return Math.max(
                 Number((investmentRemaining * cfg.COMPOUND_PERCENTAGE / 100).toFixed(2)),
-                cfg.INITIAL_STAKE
+                base
             );
         }
-        return cfg.INITIAL_STAKE;
+        return base;
     }
 
-    static calculate(symbol, martingaleLevel, investmentRemaining) {
+    static calculate(symbol, martingaleLevel, investmentRemaining, mode = 'REGULAR') {
         const cfg = getAssetConfig(symbol);
         let level = Math.max(0, martingaleLevel || 0);
-        let base = this.getBaseStake(symbol, investmentRemaining);
-        base = Math.max(base, cfg.INITIAL_STAKE);
+        // REGULAR mode is always flat — no martingale multiplier ever applies.
+        if (mode !== 'MAIN') level = 0;
+        let base = this.getBaseStake(symbol, investmentRemaining, mode);
+        base = Math.max(base, mode === 'MAIN' ? (cfg.MAIN_INITIAL_STAKE ?? 0.50) : cfg.INITIAL_STAKE);
 
         let stake;
         if (level <= cfg.MAX_MARTINGALE_LEVEL) {
@@ -453,12 +481,12 @@ class StakeCalculator {
 
         // Cap at remaining investment pool
         stake = Math.min(stake, investmentRemaining > 0 ? investmentRemaining : stake);
-        stake = Math.max(cfg.INITIAL_STAKE, stake);
+        stake = Math.max(mode === 'MAIN' ? (cfg.MAIN_INITIAL_STAKE ?? 0.50) : cfg.INITIAL_STAKE, stake);
         return parseFloat(stake.toFixed(2));
     }
 
-    static describe(symbol, investmentRemaining, martingaleLevel) {
-        const stake = this.calculate(symbol, martingaleLevel, investmentRemaining);
+    static describe(symbol, investmentRemaining, martingaleLevel, mode = 'REGULAR') {
+        const stake = this.calculate(symbol, martingaleLevel, investmentRemaining, mode);
         const pct = investmentRemaining > 0 ? ((stake / investmentRemaining) * 100).toFixed(2) : '0.00';
         return `$${stake.toFixed(2)} (${pct}% pool, martingale level ${martingaleLevel})`;
     }
@@ -575,12 +603,18 @@ class BacktestEngine {
         const cfg = getAssetConfig(symbol);
         const period = cfg.WPR_PERIOD ?? CONFIG.WPR_PERIOD ?? 14;
         // v4: isolated pool, signal ALWAYS required, stake multiplier only.
+        // DUAL TOKEN: REGULAR flat until LOSSES_BEFORE_MAIN_SWITCH losses, then MAIN
+        // (MAIN_INITIAL_STAKE → martingale ladder per further loss until a win).
+        const dualBacktest = !!(CONFIG.MAIN_TOKEN && CONFIG.REGULAR_TOKEN);
+        const threshold = cfg.LOSSES_BEFORE_MAIN_SWITCH ?? CONFIG.LOSSES_BEFORE_MAIN_SWITCH ?? 2;
+        let mode = 'REGULAR';
         let investmentRemaining = cfg.INVESTMENT_AMOUNT;
         let martingaleLevel = 0;
         let lastTradeDirection = null;
         let consecutiveLosses = 0;
         let buyFlagActive = false, sellFlagActive = false;
         let netPL = 0, totalStake = 0;
+        const tokenStats = { REGULAR: { tradesCount: 0, winsCount: 0, lossesCount: 0, netPL: 0, totalStake: 0 }, MAIN: { tradesCount: 0, winsCount: 0, lossesCount: 0, netPL: 0, totalStake: 0 } };
         const trades = [];
         const streakCounts = {}; let curStreak = 0, maxStreak = 0;
         const closed = [];
@@ -612,33 +646,48 @@ class BacktestEngine {
             if (buyCross) direction = 'CALLE';
             else if (sellCross) direction = 'PUTE';
             else continue;
-            const isRecoveryTrade = martingaleLevel > 0;
+            const isRecoveryTrade = mode === 'MAIN' || martingaleLevel > 0;
             if (i + 1 >= candles.length) break; // need next candle to settle
-            const stake = StakeCalculator.calculate(symbol, martingaleLevel, investmentRemaining);
+            const stake = StakeCalculator.calculate(symbol, martingaleLevel, investmentRemaining, mode);
             if (stake > investmentRemaining) continue;
             // deduct from THIS asset's pool only
             investmentRemaining = Number((investmentRemaining - stake).toFixed(2));
             totalStake += stake;
+            tokenStats[mode].tradesCount++;
+            tokenStats[mode].totalStake += stake;
             const entryClose = c.close;
             const exitClose = candles[i + 1].close;
             const won = direction === 'CALLE' ? exitClose > entryClose : exitClose < entryClose;
             const pnl = won ? Number((stake * payoutRatio).toFixed(2)) : -stake;
             netPL = Number((netPL + pnl).toFixed(2));
-            trades.push({ idx: i, open_time: c.open_time, close_time: candles[i + 1].open_time, direction, stake, won, pnl, level: martingaleLevel, isRecovery: isRecoveryTrade });
+            tokenStats[mode].netPL = Number((tokenStats[mode].netPL + pnl).toFixed(2));
+            if (won) tokenStats[mode].winsCount++; else tokenStats[mode].lossesCount++;
+            trades.push({ idx: i, open_time: c.open_time, close_time: candles[i + 1].open_time, direction, stake, won, pnl, level: martingaleLevel, isRecovery: isRecoveryTrade, mode });
             // Consume flag on executed signal (first-cross logic) — always, incl. recovery
             if (direction === 'CALLE') buyFlagActive = false;
             else sellFlagActive = false;
             // v4 state update mirrors SessionManager.recordTradeResult
             if (won) {
                 lastTradeDirection = direction;
+                if (dualBacktest && mode === 'MAIN') mode = 'REGULAR';
                 martingaleLevel = 0; consecutiveLosses = 0; curStreak = 0;
                 investmentRemaining = Number((investmentRemaining + stake + pnl).toFixed(2));
             } else {
                 lastTradeDirection = direction;
-                martingaleLevel++;
                 consecutiveLosses++; curStreak++; maxStreak = Math.max(maxStreak, curStreak);
                 const key = 'x' + Math.min(curStreak, 12);
                 streakCounts[key] = (streakCounts[key] || 0) + 1;
+                if (dualBacktest && mode === 'REGULAR') {
+                    // REGULAR stays flat until the threshold triggers a switch to MAIN.
+                    martingaleLevel = 0;
+                    if (consecutiveLosses >= threshold) {
+                        mode = 'MAIN';
+                        martingaleLevel = 0; // first MAIN trade = MAIN_INITIAL_STAKE (ladder starts on its losses)
+                    }
+                } else {
+                    // MAIN (dual) or legacy single-token: martingale escalates.
+                    martingaleLevel++;
+                }
                 // loss does not credit pool; no cooldown, no exit — wait for next signal
             }
             // next trade can only be after next candle (i+1) is close, so i++ already ensures
@@ -664,6 +713,10 @@ class BacktestEngine {
             expectancyPerTrade: Number(expectancyPerTrade.toFixed(4)), expectancy, breakevenWinRate: Number((breakeven*100).toFixed(2)),
             streakCounts, maxConsecutiveLosses: maxStreak, successProbability: Number((successProb*100).toFixed(2)), wilsonLowerBound: Number((lb*100).toFixed(2)),
             verdict, ranAt: new Date().toISOString(), isRecoveryB: true
+            , tokenStats: {
+                REGULAR: { ...tokenStats.REGULAR, winRate: tokenStats.REGULAR.tradesCount ? Number(((tokenStats.REGULAR.winsCount / tokenStats.REGULAR.tradesCount) * 100).toFixed(2)) : 0 },
+                MAIN: { ...tokenStats.MAIN, winRate: tokenStats.MAIN.tradesCount ? Number(((tokenStats.MAIN.winsCount / tokenStats.MAIN.tradesCount) * 100).toFixed(2)) : 0 },
+            }
         };
     }
     formatReport(r){
@@ -676,6 +729,7 @@ class BacktestEngine {
             `Period: ${r.periodFrom} → ${r.periodTo} (${r.candles} candles)`,
             `Trades: ${r.trades} (${r.wins}W / ${r.losses}L)  WinRate ${r.winRate}% / Loss ${r.lossRate}% (need ≥ ${r.breakevenWinRate}% BE)`,
             `Profit Ratio: ${r.profitRatio}%  Expectancy/trade: ${r.expectancyPerTrade>=0?'+':''}${r.expectancyPerTrade}  Net P/L: $${r.netPL.toFixed(2)} (staked $${r.totalStake.toFixed(2)}, avg $${r.avgStake.toFixed(2)})`,
+            `Dual token: REGULAR ${r.tokenStats?.REGULAR?.tradesCount || 0}t ${r.tokenStats?.REGULAR?.winsCount || 0}W/${r.tokenStats?.REGULAR?.lossesCount || 0}L $${(r.tokenStats?.REGULAR?.netPL || 0).toFixed(2)} ($${(r.tokenStats?.REGULAR?.totalStake || 0).toFixed(2)} staked) | MAIN ${r.tokenStats?.MAIN?.tradesCount || 0}t ${r.tokenStats?.MAIN?.winsCount || 0}W/${r.tokenStats?.MAIN?.lossesCount || 0}L $${(r.tokenStats?.MAIN?.netPL || 0).toFixed(2)} ($${(r.tokenStats?.MAIN?.totalStake || 0).toFixed(2)} staked)`,
             `Streaks ${xn}: ${streakStr}  Max consecutive losses: ${r.maxConsecutiveLosses}`,
             `Success prob (Wilson LB 90%): ${r.successProbability}% (LB) vs BE ${r.breakevenWinRate}% → ${r.wilsonLowerBound}%`,
             `Verdict: ${r.verdict}`,
@@ -739,6 +793,18 @@ class TradeHistoryManager {
             if (!data.dailyHistory) data.dailyHistory = {};
             if (!data.overallAssets) data.overallAssets = {};
             if (!data.overall) data.overall = this._emptyOverall();
+            if (!data.recentTrades) data.recentTrades = [];
+            // Migrate: ensure tokenStats exist at every level.
+            data.overall.tokenStats = data.overall.tokenStats || { REGULAR: this._emptyTokenStats(), MAIN: this._emptyTokenStats() };
+            Object.values(data.dailyHistory).forEach(day => {
+                if (!day.tokenStats) day.tokenStats = { REGULAR: this._emptyTokenStats(), MAIN: this._emptyTokenStats() };
+                Object.values(day.assets || {}).forEach(as => {
+                    if (!as.tokenStats) as.tokenStats = { REGULAR: this._emptyTokenStats(), MAIN: this._emptyTokenStats() };
+                });
+            });
+            Object.values(data.overallAssets).forEach(as => {
+                if (!as.tokenStats) as.tokenStats = { REGULAR: this._emptyTokenStats(), MAIN: this._emptyTokenStats() };
+            });
             LOGGER.info(`History loaded — ${Object.keys(data.dailyHistory).length} days on record`);
             return data;
         } catch (e) {
@@ -747,12 +813,16 @@ class TradeHistoryManager {
         }
     }
 
+    static _emptyTokenStats() {
+        return { tradesCount: 0, winsCount: 0, lossesCount: 0, profit: 0, loss: 0, netPL: 0, totalStake: 0 };
+    }
+
     static _emptyOverall() {
-        return { tradesCount: 0, winsCount: 0, lossesCount: 0, profit: 0, loss: 0, netPL: 0, x2Losses: 0, x3Losses: 0, x4Losses: 0, x5Losses: 0, x6Losses: 0, x7Losses: 0, x8Losses: 0, x9Losses: 0, firstTradeDate: null, lastTradeDate: null };
+        return { tradesCount: 0, winsCount: 0, lossesCount: 0, profit: 0, loss: 0, netPL: 0, x2Losses: 0, x3Losses: 0, x4Losses: 0, x5Losses: 0, x6Losses: 0, x7Losses: 0, x8Losses: 0, x9Losses: 0, firstTradeDate: null, lastTradeDate: null, tokenStats: { REGULAR: this._emptyTokenStats(), MAIN: this._emptyTokenStats() } };
     }
 
     static _emptyHistory() {
-        return { overall: this._emptyOverall(), overallAssets: {}, dailyHistory: {}, lastUpdated: Date.now() };
+        return { overall: this._emptyOverall(), overallAssets: {}, dailyHistory: {}, recentTrades: [], lastUpdated: Date.now() };
     }
 
     static saveHistory() {
@@ -765,6 +835,7 @@ class TradeHistoryManager {
             tradeHistory.dailyHistory[dateKey] = {
                 date: dateKey, tradesCount: 0, winsCount: 0, lossesCount: 0,
                 profit: 0, loss: 0, netPL: 0, x2Losses: 0, x3Losses: 0, x4Losses: 0, x5Losses: 0, x6Losses: 0, x7Losses: 0, x8Losses: 0, x9Losses: 0, assets: {}, startCapital: state.capital, endCapital: state.capital,
+                tokenStats: { REGULAR: this._emptyTokenStats(), MAIN: this._emptyTokenStats() },
             };
         }
     }
@@ -772,20 +843,23 @@ class TradeHistoryManager {
     static ensureAssetDayEntry(dateKey, symbol) {
         this.ensureDayEntry(dateKey);
         if (!tradeHistory.dailyHistory[dateKey].assets[symbol]) {
-            tradeHistory.dailyHistory[dateKey].assets[symbol] = { tradesCount: 0, winsCount: 0, lossesCount: 0, profit: 0, loss: 0, netPL: 0, x2Losses: 0, x3Losses: 0, x4Losses: 0, x5Losses: 0, x6Losses: 0, x7Losses: 0, x8Losses: 0, x9Losses: 0 };
+            tradeHistory.dailyHistory[dateKey].assets[symbol] = { tradesCount: 0, winsCount: 0, lossesCount: 0, profit: 0, loss: 0, netPL: 0, x2Losses: 0, x3Losses: 0, x4Losses: 0, x5Losses: 0, x6Losses: 0, x7Losses: 0, x8Losses: 0, x9Losses: 0, tokenStats: { REGULAR: this._emptyTokenStats(), MAIN: this._emptyTokenStats() } };
         }
     }
 
     static ensureOverallAssetEntry(symbol) {
         if (!tradeHistory.overallAssets[symbol]) {
-            tradeHistory.overallAssets[symbol] = { tradesCount: 0, winsCount: 0, lossesCount: 0, profit: 0, loss: 0, netPL: 0, x2Losses: 0, x3Losses: 0, x4Losses: 0, x5Losses: 0, x6Losses: 0, x7Losses: 0, x8Losses: 0, x9Losses: 0 };
+            tradeHistory.overallAssets[symbol] = { tradesCount: 0, winsCount: 0, lossesCount: 0, profit: 0, loss: 0, netPL: 0, x2Losses: 0, x3Losses: 0, x4Losses: 0, x5Losses: 0, x6Losses: 0, x7Losses: 0, x8Losses: 0, x9Losses: 0, tokenStats: { REGULAR: this._emptyTokenStats(), MAIN: this._emptyTokenStats() } };
         }
     }
 
-    static recordTrade(symbol, profit, martingaleLevel = 0) {
+    static recordTrade(symbol, profit, martingaleLevel = 0, mode = 'REGULAR', stake = 0, direction = null) {
         const dateKey = this.getDateKey();
         this.ensureAssetDayEntry(dateKey, symbol);
         this.ensureOverallAssetEntry(symbol);
+
+        const tokenMode = (mode === 'MAIN' && (CONFIG.MAIN_TOKEN ? true : false)) ? 'MAIN' : 'REGULAR';
+        const tOk = s => s === 'MAIN' ? 'MAIN' : 'REGULAR';
 
         const dayStats = tradeHistory.dailyHistory[dateKey];
         const dayAssetStats = dayStats.assets[symbol];
@@ -797,16 +871,32 @@ class TradeHistoryManager {
         overall.tradesCount++;
         overallAsset.tradesCount++;
 
+        const token = tOk(tokenMode);
+        const dayToken = dayStats.tokenStats[token];
+        const assetDayToken = dayAssetStats.tokenStats[token];
+        const overallToken = overall.tokenStats[token];
+        const overallAssetToken = overallAsset.tokenStats[token];
+        dayToken.tradesCount++; assetDayToken.tradesCount++; overallToken.tradesCount++; overallAssetToken.tradesCount++;
+        dayToken.totalStake += stake; assetDayToken.totalStake += stake; overallToken.totalStake += stake; overallAssetToken.totalStake += stake;
+
         if (profit > 0) {
             dayStats.winsCount++; dayStats.profit += profit; dayStats.netPL += profit;
             dayAssetStats.winsCount++; dayAssetStats.profit += profit; dayAssetStats.netPL += profit;
             overall.winsCount++; overall.profit += profit; overall.netPL += profit;
             overallAsset.winsCount++; overallAsset.profit += profit; overallAsset.netPL += profit;
+            dayToken.winsCount++; dayToken.profit += profit; dayToken.netPL += profit;
+            assetDayToken.winsCount++; assetDayToken.profit += profit; assetDayToken.netPL += profit;
+            overallToken.winsCount++; overallToken.profit += profit; overallToken.netPL += profit;
+            overallAssetToken.winsCount++; overallAssetToken.profit += profit; overallAssetToken.netPL += profit;
         } else {
             dayStats.lossesCount++; dayStats.loss += Math.abs(profit); dayStats.netPL += profit;
             dayAssetStats.lossesCount++; dayAssetStats.loss += Math.abs(profit); dayAssetStats.netPL += profit;
             overall.lossesCount++; overall.loss += Math.abs(profit); overall.netPL += profit;
             overallAsset.lossesCount++; overallAsset.loss += Math.abs(profit); overallAsset.netPL += profit;
+            dayToken.lossesCount++; dayToken.loss += Math.abs(profit); dayToken.netPL += profit;
+            assetDayToken.lossesCount++; assetDayToken.loss += Math.abs(profit); assetDayToken.netPL += profit;
+            overallToken.lossesCount++; overallToken.loss += Math.abs(profit); overallToken.netPL += profit;
+            overallAssetToken.lossesCount++; overallAssetToken.loss += Math.abs(profit); overallAssetToken.netPL += profit;
 
             if (martingaleLevel >= 2 && martingaleLevel <= 9) {
                 const key = `x${martingaleLevel}Losses`;
@@ -816,6 +906,14 @@ class TradeHistoryManager {
                 overallAsset[key]++;
             }
         }
+
+        // ── Recent trades log (capped) — dual-token aware ──
+        if (!Array.isArray(tradeHistory.recentTrades)) tradeHistory.recentTrades = [];
+        tradeHistory.recentTrades.push({
+            time: Date.now(), dateKey, symbol, direction, profit: Number((profit || 0).toFixed(2)),
+            stake: Number((stake || 0).toFixed(2)), mode: token, level: martingaleLevel,
+        });
+        if (tradeHistory.recentTrades.length > 200) tradeHistory.recentTrades = tradeHistory.recentTrades.slice(-200);
 
         if (!tradeHistory.overall.firstTradeDate) tradeHistory.overall.firstTradeDate = dateKey;
         tradeHistory.overall.lastTradeDate = dateKey;
@@ -866,6 +964,7 @@ class StatePersistence {
                     currentStake: a.currentStake,
                     baseStake: a.baseStake,
                     martingaleLevel: a.martingaleLevel,
+                    mode: a.mode || 'REGULAR',
                     investmentRemaining: a.investmentRemaining,
                     stopped: !!a.stopped,
                     stoppedReason: a.stoppedReason || null,
@@ -937,13 +1036,15 @@ class StatePersistence {
                         a.lastTradeWasWin = saved.lastTradeWasWin ?? null;
                         // v4: derive recovery from martingale; never restore locks.
                         a.martingaleLevel = saved.martingaleLevel || 0;
+                        // DUAL TOKEN: restore per-asset mode (MAIN only valid while a MAIN token is set).
+                        a.mode = (CONFIG.MAIN_TOKEN && saved.mode === 'MAIN') ? 'MAIN' : 'REGULAR';
                         a.isRecovery = a.martingaleLevel > 0;
                         a.waitingForNewSignal = a.martingaleLevel > 0;
                         a.exclusiveLock = false;
                         a.forceRecoverDirection = null;
                         a.recoveryStep = saved.recoveryStep || 0;
-                        a.currentStake = saved.currentStake || StakeCalculator.calculate(symbol, 0, a.investmentRemaining);
-                        a.baseStake = saved.baseStake || StakeCalculator.getBaseStake(symbol, a.investmentRemaining);
+                        a.currentStake = saved.currentStake || StakeCalculator.calculate(symbol, 0, a.investmentRemaining, a.mode);
+                        a.baseStake = saved.baseStake || StakeCalculator.getBaseStake(symbol, a.investmentRemaining, a.mode);
                         a.investmentRemaining = saved.investmentRemaining || getAssetConfig(symbol).INVESTMENT_AMOUNT;
                         a.stopped = saved.stopped || false;
                         a.stoppedReason = saved.stoppedReason || null;
@@ -977,7 +1078,7 @@ class StatePersistence {
                         a.netPL = saved.netPL || 0;
                         a.profit = saved.profit || 0;
                         a.loss = saved.loss || 0;
-                        a.activePositions = (saved.activePositions || []).map(p => ({ ...p }));
+                        a.activePositions = (saved.activePositions || []).map(p => ({ mode: (p.mode || a.mode || 'REGULAR'), ...p }));
 
                         const wprTxt = Number.isFinite(a.wpr) ? a.wpr.toFixed(1) : 'n/a';
                         const prevTxt = Number.isFinite(a.prevWpr) ? a.prevWpr.toFixed(1) : 'n/a';
@@ -1070,6 +1171,7 @@ class TelegramService {
 
         📋 <b>Today (all assets):</b>
         Trades: ${today.tradesCount} | W/L: ${today.winsCount || 0}/${today.lossesCount || 0} | P/L: $${(today.netPL || 0).toFixed(2)}
+        💳 <b>Today per token:</b> REGULAR ${today.tokenStats?.REGULAR?.tradesCount || 0}t P/L $${(today.tokenStats?.REGULAR?.netPL || 0).toFixed(2)} | MAIN ${today.tokenStats?.MAIN?.tradesCount || 0}t P/L $${(today.tokenStats?.MAIN?.netPL || 0).toFixed(2)}
         💰 Pools sum: $${state.capital.toFixed(2)}
 
         📋 <b>Overall:</b>
@@ -1077,11 +1179,14 @@ class TelegramService {
         }
 
         const recoveryStatus = (a?.martingaleLevel || 0) > 0 ? `🔄 RECOVERY L${a.martingaleLevel}` : '🎯 NORMAL';
+        const tokenMode = details.mode || (a && a.mode) || 'REGULAR';
+        const tokenBadge = tokenMode === 'MAIN' ? '💳 MAIN' : '💳 REGULAR';
 
         const msg = `
         ${emoji} <b>${type} BizWillRF TRADE ALERT - ${recoveryStatus}</b>
 
         📊 Asset: ${symbol} (pool $${(a?.investmentRemaining ?? 0).toFixed(2)})
+        💳 Token: ${tokenBadge}
         📈 Direction: ${direction === 'CALLE' ? 'RISE 📈' : 'FALL 📉'} (signal direction)
         💵 Stake: $${stake.toFixed(2)}
         ⏱ Duration: ${duration}${(durationUnit || 's').toUpperCase()}
@@ -1103,14 +1208,15 @@ class TelegramService {
         CONFIG.ACTIVE_ASSETS.forEach(sym => {
             const a = state.assets[sym];
             if (a) {
-                assetInfo += `\n  ${sym}: ${a.tradesCount}t ${a.winsCount}W/${a.lossesCount}L $${(a.netPL || 0).toFixed(2)} L${a.martingaleLevel || 0} pool $${(a.investmentRemaining || 0).toFixed(2)}${a.stopped ? ' STOPPED' : ''}`;
+                assetInfo += `\n  ${sym}: ${a.mode === 'MAIN' ? '💳M' : '💳R'} ${a.tradesCount}t ${a.winsCount}W/${a.lossesCount}L $${(a.netPL || 0).toFixed(2)} L${a.martingaleLevel || 0} pool $${(a.investmentRemaining || 0).toFixed(2)}${a.stopped ? ' STOPPED' : ''}`;
             }
         });
 
         await this.sendMessage([
-            `⏰ <b>BizWillRF HOURLY SUMMARY (multi-asset independent)</b>`,
+            `⏰ <b>BizWillRF HOURLY SUMMARY (dual-token, multi-asset)</b>`,
             `Last Hour: ${h.trades}t ${h.wins}W/${h.losses}L ${wr}% ${h.pnl >= 0 ? '\u{1f7e2}' : '\u{1f534}'} $${h.pnl.toFixed(2)}`,
             `Today: ${today.tradesCount}t P/L: $${(today.netPL || 0).toFixed(2)}`,
+            `💳 Today per token: REGULAR ${today.tokenStats?.REGULAR?.tradesCount || 0}t $${(today.tokenStats?.REGULAR?.netPL || 0).toFixed(2)} | MAIN ${today.tokenStats?.MAIN?.tradesCount || 0}t $${(today.tokenStats?.MAIN?.netPL || 0).toFixed(2)}`,
             `Loss Stats: x2:${today.x2Losses || 0} x3:${today.x3Losses || 0} x4:${today.x4Losses || 0} x5:${today.x5Losses || 0} x6:${today.x6Losses || 0} x7:${today.x7Losses || 0} x8:${today.x8Losses || 0} x9:${today.x9Losses || 0}`,
             `Pools sum: $${state.capital.toFixed(2)}`,
             TradingSessionManager.getStatusString(),
@@ -1136,13 +1242,15 @@ class TelegramService {
         });
 
         await this.sendMessage([
-            `\u{1f4ca} <b>BizWillRF SESSION SUMMARY (independent)</b>`,
+            `\u{1f4ca} <b>BizWillRF SESSION SUMMARY (dual-token)</b>`,
             `Duration: ${stats.duration} | Trades: ${stats.trades}`,
             `W: ${stats.wins} | L: ${stats.losses} | Win Rate: ${stats.winRate}`,
             `Session P/L: $${(stats.netPL || 0).toFixed(2)}`,
             `Today P/L: $${(today.netPL || 0).toFixed(2)}`,
+            `💳 Per token: REGULAR ${today.tokenStats?.REGULAR?.tradesCount || 0}t $${(today.tokenStats?.REGULAR?.netPL || 0).toFixed(2)} | MAIN ${today.tokenStats?.MAIN?.tradesCount || 0}t $${(today.tokenStats?.MAIN?.netPL || 0).toFixed(2)}`,
             ``,
             `\u{1f4cb} <b>Overall:</b> ${overall.tradesCount} trades | WR: ${wr}% | P/L: $${(overall.netPL || 0).toFixed(2)}`,
+            `💳 Overall per token: REGULAR ${overall.tokenStats?.REGULAR?.tradesCount || 0}t $${(overall.tokenStats?.REGULAR?.netPL || 0).toFixed(2)} | MAIN ${overall.tokenStats?.MAIN?.tradesCount || 0}t $${(overall.tokenStats?.MAIN?.netPL || 0).toFixed(2)}`,
             pairBreakdown ? `\n<b>Per-Asset:</b>${pairBreakdown}` : '',
             ``,
             `\u{1f4b0} Pools sum: $${state.capital.toFixed(2)}`,
@@ -1158,14 +1266,15 @@ class TelegramService {
         });
 
         await this.sendMessage([
-            `\u{1f916} <b>BizWillRF STARTED — TRUE MULTI-ASSET</b>`,
+            `\u{1f916} <b>BizWillRF STARTED — DUAL TOKEN (REGULAR + MAIN)</b>`,
             `Strategy: Williams %R(${CONFIG.WPR_PERIOD}) cross ${CONFIG.WPR_OVERBOUGHT}/${CONFIG.WPR_OVERSOLD} → CALLE/PUTE (signal always required)`,
-            `Recovery: SIGNAL-WAIT — after loss wait for NEW signal, trade its direction with x-multiplier until win → reset to default`,
+            `Dual token: REGULAR (flat $${CONFIG.INITIAL_STAKE}, no multiplier). After ${CONFIG.LOSSES_BEFORE_MAIN_SWITCH} consecutive REGULAR losses → switch to MAIN (starts $${CONFIG.MAIN_INITIAL_STAKE}), martingale x${CONFIG.MARTINGALE_MULTIPLIER} per further loss (max L${CONFIG.MAX_MARTINGALE_LEVEL}) until win → back on REGULAR.`,
             `Independence: own stake/martingale/x2-x9/pool per asset, concurrent (1 open/asset, ${CONFIG.MAX_TOTAL_POSITIONS} total)`,
             `Pools sum: $${state.capital.toFixed(2)}`,
             TradingSessionManager.getStatusString(),
             ``,
             `\u{1f4ca} Overall: ${overall.tradesCount} trades | P/L: $${(overall.netPL || 0).toFixed(2)}`,
+            `💳 Overall per token: REGULAR ${overall.tokenStats?.REGULAR?.tradesCount || 0}t $${(overall.tokenStats?.REGULAR?.netPL || 0).toFixed(2)} | MAIN ${overall.tokenStats?.MAIN?.tradesCount || 0}t $${(overall.tokenStats?.MAIN?.netPL || 0).toFixed(2)}`,
             `<b>Active Assets:</b>${pairInfo}`,
         ].join('\n'));
     }
@@ -1300,7 +1409,16 @@ class SessionManager {
         });
     }
 
-    static recordTradeResult(symbol, profit, direction, stake) {
+    static _mainSwitchThreshold(symbol) {
+        const cfg = getAssetConfig(symbol);
+        return cfg.LOSSES_BEFORE_MAIN_SWITCH ?? CONFIG.LOSSES_BEFORE_MAIN_SWITCH ?? 2;
+    }
+
+    static _isDualToken() {
+        return !!(CONFIG.MAIN_TOKEN && CONFIG.REGULAR_TOKEN);
+    }
+
+    static recordTradeResult(symbol, profit, direction, stake, mode) {
         const a = state.assets[symbol];
         if (!a) return;
 
@@ -1314,6 +1432,9 @@ class SessionManager {
         if (hour !== state.hourlyStats.lastHour) {
             state.hourlyStats = { trades: 0, wins: 0, losses: 0, pnl: 0, lastHour: hour };
         }
+
+        const dual = this._isDualToken();
+        const tradeMode = dual && mode === 'MAIN' ? mode : (a.mode || 'REGULAR');
 
         state.session.tradesCount++;
         state.hourlyStats.trades++;
@@ -1346,10 +1467,20 @@ class SessionManager {
 
             // Credit payout (stake + profit) back to THIS asset's pool only.
             a.investmentRemaining = Number((a.investmentRemaining + stake + profit).toFixed(2));
-            a.baseStake = StakeCalculator.getBaseStake(symbol, a.investmentRemaining);
-            a.currentStake = StakeCalculator.calculate(symbol, 0, a.investmentRemaining);
 
-            LOGGER.trade(`WIN [${symbol}] +$${(profit || 0).toFixed(2)} | ${direction} | P/L: $${(a.netPL || 0).toFixed(2)} | stake reset to $${a.currentStake.toFixed(2)} (L0)`);
+            // DUAL TOKEN: a win on the MAIN token completes the recovery chain → back to REGULAR.
+            if (dual && a.mode === 'MAIN') {
+                a.mode = 'REGULAR';
+                a.baseStake = StakeCalculator.getBaseStake(symbol, a.investmentRemaining, 'REGULAR');
+                a.currentStake = StakeCalculator.calculate(symbol, 0, a.investmentRemaining, 'REGULAR');
+                LOGGER.recovery(`✅ [${symbol}] RECOVERY COMPLETE — win on MAIN token. Switching back to REGULAR (stake $${a.currentStake.toFixed(2)}).`);
+                TelegramService.sendMessage(`✅ <b>${symbol} RECOVERY COMPLETE</b>\nWin on <b>💳 MAIN</b> +$${(profit || 0).toFixed(2)}\nBack on <b>💳 REGULAR</b> — stake $${a.currentStake.toFixed(2)}`);
+            } else {
+                a.baseStake = StakeCalculator.getBaseStake(symbol, a.investmentRemaining, tradeMode);
+                a.currentStake = StakeCalculator.calculate(symbol, 0, a.investmentRemaining, tradeMode);
+            }
+
+            LOGGER.trade(`WIN [${symbol}] +$${(profit || 0).toFixed(2)} | ${direction} | ${tradeMode} | P/L: $${(a.netPL || 0).toFixed(2)} | stake reset to $${a.currentStake.toFixed(2)} (L0)`);
             this.checkAssetTargets(symbol);
         } else {
             state.session.lossesCount++;
@@ -1366,29 +1497,64 @@ class SessionManager {
             a.lastTradeWasWin = false;
             // v4 signal-wait: NO same-direction, NO exclusive lock, NO cooldown.
             // Only the stake multiplier advances; next trade waits for a fresh WPR signal.
-            a.martingaleLevel = (a.martingaleLevel || 0) + 1;
-            a.isRecovery = a.martingaleLevel > 0; // informational only (L>0 = in recovery)
-            a.waitingForNewSignal = true; // informational: waiting for next valid signal
-            a.exclusiveLock = false;
+            a.cooldownCandles = 0;
             a.forceRecoverDirection = null;
             a.pendingRecovery = false;
             a.recoveryFirstDone = false;
 
-            // Per-asset x2..x9 loss tracking (this asset only).
-            if (a.martingaleLevel >= 2 && a.martingaleLevel <= 9) {
-                const key = `x${a.martingaleLevel}Losses`;
-                state.session[key]++;
-                a[key] = (a[key] || 0) + 1;
+            if (dual && tradeMode === 'MAIN') {
+                // ── MAIN mode: martingale ladder continues (fresh base on switch-in, ladder per loss) ──
+                a.martingaleLevel = (a.martingaleLevel || 0) + 1;
+                a.currentStake = StakeCalculator.calculate(symbol, a.martingaleLevel, a.investmentRemaining, 'MAIN');
+                a.baseStake = StakeCalculator.getBaseStake(symbol, a.investmentRemaining, 'MAIN');
+                a.isRecovery = true;
+                a.waitingForNewSignal = true;
+                if (a.martingaleLevel >= 2 && a.martingaleLevel <= 9) {
+                    const key = `x${a.martingaleLevel}Losses`;
+                    state.session[key]++;
+                    a[key] = (a[key] || 0) + 1;
+                }
+                LOGGER.trade(`LOSS [${symbol}] -$${Math.abs(profit || 0).toFixed(2)} | ${direction} | 💳 MAIN | Next Stake: $${(a.currentStake || 0).toFixed(2)} (L${a.martingaleLevel})`);
+            } else if (dual) {
+                // ── REGULAR mode: flat stake — switch to MAIN after the threshold ──
+                const threshold = this._mainSwitchThreshold(symbol);
+                a.martingaleLevel = 0;
+                a.waitingForNewSignal = false;
+                if (a.consecutiveLosses >= threshold) {
+                    a.mode = 'MAIN';
+                    a.martingaleLevel = 0;
+                    a.currentStake = StakeCalculator.calculate(symbol, 0, a.investmentRemaining, 'MAIN');
+                    a.baseStake = StakeCalculator.getBaseStake(symbol, a.investmentRemaining, 'MAIN');
+                    a.isRecovery = true;
+                    a.waitingForNewSignal = true;
+                    LOGGER.recovery(`⚡ [${symbol}] ${a.consecutiveLosses} losses on REGULAR — SWITCHING to MAIN token (first stake $${a.currentStake.toFixed(2)}).`);
+                    TelegramService.sendMessage(`⚡ <b>${symbol} → 💳 MAIN token</b>\n${a.consecutiveLosses} consecutive REGULAR losses\nStarting MAIN recovery at **$${a.currentStake.toFixed(2)}** (then martingale x${CONFIG.MARTINGALE_MULTIPLIER})`);
+                } else {
+                    a.currentStake = StakeCalculator.calculate(symbol, 0, a.investmentRemaining, 'REGULAR');
+                    a.baseStake = StakeCalculator.getBaseStake(symbol, a.investmentRemaining, 'REGULAR');
+                    LOGGER.trade(`LOSS [${symbol}] -$${Math.abs(profit || 0).toFixed(2)} | ${direction} | 💳 REGULAR | Next Stake: $${(a.currentStake || 0).toFixed(2)} (flat, ${a.consecutiveLosses}/${threshold} losses before MAIN)`);
+                }
+            } else {
+                // ── Legacy single-token: martingale escalates from L1 immediately ──
+                a.martingaleLevel = (a.martingaleLevel || 0) + 1;
+                a.currentStake = StakeCalculator.calculate(symbol, a.martingaleLevel, a.investmentRemaining, 'REGULAR');
+                a.isRecovery = a.martingaleLevel > 0;
+                a.waitingForNewSignal = true;
+                if (a.martingaleLevel >= 2 && a.martingaleLevel <= 9) {
+                    const key = `x${a.martingaleLevel}Losses`;
+                    state.session[key]++;
+                    a[key] = (a[key] || 0) + 1;
+                }
+                LOGGER.trade(`LOSS [${symbol}] -$${Math.abs(profit || 0).toFixed(2)} | ${direction} | waiting for NEW WPR signal | Next Stake: $${(a.currentStake || 0).toFixed(2)} (martingale L${a.martingaleLevel})`);
             }
-
-            a.currentStake = StakeCalculator.calculate(symbol, a.martingaleLevel, a.investmentRemaining);
-
-            LOGGER.trade(`LOSS [${symbol}] -$${Math.abs(profit || 0).toFixed(2)} | ${direction} | waiting for NEW WPR signal | Next Stake: $${(a.currentStake || 0).toFixed(2)} (martingale L${a.martingaleLevel})`);
+            a.exclusiveLock = false;
             this.checkAssetTargets(symbol);
         }
 
         this.recalcGlobalCapital();
-        TradeHistoryManager.recordTrade(symbol, profit, a.martingaleLevel);
+        // History is keyed to the token the trade actually executed on (pos.mode), not the
+        // post-settlement a.mode (e.g. the losing REGULAR trade that triggers the MAIN switch).
+        TradeHistoryManager.recordTrade(symbol, profit, a.martingaleLevel, (mode || a.mode || 'REGULAR'), stake, direction);
     }
 }
 
@@ -1430,7 +1596,16 @@ let tradeHistory = null;
 // ============================================================
 class ConnectionManager {
 
-    constructor() {
+    constructor(mode = 'REGULAR') {
+        this.mode = mode === 'MAIN' ? 'MAIN' : 'REGULAR';
+        // MAIN connection exists only when a MAIN_TOKEN is set — otherwise null token,
+        // so connect() skips it and the bot runs legacy single-token martingale.
+        this.token = mode === 'MAIN'
+            ? (CONFIG.MAIN_TOKEN || null)
+            : (CONFIG.REGULAR_TOKEN || CONFIG.API_TOKEN);
+        this.isAuthorized = false;
+        this.isConnected = false;
+        this.loginid = null;
         this.ws = null;
         this.reconnectAttempts = 0;
         this.maxReconnectAttempts = 50;
@@ -1442,9 +1617,9 @@ class ConnectionManager {
         this.reconnectTimer = null;
         this.activeSubscriptions = new Set();
         this._subscriptionIds = new Map();
-        this._isPat = RestClient.isPat(CONFIG.API_TOKEN);
+        this._isPat = RestClient.isPat(this.token);
         this._rest = this._isPat
-            ? new RestClient('https://api.derivws.com', CONFIG.APP_ID, CONFIG.API_TOKEN)
+            ? new RestClient('https://api.derivws.com', CONFIG.APP_ID, this.token)
             : null;
         this._otpUrl = null;
         this._targetAccount = null;
@@ -1452,20 +1627,23 @@ class ConnectionManager {
     }
 
     connect() {
-        if (this.ws?.readyState === WebSocket.OPEN) { LOGGER.info('Already connected'); return; }
-        if (!CONFIG.API_TOKEN) { LOGGER.error('API_TOKEN is empty — aborting'); return; }
-        LOGGER.info('Connecting to Deriv API...');
+        if (this.ws?.readyState === WebSocket.OPEN) { LOGGER.info(`[${this.mode}] Already connected`); return; }
+        if (!this.token) {
+            LOGGER.warn(`[${this.mode}] No token configured — ${this.mode} connection skipped`);
+            return;
+        }
+        LOGGER.info(`[${this.mode}] Connecting to Deriv API...`);
         this.cleanup();
         this.isShuttingDown = false;
 
         if (this._isPat) {
-            LOGGER.info('PAT token detected-> using NEW Deriv API (OTP flow)');
+            LOGGER.info(`[${this.mode}] PAT token detected -> using NEW Deriv API (OTP flow)`);
             this._newApiConnect().catch(err => {
-                LOGGER.error(`New API connect failed: ${err.message}`);
+                LOGGER.error(`[${this.mode}] New API connect failed: ${err.message}`);
                 this.onClose();
             });
         } else {
-            LOGGER.info('Using legacy Deriv API (token authorize flow)');
+            LOGGER.info(`[${this.mode}] Using legacy Deriv API (token authorize flow)`);
             this._openWs(`${CONFIG.WS_URL}?app_id=${encodeURIComponent(CONFIG.APP_ID)}`);
         }
     }
@@ -1541,14 +1719,15 @@ class ConnectionManager {
     _newApiMarkAuthorized() {
         if (!this.accountInfo) return;
 
+        this.isAuthorized = true;
         LOGGER.info(
-            `Authorized ${this.accountInfo.loginid}` +
+            `[${this.mode}] Authorized ${this.accountInfo.loginid}` +
             `(${this.accountInfo.isVirtual ? 'DEMO' : 'REAL'})` +
             `balance=${this.accountInfo.balance} ${this.accountInfo.currency} via PAT/new-API`
         );
 
-        state.isAuthorized = true;
-        state.accountBalance = this.accountInfo.balance;
+        this.refreshGlobalFlags();
+        state.accountBalance = bot?.connectionRegular ? (bot.connectionRegular.accountInfo?.balance ?? this.accountInfo.balance) : this.accountInfo.balance;
         this.send({ balance: 1, subscribe: 1 });
 
         if (this.reconnectAttempts > 0 || this.hasAnyActivePositions()) {
@@ -1556,7 +1735,7 @@ class ConnectionManager {
                 const a = state.assets[sym];
                 if (a?.activePositions) {
                     a.activePositions.forEach(pos => {
-                        if (pos.contractId) this.send({ proposal_open_contract: 1, contract_id: pos.contractId, subscribe: 1 });
+                        if (pos.contractId && pos.mode === this.mode) this.send({ proposal_open_contract: 1, contract_id: pos.contractId, subscribe: 1 });
                     });
                 }
             });
@@ -1565,9 +1744,20 @@ class ConnectionManager {
         bot.start();
     }
 
+    static refreshGlobalFlags() {
+        try {
+            const conns = bot && (bot.connectionRegular || bot.connectionMain)
+                ? [bot.connectionRegular, bot.connectionMain].filter(Boolean)
+                : [];
+            state.isConnected = conns.length > 0 && conns.some(c => c.isConnected);
+            state.isAuthorized = conns.length > 0 && conns.some(c => c.isAuthorized);
+        } catch (_) { /* bot already shutting down */ }
+    }
+
     onOpen() {
-        LOGGER.info('Connected to Deriv API');
-        state.isConnected = true;
+        LOGGER.info(`[${this.mode}] Connected to Deriv API`);
+        this.isConnected = true;
+        this.refreshGlobalFlags();
         this.reconnectAttempts = 0;
         this.isReconnecting = false;
         this.startPing();
@@ -1577,7 +1767,7 @@ class ConnectionManager {
         if (this._isPat) {
             this._newApiMarkAuthorized();
         } else {
-            this.send({ authorize: CONFIG.API_TOKEN });
+            this.send({ authorize: this.token });
         }
     }
 
@@ -1605,6 +1795,9 @@ class ConnectionManager {
                     exclusiveLock: false,
                     forceRecoverDirection: null,
                     recoveryStep: 0,
+                    // DUAL TOKEN: per-asset trading mode. 'REGULAR' = flat stake on REGULAR token;
+                    // 'MAIN' = martingale ladder on MAIN token after LOSSES_BEFORE_MAIN_SWITCH losses.
+                    mode: 'REGULAR',
                     currentStake: assetConfig.INITIAL_STAKE,
                     baseStake: assetConfig.INITIAL_STAKE,
                     martingaleLevel: 0,
@@ -1648,6 +1841,11 @@ class ConnectionManager {
                 for (let lv = 2; lv <= 9; lv++) { if (a[`x${lv}Losses`] === undefined) a[`x${lv}Losses`] = 0; }
                 if (!Number.isFinite(a.investmentRemaining)) a.investmentRemaining = getAssetConfig(symbol).INVESTMENT_AMOUNT;
                 if (!Number.isFinite(a.martingaleLevel)) a.martingaleLevel = 0;
+                if (!a.mode) a.mode = 'REGULAR';
+                // A MAIN-mode asset that lost its max-level reset falls back to REGULAR.
+                if (a.mode === 'MAIN' && a.martingaleLevel === 0 && a.consecutiveLosses === 0 && a.activePositions?.length === 0) {
+                    // Full MAIN chain resolved; always return to REGULAR (safer default on resume).
+                }
                 // Legacy locks must never survive into v4.
                 a.exclusiveLock = false; a.waitingForNewSignal = a.martingaleLevel > 0;
                 a.isRecovery = a.martingaleLevel > 0; a.cooldownCandles = 0;
@@ -1677,7 +1875,7 @@ class ConnectionManager {
     handleResponse(r) {
         switch (r.msg_type) {
             case 'authorize': this.handleAuthorize(r); break;
-            case 'balance': state.accountBalance = r.balance.balance; break;
+            case 'balance': if (this.mode === 'REGULAR') state.accountBalance = r.balance.balance; break;
             case 'ohlc': this.handleOHLC(r.ohlc); break;
             case 'candles': this.handleCandlesHistory(r); break;
             case 'buy': this.handleBuyResponse(r); break;
@@ -1688,11 +1886,12 @@ class ConnectionManager {
     }
 
     handleAuthorize(r) {
-        if (r.error) { LOGGER.error(`Auth failed: ${r.error.message}`); return; }
+        if (r.error) { LOGGER.error(`[${this.mode}] Auth failed: ${r.error.message}`); return; }
 
-        LOGGER.info(`Authorized: ${r.authorize.loginid} | Balance: ${r.authorize.balance} ${r.authorize.currency}`);
-        state.isAuthorized = true;
-        state.accountBalance = r.authorize.balance;
+        this.isAuthorized = true;
+        LOGGER.info(`[${this.mode}] Authorized: ${r.authorize.loginid} | Balance: ${r.authorize.balance} ${r.authorize.currency}`);
+        this.refreshGlobalFlags();
+        if (this.mode === 'REGULAR') state.accountBalance = r.authorize.balance;
         this.send({ balance: 1, subscribe: 1 });
 
         if (this.reconnectAttempts > 0 || this.hasAnyActivePositions()) {
@@ -1700,7 +1899,8 @@ class ConnectionManager {
                 const a = state.assets[sym];
                 if (a?.activePositions) {
                     a.activePositions.forEach(pos => {
-                        if (pos.contractId) this.send({ proposal_open_contract: 1, contract_id: pos.contractId, subscribe: 1 });
+                        // Only the owning-mode connection resumes observing its own contracts.
+                        if (pos.contractId && pos.mode === this.mode) this.send({ proposal_open_contract: 1, contract_id: pos.contractId, subscribe: 1 });
                     });
                 }
             });
@@ -1860,14 +2060,14 @@ class ConnectionManager {
         const pos = a.activePositions[posIdx];
         const profit = Number(contract.profit);
 
-        SessionManager.recordTradeResult(ownerSym, profit, pos.direction, pos.stake);
+        SessionManager.recordTradeResult(ownerSym, profit, pos.direction, pos.stake, pos.mode);
         a.canTrade = true;
 
         TelegramService.sendTradeAlert(
             profit >= 0 ? 'WIN' : 'LOSS',
             ownerSym, pos.direction, pos.stake,
             pos.duration, pos.durationUnit,
-            { profit }
+            { profit, mode: pos.mode }
         );
 
         a.activePositions.splice(posIdx, 1);
@@ -2106,9 +2306,10 @@ class ConnectionManager {
     onError(err) { LOGGER.error(`WebSocket error: ${err.message}`); }
 
     onClose() {
-        LOGGER.warn('Disconnected from Deriv API');
-        state.isConnected = false;
-        state.isAuthorized = false;
+        LOGGER.warn(`[${this.mode}] Disconnected from Deriv API`);
+        this.isConnected = false;
+        this.isAuthorized = false;
+        this.refreshGlobalFlags();
         this.stopPing();
         StatePersistence.saveState();
 
@@ -2119,8 +2320,8 @@ class ConnectionManager {
             this.isReconnecting = true;
             this.reconnectAttempts++;
             const delay = Math.min(this.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1), 30000);
-            LOGGER.info(`Reconnecting in ${(delay / 1000).toFixed(1)}s (attempt ${this.reconnectAttempts})`);
-            TelegramService.sendMessage(`⚠️ <b>BizWillRF BOT CONNECTION LOST</b> — Reconnecting (attempt ${this.reconnectAttempts})`);
+            LOGGER.info(`[${this.mode}] Reconnecting in ${(delay / 1000).toFixed(1)}s (attempt ${this.reconnectAttempts})`);
+            TelegramService.sendMessage(`⚠️ <b>BizWillRF BOT CONNECTION LOST [${this.mode}]</b> — Reconnecting (attempt ${this.reconnectAttempts})`);
 
             this.reconnectTimer = setTimeout(() => {
                 this.reconnectTimer = null;
@@ -2129,8 +2330,15 @@ class ConnectionManager {
                 this.connect();
             }, delay);
         } else {
-            LOGGER.error('Max reconnection attempts reached — giving up');
-            TelegramService.sendMessage(`\u{1f6d1} <b>BizWillRF BOT STOPPED</b> — Max reconnections\nFinal P/L: $${(state.session.netPL || 0).toFixed(2)}`);
+            // Only abandon the whole bot if BOTH token connections are dead.
+            const other = bot && (this.mode === 'MAIN' ? bot.connectionRegular : bot.connectionMain);
+            const otherAlive = other && (other.isConnected || other.isAuthorized || other.ws?.readyState === WebSocket.OPEN);
+            if (otherAlive) {
+                LOGGER.error(`[${this.mode}] Max reconnection attempts reached — ${this.mode} connection retired, keeping the other connection alive`);
+                return;
+            }
+            LOGGER.error(`[${this.mode}] Max reconnection attempts reached — giving up`);
+            TelegramService.sendMessage(`\u{1f6d1} <b>BizWillRF BOT STOPPED [${this.mode}]</b> — Max reconnections\nFinal P/L: $${(state.session.netPL || 0).toFixed(2)}`);
             process.exit(1);
         }
     }
@@ -2167,7 +2375,12 @@ class ConnectionManager {
 class IndexBot {
 
     constructor() {
-        this.connection = new ConnectionManager();
+        // DUAL TOKEN: REGULAR connection handles flat-stake trades on REGULAR_TOKEN;
+        // MAIN connection handles the martingale ladder on MAIN_TOKEN. `this.connection`
+        // is kept as an alias to the REGULAR connection for compatibility.
+        this.connectionRegular = new ConnectionManager('REGULAR');
+        this.connectionMain = new ConnectionManager('MAIN');
+        this.connection = this.connectionRegular;
         this._processedContracts = new Set();
         // v4: no global trade lock — concurrency is per-asset (1 open/asset).
         // _tradeLocked kept as compat getter (true if any position open).
@@ -2198,13 +2411,39 @@ class IndexBot {
     }
     set _tradeLocked(_) { /* compat no-op — v4 uses per-asset positions */ }
 
+    // DUAL TOKEN: pick the API connection that owns the asset's current mode.
+    _connectionFor(mode) {
+        if (mode === 'MAIN' && CONFIG.MAIN_TOKEN && this.connectionMain) return this.connectionMain;
+        return this.connectionRegular || this.connection;
+    }
+
+    _connForContract(contractId) {
+        let pos = null;
+        CONFIG.ACTIVE_ASSETS.forEach(sym => {
+            if (pos) return;
+            const a = state.assets[sym];
+            if (a?.activePositions) {
+                pos = a.activePositions.find(p => String(p.contractId) === String(contractId)) || null;
+            }
+        });
+        return pos ? this._connectionFor(pos.mode) : this.connectionRegular;
+    }
+
+    _isConnReady(conn) {
+        return !!(conn && (conn.isAuthorized || conn.ws?.readyState === WebSocket.OPEN));
+    }
+
     async start() {
+        if (this.started) return; // idempotent — both connections fire bot.start() on authorize
+        this.started = true;
+
         console.log('\n' + '═'.repeat(74));
-        console.log(' DERIV CALLE/PUTE BOT v4 — TRUE MULTI-ASSET + SIGNAL-WAIT RECOVERY');
+        console.log(' DERIV CALLE/PUTE BOT v4 — DUAL TOKEN (REGULAR + MAIN MARTINGALE)');
         console.log('═'.repeat(74));
         console.log(`Assets    : ${CONFIG.ACTIVE_ASSETS.join(', ')} (independent pools/stakes)`);
         console.log(`WPR       : Period=${CONFIG.WPR_PERIOD} OB=${CONFIG.WPR_OVERBOUGHT} OS=${CONFIG.WPR_OVERSOLD} | BUY: cross >-20 (first since -80) → CALLE | SELL: cross <-80 (first since -20) → PUTE`);
-        console.log(`Timeframe : ${CONFIG.TIMEFRAME_LABEL} candles | Duration: ${CONFIG.DURATION}${CONFIG.DURATION_UNIT} | Recovery: wait for NEW signal, stake x-multiplier, reset on win`);
+        console.log(`Timeframe : ${CONFIG.TIMEFRAME_LABEL} candles | Duration: ${CONFIG.DURATION}${CONFIG.DURATION_UNIT}`);
+        console.log(`Dual token: REGULAR (flat $${CONFIG.INITIAL_STAKE}, no multiplier) | switch to MAIN after ${CONFIG.LOSSES_BEFORE_MAIN_SWITCH} losses → MAIN starts $${CONFIG.MAIN_INITIAL_STAKE} then ladder (x${CONFIG.MARTINGALE_MULTIPLIER}, max L${CONFIG.MAX_MARTINGALE_LEVEL})`);
         console.log(`Risk      : Per-asset martingale pools: ${CONFIG.ACTIVE_ASSETS.map(s => `${s}=$${getAssetConfig(s).INVESTMENT_AMOUNT}`).join(', ')}`);
         console.log(`Capital   : $${state.capital.toFixed(2)}`);
         console.log(`Sessions  : ${TradingSessionManager.getStatusString()}`);
@@ -2212,9 +2451,14 @@ class IndexBot {
 
         state.currentTradeDay = TradeHistoryManager.getDateKey();
         TradeHistoryManager.ensureDayEntry(state.currentTradeDay);
-        this.connection.initializeAssets();
+        this.connectionRegular.initializeAssets();
 
-        CONFIG.ACTIVE_ASSETS.forEach(sym => this.subscribeToCandles(sym));
+        // Subscribe candles on BOTH connections so a live dual feed races safely;
+        // handleOHLC dedupes identical closes via lastProcessedCandleOpenTime.
+        CONFIG.ACTIVE_ASSETS.forEach(sym => {
+            this.subscribeToCandles(sym, this.connectionRegular);
+            this.subscribeToCandles(sym, this.connectionMain);
+        });
 
         await TelegramService.sendStartupMessage();
         TelegramService.startHourlyTimer();
@@ -2224,29 +2468,30 @@ class IndexBot {
         LOGGER.info('WILLRF BOT v1.0 fully started!');
     }
 
-    subscribeToCandles(symbol) {
-        if (this.connection.activeSubscriptions.has(symbol)) {
-            LOGGER.debug(`Already subscribed to ${symbol}`);
+    subscribeToCandles(symbol, conn = this.connectionRegular) {
+        if (!conn || !conn.token) return; // e.g. single-token mode: MAIN connection skipped
+        if (conn.activeSubscriptions.has(symbol)) {
+            LOGGER.debug(`[${conn.mode}] Already subscribed to ${symbol}`);
             return;
         }
 
-        LOGGER.info(`Subscribing to ${symbol} (${CONFIG.TIMEFRAME_LABEL})...`);
+        LOGGER.info(`[${conn.mode}] Subscribing to ${symbol} (${CONFIG.TIMEFRAME_LABEL})...`);
 
         // Load historical candles
-        this.connection.send({
+        conn.send({
             ticks_history: symbol, adjust_start_time: 1,
             count: CONFIG.CANDLES_TO_LOAD, end: 'latest', start: 1,
             style: 'candles', granularity: CONFIG.GRANULARITY,
         });
 
         // Subscribe to live candles
-        this.connection.send({
+        conn.send({
             ticks_history: symbol, adjust_start_time: 1,
             count: 1, end: 'latest', start: 1,
             style: 'candles', granularity: CONFIG.GRANULARITY, subscribe: 1,
         });
 
-        this.connection.activeSubscriptions.add(symbol);
+        conn.activeSubscriptions.add(symbol);
     }
 
     _getTradeDuration(symbol) {
@@ -2257,9 +2502,10 @@ class IndexBot {
     _executeBuy(symbol, direction, isRecovery, analysis) {
         const assetState = state.assets[symbol];
         if (!assetState) return null;
+        const mode = assetState.mode || 'REGULAR';
         const stake = assetState.currentStake;
         if (stake > assetState.investmentRemaining) {
-            LOGGER.error(`[${symbol}] Insufficient pool: stake $${stake} > remaining $${assetState.investmentRemaining.toFixed(2)} (L${assetState.martingaleLevel})`);
+            LOGGER.error(`[${symbol}] Insufficient pool: stake $${stake} > remaining $${assetState.investmentRemaining.toFixed(2)} (L${assetState.martingaleLevel}, ${mode})`);
             assetState.canTrade = false;
             return null;
         }
@@ -2269,35 +2515,41 @@ class IndexBot {
 
         const { duration, durationUnit } = this._getTradeDuration(symbol);
 
-        if (isRecovery) {
-            const wprStr = analysis?.details?.wpr != null && analysis?.details?.prevWpr != null
-                ? `${analysis.details.prevWpr.toFixed(2)}→${analysis.details.wpr.toFixed(2)}`
-                : `wpr=${assetState.wpr?.toFixed(2) ?? 'n/a'}`;
-            LOGGER.trade(`   Recovery: SIGNAL-WAIT L${assetState.martingaleLevel} | WPR ${wprStr} → ${direction} (signal direction) | Stake: $${stake.toFixed(2)} | Pool left: $${assetState.investmentRemaining.toFixed(2)} | ${analysis?.reason || ''}`);
+        const wprStr = analysis?.details?.wpr != null && analysis?.details?.prevWpr != null
+            ? `${analysis.details.prevWpr.toFixed(2)}→${analysis.details.wpr.toFixed(2)}`
+            : `wpr=${assetState.wpr?.toFixed(2) ?? 'n/a'}`;
+        if (mode === 'MAIN') {
+            LOGGER.trade(`   [MAIN] Recovery L${assetState.martingaleLevel} | WPR ${wprStr} → ${direction} | Stake: $${stake.toFixed(2)} | Pool left: $${assetState.investmentRemaining.toFixed(2)} | ${analysis?.reason || ''}`);
         } else {
-            const wprStr = analysis?.details?.wpr != null && analysis?.details?.prevWpr != null
-                ? `${analysis.details.prevWpr.toFixed(2)}→${analysis.details.wpr.toFixed(2)}`
-                : `wpr=${assetState.wpr?.toFixed(2) ?? 'n/a'}`;
-            LOGGER.trade(`   Recovery Mode: NO | WPR(${CONFIG.WPR_PERIOD}) ${wprStr} → ${direction} | Stake: $${stake.toFixed(2)} | Martingale: L${assetState.martingaleLevel} | Duration: ${duration}${durationUnit} | ${analysis?.reason || ''}`);
+            LOGGER.trade(`   [REGULAR] Flat | WPR(${CONFIG.WPR_PERIOD}) ${wprStr} → ${direction} | Stake: $${stake.toFixed(2)} | Martingale: L${assetState.martingaleLevel} | Duration: ${duration}${durationUnit} | ${analysis?.reason || ''}`);
         }
 
         assetState.canTrade = false;
         assetState.lastTradeDirection = direction;
 
+        const conn = this._connectionFor(mode);
+        if (!this._isConnReady(conn)) {
+            LOGGER.error(`[${symbol}] ${mode} connection not authorized/open — trade blocked (mode switch requires both tokens live)`);
+            assetState.canTrade = true;
+            return null;
+        }
+
         const position = {
             symbol, direction, stake, duration, durationUnit,
+            mode,
             entryTime: Date.now(), contractId: null, reqId: null, currentProfit: 0, buyPrice: 0
         };
         assetState.activePositions.push(position);
 
         TelegramService.sendTradeAlert('OPEN', symbol, direction, stake, duration, durationUnit, {
+            mode,
             isRecovery,
             analysis,
             recoveryDuration: isRecovery ? duration : null,
             recoveryDurationUnit: isRecovery ? durationUnit : null
         });
 
-        const symbolKey = this.connection && this.connection._isPat ? 'underlying_symbol' : 'symbol';
+        const symbolKey = conn && conn._isPat ? 'underlying_symbol' : 'symbol';
         const tradeRequest = {
             buy: 1,
             subscribe: 1,
@@ -2312,14 +2564,14 @@ class IndexBot {
                 basis: 'stake'
             }
         };
-        const reqId = this.connection.send(tradeRequest);
+        const reqId = conn.send(tradeRequest);
         if (reqId == null) {
             // Send failed (WS not open) — no contract exists, refund pool immediately.
             assetState.activePositions.splice(assetState.activePositions.indexOf(position), 1);
             assetState.investmentRemaining = Number((assetState.investmentRemaining + stake).toFixed(2));
             SessionManager.recalcGlobalCapital();
             assetState.canTrade = true;
-            LOGGER.error(`[${symbol}] Buy NOT sent (WS not open) — pool refunded $${stake.toFixed(2)}, asset freed`);
+            LOGGER.error(`[${symbol}] Buy NOT sent (${mode} WS not open) — pool refunded $${stake.toFixed(2)}, asset freed`);
             StatePersistence.saveState();
             return null;
         }
@@ -2461,7 +2713,8 @@ class IndexBot {
             if (n === 0) LOGGER.warn(`WATCHDOG fired for contract ${contractId}`);
 
             if (state.isConnected && state.isAuthorized) {
-                this.connection.send({ proposal_open_contract: 1, contract_id: contractId, subscribe: 1 });
+                const conn = this._connForContract(contractId);
+                (conn || this.connection).send({ proposal_open_contract: 1, contract_id: contractId, subscribe: 1 });
 
                 if (n + 1 < this.watchdogPolls) {
                     const poll = setTimeout(() => {
@@ -2555,12 +2808,13 @@ class IndexBot {
 
         // Stop Deriv pushing stale updates for a contract we no longer track.
         if (contractId != null) {
-            const subId = this.connection && this.connection._subscriptionIds
-                ? this.connection._subscriptionIds.get(String(contractId))
+            const conn = this._connForContract(contractId);
+            const subId = conn && conn._subscriptionIds
+                ? conn._subscriptionIds.get(String(contractId))
                 : null;
-            if (subId != null && this.connection) {
-                try { this.connection.send({ forget: subId }); } catch (_) { }
-                this.connection._subscriptionIds.delete(String(contractId));
+            if (subId != null && conn) {
+                try { conn.send({ forget: subId }); } catch (_) { }
+                conn._subscriptionIds.delete(String(contractId));
             }
         }
 
@@ -2586,7 +2840,7 @@ class IndexBot {
             }
             const a = state.assets[ownerSym];
             // Model exactly like a real loss with this stake (pool untouched — already deducted).
-            SessionManager.recordTradeResult(ownerSym, -pos.stake, pos.direction, pos.stake);
+            SessionManager.recordTradeResult(ownerSym, -pos.stake, pos.direction, pos.stake, pos.mode);
             a.canTrade = true;
             const entry = {
                 contractId: String(contractId), symbol: ownerSym,
@@ -2632,7 +2886,10 @@ class IndexBot {
         if (this.contractCleanupInterval) clearInterval(this.contractCleanupInterval);
         StatePersistence.saveState();
         TradeHistoryManager.saveHistory();
-        setTimeout(() => { this.connection.cleanup(); LOGGER.info('Bot stopped'); }, 2000);
+        setTimeout(() => {
+            [this.connectionRegular, this.connectionMain].forEach(c => { if (c) c.cleanup(); });
+            LOGGER.info('Bot stopped');
+        }, 2000);
     }
 
     startSessionTimeChecker() {
@@ -2653,6 +2910,7 @@ class IndexBot {
                     recoveryStep: a.recoveryStep,
                     isRecovery: (a.martingaleLevel || 0) > 0,
                     martingaleLevel: a.martingaleLevel || 0,
+                    mode: a.mode || 'REGULAR',
                     stopped: !!a.stopped,
                     currentStake: a.currentStake,
                     pool: a.investmentRemaining,
@@ -2817,8 +3075,8 @@ function stopTelegramPolling(){
 tradeHistory = TradeHistoryManager.loadHistory();
 const bot = new IndexBot();
 
-process.on('SIGINT', () => { try{ stopTelegramPolling(); }catch(_){} bot.stop(); bot.connection.shutdown(); setTimeout(() => process.exit(0), 3000); });
-process.on('SIGTERM', () => { try{ stopTelegramPolling(); }catch(_){} bot.stop(); bot.connection.shutdown(); setTimeout(() => process.exit(0), 3000); });
+process.on('SIGINT', () => { try{ stopTelegramPolling(); }catch(_){} bot.stop(); [bot.connectionRegular, bot.connectionMain].forEach(c => { if (c) c.shutdown(); }); setTimeout(() => process.exit(0), 3000); });
+process.on('SIGTERM', () => { try{ stopTelegramPolling(); }catch(_){} bot.stop(); [bot.connectionRegular, bot.connectionMain].forEach(c => { if (c) c.shutdown(); }); setTimeout(() => process.exit(0), 3000); });
 process.on('uncaughtException', (err) => { LOGGER.error(`UNCAUGHT: ${err.message}\n${err.stack}`); try { StatePersistence.saveState(); } catch { } });
 process.on('unhandledRejection', (reason) => { LOGGER.error(`UNHANDLED: ${reason}`); try { StatePersistence.saveState(); } catch { } });
 
@@ -2832,13 +3090,14 @@ if (cliArgs.backtest) {
     const stateLoaded = StatePersistence.loadState();
     LOGGER.info(stateLoaded ? 'Resuming from saved state' : 'Starting fresh session');
 
-    if (CONFIG.API_TOKEN === 'YOUR_API_TOKEN_HERE') {
-        console.error('\n⚠️  Set CONFIG.API_TOKEN before running!\n');
+    if (CONFIG.REGULAR_TOKEN === 'YOUR_API_TOKEN_HERE' || !CONFIG.REGULAR_TOKEN) {
+        console.error('\n⚠️  Set CONFIG.REGULAR_TOKEN before running!\n');
         process.exit(1);
     }
 
-    console.log('\n\u{1f680} Starting WPR BOT v4.0 TRUE MULTI-ASSET (Williams %R)...\n');
-    bot.connection.connect();
+    console.log('\n\u{1f680} Starting WPR BOT v4.0 DUAL TOKEN (REGULAR + MAIN martingale)...\n');
+    bot.connectionRegular.connect();
+    bot.connectionMain.connect();
     // start Telegram backtest listener in live mode (optional)
     startTelegramBacktestPolling();
 
@@ -2866,9 +3125,10 @@ if (cliArgs.backtest) {
             if (p) {
                 const wpr = p.wpr != null ? `WPR:${p.wpr.toFixed(1)}` : 'WPR:n/a';
                 const rec = p.isRecovery ? `🔄L${p.martingaleLevel}` : '🎯L0';
+                const mod = p.mode === 'MAIN' ? '💳M' : '💳R';
                 const stop = p.stopped ? '⛔STOP' : '';
 
-                pairLines += `\n  ${sym}: ${wpr} ${p.buyFlag ? '🟢BF' : ''} ${p.sellFlag ? '🔴SF' : ''} ${rec}${stop} $${(p.currentStake || 0).toFixed(2)} pool $${(p.pool || 0).toFixed(2)} | ${p.trades}t ${p.wins}W/${p.losses}L $${(p.netPL || 0).toFixed(2)} | Pos:${p.activePositions} CL:${p.consecutiveLosses} x2:${p.x2 || 0} x3:${p.x3 || 0} x4:${p.x4 || 0}  x5:${p.x5 || 0} x6:${p.x6 || 0} x7:${p.x7 || 0} x8:${p.x8 || 0} x9:${p.x9 || 0}`;
+                pairLines += `\n  ${sym}: ${wpr} ${mod} ${p.buyFlag ? '🟢BF' : ''} ${p.sellFlag ? '🔴SF' : ''} ${rec}${stop} $${(p.currentStake || 0).toFixed(2)} pool $${(p.pool || 0).toFixed(2)} | ${p.trades}t ${p.wins}W/${p.losses}L $${(p.netPL || 0).toFixed(2)} | Pos:${p.activePositions} CL:${p.consecutiveLosses} x2:${p.x2 || 0} x3:${p.x3 || 0} x4:${p.x4 || 0}  x5:${p.x5 || 0} x6:${p.x6 || 0} x7:${p.x7 || 0} x8:${p.x8 || 0} x9:${p.x9 || 0}`;
             }
         });
 
