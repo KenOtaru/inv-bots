@@ -1663,7 +1663,7 @@ class ConnectionManager {
             `balance=${this.accountInfo.balance} ${this.accountInfo.currency} via PAT/new-API`
         );
 
-        this.refreshGlobalFlags();
+        ConnectionManager.refreshGlobalFlags();
         state.accountBalance = bot?.connectionRegular ? (bot.connectionRegular.accountInfo?.balance ?? this.accountInfo.balance) : this.accountInfo.balance;
         this.send({ balance: 1, subscribe: 1 });
 
@@ -1694,7 +1694,7 @@ class ConnectionManager {
     onOpen() {
         LOGGER.info(`[${this.mode}] Connected to Deriv API`);
         this.isConnected = true;
-        this.refreshGlobalFlags();
+        ConnectionManager.refreshGlobalFlags();
         this.reconnectAttempts = 0;
         this.isReconnecting = false;
         this.startPing();
@@ -1827,7 +1827,7 @@ class ConnectionManager {
 
         this.isAuthorized = true;
         LOGGER.info(`[${this.mode}] Authorized: ${r.authorize.loginid} | Balance: ${r.authorize.balance} ${r.authorize.currency}`);
-        this.refreshGlobalFlags();
+        ConnectionManager.refreshGlobalFlags();
         if (this.mode === 'REGULAR') state.accountBalance = r.authorize.balance;
         this.send({ balance: 1, subscribe: 1 });
 
@@ -2246,7 +2246,7 @@ class ConnectionManager {
         LOGGER.warn(`[${this.mode}] Disconnected from Deriv API`);
         this.isConnected = false;
         this.isAuthorized = false;
-        this.refreshGlobalFlags();
+        ConnectionManager.refreshGlobalFlags();
         this.stopPing();
         StatePersistence.saveState();
 
