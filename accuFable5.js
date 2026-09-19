@@ -194,8 +194,8 @@ assets: envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100')
   stayMaxValue   : 10,    //20 every one of those N must be < this
   stayCurrentMax : 1,   //2 the most-current value must be < this
   stayStaleMs    : 240000, // stays older than this are ignored
-  evLowerGateMax : -0.030547, //-0.014547 evLower/tick gate: trade only when ≤ this
-  breachMinCount : 72, //65 trade only when historical single-tick barrier hits ≥ this
+  evLowerGateMax : -0.036000, //-0.014547 evLower/tick gate: trade only when ≤ this
+  breachMinCount : 75, //72 trade only when historical single-tick barrier hits ≥ this
 
   // ── Take-profit ──
   // TP exits the trade after takeProfitTicks ticks (the hold target). The
