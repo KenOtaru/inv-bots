@@ -42,11 +42,11 @@ const CONFIG = Object.freeze({
     takeProfitCooldownMaxMs: intEnv('TAKE_PROFIT_COOLDOWN_MS_MAX', 60 * 60 * 1000), // 60 min
 
     // ── persistence (survive restart / network drop) ───────────────────
-    stateFile: strEnv('STATE_FILE', 'randomDiffer_state_03.json'),
+    stateFile: strEnv('STATE_FILE', 'randomDiffer_state_06.json'),
 
     telegram: {
         enabled:  true,
-        botToken: '8288121368:AAHYRb0Stk5dWUWN1iTYbdO3fyIEwIuZQR8',
+        botToken: '7919033379:AAHluKFMECmhMrBhNr_XVpWvCKEonQPx9_0',
         chatId:   '752497117',
     },
     reconnect: {
@@ -290,7 +290,7 @@ class EnhancedDigitDifferTradingBot {
         this.assets = config.assets || [
             // 'R_10','R_25','R_50','R_75', 'R_100', 
             // 'RDBULL', 'RDBEAR', 
-            'R_10','R_25','R_50','R_75', 'R_100', 'RDBULL', 'RDBEAR', '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V', 'JD10', 'JD25', 'JD50', 'JD75', 'JD100'
+            'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR', 'JD10', 'JD25', 'JD50', 'JD75', 'JD100'
             // 'JD10', 'JD25', 'JD50', 'JD75', 'JD100',
             // 'R_10','R_25','R_50','R_75', 'R_100', 'RDBULL', 'RDBEAR',
             // 'R_75',
@@ -1393,6 +1393,7 @@ const bot = new EnhancedDigitDifferTradingBot({
         // '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V', 
         // 'JD10', 'JD25', 'JD50', 'JD75', 'JD100'
         'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR'
+        // 'JD10', 'JD25', 'JD50', 'JD75'
     ],
     // singleActiveAsset: ONE random asset subscribed + traded per trade, dropped
     // on disconnect, re-picked on reconnect (default true; hard-pinned below).
