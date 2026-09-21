@@ -5,7 +5,7 @@
   "maxPremiumUsdt": 1000, "maxOpenPositions": 2, "maxDailyLossUsdt": 25,
   "martingale": {
     "investmentAmount": 1000,
-    "initialStake": 0.5,
+    "initialStake": 1.0,
     "multiplier": 1.48,
     "maxLevel": 1,
     "continueExtraLevels": 8,
