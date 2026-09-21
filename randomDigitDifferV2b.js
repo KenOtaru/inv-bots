@@ -140,8 +140,8 @@ const CONFIG = Object.freeze({
   notifyTradeOpen: boolEnv('NOTIFY_TRADE_OPEN', true),
   notifyTradeResult: boolEnv('NOTIFY_TRADE_RESULT', true),
 
-  stateFile: strEnv('STATE_FILE', 'randomDigitDiffer_state_003.json'),
-  logFile:   strEnv('LOG_FILE',   'randomDigitDiffer_bot_003.log'),
+  stateFile: strEnv('STATE_FILE', 'randomDigitDifferb_state_01.json'),
+  logFile:   strEnv('LOG_FILE',   'randomDigitDifferb_bot_01.log'),
   logLevel:  strEnv('LOG_LEVEL',  'INFO').toUpperCase(),
 
   telegram: {
