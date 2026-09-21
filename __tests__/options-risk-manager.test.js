@@ -1,0 +1,2 @@
+const { OptionsRiskManager } = require('../lib/options-risk-manager');
+test('blocks premium, position, and daily-loss breaches', () => { const risk = new OptionsRiskManager({ maxPremiumUsdt: 10, maxOpenPositions: 1, maxDailyLossUsdt: 5 }); expect(risk.canOpen({ premium: 11 })).toBe('premium limit'); expect(risk.canOpen({ premium: 5 })).toBeNull(); risk.add({ clientOrderId: 'one' }); expect(risk.canOpen({ premium: 5 })).toBe('position limit'); risk.close('one', -5); expect(risk.canOpen({ premium: 5 })).toBe('daily loss limit'); });

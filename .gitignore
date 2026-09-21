@@ -1,0 +1,9 @@
+# Local credentials and runtime state
+.env
+.env.*
+!.env.example
+*-state.json
+*-history.json
+logs/
+coverage/
+node_modules/

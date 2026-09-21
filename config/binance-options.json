@@ -1,0 +1,7 @@
+{
+  "interval": "15m", "wprPeriod": 7, "oversold": -80, "overbought": -20,
+  "underlyings": ["BTCUSDT", "ETHUSDT"], "minDaysToExpiry": 7, "maxDaysToExpiry": 30,
+  "targetDelta": 0.4, "maxContractsPerSide": 24, "maxSpreadPercent": 8, "minTopOfBookQuantity": 0.01,
+  "maxPremiumUsdt": 10, "maxOpenPositions": 2, "maxDailyLossUsdt": 25,
+  "paperMode": true, "pollSeconds": 30
+}
