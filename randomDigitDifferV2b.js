@@ -101,7 +101,7 @@ const CONFIG = Object.freeze({
   recentTradedSymbolsLen:  intEnv('RECENT_TRADED_LEN', 2),   // rolling window of symbols to avoid
   stake:         0.61,
   durationTicks: 1,
-  minStake:      0.62,
+  minStake:      0.61,
   maxStake:      1000,
   // ── Tick history (randomDiffer.js port) ───────────────────────────
   // Digits kept per symbol; the bot only trades once a symbol's history
