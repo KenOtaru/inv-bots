@@ -1,6 +1,6 @@
 # Binance Options WPR bot
 
-`bizWillRFv2_BINANCE_OPTIONS.js` is a separate Binance crypto-Options bot. It discovers the current `TRADING` CALL and PUT contracts for the configured underlyings, uses closed spot candles for Williams %R signals, selects a liquid near-the-money contract near the requested delta, and buys the selected Call or Put.
+`bizWillRFv2_BINANCE_OPTIONS.js` is a separate Binance crypto-Options bot. It discovers the current `TRADING` CALL and PUT contracts for the configured underlyings, uses closed one-minute spot candles for Williams %R signals, selects a liquid near-the-money contract near the requested delta, and buys the selected Call or Put.
 
 ## Safe startup
 
@@ -15,6 +15,10 @@ Paper mode needs no Binance credential and never sends an order. It logs the sel
 The `martingale` block in `config/binance-options.json` mirrors the reference Deriv calculation per underlying: an initial `$0.50` stake, `×1.48` at level 1, then the configured extra-level multipliers. Each underlying has its own `$1,000` pool. A win resets its sequence to the initial stake; a loss advances only after a confirmed position settlement.
 
 Options have contract-level minimum quantities and premiums, so a `$0.50` calculated stake can be below the Binance minimum. In that case the bot safely skips the trade. Raise `initialStake` only after checking the selected contracts' actual premiums and keep `maxPremiumUsdt` at or above the largest permitted sequence stake.
+
+## Position monitoring and exits
+
+The bot checks open bot-owned positions every five seconds and applies the first applicable exit: 100% premium take-profit, 50% premium stop-loss, or the mandatory 60-second time exit. It submits a `reduceOnly` fill-or-kill limit sell at the current best bid, so a partial exit cannot make the locally tracked stake and the exchange position disagree. Martingale advances only after a whole exit fill with realized P/L; a failed exit leaves the position open for the next monitoring cycle.
 
 ## Connectivity error: `ENOTFOUND eapi.binance.com`
 

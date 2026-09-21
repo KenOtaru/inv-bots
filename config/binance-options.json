@@ -11,5 +11,6 @@
     "continueExtraLevels": 8,
     "extraLevelMultipliers": [2.5, 2.5, 2.5, 2.5, 2.5, 2.5, 2.5]
   },
-  "paperMode": true, "pollSeconds": 30
+  "paperMode": true, "pollSeconds": 5,
+  "exit": { "holdSeconds": 60, "takeProfitPercent": 100, "stopLossPercent": 50, "monitorSeconds": 5 }
 }
