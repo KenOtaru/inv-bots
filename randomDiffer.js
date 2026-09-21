@@ -1249,7 +1249,7 @@ class EnhancedDigitDifferTradingBot {
         const summaryText =
             '📊 <b>Random Digit Multi-Asset Bot — Summary</b>\n' +
             'Total Trades: ' + this.totalTrades + ' | ✅ ' + this.totalWins + ' | ❌ ' + this.totalLosses + '\n' +
-            'x2 Losses: ' + this.consecutiveLosses2 + ' | x3: ' + this.consecutiveLosses3 +
+            'x2: ' + this.consecutiveLosses2 + ' | x3: ' + this.consecutiveLosses3 +
             ' | x4: ' + this.consecutiveLosses4 + ' | x5: ' + this.consecutiveLosses5 + '\n\n' +
             '📅 Today (UTC ' + this._dayKey() + '): ' + today.trades + ' trades (✅' + today.wins + ' ❌' + today.losses +
             ') | P/L <b>' + today.netPL.toFixed(2) + '</b>\n\n' +
@@ -1288,9 +1288,13 @@ class EnhancedDigitDifferTradingBot {
             'Asset: <code>' + htmlEscape(asset) + '</code>\n' +
             'Predicted digit: <b>' + this.xDigit + '</b>\n' +
             'Result P/L: <b>' + (won ? '+' : '') + profit.toFixed(2) + '</b>\n\n' +
+            'Session P/L: <b>$' + this._sessionPL.toFixed(2) + '</b> (target $' + this.config.takeProfit.toFixed(2) + ')\n' +
+            'Trades this session: ' + this._sessionTrades + '\n' +
             'Total Trades: ' + this.totalTrades + ' | ✅ ' + this.totalWins + ' | ❌ ' + this.totalLosses + '\n' +
             'Win Rate: <b>' + winRate + '%</b>\n' +
             'Total P/L: <b>' + this.totalProfitLoss.toFixed(2) + '</b>\n\n' +
+            'x2: ' + this.consecutiveLosses2 + ' | x3: ' + this.consecutiveLosses3 +
+            ' | x4: ' + this.consecutiveLosses4 + ' | x5: ' + this.consecutiveLosses5 + '\n\n' +
             'Last 20 digits: <code>' + (lastFewTicks.join(', ') || '—') + '</code>\n\n' +
             'Current Stake: <b>$' + this.currentStake.toFixed(2) + '</b>\n' +
             'Waiting for: ' + this.waitTime + ' (' + this.waitSeconds + ' ms)  before next trade...\n' +
