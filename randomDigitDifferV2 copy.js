@@ -511,7 +511,7 @@ class MarketDataManager extends EventEmitter{
       if(!hist){ hist=[]; this.digitHistory.set(symbol,hist); }
       hist.push({d:digit, epoch:tick.epoch});
       if(hist.length>this.historyLen) hist.splice(0,hist.length-this.historyLen);
-      logger.info(`[${symbol}] ${tick.quote}: ${hist.slice(-5).map(h=>h.d).join(', ')}`); // randomDiffer.js live-tick log
+      console.log(`[${symbol}] ${tick.quote}: ${hist.slice(-5).map(h=>h.d).join(', ')}`); // randomDiffer.js handleTickUpdate() log
       this.emit('tick',symbol,tick);
     });
     this.subs.set(symbol,subId);
@@ -520,6 +520,7 @@ class MarketDataManager extends EventEmitter{
   }
   async subscribeAll(symbols){
     const need=symbols.filter(s=>!this.subs.has(s));
+    if(need.length) console.log(`Initializing subscriptions for ${need.length} asset(s): ${need.join(', ')}...`); // randomDiffer.js initializeSubscriptions()
     if(need.length) await Promise.all(need.map(s=>this.subscribe(s).catch(e=>logger.warn(`subscribe(${s}) failed:`,e.message))));
     return this;
   }
@@ -753,6 +754,23 @@ class TradingBot{
   // _startNewSession (only session P/L resets between sessions).
   _netLine(){
     return `💼 Net P/L (lifetime): ${money(this.stats.overallProfit,this.currency())}`;
+  }
+  // ── Trading Summary (exact randomDiffer.js logTradingSummary format) ──
+  logTradingSummary(asset){
+    const total=this.stats.wins+this.stats.losses; // randomDiffer.js: totalTrades counts won+lost only
+    const rate=total?((this.stats.wins/total)*100).toFixed(2):'0.00';
+    console.log('Trading Summary:');
+    console.log(`Total Trades: ${total}`);
+    console.log(`Total Trades Won: ${this.stats.wins}`);
+    console.log(`Total Trades Lost: ${this.stats.losses}`);
+    console.log(`x2 Losses: ${this.stats.lossStreakEvents.x2}`);
+    console.log(`x3 Losses: ${this.stats.lossStreakEvents.x3}`);
+    console.log(`x4 Losses: ${this.stats.lossStreakEvents.x4}`);
+    console.log(`x5 Losses: ${this.stats.lossStreakEvents.x5}`);
+    console.log(`Total Profit/Loss Amount: ${this.stats.overallProfit.toFixed(2)}`);
+    console.log(`Win Rate: ${rate}%`);
+    console.log(`[${asset}] Predicted Digit: ${this._lastPredictedDigit??'—'}`);
+    console.log(`Current Stake: $${this._getStake().toFixed(2)}`);
   }
 
   // ── V2 multi-asset: uniformly random symbol pick, optional anti-hammer ──
@@ -1000,11 +1018,12 @@ class TradingBot{
     // present (warm-up makes it available immediately after subscribe).
     const history = this.market.historyOf(tradeSymbol);
     if(history.length < Math.min(this.cfg.requiredHistoryLength, this.market.historyLen)){
-      logger.debug(`[${tradeSymbol}] history warming (${history.length}/${this.market.historyLen}) — skipping`);
+      console.log(`[${tradeSymbol}] Waiting for more ticks. Current length: ${history.length}`); // randomDiffer.js analyzeTicks() log
       return;
     }
     const lastDigit = history[history.length-1];
     const digit = this._randDigit(); // crypto.randomInt(0,10)
+    this._lastPredictedDigit=digit;                                                   // for logTradingSummary (same as randomDiffer xDigit)
     // randomDiffer.js analyzeTicks(): place trade ONLY when predicted is
     // NOT equal to and NOT ±1 adjacent to the last digit, else skip.
     if(digit===lastDigit || digit===lastDigit+1 || digit===lastDigit-1){
@@ -1024,7 +1043,10 @@ class TradingBot{
     this._buying=true;
     try{
       const digitsSnap=this.market.historyOf(tradeSymbol).slice(-10);
+      console.log(`🎲 Next trade asset (random pick per trade): ${tradeSymbol}`);        // randomDiffer.js: cycle/pick log
+      console.log(`[${tradeSymbol}] 🚀 Placing trade for digit: ${digit} | Stake: ${stake.toFixed(2)}`); // randomDiffer.js placeTrade() log
       const trade=await this.exec.buy(tradeSymbol,digit,stake,digitsSnap);
+      console.log('Trade placed successfully');                                          // randomDiffer.js buy-success log
       this.lastTradeAt=Date.now();
       this._todayTrades++;
       this._sessionTrades++;
@@ -1084,6 +1106,7 @@ class TradingBot{
     this._sessionPL+=profit;
     if(this.cfg.takeProfit>0 && this._sessionPL>=this.cfg.takeProfit) this._pauseForTakeProfit();
     const won=t.status==='won';
+    console.log(`[${t.symbol}] Trade outcome: ${won ? '✅ WON' : '❌ LOST'}`);           // randomDiffer.js handleTradeResult() log
     const e=this.stats.lossStreakEvents;
     const total = this.stats.wins + this.stats.losses + this.stats.unknowns;
     const wr = this.stats.winRate().toFixed(1);
@@ -1091,6 +1114,7 @@ class TradingBot{
     const streakLine=`x2=${e.x2} x3=${e.x3} x4=${e.x4} x5=${e.x5} x6=${e.x6} x7=${e.x7} (Max: ${this.stats.maxLossStreak})`;
     const mgLine=this.cfg.martingaleEnabled ? `🧮 Martingale: ${this._getStake().toFixed(2)} (mul: ${this.cfg.martingaleStep} filter: ${this.cfg.martingaleFilter})` : '';
     logger.info(`${won?'WIN':'LOSS'} #${t.contractId} P/L=${profit.toFixed(2)} | ${tradesLine} | ${streakLine} | overall=${this.stats.overallProfit.toFixed(2)} | session=${this._sessionPL.toFixed(2)}`);
+    this.logTradingSummary(t.symbol);                                                  // randomDiffer.js: summary after EVERY trade
     if(!this.cfg.notifyTradeResult){
       logger.debug('trade-result telegram suppressed (NOTIFY_TRADE_RESULT=false)');
       this._save('after-trade');
