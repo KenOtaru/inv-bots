@@ -26,10 +26,13 @@
   *      the lifetime Net P/L (stats.overallProfit) carries over forever.
   *      Sessions are persisted so a restart mid-pause honors the
   *      remaining cooldown.
- *    • NOTIFICATIONS show the asset's last 10 digits (rolling window,
- *      current + previous 9). The TRADE RESULT re-reads the window at
- *      settlement time so it plainly shows whether the PREDICTED digit
- *      and the NEW last digit differed (win) or matched (loss).
+ *    • NOTIFICATIONS show the asset's digit history exactly like
+ *      randomDiffer.js: the OPEN shows the last 10 digits and the
+ *      RESULT shows the last 20 digits (comma-joined in <code>).
+ *      The TRADE RESULT re-reads the window at settlement time (trimmed
+ *      to the exit tick using the contract's exit_tick_display_value) so
+ *      it plainly shows whether the PREDICTED digit and the NEW last
+ *      digit differed (win) or matched (loss).
  *
  *  All battle-tested infra from fastX2Differ.js is preserved verbatim:
  *  PAT+legacy auth, reconcile-on-reconnect (never fabricate P/L),
@@ -49,6 +52,7 @@ const fs           = require('fs');
 const path         = require('path');
 const { URL }      = require('url');
 const EventEmitter = require('events');
+const crypto       = require('crypto');
 
 // ── 1. ENV LOADER (minimal) ──────────────────────────────────────────
 function loadEnv(filePath = path.join(process.cwd(), '.env')) {
@@ -94,6 +98,10 @@ const CONFIG = Object.freeze({
   durationTicks: intEnv('DURATION_TICKS', 1),
   minStake:      0.62,
   maxStake:      1000,
+  // ── Tick history (randomDiffer.js port) ───────────────────────────
+  // Digits kept per symbol; the bot only trades once a symbol's history
+  // reaches this length (same gate as randomDiffer.js analyzeTicks).
+  requiredHistoryLength: intEnv('REQUIRED_HISTORY_LENGTH', 200),
 
   // ── TRULY RANDOM throttle (replaces fixed tradeCooldownMs) ─────────
   ticksBetweenMin:  intEnv('TICKS_BETWEEN_MIN', 1),      // skip N random ticks before next trade
@@ -411,6 +419,21 @@ function quoteToDigit(quote,pipSize=2){
   const dot=s.indexOf('.'); const frac=dot<0?'':s.slice(dot+1); const padded=frac.padEnd(pip,'0'); const d=Number(padded.charAt(pip-1)); return Number.isInteger(d)?d:null;
 }
 
+// Exact last-digit extraction from randomDiffer.js (getLastDigit):
+// asset-aware fractional depth — RDBULL/RDBEAR/R_75/R_50 → 4th dec,
+// R_10/R_25/1HZ15V/1HZ30V/1HZ90V → 3rd dec, everything else → 2nd dec.
+function getLastDigit(quote, asset){
+  const quoteString = quote.toString();
+  const [, fractionalPart = ''] = quoteString.split('.');
+  if(['RDBULL','RDBEAR','R_75','R_50'].includes(asset)){
+    return fractionalPart.length >= 4 ? parseInt(fractionalPart[3]) : 0;
+  } else if(['R_10','R_25','1HZ15V','1HZ30V','1HZ90V'].includes(asset)){
+    return fractionalPart.length >= 3 ? parseInt(fractionalPart[2]) : 0;
+  } else {
+    return fractionalPart.length >= 2 ? parseInt(fractionalPart[1]) : 0;
+  }
+}
+
 class MarketDataManager extends EventEmitter{
   constructor(client){
     super();
@@ -419,7 +442,8 @@ class MarketDataManager extends EventEmitter{
     this.lastTick=new Map();           // symbol -> {epoch,quote,digit}
     this.lastDigit=new Map();          // symbol -> digit
     this.pips=new Map();               // symbol -> pip size
-    this.digitHistory=new Map();       // symbol -> rolling array of last DIGIT_WINDOW digits (oldest→newest)
+    this.digitHistory=new Map();       // symbol -> rolling array of last digits {d,epoch} (oldest→newest), capped at requiredHistoryLength
+    this.historyLen=Math.max(50,Number(CONFIG.requiredHistoryLength)||200); // randomDiffer.js cap
     const assets=client.cfg?.assets||(Array.isArray(CONFIG.assets)?CONFIG.assets:[]);
     for(const s of assets){ if(KNOWN_PIP_SIZES[s]!=null) this.pips.set(s,KNOWN_PIP_SIZES[s]); }
     client.on('close',()=>{ this.subs.clear(); });
@@ -445,39 +469,53 @@ class MarketDataManager extends EventEmitter{
   }
   async subscribe(symbol){
     if(this.subs.has(symbol)) return this.subs.get(symbol);
-    const pip=this.pipSize(symbol);
-    // Warm the 10-digit window with recent server ticks so the very first
-    // OPEN notification (and any immediate result) never shows an empty
-    // window — same history warm-up approach as x2Differ4.js.
+    // ── tick history — EXACT randomDiffer.js subscribeToTickHistory() ──
+    //   { ticks_history, adjust_start_time:1, count:requiredHistoryLength,
+    //     end:'latest', start:1, style:'ticks' }
+    // Then map each price through getLastDigit() (asset-aware decimals).
     try{
-      const res=await this.client._send({ticks_history:symbol, adjust_start_time:1, end:'latest', count:50, style:'ticks'},15000);
-      const arr=res?.history?.ticks;
-      if(Array.isArray(arr)&&arr.length){
+      const res=await this.client._send({ticks_history:symbol, adjust_start_time:1, count:this.historyLen, end:'latest', start:1, style:'ticks'},30000);
+      const history=res?.history;
+      const tks=Array.isArray(history?.ticks)?history.ticks:null;
+      const prices=Array.isArray(history?.prices)?history.prices:null;
+      if((tks&&tks.length)||(prices&&prices.length)){
         const hist=[];
-        for(const t of arr){
-          const d=quoteToDigit(Number(t.quote),pip);
-          if(d!=null) hist.push({d, epoch:Number(t.epoch)});
+        if(tks&&tks.length){
+          for(const t of tks){
+            const d=getLastDigit(t.quote, symbol);
+            if(Number.isFinite(d)) hist.push({d, epoch:Number(t.epoch)});
+          }
+        } else {
+          for(const p of prices){
+            const d=getLastDigit(p, symbol);
+            if(Number.isFinite(d)) hist.push({d, epoch:null});
+          }
         }
-        if(hist.length>DIGIT_WINDOW) hist.splice(0,hist.length-DIGIT_WINDOW);
+        if(hist.length>this.historyLen) hist.splice(0,hist.length-this.historyLen);
         if(hist.length) this.digitHistory.set(symbol,hist);
         const last=hist[hist.length-1]; if(last!=null){ this.lastTick.set(symbol,{epoch:last.epoch,digit:last.d}); this.lastDigit.set(symbol,last.d); }
+        logger.info(`[tick history] ${symbol}: loaded ${hist.length} ticks | last 5: ${hist.slice(-5).map(h=>h.d).join(', ')}`);
+      } else {
+        logger.warn(`[tick history] ${symbol}: no history returned (${(res&&res.error)?res.error.code||res.error.message:'?'})`);
       }
     }catch(e){ logger.warn(`history warm-up ${symbol}:`,e.message); }
+    // ── live ticks — EXACT randomDiffer.js subscribeToTicks()/handleTickUpdate() ──
     const subId=await this.client.subscribe({ticks:symbol},msg=>{
       const t=msg.tick; if(!t) return;
-      const quote=Number(t.quote); const digit=quoteToDigit(quote,pip);
-      if(digit==null) return;
+      const quote=Number(t.quote); const digit=getLastDigit(quote,symbol);
+      if(!Number.isFinite(digit)) return;
       const tick={ epoch:Number(t.epoch), quote, digit };
       this.lastTick.set(symbol,tick);
       this.lastDigit.set(symbol,digit);
       let hist=this.digitHistory.get(symbol);
       if(!hist){ hist=[]; this.digitHistory.set(symbol,hist); }
       hist.push({d:digit, epoch:tick.epoch});
-      if(hist.length>DIGIT_WINDOW) hist.splice(0,hist.length-DIGIT_WINDOW);
+      if(hist.length>this.historyLen) hist.splice(0,hist.length-this.historyLen);
+      logger.info(`[${symbol}] ${tick.quote}: ${hist.slice(-5).map(h=>h.d).join(', ')}`); // randomDiffer.js live-tick log
       this.emit('tick',symbol,tick);
     });
     this.subs.set(symbol,subId);
-    logger.info(`subscribed ticks: ${symbol} sub=${subId} pip=${pip}`);
+    logger.info(`subscribed ticks: ${symbol} sub=${subId}`);
     return subId;
   }
   async subscribeAll(symbols){
@@ -485,7 +523,7 @@ class MarketDataManager extends EventEmitter{
     if(need.length) await Promise.all(need.map(s=>this.subscribe(s).catch(e=>logger.warn(`subscribe(${s}) failed:`,e.message))));
     return this;
   }
-  historyOf(symbol){ return (this.digitHistory.get(symbol)||[]).map(h=>h.d); }       // up to DIGIT_WINDOW digits (numbers)
+  historyOf(symbol){ return (this.digitHistory.get(symbol)||[]).map(h=>h.d); }       // digits (numbers), oldest→newest, up to historyLen
   windowOf(symbol){ return this.digitHistory.get(symbol)||[]; }                      // {d,epoch} objects, newest last
   // Digits up to AND including the exiting tick (removes any post-settlement
   // ticks that arrived before we rendered the notification). Falls back to
@@ -695,7 +733,7 @@ class TradingBot{
 
   // ── V2 randomness helpers ───────────────────────────────────────────
   _randInt(min,max){ if(!(max>min) || !Number.isFinite(min) || !Number.isFinite(max)) return min; return min + Math.floor(Math.random()*(max-min+1)); }
-  _randDigit(){ return Math.floor(Math.random()*10); } // truly random barrier 0-9
+  _randDigit(){ return crypto.randomInt(0,10); } // exact randomDiffer.js createRandomPrediction()
   _randomDelayMs(){
     const minS=Math.max(0,Number(this.cfg.tradeIntervalMinS)||0);
     const maxS=Math.max(minS,Number(this.cfg.tradeIntervalMaxS)||0);
@@ -756,10 +794,12 @@ class TradingBot{
   _last10Of(symbol){ return this.market.historyOf(symbol).slice(-10); }
   _digitOfPrice(spot,symbol){
     if(spot==null || !Number.isFinite(spot)) return null;
-    return quoteToDigit(spot, this.market.pipSize(symbol));
+    return getLastDigit(spot, symbol); // exact randomDiffer.js getLastDigit
   }
   _digitsOpenLine(t){
-    return `🎯 last 10: ${this._digitsSpan(t.digits, t.digit, false)}`; // open-time window snapshot
+    // randomDiffer.js notify format: "Last 10 digits: <code>…</code>"
+    const digs=(t.digits&&t.digits.length?t.digits:this.market.historyOf(t.symbol)).slice(-10);
+    return `🎰 Last 10 digits: <code>${digs.length?digs.join(', '):'—'}</code>`;
   }
   _digitsResultLine(t){
     // Authoritative settlement digits from the CONTRACT (entry_spot /
@@ -774,12 +814,14 @@ class TradingBot{
     const preceding=entryDigit!=null?entryDigit:(ts.length>1?ts[ts.length-2]:null);
     const spanLast=ts.length?ts[ts.length-1]:null;
     const hl=(exitDigit==null||spanLast===exitDigit);              // underline only if display matches settlement
-    const span=this._digitsSpan(ts, t.digit, hl);                  // barrier digits bolded
+    const span=this._digitsSpan(ts.slice(-10), t.digit, hl);       // barrier digits bolded (last 10)
     const won=(newLast!=null && newLast!==t.digit);
     const verdict=newLast!=null
-      ? `${won?'✅ WON':'❌ LOST'} — <b>${t.digit}</b>/<b>${newLast}</b> → ${won?'unequal':'equal'}`
+      ? `${won?'✅ WON':'❌ LOST'} — <b>${t.digit}</b> vs new last <b>${newLast}</b>`
       : '❓ settlement digit unavailable';
-    return `🎯 last 10: ${span}\n   ${verdict}`;
+    // randomDiffer.js notify format: "Last 20 digits: <code>…</code>"
+    const last20=ts.slice(-20); // digits (numbers) up to exit tick
+    return `🎰 Last 20 digits: <code>${last20.length?last20.join(', '):'—'}</code>\n   ${verdict}\n   ${span}`;
   }
 
   // ── Martingale stake: base * step^effectiveLosses, capped ─────────
@@ -954,7 +996,21 @@ class TradingBot{
 
     const tradeSymbol=this._pickSymbol(); // multi-asset: random symbol each trade
     if(!tradeSymbol) return;
-    const digit = this._randDigit(); // truly random barrier each trade
+    // randomDiffer.js analyzeTicks() gate: only trade when tick history is
+    // present (warm-up makes it available immediately after subscribe).
+    const history = this.market.historyOf(tradeSymbol);
+    if(history.length < Math.min(this.cfg.requiredHistoryLength, this.market.historyLen)){
+      logger.debug(`[${tradeSymbol}] history warming (${history.length}/${this.market.historyLen}) — skipping`);
+      return;
+    }
+    const lastDigit = history[history.length-1];
+    const digit = this._randDigit(); // crypto.randomInt(0,10)
+    // randomDiffer.js analyzeTicks(): place trade ONLY when predicted is
+    // NOT equal to and NOT ±1 adjacent to the last digit, else skip.
+    if(digit===lastDigit || digit===lastDigit+1 || digit===lastDigit-1){
+      logger.info(`[${tradeSymbol}] skip: predicted ${digit} ~ last ${lastDigit} (equal/adjacent)`);
+      return;
+    }
     const stake = this._getStake();
     if(!Number.isFinite(stake) || stake < this.cfg.minStake){
       logger.debug(`stake ${stake} invalid — skipping`);

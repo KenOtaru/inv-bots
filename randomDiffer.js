@@ -1287,6 +1287,7 @@ class EnhancedDigitDifferTradingBot {
             'Trade #' + tradeId + '\n' +
             'Asset: <code>' + htmlEscape(asset) + '</code>\n' +
             'Predicted digit: <b>' + this.xDigit + '</b>\n' +
+            'Last 20 digits: <code>' + (lastFewTicks.join(', ') || '—') + '</code>\n\n' +
             'Result P/L: <b>' + (won ? '+' : '') + profit.toFixed(2) + '</b>\n\n' +
             'Session P/L: <b>$' + this._sessionPL.toFixed(2) + '</b> (target $' + this.config.takeProfit.toFixed(2) + ')\n' +
             'Trades this session: ' + this._sessionTrades + '\n' +
@@ -1295,7 +1296,6 @@ class EnhancedDigitDifferTradingBot {
             'Total P/L: <b>' + this.totalProfitLoss.toFixed(2) + '</b>\n\n' +
             'x2: ' + this.consecutiveLosses2 + ' | x3: ' + this.consecutiveLosses3 +
             ' | x4: ' + this.consecutiveLosses4 + ' | x5: ' + this.consecutiveLosses5 + '\n\n' +
-            'Last 20 digits: <code>' + (lastFewTicks.join(', ') || '—') + '</code>\n\n' +
             'Current Stake: <b>$' + this.currentStake.toFixed(2) + '</b>\n' +
             'Waiting for: ' + this.waitTime + ' (' + this.waitSeconds + ' ms)  before next trade...\n' +
             '🕒 ' + utcTs();
