@@ -10,8 +10,8 @@ const { OptionsRiskManager } = require('./lib/options-risk-manager');
 const { TelegramNotifier } = require('./lib/telegram-notifier');
 
 // ── Env-var overrides ──────────────────────────────────────────────
-const BINANCE_API_KEY    = process.env.BINANCE_API_KEY     || 'AOMMGQT0MqD1KmyTewyosoNz0U8t9do8dcKr4a7xFZfCnhlOAhErYJRXlHSKzbwv';
-const BINANCE_SECRET     = process.env.BINANCE_SECRET      || 'x2TPskF5MMl0v2592chixFuhqp0oyWVlcRLM93CZA4ChIZwD4jLcydwTIR8cEI2L';
+const BINANCE_API_KEY    = process.env.BINANCE_API_KEY     || '';
+const BINANCE_SECRET     = process.env.BINANCE_SECRET      || '';
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN  || '8106601008:AAEMyCma6mvPYIHEvw3RHQX2tkD5-wUe1o0';
 const TELEGRAM_CHAT_ID   = process.env.TELEGRAM_CHAT_ID    || '752497117';
 const TELEGRAM_ENABLED   = process.env.TELEGRAM_ENABLED    !== 'false';
@@ -25,10 +25,10 @@ const CONFIG = {
     BINANCE_SECRET,
     BASE_URL: 'https://eapi.binance.com',
     SPOT_BASE_URL: 'https://api.binance.com',
-    PAPER_MODE: true,
+    PAPER_MODE: false, // true = paper trading (no real trades), false = live trading
 
     // ── Mode Selection ──
-    TRADE_MODE: 'wpr',               // 'wpr' | 'prediction'
+    TRADE_MODE: 'prediction',               // 'wpr' | 'prediction'
     PREDICTION_PERCENTAGE: 70,       // target delta % (min 70, user-adjustable)
 
     // ── Prediction Mode Filters ──
