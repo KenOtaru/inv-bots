@@ -552,6 +552,8 @@ class TelegramService {
     }
 
     static async sendTradeAlert(type, symbol, direction, stake, optionContract, mode = 'wpr', details = {}) {
+        // Defensive: mode must be a string (callers historically passed objects)
+        if (typeof mode !== 'string') mode = typeof mode?.mode === 'string' ? mode.mode : 'wpr';
         const emoji = type === 'OPEN' ? '🚀' : type === 'WIN' ? '✅' : '❌';
         const a = state.assets[symbol];
         const overall = TradeHistoryManager.getOverallStats();
@@ -985,6 +987,7 @@ class PredictionSelector {
     }
 
     // Nearest-to-index: pick the contract whose strike is closest to index price.
+    // IMPROVED: Sample only near-expiry, reasonably-priced contracts to avoid rate limits.
     static async _selectByProximity(underlying, optionSide) {
         try {
             const info = await BinanceClient.exchangeInfo();
@@ -996,33 +999,48 @@ class PredictionSelector {
             const indexPrice = Number(indexRes?.indexPrice || 0);
             if (!Number.isFinite(indexPrice)) { LOGGER.warn(`[WPR] No index price for ${underlying}`); return null; }
 
-            candidates.sort((a, b) => Math.abs(Number(a.strikePrice) - indexPrice) - Math.abs(Number(b.strikePrice) - indexPrice));
-            const pick = candidates[0];
-            // Get mark — REQUIRED (delta). If fails, skip.
-            let mark = null;
-            try {
-                const marks = await BinanceClient.mark(pick.symbol);
-                mark = Array.isArray(marks) ? marks[0] : marks;
-                if (!mark) return null;
-            } catch { return null; }
-            // Get depth — optional (spread = Infinity if fails, filtered out)
-            let bid = 0, ask = 0, spreadPct = Infinity;
-            try {
-                const book = await BinanceClient.depth(pick.symbol, 10);
-                bid = Number(book?.bids?.[0]?.[0] || 0);
-                ask = Number(book?.asks?.[0]?.[0] || 0);
-                if (Number.isFinite(bid) && Number.isFinite(ask) && bid > 0 && ask > 0) {
-                    spreadPct = (ask - bid) / ((bid + ask) / 2) * 100;
-                }
-            } catch { /* depth unavailable — spread stays Infinity */ }
+            // Filter to near-expiry (≤7 days) and near-ATM (±30% from index) to reduce API calls
+            const now = Date.now();
+            const filtered = candidates.filter(c => {
+                const daysToExpiry = (Number(c.expiryDate) - now) / 86400000;
+                const strike = Number(c.strikePrice);
+                const distPct = Math.abs(strike - indexPrice) / indexPrice;
+                return daysToExpiry <= 7 && distPct <= 0.30;
+            });
 
-            const mid = (bid + ask) / 2;
-            if (!Number.isFinite(mid) || mid <= 0) return null;
-            // Hard cap 50% — beyond that the contract is unusable. Lower caps
-            // just filter out ~90% of live Binance Options liquidity.
-            if (spreadPct > 50) { LOGGER.warn(`[WPR] Spread too wide: ${spreadPct.toFixed(1)}%`); return null; }
+            if (!filtered.length) {
+                LOGGER.warn(`[WPR] No near-term ${optionSide} candidates for ${underlying}`);
+                return null;
+            }
 
-            return { symbol: pick, mark, bid, ask, delta: Number(mark?.delta || 0), spreadPercent: spreadPct, score: 0 };
+            // Sample up to 10 contracts (nearest to ATM) to limit API calls
+            filtered.sort((a, b) => Math.abs(Number(a.strikePrice) - indexPrice) - Math.abs(Number(b.strikePrice) - indexPrice));
+            const sample = filtered.slice(0, 10);
+
+            // Score: prefer cheap contracts that are tradeable
+            const scored = [];
+            for (const sym of sample) {
+                try {
+                    const marks = await BinanceClient.mark(sym.symbol);
+                    const mark = Array.isArray(marks) ? marks[0] : marks;
+                    if (!mark) continue;
+                    const book = await BinanceClient.depth(sym.symbol, 10).catch(() => null);
+                    const bid = Number(book?.bids?.[0]?.[0] || 0);
+                    const ask = Number(book?.asks?.[0]?.[0] || 0);
+                    if (!ask || ask <= 0) continue;
+                    const spreadPct = (bid > 0 && ask > 0) ? (ask - bid) / ((bid + ask) / 2) * 100 : Infinity;
+                    if (spreadPct > 50) continue;
+                    const distanceFromATM = Math.abs(Number(sym.strikePrice) - indexPrice) / indexPrice;
+                    // Score = ask price (prefer cheap) + penalty for distance from ATM
+                    const score = ask + 1000 * distanceFromATM;
+                    scored.push({ symbol: sym, mark, bid, ask, delta: Number(mark?.delta || 0), spreadPercent: spreadPct, score });
+                } catch { /* skip */ }
+            }
+
+            if (!scored.length) { LOGGER.warn(`[WPR] No affordable ${optionSide} contracts for ${underlying}`); return null; }
+            const pick = scored.sort((a, b) => a.score - b.score)[0];
+            LOGGER.info(`[WPR] Selected: ${pick.symbol.symbol} ask=${pick.ask} spread=${pick.spreadPercent.toFixed(1)}%`);
+            return pick;
         } catch (e) {
             LOGGER.error(`[WPR] Proximity selection error: ${e.message}`);
             return null;
@@ -1041,18 +1059,22 @@ async function executeBuy(underlying, direction, signalDetails = {}) {
     const cfg = getAssetConfig(underlying);
     const stake = StakeCalculator.calculate(underlying, a.martingaleLevel, a.investmentRemaining);
     const premium = stake; // for options: stake = premium budget
+    LOGGER.info(`[${underlying}] EXECUTE: direction=${direction} stake=$${stake} pool=$${a.investmentRemaining} L${a.martingaleLevel}`);
 
     // Check risk limits
     const riskReason = Risk.canOpen({ underlying, premium });
     if (riskReason) { LOGGER.warn(`[${underlying}] Risk blocked: ${riskReason}`); return null; }
+    LOGGER.info(`[${underlying}] Risk OK`);
 
     // Select contract
     const optionSide = direction === 'CALLE' ? 'CALL' : 'PUT';
     const picked = await PredictionSelector.select(underlying, optionSide, CONFIG.TRADE_MODE);
+    LOGGER.info(`[${underlying}] SELECTED: ${picked ? picked.symbol.symbol + ' ask=' + picked.ask : 'null'}`);
     if (!picked) { LOGGER.warn(`[${underlying}] No eligible ${optionSide} contract`); return null; }
 
     // Calculate quantity from premium budget
     const quantity = OptionsUniverse.quantityForPremium(picked.symbol, picked.ask, stake);
+    LOGGER.info(`[${underlying}] QUANTITY: ${quantity} (ask=${picked.ask} stake=${stake})`);
     if (!quantity || quantity <= 0) { LOGGER.warn(`[${underlying}] Quantity 0 for stake $${stake}`); return null; }
 
     const contractSymbol = picked.symbol.symbol;
@@ -1127,8 +1149,7 @@ async function executeBuy(underlying, direction, signalDetails = {}) {
     await TelegramService.sendTradeAlert('OPEN', underlying, direction, stake, {
         contractSymbol,
         delta: position.delta,
-    }, {
-        mode: CONFIG.TRADE_MODE,
+    }, CONFIG.TRADE_MODE, {
         wpr: a.wpr,
         prevWpr: a.prevWpr,
     });
