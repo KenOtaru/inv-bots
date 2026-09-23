@@ -1,6 +1,13 @@
 {
   "memories": [],
-  "manual_memories": [],
+  "manual_memories": [
+    {
+      "type": "project",
+      "content": "bizWillRFv2_dualToken_v2.js created 2026-09-23: dual-token bot, MAIN_TOKEN=pat_a4392c86309361a50eca82c1ea872127636b84070f6c45295459ffb83de31360 (user-supplied), REGULAR_TOKEN=pat_27a3197287bae3ec6c2c9cbdd68fffaa2a524e3b0a6e1ecf298b5ffb338adb10 (reused from bizWillRFv2.js since user gave only one token), R_50 active asset, flat stake on REGULAR then switch to MAIN with martingale after LOSSES_BEFORE_MAIN_SWITCH losses, win switches back to REGULAR. All Telegram notifications fully per-token differentiated (separate REGULAR/MAIN sections with trade count, W/L, WR%, P/L, stake type) in sendTradeAlert, sendHourlySummary, sendSessionSummary, sendDailySummary, sendOverallSummary, END OF DAY, and STARTUP/BOT STOPPED messages.",
+      "added_at": "2026-09-23T00:00:00.000000",
+      "source": "user_command"
+    }
+  ],
   "realtime_memories": [
     {
       "type": "preference",
@@ -10,7 +17,7 @@
     },
     {
       "type": "project",
-      "content": "Stuck-contract handling pattern (applies to accuPULSE3.js v4.0 AND accuPULSE3_v5.js): subscription death leaves a stale entry in exec.open + _lastUpdateMap → force-sell fails ('not found among your open positions') but old .catch never cleared state → stuck-check looped every 30s forever AND blocked new trades (count() >= maxOpenTrades). FIX: checkStuckContracts drops stale entry when server says already-closed; add _settledIds idempotency guard in _onUpdate/reconcile; record unconfirmable contracts as status 'unknown' (excluded from WR/streaks/win-rate denom). This was the root cause of '1 trade / 48h' — orphaned open slots choke entry.",
+      "content": "Stuck-contract handling pattern (applies to accuPULSE3.js v4.0 AND accuPULSE3_v5.js): subscription death leaves a stale entry in exec.open + _lastUpdateMap \u00e2\u2020\u2019 force-sell fails ('not found among your open positions') but old .catch never cleared state \u00e2\u2020\u2019 stuck-check looped every 30s forever AND blocked new trades (count() >= maxOpenTrades). FIX: checkStuckContracts drops stale entry when server says already-closed; add _settledIds idempotency guard in _onUpdate/reconcile; record unconfirmable contracts as status 'unknown' (excluded from WR/streaks/win-rate denom). This was the root cause of '1 trade / 48h' \u00e2\u20ac\u201d orphaned open slots choke entry.",
       "added_at": "2026-08-15T12:05:42.000000",
       "source": "realtime_capture"
     },
@@ -28,25 +35,25 @@
     },
     {
       "type": "project",
-      "content": "bizPattern.js v2: Wilson lower bound REMOVED as trade gate (only reported as confidenceLower) — using it made trading impossible on n≈20-60 samples; holdout comparison is THE anti-overfit check; BUY_SYMBOL_FIELD must be 'auto' (resolves to 'underlying_symbol' for PAT/OTP); DURATION must equal GRANULARITY (60s/60s); martingale user-re-enabled (preserve user config edits).",
+      "content": "bizPattern.js v2: Wilson lower bound REMOVED as trade gate (only reported as confidenceLower) \u00e2\u20ac\u201d using it made trading impossible on n\u00e2\u2030\u02c620-60 samples; holdout comparison is THE anti-overfit check; BUY_SYMBOL_FIELD must be 'auto' (resolves to 'underlying_symbol' for PAT/OTP); DURATION must equal GRANULARITY (60s/60s); martingale user-re-enabled (preserve user config edits).",
       "added_at": "2026-08-07T13:01:12.000000",
       "source": "realtime_capture"
     },
     {
       "type": "project",
-      "content": "accuPULSE2b AEBA v2: Gate = hard EV net of costs; EV(g) = (1+g)·p̂ − 1 − costHaircut; g chosen by argmax EV; survival floor S(K) ≥ survivalFloor; vol-of-vol percentile gate. Barrier from live tick_size_barrier_percentage per growth-rate bucket — never fabricate. P0: do NOT clear exec.open on disconnect; reconcile on re-auth; entry gated on this.reconciled. dailyMaxTrades=40. Selftest: 8 checks, no network.",
+      "content": "accuPULSE2b AEBA v2: Gate = hard EV net of costs; EV(g) = (1+g)\u00c2\u00b7p\u00cc\u201a \u00e2\u02c6\u2019 1 \u00e2\u02c6\u2019 costHaircut; g chosen by argmax EV; survival floor S(K) \u00e2\u2030\u00a5 survivalFloor; vol-of-vol percentile gate. Barrier from live tick_size_barrier_percentage per growth-rate bucket \u00e2\u20ac\u201d never fabricate. P0: do NOT clear exec.open on disconnect; reconcile on re-auth; entry gated on this.reconciled. dailyMaxTrades=40. Selftest: 8 checks, no network.",
       "added_at": "2026-08-05T09:52:03.000000",
       "source": "realtime_capture"
     },
     {
       "type": "project",
-      "content": "newDifferX2.js pause + DOW fix: _schedulePause() was defined but never called — pause windows never fired. Fix: call this.paused = this._isPausedNow() + this._schedulePause() in _onAuthorized. Day-of-week filter ported from accurateDiffer.js: CONFIG tradeSunday..tradeSaturday (env-overridable), _isTradingAllowedToday() checks getUTCDay(). All times GMT/UTC. Both filters independent and stack.",
+      "content": "newDifferX2.js pause + DOW fix: _schedulePause() was defined but never called \u00e2\u20ac\u201d pause windows never fired. Fix: call this.paused = this._isPausedNow() + this._schedulePause() in _onAuthorized. Day-of-week filter ported from accurateDiffer.js: CONFIG tradeSunday..tradeSaturday (env-overridable), _isTradingAllowedToday() checks getUTCDay(). All times GMT/UTC. Both filters independent and stack.",
       "added_at": "2026-08-15T09:03:35.000000",
       "source": "realtime_capture"
     },
     {
       "type": "project",
-      "content": "accuPULSE3 v5.0 built 2026-08-15 (accuPULSE3_v5.js, 2875 lines). 7 features: (1) adaptive confidence gates by vol regime (0.01-0.08); (2) 6-factor stake sizing (Kelly, confidence, vol, WR, DD, streak); (3) 6-check entry confirmation (≥4/6 pass); (4) 4-tier exit (3/8/15/20 ticks, scale-out 30%); (5) warm-up lifecycle WARMUP→BALANCED→OPTIMIZED; (6) graduated recovery (WR-based multipliers, no hard pause); (7) full metrics JSONL logging. v4.0 had 6 critical blockers causing 1 trade/48h. Worktree agent lesson: always commit base changes before spawning worktree agents.",
+      "content": "accuPULSE3 v5.0 built 2026-08-15 (accuPULSE3_v5.js, 2875 lines). 7 features: (1) adaptive confidence gates by vol regime (0.01-0.08); (2) 6-factor stake sizing (Kelly, confidence, vol, WR, DD, streak); (3) 6-check entry confirmation (\u00e2\u2030\u00a54/6 pass); (4) 4-tier exit (3/8/15/20 ticks, scale-out 30%); (5) warm-up lifecycle WARMUP\u00e2\u2020\u2019BALANCED\u00e2\u2020\u2019OPTIMIZED; (6) graduated recovery (WR-based multipliers, no hard pause); (7) full metrics JSONL logging. v4.0 had 6 critical blockers causing 1 trade/48h. Worktree agent lesson: always commit base changes before spawning worktree agents.",
       "added_at": "2026-08-15T10:00:00.000000",
       "source": "realtime_capture"
     }
