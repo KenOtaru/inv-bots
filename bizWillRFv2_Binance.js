@@ -25,7 +25,7 @@ const CONFIG = {
     BINANCE_SECRET,
     BASE_URL: 'https://eapi.binance.com',
     SPOT_BASE_URL: 'https://api.binance.com',
-    PAPER_MODE: false, // true = paper trading (no real trades), false = live trading
+    PAPER_MODE: true, // true = paper trading (no real trades), false = live trading
 
     // ── Mode Selection ──
     TRADE_MODE: 'wpr',               // 'wpr' | 'prediction'
