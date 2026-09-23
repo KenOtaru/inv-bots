@@ -28,7 +28,7 @@ const CONFIG = {
     PAPER_MODE: true, // true = paper trading (no real trades), false = live trading
 
     // ── Mode Selection ──
-    TRADE_MODE: 'wpr',               // 'wpr' | 'prediction'
+    TRADE_MODE: 'prediction',               // 'wpr' | 'prediction'
     PREDICTION_PERCENTAGE: 70,       // target delta % (min 70, user-adjustable)
 
     // ── Prediction Mode Filters ──
