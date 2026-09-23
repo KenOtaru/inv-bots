@@ -11,7 +11,7 @@ const { TelegramNotifier } = require('./lib/telegram-notifier');
 
 // ── Env-var overrides ──────────────────────────────────────────────
 const BINANCE_API_KEY    = process.env.BINANCE_API_KEY     || '';
-const BINANCE_SECRET     = process.env.BINANCE_SECRET      || '';
+const BINANCE_SECRET     = process.env.BINANCE_API_SECRET  || '';
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN  || '8106601008:AAEMyCma6mvPYIHEvw3RHQX2tkD5-wUe1o0';
 const TELEGRAM_CHAT_ID   = process.env.TELEGRAM_CHAT_ID    || '752497117';
 const TELEGRAM_ENABLED   = process.env.TELEGRAM_ENABLED    !== 'false';
@@ -32,8 +32,10 @@ const CONFIG = {
     PREDICTION_PERCENTAGE: 70,       // target delta % (min 70, user-adjustable)
 
     // ── Prediction Mode Filters ──
-    MAX_SPREAD_PCT: 5,
-    MAX_EXPIRY_DAYS: 14,
+    // NOTE: Binance Options liquidity is very thin — live spreads range 0.8%–200%+.
+    // Hard 5% cutoff blocks nearly every contract (~90% filtered). Use score-based
+    // selection (delta proximity + spread penalty) + a soft advisory cap instead.
+    MAX_SPREAD_PCT: 15,
 
     // ── WPR Strategy ──
     WPR_PERIOD: 7,
@@ -942,22 +944,36 @@ class PredictionSelector {
             const targetDelta = CONFIG.PREDICTION_PERCENTAGE / 100;
             const results = await Promise.all(candidates.map(async sym => {
                 try {
-                    const [marks, book] = await Promise.all([
-                        BinanceClient.mark(sym.symbol),
-                        BinanceClient.depth(sym.symbol, 5),
-                    ]);
-                    const mark = Array.isArray(marks) ? marks[0] : marks;
-                    const bid = Number(book?.bids?.[0]?.[0] || 0);
-                    const ask = Number(book?.asks?.[0]?.[0] || 0);
-                    const delta = Number(mark?.delta || 0);
-                    if (!Number.isFinite(ask) || ask <= 0) return null;
-                    const spreadPercent = (bid + ask) > 0 ? Math.abs(ask - bid) / ((bid + ask) / 2) * 100 : Infinity;
-                    if (spreadPercent > (CONFIG.MAX_SPREAD_PCT ?? 5)) return null;
+                    // Binance eapi/depth rejects limit=5 — use 10 (valid for options).
+                    // Falls back to mark-only if depth fails (spread = Infinity, filtered out).
+                    let bid = 0, ask = 0, spreadPercent = Infinity;
+                    try {
+                        const book = await BinanceClient.depth(sym.symbol, 10);
+                        bid = Number(book?.bids?.[0]?.[0] || 0);
+                        ask = Number(book?.asks?.[0]?.[0] || 0);
+                        if (Number.isFinite(bid) && Number.isFinite(ask) && bid > 0 && ask > 0) {
+                            spreadPercent = Math.abs(ask - bid) / ((bid + ask) / 2) * 100;
+                        }
+                    } catch { /* depth unavailable — spread stays Infinity */ }
+
+                    // Get mark for delta (REQUIRED) — if this fails, skip the contract
+                    let delta = 0;
+                    try {
+                        const marks = await BinanceClient.mark(sym.symbol);
+                        const mark = Array.isArray(marks) ? marks[0] : marks;
+                        delta = Number(mark?.delta || 0);
+                    } catch { return null; }
+
+                    const mid = (bid + ask) / 2;
+                    if (!Number.isFinite(mid) || mid <= 0) return null;
+                    // Hard cap only at 50% — beyond that the contract is unusable
+                    if (spreadPercent > 50) return null;
                     return {
-                        symbol: sym,
-                        mark, bid, ask, delta,
+                        symbol: sym, mark: { delta }, bid, ask, delta,
                         spreadPercent,
-                        score: Math.abs(Math.abs(delta) - targetDelta) + spreadPercent / 100,
+                        // score = (delta distance as % of target) + (spread as % of target)
+                        // so delta proximity dominates unless spreads are extreme
+                        score: Math.abs(Math.abs(delta) - targetDelta) * 2 + Math.min(spreadPercent, 50) / 100,
                     };
                 } catch { return null; }
             }));
@@ -982,17 +998,29 @@ class PredictionSelector {
 
             candidates.sort((a, b) => Math.abs(Number(a.strikePrice) - indexPrice) - Math.abs(Number(b.strikePrice) - indexPrice));
             const pick = candidates[0];
-            // Get market data for liquidity check
-            const [marks, book] = await Promise.all([
-                BinanceClient.mark(pick.symbol),
-                BinanceClient.depth(pick.symbol, 5),
-            ]);
-            const mark = Array.isArray(marks) ? marks[0] : marks;
-            const bid = Number(book?.bids?.[0]?.[0] || 0);
-            const ask = Number(book?.asks?.[0]?.[0] || 0);
-            if (!Number.isFinite(ask) || ask <= 0) return null;
-            const spreadPct = (bid + ask) > 0 ? (ask - bid) / ((bid + ask) / 2) * 100 : Infinity;
-            if (spreadPct > (CONFIG.MAX_SPREAD_PCT ?? 5)) { LOGGER.warn(`[WPR] Spread too wide: ${spreadPct.toFixed(1)}%`); return null; }
+            // Get mark — REQUIRED (delta). If fails, skip.
+            let mark = null;
+            try {
+                const marks = await BinanceClient.mark(pick.symbol);
+                mark = Array.isArray(marks) ? marks[0] : marks;
+                if (!mark) return null;
+            } catch { return null; }
+            // Get depth — optional (spread = Infinity if fails, filtered out)
+            let bid = 0, ask = 0, spreadPct = Infinity;
+            try {
+                const book = await BinanceClient.depth(pick.symbol, 10);
+                bid = Number(book?.bids?.[0]?.[0] || 0);
+                ask = Number(book?.asks?.[0]?.[0] || 0);
+                if (Number.isFinite(bid) && Number.isFinite(ask) && bid > 0 && ask > 0) {
+                    spreadPct = (ask - bid) / ((bid + ask) / 2) * 100;
+                }
+            } catch { /* depth unavailable — spread stays Infinity */ }
+
+            const mid = (bid + ask) / 2;
+            if (!Number.isFinite(mid) || mid <= 0) return null;
+            // Hard cap 50% — beyond that the contract is unusable. Lower caps
+            // just filter out ~90% of live Binance Options liquidity.
+            if (spreadPct > 50) { LOGGER.warn(`[WPR] Spread too wide: ${spreadPct.toFixed(1)}%`); return null; }
 
             return { symbol: pick, mark, bid, ask, delta: Number(mark?.delta || 0), spreadPercent: spreadPct, score: 0 };
         } catch (e) {
