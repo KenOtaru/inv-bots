@@ -1055,13 +1055,13 @@ class TelegramService {
             const wprStr = Number.isFinite(wpr) && Number.isFinite(prevWpr) ? `${prevWpr.toFixed(1)}→${wpr.toFixed(1)}` : 'N/A';
             if (details.isRecovery) {
                 analysisDetails = `
-        🔄 <b>BizWillRF SIGNAL-WAIT RECOVERY L${a?.martingaleLevel ?? 0}</b> (new WPR signal direction, stake multiplier only)
+        🔄 <b>BizWillRFb SIGNAL-WAIT RECOVERY L${a?.martingaleLevel ?? 0}</b> (new WPR signal direction, stake multiplier only)
         🧠 <b>WPR(${CONFIG.WPR_PERIOD}) Signal:</b>
         📊 WPR: ${wprStr} (OB ${CONFIG.WPR_OVERBOUGHT} / OS ${CONFIG.WPR_OVERSOLD})
         📊 Signal: ${analysis?.direction || direction} (${analysis?.reason || ''})`;
             } else if (analysis) {
                 analysisDetails = `
-        🧠 <b>BizWillRF WPR(${CONFIG.WPR_PERIOD}) Signal:</b>
+        🧠 <b>BizWillRFb WPR(${CONFIG.WPR_PERIOD}) Signal:</b>
         📊 WPR: ${wprStr} (OB ${CONFIG.WPR_OVERBOUGHT} / OS ${CONFIG.WPR_OVERSOLD})
         📊 Signal: ${analysis?.direction || 'N/A'} (${analysis?.reason || ''})`;
             }
@@ -1093,7 +1093,7 @@ class TelegramService {
         const recoveryStatus = (a?.martingaleLevel || 0) > 0 ? `🔄 RECOVERY L${a.martingaleLevel}` : '🎯 NORMAL';
 
         const msg = `
-        ${emoji} <b>${type} BizWillRF TRADE ALERT - ${recoveryStatus}</b>
+        ${emoji} <b>${type} BizWillRFb TRADE ALERT - ${recoveryStatus}</b>
 
         📊 Asset: ${symbol} (pool $${(a?.investmentRemaining ?? 0).toFixed(2)})
         📈 Direction: ${direction === 'CALLE' ? 'RISE 📈' : 'FALL 📉'} (signal direction)
@@ -1122,7 +1122,7 @@ class TelegramService {
         });
 
         await this.sendMessage([
-            `⏰ <b>BizWillRF HOURLY SUMMARY (multi-asset independent)</b>`,
+            `⏰ <b>BizWillRFb HOURLY SUMMARY (multi-asset independent)</b>`,
             `Last Hour: ${h.trades}t ${h.wins}W/${h.losses}L ${wr}% ${h.pnl >= 0 ? '\u{1f7e2}' : '\u{1f534}'} $${h.pnl.toFixed(2)}`,
             `Today: ${today.tradesCount}t P/L: $${(today.netPL || 0).toFixed(2)}`,
             `Loss Stats: x2:${today.x2Losses || 0} x3:${today.x3Losses || 0} x4:${today.x4Losses || 0} x5:${today.x5Losses || 0} x6:${today.x6Losses || 0} x7:${today.x7Losses || 0} x8:${today.x8Losses || 0} x9:${today.x9Losses || 0}`,
@@ -1150,7 +1150,7 @@ class TelegramService {
         });
 
         await this.sendMessage([
-            `\u{1f4ca} <b>BizWillRF SESSION SUMMARY (independent)</b>`,
+            `\u{1f4ca} <b>BizWillRFb SESSION SUMMARY (independent)</b>`,
             `Duration: ${stats.duration} | Trades: ${stats.trades}`,
             `W: ${stats.wins} | L: ${stats.losses} | Win Rate: ${stats.winRate}`,
             `Session P/L: $${(stats.netPL || 0).toFixed(2)}`,
@@ -1172,7 +1172,7 @@ class TelegramService {
         });
 
         await this.sendMessage([
-            `\u{1f916} <b>BizWillRF STARTED — TRUE MULTI-ASSET</b>`,
+            `\u{1f916} <b>BizWillRFb STARTED — TRUE MULTI-ASSET</b>`,
             `Strategy: Williams %R(${CONFIG.WPR_PERIOD}) cross ${CONFIG.WPR_OVERBOUGHT}/${CONFIG.WPR_OVERSOLD} → PUTE/CALLE (signal always required)`,
             `Recovery: SIGNAL-WAIT — after loss wait for NEW signal, trade its direction with x-multiplier until win → reset to default`,
             `Independence: own stake/martingale/x2-x9/pool per asset, concurrent (1 open/asset, ${CONFIG.MAX_TOTAL_POSITIONS} total)`,
