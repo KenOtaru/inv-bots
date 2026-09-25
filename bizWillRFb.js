@@ -471,9 +471,12 @@ class DerivCandleFetcher {
     constructor(appId, logger) {
         this.appId = appId || '1089';
         this.logger = logger || LOGGER;
-        // Use public app_id 1089 for history fetch — custom app_id (33usl...) may 401 on anonymous WS
-        this.wsUrl = `wss://ws.derivws.com/websockets/v3?app_id=1089`;
-        this.fallbackUrl = `wss://ws.derivws.com/websockets/v3?app_id=${appId || CONFIG.APP_ID}`;
+        const legacyAppId = encodeURIComponent(appId || this.appId);
+        this.wsUrls = [
+            'wss://api.derivws.com/trading/v1/options/ws/public',
+            `wss://ws.derivws.com/websockets/v3?app_id=${legacyAppId}`,
+            `wss://ws.binaryws.com/websockets/v3?app_id=${legacyAppId}`,
+        ];
     }
     async fetchCandles(symbol, opts = {}) {
         const granularity = opts.granularity || getAssetConfig(symbol).GRANULARITY || CONFIG.GRANULARITY || 60;
@@ -504,9 +507,20 @@ class DerivCandleFetcher {
             w.on('error', e => { clearTimeout(t); if (!opened) reject(e); });
             w.on('unexpected-response', (_req,res)=> { clearTimeout(t); reject(new Error(`Unexpected server response: ${res.statusCode}`)); try{res.destroy();}catch{} });
         });
-        try { ws = await connectTo(this.wsUrl); } catch (e) {
-            this.logger.warn(`Fetcher connect ${this.wsUrl} failed: ${e.message} — trying fallback`);
-            try { ws = await connectTo(this.fallbackUrl); } catch (e2) { this.logger.error(`Fetcher connect failed: ${e2.message}`); throw e2; }
+        let lastError = null;
+        for (let i = 0; i < this.wsUrls.length; i++) {
+            const url = this.wsUrls[i];
+            try {
+                ws = await connectTo(url);
+                break;
+            } catch (e) {
+                lastError = e;
+                if (i < this.wsUrls.length - 1) this.logger.warn(`Fetcher connect ${url} failed: ${e.message} — trying next endpoint`);
+            }
+        }
+        if (!ws) {
+            this.logger.error(`Fetcher connect failed: ${lastError?.message || 'no WebSocket endpoint available'}`);
+            throw lastError || new Error('No WebSocket endpoint available');
         }
         const send = (req) => new Promise((resolve, reject) => {
             const id = Date.now() + Math.floor(Math.random()*1000);
