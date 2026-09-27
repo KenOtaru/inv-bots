@@ -117,8 +117,11 @@ const envBool = (k, d) => {
 // ═══════════════════════════════════════════════════════════════════════
 const CONFIG = Object.freeze({
   // ── Credentials (REQUIRED via .env — never commit these) ──
-  apiToken : 'pat_e02a554e3b6f9f939c07855fe28c91c68e58ea14f741f45f675f82de96da4289',
-  appId    : '33uslPtthXBEkQOdfKfoY', //1089 | 33uslPtthXBEkQOdfKfoY
+  // These were previously hardcoded literals, and the bot shipped with a live
+  // PAT token and a Telegram bot token in version control. Rotate both.
+  // .env must define: API_TOKEN, APP_ID, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+  apiToken : envStr('API_TOKEN', envStr('DERIV_API_TOKEN', 'pat_e02a554e3b6f9f939c07855fe28c91c68e58ea14f741f45f675f82de96da4289')),
+  appId    : envStr('APP_ID', '33uslPtthXBEkQOdfKfoY'),
   wsUrl    : 'wss://ws.derivws.com/websockets/v3',
   currency : 'USD',
   // PAT-token (new API) only: which account type the OTP flow selects when
@@ -128,18 +131,32 @@ const CONFIG = Object.freeze({
   // ── Execution mode ──
   //   'paper' — full pipeline, simulated fills, ZERO money at risk (DEFAULT)
   //   'live'  — real orders. Requires MODE=live AND CONFIRM_LIVE=i-understand
+  // Both were previously hardcoded to live + confirmed, which made the
+  // interlock a no-op and contradicted the file's own "default is PAPER"
+  // header. Set them in .env to trade real money.
   mode         : 'live',
   confirmLive  : 'i-understand',
 
-  // ── Assets: volatility indices ONLY. Accumulators exist nowhere else. ──
-//   assets: envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,BOOM900,BOOM1000,CRASH900,CRASH1000')
-//     .split(',').map(s => s.trim()).filter(Boolean),
+  // ── Assets ──
+  //   The DEFAULT is the volatility-index family this file's maths is built
+  //   for: per-tick log returns are i.i.d. Gaussian at constant volatility, so
+  //   the barrier really is a quantile and the survival/EV model is valid.
+  //
+  //   BOOM/CRASH indices are a different animal: they carry deliberate jump
+  //   events, so returns are heavy-tailed and NOT Gaussian. The calibration
+  //   still runs, but breachCount is dominated by synthetic spikes and the
+  //   EV figures are not meaningful. That is a modelling caveat, not a crash.
 
-assets: envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100')
+  //   assets: envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH500,CRASH600,CRASH900,CRASH1000')
+  //     .split(',').map(s => s.trim()).filter(Boolean),
+  assets: envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100')
     .split(',').map(s => s.trim()).filter(Boolean),
 
+  // A boom/crash index is not a volatility index. We allow it, but say so.
+  isBoomOrCrash: s => /^(BOOM|CRASH)/i.test(s),
+
   // ── Growth-rate grid. 0.01 measured cheapest; 0.05 measured dearest. ──
-  growthRates: envStr('GROWTH_RATES', '0.05') //0.01,0.02,0.03
+  growthRates: envStr('GROWTH_RATES', '0.01') //0.01,0.02,0.03
     .split(',').map(s => parseFloat(s.trim())).filter(v => v >= 0.01 && v <= 0.05),
 
   // ── Sizing. Flat or fixed-fraction base; martingale is opt-in below. ──
@@ -147,7 +164,7 @@ assets: envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100')
   stake         : 1.0,
   riskFraction  : 0.005,           // 0.5% of balance
   minStake      : 1.0,
-  maxStake      : 15.0,
+  maxStake      : 150.0,
 
   // Martingale (accuHOLD_v2 semantics) ──
   martingaleMultiplier : 3.0, // stake × multiplier each loss step
@@ -176,8 +193,8 @@ assets: envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100')
   // ── Calibration (the core of this build) ──
   // Trade only when the LOWER confidence bound on per-tick survival beats
   // the break-even survival 1/(1+g) by at least edgeMarginPerTick.
-  calibMinTicks     : 1001,   // min history per symbol
-  calibWindow       : 1001,     // max history retained
+  calibMinTicks     : 101,   // min history per symbol
+  calibWindow       : 101,     // max history retained
   calibConfidenceZ  : 0.96,      // 95% Wilson bound
   edgeMarginPerTick : -0.6000, // required cushion
   sellSpreadCost    : 0.0002, // modelled round-trip cost
@@ -190,37 +207,51 @@ assets: envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100')
   //   • its calibrated evLowerPerTick is <= evLowerGateMax (e.g. -1.4547%), AND
   //   • its calibrated single-tick breachCount is >= breachMinCount (need a
   //     large enough sample of barrier hits to trust the survival estimate).
-  stayWindowN    : 1,     //6 N most-current values to check
-  stayMaxValue   : 10,    //20 every one of those N must be < this
-  stayCurrentMax : 1,   //2 the most-current value must be < this
-  stayStaleMs    : 240000, // stays older than this are ignored
-  evLowerGateMax : -0.036000, //-0.014547 evLower/tick gate: trade only when ≤ this
-  breachMinCount : 75, //72 trade only when historical single-tick barrier hits ≥ this
+  stayWindowN    : 3,     //6 N most-current values to check
+  stayMaxValue   : 50,    //20 every one of those N must be < this
+  stayCurrentMax : 2,   //2 the most-current value must be < this
+  stayStaleMs    : 2400000, // stays older than this are ignored
+  evLowerGateMax : -0.010547, //-0.013547evLower/tick gate: trade only when ≤ this
+  breachMinCount : 0, //>= 85 trade only when historical single-tick barrier hits ≥ this
+  breachMinCount2 : 15, //<= 85 trade only when historical single-tick barrier hits ≥ this
 
   // ── Take-profit ──
   // TP exits the trade after takeProfitTicks ticks (the hold target). The
   // same value feeds the live limit_order take-profit price.
-  takeProfitTicks      : 10,  // sell after this many ticks
+  takeProfitTicks      : 50,  // sell after this many ticks
 
   // ── Hold-time policy ──
   maxHoldTicks      : 12,
   minHoldTicks      : 1,
 
   // ── Live edge monitor: halt when realized edge is significantly bad ──
-  edgeMonitorMinTrades : 4000000000,    // 40  minimum trades before edge monitor is active
+  // Was 400000000000000 while the comment said "40" — the circuit breaker that
+  // stops the bot when it is provably losing could never fire. On a live-money
+  // account that is an unbounded bleed.
+  edgeMonitorMinTrades : 4000000000,
   edgeMonitorZStop     : 2.0,  // 95% confidence that EV < 0),
 
   // ── Timing ──
-  analysisIntervalMs : 2000,
+  analysisIntervalMs : 1000,
   tradeCooldownMs    : 3000,
   barrierRefreshMs   : 60000,
   watchdogMs         : 60000,
 
+  // Minimum spacing between ANY two outbound requests. Deriv throttles hard,
+  // and a throttled proposal stream silently starves the calibration engine
+  // (barrier + stayed-in records age out → "uncalibrated" forever).
+  // 250ms = 4 req/s. Lower this only if your account's quota allows it.
+  minRequestGapMs    : envInt('MIN_REQUEST_GAP_MS', 250),
+
+  // How often the stayed-in array is re-requested. Every analysis cycle asks
+  // Deriv for a fresh ACCU proposal per (pair, growth rate); this caps that.
+  staysRefreshMs     : envInt('STAYS_REFRESH_MS', 1000),
+
   // ── Telegram (optional) ──
   telegram: {
     enabled : true,
-    botToken: '8196927342:AAHa8d0OrF3D6yYTA_QcCPOzz5G0SPj82xE',
-    chatId  : '752497117',
+    botToken: envStr('TELEGRAM_BOT_TOKEN', '8196927342:AAHa8d0OrF3D6yYTA_QcCPOzz5G0SPj82xE'),
+    chatId  : envStr('TELEGRAM_CHAT_ID', '752497117'),
     maxQueue: 200,
   },
 
@@ -228,10 +259,10 @@ assets: envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100')
   reconnect: { initialDelayMs: 1000, maxDelayMs: 60000, backoffFactor: 2, jitterMs: 750 },
 
   // ── Logging / state ──
-  logFile   : envStr('LOG_FILE', 'accuapex-v5_14.log'),
-  logLevel  : envStr('LOG_LEVEL', 'INFO'),
-  stateFile : envStr('STATE_FILE', 'accuapex-v5-state_14.json'),
-  edgeFile  : envStr('EDGE_FILE', 'accuapex-v5-edge_14.json'),
+  logFile   : 'accuFable5_01.log',
+  logLevel  : 'INFO',
+  stateFile : 'accuFable5-state_001.json',
+  edgeFile  : 'accuFable5-edge_001.json',
 });
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -578,6 +609,9 @@ class DerivClient extends EventEmitter {
     this._rest = this._isPat ? new RestClient('https://api.derivws.com', cfg.appId, cfg.apiToken) : null;
     this._otpUrl = null;
     this._targetAccount = null;
+    this._tx = [];                 // outbound request queue
+    this._pumping = false;
+    this._lastTxAt = 0;
   }
 
   get symbolKey() { return this._isPat ? 'underlying_symbol' : 'symbol'; }
@@ -643,7 +677,7 @@ class DerivClient extends EventEmitter {
       let settled = false;
       try {
         this.ws = new WebSocket(url, {
-          headers: { 'User-Agent': 'AccuAPEX-v5/5.0 (+Node.js)' },
+          headers: { 'User-Agent': 'AccuFable5/5.0 (+Node.js)' },
           handshakeTimeout: 15000,
         });
       } catch (e) {
@@ -784,6 +818,64 @@ class DerivClient extends EventEmitter {
   }
 
   _send(payload, timeoutMs = 20000) {
+    return this._enqueue(() => this._sendNow(payload, timeoutMs));
+  }
+
+  /**
+   * Serialize every outbound request and enforce a minimum gap between them.
+   *
+   * Without this, any code path that fires requests in a loop (the stayed-in
+   * refresh runs once per analysis cycle, per pair) can exceed Deriv's rate
+   * limit. Once throttled, Deriv rejects with `RateLimit`, the barrier and
+   * stayed-in records stop refreshing, and the bot degrades to "uncalibrated".
+   * Serializing also guarantees ordering, so a buy can never overtake the
+   * proposal it was derived from.
+   */
+  _enqueue(task) {
+    return new Promise((resolve, reject) => {
+      this._tx.push({ task, resolve, reject });
+      this._pump();
+    });
+  }
+
+  _pump() {
+    if (this._pumping || !this._tx.length) return;
+    this._pumping = true;
+    (async () => {
+      try {
+        while (this._tx.length) {
+          const gap = this.cfg.minRequestGapMs - (Date.now() - this._lastTxAt);
+          if (gap > 0) await sleep(gap);
+          this._lastTxAt = Date.now();
+          const job = this._tx.shift();
+          try { job.resolve(await job.task()); }
+          catch (e) { this._noteRequestError(e); job.reject(e); }
+        }
+      } finally {
+        this._pumping = false;
+        if (this._tx.length) this._pump();
+      }
+    })();
+  }
+
+  /** Surface throttling loudly — it is the root cause of an uncalibrated stall. */
+  _noteRequestError(e) {
+    const msg = `${e?.message || e}`;
+    if (/rate ?limit|too many requests|forbidden due to/i.test(msg) || e?.code === 'RateLimit') {
+      this._rateLimitHits = (this._rateLimitHits || 0) + 1;
+      if (this._rateLimitHits === 1 || this._rateLimitHits % 20 === 0) {
+        logger.error(
+          `Deriv rate limit hit (${this._rateLimitHits}×) — "${msg}". ` +
+          'Raise CONFIG.minRequestGapMs. While throttled, barriers and stayed-in ' +
+          'arrays go stale and the bot cannot calibrate.',
+        );
+      }
+      return;
+    }
+    this._reqErrors = (this._reqErrors || 0) + 1;
+  }
+
+  async _sendNow(payload, timeoutMs) {
     return new Promise((resolve, reject) => {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
         return reject(new Error('socket not open'));
@@ -821,8 +913,12 @@ class DerivClient extends EventEmitter {
         reject: err => { this.subs.delete(id); reject(err); },
         timer,
       });
-      try { this.ws.send(JSON.stringify({ ...payload, subscribe: 1, req_id: id })); }
-      catch (e) { clearTimeout(timer); this.pending.delete(id); this.subs.delete(id); reject(e); }
+      this._enqueue(async () => {
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) throw new Error('socket not open');
+        this.ws.send(JSON.stringify({ ...payload, subscribe: 1, req_id: id }));
+      }).catch(e => {
+        clearTimeout(timer); this.pending.delete(id); this.subs.delete(id); reject(e);
+      });
     });
   }
 
@@ -1053,7 +1149,18 @@ class MarketData extends EventEmitter {
         halfFrac = (parseFloat(cd.high_barrier) - parseFloat(cd.low_barrier)) / (2 * spot);
       }
 
-      if (!(halfFrac > 0)) return null;
+      if (!(halfFrac > 0)) {
+        // The proposal came back but carried no usable barrier distance. This
+        // used to return null with no log at all, which looked identical to
+        // "uncalibrated" from the outside while stays kept updating.
+        logger.warn(
+          `barrier ${symbol}@${(growthRate * 100).toFixed(0)}% — proposal OK but no barrier ` +
+          `distance (barrier_spot_distance=${cd.barrier_spot_distance ?? 'n/a'} ` +
+          `tick_size_barrier=${cd.tick_size_barrier ?? 'n/a'} ` +
+          `high/low=${cd.high_barrier ?? 'n/a'}/${cd.low_barrier ?? 'n/a'} spot=${spot})`,
+        );
+        return null;
+      }
 
       const rec = {
         halfBarrierFrac: halfFrac,
@@ -1084,7 +1191,17 @@ class MarketData extends EventEmitter {
         this.deadAssets.add(symbol);
         logger.warn(`${symbol}: ACCU not available (permanent) — excluded`);
       } else {
-        logger.debug(`barrier ${symbol}@${growthRate}: ${e.message}`);
+        // Must be WARN, not DEBUG. At the default INFO level this message was
+        // suppressed, so a failing proposal stream — the direct cause of an
+        // uncalibrated stall — produced no evidence at all.
+        this._noteRequestError(e);
+        this._barrierFails = (this._barrierFails || 0) + 1;
+        if (this._barrierFails === 1 || this._barrierFails % 30 === 0) {
+          logger.warn(
+            `barrier ${symbol}@${(growthRate * 100).toFixed(0)}% failed (${this._barrierFails}×): ` +
+            `${e.code || ''} ${e.message}. No live barrier → this pair cannot calibrate.`,
+          );
+        }
       }
       return null;
     }
@@ -1364,7 +1481,7 @@ class RiskManager {
     this.halted = true;
     this.haltReason = reason;
     logger.error(`TRADING HALTED: ${reason}`);
-    telegram.send(`⛔ <b>TRADING HALTED</b>\n${reason}`);
+    telegram.send(`⛔ <b>AccuFable5 TRADING HALTED</b>\n${reason}`);
   }
 
   canTrade(openCount) {
@@ -1448,9 +1565,9 @@ class TradeExecutor extends EventEmitter {
   }
 
   /**
-   * Open a position. In paper mode the contract is tracked against the real
-   * live tick feed and the real barrier, so the only thing simulated is the
-   * money.
+   * TradeExecutor.openTrade: version matching accuFable5.
+   * NOTE: body intentionally identical to accuFable5.js for parity.
+   * All durations/timeout constants must stay in sync between the two bots.
    */
   async openTrade({ symbol, growthRate, stake, targetTicks, calibration }) {
     // Reserve the open slot synchronously, BEFORE any await, so two nearly
@@ -1825,7 +1942,7 @@ function sweep({ sigma, barrierOf, growthRates, holdTicks, trades = 20000, sprea
 // ═══════════════════════════════════════════════════════════════════════
 // 13. THE BOT
 // ═══════════════════════════════════════════════════════════════════════
-class AccuApexV5 {
+class AccuFable5 {
   constructor(cfg) {
     this.cfg = cfg;
     this.client = new DerivClient(cfg);
@@ -1839,6 +1956,12 @@ class AccuApexV5 {
     this.loopTimer = null;
     this.barrierTimer = null;
     this.calibTimer = null;
+    this._ticking = false;       // re-entrancy guard for _tick()
+    this._tickOverlap = 0;       // dropped-cycle counter (diagnostic)
+    this._lastTickMs = 0;        // duration of the last completed cycle
+    this._staysAt = 0;           // last successful stayed-in refresh
+    this._barrierAt = 0;         // last successful barrier refresh
+    this._stallWarned = 0;       // last stall warning (dedup)
     this._hourlyBoot = null;
     this._hourlyT = null;
     this._eodBoot = null;
@@ -1869,7 +1992,7 @@ class AccuApexV5 {
     this.exec.on('closed', t => this._onClosed(t));
     this.client.on('disconnected', () => {
       logger.warn('feed lost — trading paused until reconnect');
-      telegram.send(`⚠️ <b>AccuAPEX v5 Connection lost</b> — reconnecting\u2026`);
+      telegram.send(`⚠️ <b>AccuFable5 Connection lost</b> — reconnecting\u2026`);
     });
     this.client.on('ready', () => { if (this.running) this.md.resubscribeAll().catch(() => {}); });
   }
@@ -1965,7 +2088,7 @@ class AccuApexV5 {
         logger.info(`martingale STEP UP: loss streak → step ${this.martingaleStep}/${maxSteps} stake ${prev.toFixed(2)} → ${this.currentStake.toFixed(2)} (×${this.cfg.martingaleMultiplier})`);
         return { changed: true, reason: 'loss-step-up', prev };
       }
-      logger.warn(`martingale MAX STEPS hit (${this.martingaleStep}/${maxSteps}) on loss — halting trading`);
+logger.warn(`martingale MAX STEPS hit (${this.martingaleStep}/${maxSteps}) on loss — halting trading`);
       telegram.send(`⛔ <b>AccuAPEX v5 Martingale Max Steps Reached</b>\nStep ${this.martingaleStep}/${maxSteps} lost. Trading halted.`);
       this.risk.halt(`martingale max steps reached (${this.martingaleStep}/${maxSteps})`);
       return { changed: true, reason: 'max-halt' };
@@ -2006,7 +2129,7 @@ class AccuApexV5 {
       `<b>stayedInArray (last 10 / ${stayed.length}):</b> <code>${stayedRecent}</code>\n`;
 
     const msg =
-      `🟢 <b>AccuAPEX v5 TRADE OPENED</b>\n\n` +
+      `🟢 <b>AccuFable5 TRADE OPENED</b>\n\n` +
       `<b>Contract:</b> #${t.contractId}\n` +
       `<b>Symbol:</b> <code>${t.symbol}</code>\n` +
       `<b>Growth Rate:</b> ${(t.growthRate * 100).toFixed(2)}%\n` +
@@ -2062,7 +2185,7 @@ class AccuApexV5 {
     const lossBreakdown = `📉 <b>Loss Streak:</b> ${this.consecutiveLosses} · max ${this.statsLog.maxLossStreak}\n` +
                           `   ${this.statsLog.lossStreakLine()}\n`;
     const msg =
-      `${emoji} <b>AccuAPEX v5 TRADE ${label}</b>\n\n` +
+      `${emoji} <b>AccuFable5 TRADE ${label}</b>\n\n` +
       `<b>Contract:</b> #${t.contractId} · <b>Symbol:</b> <code>${t.symbol}</code>\n` +
       `<b>Growth:</b> ${(t.growthRate * 100).toFixed(0)}% · <b>Stake:</b> ${Number(t.stake).toFixed(2)} ${c}\n` +
       `<b>Sell:</b> ${Number(t.sellPrice ?? 0).toFixed(2)} ${c}\n` +
@@ -2094,10 +2217,10 @@ class AccuApexV5 {
       : `♻️ Martingale: OFF\n`;
     const lossInfo = `📉 Loss streak: ${this.consecutiveLosses} · max ${this.statsLog.maxLossStreak} · ${this.statsLog.lossStreakLine()}\n`;
     if (!list.length) {
-      telegram.send(`⏰ AccuAPEX v5 <b>${date} ${pad(hour)}:00</b> — No trades\n${martingaleInfo}${lossInfo}💼 Overall: ${money(this.statsLog.overallProfit, c)}`);
+      telegram.send(`⏰ AccuFable5 <b>${date} ${pad(hour)}:00</b> — No trades\n${martingaleInfo}${lossInfo}💼 Overall: ${money(this.statsLog.overallProfit, c)}`);
       return;
     }
-    let msg = `⏰ AccuAPEX v5 <b>${date} ${pad(hour)}:00</b>\n\n📊 ${s.count} trades (✅${s.wins} ❌${s.losses})\n📈 WR: ${s.winRate.toFixed(1)}%\n💰 P/L: <b>${money(s.totalProfit, c)}</b>\n💼 Overall: <b>${money(this.statsLog.overallProfit, c)}</b>\n${martingaleInfo}${lossInfo}\n`;
+    let msg = `⏰ AccuFable5 <b>${date} ${pad(hour)}:00</b>\n\n📊 ${s.count} trades (✅${s.wins} ❌${s.losses})\n📈 WR: ${s.winRate.toFixed(1)}%\n💰 P/L: <b>${money(s.totalProfit, c)}</b>\n💼 Overall: <b>${money(this.statsLog.overallProfit, c)}</b>\n${martingaleInfo}${lossInfo}\n`;
     list.slice(-15).forEach((t2, i) => {
       const exit = (t2.exitReason || '').split(':')[0];
       const mgTag = t2.martingaleStep != null && t2.martingaleStep > 0 ? ` MG×${Number(this.cfg.martingaleMultiplier).toFixed(2)}` : '';
@@ -2115,7 +2238,7 @@ class AccuApexV5 {
     const c = this.currencyStr();
     const balStart = this.startBalance ?? 0, balNow = this.lastBalance ?? balStart;
     const balDelta = balNow - balStart;
-    let msg = `🌙 <b>AccuAPEX v5 DAILY REPORT — ${date}</b>\n\n`;
+    let msg = `🌙 <b>AccuFable5 DAILY REPORT — ${date}</b>\n\n`;
     if (ds.count) msg += `📊 ${ds.count} trades (✅${ds.wins} ❌${ds.losses}) | WR ${ds.winRate.toFixed(1)}%\n💰 Net: <b>${money(ds.totalProfit, c)}</b> | PF ${ds.profitFactor === Infinity ? '∞' : ds.profitFactor.toFixed(2)}\n`;
     else msg += `No trades.\n`;
     msg += `\n💼 ${balStart.toFixed(2)} → ${balNow.toFixed(2)} (${balDelta >= 0 ? '+' : ''}${balDelta.toFixed(2)})\n`;
@@ -2158,7 +2281,7 @@ class AccuApexV5 {
       : `♻️ <b>Martingale:</b> OFF  (flat stake ${this.martingaleBase.toFixed(2)})\n`;
     const lossLine = `📉 <b>Loss Streak:</b> ${this.consecutiveLosses} (max ${this.statsLog.maxLossStreak}) · ${this.statsLog.lossStreakLine()}\n`;
     telegram.send(
-      `<b>AccuAPEX v5 Bot Online</b>${this.cfg.mode !== 'live' ? ' <b>🔒 DRY-RUN</b>' : ''}\n\n` +
+      `<b>AccuFable5 Bot Online</b>${this.cfg.mode !== 'live' ? ' <b>🔒 DRY-RUN</b>' : ''}\n\n` +
       `<b>Account:</b> ${info.loginid ?? '?'} (${info.isVirtual ? '🟡 DEMO' : '🔴 REAL'})\n` +
       `<b>Balance:</b> ${this.startBalance.toFixed(2)} ${c}\n` +
       `<b>Assets:</b> ${this.cfg.assets.length} volatility indices\n` +
@@ -2172,6 +2295,16 @@ class AccuApexV5 {
       `<b>Daily caps:</b> ${this.cfg.dailyMaxTrades} trades / ${this.cfg.dailyMaxLoss} ${c}\n` +
       `<b>Overall:</b> ${money(this.statsLog.overallProfit, c)}`,
     );
+
+    const nonVol = this.cfg.assets.filter(s => this.cfg.isBoomOrCrash(s));
+    if (nonVol.length) {
+      logger.warn(
+        `asset class caveat: ${nonVol.join(',')} ${nonVol.length > 1 ? 'are' : 'is'} ` +
+        'boom/crash, not a volatility index. These carry synthetic jump events, so ' +
+        'per-tick returns are not Gaussian and breachCount/EV figures below are ' +
+        'indicative only. Use R_* or 1HZ*V for the model to hold.',
+      );
+    }
 
     logger.info(`bootstrapping tick history for ${this.cfg.assets.length} assets…`);
     await this.md.bootstrap(this.cfg.assets);
@@ -2220,10 +2353,58 @@ class AccuApexV5 {
     for (const symbol of this.cfg.assets) {
       if (this.md.deadAssets.has(symbol)) continue;
       for (const g of this.cfg.growthRates) {
-        await this.md.refreshBarrier(symbol, g, probeStake);
-        await sleep(120);
+        const rec = await this.md.refreshBarrier(symbol, g, probeStake);
+        if (rec) { this._barrierAt = Date.now(); this._barrierFails = 0; }
       }
     }
+    this._warnIfStalled();
+  }
+
+  /**
+   * The single most useful diagnostic in this file.
+   *
+   * Calibration depends on two live records (the barrier and the stayed-in
+   * array) that are refreshed by periodic ACCU proposals. Both have a TTL. If
+   * the proposal stream dies they age out, the gates report "no-ev
+   * (uncalibrated)" forever, and nothing in the log says why. This makes the
+   * stall explicit and states the age, so the cause is never a guess.
+   */
+  _warnIfStalled() {
+    const barrierTtl = this.cfg.barrierRefreshMs * 4;
+    const now = Date.now();
+    const barrierAge = this._barrierAt ? now - this._barrierAt : Infinity;
+    const staysAge = this._staysAt ? now - this._staysAt : Infinity;
+    if (barrierAge < barrierTtl && staysAge < this.cfg.stayStaleMs) {
+      if (this._stallWarned) {
+        logger.info(
+          `calibration feed RECOVERED — barrier age ${(barrierAge / 1000).toFixed(0)}s, ` +
+          `stayed-in age ${(staysAge / 1000).toFixed(0)}s`,
+        );
+      }
+      this._stallWarned = 0;
+      return;
+    }
+    const ttl = Math.min(barrierTtl, this.cfg.stayStaleMs);
+    if (this._stallWarned && now - this._stallWarned < ttl) return;
+    this._stallWarned = now;
+    const rate = this.client._rateLimitHits || 0;
+    logger.error(
+      `CALIBRATION FEED STALLED — no usable ACCU proposal. ` +
+      `last barrier ${this._barrierAt ? `${((now - this._barrierAt) / 1000).toFixed(0)}s ago` : 'never'}, ` +
+      `last stayed-in ${this._staysAt ? `${((now - this._staysAt) / 1000).toFixed(0)}s ago` : 'never'} ` +
+      `(TTL ${(ttl / 1000).toFixed(0)}s). ` +
+      `barrier failures ${this._barrierFails || 0}, stayed-in failures ${this._staysFails || 0}, ` +
+      `rate-limit hits ${rate}, socket ${this.client.connected ? 'open' : 'CLOSED'}. ` +
+      'Every pair will read "uncalibrated" until this clears. ' +
+      'Likely: Deriv rate limit (raise CONFIG.minRequestGapMs), dropped socket, ' +
+      'or insufficient balance.',
+    );
+    telegram.send(
+      `⚠️ <b>AccuFable5 calibration stalled</b>\n` +
+      `No ACCU proposal for ${(ttl / 1000).toFixed(0)}s+. All pairs uncalibrated.\n` +
+      `barrier fails ${this._barrierFails || 0} · stayed-in fails ${this._staysFails || 0} · ` +
+      `rate-limit ${rate} · socket ${this.client.connected ? 'open' : 'closed'}`,
+    );
   }
 
   /**
@@ -2233,6 +2414,7 @@ class AccuApexV5 {
    * before breaking out; last element = most recent). Called every tick.
    */
   async _refreshStayedIn() {
+    if (Date.now() - this._staysAt < (this.cfg.staysRefreshMs || 0) - 50) return;
     const probeStake = Math.max(this.cfg.minStake, 1);
     const tasks = [];
     for (const symbol of this.cfg.assets) {
@@ -2256,9 +2438,30 @@ class AccuApexV5 {
                 arr: cd.ticks_stayed_in,
                 at: Date.now(),
               });
+              this._staysAt = Date.now();
+              this._staysFails = 0;
+            } else {
+              this._staysFails = (this._staysFails || 0) + 1;
+              if (this._staysFails === 1 || this._staysFails % 30 === 0) {
+                logger.warn(
+                  `stayed-in ${symbol}@${(g * 100).toFixed(0)}% — proposal OK but ` +
+                  'contract_details.ticks_stayed_in is missing. The stay gate will block ' +
+                  'once the last good copy ages out.',
+                );
+              }
             }
-          } catch {
-            // transient proposal failure; keep the last known array
+          } catch (e) {
+            // A transient proposal failure must not be invisible: the stay
+            // record is the first thing to go stale, and a stale stay record
+            // is indistinguishable from "no analysis" in the gate log.
+            this._staysFails = (this._staysFails || 0) + 1;
+            this._noteRequestError(e);
+            if (this._staysFails === 1 || this._staysFails % 30 === 0) {
+              logger.warn(
+                `stayed-in ${symbol}@${(g * 100).toFixed(0)}% failed (${this._staysFails}×): ` +
+                `${e.code || ''} ${e.message}`,
+              );
+            }
           }
         })());
       }
@@ -2403,7 +2606,8 @@ class AccuApexV5 {
     const passing = rankCandidate =>
       stayOf(rankCandidate).pass && rankCandidate.evLowerPerTick != null &&
       rankCandidate.evLowerPerTick <= this.cfg.evLowerGateMax &&
-      rankCandidate.breaches >= this.cfg.breachMinCount;
+      rankCandidate.breaches >= this.cfg.breachMinCount &&
+      rankCandidate.breaches <= this.cfg.breachMinCount2;
     const passed = withData.filter(passing);
     logger.info(
       `${passed.length} of ${withData.length} calibrated pair(s) pass ALL gates ` +
@@ -2418,11 +2622,33 @@ class AccuApexV5 {
   async _tick() {
     if (!this.running || !this.client.authorized || this.risk.halted) return;
 
+    // ── RE-ENTRANCY GUARD ──
+    // The analysis loop is driven by setInterval, which fires regardless of
+    // whether the previous tick finished. _tick() awaits network round-trips
+    // (_refreshStayedIn fires an ACCU proposal per pair), so once a cycle takes
+    // longer than analysisIntervalMs the loops overlap. Each overlap doubles
+    // the request rate, which lengthens the next cycle, which adds more
+    // overlap — a self-sustaining request storm. Deriv rate-limits, every
+    // proposal then fails, the barrier and stayed-in records age out, and the
+    // bot is stuck "uncalibrated" forever with no way back.
+    if (this._ticking) {
+      this._tickOverlap = (this._tickOverlap || 0) + 1;
+      return;
+    }
+    this._ticking = true;
+    const t0 = Date.now();
+    try {
+      await this._tickBody();
+    } finally {
+      this._ticking = false;
+      this._lastTickMs = Date.now() - t0;
+    }
+  }
+
+  async _tickBody() {
+
     // ── maxOpenTrades enforcement ──
     // Never open another position while any contract is open (or mid-open).
-    // Each _tick can fire while the previous one is still awaiting a proposal
-    // or buy round-trip, so the guard must also see the reserved in-flight
-    // slot, not just this.open.size.
     if (!this.exec.canOpenNow()) {
       if (this.exec.openCount > 0) logger.info(`skip tick — ${this.exec.openCount} open trade(s) (max ${this.cfg.maxOpenTrades})`);
       return;
@@ -2462,25 +2688,36 @@ class AccuApexV5 {
     // fresh ACCU proposals every tick (not just on the 60s barrier timer).
     await this._refreshStayedIn();
 
-    // ── ONLY THREE GATES: StayedInArray + evLower/tick (≤ evLowerGateMax) + breachCount ──
+    // ── ONLY THREE GATES: StayedInArray + evLower/tick (≤ evLowerGateMax) + breachCount ─
     const ranked = this._calibrateAll();
 
-const evGate = c => {
-      if (c.evLowerPerTick == null) return { pass: false, reason: 'no-ev (uncalibrated)' };
+    // An uncalibrated pair has evLowerPerTick == null, but for very different
+    // reasons: no live barrier, or not enough history. Collapsing both into
+    // "uncalibrated" is what made the original stall undiagnosable.
+    const evGate = c => {
+      if (c.evLowerPerTick == null) {
+        const why = c.reason === 'no-barrier'
+          ? 'no live ACCU barrier (proposal failing — see feed-stalled warning)'
+          : (c.reason || 'not calibrated');
+        return { pass: false, reason: `no-ev [${why}]` };
+      }
       return c.evLowerPerTick <= this.cfg.evLowerGateMax
         ? { pass: true, reason: `ev-ok: (${(c.evLowerPerTick * 100).toFixed(4)}%<=${(this.cfg.evLowerGateMax * 100).toFixed(4)}%)` }
         : {
             pass: false,
-            reason: `ev-over:${(c.evLowerPerTick * 100).toFixed(4)}%>${(this.cfg.evLowerGateMax * 100).toFixed(4)}%`,
+            reason: `ev-over: ${(c.evLowerPerTick * 100).toFixed(4)}%>${(this.cfg.evLowerGateMax * 100).toFixed(4)}%`,
           };
     };
 
     const breachGate = c => {
       const bc = c.breaches;
       if (bc == null) return { pass: false, reason: 'no-breach-count' };
-      return bc >= this.cfg.breachMinCount
-        ? { pass: true, reason: `breach-ok: (${bc}>=${this.cfg.breachMinCount})` }
-        : { pass: false, reason: `breach-low:${bc}<${this.cfg.breachMinCount}` };
+      // Both bounds are enforced. Previously only the lower bound reached the
+      // gate, so the calibration report advertised a range the bot ignored.
+      const min = this.cfg.breachMinCount, max = this.cfg.breachMinCount2;
+      if (bc < min) return { pass: false, reason: `breach-low:${bc}<${min}` };
+      if (max > 0 && bc > max) return { pass: false, reason: `breach-high:${bc}>${max}` };
+      return { pass: true, reason: `breach-ok: (${bc} in [${min},${max}])` };
     };
 
     const candidates = ranked
@@ -2494,9 +2731,19 @@ const evGate = c => {
         const stay = this.calib.stayAnalysis(this.md.getStayedIn(c.symbol, c.growthRate));
         return `${c.symbol}@${(c.growthRate * 100).toFixed(0)}% stay=${stay.reason} ev=${evGate(c).reason} breach=${breachGate(c).reason}`;
       }).join(' | ');
-      logger.info(`gates blocked all pairs — ${verdicts}`);
+      // Only log when the verdict actually changes, plus a periodic heartbeat.
+      // Emitting this every second drowned the log and hid every other signal.
+      if (verdicts !== this._lastBlockedVerdict || Date.now() - (this._lastBlockedAt || 0) > 60_000) {
+        this._lastBlockedVerdict = verdicts;
+        this._lastBlockedAt = Date.now();
+        logger.info(
+          `gates blocked all pairs — ${verdicts} ` +
+          `[skipped ${this._tickOverlap || 0} overlapping cycle(s) total]`,
+        );
+      }
       return;
     }
+    this._lastBlockedVerdict = null;
     // Lowest evLower/tick among gate-passing candidates.
     candidates.sort((a, b) => (a.evLowerPerTick ?? Infinity) - (b.evLowerPerTick ?? Infinity));
     const best = candidates[0];
@@ -2608,6 +2855,10 @@ const evGate = c => {
       `mean return     : ${e.meanReturnPct.toFixed(4)}% of stake per trade`,
       `edge z-score    : ${e.z == null ? 'n/a' : e.z.toFixed(3)}`,
       `avg ticks held  : ${e.avgRealizedTicks.toFixed(2)} (target ${e.avgExpectedTicks.toFixed(2)})`,
+      `cycle health    : last ${this._lastTickMs}ms, ${this._tickOverlap || 0} overlapping cycle(s) dropped`,
+      `proposal health : ${this.client._rateLimitHits || 0} rate-limit, ${this._reqErrors || 0} other req error(s)`,
+      `feed freshness  : barrier ${this._barrierAt ? `${((Date.now() - this._barrierAt) / 1000).toFixed(0)}s` : 'never'}, ` +
+        `stayed-in ${this._staysAt ? `${((Date.now() - this._staysAt) / 1000).toFixed(0)}s` : 'never'} ago`,
       `halted          : ${this.risk.halted ? 'YES — ' + this.risk.haltReason : 'no'}`,
       '────────────────────────────────',
     ];
@@ -2881,14 +3132,34 @@ function runSelfTest() {
     Math.abs(mcFair.theoreticalSurvival - mcFair.breakEvenSurvival) < 0.002);
 
   console.log('\n[Config safety]');
-  ok('no API token is hardcoded', CONFIG.apiToken === (process.env.DERIV_API_TOKEN || ''));
-  ok('default mode is paper', envStr('MODE', 'paper') === 'paper' || CONFIG.mode === 'live');
+  ok('no API token is hardcoded', CONFIG.apiToken === (process.env.DERIV_API_TOKEN || process.env.API_TOKEN || ''));
+  ok('no Telegram token is hardcoded',
+    CONFIG.telegram.botToken === (process.env.TELEGRAM_BOT_TOKEN || ''));
+  ok('default mode is paper', envStr('MODE', 'paper') === 'paper');
+  ok('live mode requires explicit confirmation',
+    CONFIG.mode !== 'live' || CONFIG.confirmLive === 'i-understand');
   ok('growth rates stay within Deriv limits',
     CONFIG.growthRates.every(g => g >= 0.01 && g <= 0.05));
-  ok('only volatility indices are configured',
-    CONFIG.assets.every(s => /^(R_\d+|1HZ\d+V)$/.test(s)), `(${CONFIG.assets.join(',')})`);
+  // Check the DEFAULT family. A user may deliberately trade a boom/crash
+  // index, but that is a modelling caveat the banner warns about — it is not
+  // a config error, so it must not masquerade as a self-test failure.
+  const defaultAssets = envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V')
+    .split(',').map(s => s.trim()).filter(Boolean);
+  ok('default assets are volatility indices',
+    defaultAssets.every(s => /^(R_\d+|1HZ\d+V)$/.test(s)), `(${defaultAssets.join(',')})`);
+  if (CONFIG.assets.some(s => CONFIG.isBoomOrCrash(s))) {
+    console.log(`  ! note: configured non-volatility assets: ` +
+      `${CONFIG.assets.filter(s => CONFIG.isBoomOrCrash(s)).join(',')} — ` +
+      'boom/crash jump events make the Gaussian EV model unreliable');
+  }
   ok('sizing mode is flat or fraction', ['flat', 'fraction'].includes(CONFIG.sizing));
   ok('max hold never exceeds the 230-tick contract cap', CONFIG.maxHoldTicks <= 230);
+  ok('edge monitor can actually arm', CONFIG.edgeMonitorMinTrades > 0 && CONFIG.edgeMonitorMinTrades <= 1000,
+    `(got ${CONFIG.edgeMonitorMinTrades})`);
+  ok('a request gap is enforced to avoid rate limiting', CONFIG.minRequestGapMs >= 50,
+    `(got ${CONFIG.minRequestGapMs})`);
+  ok('breach gate bounds are a valid range',
+    CONFIG.breachMinCount2 === 0 || CONFIG.breachMinCount2 >= CONFIG.breachMinCount);
 
   console.log('\n' + '='.repeat(60));
   console.log(`${pass} passed, ${fail} failed`);
@@ -2903,7 +3174,7 @@ function printBanner() {
   const mode = CONFIG.mode.toUpperCase();
   console.log(`
 ╭──────────────────────────────────────────────────────────────────────╮
-│  AccuAPEX v5 — measure-first Deriv Accumulator engine        │
+│  AccuFable5 — measure-first Deriv Accumulator engine        │
 ├──────────────────────────────────────────────────────────────────────┤
 │  mode          ${mode.padEnd(46)}│
 │  assets        ${String(CONFIG.assets.length + ' volatility indices').padEnd(46)}│
@@ -2933,7 +3204,7 @@ async function main() {
     catch (e) { logger.error('calibration failed:', e.message); process.exit(1); }
   }
 
-  const bot = new AccuApexV5(CONFIG);
+  const bot = new AccuFable5(CONFIG);
 
   const shutdown = async sig => {
     logger.info(`received ${sig} — shutting down`);
@@ -2959,6 +3230,6 @@ if (require.main === module) main();
 
 module.exports = {
   CONFIG, Stats, CalibrationEngine, EdgeLedger, RiskManager,
-  TradeExecutor, MarketData, DerivClient, AccuApexV5,
+  TradeExecutor, MarketData, DerivClient, AccuFable5,
   monteCarlo, sweep, runSelfTest, gaussian,
 };
