@@ -177,7 +177,7 @@ const CONFIG = Object.freeze({
   // growth rate) on the very next tick, skipping the stay/ev gates. It keeps
   // re-trading that same asset after each loss until a win, then returns to
   // the normal gate-based selection.
-  chaseOnLoss         : false,
+  chaseOnLoss         : true,
 
   // ── EOD / hourly summaries (GMT) ──
   eodTimeGmt         : '00:00',
@@ -209,7 +209,7 @@ const CONFIG = Object.freeze({
   //   • its calibrated single-tick breachCount is >= breachMinCount (need a
   //     large enough sample of barrier hits to trust the survival estimate).
   stayWindowN    : 1,     //6 N most-current values to check
-  stayMaxValue   : 10,    //20 every one of those N must be < this
+  stayMaxValue   : 50,    //20 every one of those N must be < this
   stayCurrentMax : 1,   //2 the most-current value must be < this
   stayStaleMs    : 240000, // stays older than this are ignored
   evLowerGateMax : -0.010547, //-0.013547evLower/tick gate: trade only when ≤ this
