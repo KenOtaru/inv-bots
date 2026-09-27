@@ -168,8 +168,8 @@ const CONFIG = Object.freeze({
   maxStake      : 150.0,
 
   // Martingale (accuHOLD_v2 semantics) ──
-  martingaleMultiplier : 3.0, // stake × multiplier each loss step
-  martingaleSteps      : 4,        // 0 = disabled
+  martingaleMultiplier : 2.5, // stake × multiplier each loss step
+  martingaleSteps      : 5,        // 0 = disabled
   martingaleBaseStake  : 0,   // 0 → use CONFIG.stake
 
   // ── Chase-on-loss ──
@@ -213,13 +213,13 @@ const CONFIG = Object.freeze({
   stayCurrentMax : 1,   //2 the most-current value must be < this
   stayStaleMs    : 240000, // stays older than this are ignored
   evLowerGateMax : -0.010547, //-0.013547evLower/tick gate: trade only when ≤ this
-  breachMinCount : 20, //>= 83 trade only when historical single-tick barrier hits ≥ this
-  breachMinCount2 : 26, //<= 83 trade only when historical single-tick barrier hits ≥ this
+  breachMinCount : 12, //>= 83 trade only when historical single-tick barrier hits ≥ this
+  breachMinCount2 : 20, //<= 83 trade only when historical single-tick barrier hits ≥ this
 
   // ── Take-profit ──
   // TP exits the trade after takeProfitTicks ticks (the hold target). The
   // same value feeds the live limit_order take-profit price.
-  takeProfitTicks      : 10,  // sell after this many ticks
+  takeProfitTicks      : 50,  // sell after this many ticks
 
   // ── Hold-time policy ──
   maxHoldTicks      : 12,
