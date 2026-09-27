@@ -150,7 +150,7 @@ const CONFIG = Object.freeze({
   //   assets: envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,BOOM900,BOOM1000,CRASH900,CRASH1000')
   //     .split(',').map(s => s.trim()).filter(Boolean),
 
-  assets: envStr('ASSETS', '1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V')
+  assets: envStr('ASSETS', '1HZ50V')
     .split(',').map(s => s.trim()).filter(Boolean),
 
   // A boom/crash index is not a volatility index. We allow it, but say so.
