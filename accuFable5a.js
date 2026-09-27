@@ -211,7 +211,7 @@ const CONFIG = Object.freeze({
   stayWindowN    : 3,     //6 N most-current values to check
   stayMaxValue   : 50,    //20 every one of those N must be < this
   stayCurrentMax : 2,   //2 the most-current value must be < this
-  stayStaleMs    : 2400000, // stays older than this are ignored
+  stayStaleMs    : 24000000, // stays older than this are ignored
   evLowerGateMax : -0.010547, //-0.013547evLower/tick gate: trade only when ≤ this
   breachMinCount : 0, //>= 83 trade only when historical single-tick barrier hits ≥ this
   breachMinCount2 : 15, //<= 83 trade only when historical single-tick barrier hits ≥ this
