@@ -208,7 +208,7 @@ const CONFIG = Object.freeze({
   //   • its calibrated evLowerPerTick is <= evLowerGateMax (e.g. -1.4547%), AND
   //   • its calibrated single-tick breachCount is >= breachMinCount (need a
   //     large enough sample of barrier hits to trust the survival estimate).
-  stayWindowN    : 2,     //6 N most-current values to check
+  stayWindowN    : 3,     //6 N most-current values to check
   stayMaxValue   : 50,    //20 every one of those N must be < this
   stayCurrentMax : 2,   //2 the most-current value must be < this
   stayStaleMs    : 2400000, // stays older than this are ignored
