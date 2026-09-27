@@ -213,8 +213,8 @@ const CONFIG = Object.freeze({
   stayCurrentMax : 1,   //2 the most-current value must be < this
   stayStaleMs    : 240000, // stays older than this are ignored
   evLowerGateMax : -0.010547, //-0.013547evLower/tick gate: trade only when ≤ this
-  breachMinCount : 60, //>= 83 trade only when historical single-tick barrier hits ≥ this
-  breachMinCount2 : 63, //<= 83 trade only when historical single-tick barrier hits ≥ this
+  breachMinCount : 24, //>= 83 trade only when historical single-tick barrier hits ≥ this
+  breachMinCount2 : 25, //<= 83 trade only when historical single-tick barrier hits ≥ this
 
   // ── Take-profit ──
   // TP exits the trade after takeProfitTicks ticks (the hold target). The
