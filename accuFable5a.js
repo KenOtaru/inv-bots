@@ -150,7 +150,7 @@ const CONFIG = Object.freeze({
   //   assets: envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,BOOM900,BOOM1000,CRASH900,CRASH1000')
   //     .split(',').map(s => s.trim()).filter(Boolean),
 
-  assets: envStr('ASSETS', '1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V')
+  assets: envStr('ASSETS', '1HZ50V')
     .split(',').map(s => s.trim()).filter(Boolean),
 
   // A boom/crash index is not a volatility index. We allow it, but say so.
@@ -213,7 +213,7 @@ const CONFIG = Object.freeze({
   stayCurrentMax : 1,   //2 the most-current value must be < this
   stayStaleMs    : 2400000, // stays older than this are ignored
   evLowerGateMax : -0.010547, //-0.013547evLower/tick gate: trade only when ≤ this
-  breachMinCount : 1, //>= 83 trade only when historical single-tick barrier hits ≥ this
+  breachMinCount : 0, //>= 83 trade only when historical single-tick barrier hits ≥ this
   breachMinCount2 : 15, //<= 83 trade only when historical single-tick barrier hits ≥ this
 
   // ── Take-profit ──
