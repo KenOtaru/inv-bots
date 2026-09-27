@@ -194,8 +194,8 @@ const CONFIG = Object.freeze({
   // ── Calibration (the core of this build) ──
   // Trade only when the LOWER confidence bound on per-tick survival beats
   // the break-even survival 1/(1+g) by at least edgeMarginPerTick.
-  calibMinTicks     : 1001,   // min history per symbol
-  calibWindow       : 1001,     // max history retained
+  calibMinTicks     : 101,   // min history per symbol
+  calibWindow       : 101,     // max history retained
   calibConfidenceZ  : 0.96,      // 95% Wilson bound
   edgeMarginPerTick : -0.6000, // required cushion
   sellSpreadCost    : 0.0002, // modelled round-trip cost
@@ -208,10 +208,10 @@ const CONFIG = Object.freeze({
   //   • its calibrated evLowerPerTick is <= evLowerGateMax (e.g. -1.4547%), AND
   //   • its calibrated single-tick breachCount is >= breachMinCount (need a
   //     large enough sample of barrier hits to trust the survival estimate).
-  stayWindowN    : 1,     //6 N most-current values to check
+  stayWindowN    : 2,     //6 N most-current values to check
   stayMaxValue   : 50,    //20 every one of those N must be < this
   stayCurrentMax : 1,   //2 the most-current value must be < this
-  stayStaleMs    : 240000, // stays older than this are ignored
+  stayStaleMs    : 60000, // stays older than this are ignored
   evLowerGateMax : -0.010547, //-0.013547evLower/tick gate: trade only when ≤ this
   breachMinCount : 10, //>= 83 trade only when historical single-tick barrier hits ≥ this
   breachMinCount2 : 15, //<= 83 trade only when historical single-tick barrier hits ≥ this
