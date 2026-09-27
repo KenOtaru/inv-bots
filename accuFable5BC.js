@@ -146,7 +146,10 @@ const CONFIG = Object.freeze({
   //   events, so returns are heavy-tailed and NOT Gaussian. The calibration
   //   still runs, but breachCount is dominated by synthetic spikes and the
   //   EV figures are not meaningful. That is a modelling caveat, not a crash.
-  assets: envStr('ASSETS', 'CRASH500')
+
+  //   assets: envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH500,CRASH600,CRASH900,CRASH1000')
+  //     .split(',').map(s => s.trim()).filter(Boolean),
+  assets: envStr('ASSETS', 'BOOM500,BOOM600,BOOM900,BOOM1000,CRASH500,CRASH600,CRASH900,CRASH1000')
     .split(',').map(s => s.trim()).filter(Boolean),
 
   // A boom/crash index is not a volatility index. We allow it, but say so.
@@ -173,7 +176,7 @@ const CONFIG = Object.freeze({
   // growth rate) on the very next tick, skipping the stay/ev gates. It keeps
   // re-trading that same asset after each loss until a win, then returns to
   // the normal gate-based selection.
-  chaseOnLoss         : false,
+  chaseOnLoss         : true,
 
   // ── EOD / hourly summaries (GMT) ──
   eodTimeGmt         : '00:00',
@@ -190,8 +193,8 @@ const CONFIG = Object.freeze({
   // ── Calibration (the core of this build) ──
   // Trade only when the LOWER confidence bound on per-tick survival beats
   // the break-even survival 1/(1+g) by at least edgeMarginPerTick.
-  calibMinTicks     : 1001,   // min history per symbol
-  calibWindow       : 1001,     // max history retained
+  calibMinTicks     : 101,   // min history per symbol
+  calibWindow       : 101,     // max history retained
   calibConfidenceZ  : 0.96,      // 95% Wilson bound
   edgeMarginPerTick : -0.6000, // required cushion
   sellSpreadCost    : 0.0002, // modelled round-trip cost
@@ -206,11 +209,11 @@ const CONFIG = Object.freeze({
   //     large enough sample of barrier hits to trust the survival estimate).
   stayWindowN    : 1,     //6 N most-current values to check
   stayMaxValue   : 10,    //20 every one of those N must be < this
-  stayCurrentMax : 1,   //2 the most-current value must be < this
-  stayStaleMs    : 240000, // stays older than this are ignored
+  stayCurrentMax : 2,   //2 the most-current value must be < this
+  stayStaleMs    : 2400000, // stays older than this are ignored
   evLowerGateMax : -0.010547, //-0.013547evLower/tick gate: trade only when ≤ this
-  breachMinCount : 60, //>= 83 trade only when historical single-tick barrier hits ≥ this
-  breachMinCount2 : 63, //<= 83 trade only when historical single-tick barrier hits ≥ this
+  breachMinCount : 11, //>= 83 trade only when historical single-tick barrier hits ≥ this
+  breachMinCount2 : 15, //<= 83 trade only when historical single-tick barrier hits ≥ this
 
   // ── Take-profit ──
   // TP exits the trade after takeProfitTicks ticks (the hold target). The
