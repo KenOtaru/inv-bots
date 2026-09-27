@@ -208,7 +208,7 @@ const CONFIG = Object.freeze({
   //   • its calibrated evLowerPerTick is <= evLowerGateMax (e.g. -1.4547%), AND
   //   • its calibrated single-tick breachCount is >= breachMinCount (need a
   //     large enough sample of barrier hits to trust the survival estimate).
-  stayWindowN    : 3,     //6 N most-current values to check
+  stayWindowN    : 5,     //6 N most-current values to check
   stayMaxValue   : 50,    //20 every one of those N must be < this
   stayCurrentMax : 2,   //2 the most-current value must be < this
   stayStaleMs    : 24000000, // stays older than this are ignored
@@ -260,10 +260,10 @@ const CONFIG = Object.freeze({
   reconnect: { initialDelayMs: 1000, maxDelayMs: 60000, backoffFactor: 2, jitterMs: 750 },
 
   // ── Logging / state ──
-  logFile   : envStr('LOG_FILE', 'accuFable5a_06.log'),
-  logLevel  : envStr('LOG_LEVEL', 'INFO'),
-  stateFile : envStr('STATE_FILE', 'accuFable5a-state_06.json'),
-  edgeFile  : envStr('EDGE_FILE', 'accuFable5a-edge_06.json'),
+  logFile   : 'accuFable5a_01.log',
+  logLevel  : 'INFO',
+  stateFile : 'accuFable5a-state_001.json',
+  edgeFile  : 'accuFable5a-edge_001.json',
 });
 
 // ═══════════════════════════════════════════════════════════════════════
