@@ -1979,7 +1979,7 @@ const bot = new EnhancedDerivTradingBot('pat_9407fd80466311ce13f2d2b5e884d95f650
     multiplier: 21,
     multiplier2: 2,
     recoveryWinNum: 100,
-    maxConsecutiveLosses: 10,
+    maxConsecutiveLosses: 3,
     stopLoss: 127,
     takeProfit: 2500,
     growthRate: 0.05,
