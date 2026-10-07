@@ -108,7 +108,7 @@ class RestClient {
 // ══════════════════════════════════════════════════════════════════════════════
 // STATE PERSISTENCE MANAGER
 // ══════════════════════════════════════════════════════════════════════════════
-const STATE_FILE = path.join(__dirname, 'accumBC2n_15_state.json');
+const STATE_FILE = path.join(__dirname, 'accumBC2n_01_state.json');
 const STATE_SAVE_INTERVAL = 5000;
 
 class StatePersistence {
@@ -236,7 +236,9 @@ class EnhancedDerivTradingBot {
             takeProfitMultiplier2: config.takeProfitMultiplier2 || 0.20,
             filterNum: config.filterNum || 5,
             scanTimer: config.scanTimer || 60000,
-            STAYED_IN_THRESHOLD: config.STAYED_IN_THRESHOLD,
+            STAYED_IN_THRESHOLD: config.STAYED_IN_THRESHOLD || 2200,
+            STAYED_IN_THRESHOLD2: config.STAYED_IN_THRESHOLD2 || 160,
+            STAYED_IN_THRESHOLD2FILTER: config.STAYED_IN_THRESHOLD2FILTER || 6,
 
             // ✅ NEW: StayedIn trend filter settings
             enableTrendFilter: config.enableTrendFilter !== false, // default true
@@ -257,8 +259,8 @@ class EnhancedDerivTradingBot {
             analysisInterval: 1,
 
             // Telegram
-            telegramToken: '8218636914:AAGvaKFh8MT769-_9eOEiU4XKufL0aHRhZ4',
-            telegramChatId: '752497117',
+            telegramToken: config.telegramToken || null,
+            telegramChatId: config.telegramChatId || null,
         };
 
         // ── Trading state (original logic preserved) ─────────────────────────
@@ -389,14 +391,14 @@ class EnhancedDerivTradingBot {
         const totalStayedInArray = this.calculateTotalStayedIn(stayedInArray);
 
         // Log the calculation for debugging
-        console.log(`   📊 ${asset} | Total StayedIn Sum: ${stayedInArray[99]} (${totalStayedInArray}/${maxTotalStayedIn})`);
+        // console.log(`   📊 ${asset} Total StayedIn: ${stayedInArray[0]},${stayedInArray[1]},${stayedInArray[2]},${stayedInArray[3]},${stayedInArray[4]},${stayedInArray[5]},${stayedInArray[6]},${stayedInArray[7]},${stayedInArray[8]},${stayedInArray[9]}, (${totalStayedInArray} / ${maxTotalStayedIn})`);
         this.totalStayedInArray = totalStayedInArray;
         this.maxTotalStayedIn = maxTotalStayedIn;
 
         // Check individual thresholds for recent values
         const recentThresholds = (
-            // stayedInArray[99] >= stayedInArray[98] && stayedInArray[99] <= (stayedInArray[98] + 1) &&
-            // stayedInArray[99] <= 10 &&
+            stayedInArray[99] >= stayedInArray[98] && stayedInArray[99] <= (stayedInArray[98] + 1) &&
+            stayedInArray[99] <= 10 &&
             stayedInArray[98] > stayedInArray[97]  
             &&
             stayedInArray[97] > stayedInArray[96] 
@@ -413,13 +415,13 @@ class EnhancedDerivTradingBot {
         );
 
         // Check if total sum is within acceptable range
-        const totalWithinRange = totalStayedInArray > maxTotalStayedIn;
+        const totalWithinRange = totalStayedInArray < maxTotalStayedIn;
 
         // Check if we have consecutive losses (recovery mode)
         const inRecoveryMode = consecutiveLosses > 0;
 
         // Return true if: (recent thresholds AND total within range) OR in recovery mode
-        return (recentThresholds && totalWithinRange);
+        return (totalWithinRange);
     }
 
     checkTradeCondition2(stayedInArray, consecutiveLosses, maxTotalStayedIn, asset) {
@@ -427,18 +429,14 @@ class EnhancedDerivTradingBot {
         const totalStayedInArray = this.calculateTotalStayedIn(stayedInArray);
 
         // Log the calculation for debugging
-        // console.log(`   📊 ${asset} Total StayedIn2 Sum: ${totalStayedInArray} (Max: ${maxTotalStayedIn})`);
+        console.log(`   📊 ${asset} Total StayedIn2: ${stayedInArray[0]},${stayedInArray[1]},${stayedInArray[2]},${stayedInArray[3]},${stayedInArray[4]},${stayedInArray[5]},${stayedInArray[6]},${stayedInArray[7]},${stayedInArray[8]},${stayedInArray[9]} (${totalStayedInArray} / ${maxTotalStayedIn}) | (${this.totalStayedInArray} / ${this.maxTotalStayedIn})`);
         this.totalStayedInArray2 = totalStayedInArray;
         this.maxTotalStayedIn2 = maxTotalStayedIn;
 
         // Check individual thresholds for recent values
         const recentThresholds = (
-           stayedInArray[5] < 10
-           && stayedInArray[4] < 10
-        );
-
-        const recentThreshold2s = (
-            stayedInArray[5] < 10
+           stayedInArray[9] < 2
+        //    && stayedInArray[8] < 5
         );
 
         // Check if total sum is within acceptable range
@@ -450,7 +448,7 @@ class EnhancedDerivTradingBot {
         // Return true if: (recent thresholds AND total within range) OR in recovery mode
         // return inRecoveryMode ? (recentThreshold2s) : (recentThresholds);
         //  return this.consecutiveLosses > 0 ? (recentThreshold2s) : (recentThresholds && totalWithinRange);
-        return (totalWithinRange);
+        return (recentThresholds && totalWithinRange);
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -546,7 +544,7 @@ class EnhancedDerivTradingBot {
         const wasActive = this.activeAssets.has(asset);
         const wasPending = this.pendingAssets.has(asset);
 
-        if (totalStayedIn > this.config.STAYED_IN_THRESHOLD) {
+        if (totalStayedIn < this.config.STAYED_IN_THRESHOLD) {
             // Asset is ready for trading
             if (!wasActive) {
                 this.activeAssets.add(asset);
@@ -1213,9 +1211,12 @@ class EnhancedDerivTradingBot {
         // Belt-and-suspenders — never send a proposal for a suspended asset
         if (!this.isAssetAllowed(asset)) return;
 
-        this.takeProfitAmount = this.consecutiveLosses < 1
-            ? this.currentStake * this.config.takeProfitMultiplier
-            : this.currentStake * this.config.takeProfitMultiplier2;
+        // this.takeProfitAmount = this.consecutiveLosses < 1
+        //     ? this.currentStake * this.config.takeProfitMultiplier
+        //     : this.currentStake * this.config.takeProfitMultiplier2;
+
+        this.takeProfitAmount = this.currentStake * this.config.takeProfitMultiplier;
+            
 
         const proposal = {
             proposal: 1,
@@ -1274,6 +1275,8 @@ class EnhancedDerivTradingBot {
         if (passthrough?.action === 'get_final_stayed_in') {
             console.log(`✅ Final stayedInArray received for ${asset}: [${stayedInArray.slice(-6).join('|')}]`);
 
+            this.finalStayedInArray = stayedInArray;
+
             if (!this.assetStayedInArrays) this.assetStayedInArrays = {};
             this.assetStayedInArrays[asset] = stayedInArray;
             this.stayedInArray = stayedInArray;
@@ -1300,7 +1303,7 @@ class EnhancedDerivTradingBot {
 
         // ── Regular proposal handling (for new trades) ──────────────────────────
         this.stayedInArray = stayedInArray;
-        const stayedInArray2 = stayedInArray.slice(-6);
+        const stayedInArray2 = stayedInArray.slice(-this.config.STAYED_IN_THRESHOLD2FILTER);
 
         if (!this.assetStayedInArrays) this.assetStayedInArrays = {};
         this.assetStayedInArrays[asset] = stayedInArray;
@@ -1337,7 +1340,7 @@ class EnhancedDerivTradingBot {
             .map(Number);
 
         const condition  = this.checkTradeCondition(stayedInArray, this.consecutiveLosses, this.config.STAYED_IN_THRESHOLD, asset);
-        const condition2 = this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, 160, asset);
+        const condition2 = this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, this.config.STAYED_IN_THRESHOLD2, asset);
 
         // ✅ TREND-FIX: Only enter when the asset's total stayedInArray is
         // FRESHLY trending upward. This applies to BOTH the normal entry
@@ -1348,15 +1351,18 @@ class EnhancedDerivTradingBot {
         const entrySignal = condition;
         const trendingUp = this.config.enableTrendFilter ? this.isStayedInTrendingUp(asset) : true;
         const trendDirection = this.getStayedInTrendDirection(asset);
+        const tradeWithDirection = trendDirection === '📈 up';
 
         if (!trendingUp) {
             console.log(`   ⏳ ${asset}: entry conditions met but stayedIn trend is ${trendDirection} — waiting for a FRESH upward trend before entering`);
         }
 
-        if (trendingUp) {
+        if (condition && condition2) {
             console.log(`   Entry condition: ✅ MET | Trend: ${trendDirection}`);
 
             this.tradedDigitArray.push(this.stayedInArray[99]);
+            this.stayedInArray2 = this.stayedInArray;
+
             this.filteredArray = appearedOnceArray;
 
             console.log(`   Traded Digit Array: [${this.tradedDigitArray.join(', ')}]`);
@@ -1409,7 +1415,7 @@ class EnhancedDerivTradingBot {
         this.sendTelegramMessage(
             `🚀 <b>TRADE OPENED (Trend Filtered)</b>\n\n` +
             `Asset: <b>${asset}</b>\n` +
-            `stayedInArray: <b>[${this.stayedInArray[99]}|${this.stayedInArray[98]}|${this.stayedInArray[97]}|${this.stayedInArray[96]}|${this.stayedInArray[95]}|${this.stayedInArray[94]}]</b>\n` +
+            `stayedInArray: <b>[${this.stayedInArray2.slice(-6).join('|')}]</b>\n` +
             `totalStayedInArray: ${this.totalStayedInArray}/${this.maxTotalStayedIn} (${this.totalStayedInArray2}/${this.maxTotalStayedIn2})\n` +
             `StayedIn Trend: ${trendDirection}\n` +
             `Stake: $${trade.stake.toFixed(2)}\n` +
@@ -1722,7 +1728,7 @@ class EnhancedDerivTradingBot {
         const profit = parseFloat(contract.profit);
 
         // Get the final stayedInArray for this asset (updated continuously via proposal stream)
-        const finalStayedInArray = this.assetStayedInArrays?.[asset] || [];
+        const finalStayedInArray = this.finalStayedInArray //this.assetStayedInArrays?.[asset] || [];
 
         // Unsubscribe from contract
         if (this.contractSubscriptions[asset]) {
@@ -1733,7 +1739,7 @@ class EnhancedDerivTradingBot {
         console.log(`\n${'═'.repeat(55)}`);
         console.log(`  ${won ? '✅ WIN' : '❌ LOSS'}: ${asset}`);
         console.log(`  Ticks: ${contract.tick_count || 0} | P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(3)}`);
-        console.log(`  Final StayedIn: [${finalStayedInArray[99]}|${finalStayedInArray[98]}|${finalStayedInArray[97]}|${finalStayedInArray[96]}|${finalStayedInArray[95]}|${finalStayedInArray[94]}]`);
+        console.log(`  Final StayedIn: [${this.finalStayedInArray.slice(-6).join('|')}]`);
         console.log(`${'═'.repeat(55)}`);
 
         // Update stats
@@ -1804,7 +1810,7 @@ class EnhancedDerivTradingBot {
             `${won ? '✅ WON' : '❌ LOSS'}\n` +
             `Asset: <b>${asset}</b>\n` +
             `Tick Passed: <b>${this.tickPassed}</b>\n` +
-            `Final stayedInArray: [${finalStayedInArray[99]}|${finalStayedInArray[98]}|${finalStayedInArray[97]}|${finalStayedInArray[96]}|${finalStayedInArray[95]}|${finalStayedInArray[94]}]\n` +
+            `Final stayedInArray: [${this.finalStayedInArray.slice(-6).join('|')}]\n` +
             `P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(3)}\n` +
             `Consecutive Losses: ${this.consecutiveLosses}\n` +
             `Trades: ${this.totalTrades} (${this.totalWins}W/${this.totalLosses}L)\n` +
@@ -1947,7 +1953,7 @@ class EnhancedDerivTradingBot {
         console.log('═══════════════════════════════════════════════════════════\n');
 
         this.connect();
-        this.checkTimeForDisconnectReconnect();
+        // this.checkTimeForDisconnectReconnect();
         this.startTelegramTimer();
         StatePersistence.startAutoSave(this);
     }
@@ -1965,38 +1971,40 @@ class EnhancedDerivTradingBot {
 // https://app.deriv.com/account/api-token and register an app at
 // https://developers.deriv.com/.
 // ─────────────────────────────────────────────────────────────────────────
-const bot = new EnhancedDerivTradingBot('0P94g4WdSrSrzir', {
-    appId: '1089',           // override with your registered Deriv app_id
+const bot = new EnhancedDerivTradingBot('pat_9407fd80466311ce13f2d2b5e884d95f6507f24a5dcb8ec853d775022c1591c7', {
+    appId: '33uslPtthXBEkQOdfKfoY',           // override with your registered Deriv app_id
     accountType: 'demo',     // 'demo' | 'real' (PAT mode only)
     initialStake: 1,
-    initialStake2: 25,
-    multiplier: 1,
+    initialStake2: 21,
+    multiplier: 21,
     multiplier2: 2,
     recoveryWinNum: 100,
     maxConsecutiveLosses: 10,
     stopLoss: 127,
     takeProfit: 2500,
-    growthRate: 0.04,
-    takeProfitMultiplier: 0.12, //25% of Stake Amount
-    takeProfitMultiplier2: 0.12, //15% of Stake Amount
-    filterNum: 4,
-    STAYED_IN_THRESHOLD: 2200, // Threshold for asset filtering
+    growthRate: 0.05,
+    takeProfitMultiplier: 0.01, //0.12 25% of Stake Amount
+    takeProfitMultiplier2: 0.01, //15% of Stake Amount
+    filterNum: 7,
+    STAYED_IN_THRESHOLD: 3660, //2200 Threshold for asset filtering
+    STAYED_IN_THRESHOLD2: 200, //160 Threshold2 for asset filtering
+    STAYED_IN_THRESHOLD2FILTER: 10, //6 Threshold2 for asset filtering Total StayedInArray from Deriv API is 100, so we can filter the last 10 digits for more accurate analysis.
     scanTimer: 60000, //Set Timer for Bot to Re-scan for Assets that are ready for Trade execution.
 
     // ── StayedIn trend filter (NEW) ──────────────────────────────────────────
-    enableTrendFilter: true,  // Only trade when stayedInArray sum is freshly trending upward
+    enableTrendFilter: false,  // Only trade when stayedInArray sum is freshly trending upward
     trendSampleSize: 10,       // How many recent stayedIn samples to retain per asset
     trendConfirmCount: 2,     // Consecutive upward steps required to confirm a fresh uptrend
     trendMinDelta: 1,         // Minimum increase per step to count as "up" (raise to filter noise)
     trendMaxAgeMs: 12000000,    //120000 Ignore trend data older than this (stale safeguard)
 
     assets: [
-        'BOOM50','BOOM150N', 'BOOM300N', 'BOOM500', 'BOOM600', 'BOOM900', 'BOOM1000',
-        'CRASH50', 'CRASH150N', 'CRASH300N', 'CRASH500', 'CRASH600', 'CRASH900', 'CRASH1000',
-        // 'R_10', 'R_25', 'R_50', 'R_75', 'R_100',
+        // 'BOOM50','BOOM150N', 'BOOM300N', 'BOOM500', 'BOOM600', 'BOOM900', 'BOOM1000',
+        // 'CRASH50', 'CRASH150N', 'CRASH300N', 'CRASH500', 'CRASH600', 'CRASH900', 'CRASH1000',
+        'R_10', 'R_25', 'R_50', 'R_75', 'R_100',
         // '1HZ10V', '1HZ25V', '1HZ75V', '1HZ100V',
     ],
-    telegramToken: '8106601008:AAEMyCma6mvPYIHEvw3RHQX2tkD5-wUe1o0',
+    telegramToken: '8240090224:AAEvCwqEujSdfYjs8jY7tMx1vCI995T1-Oc',
     telegramChatId: '752497117',
 });
 
