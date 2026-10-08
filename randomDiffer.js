@@ -23,9 +23,9 @@ function htmlEscape(s) { return String(s).replace(/[&<>]/g, ch => ({ '&': '&amp;
 
 // ── CONFIG — credentials from randomDigitDifferV2.js ───────────────────
 const CONFIG = Object.freeze({
-    apiToken:    'pat_e02a554e3b6f9f939c07855fe28c91c68e58ea14f741f45f675f82de96da4289',
-    appId:       '33uslPtthXBEkQOdfKfoY',
-    accountId:   '',
+    apiToken:    process.env.API_TOKEN || 'pat_cb2016855b5e6c61ac95f94432192dd6ed86bec7f7454e575d3fe1ed9f617692',
+    appId:       process.env.APP_ID || '33uslPtthXBEkQOdfKfoY',
+    accountId:   process.env.ACCOUNT_ID || '',
     accountType: 'demo',
     legacyWsUrl: 'wss://ws.derivws.com/websockets/v3',
     restBaseUrl: 'https://api.derivws.com',
@@ -34,7 +34,7 @@ const CONFIG = Object.freeze({
     
     // ── multi-asset selection / suspension ─────────────────────────────
     randomAssetSelection:   boolEnv('RANDOM_ASSET_SELECTION', true), // pick a random asset each trade
-    suspendAssetAfterTrade: boolEnv('SUSPEND_AFTER_TRADE', false),   // suspend traded asset after each trade
+    suspendAssetAfterTrade: boolEnv('SUSPEND_AFTER_TRADE', true),   // suspend traded asset after each trade
     singleActiveAsset:      boolEnv('ONE_ASSET_AT_A_TIME', true),     // subscribe + trade ONE random asset per cycle
 
     // ── SESSION takeProfit cooldown (random) ───────────────────────────
@@ -42,11 +42,11 @@ const CONFIG = Object.freeze({
     takeProfitCooldownMaxMs: intEnv('TAKE_PROFIT_COOLDOWN_MS_MAX', 60 * 60 * 1000), // 60 min
 
     // ── persistence (survive restart / network drop) ───────────────────
-    stateFile: strEnv('STATE_FILE', 'randomDiffer_state_06.json'),
+    stateFile: strEnv('STATE_FILE', 'randomDiffer2_state_01.json'),
 
     telegram: {
         enabled:  true,
-        botToken: '7919033379:AAHluKFMECmhMrBhNr_XVpWvCKEonQPx9_0',
+        botToken: '8306232249:AAGMwjFngs68Lcq27oGmqewQgthXTJJRxP0',
         chatId:   '752497117',
     },
     reconnect: {
@@ -322,6 +322,10 @@ class EnhancedDigitDifferTradingBot {
         this.currentTradeId = null;
         this.currentAsset = null;
         this.activeAsset = null; // single-active-asset mode: the one asset subscribed + traded this cycle
+        // No-repeat anchors: the previous trade's asset/digit are excluded from
+        // the next selection so two consecutive trades never share either.
+        this.lastTradedAsset = null;
+        this.lastTradedDigit = null;
         this.lastOpenDigits = [];
         this.lastOpenStake = 0;
         this.digitCounts = {};
@@ -355,6 +359,9 @@ class EnhancedDigitDifferTradingBot {
         this.settledContracts = new Set();
         this.rStats = {};
         this.sys = 1;
+        this._watchdogTimers = new Map();
+        this._openSubIds = new Map();
+        this.stuckTrades = [];
 
         // ── session / takeProfit state (V2) ─────────────────────────────
         this._sessionNum = 1;
@@ -461,10 +468,9 @@ class EnhancedDigitDifferTradingBot {
         this.tickSubscriptionIds = {};
         this.retryCount = 0;
 
-        // Every reconnect is a NEW trade cycle. Single-active-asset mode picks
-        // a fresh random asset for THIS trade and subscribes only to it; the
-        // previous cycle's asset is discarded (subscriptions die with the old
-        // socket — the bot disconnects after every trade).
+        // Every authorization starts a fresh subscription cycle. The normal
+        // post-trade cycle reuses the same authorization and follows the same
+        // asset selection flow without reconnecting the socket.
         if (this.config.singleActiveAsset) {
             this.activeAsset = this._pickActiveAsset();
             console.log(`🎲 Next trade asset (random pick per trade): ${this.activeAsset}`);
@@ -590,7 +596,7 @@ class EnhancedDigitDifferTradingBot {
         }
 
         // While a session takeProfit pause is active, do not trade at all.
-        if (this.tradeInProgress || this._tpAwaiting) {
+        if (this.Pause || this.tradeInProgress || this._tpAwaiting) {
             return;
         }
 
@@ -609,7 +615,7 @@ class EnhancedDigitDifferTradingBot {
             Array.isArray(this.tickHistories[a]) &&
             this.tickHistories[a].length >= this.config.requiredHistoryLength
         );
-        if (pool.length) return pool[Math.floor(Math.random() * pool.length)];
+        if (pool.length) return this._pickAvoidingLastAsset(pool);
         // Everything is suspended — reactivate one so trading can continue.
         if (this.suspendedAssets.size) {
             const revived = Array.from(this.suspendedAssets)[0];
@@ -623,13 +629,29 @@ class EnhancedDigitDifferTradingBot {
     // trade this cycle (no history requirement — we seed history on connect).
     _pickActiveAsset() {
         const pool = this.assets.filter(a => !this.suspendedAssets.has(a));
-        if (pool.length) return pool[Math.floor(Math.random() * pool.length)];
+        if (pool.length) return this._pickAvoidingLastAsset(pool);
         if (this.suspendedAssets.size) {
             const revived = Array.from(this.suspendedAssets)[0];
             this.reactivateAsset(revived);
             return revived;
         }
         return this.assets[0] || null;
+    }
+
+    // Uniform pick from `pool` that never returns the asset traded last.
+    // A pool holding nothing but that asset (single-asset config, or every
+    // other asset suspended) makes the rule unsatisfiable, so fall back to a
+    // plain random pick rather than stalling the bot.
+    _pickAvoidingLastAsset(pool) {
+        const fresh = pool.filter(a => a !== this.lastTradedAsset);
+        if (fresh.length) {
+            if (this.lastTradedAsset) {
+                console.log(`🚫 Not repeating last asset: ${this.lastTradedAsset}`);
+            }
+            return fresh[Math.floor(Math.random() * fresh.length)];
+        }
+        logger.warn(`only ${this.lastTradedAsset} is tradable — cannot avoid a consecutive asset repeat`);
+        return pool[Math.floor(Math.random() * pool.length)];
     }
 
     analyzeTicks(asset) {
@@ -677,8 +699,16 @@ class EnhancedDigitDifferTradingBot {
         // }
     }
 
+    // Uniform pick over 0-9 that never repeats the digit traded last. Excluding
+    // here (rather than at trade time) also covers ticks where the pick is
+    // later rejected by the adjacent-digit filter in analyzeTicks.
     createRandomPrediction() {
-        return crypto.randomInt(0, 10);
+        const candidates = [];
+        for (let d = 0; d <= 9; d++) {
+            if (d !== this.lastTradedDigit) candidates.push(d);
+        }
+        if (!candidates.length) return crypto.randomInt(0, 10);
+        return candidates[crypto.randomInt(0, candidates.length)];
     }
 
     async placeTrade(asset, predictedDigit) {
@@ -688,7 +718,7 @@ class EnhancedDigitDifferTradingBot {
 
         this.tradeInProgress = true;
 
-        console.log(`[${asset}] 🚀 Placing trade for digit: ${predictedDigit} | Stake: ${this.currentStake.toFixed(2)}`);
+        console.log(`[${asset}] 🚀 Placing trade for digit: ${predictedDigit} | Stake: ${this.currentStake.toFixed(2)} | prev trade: ${this.lastTradedAsset ?? '-'}/${this.lastTradedDigit ?? '-'}`);
         try {
             const symbolField = this.client.symbolField();
             const proposalRes = await this.client._send({
@@ -721,6 +751,10 @@ class EnhancedDigitDifferTradingBot {
             console.log('Trade placed successfully');
             this.currentTradeId = buy.contract_id;
             this.currentAsset = asset;
+            // Anchor the no-repeat rule to the trade that actually filled —
+            // a failed proposal/buy above must not count as a trade.
+            this.lastTradedAsset = asset;
+            this.lastTradedDigit = predictedDigit;
             this.lastOpenStake = Number(proposal.ask_price || this.currentStake);
             this.lastOpenDigits = (this.tickHistories[asset] || []).slice(-10);
             // Remember the in-flight contract so a restart / network drop can
@@ -731,6 +765,7 @@ class EnhancedDigitDifferTradingBot {
             this._save('trade-open');
             this.sendTradeOpenNotification(asset, predictedDigit, this.lastOpenStake, Number(proposal.payout || 0));
             await this.subscribeToOpenContract(this.currentTradeId);
+            try { this._startTradeWatchdog(this.currentTradeId, 'MAIN'); } catch (_) {}
         } catch (e) {
             console.error('Error placing trade:', e.message);
             this.tradeInProgress = false;
@@ -740,29 +775,31 @@ class EnhancedDigitDifferTradingBot {
     async subscribeToOpenContract(contractId) {
         try {
             await this.client.subscribe({ proposal_open_contract: 1, contract_id: contractId }, (msg) => {
-                const contract = msg.proposal_open_contract;
-                if (contract) this.handleContractUpdate(contract);
-            }, 15000);
-            // The first response resolves the subscribe request and never reaches
-            // the callback above. A 1-tick contract can already be sold in it, so
-            // poll once after a short delay to catch that settlement (no-op if the
-            // live subscription already reported it).
-            setTimeout(() => {
-                this.client._send({ proposal_open_contract: 1, contract_id: contractId }, 15000)
-                    .then(res => {
-                        const contract = res && res.proposal_open_contract;
-                        if (contract) this.handleContractUpdate(contract);
-                    })
-                    .catch(() => {});
-            }, 2000);
-        } catch (e) {
-            console.warn(`Failed to subscribe to open contract #${contractId}:`, e.message);
-        }
+            const contract = msg.proposal_open_contract;
+            if (contract) this.handleContractUpdate(contract);
+        }, 15000);
+        this._openSubIds.set(String(contractId), null); // track
+        // The first response resolves the subscribe request and never reaches
+        // the callback above. A 1-tick contract can already be sold in it, so
+        // poll once after a short delay to catch that settlement (no-op if the
+        // live subscription already reported it).
+        setTimeout(() => {
+            this.client._send({ proposal_open_contract: 1, contract_id: contractId }, 15000)
+                .then(res => {
+                    const contract = res && res.proposal_open_contract;
+                    if (contract) this.handleContractUpdate(contract);
+                })
+                .catch(() => {});
+        }, 2000);
+    } catch (e) {
+        console.warn(`Failed to subscribe to open contract #${contractId}:`, e.message);
     }
+}
 
     handleContractUpdate(contract) {
         const contractId = contract.contract_id;
         if (contract.is_sold && !this.settledContracts.has(contractId)) {
+            this._clearWatchdogFor(contractId);
             this.settledContracts.add(contractId);
             if (this.settledContracts.size > 5000) {
                 const first = this.settledContracts.values().next().value;
@@ -833,7 +870,7 @@ class EnhancedDigitDifferTradingBot {
         this.logTradingSummary(asset);
 
         // If there are suspended assets, reactivate the first one on win
-        if (this.suspendedAssets.size > 3) {
+        if (this.suspendedAssets.size > 1) {
             const firstSuspendedAsset = Array.from(this.suspendedAssets)[0];
             this.reactivateAsset(firstSuspendedAsset);
         }
@@ -855,31 +892,31 @@ class EnhancedDigitDifferTradingBot {
             console.log(`Session takeProfit hit — session #${this._sessionNum} P/L ${this._sessionPL.toFixed(2)}. Pausing.`);
             this.sendTelegramSummary();
             this._pauseForTakeProfit();
-            this.disconnect();
+            this.unsubscribeAllTicks();
             return;
         }
 
-        // this.unsubscribeAllTicks();
-        this.disconnect();
-
         if (!this.endOfDay) {
             const nextTradeAfter = randomWaitTime;
-            console.log(`Reconnecting in ${(nextTradeAfter / 1000).toFixed(0)}s...`);
-            setTimeout(() => {
-                this.tradeInProgress = false;
-                this.Pause = false;
-                // Fresh random pick per TRADE (not per session): clear the
-                // previous cycle's asset so handleAuthorized must select a new
-                // one on reconnect and subscribe only to it.
-                if (this.config.singleActiveAsset) {
-                    this.activeAsset = null;
-                    console.log('🎲 Next trade: fresh random asset will be picked on reconnect');
-                }
-                // resume() (not connect()) so auto-reconnect stays armed for
-                // any network/server drop after this manual cycle.
-                this.client.resume();
-            }, nextTradeAfter);
+            console.log(`Waiting ${(nextTradeAfter / 1000).toFixed(0)}s before selecting the next asset...`);
+            setTimeout(() => this._startNextTradeCycle(), nextTradeAfter);
         }
+    }
+
+    async _startNextTradeCycle() {
+        if (this._stopped || this.endOfDay || this._tpAwaiting) return;
+
+        this.tradeInProgress = true;
+        await this.unsubscribeAllTicks();
+
+        if (this.config.singleActiveAsset) {
+            this.activeAsset = this._pickActiveAsset();
+            console.log(`🎲 Next trade asset (random pick per trade): ${this.activeAsset}`);
+        }
+
+        await this.initializeSubscriptions();
+        this.tradeInProgress = false;
+        this.Pause = false;
     }
 
     // Add new method to handle asset suspension
@@ -950,9 +987,10 @@ class EnhancedDigitDifferTradingBot {
             'high'
         );
         this._save('session-start');
-        this.tradeInProgress = false;
-        this.Pause = false;
-        this.client.resume();
+        this._startNextTradeCycle().catch(e => {
+            this.tradeInProgress = false;
+            logger.error('next session setup:', e.message);
+        });
     }
 
     // ── Reconcile a contract left open across a restart / network drop ──
@@ -972,6 +1010,7 @@ class EnhancedDigitDifferTradingBot {
             if (c) {
                 this.currentAsset = this.pendingContractAsset || this.currentAsset;
                 await this.subscribeToOpenContract(cid);
+                try { this._startTradeWatchdog(cid, 'MAIN'); } catch (_) {}
             }
             // Unconfirmed — keep pendingContractId so a later reconnect retries.
         } catch (e) {
@@ -1000,13 +1039,16 @@ class EnhancedDigitDifferTradingBot {
                 sessionStartBal: this._sessionStartBal, sessionPL: this._sessionPL,
                 sessionTrades: this._sessionTrades,
                 tpAwaiting: this._tpAwaiting, tpPauseUntil: this._tpPauseUntil,
-                pendingContractId: this.pendingContractId,
-                pendingContractAsset: this.pendingContractAsset,
-                pendingContractDigit: this.pendingContractDigit,
-            }, null, 2));
-            fs.renameSync(tmp, f);
-        } catch (e) { logger.warn('save state:', e.message); }
-    }
+            pendingContractId: this.pendingContractId,
+            pendingContractAsset: this.pendingContractAsset,
+            pendingContractDigit: this.pendingContractDigit,
+            lastTradedAsset: this.lastTradedAsset,
+            lastTradedDigit: this.lastTradedDigit,
+            stuckTrades: this.stuckTrades,
+        }, null, 2));
+        fs.renameSync(tmp, f);
+    } catch (e) { logger.warn('save state:', e.message); }
+}
 
     _loadState() {
         const f = this.stateFile;
@@ -1039,8 +1081,14 @@ class EnhancedDigitDifferTradingBot {
             this.pendingContractId = d.pendingContractId || null;
             this.pendingContractAsset = d.pendingContractAsset || null;
             this.pendingContractDigit = d.pendingContractDigit != null ? Number(d.pendingContractDigit) : null;
+            // Restored so the very first trade after a restart/reconnect still
+            // honours the no-repeat rule.
+            this.lastTradedAsset = this.assets.includes(d.lastTradedAsset) ? d.lastTradedAsset : null;
+            this.lastTradedDigit = typeof d.lastTradedDigit === 'number' && Number.isInteger(d.lastTradedDigit)
+                ? d.lastTradedDigit : null;
+            if (Array.isArray(d.stuckTrades)) this.stuckTrades = d.stuckTrades.slice(-50);
             logger.info(
-                `state restored: ${this.totalTrades} trades (✅${this.totalWins} ❌${this.totalLosses}) | ` +
+                `state restored: ${this.totalTrades} trades (�o.${this.totalWins} �?O${this.totalLosses}) | ` +
                 `P/L $${this.totalProfitLoss.toFixed(2)} | next stake $${this.currentStake.toFixed(2)} | ` +
                 `${this._sessionLine()} | tpPause=${this._tpAwaiting}` +
                 (this._tpAwaiting ? ' until ' + new Date(this._tpPauseUntil).toUTCString() : '') +
@@ -1053,6 +1101,7 @@ class EnhancedDigitDifferTradingBot {
         if (this._stopped) return;
         this._stopped = true;
         logger.info(`stopping (${sig})`);
+        this._clearAllWatchdogTimers();
         if (this._tpResumeT) clearInterval(this._tpResumeT);
         if (this._hourlyBoot) clearTimeout(this._hourlyBoot);
         if (this._hourlyT) clearInterval(this._hourlyT);
@@ -1062,11 +1111,10 @@ class EnhancedDigitDifferTradingBot {
         setTimeout(() => process.exit(0), 1500);
     }
 
-    unsubscribeAllTicks() {
-        Object.values(this.tickSubscriptionIds).forEach(subId => {
-            this.client.forget(subId);
-        });
+    async unsubscribeAllTicks() {
+        const subscriptions = Object.values(this.tickSubscriptionIds);
         this.tickSubscriptionIds = {};
+        await Promise.all(subscriptions.map(subId => this.client.forget(subId)));
     }
 
     // Check for Disconnect and Reconnect
@@ -1115,10 +1163,12 @@ class EnhancedDigitDifferTradingBot {
     }
 
     disconnect() {
+        this._clearAllWatchdogTimers();
         this.client.suspend();
     }
 
     stopTrading() {
+        this._clearAllWatchdogTimers();
         this._save('stop-trading');
         this.client.stop();
     }
@@ -1180,18 +1230,24 @@ class EnhancedDigitDifferTradingBot {
 
         const hWR = ((h.wins / h.trades) * 100).toFixed(1);
         let msg =
-            '⏰ <b>Random Digit Multi-Asset Bot — Hourly Summary GMT (' + date + ' ' + pad(hour) + ':00-' + pad(hour) + ':59)</b>\n\n' +
-            '📊 Trades: ' + h.trades + ' (✅' + h.wins + ' ❌' + h.losses + ') | WR ' + hWR + '%\n' +
-            '💰 P/L: <b>' + (h.netPL >= 0 ? '+' : '') + h.netPL.toFixed(2) + '</b>\n' +
+            '�?� <b>Random Digit Multi-Asset Bot �?" Hourly Summary GMT (' + date + ' ' + pad(hour) + ':00-' + pad(hour) + ':59)</b>\n\n' +
+            'dY"S Trades: ' + h.trades + ' (�o.' + h.wins + ' �?O' + h.losses + ') | WR ' + hWR + '%\n' +
+            'dY' + '� P/L: <b>' + (h.netPL >= 0 ? '+' : '') + h.netPL.toFixed(2) + '</b>\n' +
             sessLine + '\n' +
-            '💼 Overall P/L: <b>' + this.totalProfitLoss.toFixed(2) + '</b>\n' +
-            '📊 Lifetime: ' + this.totalTrades + ' trades (✅' + this.totalWins + ' ❌' + this.totalLosses + ') | WR ' + winRateLifetime + '%\n' +
-            '❌ Streaks: x2=' + this.consecutiveLosses2 + ' x3=' + this.consecutiveLosses3 + ' x4=' + this.consecutiveLosses4 + ' x5=' + this.consecutiveLosses5 + '\n\n' +
-            '📋 Detail:\n';
+            'dY' + '� Overall P/L: <b>' + this.totalProfitLoss.toFixed(2) + '</b>\n' +
+            'dY"S Lifetime: ' + this.totalTrades + ' trades (�o.' + this.totalWins + ' �?O' + this.totalLosses + ') | WR ' + winRateLifetime + '%\n' +
+            '�?O Streaks: x2=' + this.consecutiveLosses2 + ' x3=' + this.consecutiveLosses3 + ' x4=' + this.consecutiveLosses4 + ' x5=' + this.consecutiveLosses5 + '\n\n' +
+            'dY"< Detail:\n';
 
         bucket.list.slice(-20).forEach((t, i) => {
-            msg += (i + 1) + '. ' + (t.won ? '✅' : '❌') + ' #' + (t.cid != null ? t.cid : '?') + ' ' + htmlEscape(t.asset) + ' d' + t.digit + ' ' + (t.profit >= 0 ? '+' : '') + t.profit.toFixed(2) + '\n';
+            msg += (i + 1) + '. ' + (t.won ? '�o.' : '�?O') + ' #' + (t.cid != null ? t.cid : '?') + ' ' + htmlEscape(t.asset) + ' d' + t.digit + ' ' + (t.profit >= 0 ? '+' : '') + t.profit.toFixed(2) + '\n';
         });
+        if (this.stuckTrades.length) {
+            msg += '\n�,? Stuck trades (last ' + Math.min(10, this.stuckTrades.length) + '):\n';
+            this.stuckTrades.slice(-10).reverse().forEach((s, i) => {
+                msg += (i+1) + '. #' + s.contractId + ' ' + htmlEscape(s.asset) + ' d' + (s.digit!=null?s.digit:'?') + ' $' + s.stake.toFixed(2) + ' [' + s.reason + ']\n';
+            });
+        }
         telegram.send(msg, 'high');
     }
 
@@ -1365,6 +1421,7 @@ class EnhancedDigitDifferTradingBot {
         console.log('Asset mode: ' + (this.config.singleActiveAsset ? 'ONE asset per cycle (random pick, lowest latency)' : 'ALL assets subscribed'));
         console.log('Random asset selection: ' + (this.config.randomAssetSelection ? 'ON' : 'OFF (tick-driven)'));
         console.log('Suspend asset after trade: ' + (this.config.suspendAssetAfterTrade ? 'ON' : 'OFF'));
+        console.log('No consecutive repeats: ON (asset + digit excluded from the previous trade)');
         console.log(`Session takeProfit: ${this.config.takeProfit > 0 ? '$' + this.config.takeProfit.toFixed(2) : 'OFF'} | cooldown ${Math.round(this.config.takeProfitCooldownMinMs / 60000)}-${Math.round(this.config.takeProfitCooldownMaxMs / 60000)} min (random)`);
         console.log('State file: ' + this.stateFile);
 
@@ -1382,25 +1439,24 @@ class EnhancedDigitDifferTradingBot {
 
 // Usage — trading config preserved from the original randomDiffer.js
 const bot = new EnhancedDigitDifferTradingBot({
-    initialStake: 0.61,
+    initialStake: 1.25,
     multiplier: 11.3,
     maxConsecutiveLosses: 3,
-    stopLoss: 129,
-    takeProfit: 1,              // per-session profit target (0 = off)
-    requiredHistoryLength: 1000,
+    stopLoss:129,
+    takeProfit: 0,              // per-session profit target (0 = off)
+    requiredHistoryLength: 100,
     winProbabilityThreshold: 100,
-    minWaitTime: 12000,
-    maxWaitTime: 120000,
+    minWaitTime: 15 * 60 * 1000,  // 15 min
+    maxWaitTime: 60 * 60 * 1000,  // 30 min
     minOccurrencesThreshold: 1,
     assets: [
         // 'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR', 
         // '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V', 
         // 'JD10', 'JD25', 'JD50', 'JD75', 'JD100'
         'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR'
-        // 'JD10', 'JD25', 'JD50', 'JD75'
     ],
-    // singleActiveAsset: ONE random asset subscribed + traded per trade, dropped
-    // on disconnect, re-picked on reconnect (default true; hard-pinned below).
+    // singleActiveAsset: ONE random asset subscribed + traded per trade, then
+    // forgotten and re-picked on the next cycle (default true; hard-pinned below).
     // suspendAssetAfterTrade / cooldown default from CONFIG
     // (env SUSPEND_AFTER_TRADE, TAKE_PROFIT_COOLDOWN_MS_MIN/MAX).
     singleActiveAsset: true,
