@@ -23,7 +23,7 @@ function htmlEscape(s) { return String(s).replace(/[&<>]/g, ch => ({ '&': '&amp;
 
 // ── CONFIG — credentials from randomDigitDifferV2.js ───────────────────
 const CONFIG = Object.freeze({
-    apiToken:    process.env.API_TOKEN || 'pat_cb2016855b5e6c61ac95f94432192dd6ed86bec7f7454e575d3fe1ed9f617692',
+    apiToken:    process.env.API_TOKEN || 'pat_a4392c86309361a50eca82c1ea872127636b84070f6c45295459ffb83de31360',
     appId:       process.env.APP_ID || '33uslPtthXBEkQOdfKfoY',
     accountId:   process.env.ACCOUNT_ID || '',
     accountType: 'demo',
@@ -359,9 +359,6 @@ class EnhancedDigitDifferTradingBot {
         this.settledContracts = new Set();
         this.rStats = {};
         this.sys = 1;
-        this._watchdogTimers = new Map();
-        this._openSubIds = new Map();
-        this.stuckTrades = [];
 
         // ── session / takeProfit state (V2) ─────────────────────────────
         this._sessionNum = 1;
@@ -765,7 +762,6 @@ class EnhancedDigitDifferTradingBot {
             this._save('trade-open');
             this.sendTradeOpenNotification(asset, predictedDigit, this.lastOpenStake, Number(proposal.payout || 0));
             await this.subscribeToOpenContract(this.currentTradeId);
-            try { this._startTradeWatchdog(this.currentTradeId, 'MAIN'); } catch (_) {}
         } catch (e) {
             console.error('Error placing trade:', e.message);
             this.tradeInProgress = false;
@@ -775,31 +771,29 @@ class EnhancedDigitDifferTradingBot {
     async subscribeToOpenContract(contractId) {
         try {
             await this.client.subscribe({ proposal_open_contract: 1, contract_id: contractId }, (msg) => {
-            const contract = msg.proposal_open_contract;
-            if (contract) this.handleContractUpdate(contract);
-        }, 15000);
-        this._openSubIds.set(String(contractId), null); // track
-        // The first response resolves the subscribe request and never reaches
-        // the callback above. A 1-tick contract can already be sold in it, so
-        // poll once after a short delay to catch that settlement (no-op if the
-        // live subscription already reported it).
-        setTimeout(() => {
-            this.client._send({ proposal_open_contract: 1, contract_id: contractId }, 15000)
-                .then(res => {
-                    const contract = res && res.proposal_open_contract;
-                    if (contract) this.handleContractUpdate(contract);
-                })
-                .catch(() => {});
-        }, 2000);
-    } catch (e) {
-        console.warn(`Failed to subscribe to open contract #${contractId}:`, e.message);
+                const contract = msg.proposal_open_contract;
+                if (contract) this.handleContractUpdate(contract);
+            }, 15000);
+            // The first response resolves the subscribe request and never reaches
+            // the callback above. A 1-tick contract can already be sold in it, so
+            // poll once after a short delay to catch that settlement (no-op if the
+            // live subscription already reported it).
+            setTimeout(() => {
+                this.client._send({ proposal_open_contract: 1, contract_id: contractId }, 15000)
+                    .then(res => {
+                        const contract = res && res.proposal_open_contract;
+                        if (contract) this.handleContractUpdate(contract);
+                    })
+                    .catch(() => {});
+            }, 2000);
+        } catch (e) {
+            console.warn(`Failed to subscribe to open contract #${contractId}:`, e.message);
+        }
     }
-}
 
     handleContractUpdate(contract) {
         const contractId = contract.contract_id;
         if (contract.is_sold && !this.settledContracts.has(contractId)) {
-            this._clearWatchdogFor(contractId);
             this.settledContracts.add(contractId);
             if (this.settledContracts.size > 5000) {
                 const first = this.settledContracts.values().next().value;
@@ -1010,7 +1004,6 @@ class EnhancedDigitDifferTradingBot {
             if (c) {
                 this.currentAsset = this.pendingContractAsset || this.currentAsset;
                 await this.subscribeToOpenContract(cid);
-                try { this._startTradeWatchdog(cid, 'MAIN'); } catch (_) {}
             }
             // Unconfirmed — keep pendingContractId so a later reconnect retries.
         } catch (e) {
@@ -1039,16 +1032,15 @@ class EnhancedDigitDifferTradingBot {
                 sessionStartBal: this._sessionStartBal, sessionPL: this._sessionPL,
                 sessionTrades: this._sessionTrades,
                 tpAwaiting: this._tpAwaiting, tpPauseUntil: this._tpPauseUntil,
-            pendingContractId: this.pendingContractId,
-            pendingContractAsset: this.pendingContractAsset,
-            pendingContractDigit: this.pendingContractDigit,
-            lastTradedAsset: this.lastTradedAsset,
-            lastTradedDigit: this.lastTradedDigit,
-            stuckTrades: this.stuckTrades,
-        }, null, 2));
-        fs.renameSync(tmp, f);
-    } catch (e) { logger.warn('save state:', e.message); }
-}
+                pendingContractId: this.pendingContractId,
+                pendingContractAsset: this.pendingContractAsset,
+                pendingContractDigit: this.pendingContractDigit,
+                lastTradedAsset: this.lastTradedAsset,
+                lastTradedDigit: this.lastTradedDigit,
+            }, null, 2));
+            fs.renameSync(tmp, f);
+        } catch (e) { logger.warn('save state:', e.message); }
+    }
 
     _loadState() {
         const f = this.stateFile;
@@ -1086,9 +1078,8 @@ class EnhancedDigitDifferTradingBot {
             this.lastTradedAsset = this.assets.includes(d.lastTradedAsset) ? d.lastTradedAsset : null;
             this.lastTradedDigit = typeof d.lastTradedDigit === 'number' && Number.isInteger(d.lastTradedDigit)
                 ? d.lastTradedDigit : null;
-            if (Array.isArray(d.stuckTrades)) this.stuckTrades = d.stuckTrades.slice(-50);
             logger.info(
-                `state restored: ${this.totalTrades} trades (�o.${this.totalWins} �?O${this.totalLosses}) | ` +
+                `state restored: ${this.totalTrades} trades (✅${this.totalWins} ❌${this.totalLosses}) | ` +
                 `P/L $${this.totalProfitLoss.toFixed(2)} | next stake $${this.currentStake.toFixed(2)} | ` +
                 `${this._sessionLine()} | tpPause=${this._tpAwaiting}` +
                 (this._tpAwaiting ? ' until ' + new Date(this._tpPauseUntil).toUTCString() : '') +
@@ -1101,7 +1092,6 @@ class EnhancedDigitDifferTradingBot {
         if (this._stopped) return;
         this._stopped = true;
         logger.info(`stopping (${sig})`);
-        this._clearAllWatchdogTimers();
         if (this._tpResumeT) clearInterval(this._tpResumeT);
         if (this._hourlyBoot) clearTimeout(this._hourlyBoot);
         if (this._hourlyT) clearInterval(this._hourlyT);
@@ -1163,12 +1153,10 @@ class EnhancedDigitDifferTradingBot {
     }
 
     disconnect() {
-        this._clearAllWatchdogTimers();
         this.client.suspend();
     }
 
     stopTrading() {
-        this._clearAllWatchdogTimers();
         this._save('stop-trading');
         this.client.stop();
     }
@@ -1230,24 +1218,18 @@ class EnhancedDigitDifferTradingBot {
 
         const hWR = ((h.wins / h.trades) * 100).toFixed(1);
         let msg =
-            '�?� <b>Random Digit Multi-Asset Bot �?" Hourly Summary GMT (' + date + ' ' + pad(hour) + ':00-' + pad(hour) + ':59)</b>\n\n' +
-            'dY"S Trades: ' + h.trades + ' (�o.' + h.wins + ' �?O' + h.losses + ') | WR ' + hWR + '%\n' +
-            'dY' + '� P/L: <b>' + (h.netPL >= 0 ? '+' : '') + h.netPL.toFixed(2) + '</b>\n' +
+            '⏰ <b>Random Digit Multi-Asset Bot — Hourly Summary GMT (' + date + ' ' + pad(hour) + ':00-' + pad(hour) + ':59)</b>\n\n' +
+            '📊 Trades: ' + h.trades + ' (✅' + h.wins + ' ❌' + h.losses + ') | WR ' + hWR + '%\n' +
+            '💰 P/L: <b>' + (h.netPL >= 0 ? '+' : '') + h.netPL.toFixed(2) + '</b>\n' +
             sessLine + '\n' +
-            'dY' + '� Overall P/L: <b>' + this.totalProfitLoss.toFixed(2) + '</b>\n' +
-            'dY"S Lifetime: ' + this.totalTrades + ' trades (�o.' + this.totalWins + ' �?O' + this.totalLosses + ') | WR ' + winRateLifetime + '%\n' +
-            '�?O Streaks: x2=' + this.consecutiveLosses2 + ' x3=' + this.consecutiveLosses3 + ' x4=' + this.consecutiveLosses4 + ' x5=' + this.consecutiveLosses5 + '\n\n' +
-            'dY"< Detail:\n';
+            '💼 Overall P/L: <b>' + this.totalProfitLoss.toFixed(2) + '</b>\n' +
+            '📊 Lifetime: ' + this.totalTrades + ' trades (✅' + this.totalWins + ' ❌' + this.totalLosses + ') | WR ' + winRateLifetime + '%\n' +
+            '❌ Streaks: x2=' + this.consecutiveLosses2 + ' x3=' + this.consecutiveLosses3 + ' x4=' + this.consecutiveLosses4 + ' x5=' + this.consecutiveLosses5 + '\n\n' +
+            '📋 Detail:\n';
 
         bucket.list.slice(-20).forEach((t, i) => {
-            msg += (i + 1) + '. ' + (t.won ? '�o.' : '�?O') + ' #' + (t.cid != null ? t.cid : '?') + ' ' + htmlEscape(t.asset) + ' d' + t.digit + ' ' + (t.profit >= 0 ? '+' : '') + t.profit.toFixed(2) + '\n';
+            msg += (i + 1) + '. ' + (t.won ? '✅' : '❌') + ' #' + (t.cid != null ? t.cid : '?') + ' ' + htmlEscape(t.asset) + ' d' + t.digit + ' ' + (t.profit >= 0 ? '+' : '') + t.profit.toFixed(2) + '\n';
         });
-        if (this.stuckTrades.length) {
-            msg += '\n�,? Stuck trades (last ' + Math.min(10, this.stuckTrades.length) + '):\n';
-            this.stuckTrades.slice(-10).reverse().forEach((s, i) => {
-                msg += (i+1) + '. #' + s.contractId + ' ' + htmlEscape(s.asset) + ' d' + (s.digit!=null?s.digit:'?') + ' $' + s.stake.toFixed(2) + ' [' + s.reason + ']\n';
-            });
-        }
         telegram.send(msg, 'high');
     }
 
