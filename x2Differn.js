@@ -10,6 +10,7 @@ function numEnv(n, d) { const v = process.env[n]; if (v == null || v === '') ret
 function intEnv(n, d) { const v = process.env[n]; if (v == null || v === '') return d; const x = parseInt(v, 10); return Number.isFinite(x) ? x : d; }
 function strEnv(n, d) { const v = process.env[n]; return v == null || v === '' ? d : String(v).trim(); }
 function boolEnv(n, d) { const v = process.env[n]; if (v == null || v === '') return d; return ['1', 'true', 'yes', 'on'].includes(String(v).trim().toLowerCase()); }
+function listEnv(n, d) { const v = process.env[n]; const s = v == null || v === '' ? d : String(v); return String(s).split(',').map(x => x.trim().toLowerCase()).filter(Boolean); }
 const logger = {
     error: (...a) => console.error(...a),
     warn: (...a) => console.warn(...a),
@@ -318,6 +319,12 @@ function repeatAvoidDefaults(overrides = {}) {
         raAllowQuiet: boolEnv('RA_ALLOW_QUIET', true),
         raAllowCooling: boolEnv('RA_ALLOW_COOLING', true),
         raAllowNeutral: boolEnv('RA_ALLOW_NEUTRAL', false),
+        // When true, only fire on the RISING EDGE into `quiet` — i.e. the
+        // phase just changed from neutral→quiet or cooling→quiet — instead
+        // of on every qualifying quiet tick. Set false to fire whenever the
+        // quiet/cooling gates pass (previous behaviour).
+        onlyOnPhaseEntryToQuiet: boolEnv('ONLY_ON_PHASE_ENTRY_TO_QUIET', false),
+        raEntryFromPhases: listEnv('RA_ENTRY_FROM_PHASES', 'neutral,cooling'),
         raMinRegimeSep: numEnv('RA_MIN_REGIME_SEP', 0.015),
         raSlopeEps: numEnv('RA_SLOPE_EPS', 0.008),
         repeatAvoidMaxStreakBucket: intEnv('RA_MAX_STREAK_BUCKET', 100),
@@ -600,22 +607,34 @@ function runRepeatRegimeSelfTest() {
 
     const walk = (digits, label) => {
         let fires = 0, wins = 0, scans = 0, fireQuiet = 0, fireHot = 0;
+        let prevPhase = null, entryFires = 0, entryWins = 0, armed = false;
+        const entryFrom = Array.isArray(cfg.raEntryFromPhases) ? cfg.raEntryFromPhases : ['neutral', 'cooling'];
         for (let i = warm; i + 1 < digits.length; i++) {
             const win = digits.slice(i + 1 - span, i + 1);
             const res = analyzer.analyze('TEST', win);
             if (res.pRepeat == null) continue;
             scans++;
+            const curPhase = typeof res.phase === 'string' ? res.phase : null;
+            if (curPhase !== 'quiet') armed = false;
+            else if (prevPhase && prevPhase !== 'quiet') armed = entryFrom.includes(prevPhase);
+            const quietEntry = curPhase === 'quiet' && armed;
             if (res.trade) {
                 fires++;
-                if (digits[i + 1] !== res.digit) wins++;
+                const won = digits[i + 1] !== res.digit;
+                if (won) wins++;
                 if (res.phase === 'quiet' || res.phase === 'cooling') fireQuiet++; else fireHot++;
+                if (quietEntry) { entryFires++; if (won) entryWins++; }
             }
+            if (curPhase) prevPhase = curPhase;
         }
         const wr = fires ? (wins / fires) * 100 : 0;
+        const ewr = entryFires ? (entryWins / entryFires) * 100 : 0;
         console.log(`\n── ${label} (n=${digits.length}, window=${span}) ──`);
         console.log(`scans=${scans}  fires=${fires} (${scans ? ((fires / scans) * 100).toFixed(2) : '0.00'}%)  ` +
             `WR=${wr.toFixed(2)}% (${wins}/${fires})  quiet-fires=${fireQuiet} hot-fires=${fireHot}`);
-        return { fires, wins, wr };
+        console.log(`quiet-entry-only fires=${entryFires} (${scans ? ((entryFires / scans) * 100).toFixed(2) : '0.00'}%)  ` +
+            `WR=${ewr.toFixed(2)}% (${entryWins}/${entryFires})`);
+        return { fires, wins, wr, entryFires, entryWins, ewr };
     };
 
     console.log(`Repeat-regime self-test — threshold=${cfg.winProbabilityThreshold}% z=${cfg.zScore} windows=${cfg.raFastWindow}/${cfg.raMidWindow}/${cfg.raSlowWindow}`);
@@ -677,6 +696,8 @@ class EnhancedDigitDifferTradingBot {
         Object.assign(this.config, raDefaults, raOverrides);
         this.regime = new RepeatRegimeAnalyzer(this.config);
         this.lastRegimeInfo = {};
+        this.lastPhase = {};
+        this.phaseArmed = {};
 
         this.stateFile = config.stateFile || CONFIG.stateFile;
 
@@ -828,6 +849,8 @@ class EnhancedDigitDifferTradingBot {
         this.tickSubscriptionIds = {};
         this.retryCount = 0;
         this.lastRegimeInfo = {};
+        this.lastPhase = {};
+        this.phaseArmed = {};
 
         // Every authorization starts a fresh subscription cycle. The normal
         // post-trade cycle reuses the same authorization and follows the same
@@ -926,6 +949,10 @@ class EnhancedDigitDifferTradingBot {
 
     handleTickHistory(asset, history) {
         this.tickHistories[asset] = history.prices.map(price => this.getLastDigit(price, asset));
+        // Fresh history window → forget the previous phase so the very first
+        // analyzed tick cannot be mistaken for a rising edge into quiet.
+        this.lastPhase[asset] = null;
+        this.phaseArmed[asset] = false;
     }
 
     handleTickUpdate(tick) {
@@ -1040,7 +1067,33 @@ class EnhancedDigitDifferTradingBot {
         // it. Only fire when the conservative no-repeat win probability
         // clears the configured threshold (default 90%).
         const regime = this.regime.analyze(asset, history);
+
+        // Optional phase-entry filter: only trade `quiet` phases that were
+        // ENTERED from an allowed source phase (default neutral or cooling).
+        // The phase flips to quiet at the start of a regime but the other
+        // gates usually pass a few ticks later, so we ARM on the entry edge
+        // and stay armed for the whole quiet run (disarm the moment quiet
+        // ends). Quiet runs that grew from hot/heating are skipped entirely.
+        const prevPhase = this.lastPhase[asset] ?? null;
+        const curPhase = typeof regime.phase === 'string' ? regime.phase : null;
+        if (curPhase) this.lastPhase[asset] = curPhase;
+        const entryFrom = Array.isArray(this.config.raEntryFromPhases) ? this.config.raEntryFromPhases : ['neutral', 'cooling'];
+        if (curPhase !== 'quiet') this.phaseArmed[asset] = false;
+        else if (prevPhase && prevPhase !== 'quiet') this.phaseArmed[asset] = entryFrom.includes(prevPhase);
+        const armed = this.phaseArmed[asset] === true;
+        const quietEntry = curPhase === 'quiet' && armed;
+        regime.prevPhase = prevPhase;
+        regime.quietEntry = quietEntry;
         this.lastRegimeInfo[asset] = regime;
+
+        const entryRequired = this.config.onlyOnPhaseEntryToQuiet === true;
+        if (entryRequired && !quietEntry) {
+            console.log(
+                `[${asset}] ⏳ await quiet-entry | prev=${prevPhase ?? '-'} → ${curPhase ?? '-'} ` +
+                `(need ${entryFrom.join('|')}→quiet)`
+            );
+            return;
+        }
 
         if (!regime.trade) {
             console.log(
@@ -1052,7 +1105,7 @@ class EnhancedDigitDifferTradingBot {
         }
 
         console.log(
-            `[${asset}] 🔎 regime=${regime.phase} P(repeat)=${regime.pRepeat} ` +
+            `[${asset}] 🔎 regime=${regime.phase}${entryRequired ? ' (quiet-entry)' : ''} P(repeat)=${regime.pRepeat} ` +
             `→ win%=${regime.winProbPct} (≥${this.config.winProbabilityThreshold}) | barrier=${lastDigit}`
         );
         this.xDigit = lastDigit;
@@ -1761,6 +1814,7 @@ class EnhancedDigitDifferTradingBot {
         console.log('Random asset selection: ' + (this.config.randomAssetSelection ? 'ON' : 'OFF (tick-driven)'));
         console.log('Suspend asset after trade: ' + (this.config.suspendAssetAfterTrade ? 'ON' : 'OFF'));
         console.log(`Strategy: repeat-avoid (barrier = current last digit) | fire when no-repeat win% ≥ ${this.config.winProbabilityThreshold} | phase allows quiet=${this.config.raAllowQuiet}/cooling=${this.config.raAllowCooling}/neutral=${this.config.raAllowNeutral}`);
+        console.log(`Quiet-entry-only: ${this.config.onlyOnPhaseEntryToQuiet ? 'ON' : 'OFF'}${this.config.onlyOnPhaseEntryToQuiet ? ` (fire only on ${this.config.raEntryFromPhases.join('|')}→quiet)` : ''}`);
         console.log(`Regime engine: windows ${this.config.raFastWindow}/${this.config.raMidWindow}/${this.config.raSlowWindow} | Wilson z=${this.config.zScore} margin=${this.config.modelRiskMargin}`);
         console.log(`Session takeProfit: ${this.config.takeProfit > 0 ? '$' + this.config.takeProfit.toFixed(2) : 'OFF'} | cooldown ${Math.round(this.config.takeProfitCooldownMinMs / 60000)}-${Math.round(this.config.takeProfitCooldownMaxMs / 60000)} min (random)`);
         console.log('State file: ' + this.stateFile);
