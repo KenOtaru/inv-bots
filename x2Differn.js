@@ -1837,7 +1837,7 @@ if (boolEnv('SELFTEST', false) || process.argv.includes('--selftest')) {
 
 // Usage — trading config preserved from the original x2Differ.js
 const bot = new EnhancedDigitDifferTradingBot({
-    initialStake: 1.10,
+    initialStake: 1.15,
     multiplier: 11.3,
     maxConsecutiveLosses: 3,
     stopLoss:129,
