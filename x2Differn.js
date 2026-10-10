@@ -882,7 +882,7 @@ class EnhancedDigitDifferTradingBot {
             : '📊 Assets: <code>' + this.assets.join(', ') + '</code> (' + (this.config.randomAssetSelection ? 'x2 DigitDiffer pick' : 'tick-driven') + ')';
 
         telegram.send(
-            '🤖 <b>x2 DigitDiffer Digit Multi-Asset Bot — ONLINE</b>\n' +
+            '🤖 <b>x2 DigitDiffer Bot — ONLINE</b>\n' +
             '👤 <code>' + htmlEscape(this.client.accountInfo?.loginid || '?') + '</code> ' + (this.client.accountInfo?.isVirtual ? '🟡 DEMO' : '🔴 REAL') + '\n' +
             '💰 ' + Number(this.client.balance ?? 0).toFixed(2) + ' ' + this.currency + '\n' +
             assetsLine + '\n' +
@@ -1609,7 +1609,7 @@ class EnhancedDigitDifferTradingBot {
 
         if (!h.trades) {
             telegram.send(
-                '⏰ <b>x2 DigitDiffer Multi-Asset Bot — Hourly Summary GMT (' + date + ' ' + pad(hour) + ':00-' + pad(hour) + ':59)</b>\n\n' +
+                '⏰ <b>x2 DigitDiffer Bot — Hourly Summary GMT (' + date + ' ' + pad(hour) + ':00-' + pad(hour) + ':59)</b>\n\n' +
                 'No trades this hour.\n\n' +
                 '📊 Trades: ' + this.totalTrades + ' (✅' + this.totalWins + ' ❌' + this.totalLosses + ') | WR ' + winRateLifetime + '%\n' +
                 sessLine + '\n' +
@@ -1622,7 +1622,7 @@ class EnhancedDigitDifferTradingBot {
 
         const hWR = ((h.wins / h.trades) * 100).toFixed(1);
         let msg =
-            '⏰ <b>x2 DigitDiffer Multi-Asset Bot — Hourly Summary GMT (' + date + ' ' + pad(hour) + ':00-' + pad(hour) + ':59)</b>\n\n' +
+            '⏰ <b>x2 DigitDiffer Bot — Hourly Summary GMT (' + date + ' ' + pad(hour) + ':00-' + pad(hour) + ':59)</b>\n\n' +
             '📊 Trades: ' + h.trades + ' (✅' + h.wins + ' ❌' + h.losses + ') | WR ' + hWR + '%\n' +
             '💰 P/L: <b>' + (h.netPL >= 0 ? '+' : '') + h.netPL.toFixed(2) + '</b>\n' +
             sessLine + '\n' +
@@ -1689,7 +1689,7 @@ class EnhancedDigitDifferTradingBot {
         const today = this._todayStats();
 
         const summaryText =
-            '📊 <b>x2 DigitDiffer Multi-Asset Bot — Summary</b>\n' +
+            '📊 <b>x2 DigitDiffer Bot — Summary</b>\n' +
             'Total Trades: ' + this.totalTrades + ' | ✅ ' + this.totalWins + ' | ❌ ' + this.totalLosses + '\n' +
             'x2: ' + this.consecutiveLosses2 + ' | x3: ' + this.consecutiveLosses3 +
             ' | x4: ' + this.consecutiveLosses4 + ' | x5: ' + this.consecutiveLosses5 + '\n\n' +
@@ -1709,7 +1709,7 @@ class EnhancedDigitDifferTradingBot {
         const reg = this.lastRegimeInfo ? this.lastRegimeInfo[asset] : null;
 
         telegram.send(
-            '🟢 <b>x2 DigitDiffer Multi-Asset Bot — OPEN</b>\n' +
+            '🟢 <b>x2 DigitDiffer Bot — OPEN</b>\n' +
             'Asset: <code>' + htmlEscape(asset) + '</code>\n' +
             'Predicted digit (repeat-avoid barrier): <b>' + digit + '</b>\n' +
             'Regime: <b>' + (reg.phase || '—') + '</b> | Prev: <b>' + (reg.prevPhase || '—') + '</b>\n' +
@@ -1729,7 +1729,7 @@ class EnhancedDigitDifferTradingBot {
         const tradeId = contract.contract_id;
 
         const summaryText =
-            (won ? '✅ <b>x2 DigitDiffer Digit Multi-Asset Bot — WIN</b>' : '❌ <b>x2 DigitDiffer Digit Multi-Asset Bot — LOSS</b>') + '\n\n' +
+            (won ? '✅ <b>x2 DigitDiffer Bot — WIN</b>' : '❌ <b>x2 DigitDiffer Bot — LOSS</b>') + '\n\n' +
             'Trade #' + tradeId + '\n' +
             'Asset: <code>' + htmlEscape(asset) + '</code>\n' +
             'Predicted digit: <b>' + this.xDigit + '</b>\n' +
@@ -1751,7 +1751,7 @@ class EnhancedDigitDifferTradingBot {
 
     sendErrorNotification(errorMessage) {
         telegram.send(
-            '🚨 <b>x2 DigitDiffer Digit Multi-Asset Bot — Error</b>\n\n' +
+            '🚨 <b>x2 DigitDiffer Bot — Error</b>\n\n' +
             'An error occurred: ' + errorMessage + '\n' +
             '🕒 ' + utcTs(),
             'high'
@@ -1782,7 +1782,7 @@ class EnhancedDigitDifferTradingBot {
         const d = this.dailyStats[date] || { trades: 0, wins: 0, losses: 0, netPL: 0, list: [] };
         const winRate = d.trades ? ((d.wins / d.trades) * 100).toFixed(2) : '0.00';
 
-        let msg = '🌙 <b>x2 DigitDiffer Multi-Asset Bot — END OF TRADE DAY</b>\n' +
+        let msg = '🌙 <b>x2 DigitDiffer Bot — END OF TRADE DAY</b>\n' +
             '📅 Trade day (UTC): <b>' + date + '</b>\n\n';
 
         if (d.trades === 0) {
