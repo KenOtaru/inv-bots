@@ -1109,17 +1109,17 @@ class EnhancedDigitDifferTradingBot {
             `→ win%=${regime.winProbPct} (≥${this.config.winProbabilityThreshold}) | barrier=${lastDigit}`
         );
         this.xDigit = lastDigit;
-        this.placeTrade(asset, lastDigit);
+        this.placeTrade(asset, lastDigit, regime.prevPhase, regime.phase, regime.winProbPct);
     }
 
-    async placeTrade(asset, predictedDigit) {
+    async placeTrade(asset, predictedDigit, prevPhase, curPhase, winProbPct) {
         if (this.tradeInProgress || this._tpAwaiting) {
             return;
         }
 
         this.tradeInProgress = true;
 
-        console.log(`[${asset}] 🚀 Placing trade for digit: ${predictedDigit} | Stake: ${this.currentStake.toFixed(2)} | prev trade: ${this.lastTradedAsset ?? '-'}/${this.lastTradedDigit ?? '-'}`);
+        console.log(`[${asset}] 🚀 Placing trade for digit: ${predictedDigit} | Stake: ${this.currentStake.toFixed(2)} | prev regime: ${prevPhase ?? '-'}/${curPhase ?? '-'} (win%: ${winProbPct?.toFixed(2) ?? '-'})`);
         try {
             const symbolField = this.client.symbolField();
             const proposalRes = await this.client._send({
@@ -1164,7 +1164,7 @@ class EnhancedDigitDifferTradingBot {
             this.pendingContractAsset = asset;
             this.pendingContractDigit = predictedDigit;
             this._save('trade-open');
-            this.sendTradeOpenNotification(asset, predictedDigit, this.lastOpenStake, Number(proposal.payout || 0));
+            this.sendTradeOpenNotification(asset, predictedDigit, this.lastOpenStake, prevPhase, curPhase, winProbPct, Number(proposal.payout || 0));
             await this.subscribeToOpenContract(this.currentTradeId);
         } catch (e) {
             console.error('Error placing trade:', e.message);
@@ -1707,16 +1707,14 @@ class EnhancedDigitDifferTradingBot {
     sendTradeOpenNotification(asset, digit, stake, payout) {
         const last10 = this.lastOpenDigits && this.lastOpenDigits.length ? this.lastOpenDigits.join(', ') : (this.tickHistories[asset] || []).slice(-10).join(', ') || '—';
         const reg = this.lastRegimeInfo ? this.lastRegimeInfo[asset] : null;
-        const regLine = reg
-            ? 'Regime: <b>' + reg.phase + '</b> | P(repeat)=' + (reg.pRepeat != null ? (reg.pRepeat * 100).toFixed(1) + '%' : '—') +
-              ' → win% <b>' + (reg.winProbPct != null ? reg.winProbPct.toFixed(1) : '—') + '%</b>\n'
-            : '';
 
         telegram.send(
             '🟢 <b>x2 DigitDiffer Multi-Asset Bot — OPEN</b>\n' +
             'Asset: <code>' + htmlEscape(asset) + '</code>\n' +
             'Predicted digit (repeat-avoid barrier): <b>' + digit + '</b>\n' +
-            regLine +
+            'Regime: <b>' + (reg.phase || '—') + '</b> | Prev: <b>' + (reg.prevPhase || '—') + '</b>\n' +
+            'P(repeat): <b>' + (reg.pRepeat != null ? (reg.pRepeat * 100).toFixed(1) + '%' : '—') + '</b>\n' +
+            'Win%: <b>' + (reg.winProbPct != null ? reg.winProbPct.toFixed(1) : '—') + '%</b>\n' +
             'Stake: <b>$' + stake.toFixed(2) + '</b> → payout ' + (payout ? payout.toFixed(2) : '—') + '\n\n' +
             'Last 10 digits: <code>' + last10 + '</code>\n' +
             '🕒 ' + utcTs(),
