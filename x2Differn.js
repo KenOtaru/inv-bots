@@ -21,7 +21,7 @@ const pad = n => String(n).padStart(2, '0');
 function utcTs() { const d = new Date(); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())} GMT`; }
 function htmlEscape(s) { return String(s).replace(/[&<>]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch])); }
 
-// ── CONFIG — credentials from randomDigitDifferV2.js ───────────────────
+// ── CONFIG — credentials from x2DifferV2.js ───────────────────
 const CONFIG = Object.freeze({
     apiToken:    process.env.API_TOKEN || 'pat_a4392c86309361a50eca82c1ea872127636b84070f6c45295459ffb83de31360',
     appId:       process.env.APP_ID || '33uslPtthXBEkQOdfKfoY',
@@ -42,7 +42,7 @@ const CONFIG = Object.freeze({
     takeProfitCooldownMaxMs: intEnv('TAKE_PROFIT_COOLDOWN_MS_MAX', 60 * 60 * 1000), // 60 min
 
     // ── persistence (survive restart / network drop) ───────────────────
-    stateFile: strEnv('STATE_FILE', 'randomDiffer2_state_01.json'),
+    stateFile: strEnv('STATE_FILE', 'x2Differ_state_01.json'),
 
     telegram: {
         enabled:  true,
@@ -57,7 +57,7 @@ const CONFIG = Object.freeze({
     },
 });
 
-// ── TELEGRAM notifier (flood-aware, same as randomDigitDifferV2.js) ─────
+// ── TELEGRAM notifier (flood-aware, same as x2DifferV2.js) ─────
 class TelegramNotifier extends EventEmitter {
     constructor(cfg) {
         super();
@@ -146,7 +146,7 @@ class TelegramNotifier extends EventEmitter {
 }
 const telegram = new TelegramNotifier(CONFIG.telegram);
 
-// ── REST + WS CLIENT (new PAT connection — same as randomDigitDifferV2.js)
+// ── REST + WS CLIENT (new PAT connection — same as x2DifferV2.js)
 class RestClient {
     constructor(base, appId, token) { this.baseUrl = base; this.appId = appId; this.token = token; }
     static isPat(t) { return typeof t === 'string' && /^pat_[a-z0-9_\-]{16,}$/i.test(t.trim()); }
@@ -314,7 +314,7 @@ function repeatAvoidDefaults(overrides = {}) {
         // gates
         // raMinQuietProb default 0.90 (tuned via SELFTEST): near-idle on fair
         // digits while still firing on genuine quiet regimes.
-        raMinQuietProb: numEnv('RA_MIN_QUIET_PROB', 0.88), //0.90
+        raMinQuietProb: numEnv('RA_MIN_QUIET_PROB', 0.60), //0.90
         raMaxLocalRate: numEnv('RA_MAX_LOCAL_RATE', 0.095),
         raAllowQuiet: boolEnv('RA_ALLOW_QUIET', true),
         raAllowCooling: boolEnv('RA_ALLOW_COOLING', true),
@@ -323,7 +323,7 @@ function repeatAvoidDefaults(overrides = {}) {
         // phase just changed from neutral→quiet or cooling→quiet — instead
         // of on every qualifying quiet tick. Set false to fire whenever the
         // quiet/cooling gates pass (previous behaviour).
-        onlyOnPhaseEntryToQuiet: boolEnv('ONLY_ON_PHASE_ENTRY_TO_QUIET', false),
+        onlyOnPhaseEntryToQuiet: boolEnv('ONLY_ON_PHASE_ENTRY_TO_QUIET', true),
         raEntryFromPhases: listEnv('RA_ENTRY_FROM_PHASES', 'neutral,cooling'),
         raMinRegimeSep: numEnv('RA_MIN_REGIME_SEP', 0.015),
         raSlopeEps: numEnv('RA_SLOPE_EPS', 0.008),
@@ -333,7 +333,7 @@ function repeatAvoidDefaults(overrides = {}) {
         zScore: numEnv('RA_ZSCORE', 1.28),
         modelRiskMargin: numEnv('RA_MODEL_RISK_MARGIN', 0.0015),
         // win-probability gate (%)
-        winProbabilityThreshold: numEnv('WIN_PROBABILITY_THRESHOLD', 88), //90
+        winProbabilityThreshold: numEnv('WIN_PROBABILITY_THRESHOLD', 60), //90
         ...overrides,
     };
 }
@@ -878,11 +878,11 @@ class EnhancedDigitDifferTradingBot {
             : '▶ ' + this._sessionLine();
 
         const assetsLine = this.config.singleActiveAsset
-            ? '🎲 This trade: <code>' + htmlEscape(this.activeAsset || '?') + '</code> (random pick per trade) | pool: <code>' + this.assets.join(', ') + '</code>'
-            : '📊 Assets: <code>' + this.assets.join(', ') + '</code> (' + (this.config.randomAssetSelection ? 'random pick' : 'tick-driven') + ')';
+            ? '🎲 This trade: <code>' + htmlEscape(this.activeAsset || '?') + '</code> (x2 DigitDiffer pick per trade) | pool: <code>' + this.assets.join(', ') + '</code>'
+            : '📊 Assets: <code>' + this.assets.join(', ') + '</code> (' + (this.config.randomAssetSelection ? 'x2 DigitDiffer pick' : 'tick-driven') + ')';
 
         telegram.send(
-            '🤖 <b>Random Digit Multi-Asset Bot — ONLINE</b>\n' +
+            '🤖 <b>x2 DigitDiffer Digit Multi-Asset Bot — ONLINE</b>\n' +
             '👤 <code>' + htmlEscape(this.client.accountInfo?.loginid || '?') + '</code> ' + (this.client.accountInfo?.isVirtual ? '🟡 DEMO' : '🔴 REAL') + '\n' +
             '💰 ' + Number(this.client.balance ?? 0).toFixed(2) + ' ' + this.currency + '\n' +
             assetsLine + '\n' +
@@ -1287,7 +1287,7 @@ class EnhancedDigitDifferTradingBot {
         // Session takeProfit: pause with a random cooldown, then start a new
         // session. Lifetime P/L is never reset by a session rollover.
         if (this.config.takeProfit > 0 && this._sessionPL >= this.config.takeProfit) {
-            console.log(`Session takeProfit hit — session #${this._sessionNum} P/L ${this._sessionPL.toFixed(2)}. Pausing.`);
+            console.log(`x2 DigitDiffer Session takeProfit hit — session #${this._sessionNum} P/L ${this._sessionPL.toFixed(2)}. Pausing.`);
             this.sendTelegramSummary();
             this._pauseForTakeProfit();
             this.unsubscribeAllTicks();
@@ -1309,7 +1309,7 @@ class EnhancedDigitDifferTradingBot {
 
         if (this.config.singleActiveAsset) {
             this.activeAsset = this._pickActiveAsset();
-            console.log(`🎲 Next trade asset (random pick per trade): ${this.activeAsset}`);
+            console.log(`🎲 Next trade asset (x2 DigitDiffer pick per trade): ${this.activeAsset}`);
         }
 
         await this.initializeSubscriptions();
@@ -1350,7 +1350,7 @@ class EnhancedDigitDifferTradingBot {
         const mins = Math.max(1, Math.round(cooldownMs / 60000));
         logger.warn(`session takeProfit ${this.config.takeProfit} hit — session #${this._sessionNum} paused for ${mins} min (random)`);
         telegram.send(
-            '🎯 <b>SESSION TAKE PROFIT HIT</b> — Session #' + this._sessionNum + '\n\n' +
+            '🎯 <b>x2 DigitDiffer SESSION TAKE PROFIT HIT</b> — Session #' + this._sessionNum + '\n\n' +
             'Session P/L: <b>$' + this._sessionPL.toFixed(2) + '</b> (target $' + this.config.takeProfit.toFixed(2) + ')\n' +
             'Trades this session: ' + this._sessionTrades + '\n' +
             '💼 Lifetime P/L: <b>$' + this.totalProfitLoss.toFixed(2) + '</b>\n\n' +
@@ -1376,7 +1376,7 @@ class EnhancedDigitDifferTradingBot {
         this._tpPauseUntil = 0;
         logger.warn(`takeProfit cooldown over — new session #${this._sessionNum} started (${reason})`);
         telegram.send(
-            '🚀 <b>NEW SESSION #' + this._sessionNum + '</b>\n\n' +
+            '🚀 <b>x2 DigitDiffer NEW SESSION #' + this._sessionNum + '</b>\n\n' +
             'takeProfit cooldown ended (' + reason + '). Trading resumes — session P/L reset.\n' +
             'Start balance: <b>$' + (this._sessionStartBal || 0).toFixed(2) + '</b> | Target: ' +
             (this.config.takeProfit > 0 ? '$' + this.config.takeProfit.toFixed(2) : '∞') + '\n' +
@@ -1609,7 +1609,7 @@ class EnhancedDigitDifferTradingBot {
 
         if (!h.trades) {
             telegram.send(
-                '⏰ <b>Random Digit Multi-Asset Bot — Hourly Summary GMT (' + date + ' ' + pad(hour) + ':00-' + pad(hour) + ':59)</b>\n\n' +
+                '⏰ <b>x2 DigitDiffer Multi-Asset Bot — Hourly Summary GMT (' + date + ' ' + pad(hour) + ':00-' + pad(hour) + ':59)</b>\n\n' +
                 'No trades this hour.\n\n' +
                 '📊 Trades: ' + this.totalTrades + ' (✅' + this.totalWins + ' ❌' + this.totalLosses + ') | WR ' + winRateLifetime + '%\n' +
                 sessLine + '\n' +
@@ -1622,7 +1622,7 @@ class EnhancedDigitDifferTradingBot {
 
         const hWR = ((h.wins / h.trades) * 100).toFixed(1);
         let msg =
-            '⏰ <b>Random Digit Multi-Asset Bot — Hourly Summary GMT (' + date + ' ' + pad(hour) + ':00-' + pad(hour) + ':59)</b>\n\n' +
+            '⏰ <b>x2 DigitDiffer Multi-Asset Bot — Hourly Summary GMT (' + date + ' ' + pad(hour) + ':00-' + pad(hour) + ':59)</b>\n\n' +
             '📊 Trades: ' + h.trades + ' (✅' + h.wins + ' ❌' + h.losses + ') | WR ' + hWR + '%\n' +
             '💰 P/L: <b>' + (h.netPL >= 0 ? '+' : '') + h.netPL.toFixed(2) + '</b>\n' +
             sessLine + '\n' +
@@ -1689,7 +1689,7 @@ class EnhancedDigitDifferTradingBot {
         const today = this._todayStats();
 
         const summaryText =
-            '📊 <b>Random Digit Multi-Asset Bot — Summary</b>\n' +
+            '📊 <b>x2 DigitDiffer Multi-Asset Bot — Summary</b>\n' +
             'Total Trades: ' + this.totalTrades + ' | ✅ ' + this.totalWins + ' | ❌ ' + this.totalLosses + '\n' +
             'x2: ' + this.consecutiveLosses2 + ' | x3: ' + this.consecutiveLosses3 +
             ' | x4: ' + this.consecutiveLosses4 + ' | x5: ' + this.consecutiveLosses5 + '\n\n' +
@@ -1713,7 +1713,7 @@ class EnhancedDigitDifferTradingBot {
             : '';
 
         telegram.send(
-            '🟢 <b>Random Digit Multi-Asset Bot — OPEN</b>\n' +
+            '🟢 <b>x2 DigitDiffer Multi-Asset Bot — OPEN</b>\n' +
             'Asset: <code>' + htmlEscape(asset) + '</code>\n' +
             'Predicted digit (repeat-avoid barrier): <b>' + digit + '</b>\n' +
             regLine +
@@ -1731,7 +1731,7 @@ class EnhancedDigitDifferTradingBot {
         const tradeId = contract.contract_id;
 
         const summaryText =
-            (won ? '✅ <b>Random Digit Multi-Asset Bot — WIN</b>' : '❌ <b>Random Digit Multi-Asset Bot — LOSS</b>') + '\n\n' +
+            (won ? '✅ <b>x2 DigitDiffer Digit Multi-Asset Bot — WIN</b>' : '❌ <b>x2 DigitDiffer Digit Multi-Asset Bot — LOSS</b>') + '\n\n' +
             'Trade #' + tradeId + '\n' +
             'Asset: <code>' + htmlEscape(asset) + '</code>\n' +
             'Predicted digit: <b>' + this.xDigit + '</b>\n' +
@@ -1753,7 +1753,7 @@ class EnhancedDigitDifferTradingBot {
 
     sendErrorNotification(errorMessage) {
         telegram.send(
-            '🚨 <b>Random Digit Multi-Asset Bot — Error</b>\n\n' +
+            '🚨 <b>x2 DigitDiffer Digit Multi-Asset Bot — Error</b>\n\n' +
             'An error occurred: ' + errorMessage + '\n' +
             '🕒 ' + utcTs(),
             'high'
@@ -1784,7 +1784,7 @@ class EnhancedDigitDifferTradingBot {
         const d = this.dailyStats[date] || { trades: 0, wins: 0, losses: 0, netPL: 0, list: [] };
         const winRate = d.trades ? ((d.wins / d.trades) * 100).toFixed(2) : '0.00';
 
-        let msg = '🌙 <b>Random Digit Multi-Asset Bot — END OF TRADE DAY</b>\n' +
+        let msg = '🌙 <b>x2 DigitDiffer Multi-Asset Bot — END OF TRADE DAY</b>\n' +
             '📅 Trade day (UTC): <b>' + date + '</b>\n\n';
 
         if (d.trades === 0) {
@@ -1837,9 +1837,9 @@ if (boolEnv('SELFTEST', false) || process.argv.includes('--selftest')) {
     process.exit(0);
 }
 
-// Usage — trading config preserved from the original randomDiffer.js
+// Usage — trading config preserved from the original x2Differ.js
 const bot = new EnhancedDigitDifferTradingBot({
-    initialStake: 1.25,
+    initialStake: 1.10,
     multiplier: 11.3,
     maxConsecutiveLosses: 3,
     stopLoss:129,
@@ -1853,14 +1853,14 @@ const bot = new EnhancedDigitDifferTradingBot({
         // 'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR', 
         // '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V', 
         // 'JD10', 'JD25', 'JD50', 'JD75', 'JD100'
-        // 'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR'
-        'R_50'
+        'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR'
+        // 'R_50'
     ],
     // singleActiveAsset: ONE random asset subscribed + traded per trade, then
     // forgotten and re-picked on the next cycle (default true; hard-pinned below).
     // suspendAssetAfterTrade / cooldown default from CONFIG
     // (env SUSPEND_AFTER_TRADE, TAKE_PROFIT_COOLDOWN_MS_MIN/MAX).
-    singleActiveAsset: true,
+    singleActiveAsset: true,  // false = all assets subscribed, trade any that fires
 });
 
 bot.start();
