@@ -1426,8 +1426,8 @@ const bot = new EnhancedDigitDifferTradingBot({
     maxConsecutiveLosses: 3,
     stopLoss:129,
     takeProfit: 0,              // per-session profit target (0 = off)
-    requiredHistoryLength: 100,
-    winProbabilityThreshold: 100,
+    requiredHistoryLength: 1000,
+    winProbabilityThreshold: 90,
     minWaitTime: 1000,  // 15 min 15 * 60 * 1000,
     maxWaitTime: 1000,  // 30 min 60 * 60 * 1000,
     minOccurrencesThreshold: 1,
