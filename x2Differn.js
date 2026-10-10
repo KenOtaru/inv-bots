@@ -313,10 +313,10 @@ function repeatAvoidDefaults(overrides = {}) {
         // gates
         // raMinQuietProb default 0.90 (tuned via SELFTEST): near-idle on fair
         // digits while still firing on genuine quiet regimes.
-        raMinQuietProb: numEnv('RA_MIN_QUIET_PROB', 0.90),
+        raMinQuietProb: numEnv('RA_MIN_QUIET_PROB', 0.88), //0.90
         raMaxLocalRate: numEnv('RA_MAX_LOCAL_RATE', 0.095),
         raAllowQuiet: boolEnv('RA_ALLOW_QUIET', true),
-        raAllowCooling: boolEnv('RA_ALLOW_COOLING', false),
+        raAllowCooling: boolEnv('RA_ALLOW_COOLING', true),
         raAllowNeutral: boolEnv('RA_ALLOW_NEUTRAL', false),
         raMinRegimeSep: numEnv('RA_MIN_REGIME_SEP', 0.015),
         raSlopeEps: numEnv('RA_SLOPE_EPS', 0.008),
@@ -326,7 +326,7 @@ function repeatAvoidDefaults(overrides = {}) {
         zScore: numEnv('RA_ZSCORE', 1.28),
         modelRiskMargin: numEnv('RA_MODEL_RISK_MARGIN', 0.0015),
         // win-probability gate (%)
-        winProbabilityThreshold: numEnv('WIN_PROBABILITY_THRESHOLD', 90),
+        winProbabilityThreshold: numEnv('WIN_PROBABILITY_THRESHOLD', 88), //90
         ...overrides,
     };
 }
@@ -1791,7 +1791,7 @@ const bot = new EnhancedDigitDifferTradingBot({
     stopLoss:129,
     takeProfit: 0,              // per-session profit target (0 = off)
     requiredHistoryLength: 1000,
-    winProbabilityThreshold: 90,
+    winProbabilityThreshold: 88,  // 88% minimum win probability to fire a trade
     minWaitTime: 1000,  // 15 min 15 * 60 * 1000,
     maxWaitTime: 1000,  // 30 min 60 * 60 * 1000,
     minOccurrencesThreshold: 1,
