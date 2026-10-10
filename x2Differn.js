@@ -1164,7 +1164,7 @@ class EnhancedDigitDifferTradingBot {
             this.pendingContractAsset = asset;
             this.pendingContractDigit = predictedDigit;
             this._save('trade-open');
-            this.sendTradeOpenNotification(asset, predictedDigit, this.lastOpenStake, prevPhase, curPhase, winProbPct, Number(proposal.payout || 0));
+            this.sendTradeOpenNotification(asset, predictedDigit, this.lastOpenStake);
             await this.subscribeToOpenContract(this.currentTradeId);
         } catch (e) {
             console.error('Error placing trade:', e.message);
@@ -1704,7 +1704,7 @@ class EnhancedDigitDifferTradingBot {
         telegram.send(summaryText, 'high');
     }
 
-    sendTradeOpenNotification(asset, digit, stake, payout) {
+    sendTradeOpenNotification(asset, digit, stake) {
         const last10 = this.lastOpenDigits && this.lastOpenDigits.length ? this.lastOpenDigits.join(', ') : (this.tickHistories[asset] || []).slice(-10).join(', ') || '—';
         const reg = this.lastRegimeInfo ? this.lastRegimeInfo[asset] : null;
 
@@ -1715,7 +1715,7 @@ class EnhancedDigitDifferTradingBot {
             'Regime: <b>' + (reg.phase || '—') + '</b> | Prev: <b>' + (reg.prevPhase || '—') + '</b>\n' +
             'P(repeat): <b>' + (reg.pRepeat != null ? (reg.pRepeat * 100).toFixed(1) + '%' : '—') + '</b>\n' +
             'Win%: <b>' + (reg.winProbPct != null ? reg.winProbPct.toFixed(1) : '—') + '%</b>\n' +
-            'Stake: <b>$' + stake.toFixed(2) + '</b> → payout ' + (payout ? payout.toFixed(2) : '—') + '\n\n' +
+            'Stake: <b>$' + stake.toFixed(2) + '</b>\n\n' +
             'Last 10 digits: <code>' + last10 + '</code>\n' +
             '🕒 ' + utcTs(),
             'low'
