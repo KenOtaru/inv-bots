@@ -4,7 +4,6 @@ const https = require('https');
 const fs = require('fs');
 const { URL } = require('url');
 const EventEmitter = require('events');
-const crypto = require('crypto');
 
 // ── env + logging helpers ───────────────────────────────────────────────
 function numEnv(n, d) { const v = process.env[n]; if (v == null || v === '') return d; const x = Number(v); return Number.isFinite(x) ? x : d; }
@@ -279,6 +278,361 @@ class DerivClient extends EventEmitter {
     symbolField() { return this._isPat ? 'underlying_symbol' : 'symbol'; }
 }
 
+// ── REPEAT-REGIME ANALYZER ─────────────────────────────────────────────
+// Barrier digit = current last tick digit. A DIGITDIFF contract wins when
+// the next tick digit DIFFERS from the barrier, so with barrier = lastDigit
+// the trade wins exactly when the next digit does NOT repeat the current
+// one. Digit streams are claimed to alternate between "quiet" regimes
+// (repeats rarer than the fair 10%) and "hot" regimes (repeats more common
+// than 10%). This module estimates the current regime online, predicts
+// P(repeat next), and exposes a CONSERVATIVE upper bound so the bot only
+// fires when the true no-repeat win probability clears the configured
+// threshold (default 90%).
+//
+// On a truly fair i.i.d. stream P(repeat) ≈ 0.10 and the value gate below
+// keeps the strategy (near-)idle — validate with SELFTEST=1 before
+// trusting any claimed structure. Any edge here is an empirical claim.
+//
+// Knob defaults are env-overridable (RA_* / WIN_PROBABILITY_THRESHOLD).
+function repeatAvoidDefaults(overrides = {}) {
+    return {
+        // multi-scale windows (ticks)
+        raFastWindow: intEnv('RA_FAST_WINDOW', 20),
+        raMidWindow: intEnv('RA_MID_WINDOW', 100),
+        raSlowWindow: intEnv('RA_SLOW_WINDOW', 500),
+        raBlockSize: intEnv('RA_BLOCK_SIZE', 20),
+        // sticky 2-state Bayesian filter transition probabilities
+        raStayQuiet: numEnv('RA_STAY_QUIET', 0.985),
+        raStayHot: numEnv('RA_STAY_HOT', 0.980),
+        // estimator blend weights (regime / local / streak)
+        raWRegime: numEnv('RA_W_REGIME', 0.50),
+        raWLocal: numEnv('RA_W_LOCAL', 0.30),
+        raWStreak: numEnv('RA_W_STREAK', 0.20),
+        // empirical-Bayes shrink toward the fair 0.10 repeat rate
+        raShrinkToFair: numEnv('RA_SHRINK_TO_FAIR', 0.12),
+        // gates
+        // raMinQuietProb default 0.90 (tuned via SELFTEST): near-idle on fair
+        // digits while still firing on genuine quiet regimes.
+        raMinQuietProb: numEnv('RA_MIN_QUIET_PROB', 0.90),
+        raMaxLocalRate: numEnv('RA_MAX_LOCAL_RATE', 0.095),
+        raAllowQuiet: boolEnv('RA_ALLOW_QUIET', true),
+        raAllowCooling: boolEnv('RA_ALLOW_COOLING', false),
+        raAllowNeutral: boolEnv('RA_ALLOW_NEUTRAL', false),
+        raMinRegimeSep: numEnv('RA_MIN_REGIME_SEP', 0.015),
+        raSlopeEps: numEnv('RA_SLOPE_EPS', 0.008),
+        repeatAvoidMaxStreakBucket: intEnv('RA_MAX_STREAK_BUCKET', 100),
+        repeatAvoidMinBucketN: intEnv('RA_MIN_BUCKET_N', 100),
+        // Wilson one-sided upper bound z + model risk margin
+        zScore: numEnv('RA_ZSCORE', 1.28),
+        modelRiskMargin: numEnv('RA_MODEL_RISK_MARGIN', 0.0015),
+        // win-probability gate (%)
+        winProbabilityThreshold: numEnv('WIN_PROBABILITY_THRESHOLD', 90),
+        ...overrides,
+    };
+}
+
+class RepeatRegimeAnalyzer {
+    constructor(cfg = {}) { this.cfg = cfg; }
+
+    _num(v, d) { return Number.isFinite(Number(v)) ? Number(v) : d; }
+
+    /** Bernoulli series R_t = 1 if digit repeated vs previous. */
+    buildRepeatSeries(digits) {
+        const R = new Array(Math.max(0, digits.length - 1));
+        for (let i = 1; i < digits.length; i++) R[i - 1] = digits[i] === digits[i - 1] ? 1 : 0;
+        return R;
+    }
+
+    /** Consecutive non-repeats ending at the last digit. */
+    currentNonRepeatStreak(digits) {
+        let s = 0;
+        for (let i = digits.length - 1; i > 0; i--) { if (digits[i] !== digits[i - 1]) s++; else break; }
+        return s;
+    }
+
+    /** Consecutive repeats ending at the last digit. */
+    currentRepeatStreak(digits) {
+        let s = 0;
+        for (let i = digits.length - 1; i > 0; i--) { if (digits[i] === digits[i - 1]) s++; else break; }
+        return s;
+    }
+
+    /** Mean of the last `w` points of R. */
+    tailRate(R, w) {
+        if (!R.length) return 0.1;
+        const n = Math.min(w, R.length);
+        let s = 0;
+        for (let i = R.length - n; i < R.length; i++) s += R[i];
+        return s / n;
+    }
+
+    /** Rolling repeat rate over windows of length `w`. */
+    rollingRates(R, w) {
+        const n = R.length, out = [];
+        if (n < w) return out;
+        let s = 0;
+        for (let i = 0; i < w; i++) s += R[i];
+        out.push(s / w);
+        for (let i = w; i < n; i++) { s += R[i] - R[i - w]; out.push(s / w); }
+        return out;
+    }
+
+    /** Estimate quiet/hot emission rates from block-rate quantiles. */
+    estimateEmissionRates(R) {
+        const block = Math.max(8, this._num(this.cfg.raBlockSize, 20));
+        const rates = this.rollingRates(R, block);
+        const fair = 0.10;
+        if (rates.length < 8) {
+            const base = R.length ? R.reduce((a, b) => a + b, 0) / R.length : fair;
+            return { pL: Math.max(0.02, Math.min(0.09, base * 0.65)), pH: Math.min(0.30, Math.max(0.11, base * 1.55)), pBase: base };
+        }
+        const sorted = rates.slice().sort((a, b) => a - b);
+        const q = p => { const i = Math.min(sorted.length - 1, Math.max(0, Math.floor(p * (sorted.length - 1)))); return sorted[i]; };
+        const pBase = R.reduce((a, b) => a + b, 0) / R.length;
+        let pL = q(0.25), pH = q(0.75);
+        const minSep = this._num(this.cfg.raMinRegimeSep, 0.015);
+        if (pH - pL < minSep) {
+            pL = Math.max(0.02, pBase - Math.max(minSep, 0.02));
+            pH = Math.min(0.30, pBase + Math.max(minSep, 0.02));
+        }
+        pL = Math.max(0.015, Math.min(0.095, pL));
+        pH = Math.max(0.105, Math.min(0.35, pH));
+        if (pH <= pL) { pL = 0.06; pH = 0.14; }
+        return { pL, pH, pBase };
+    }
+
+    /** Online 2-state (quiet/hot) Bayesian filter on the repeat series. */
+    bayesianRegimeFilter(R, pL, pH) {
+        const stayQ = Math.min(0.999, Math.max(0.5, this._num(this.cfg.raStayQuiet, 0.985)));
+        const stayH = Math.min(0.999, Math.max(0.5, this._num(this.cfg.raStayHot, 0.980)));
+        const switchQH = 1 - stayQ, switchHQ = 1 - stayH;
+        let pQ = 0.5;
+        for (let i = 0; i < R.length; i++) {
+            const r = R[i];
+            const pQpred = pQ * stayQ + (1 - pQ) * switchHQ;
+            const postQ = pQpred * (r ? pL : 1 - pL);
+            const postH = (1 - pQpred) * (r ? pH : 1 - pH);
+            const norm = postQ + postH;
+            pQ = norm > 0 ? postQ / norm : 0.5;
+        }
+        const pQnext = pQ * stayQ + (1 - pQ) * switchHQ;
+        const pRepeatNext = pQnext * pL + (1 - pQnext) * pH;
+        return { pQuiet: pQ, pQuietNext: pQnext, pRepeatNext, pL, pH };
+    }
+
+    /** Classify the cycle phase from multi-scale rates + regime posterior. */
+    classifyPhase(rFast, rMid, rSlow, pQuiet, pBase) {
+        const eps = this._num(this.cfg.raSlopeEps, 0.008);
+        const slope = rFast - rMid;
+        const base = Number.isFinite(pBase) ? pBase : 0.10;
+        const elevatedMid = rMid > base + eps * 0.5;
+        const depressedMid = rMid < base - eps * 0.5;
+        const elevatedFast = rFast > base + eps;
+        const depressedFast = rFast < base - eps * 0.25;
+        if (pQuiet >= 0.65 && depressedFast) return 'quiet';
+        if (pQuiet <= 0.35 && elevatedFast) return 'hot';
+        if (slope < -eps && elevatedMid) return 'cooling';
+        if (slope > eps && depressedMid) return 'heating';
+        if (pQuiet >= 0.60 && rFast <= base) return 'quiet';
+        if (pQuiet <= 0.40 && rFast >= base) return 'hot';
+        return 'neutral';
+    }
+
+    /** P(repeat | current non-repeat streak length). */
+    conditionalRepeatProb(digits, streakLen) {
+        const cap = Math.max(1, this._num(this.cfg.repeatAvoidMaxStreakBucket, 100));
+        const target = Math.min(streakLen, cap);
+        let streak = 0, hits = 0, n = 0;
+        for (let i = 1; i < digits.length; i++) {
+            const isRepeat = digits[i] === digits[i - 1] ? 1 : 0;
+            if (Math.min(streak, cap) === target) { n++; hits += isRepeat; }
+            streak = isRepeat ? 0 : streak + 1;
+        }
+        const minN = this._num(this.cfg.repeatAvoidMinBucketN, 100);
+        return n >= minN ? { p: hits / n, n } : null;
+    }
+
+    /** Reliability-weighted blend, shrunk toward fair 0.10. */
+    blendEstimates(parts) {
+        let wSum = 0, pSum = 0, nEff = 0;
+        for (const part of parts) {
+            if (!part || !Number.isFinite(part.p) || !(part.w > 0)) continue;
+            wSum += part.w; pSum += part.w * part.p;
+            if (part.n > 0) nEff += part.w * part.n;
+        }
+        if (!(wSum > 0)) return { p: 0.10, n: 1, source: 'fair-fallback' };
+        let p = pSum / wSum;
+        const shrink = Math.min(0.5, Math.max(0, this._num(this.cfg.raShrinkToFair, 0.12)));
+        p = (1 - shrink) * p + shrink * 0.10;
+        p = Math.max(0.01, Math.min(0.40, p));
+        const n = Math.max(1, Math.round(nEff / Math.max(wSum, 1e-9)));
+        const labels = parts.filter(x => x && x.w > 0 && x.label).map(x => x.label);
+        return { p, n, source: labels.join('+') || 'blend' };
+    }
+
+    /** Wilson one-sided upper confidence bound on a Bernoulli p. */
+    wilsonUpper(phat, n, z) {
+        n = Math.max(1, n);
+        phat = Math.max(0, Math.min(1, phat));
+        const z2 = z * z;
+        const denom = 1 + z2 / n;
+        const center = phat + z2 / (2 * n);
+        const spread = z * Math.sqrt((phat * (1 - phat) + z2 / (4 * n)) / n);
+        return Math.min(1, (center + spread) / denom);
+    }
+
+    /**
+     * Analyze the trailing digit history and decide whether to fire a
+     * repeat-avoid (DIGITDIFF barrier = current last digit) trade.
+     * Returns { trade, digit, winProbPct, pRepeat, pRepeatUpper, phase, ... }.
+     */
+    analyze(asset, digits) {
+        const lastDigit = digits[digits.length - 1];
+        const R = this.buildRepeatSeries(digits);
+        const wFast = Math.max(8, this._num(this.cfg.raFastWindow, 20));
+        const wMid = Math.max(wFast + 1, this._num(this.cfg.raMidWindow, 100));
+        const wSlow = Math.max(wMid + 1, this._num(this.cfg.raSlowWindow, 500));
+        const minN = this._num(this.cfg.repeatAvoidMinBucketN, 100);
+
+        if (R.length < Math.max(30, wFast)) {
+            return { trade: false, digit: lastDigit, reason: `insufficient-history:${R.length}`, winProbPct: null, pRepeat: null };
+        }
+
+        const rFast = this.tailRate(R, wFast);
+        const rMid = this.tailRate(R, Math.min(wMid, R.length));
+        const rSlow = this.tailRate(R, Math.min(wSlow, R.length));
+
+        const { pL, pH, pBase } = this.estimateEmissionRates(R);
+        const filt = this.bayesianRegimeFilter(R, pL, pH);
+        const phase = this.classifyPhase(rFast, rMid, rSlow, filt.pQuiet, pBase);
+
+        const streakLen = this.currentNonRepeatStreak(digits);
+        const repStreak = this.currentRepeatStreak(digits);
+        const cond = this.conditionalRepeatProb(digits, streakLen);
+
+        const parts = [
+            { p: filt.pRepeatNext, w: this._num(this.cfg.raWRegime, 0.50), n: R.length, label: 'regime' },
+            { p: rFast, w: this._num(this.cfg.raWLocal, 0.30), n: Math.min(wFast, R.length), label: 'local' },
+        ];
+        if (cond) parts.push({ p: cond.p, w: this._num(this.cfg.raWStreak, 0.20), n: cond.n, label: `streak${Math.min(streakLen, this.cfg.repeatAvoidMaxStreakBucket ?? 100)}` });
+        const blend = this.blendEstimates(parts);
+
+        const nBound = Math.max(8, Math.min(wMid, R.length));
+        const z = this._num(this.cfg.zScore, 1.28);
+        const pRepeatUpper = Math.min(1, this.wilsonUpper(blend.p, nBound, z) + this._num(this.cfg.modelRiskMargin, 0.0015));
+        const winProbPct = (1 - pRepeatUpper) * 100;
+
+        const threshold = this._num(this.cfg.winProbabilityThreshold, 90);
+        const allowQuiet = this.cfg.raAllowQuiet !== false;
+        const allowCooling = this.cfg.raAllowCooling === true;
+        const allowNeutral = this.cfg.raAllowNeutral === true;
+        const phaseOk =
+            (phase === 'quiet' && allowQuiet) ||
+            (phase === 'cooling' && allowCooling) ||
+            (phase === 'neutral' && allowNeutral);
+        const minQ = this._num(this.cfg.raMinQuietProb, 0.85);
+        const maxLocal = this._num(this.cfg.raMaxLocalRate, 0.095);
+
+        const reasons = [];
+        if (R.length < minN) reasons.push(`sample-too-small:${R.length}`);
+        if ((pH - pL) < this._num(this.cfg.raMinRegimeSep, 0.015)) reasons.push(`regime-collapsed:${(pH - pL).toFixed(4)}`);
+        if (!phaseOk) reasons.push(`phase-block:${phase}`);
+        if ((phase === 'quiet' || phase === 'cooling') && filt.pQuiet < minQ) reasons.push(`quiet-prob-low:${filt.pQuiet.toFixed(3)}`);
+        if (rFast > maxLocal) reasons.push(`local-rate-high:${rFast.toFixed(4)}`);
+        if (winProbPct < threshold) reasons.push(`win-prob-low:${winProbPct.toFixed(1)}`);
+
+        return {
+            trade: reasons.length === 0,
+            digit: lastDigit,
+            phase,
+            pRepeat: +blend.p.toFixed(4),
+            pRepeatUpper: +pRepeatUpper.toFixed(4),
+            winProbPct: +winProbPct.toFixed(2),
+            pQuiet: +filt.pQuiet.toFixed(4),
+            rFast: +rFast.toFixed(4),
+            rMid: +rMid.toFixed(4),
+            rSlow: +rSlow.toFixed(4),
+            pL: +pL.toFixed(4),
+            pH: +pH.toFixed(4),
+            streak: streakLen,
+            repeatStreak: repStreak,
+            source: blend.source,
+            sample: R.length,
+            reason: reasons.length ? reasons.join(',') : 'ok',
+        };
+    }
+}
+
+// ── Self-test / backtest (no network) — SELFTEST=1 ─────────────────────
+// Confirms the gate idles on fair i.i.d. digits (no phantom edge) and
+// fires on a synthetic alternating quiet/hot regime stream.
+function mulberry32(a) {
+    return function () {
+        a |= 0; a = a + 0x6D2B79F5 | 0;
+        let t = Math.imul(a ^ a >>> 15, 1 | a);
+        t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+}
+function fairDigits(n, seed) {
+    const rng = mulberry32(seed);
+    const d = new Array(n);
+    for (let i = 0; i < n; i++) d[i] = Math.floor(rng() * 10);
+    return d;
+}
+function regimeDigits(n, seed, quietP = 0.03, hotP = 0.17, block = 200) {
+    const rng = mulberry32(seed);
+    const d = new Array(n);
+    for (let i = 0; i < n; i++) {
+        const quiet = Math.floor(i / block) % 2 === 0;
+        const pRepeat = quiet ? quietP : hotP;
+        if (i > 0 && rng() < pRepeat) { d[i] = d[i - 1]; continue; }
+        let x; do { x = Math.floor(rng() * 10); } while (i > 0 && x === d[i - 1]);
+        d[i] = x;
+    }
+    return d;
+}
+function runRepeatRegimeSelfTest() {
+    const cfg = repeatAvoidDefaults();
+    const analyzer = new RepeatRegimeAnalyzer(cfg);
+    const span = Math.max(cfg.raSlowWindow + 40, cfg.repeatAvoidMinBucketN + 40, 600);
+    const warm = span;
+
+    const walk = (digits, label) => {
+        let fires = 0, wins = 0, scans = 0, fireQuiet = 0, fireHot = 0;
+        for (let i = warm; i + 1 < digits.length; i++) {
+            const win = digits.slice(i + 1 - span, i + 1);
+            const res = analyzer.analyze('TEST', win);
+            if (res.pRepeat == null) continue;
+            scans++;
+            if (res.trade) {
+                fires++;
+                if (digits[i + 1] !== res.digit) wins++;
+                if (res.phase === 'quiet' || res.phase === 'cooling') fireQuiet++; else fireHot++;
+            }
+        }
+        const wr = fires ? (wins / fires) * 100 : 0;
+        console.log(`\n── ${label} (n=${digits.length}, window=${span}) ──`);
+        console.log(`scans=${scans}  fires=${fires} (${scans ? ((fires / scans) * 100).toFixed(2) : '0.00'}%)  ` +
+            `WR=${wr.toFixed(2)}% (${wins}/${fires})  quiet-fires=${fireQuiet} hot-fires=${fireHot}`);
+        return { fires, wins, wr };
+    };
+
+    console.log(`Repeat-regime self-test — threshold=${cfg.winProbabilityThreshold}% z=${cfg.zScore} windows=${cfg.raFastWindow}/${cfg.raMidWindow}/${cfg.raSlowWindow}`);
+    const fair = walk(fairDigits(20000, 12345), 'FAIR i.i.d. uniform (expect near-idle)');
+    const regime = walk(regimeDigits(20000, 67890), 'SYNTHETIC quiet/hot regime (expect fires, concentrated in quiet)');
+
+    console.log('\n── Verdict ──');
+    const fairOk = fair.fires === 0 || fair.wr <= cfg.winProbabilityThreshold + 1 || fair.fires < 50;
+    if (fair.fires === 0) console.log('✅ fair null: gate idled (0 fires) — no phantom edge');
+    else if (fair.fires < 50) console.log(`ℹ️ fair null: ${fair.fires} fires, WR ${fair.wr.toFixed(2)}% (too few for a verdict; house edge expected)`);
+    else if (fairOk) console.log(`✅ fair null: ${fair.fires} fires, WR ${fair.wr.toFixed(2)}% (within noise of ${cfg.winProbabilityThreshold}%)`);
+    else console.log(`⚠️ fair null: ${fair.fires} fires at WR ${fair.wr.toFixed(2)}% — gate may be too loose`);
+    if (regime.fires > 0 && regime.wr >= cfg.winProbabilityThreshold) console.log(`✅ regime control: fired ${regime.fires}× at WR ${regime.wr.toFixed(2)}% (≥ ${cfg.winProbabilityThreshold}%)`);
+    else if (regime.fires > 0) console.log(`ℹ️ regime control: fired ${regime.fires}× at WR ${regime.wr.toFixed(2)}%`);
+    else console.log('ℹ️ regime control: no fires (raise threshold sensitivity if expected).');
+}
+
 class EnhancedDigitDifferTradingBot {
     constructor(config = {}) {
         this.currency = CONFIG.currency;
@@ -305,7 +659,7 @@ class EnhancedDigitDifferTradingBot {
             takeProfitCooldownMinMs: config.takeProfitCooldownMinMs || CONFIG.takeProfitCooldownMinMs,
             takeProfitCooldownMaxMs: config.takeProfitCooldownMaxMs || CONFIG.takeProfitCooldownMaxMs,
             requiredHistoryLength: config.requiredHistoryLength || 200,
-            winProbabilityThreshold: config.winProbabilityThreshold || 100,
+            winProbabilityThreshold: config.winProbabilityThreshold != null ? config.winProbabilityThreshold : 90,
             randomAssetSelection: config.randomAssetSelection != null ? config.randomAssetSelection : CONFIG.randomAssetSelection,
             suspendAssetAfterTrade: config.suspendAssetAfterTrade != null ? config.suspendAssetAfterTrade : CONFIG.suspendAssetAfterTrade,
             singleActiveAsset: config.singleActiveAsset || CONFIG.singleActiveAsset,
@@ -314,6 +668,15 @@ class EnhancedDigitDifferTradingBot {
             minWaitTime: config.minWaitTime || 200 * 1000,
             maxWaitTime: config.maxWaitTime || 500 * 1000,
         };
+
+        // Merge repeat-avoid regime-engine config: defaults ← env ← per-run
+        // `config` overrides. winProbabilityThreshold is honored here too.
+        const raDefaults = repeatAvoidDefaults();
+        const raOverrides = {};
+        for (const k of Object.keys(raDefaults)) if (config[k] != null) raOverrides[k] = config[k];
+        Object.assign(this.config, raDefaults, raOverrides);
+        this.regime = new RepeatRegimeAnalyzer(this.config);
+        this.lastRegimeInfo = {};
 
         this.stateFile = config.stateFile || CONFIG.stateFile;
 
@@ -464,6 +827,7 @@ class EnhancedDigitDifferTradingBot {
         });
         this.tickSubscriptionIds = {};
         this.retryCount = 0;
+        this.lastRegimeInfo = {};
 
         // Every authorization starts a fresh subscription cycle. The normal
         // post-trade cycle reuses the same authorization and follows the same
@@ -671,41 +1035,28 @@ class EnhancedDigitDifferTradingBot {
 
         const lastDigit = history[history.length - 1];
 
-        const predictedDigit = this.createRandomPrediction();
+        // Regime-gated repeat-avoid: the DIGITDIFF barrier is the CURRENT
+        // last digit, so the trade wins when the next tick does NOT repeat
+        // it. Only fire when the conservative no-repeat win probability
+        // clears the configured threshold (default 90%).
+        const regime = this.regime.analyze(asset, history);
+        this.lastRegimeInfo[asset] = regime;
 
-        // if(this.sys === 1) {
-        //     if((predictedDigit == lastDigit ) || (predictedDigit === lastDigit + 1) || (predictedDigit === lastDigit - 1)) {
-        //         this.xDigit = predictedDigit;
-        //         this.placeTrade(asset, predictedDigit);
-        //     }
-        //     else{
-        //         console.log(`[${asset}] Skipping trade for digit: ${predictedDigit} | Last Digit: ${lastDigit}`);
-        //         this.disconnect();
-        //     }
-        // }
-        // else {
-        if ((predictedDigit !== lastDigit) && (predictedDigit !== lastDigit + 1) && (predictedDigit !== lastDigit - 1)) {
-            this.xDigit = predictedDigit;
-            this.placeTrade(asset, predictedDigit);
+        if (!regime.trade) {
+            console.log(
+                `[${asset}] ⏸ skip | lastDigit=${lastDigit} phase=${regime.phase} ` +
+                `P(repeat)=${regime.pRepeat ?? '-'} win%=${regime.winProbPct ?? '-'} ` +
+                `(need ≥${this.config.winProbabilityThreshold}) | ${regime.reason}`
+            );
+            return;
         }
-        // else
-        //     {
-        //         console.log(`[${asset}] Skipping trade for digit: ${predictedDigit} | Last Digit: ${lastDigit}`);
-        //         this.disconnect();
-        //     }
-        // }
-    }
 
-    // Uniform pick over 0-9 that never repeats the digit traded last. Excluding
-    // here (rather than at trade time) also covers ticks where the pick is
-    // later rejected by the adjacent-digit filter in analyzeTicks.
-    createRandomPrediction() {
-        const candidates = [];
-        for (let d = 0; d <= 9; d++) {
-            if (d !== this.lastTradedDigit) candidates.push(d);
-        }
-        if (!candidates.length) return crypto.randomInt(0, 10);
-        return candidates[crypto.randomInt(0, candidates.length)];
+        console.log(
+            `[${asset}] 🔎 regime=${regime.phase} P(repeat)=${regime.pRepeat} ` +
+            `→ win%=${regime.winProbPct} (≥${this.config.winProbabilityThreshold}) | barrier=${lastDigit}`
+        );
+        this.xDigit = lastDigit;
+        this.placeTrade(asset, lastDigit);
     }
 
     async placeTrade(asset, predictedDigit) {
@@ -1302,11 +1653,17 @@ class EnhancedDigitDifferTradingBot {
 
     sendTradeOpenNotification(asset, digit, stake, payout) {
         const last10 = this.lastOpenDigits && this.lastOpenDigits.length ? this.lastOpenDigits.join(', ') : (this.tickHistories[asset] || []).slice(-10).join(', ') || '—';
+        const reg = this.lastRegimeInfo ? this.lastRegimeInfo[asset] : null;
+        const regLine = reg
+            ? 'Regime: <b>' + reg.phase + '</b> | P(repeat)=' + (reg.pRepeat != null ? (reg.pRepeat * 100).toFixed(1) + '%' : '—') +
+              ' → win% <b>' + (reg.winProbPct != null ? reg.winProbPct.toFixed(1) : '—') + '%</b>\n'
+            : '';
 
         telegram.send(
             '🟢 <b>Random Digit Multi-Asset Bot — OPEN</b>\n' +
             'Asset: <code>' + htmlEscape(asset) + '</code>\n' +
-            'Predicted digit: <b>' + digit + '</b>\n' +
+            'Predicted digit (repeat-avoid barrier): <b>' + digit + '</b>\n' +
+            regLine +
             'Stake: <b>$' + stake.toFixed(2) + '</b> → payout ' + (payout ? payout.toFixed(2) : '—') + '\n\n' +
             'Last 10 digits: <code>' + last10 + '</code>\n' +
             '🕒 ' + utcTs(),
@@ -1403,7 +1760,8 @@ class EnhancedDigitDifferTradingBot {
         console.log('Asset mode: ' + (this.config.singleActiveAsset ? 'ONE asset per cycle (random pick, lowest latency)' : 'ALL assets subscribed'));
         console.log('Random asset selection: ' + (this.config.randomAssetSelection ? 'ON' : 'OFF (tick-driven)'));
         console.log('Suspend asset after trade: ' + (this.config.suspendAssetAfterTrade ? 'ON' : 'OFF'));
-        console.log('No consecutive repeats: ON (asset + digit excluded from the previous trade)');
+        console.log(`Strategy: repeat-avoid (barrier = current last digit) | fire when no-repeat win% ≥ ${this.config.winProbabilityThreshold} | phase allows quiet=${this.config.raAllowQuiet}/cooling=${this.config.raAllowCooling}/neutral=${this.config.raAllowNeutral}`);
+        console.log(`Regime engine: windows ${this.config.raFastWindow}/${this.config.raMidWindow}/${this.config.raSlowWindow} | Wilson z=${this.config.zScore} margin=${this.config.modelRiskMargin}`);
         console.log(`Session takeProfit: ${this.config.takeProfit > 0 ? '$' + this.config.takeProfit.toFixed(2) : 'OFF'} | cooldown ${Math.round(this.config.takeProfitCooldownMinMs / 60000)}-${Math.round(this.config.takeProfitCooldownMaxMs / 60000)} min (random)`);
         console.log('State file: ' + this.stateFile);
 
@@ -1417,6 +1775,12 @@ class EnhancedDigitDifferTradingBot {
         process.on('uncaughtException', (e) => { logger.error('uncaught:', e); this._save('uncaught'); });
         process.on('unhandledRejection', (e) => { logger.error('unhandled:', e); this._save('unhandled'); });
     }
+}
+
+// Offline validation: `SELFTEST=1 node x2Differn.js` (no network/login).
+if (boolEnv('SELFTEST', false) || process.argv.includes('--selftest')) {
+    runRepeatRegimeSelfTest();
+    process.exit(0);
 }
 
 // Usage — trading config preserved from the original randomDiffer.js
