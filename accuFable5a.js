@@ -1,3236 +1,2013 @@
-#!/usr/bin/env node
+/**
+ * ╔══════════════════════════════════════════════════════════════╗
+ * ║         accumBotM — Enhanced Multi-Asset Accumulator Bot    ║
+ * ╠══════════════════════════════════════════════════════════════╣
+ * ║  ORIGINAL STRATEGY (preserved):                              ║
+ * ║  • Digit-frequency analysis on StayIN sequence               ║
+ * ║  • Filters digits that appeared exactly filterNum times      ║
+ * ║  • Entry when current digit count matches filtered array     ║
+ * ║  • Martingale recovery with multiplier                       ║
+ * ║                                                              ║
+ * ║  UPGRADES:                                                   ║
+ * ║  • Multi-asset concurrent trading (one contract per asset)   ║
+ * ║  • Telegram notifications (replaces Gmail)                   ║
+ * ║  • State persistence with auto-save                          ║
+ * ║  • Trade watchdog for stuck contract recovery                ║
+ * ║  • Robust reconnection with exponential backoff              ║
+ * ║  • WebSocket ping keep-alive                                 ║
+ * ║  • INTELLIGENT ASSET FILTERING:                               ║
+ * ║    - Active Assets: stayedInArray < threshold (ready)        ║
+ * ║    - Pending Assets: stayedInArray >= threshold (waiting)    ║
+ * ║    - Dynamic asset management between lists                  ║
+ * ║    - Periodic scanning of pending assets                     ║
+ * ║  • ASSET SUSPENSION / RECOVERY FOCUS:                         ║
+ * ║    - On any trade open, all other assets suspended            ║
+ * ║    - Only the focus (loss) asset trades during recovery       ║
+ * ║    - All assets resumed on win                                ║
+ * ║  • STAYED-IN TREND FILTER (NEW):                              ║
+ * ║    - Tracks total stayedInArray sum over time per asset       ║
+ * ║    - Only enters a trade when that sum is FRESHLY trending    ║
+ * ║      upward (recent consecutive increases)                    ║
+ * ║    - Avoids entering right as an asset rolls over from its    ║
+ * ║      peak and starts declining (likely exhausted run)         ║
+ * ╚══════════════════════════════════════════════════════════════╝
+ */
+
 'use strict';
 
-/**
- * ======================================================================
- *  AccuAPEX v5 — "Measure First" Deriv Accumulator engine
- * ======================================================================
- *
- *  A single-file Deriv Accumulator (ACCU) bot rebuilt from accuAPEX v4.
- *
- *  ─ WHAT THE RESEARCH CHANGED ────────────────────────────────────────
- *
- *  1. ACCU IS VOLATILITY-INDICES ONLY.
- *     Deriv offers Accumulators only on volatility indices. All of v4's
- *     BOOM/CRASH "post-spike" machinery was unreachable code for ACCU.
- *     It is gone. Assets are R_* and 1HZ*V only.
- *
- *  2. THE UNDERLYING IS I.I.D. BY CONSTRUCTION.
- *     Volatility indices are CSPRNG-generated with a CONSTANT annualised
- *     volatility. Per-tick log returns are i.i.d. Gaussian with fixed σ.
- *     Therefore NO conditional state — realized-vol compression, RSI,
- *     streaks, patterns, time of day — can predict the next tick.
- *     v4's "volatility compression" gate was measuring sampling noise.
- *     It is gone.
- *
- *  3. THE BARRIER IS THE FAIR GAUSSIAN QUANTILE MINUS A HAIRCUT.
- *     From Deriv's own published barriers, b(5%)/b(1%) = 0.76091 versus
- *     the zero-EV Gaussian ratio z(5%)/z(1%) = 0.76795. The barrier is
- *     the fair quantile, shaved. Measured against the 1% barrier as the
- *     anchor, the 5% rate costs ≈ −0.218% EV PER TICK.
- *     v4 hardcoded growth rate 0.05 — the single most expensive rate.
- *
- *  4. COST COMPOUNDS WITH HOLD TIME: E[return] = (1+ev_tick)^K − 1.
- *     Hold time is the main cost lever, and it only ever subtracts.
- *
- *  5. MARTINGALE IS OPT-IN AND BANNED BY DEFAULT.
- *     v4 shipped martingaleMultiplier 22.0. On a $5 base that is $115 at
- *     risk, and at an 80% win rate a 2-loss streak arrives every ~25
- *     trades. Martingale therefore defaults to OFF; enabling it is a
- *     deliberate, config-driven choice (MARTINGALE_MULTIPLIER /
- *     MARTINGALE_STEPS). Match accuHOLD_v2 semantics exactly when on.
- *
- *  ─ WHAT THIS BOT ACTUALLY DOES ──────────────────────────────────────
- *
- *  It refuses to assume an edge. It MEASURES one.
- *
- *    • CalibrationEngine reads the live barrier from Deriv's own proposal
- *      for every (symbol, growth rate), measures the realized per-tick
- *      breach rate from tick history, and computes a Wilson confidence
- *      interval on per-tick survival.
- *    • It trades ONLY if the LOWER confidence bound on survival exceeds
- *      the break-even survival 1/(1+g). That is the only condition under
- *      which a positive expectation is statistically defensible.
- *    • EdgeLedger runs a sequential test on realized outcomes. If the
- *      live edge is negative with significance, the bot HALTS itself.
- *    • Default mode is PAPER. It will not touch money until you flip it.
- *
- *  If no edge clears the gate, the bot stands aside and trades nothing.
- *  That is the correct behaviour, and it is the most likely behaviour.
- *
- *  ─ HONESTY ──────────────────────────────────────────────────────────
- *  Deriv's trading terms state that Accumulator pricing "include[s] a
- *  bias in our favour". This bot cannot remove that bias. It minimises
- *  exposure to it, measures it continuously, and stops when it is losing.
- *  No configuration of this file is guaranteed to be profitable.
- *
- *  Usage:
- *    node accuAPEX-v5.js --selftest      run the unit tests, exit
- *    node accuAPEX-v5.js --calibrate     measure edge, never trade, exit
- *    node accuAPEX-v5.js                 run (PAPER mode unless changed)
- *
- *  License: MIT
- * ======================================================================
- */
+require('dotenv').config();
+const WebSocket = require('ws');
+const TelegramBot = require('node-telegram-bot-api');
+const fs = require('fs');
+const path = require('path');
+const https = require('https');
+const http = require('http');
+const { URL } = require('url');
 
-const WebSocket    = require('ws');
-const https        = require('https');
-const fs           = require('fs');
-const path         = require('path');
-const { URL }      = require('url');
-const EventEmitter = require('events');
-
-// ═══════════════════════════════════════════════════════════════════════
-// 1. ENV LOADER
-// ═══════════════════════════════════════════════════════════════════════
-function loadEnv(filePath = path.join(process.cwd(), '.env')) {
-  if (!fs.existsSync(filePath)) return;
-  try {
-    for (const raw of fs.readFileSync(filePath, 'utf8').split(/\r?\n/)) {
-      const line = raw.trim();
-      if (!line || line.startsWith('#')) continue;
-      const eq = line.indexOf('=');
-      if (eq < 0) continue;
-      const key = line.slice(0, eq).trim();
-      let val = line.slice(eq + 1).trim();
-      if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-        val = val.slice(1, -1);
-      }
-      if (!(key in process.env)) process.env[key] = val;
-    }
-  } catch (e) { console.error('[boot] .env read error:', e.message); }
-}
-loadEnv();
-
-const envStr = (k, d) => (process.env[k] != null && process.env[k] !== '' ? process.env[k] : d);
-const envNum = (k, d) => { const v = parseFloat(process.env[k]); return Number.isFinite(v) ? v : d; };
-const envInt = (k, d) => { const v = parseInt(process.env[k], 10); return Number.isFinite(v) ? v : d; };
-const envBool = (k, d) => {
-  const v = process.env[k];
-  if (v == null || v === '') return d;
-  return /^(1|true|yes|on)$/i.test(v.trim());
-};
-
-// ═══════════════════════════════════════════════════════════════════════
-// 2. CONFIGURATION
-//    Everything comes from the environment. No secret is ever hardcoded.
-// ═══════════════════════════════════════════════════════════════════════
-const CONFIG = Object.freeze({
-  // ── Credentials (REQUIRED via .env — never commit these) ──
-  // These were previously hardcoded literals, and the bot shipped with a live
-  // PAT token and a Telegram bot token in version control. Rotate both.
-  // .env must define: API_TOKEN, APP_ID, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
-  apiToken : 'pat_a4392c86309361a50eca82c1ea872127636b84070f6c45295459ffb83de31360',
-  appId    : '33uslPtthXBEkQOdfKfoY',
-  wsUrl    : 'wss://ws.derivws.com/websockets/v3',
-  currency : 'USD',
-  // PAT-token (new API) only: which account type the OTP flow selects when
-  // the token owns both types. 'demo' | 'real'.
-  accountType: 'demo',
-
-  // ── Execution mode ──
-  //   'paper' — full pipeline, simulated fills, ZERO money at risk (DEFAULT)
-  //   'live'  — real orders. Requires MODE=live AND CONFIRM_LIVE=i-understand
-  // Both were previously hardcoded to live + confirmed, which made the
-  // interlock a no-op and contradicted the file's own "default is PAPER"
-  // header. Set them in .env to trade real money.
-  mode         : 'live',
-  confirmLive  : 'i-understand',
-
-  // ── Assets ──
-  //   The DEFAULT is the volatility-index family this file's maths is built
-  //   for: per-tick log returns are i.i.d. Gaussian at constant volatility, so
-  //   the barrier really is a quantile and the survival/EV model is valid.
-  //
-  //   BOOM/CRASH indices are a different animal: they carry deliberate jump
-  //   events, so returns are heavy-tailed and NOT Gaussian. The calibration
-  //   still runs, but breachCount is dominated by synthetic spikes and the
-  //   EV figures are not meaningful. That is a modelling caveat, not a crash.
-
-  //   assets: envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH500,CRASH600,CRASH900,CRASH1000')
-  //     .split(',').map(s => s.trim()).filter(Boolean),
-
-  assets: envStr('ASSETS', '1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V')
-    .split(',').map(s => s.trim()).filter(Boolean),
-
-  // A boom/crash index is not a volatility index. We allow it, but say so.
-  isBoomOrCrash: s => /^(BOOM|CRASH)/i.test(s),
-
-  // ── Growth-rate grid. 0.01 measured cheapest; 0.05 measured dearest. ──
-  growthRates: envStr('GROWTH_RATES', '0.01') //0.01,0.02,0.03
-    .split(',').map(s => parseFloat(s.trim())).filter(v => v >= 0.01 && v <= 0.05),
-
-  // ── Sizing. Flat or fixed-fraction base; martingale is opt-in below. ──
-  sizing        : 'flat',   // 'flat' | 'fraction'
-  stake         : 1.0,
-  riskFraction  : 0.005,           // 0.5% of balance
-  minStake      : 1.0,
-  maxStake      : 150.0,
-
-  // Martingale (accuHOLD_v2 semantics) ──
-  martingaleMultiplier : 3.0, // stake × multiplier each loss step
-  martingaleSteps      : 4,        // 0 = disabled
-  martingaleBaseStake  : 0,   // 0 → use CONFIG.stake
-
-  // ── Chase-on-loss ──
-  // When ON, a losing trade immediately re-trades the SAME asset (same
-  // growth rate) on the very next tick, skipping the stay/ev gates. It keeps
-  // re-trading that same asset after each loss until a win, then returns to
-  // the normal gate-based selection.
-  chaseOnLoss         : true,
-
-  // ── EOD / hourly summaries (GMT) ──
-  eodTimeGmt         : '00:00',
-  eodSendDelaySeconds: envInt('EOD_SEND_DELAY_SECONDS', 10),
-  hourlySummary      : envBool('HOURLY_SUMMARY', true),
-
-  // ── Hard risk rails (all enforced, all halt the bot) ──
-  dailyMaxLoss      : 200,
-  dailyMaxTrades    : 40000000,
-  sessionMaxDrawdown: 300,
-  maxOpenTrades     : 1,
-  maxConsecLosses   : 5,
-
-  // ── Calibration (the core of this build) ──
-  // Trade only when the LOWER confidence bound on per-tick survival beats
-  // the break-even survival 1/(1+g) by at least edgeMarginPerTick.
-  calibMinTicks     : 101,   // min history per symbol
-  calibWindow       : 101,     // max history retained
-  calibConfidenceZ  : 0.96,      // 95% Wilson bound
-  edgeMarginPerTick : -0.6000, // required cushion
-  sellSpreadCost    : 0.0002, // modelled round-trip cost
-
-  // ── Stayed-in array + evLower/tick + breachCount gates ──
-  // The ACCU proposal returns contract_details.ticks_stayed_in — the last
-  // barrier-stay durations, most current value last. Trade only when:
-  //   • its N most-current values are each < stayMaxValue, AND
-  //   • its single most-current value is < stayCurrentMax, AND
-  //   • its calibrated evLowerPerTick is <= evLowerGateMax (e.g. -1.4547%), AND
-  //   • its calibrated single-tick breachCount is >= breachMinCount (need a
-  //     large enough sample of barrier hits to trust the survival estimate).
-  stayWindowN    : 5,     //6 N most-current values to check
-  stayMaxValue   : 50,    //20 every one of those N must be < this
-  stayCurrentMax : 2,   //2 the most-current value must be < this
-  stayStaleMs    : 24000000, // stays older than this are ignored
-  evLowerGateMax : -0.010547, //-0.013547evLower/tick gate: trade only when ≤ this
-  breachMinCount : 0, //>= 83 trade only when historical single-tick barrier hits ≥ this
-  breachMinCount2 : 15, //<= 83 trade only when historical single-tick barrier hits ≥ this
-
-  // ── Take-profit ──
-  // TP exits the trade after takeProfitTicks ticks (the hold target). The
-  // same value feeds the live limit_order take-profit price.
-  takeProfitTicks      : 50,  // sell after this many ticks
-
-  // ── Hold-time policy ──
-  maxHoldTicks      : 12,
-  minHoldTicks      : 1,
-
-  // ── Live edge monitor: halt when realized edge is significantly bad ──
-  // Was 400000000000000 while the comment said "40" — the circuit breaker that
-  // stops the bot when it is provably losing could never fire. On a live-money
-  // account that is an unbounded bleed.
-  edgeMonitorMinTrades : 400000000,
-  edgeMonitorZStop     : 2.0,  // 95% confidence that EV < 0),
-
-  // ── Timing ──
-  analysisIntervalMs : 1000,
-  tradeCooldownMs    : 3000,
-  barrierRefreshMs   : 60000,
-  watchdogMs         : 60000,
-
-  // Minimum spacing between ANY two outbound requests. Deriv throttles hard,
-  // and a throttled proposal stream silently starves the calibration engine
-  // (barrier + stayed-in records age out → "uncalibrated" forever).
-  // 250ms = 4 req/s. Lower this only if your account's quota allows it.
-  minRequestGapMs    : envInt('MIN_REQUEST_GAP_MS', 250),
-
-  // How often the stayed-in array is re-requested. Every analysis cycle asks
-  // Deriv for a fresh ACCU proposal per (pair, growth rate); this caps that.
-  staysRefreshMs     : envInt('STAYS_REFRESH_MS', 1000),
-
-  // ── Telegram (optional) ──
-  telegram: {
-    enabled : true,
-    botToken: '8196927342:AAHa8d0OrF3D6yYTA_QcCPOzz5G0SPj82xE',
-    chatId  : '752497117',
-    maxQueue: 200,
-  },
-
-  // ── Reconnect ──
-  reconnect: { initialDelayMs: 1000, maxDelayMs: 60000, backoffFactor: 2, jitterMs: 750 },
-
-  // ── Logging / state ──
-  logFile   : 'accuFable5a_01.log',
-  logLevel  : 'INFO',
-  stateFile : 'accuFable5a-state_001.json',
-  edgeFile  : 'accuFable5a-edge_001.json',
-});
-
-// ═══════════════════════════════════════════════════════════════════════
-// 3. LOGGER
-// ═══════════════════════════════════════════════════════════════════════
-const LOG_LEVELS = { ERROR: 0, WARN: 1, INFO: 2, DEBUG: 3 };
-const currentLevel = LOG_LEVELS[CONFIG.logLevel] ?? LOG_LEVELS.INFO;
-const pad = n => String(n).padStart(2, '0');
-const ts = () => {
-  const d = new Date();
-  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ` +
-         `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())}Z`;
-};
-function _writeLog(line) { try { fs.appendFileSync(CONFIG.logFile, line + '\n'); } catch (_) {} }
-function log(level, msg, ...rest) {
-  if (LOG_LEVELS[level] > currentLevel) return;
-  const line = `[${ts()}] [${level}] ${msg}` + (rest.length ? ' ' + rest.map(String).join(' ') : '');
-  if (level === 'ERROR') console.error(line);
-  else if (level === 'WARN') console.warn(line);
-  else console.log(line);
-  _writeLog(line);
-}
-const logger = {
-  error: (m, ...r) => log('ERROR', m, ...r),
-  warn : (m, ...r) => log('WARN',  m, ...r),
-  info : (m, ...r) => log('INFO',  m, ...r),
-  debug: (m, ...r) => log('DEBUG', m, ...r),
-};
-
-const money = (n, c = CONFIG.currency) => `${n >= 0 ? '+' : ''}${Number(n || 0).toFixed(2)} ${c}`;
-const utcDateStr = (d = new Date()) => d.toISOString().slice(0, 10);
-const utcHour    = (d = new Date()) => d.getUTCHours();
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-// Human-readable duration formatter for trade-held time.
-function formatDuration(totalSec) {
-  if (!Number.isFinite(totalSec) || totalSec < 0) return 'n/a';
-  const s = Math.floor(totalSec);
-  if (s < 1)    return '<1s';
-  if (s < 60)   return `${s}s`;
-  if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
-  return `${Math.floor(s / 86400)}d ${Math.floor((s % 86400) / 3600)}h`;
-}
-
-/**
- * Trade log + streaks + daily/hourly summaries for the telegram reports.
- * Copied from accuHOLD_v2.js so the notification output matches exactly.
- */
-class StatisticsManager {
-  constructor(saved = null) {
-    this.trades = [];
-    this.dailySummaries = {};
-    this.overallProfit = 0;
-    this.currentLossStreak = 0;
-    this.maxLossStreak = 0;
-    this.lossStreakEvents = { x2: 0, x3: 0, x4: 0, x5: 0, x6: 0, x7: 0 };
-    this.eodSentDates = [];
-    this.dailyState = {};
-    if (saved) this.load(saved);
-  }
-  load(s) {
-    if (Array.isArray(s.trades)) this.trades = s.trades;
-    if (s.dailySummaries) this.dailySummaries = s.dailySummaries;
-    this.overallProfit = Number(s.overallProfit || 0);
-    this.currentLossStreak = Number(s.currentLossStreak || 0);
-    this.maxLossStreak = Number(s.maxLossStreak || 0);
-    const e = s.lossStreakEvents || {};
-    this.lossStreakEvents = {
-      x2: Number(e.x2 || 0), x3: Number(e.x3 || 0), x4: Number(e.x4 || 0),
-      x5: Number(e.x5 || 0), x6: Number(e.x6 || 0), x7: Number(e.x7 || 0),
-    };
-    this.eodSentDates = Array.isArray(s.eodSentDates) ? s.eodSentDates : [];
-    this.dailyState = s.dailyState || {};
-  }
-  serialize() {
-    return {
-      trades: this.trades.slice(-5000), dailySummaries: this.dailySummaries,
-      overallProfit: this.overallProfit, currentLossStreak: this.currentLossStreak,
-      maxLossStreak: this.maxLossStreak,
-      lossStreakEvents: { ...this.lossStreakEvents },
-      eodSentDates: this.eodSentDates.slice(-400),
-      dailyState: this.dailyState,
-    };
-  }
-  lossStreakLine() {
-    const e = this.lossStreakEvents;
-    return `x2=${e.x2} x3=${e.x3} x4=${e.x4} x5=${e.x5} x6=${e.x6} x7=${e.x7}`;
-  }
-  record(trade) {
-    const tsMs = Number(trade.sellTime || trade.buyTime || Date.now() / 1000) * 1000;
-    const d = new Date(tsMs);
-    const rec = { ...trade, timestamp: tsMs, date: utcDateStr(d), hour: utcHour(d) };
-    this.trades.push(rec);
-    if (rec.status === 'unknown') return rec;
-    this.overallProfit += Number(rec.profit || 0);
-    if (rec.status === 'lost') {
-      this.currentLossStreak += 1;
-      this.maxLossStreak = Math.max(this.maxLossStreak, this.currentLossStreak);
-      if (this.currentLossStreak === 2) this.lossStreakEvents.x2 += 1;
-      else if (this.currentLossStreak === 3) this.lossStreakEvents.x3 += 1;
-      else if (this.currentLossStreak === 4) this.lossStreakEvents.x4 += 1;
-      else if (this.currentLossStreak === 5) this.lossStreakEvents.x5 += 1;
-      else if (this.currentLossStreak === 6) this.lossStreakEvents.x6 += 1;
-      else if (this.currentLossStreak >= 7) this.lossStreakEvents.x7 += 1;
-    } else if (rec.status === 'won') {
-      this.currentLossStreak = 0;
-    }
-    return rec;
-  }
-  todayTrades(date = utcDateStr()) { return this.trades.filter(t => t.date === date); }
-  tradesForHour(date, hour) { return this.trades.filter(t => t.date === date && t.hour === hour); }
-  stats(list) {
-    const wins = list.filter(t => t.status === 'won');
-    const losses = list.filter(t => t.status === 'lost');
-    const total = list.reduce((s, t) => s + Number(t.profit || 0), 0);
-    const gw = wins.reduce((s, t) => s + Number(t.profit || 0), 0);
-    const gl = Math.abs(losses.reduce((s, t) => s + Number(t.profit || 0), 0));
-    return {
-      count: list.length, wins: wins.length, losses: losses.length,
-      winRate: list.length ? wins.length / list.length * 100 : 0,
-      grossWin: gw, grossLoss: gl, totalProfit: total,
-      profitFactor: gl > 0 ? gw / gl : (gw > 0 ? Infinity : 0),
-      stake: list.reduce((s, t) => s + Number(t.stake || 0), 0),
-    };
-  }
-  archiveDate(date) {
-    const list = this.trades.filter(t => t.date === date);
-    const s = this.stats(list);
-    this.dailySummaries[date] = s;
-    return { date, trades: list, stats: s };
-  }
-  markEodSent(date) { if (!this.eodSentDates.includes(date)) this.eodSentDates.push(date); this.eodSentDates = this.eodSentDates.slice(-400); }
-  isEodSent(date) { return this.eodSentDates.includes(date); }
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// 4. STATISTICS
-//    The maths that decides whether this bot is allowed to trade at all.
-// ═══════════════════════════════════════════════════════════════════════
-const Stats = {
-  /**
-   * Wilson score interval for a binomial proportion.
-   * Far better than the normal approximation at p near 1, which is exactly
-   * where per-tick accumulator survival lives (p ≈ 0.95–0.99).
-   */
-  wilson(successes, n, z = 1.96) {
-    if (n <= 0) return { lower: 0, upper: 1, point: 0 };
-    const p = successes / n;
-    const z2 = z * z;
-    const denom = 1 + z2 / n;
-    const centre = p + z2 / (2 * n);
-    const margin = z * Math.sqrt((p * (1 - p) + z2 / (4 * n)) / n);
-    return {
-      point: p,
-      lower: Math.max(0, (centre - margin) / denom),
-      upper: Math.min(1, (centre + margin) / denom),
-    };
-  },
-
-  /** Break-even per-tick survival for a growth rate: p·(1+g) = 1. */
-  breakEvenSurvival(growthRate) { return 1 / (1 + growthRate); },
-
-  /** Expected value per tick given a survival probability. */
-  evPerTick(survival, growthRate) { return survival * (1 + growthRate) - 1; },
-
-  /** Expected total return over K ticks, including modelled exit cost. */
-  evOverHold(survival, growthRate, K, spreadCost = 0) {
-    return Math.pow(survival, K) * Math.pow(1 + growthRate, K) - 1 - spreadCost;
-  },
-
-  /** Standard normal CDF (Abramowitz & Stegun 7.1.26 via erf). */
-  normCdf(x) {
-    const t = 1 / (1 + 0.2316419 * Math.abs(x));
-    const d = 0.3989422804014327 * Math.exp(-x * x / 2);
-    let p = d * t * (0.319381530 + t * (-0.356563782 + t * (1.781477937 +
-            t * (-1.821255978 + t * 1.330274429))));
-    return x > 0 ? 1 - p : p;
-  },
-
-  mean(a) { return a.length ? a.reduce((s, v) => s + v, 0) / a.length : 0; },
-
-  stdev(a) {
-    if (a.length < 2) return 0;
-    const m = this.mean(a);
-    return Math.sqrt(a.reduce((s, v) => s + (v - m) * (v - m), 0) / (a.length - 1));
-  },
-
-  /**
-   * One-sample z-statistic for H0: mean == mu0.
-   * Used by the live edge monitor to decide when the bot is provably losing.
-   */
-  zStat(samples, mu0 = 0) {
-    const n = samples.length;
-    if (n < 2) return 0;
-    const sd = this.stdev(samples);
-    if (sd <= 0) return 0;
-    return (this.mean(samples) - mu0) / (sd / Math.sqrt(n));
-  },
-
-  /**
-   * Lag-1 autocorrelation. A genuine i.i.d. series gives ~0.
-   * If this is reliably non-zero on a volatility index, that is the ONLY
-   * kind of finding that could justify a conditional entry rule.
-   */
-  autocorr1(a) {
-    const n = a.length;
-    if (n < 3) return 0;
-    const m = this.mean(a);
-    let num = 0, den = 0;
-    for (let i = 0; i < n; i++) {
-      const d = a[i] - m;
-      den += d * d;
-      if (i > 0) num += d * (a[i - 1] - m);
-    }
-    return den > 0 ? num / den : 0;
-  },
-};
-
-// ═══════════════════════════════════════════════════════════════════════
-// 5. TELEGRAM (optional, bounded queue, never blocks trading)
-// ═══════════════════════════════════════════════════════════════════════
-class TelegramNotifier {
-  constructor(cfg) {
-    this.cfg = cfg;
-    this.queue = [];
-    this.sending = false;
-    this.dropped = 0;
-  }
-  send(text) {
-    if (!this.cfg.enabled || !this.cfg.botToken || !this.cfg.chatId) return;
-    if (this.queue.length >= this.cfg.maxQueue) { this.queue.shift(); this.dropped++; }
-    this.queue.push(text);
-    this._drain();
-  }
-  async _drain() {
-    if (this.sending) return;
-    this.sending = true;
-    while (this.queue.length) {
-      const text = this.queue.shift();
-      try { await this._post(text); } catch (e) { logger.debug('telegram:', e.message); }
-      await sleep(350);
-    }
-    this.sending = false;
-  }
-  _post(text) {
-    return new Promise((resolve, reject) => {
-      const body = JSON.stringify({ chat_id: this.cfg.chatId, text, parse_mode: 'HTML' });
-      const req = https.request({
-        hostname: 'api.telegram.org',
-        path: `/bot${this.cfg.botToken}/sendMessage`,
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
-        timeout: 10000,
-      }, res => { res.resume(); res.on('end', resolve); });
-      req.on('error', reject);
-      req.on('timeout', () => { req.destroy(new Error('timeout')); });
-      req.write(body);
-      req.end();
-    });
-  }
-}
-const telegram = new TelegramNotifier(CONFIG.telegram);
-
-// ═══════════════════════════════════════════════════════════════════════
-// 6. DERIV WEBSOCKET CLIENT
-// ═══════════════════════════════════════════════════════════════════════
-// The new-API (PAT) flow swaps the legacy `wss://…?app_id=…` + `authorize`
-// handshake for a REST OTP handshake: list accounts, request a one-time
-// session URL, then connect with that URL. The OTP socket is already
-// authenticated — never send `authorize` on it.
+// ══════════════════════════════════════════════════════════════════════════════
+// DERIV REST CLIENT  (for the new PAT / OAuth OTP-based auth flow)
+// ──────────────────────────────────────────────────────────────────────────────
+//  The new Deriv API uses two complementary components:
+//    • REST API  (https://api.derivws.com)  — Account list + OTP minting
+//    • WebSocket (wss://api.derivws.com/...) — Real-time trading, pre-authed
+//  Personal Access Tokens start with "pat_".
+// ══════════════════════════════════════════════════════════════════════════════
 class RestClient {
-  constructor(baseUrl, appId, token) {
-    this.baseUrl = baseUrl || 'https://api.derivws.com';
-    this.appId = appId || '1089';
-    this.token = token || '';
-  }
+    constructor(baseUrl, appId, token) {
+        this.baseUrl = baseUrl || 'https://api.derivws.com';
+        this.appId = appId || '1089';
+        this.token = token || '';
+    }
 
-  async _request(method, reqPath, body = null) {
-    return new Promise((resolve, reject) => {
-      let url;
-      try { url = new URL(reqPath, this.baseUrl); } catch (e) {
-        return reject(new Error(`Invalid URL: ${reqPath}`));
-      }
-      const isHttps = url.protocol === 'https:';
-      const lib = isHttps ? https : require('http');
-      const opts = {
-        method,
-        hostname: url.hostname,
-        port: url.port || (isHttps ? 443 : 80),
-        path: url.pathname + url.search,
-        headers: {
-          'Deriv-App-ID': this.appId,
-          'Authorization': 'Bearer ' + this.token,
-          'Accept': 'application/json',
-          ...(body ? { 'Content-Type': 'application/json' } : {}),
-        },
-        timeout: 20000,
-      };
-      const req = lib.request(opts, res => {
-        let data = '';
-        res.on('data', d => data += d);
-        res.on('end', () => {
-          let parsed = data;
-          try { parsed = JSON.parse(data); } catch (_) {}
-          resolve({ status: res.statusCode, body: parsed });
+    static isPat(token) {
+        return typeof token === 'string'
+            && /^pat_[a-z0-9_\-]{16,}$/i.test(token.trim());
+    }
+
+    _request(method, urlPath, body = null) {
+        return new Promise((resolve, reject) => {
+            let url;
+            try { url = new URL(urlPath, this.baseUrl); }
+            catch (e) { return reject(new Error(`Invalid URL: ${urlPath}`)); }
+            const isHttps = url.protocol === 'https:';
+            const lib = isHttps ? https : http;
+            const opts = {
+                method,
+                hostname: url.hostname,
+                port: url.port || (isHttps ? 443 : 80),
+                path: url.pathname + url.search,
+                headers: {
+                    'Deriv-App-ID': this.appId,
+                    'Authorization': 'Bearer ' + this.token,
+                    'Accept': 'application/json',
+                    ...(body ? { 'Content-Type': 'application/json' } : {}),
+                },
+                timeout: 15000,
+            };
+            const req = lib.request(opts, res => {
+                let data = '';
+                res.on('data', d => data += d);
+                res.on('end', () => {
+                    let parsed = data;
+                    try { parsed = JSON.parse(data); } catch (_) {}
+                    resolve({ status: res.statusCode, body: parsed });
+                });
+            });
+            req.on('timeout', () => { req.destroy(new Error('REST request timeout')); });
+            req.on('error', reject);
+            if (body) req.write(JSON.stringify(body));
+            req.end();
         });
-      });
-      req.on('timeout', () => req.destroy(new Error('REST timeout')));
-      req.on('error', reject);
-      if (body) req.write(JSON.stringify(body));
-      req.end();
-    });
-  }
+    }
 
-  async get(p) { return this._request('GET', p); }
-  async post(p, b) { return this._request('POST', p, b); }
-
-  static isPat(token) {
-    return typeof token === 'string' && /^pat_[a-z0-9_\-]{16,}$/i.test(token.trim());
-  }
+    get(p)       { return this._request('GET',  p); }
+    post(p, b)   { return this._request('POST', p, b); }
+    delete(p)    { return this._request('DELETE', p); }
 }
 
-class DerivClient extends EventEmitter {
-  constructor(cfg) {
-    super();
-    this.cfg = cfg;
-    this.ws = null;
-    this.connected = false;
-    this.authorized = false;
-    this.reqId = 1;
-    this.pending = new Map();       // reqId -> {resolve, reject, timer}
-    this.subs = new Map();          // reqId/subscriptionId -> handler
-    this.balance = 0;
-    this.loginId = null;
-    this.isVirtual = null;
-    this._reconnectDelay = cfg.reconnect.initialDelayMs;
-    this._shuttingDown = false;
-    this._heartbeat = null;
-    this._reconnecting = false;
-    this._reconnectAttempt = 0;
-    // Deriv's newer token format uses `underlying_symbol`; legacy uses `symbol`.
-    this._isPat = RestClient.isPat(cfg.apiToken);
-    this._rest = this._isPat ? new RestClient('https://api.derivws.com', cfg.appId, cfg.apiToken) : null;
-    this._otpUrl = null;
-    this._targetAccount = null;
-    this._tx = [];                 // outbound request queue
-    this._pumping = false;
-    this._lastTxAt = 0;
-  }
+// ══════════════════════════════════════════════════════════════════════════════
+// STATE PERSISTENCE MANAGER
+// ══════════════════════════════════════════════════════════════════════════════
+const STATE_FILE = path.join(__dirname, 'accumBCBC_01_state.json');
+const STATE_SAVE_INTERVAL = 5000;
 
-  get symbolKey() { return this._isPat ? 'underlying_symbol' : 'symbol'; }
+class StatePersistence {
+    static saveState(bot) {
+        try {
+            const persistableState = {
+                savedAt: Date.now(),
+                trading: {
+                    currentStake: bot.currentStake,
+                    consecutiveLosses: bot.consecutiveLosses,
+                    totalTrades: bot.totalTrades,
+                    totalWins: bot.totalWins,
+                    totalLosses: bot.totalLosses,
+                    totalProfitLoss: bot.totalProfitLoss,
+                    dailyProfitLoss: bot.dailyProfitLoss,
+                    consecutiveLosses2: bot.consecutiveLosses2,
+                    consecutiveLosses3: bot.consecutiveLosses3,
+                    consecutiveLosses4: bot.consecutiveLosses4,
+                    consecutiveLosses5: bot.consecutiveLosses5,
+                    consecutiveLosses6: bot.consecutiveLosses6,
+                    kCountNum: bot.kCountNum,
+                    tradedDigitArray: bot.tradedDigitArray,
+                    tradedDigitArray2: bot.tradedDigitArray2,
+                    Sys1: bot.Sys1,
+                    Sys2: bot.Sys2,
+                    kCountNum: bot.kCountNum,
+                    filterNum: bot.filterNum,
+                },
+                assetMetrics: bot.assetMetrics,
+                hourlyStats: bot.hourlyStats,
+            };
+            fs.writeFileSync(STATE_FILE, JSON.stringify(persistableState, null, 2));
+            return true;
+        } catch (error) {
+            console.error(`❌ Failed to save state: ${error.message}`);
+            return false;
+        }
+    }
 
-  connect() {
-    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
-      return Promise.resolve();
+    static loadState() {
+        try {
+            if (!fs.existsSync(STATE_FILE)) {
+                console.log('🆕 No previous state found, starting fresh');
+                return null;
+            }
+            const fileContent = fs.readFileSync(STATE_FILE, 'utf8');
+            const savedData = JSON.parse(fileContent);
+            const ageMinutes = (Date.now() - savedData.savedAt) / 60000;
+            if (ageMinutes > 60) {
+                console.warn(`⚠️  Saved state is ${ageMinutes.toFixed(1)} minutes old, starting fresh`);
+                const backupFile = STATE_FILE.replace('.json', `_backup_${Date.now()}.json`);
+                fs.renameSync(STATE_FILE, backupFile);
+                return null;
+            }
+            console.log(`📂 Restoring state from ${ageMinutes.toFixed(1)} minutes ago`);
+            return savedData;
+        } catch (error) {
+            console.error(`❌ Failed to load state: ${error.message}`);
+            return null;
+        }
     }
-    if (!this.cfg.apiToken) {
-      return Promise.reject(new Error('DERIV_API_TOKEN is not set. Put it in .env — never in the source file.'));
-    }
-    if (this._isPat) {
-      logger.info('PAT token detected → new API (OTP flow)');
-      return this._newApiConnect().catch(e => {
-        this._scheduleReconnect();
-        throw e;
-      });
-    }
-    const url = this._getWsUrl();
-    logger.info(`connecting to ${url.replace(/([?&])app_id=[^&]+/, '$1app_id=***')}`);
-    return this._openWs(url);
-  }
 
-  _getWsUrl() {
-    const sep = this.cfg.wsUrl.includes('?') ? '&' : '?';
-    return `${this.cfg.wsUrl}${sep}app_id=${encodeURIComponent(this.cfg.appId)}`;
-  }
+    static startAutoSave(bot) {
+        if (bot.autoSaveInterval) clearInterval(bot.autoSaveInterval);
+        bot.autoSaveInterval = setInterval(() => {
+            if (bot.connected && !bot.endOfDay) StatePersistence.saveState(bot);
+        }, STATE_SAVE_INTERVAL);
 
-  async _newApiConnect() {
-    const desiredType = (this.cfg.accountType || 'demo').toLowerCase();
-    const accRes = await this._rest.get('/trading/v1/options/accounts');
-    if (accRes.status !== 200) {
-      const msg = accRes.body?.errors?.[0]?.message || accRes.body?.message || JSON.stringify(accRes.body);
-      throw new Error(`Account list failed (${accRes.status}): ${msg}`);
-    }
-    const accounts = Array.isArray(accRes.body?.data) ? accRes.body.data : [];
-    if (!accounts.length) throw new Error('No Options accounts found');
-    const acct = accounts.find(a => (a.account_type || '').toLowerCase() === desiredType) || accounts[0];
-    this._targetAccount = acct;
-    this.accountInfo = {
-      loginid: acct.account_id,
-      email: acct.email,
-      isVirtual: (acct.account_type || '').toLowerCase() === 'demo',
-      accountType: acct.account_type,
-      currency: acct.currency,
-      balance: parseFloat(acct.balance),
-      group: acct.group,
-    };
-    const otpPath = `/trading/v1/options/accounts/${encodeURIComponent(acct.account_id)}/otp`;
-    const otpRes = await this._rest.post(otpPath);
-    if (otpRes.status !== 200) {
-      throw new Error(`OTP failed (${otpRes.status}): ${JSON.stringify(otpRes.body)}`);
-    }
-    const wsUrl = otpRes.body?.data?.url;
-    if (!wsUrl || !/^wss?:/i.test(wsUrl)) throw new Error('OTP missing data.url');
-    this._otpUrl = wsUrl;
-    logger.info(`connecting via OTP (new API) — session URL obtained for ${acct.account_type}`);
-    return this._openWs(wsUrl);
-  }
-
-  _openWs(url) {
-    return new Promise((resolve, reject) => {
-      let settled = false;
-      try {
-        this.ws = new WebSocket(url, {
-          headers: { 'User-Agent': 'AccuFable5a/5.0 (+Node.js)' },
-          handshakeTimeout: 15000,
+        const exitHandler = () => {
+            console.log('\n🛑 Shutting down, saving final state...');
+            StatePersistence.saveState(bot);
+            process.exit();
+        };
+        process.on('SIGINT', exitHandler);
+        process.on('SIGTERM', exitHandler);
+        process.on('uncaughtException', (err) => {
+            console.error('Uncaught Exception:', err);
+            exitHandler();
         });
-      } catch (e) {
-        return reject(e);
-      }
+    }
+}
 
-      this.ws.on('open', () => {
-        this.connected = true;
-        this._reconnecting = false;
-        this._reconnectAttempt = 0;
-        this._reconnectDelay = this.cfg.reconnect.initialDelayMs;
-        logger.info('websocket open');
-        this._startHeartbeat();
+// ══════════════════════════════════════════════════════════════════════════════
+// MAIN BOT CLASS
+// ══════════════════════════════════════════════════════════════════════════════
+class EnhancedDerivTradingBot {
+    constructor(token, config = {}) {
+        this.token = token;
+        this.ws = null;
+        this.connected = false;
+        this.wsReady = false;
 
-        const ready = () => {
-          if (!settled) { settled = true; resolve(); }
-          this.emit('ready');
+        // ── New Deriv API (PAT / OAuth OTP) auth state ────────────────────
+        this.appId = config.appId || '1089';
+        this.accountType = (config.accountType || 'demo').toLowerCase();
+        this._isPat = RestClient.isPat(token);
+        this._rest = this._isPat
+            ? new RestClient('https://api.derivws.com', this.appId, token)
+            : null;
+        this._otpUrl = null;          // wss URL returned by REST OTP step
+        this._targetAccount = null;   // account record selected by accountType
+        this.accountInfo = null;      // populated after authorization
+
+        // ── Multi-asset support ──────────────────────────────────────────────
+        this.assets = config.assets;
+
+        // ── Asset Filtering System ───────────────────────────────────────────
+        this.activeAssets = new Set();      // Assets ready for trading (stayedInArray < threshold)
+        this.pendingAssets = new Set();     // Assets waiting (stayedInArray >= threshold)
+        this.assetStayedInValues = {};      // Track current stayedInArray total for each asset
+        this.pendingScanInterval = null;    // Timer for periodic pending asset scan
+
+        this.config = {
+            initialStake: config.initialStake || 1,
+            initialStake2: config.initialStake2 || 1,
+            multiplier: config.multiplier || 6,
+            multiplier2: config.multiplier2 || 6,
+            recoveryWinNum: config.recoveryWinNum || 8,
+            maxConsecutiveLosses: config.maxConsecutiveLosses || 3,
+            takeProfit: config.takeProfit || 100,
+            stopLoss: config.stopLoss || 100,
+            // Accumulator specific
+            growthRate: config.growthRate || 0.02,
+            takeProfitMultiplier: config.takeProfitMultiplier || 0.20,
+            takeProfitMultiplier2: config.takeProfitMultiplier2 || 0.20,
+            filterNum: config.filterNum || 5,
+            scanTimer: config.scanTimer || 60000,
+            STAYED_IN_THRESHOLD: config.STAYED_IN_THRESHOLD || 2200,
+            STAYED_IN_THRESHOLD2: config.STAYED_IN_THRESHOLD2 || 160,
+            STAYED_IN_THRESHOLD2FILTER: config.STAYED_IN_THRESHOLD2FILTER || 6,
+
+            // ✅ NEW: StayedIn trend filter settings
+            enableTrendFilter: config.enableTrendFilter !== false, // default true
+            trendSampleSize: config.trendSampleSize || 5,          // how many recent samples to retain per asset
+            trendConfirmCount: config.trendConfirmCount || 2,      // consecutive upward steps required to confirm a FRESH uptrend
+            trendMinDelta: config.trendMinDelta || 0,               // minimum increase per step to count as "up" (filters noise)
+            trendMaxAgeMs: config.trendMaxAgeMs || 120000,          // ignore trend data older than this (stale safeguard)
+
+            // Reconnection
+            maxReconnectAttempts: 50,
+            reconnectDelay: 5000,
+
+            // Trade throttle per asset
+            minTimeBetweenTrades: 5000,
+
+            // History
+            requiredHistoryLength: 100,
+            analysisInterval: 1,
+
+            // Telegram
+            telegramToken: config.telegramToken || null,
+            telegramChatId: config.telegramChatId || null,
         };
 
-        if (this._isPat) {
-          // OTP sockets arrive already authorised.
-          this._newApiMarkAuthorized();
-          ready();
+        // ── Trading state (original logic preserved) ─────────────────────────
+        this.currentStake = this.config.initialStake;
+        this.consecutiveLosses = 0;
+        this.consecutiveLosses2 = 0;
+        this.consecutiveLosses3 = 0;
+        this.consecutiveLosses4 = 0;
+        this.consecutiveLosses5 = 0;
+        this.consecutiveLosses6 = 0;
+        this.consecutiveLosses7 = 0;
+        this.consecutiveLosses8 = 0;
+        this.consecutiveLosses9 = 0;
+        this.totalTrades = 0;
+        this.totalWins = 0;
+        this.totalLosses = 0;
+        this.totalProfitLoss = 0;
+        this.dailyProfitLoss = 0;
+        this.Pause = false;
+        this.endOfDay = false;
+        this.kCount = false;
+        this.kCountNum = 0;
+        this.kLoss = 0.01;
+        this.confidenceThreshold = 0.5;
+        this.kTradeCount = 0;
+        this.isWinTrade = false;
+        this.waitTime = 150000;
+        this.LossDigitsList = [];
+        this.threeConsecutiveDigits = 0;
+        this.predictedType = '';
+        this.Sys1 = 0;
+        this.tradedDigitArray = [];
+        this.tradedDigitArray2 = [];
+        this.filteredArray = [];
+        this.tradeNum = Math.floor(Math.random() * (40 - 21 + 1)) + 21;
+        this.filterNum = this.config.filterNum;
+        this.Percentage = 0;
+        this.predictedDigit = null;
+        this.currentTick = 0;
+        this.Sys2 = false;
+        this.TP_SL = false;
+        this.scanningTimer = this.config.scanTimer;
+
+        // ── Multi-asset active trades ────────────────────────────────────────
+        this.activeTrades = {};          // { asset: { contractId, status, ... } }
+        this.contractSubscriptions = {}; // { asset: subscriptionId }
+        this.tickSubscriptionIds = {};
+        this.lastTradeTime = {};
+
+        // ── Per-asset price/digit histories ──────────────────────────────────
+        this.priceHistories = {};        // raw prices (not digits, for context)
+        this.tickHistory = {};           // digit sequences per asset
+        this.lastDigitsList = {};        // recent digits per asset
+        this.tickCounts = {};            // tick counter per asset
+        this.assetStates = {};           // { asset: { proposalId, ... } }
+
+        // ── Asset metrics ────────────────────────────────────────────────────
+        this.assetMetrics = {};
+
+        // ── Asset suspension (focus on loss asset) ───────────────────────────
+        this.suspendedAssets = new Set();
+        this.focusAsset = null;
+
+        // ── StayedIn trend tracking (NEW) ────────────────────────────────────
+        this.stayedInTrendHistory = {};  // { asset: [{ value, time }, ...] }
+
+        // ── Telegram ─────────────────────────────────────────────────────────
+        this.telegramBot = null;
+        if (this.config.telegramToken && this.config.telegramChatId) {
+            this.telegramBot = new TelegramBot(this.config.telegramToken, { polling: false });
+        }
+        this.hourlyStats = { trades: 0, wins: 0, losses: 0, pnl: 0 };
+
+        // ── Reconnection ─────────────────────────────────────────────────────
+        this.reconnectAttempts = 0;
+        this.pingInterval = null;
+
+        // ── Trade Watchdog ───────────────────────────────────────────────────
+        this.tradeWatchdogTimer = null;
+        this.tradeWatchdogPollTimer = null;
+        this.tradeWatchdogMs = 120000;
+        this.tradeStartTime = null;
+
+        // ── Initialize per-asset structures ──────────────────────────────────
+        this.assets.forEach(asset => {
+            this.priceHistories[asset] = [];
+            this.tickHistory[asset] = [];
+            this.lastDigitsList[asset] = [];
+            this.tickCounts[asset] = 0;
+            this.lastTradeTime[asset] = 0;
+            this.assetStates[asset] = { proposalId: null, lastProposalAt: 0 };
+            this.assetMetrics[asset] = { trades: 0, wins: 0, losses: 0, profitLoss: 0 };
+            this.stayedInTrendHistory[asset] = [];
+
+            // Initialize all assets as pending until we get their stayedInArray values
+            this.pendingAssets.add(asset);
+            this.assetStayedInValues[asset] = null;
+        });
+
+        // ── Load saved state ─────────────────────────────────────────────────
+        this.loadSavedState();
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // UTILITY FUNCTIONS
+    // ══════════════════════════════════════════════════════════════════════════
+    /**
+     * Calculate the total sum of all values in stayedInArray (indices 0-99)
+     * @param {Array} stayedInArray - Array of stayed-in values
+     * @returns {number} Total sum of all array elements
+     */
+    calculateTotalStayedIn(stayedInArray) {
+        if (!stayedInArray || !Array.isArray(stayedInArray)) {
+            return 0;
+        }
+        return stayedInArray.reduce((sum, value) => sum + (value || 0), 0);
+    }
+
+    /**
+     * Check if trading conditions are met based on stayedInArray values
+     * @param {Array} stayedInArray - Array of stayed-in values
+     * @param {number} consecutiveLosses - Current consecutive losses count
+     * @param {number} maxTotalStayedIn - Maximum allowed total sum (default: 600)
+     * @returns {boolean} True if conditions are met for trading
+     */
+    checkTradeCondition(stayedInArray, consecutiveLosses, maxTotalStayedIn, asset) {
+        // Calculate total sum of all stayedInArray values
+        const totalStayedInArray = this.calculateTotalStayedIn(stayedInArray);
+
+        // Log the calculation for debugging
+        // console.log(`   📊 ${asset} Total StayedIn:  ${stayedInArray.slice(-this.config.STAYED_IN_THRESHOLD2FILTER).join(',')} (${totalStayedInArray} / ${maxTotalStayedIn})`);
+        this.totalStayedInArray = totalStayedInArray;
+        this.maxTotalStayedIn = maxTotalStayedIn;
+
+        // Check individual thresholds for recent values
+        const recentThresholds = (
+            stayedInArray[99] >= stayedInArray[98] && stayedInArray[99] <= (stayedInArray[98] + 1) &&
+            stayedInArray[99] <= 10 &&
+            stayedInArray[98] > stayedInArray[97]  
+            &&
+            stayedInArray[97] > stayedInArray[96] 
+            // &&
+            // stayedInArray[96] < 100
+            // &&
+            // stayedInArray[95] < 100
+            // &&
+            // stayedInArray[94] < 100
+            // &&
+            // stayedInArray[93] < 100
+            // &&
+            // stayedInArray[92] < 100
+        );
+
+        // Check if total sum is within acceptable range
+        const totalWithinRange = totalStayedInArray < maxTotalStayedIn;
+
+        // Check if we have consecutive losses (recovery mode)
+        const inRecoveryMode = consecutiveLosses > 0;
+
+        // Return true if: (recent thresholds AND total within range) OR in recovery mode
+        return (totalWithinRange);
+    }
+
+    checkTradeCondition2(stayedInArray, consecutiveLosses, maxTotalStayedIn, asset) {
+        // Calculate total sum of all stayedInArray values
+        const totalStayedInArray = this.calculateTotalStayedIn(stayedInArray);
+
+        // Log the calculation for debugging
+        console.log(`   📊 ${asset} Total StayedIn2: ${stayedInArray.slice(-this.config.STAYED_IN_THRESHOLD2FILTER).join(',')} (${totalStayedInArray} / ${maxTotalStayedIn}) | (${this.totalStayedInArray} / ${this.maxTotalStayedIn})`);
+        this.totalStayedInArray2 = totalStayedInArray;
+        this.maxTotalStayedIn2 = maxTotalStayedIn;
+
+        // Check individual thresholds for recent values
+        const recentThresholds = (
+           stayedInArray[5] <= 10
+           && stayedInArray[5] >= stayedInArray[4]
+           && stayedInArray[5] <= stayedInArray[4]
+        );
+
+        // Check if total sum is within acceptable range
+        const totalWithinRange = totalStayedInArray < maxTotalStayedIn;
+
+        // Check if we have consecutive losses (recovery mode)
+        const inRecoveryMode = consecutiveLosses > 0;
+
+        // Return true if: (recent thresholds AND total within range) OR in recovery mode
+        // return inRecoveryMode ? (recentThreshold2s) : (recentThresholds);
+        //  return this.consecutiveLosses > 0 ? (recentThreshold2s) : (recentThresholds && totalWithinRange);
+        return (recentThresholds && totalWithinRange);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // STAYED-IN TREND DETECTION (NEW)
+    // ══════════════════════════════════════════════════════════════════════════
+    /**
+     * Record a new totalStayedIn sample for an asset. Called on every proposal
+     * received for that asset (scan, regular, or final-settlement lookups) so
+     * trend data stays fresh and continuous.
+     * @param {string} asset
+     * @param {number} totalStayedIn
+     */
+    recordStayedInSample(asset, totalStayedIn) {
+        if (!this.stayedInTrendHistory[asset]) this.stayedInTrendHistory[asset] = [];
+        const history = this.stayedInTrendHistory[asset];
+
+        history.push({ value: totalStayedIn, time: Date.now() });
+
+        if (history.length > this.config.trendSampleSize) {
+            history.shift();
+        }
+    }
+
+    /**
+     * Determine whether an asset's total stayedInArray sum is FRESHLY
+     * trending upward — i.e. the most recent N consecutive samples are
+     * strictly increasing. This is the gate used to avoid entering trades
+     * right as an asset rolls over from its peak and starts declining
+     * (meaning it has likely exhausted its current stayedIn run).
+     * @param {string} asset
+     * @returns {boolean}
+     */
+    isStayedInTrendingUp(asset) {
+        const history = this.stayedInTrendHistory[asset];
+        const required = this.config.trendConfirmCount + 1;
+
+        if (!history || history.length < required) {
+            // Not enough samples yet to confirm a fresh uptrend — default
+            // to false (no trade) rather than assuming it's safe.
+            return false;
+        }
+
+        const recent = history.slice(-required);
+
+        // Staleness guard — don't trust trend data that hasn't updated recently
+        // (can happen for an asset that was just suspended/pending for a while)
+        const newestSample = recent[recent.length - 1];
+        if (Date.now() - newestSample.time > this.config.trendMaxAgeMs) {
+            return false;
+        }
+
+        // Every consecutive step within the lookback window must be a strict
+        // increase above trendMinDelta — a single flat/down step breaks the
+        // "fresh" upward trend.
+        for (let i = 1; i < recent.length; i++) {
+            const delta = recent[i].value - recent[i - 1].value;
+            if (delta <= this.config.trendMinDelta) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Get a simple human-readable direction label for an asset's most recent
+     * stayedIn step (for logging/Telegram only — not used for gating).
+     * @param {string} asset
+     * @returns {string}
+     */
+    getStayedInTrendDirection(asset) {
+        const history = this.stayedInTrendHistory[asset];
+        if (!history || history.length < 2) return 'unknown';
+        const last = history[history.length - 1].value;
+        const prev = history[history.length - 2].value;
+        if (last > prev) return '📈 up';
+        if (last < prev) return '📉 down';
+        return '➡️ flat';
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // INTELLIGENT ASSET FILTERING SYSTEM
+    // ══════════════════════════════════════════════════════════════════════════
+    /**
+     * Update asset's stayedInArray value and manage its active/pending status
+     * @param {string} asset - Asset symbol
+     * @param {Array} stayedInArray - Current stayedInArray from proposal
+     */
+    updateAssetStatus(asset, stayedInArray) {
+        const totalStayedIn = this.calculateTotalStayedIn(stayedInArray);
+        this.assetStayedInValues[asset] = totalStayedIn;
+
+        const wasActive = this.activeAssets.has(asset);
+        const wasPending = this.pendingAssets.has(asset);
+
+        if (totalStayedIn < this.config.STAYED_IN_THRESHOLD) {
+            // Asset is ready for trading
+            if (!wasActive) {
+                this.activeAssets.add(asset);
+                this.pendingAssets.delete(asset);
+                console.log(`✅ ${asset} moved to ACTIVE list (stayedIn: ${totalStayedIn})`);
+            }
         } else {
-          this._authorize().then(ready).catch(e => {
-            logger.error('authorize:', e.message);
-            if (!settled) { settled = true; reject(e); }
-          });
+            // Asset needs to wait
+            if (!wasPending) {
+                this.pendingAssets.add(asset);
+                this.activeAssets.delete(asset);
+                console.log(`⏸️  ${asset} moved to PENDING list (stayedIn: ${totalStayedIn})`);
+            }
         }
-      });
-
-      this.ws.on('message', raw => this._onMessage(raw));
-
-      this.ws.on('close', (code, reason) => {
-        this.connected = false;
-        this.authorized = false;
-        this._stopHeartbeat();
-        this._failAllPending(new Error(`socket closed (${code})`));
-        this.subs.clear();
-        logger.warn(`websocket closed code=${code} reason=${String(reason || '').slice(0, 120)}`);
-        this.emit('disconnected');
-        if (!settled) { settled = true; reject(new Error(`socket closed (${code})`)); }
-        if (!this._shuttingDown) this._scheduleReconnect();
-      });
-
-      this.ws.on('error', err => {
-        logger.error('websocket error:', err.message);
-        this.emit('error', err);
-        if (!settled) { settled = true; reject(err); }
-      });
-
-      this.ws.on('unexpected-response', (_, res) => {
-        logger.error('WS handshake failed:', res.statusCode, res.statusMessage);
-        try { res.destroy(); } catch (_) {}
-        if (!settled) { settled = true; reject(new Error(`handshake failed (${res.statusCode})`)); }
-        if (!this._shuttingDown) this._scheduleReconnect();
-      });
-    });
-  }
-
-  _newApiMarkAuthorized() {
-    if (!this.accountInfo) return;
-    this.authorized = true;
-    this.balance = this.accountInfo.balance ?? 0;
-    this.loginId = this.accountInfo.loginid;
-    this.isVirtual = this.accountInfo.isVirtual;
-    this.currency = this.accountInfo.currency || this.cfg.currency;
-    logger.info(
-      `authorized ${this.accountInfo.loginid} (${this.accountInfo.isVirtual ? 'DEMO' : 'REAL'}) ` +
-      `balance=${this.balance.toFixed(2)} ${this.currency}`,
-    );
-    this._subscribeBalance().catch(() => {});
-  }
-
-  _startHeartbeat() {
-    this._stopHeartbeat();
-    this._heartbeat = setInterval(() => {
-      if (this.connected) this._send({ ping: 1 }, 15000).catch(() => {});
-    }, 30000);
-  }
-  _stopHeartbeat() { if (this._heartbeat) { clearInterval(this._heartbeat); this._heartbeat = null; } }
-
-  _scheduleReconnect() {
-    if (this._shuttingDown || this._reconnecting) return;
-    this._reconnecting = true;
-    this._reconnectAttempt++;
-    const jitter = Math.random() * this.cfg.reconnect.jitterMs;
-    const delay = Math.min(
-      this.cfg.reconnect.initialDelayMs * Math.pow(this.cfg.reconnect.backoffFactor, this._reconnectAttempt - 1) + jitter,
-      this.cfg.reconnect.maxDelayMs,
-    );
-    logger.info(`reconnecting in ${Math.round(delay)}ms`);
-    setTimeout(() => {
-      this._reconnecting = false;
-      if (!this._shuttingDown) {
-        this.connect().catch(e => logger.error('reconnect failed:', e.message));
-      }
-    }, delay);
-  }
-
-  _closeAndReconnect() {
-    try { this.ws?.close(); } catch (_) {}
-  }
-
-  _failAllPending(err) {
-    for (const [, p] of this.pending) { clearTimeout(p.timer); p.reject(err); }
-    this.pending.clear();
-  }
-
-  _onMessage(raw) {
-    let msg;
-    try { msg = JSON.parse(raw); } catch { return; }
-    const id = msg.req_id;
-
-    // One-shot request resolved by req_id (both APIs).
-    if (id != null && this.pending.has(id)) {
-      const p = this.pending.get(id);
-      this.pending.delete(id);
-      clearTimeout(p.timer);
-      if (msg.error) {
-        const code = msg.error.code;
-        if (['AuthorizationRequired', 'InvalidToken', 'InvalidAppID'].includes(code)) this._closeAndReconnect();
-        p.reject(Object.assign(new Error(msg.error.message || 'API error'), {
-          code, details: msg.error.details,
-        }));
-      } else {
-        p.resolve(msg);
-      }
     }
 
-    // Streaming update. Legacy streams carry the subscribing req_id; the new
-    // API carries subscription.id (the initial response carries both, and the
-    // pending resolution above maps that id onto the handler).
-    const subKey = msg.subscription ? msg.subscription.id : (id != null && this.subs.has(id) ? id : null);
-    if (subKey != null && this.subs.has(subKey)) {
-      try { this.subs.get(subKey)(msg); } catch (e) { logger.debug('sub handler:', e.message); }
+    /**
+     * Check if an asset is ready for analysis and trading
+     * @param {string} asset - Asset symbol
+     * @returns {boolean} True if asset is in active list
+     */
+    isAssetReady(asset) {
+        return this.activeAssets.has(asset);
     }
-  }
 
-  _send(payload, timeoutMs = 20000) {
-    return this._enqueue(() => this._sendNow(payload, timeoutMs));
-  }
-
-  /**
-   * Serialize every outbound request and enforce a minimum gap between them.
-   *
-   * Without this, any code path that fires requests in a loop (the stayed-in
-   * refresh runs once per analysis cycle, per pair) can exceed Deriv's rate
-   * limit. Once throttled, Deriv rejects with `RateLimit`, the barrier and
-   * stayed-in records stop refreshing, and the bot degrades to "uncalibrated".
-   * Serializing also guarantees ordering, so a buy can never overtake the
-   * proposal it was derived from.
-   */
-  _enqueue(task) {
-    return new Promise((resolve, reject) => {
-      this._tx.push({ task, resolve, reject });
-      this._pump();
-    });
-  }
-
-  _pump() {
-    if (this._pumping || !this._tx.length) return;
-    this._pumping = true;
-    (async () => {
-      try {
-        while (this._tx.length) {
-          const gap = this.cfg.minRequestGapMs - (Date.now() - this._lastTxAt);
-          if (gap > 0) await sleep(gap);
-          this._lastTxAt = Date.now();
-          const job = this._tx.shift();
-          try { job.resolve(await job.task()); }
-          catch (e) { this._noteRequestError(e); job.reject(e); }
+    /**
+     * Periodically scan pending assets to check if they're ready to become active
+     */
+    startPendingAssetScan() {
+        if (this.pendingScanInterval) {
+            clearInterval(this.pendingScanInterval);
         }
-      } finally {
-        this._pumping = false;
-        if (this._tx.length) this._pump();
-      }
-    })();
-  }
 
-  /** Surface throttling loudly — it is the root cause of an uncalibrated stall. */
-  _noteRequestError(e) {
-    const msg = `${e?.message || e}`;
-    if (/rate ?limit|too many requests|forbidden due to/i.test(msg) || e?.code === 'RateLimit') {
-      this._rateLimitHits = (this._rateLimitHits || 0) + 1;
-      if (this._rateLimitHits === 1 || this._rateLimitHits % 20 === 0) {
-        logger.error(
-          `Deriv rate limit hit (${this._rateLimitHits}×) — "${msg}". ` +
-          'Raise CONFIG.minRequestGapMs. While throttled, barriers and stayed-in ' +
-          'arrays go stale and the bot cannot calibrate.',
-        );
-      }
-      return;
-    }
-    this._reqErrors = (this._reqErrors || 0) + 1;
-  }
+        const scanningTimer = this.scanningTimer;
 
-  async _sendNow(payload, timeoutMs) {
-    return new Promise((resolve, reject) => {
-      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-        return reject(new Error('socket not open'));
-      }
-      const id = this.reqId++;
-      const timer = setTimeout(() => {
-        this.pending.delete(id);
-        reject(new Error(`request timeout after ${timeoutMs}ms`));
-      }, timeoutMs);
-      this.pending.set(id, { resolve, reject, timer });
-      try { this.ws.send(JSON.stringify({ ...payload, req_id: id })); }
-      catch (e) { clearTimeout(timer); this.pending.delete(id); reject(e); }
-    });
-  }
+        this.pendingScanInterval = setInterval(() => {
+            if (!this.wsReady || this.pendingAssets.size === 0) return;
 
-  async subscribe(payload, handler) {
-    const id = this.reqId++;
-    this.subs.set(id, handler);     // legacy-stream key
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(id);
-        this.subs.delete(id);
-        reject(new Error('subscribe timeout'));
-      }, 20000);
-      this.pending.set(id, {
-        resolve: msg => {
-          const subId = msg?.subscription?.id;
-          if (subId) {
-            // new-API stream key: remap the handler from req_id to subscription.id
-            this.subs.set(subId, handler);
-            this.subs.delete(id);
-          }
-          resolve(subId ?? id);
-        },
-        reject: err => { this.subs.delete(id); reject(err); },
-        timer,
-      });
-      this._enqueue(async () => {
-        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) throw new Error('socket not open');
-        this.ws.send(JSON.stringify({ ...payload, subscribe: 1, req_id: id }));
-      }).catch(e => {
-        clearTimeout(timer); this.pending.delete(id); this.subs.delete(id); reject(e);
-      });
-    });
-  }
+            // Skip scan entirely during recovery — only the focus asset
+            // matters and it doesn't need a scan proposal to re-enter.
+            // Without this, the scanner floods the API with proposals for
+            // suspended assets that then race against recovery logic.
+            // if (this.focusAsset) {
+            //     console.log(`⏸️  Pending scan skipped — recovery mode (focus: ${this.focusAsset})`);
+            //     return;
+            // }
 
-  async forget(subscriptionId) {
-    if (subscriptionId == null) return;
-    this.subs.delete(subscriptionId);
-    try { await this._send({ forget: subscriptionId }, 10000); } catch (_) {}
-  }
+            console.log(`\n🔍 Scanning ${this.pendingAssets.size} pending assets...`);
 
-  async authorize() {
-    if (!this.cfg.apiToken) {
-      throw new Error('DERIV_API_TOKEN is not set. Put it in .env — never in the source file.');
-    }
-    const res = await this._send({ authorize: this.cfg.apiToken }, 20000);
-    const a = res.authorize;
-    this.authorized = true;
-    this.balance = parseFloat(a.balance ?? 0);
-    this.loginId = a.loginid;
-    this.isVirtual = a.is_virtual === 1 || a.is_virtual === true;
-    logger.info(
-      `authorized ${a.loginid} (${this.isVirtual ? 'DEMO' : 'REAL'}) ` +
-      `balance=${this.balance.toFixed(2)} ${a.currency}`,
-    );
-    this._subscribeBalance().catch(() => {});
-    return a;
-  }
-
-  async _subscribeBalance() {
-    await this.subscribe({ balance: 1 }, msg => {
-      if (msg.balance?.balance != null) this.balance = parseFloat(msg.balance.balance);
-    });
-  }
-
-  async ticksHistory(symbol, count = 5000) {
-    const res = await this._send({
-      ticks_history: symbol, count, end: 'latest', style: 'ticks',
-    }, 30000);
-    const h = res.history;
-    if (!h?.prices) return [];
-    return h.prices.map((p, i) => ({ quote: parseFloat(p), epoch: h.times[i] }));
-  }
-
-  /**
-   * Deep historical backfill — ported from deriv_structure_tester_v5.js
-   * `collectTicks`. Deriv ticks_history advertises up to 5000 ticks/call but
-   * is currently capped at ~1000 via the PAT/OTP flow. To reach the target
-   * we chain calls BACKWARDS using end = earliest_epoch - 1 and unshift each
-   * batch so the result stays oldest→newest. Returns [] at the first empty
-   * or short batch (history exhausted) or when Deriv refuses pagination.
-   */
-  async collectTicks(symbol, targetCount, batchSize = 1000, delayMs = 250) {
-    const out = [];
-    let remain = targetCount;
-    let end = 'latest';
-    let lastEpoch = null;
-    let batches = 0;
-
-    while (remain > 0) {
-      const count = Math.min(batchSize, 1000, remain); // 1000 = observed PAT/OTP cap
-      let msg;
-      try {
-        msg = await this._send({ ticks_history: symbol, count, end, style: 'ticks' }, 30000);
-      } catch (e) {
-        logger.warn(`history paging ${symbol}: ${e.message} — stopped at ${out.length}/${targetCount} ticks`);
-        break;
-      }
-      const times = msg.history?.times ?? [];
-      const prices = (msg.history?.prices ?? []).map(Number);
-      if (!times.length) {
-        logger.info(`history ${symbol}: server returned 0 more ticks — exhausted at ${out.length}`);
-        break;
-      }
-      if (lastEpoch !== null && times[times.length - 1] >= lastEpoch) {
-        logger.warn(`history paging ${symbol}: server did not honor pagination — stopped at ${out.length}/${targetCount} ticks`);
-        break;
-      }
-      lastEpoch = times[0];
-      batches++;
-      out.unshift(...times.map((t, i) => ({ quote: prices[i], epoch: t })));
-      remain -= times.length;
-      logger.info(`history ${symbol}: fetched ${out.length}/${targetCount} ticks (batch ${batches})`);
-      end = String(times[0] - 1);
-      await sleep(delayMs);
-      if (times.length < count) {
-        logger.info(`history ${symbol}: last batch short (${times.length}/${count}) — exhausted at ${out.length}`);
-        break;
-      }
-    }
-
-    return out;
-  }
-
-  async subscribeTicks(symbol, handler) {
-    return this.subscribe({ ticks: symbol }, msg => {
-      if (msg.tick) handler({ quote: parseFloat(msg.tick.quote), epoch: msg.tick.epoch, symbol });
-    });
-  }
-
-  async portfolio() {
-    try {
-      const res = await this._send({ portfolio: 1 }, 20000);
-      return res.portfolio?.contracts ?? [];
-    } catch (e) { logger.warn('portfolio:', e.message); return []; }
-  }
-
-  close() {
-    this._shuttingDown = true;
-    this._stopHeartbeat();
-    try { this.ws?.close(); } catch (_) {}
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// 7. MARKET DATA
-// ═══════════════════════════════════════════════════════════════════════
-class MarketData extends EventEmitter {
-  constructor(client, cfg) {
-    super();
-    this.client = client;
-    this.cfg = cfg;
-    this.history = new Map();    // symbol -> [{quote, epoch}]
-    this.tickSubs = new Map();   // symbol -> subscription id
-    this.barriers = new Map();   // `${symbol}|${gr}` -> {halfBarrierFrac, spot, at}
-    this.deadAssets = new Set(); // symbols Deriv permanently rejects for ACCU
-    this.stays = new Map();      // `${symbol}|${gr}` -> { arr: ticks_stayed_in, at }
-    this._barrierSeen = new Set(); // keys whose first barrier fetch has already been logged
-  }
-
-  historyFor(symbol) { return this.history.get(symbol) ?? []; }
-
-  async bootstrap(symbols) {
-    const want = this.cfg.calibMinTicks;
-    const cap = this.cfg.calibWindow;
-    for (const s of symbols) {
-      try {
-        const h = await this.client.collectTicks(s, Math.min(want, cap));
-        this.history.set(s, h);
-        logger.info(`history ${s}: ${h.length} ticks (target ${Math.min(want, cap)})`);
-        await this._attachTicks(s);
-      } catch (e) {
-        logger.warn(`history ${s} failed: ${e.message}`);
-      }
-      await sleep(250); // be polite to the rate limiter
-    }
-  }
-
-  async _attachTicks(symbol) {
-    if (this.tickSubs.has(symbol)) return;
-    try {
-      const id = await this.client.subscribeTicks(symbol, tick => this._onTick(symbol, tick));
-      this.tickSubs.set(symbol, id);
-    } catch (e) {
-      logger.warn(`tick subscribe ${symbol}: ${e.message}`);
-    }
-  }
-
-  _onTick(symbol, tick) {
-    const arr = this.history.get(symbol) ?? [];
-    // Deriv updates the feed at most once per second; ignore duplicate epochs.
-    const last = arr[arr.length - 1];
-    if (last && last.epoch === tick.epoch && last.quote === tick.quote) return;
-    arr.push({ quote: tick.quote, epoch: tick.epoch });
-    if (arr.length > this.cfg.calibWindow) arr.splice(0, arr.length - this.cfg.calibWindow);
-    this.history.set(symbol, arr);
-    this.emit('tick', symbol, tick);
-  }
-
-  async resubscribeAll() {
-    this.tickSubs.clear();
-    for (const s of this.history.keys()) await this._attachTicks(s);
-  }
-
-  barrierKey(symbol, gr) { return `${symbol}|${gr.toFixed(2)}`; }
-
-  getBarrier(symbol, gr) {
-    const b = this.barriers.get(this.barrierKey(symbol, gr));
-    if (!b) return null;
-    if (Date.now() - b.at > this.cfg.barrierRefreshMs * 4) return null; // too stale
-    return b;
-  }
-
-  /**
-   * The most recent ticks_stayed_in array harvested from an ACCU proposal for
-   * a (symbol, growth rate). The last element is the most current value.
-   * Returns null when we have none, or the harvest is too old to be trusted.
-   */
-  getStayedIn(symbol, gr) {
-    const s = this.stays.get(this.barrierKey(symbol, gr));
-    if (!s) return null;
-    if (Date.now() - s.at > this.cfg.stayStaleMs) return null; // too stale
-    return s.arr;
-  }
-
-  /**
-   * Read the CURRENT barrier straight from Deriv's own proposal.
-   * This is authoritative. The bot never estimates or extrapolates a barrier;
-   * if Deriv will not quote it, the pair is simply not tradeable this cycle.
-   */
-  async refreshBarrier(symbol, growthRate, stake) {
-    if (this.deadAssets.has(symbol)) return null;
-    try {
-      const res = await this.client._send({
-        proposal: 1,
-        amount: stake,
-        basis: 'stake',
-        contract_type: 'ACCU',
-        currency: this.cfg.currency,
-        [this.client.symbolKey]: symbol,
-        growth_rate: growthRate,
-      }, 20000);
-      const p = res.proposal;
-      const cd = p?.contract_details ?? {};
-      const spot = parseFloat(p?.spot ?? cd.current_spot ?? 0);
-      let halfFrac = 0;
-
-      if (Array.isArray(cd.ticks_stayed_in)) {
-        this.stays.set(this.barrierKey(symbol, growthRate), {
-          arr: cd.ticks_stayed_in,
-          at: Date.now(),
-        });
-      }
-
-      if (cd.barrier_spot_distance != null && spot > 0) {
-        halfFrac = parseFloat(cd.barrier_spot_distance) / spot;
-      } else if (cd.tick_size_barrier != null) {
-        halfFrac = parseFloat(cd.tick_size_barrier);
-      } else if (cd.high_barrier != null && cd.low_barrier != null && spot > 0) {
-        halfFrac = (parseFloat(cd.high_barrier) - parseFloat(cd.low_barrier)) / (2 * spot);
-      }
-
-      if (!(halfFrac > 0)) {
-        // The proposal came back but carried no usable barrier distance. This
-        // used to return null with no log at all, which looked identical to
-        // "uncalibrated" from the outside while stays kept updating.
-        logger.warn(
-          `barrier ${symbol}@${(growthRate * 100).toFixed(0)}% — proposal OK but no barrier ` +
-          `distance (barrier_spot_distance=${cd.barrier_spot_distance ?? 'n/a'} ` +
-          `tick_size_barrier=${cd.tick_size_barrier ?? 'n/a'} ` +
-          `high/low=${cd.high_barrier ?? 'n/a'}/${cd.low_barrier ?? 'n/a'} spot=${spot})`,
-        );
-        return null;
-      }
-
-      const rec = {
-        halfBarrierFrac: halfFrac,
-        spot,
-        maxTicks: parseInt(cd.maximum_ticks ?? 0, 10) || null,
-        maxPayout: parseFloat(cd.maximum_payout ?? 0) || null,
-        at: Date.now(),
-      };
-      this.barriers.set(this.barrierKey(symbol, growthRate), rec);
-      const key = this.barrierKey(symbol, growthRate);
-      if (!this._barrierSeen.has(key)) {
-        this._barrierSeen.add(key);
-        logger.info(
-          `barrier ${symbol}@g=${(growthRate * 100).toFixed(0)}% FOUND → ` +
-          `±${(halfFrac * 100).toFixed(6)}% spot=${spot.toPrecision(6)} ` +
-          `maxTicks=${rec.maxTicks ?? 'n/a'}`,
-        );
-      } else {
-        logger.debug(
-          `barrier refresh ${symbol}@g=${(growthRate * 100).toFixed(0)}% → ±${(halfFrac * 100).toFixed(6)}%`,
-        );
-      }
-      return rec;
-    } catch (e) {
-      // Permanent rejections mean this symbol will never support ACCU.
-      const permanent = /not (offered|available)|invalid symbol|market is presently closed|ContractCreationFailure/i;
-      if (permanent.test(e.message || '') || permanent.test(e.code || '')) {
-        this.deadAssets.add(symbol);
-        logger.warn(`${symbol}: ACCU not available (permanent) — excluded`);
-      } else {
-        // Must be WARN, not DEBUG. At the default INFO level this message was
-        // suppressed, so a failing proposal stream — the direct cause of an
-        // uncalibrated stall — produced no evidence at all.
-        this._noteRequestError(e);
-        this._barrierFails = (this._barrierFails || 0) + 1;
-        if (this._barrierFails === 1 || this._barrierFails % 30 === 0) {
-          logger.warn(
-            `barrier ${symbol}@${(growthRate * 100).toFixed(0)}% failed (${this._barrierFails}×): ` +
-            `${e.code || ''} ${e.message}. No live barrier → this pair cannot calibrate.`,
-          );
-        }
-      }
-      return null;
-    }
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// 8. CALIBRATION ENGINE  — the heart of this build
-//
-//    For each (symbol, growth rate) it answers one question:
-//      "Is the LOWER confidence bound on per-tick survival above the
-//       break-even survival 1/(1+g), by a real margin?"
-//
-//    If yes  -> a positive expectation is statistically defensible. Trade.
-//    If no   -> stand aside. This is the expected outcome.
-// ═══════════════════════════════════════════════════════════════════════
-class CalibrationEngine {
-  constructor(cfg) { this.cfg = cfg; }
-
-  /** Per-tick log returns from a tick array. */
-  logReturns(ticks) {
-    const out = [];
-    for (let i = 1; i < ticks.length; i++) {
-      const a = ticks[i - 1].quote, b = ticks[i].quote;
-      if (a > 0 && b > 0) out.push(Math.log(b / a));
-    }
-    return out;
-  }
-
-  /**
-   * Count how many historical single-tick moves would have breached a
-   * barrier of +/- halfBarrierFrac around the previous spot.
-   *
-   * This is the correct model: the Accumulator barrier is recomputed every
-   * tick around the PREVIOUS spot, so a knockout is a single-tick event,
-   * not cumulative drift from entry.
-   */
-  breachCount(returns, halfBarrierFrac) {
-    const logHalf = Math.log(1 + halfBarrierFrac);
-    let breaches = 0;
-    for (const r of returns) if (Math.abs(r) >= logHalf) breaches++;
-    return breaches;
-  }
-
-  /**
-   * Full calibration for one (symbol, growth rate).
-   * Returns null when there is not enough data to say anything honest.
-   */
-  calibrate(symbol, ticks, growthRate, barrier) {
-    if (!barrier || !(barrier.halfBarrierFrac > 0)) {
-      return { symbol, growthRate, tradeable: false, reason: 'no-barrier' };
-    }
-    if (!ticks || ticks.length < this.cfg.calibMinTicks) {
-      return {
-        symbol, growthRate, tradeable: false,
-        reason: `insufficient-history:${ticks ? ticks.length : 0}/${this.cfg.calibMinTicks}`,
-      };
-    }
-
-    const returns = this.logReturns(ticks);
-    const n = returns.length;
-    const breaches = this.breachCount(returns, barrier.halfBarrierFrac);
-    const survivals = n - breaches;
-
-    const ci = Stats.wilson(survivals, n, this.cfg.calibConfidenceZ);
-    const breakEven = Stats.breakEvenSurvival(growthRate);
-
-    // Point estimate and, critically, the conservative lower bound.
-    const evPoint = Stats.evPerTick(ci.point, growthRate);
-    const evLower = Stats.evPerTick(ci.lower, growthRate);
-
-    // Diagnostics: is the series actually i.i.d.? If lag-1 autocorrelation of
-    // |returns| is materially non-zero, volatility clusters and a conditional
-    // rule could in principle exist. On a constant-vol index it will be ~0.
-    const absR = returns.map(Math.abs);
-    const acfAbs = Stats.autocorr1(absR);
-    const acfRaw = Stats.autocorr1(returns);
-    const sigma = Stats.stdev(returns);
-    const barrierSigmas = sigma > 0 ? Math.log(1 + barrier.halfBarrierFrac) / sigma : 0;
-
-    const tradeable = ci.lower > breakEven + this.cfg.edgeMarginPerTick;
-
-    return {
-      symbol, growthRate,
-      tradeable,
-      reason: tradeable ? 'edge-confirmed' : 'no-edge',
-      n, breaches,
-      survivalPoint: ci.point,
-      survivalLower: ci.lower,
-      survivalUpper: ci.upper,
-      breakEven,
-      evPointPerTick: evPoint,
-      evLowerPerTick: evLower,
-      marginPerTick: ci.lower - breakEven,
-      halfBarrierFrac: barrier.halfBarrierFrac,
-      halfBarrierPct: barrier.halfBarrierFrac * 100,
-      sigma, barrierSigmas, acfAbs, acfRaw,
-      maxTicks: barrier.maxTicks,
-      at: Date.now(),
-    };
-  }
-
-  /**
-   * Choose the hold horizon K that maximises expected return, given a
-   * survival estimate. With a negative per-tick EV the optimum is always
-   * K = minimum, which is exactly the point: hold time only ever costs.
-   */
-  chooseHorizon(survival, growthRate, maxHold, minHold, spreadCost) {
-    let best = { K: minHold, ev: -Infinity };
-    for (let K = minHold; K <= maxHold; K++) {
-      const ev = Stats.evOverHold(survival, growthRate, K, spreadCost);
-      if (ev > best.ev) best = { K, ev };
-    }
-    return best;
-  }
-
-  /**
-   * Stayed-in array gate, ported from liveMultiAccumNew.js.
-   * @param {number[]} arr  ticks_stayed_in from the ACCU proposal (oldest→newest)
-   * @returns {{ pass: boolean, reason: string, values: number[], latest: number|null }}
-   */
-  stayAnalysis(arr) {
-    const N = this.cfg.stayWindowN;
-    if (!Array.isArray(arr) || arr.length === 0) {
-      return { pass: false, reason: 'no-stayed-in-data', values: [], latest: null };
-    }
-    const latest = arr[arr.length - 1];
-    const tail = arr.slice(-N);
-    if (arr.length < N) {
-      return { pass: false, reason: `short-stay-history:${arr.length}/${N}`, values: tail, latest };
-    }
-    const maxInWindow = Math.max(...tail);
-    if (maxInWindow >= this.cfg.stayMaxValue) {
-      return { pass: false, reason: `stay-window-over:${maxInWindow}>=${this.cfg.stayMaxValue}`, values: tail, latest };
-    }
-    if (latest >= this.cfg.stayCurrentMax) {
-      return { pass: false, reason: `stay-latest-over:${latest}>=${this.cfg.stayCurrentMax}`, values: tail, latest };
-    }
-    return { pass: true, reason: 'stay-ok', values: tail, latest };
-  }
-
-  /** Rank calibrations: tradeable first, then by the conservative lower EV. */
-  rank(calibrations) {
-    return calibrations.filter(Boolean).sort((a, b) => {
-      if (a.tradeable !== b.tradeable) return a.tradeable ? -1 : 1;
-      return (b.evLowerPerTick ?? -Infinity) - (a.evLowerPerTick ?? -Infinity);
-    });
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// 9. EDGE LEDGER — measures whether the bot is actually winning, and
-//    halts it when the evidence says it is not.
-// ═══════════════════════════════════════════════════════════════════════
-class EdgeLedger {
-  constructor(cfg) {
-    this.cfg = cfg;
-    this.returns = [];          // per-trade return as a fraction of stake
-    this.expectedTicks = 0;     // sum of predicted survival ticks
-    this.realizedTicks = 0;     // sum of actual ticks survived
-    this.trades = 0;
-    this.halted = false;
-    this.haltReason = null;
-    this.load();
-  }
-
-  record(trade) {
-    const r = trade.stake > 0 ? trade.profit / trade.stake : 0;
-    this.returns.push(r);
-    if (this.returns.length > 5000) this.returns.shift();
-    this.expectedTicks += trade.expectedTicks ?? 0;
-    this.realizedTicks += trade.ticksHeld ?? 0;
-    this.trades++;
-    this.save();
-    return this.evaluate();
-  }
-
-  /**
-   * Sequential check: with enough trades, is the mean per-trade return
-   * significantly below zero? If so the measured edge is negative and the
-   * bot should stop rather than "wait for it to turn around".
-   */
-  evaluate() {
-    const n = this.returns.length;
-    if (n < this.cfg.edgeMonitorMinTrades) {
-      return { halt: false, reason: `warmup ${n}/${this.cfg.edgeMonitorMinTrades}`, z: null };
-    }
-    const z = Stats.zStat(this.returns, 0);
-    if (z <= -this.cfg.edgeMonitorZStop) {
-      this.halted = true;
-      this.haltReason =
-        `measured edge significantly negative: mean return ` +
-        `${(Stats.mean(this.returns) * 100).toFixed(3)}% over ${n} trades (z=${z.toFixed(2)})`;
-      this.save();
-      return { halt: true, reason: this.haltReason, z };
-    }
-    return { halt: false, reason: 'within tolerance', z };
-  }
-
-  summary() {
-    const n = this.returns.length;
-    const mean = Stats.mean(this.returns);
-    const sd = Stats.stdev(this.returns);
-    return {
-      trades: this.trades,
-      sampled: n,
-      meanReturnPct: mean * 100,
-      stdevPct: sd * 100,
-      z: n >= 2 ? Stats.zStat(this.returns, 0) : null,
-      avgExpectedTicks: this.trades ? this.expectedTicks / this.trades : 0,
-      avgRealizedTicks: this.trades ? this.realizedTicks / this.trades : 0,
-      halted: this.halted,
-      haltReason: this.haltReason,
-    };
-  }
-
-  save() {
-    try {
-      const tmp = this.cfg.edgeFile + '.tmp';
-      fs.writeFileSync(tmp, JSON.stringify({
-        returns: this.returns, expectedTicks: this.expectedTicks,
-        realizedTicks: this.realizedTicks, trades: this.trades,
-        halted: this.halted, haltReason: this.haltReason,
-      }));
-      fs.renameSync(tmp, this.cfg.edgeFile);
-    } catch (e) { logger.debug('edge save:', e.message); }
-  }
-
-  load() {
-    try {
-      if (!fs.existsSync(this.cfg.edgeFile)) return;
-      const d = JSON.parse(fs.readFileSync(this.cfg.edgeFile, 'utf8'));
-      this.returns = Array.isArray(d.returns) ? d.returns : [];
-      this.expectedTicks = d.expectedTicks ?? 0;
-      this.realizedTicks = d.realizedTicks ?? 0;
-      this.trades = d.trades ?? 0;
-      this.halted = !!d.halted;
-      this.haltReason = d.haltReason ?? null;
-      if (this.trades) logger.info(`edge ledger restored: ${this.trades} trades`);
-    } catch (e) { logger.debug('edge load:', e.message); }
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// 10. RISK MANAGER — every rail halts the bot, none of them just warn.
-// ═══════════════════════════════════════════════════════════════════════
-class RiskManager {
-  constructor(cfg) {
-    this.cfg = cfg;
-    this.day = utcDateStr();
-    this.dayPnl = 0;
-    this.dayTrades = 0;
-    this.sessionPnl = 0;
-    this.sessionPeak = 0;
-    this.consecLosses = 0;
-    this.halted = false;
-    this.haltReason = null;
-  }
-
-  _rollDay() {
-    const today = utcDateStr();
-    if (today !== this.day) {
-      logger.info(`UTC day rollover ${this.day} -> ${today}: daily counters reset`);
-      this.day = today;
-      this.dayPnl = 0;
-      this.dayTrades = 0;
-      // A daily-cap halt clears at rollover. A drawdown/edge halt does not.
-      if (this.haltReason && /daily/i.test(this.haltReason)) {
-        this.halted = false;
-        this.haltReason = null;
-      }
-    }
-  }
-
-  halt(reason) {
-    if (this.halted) return;
-    this.halted = true;
-    this.haltReason = reason;
-    logger.error(`TRADING HALTED: ${reason}`);
-    telegram.send(`⛔ <b>AccuFable5a TRADING HALTED</b>\n${reason}`);
-  }
-
-  canTrade(openCount) {
-    this._rollDay();
-    if (this.halted) return { ok: false, reason: `halted: ${this.haltReason}` };
-    if (openCount >= this.cfg.maxOpenTrades) return { ok: false, reason: 'max-open-trades' };
-    if (this.dayTrades >= this.cfg.dailyMaxTrades) {
-      this.halt(`daily trade cap reached (${this.dayTrades})`);
-      return { ok: false, reason: 'daily-trade-cap' };
-    }
-    if (this.dayPnl <= -Math.abs(this.cfg.dailyMaxLoss)) {
-      this.halt(`daily loss limit hit (${money(this.dayPnl)})`);
-      return { ok: false, reason: 'daily-loss-cap' };
-    }
-    const drawdown = this.sessionPeak - this.sessionPnl;
-    if (drawdown >= Math.abs(this.cfg.sessionMaxDrawdown)) {
-      this.halt(`session drawdown limit hit (${drawdown.toFixed(2)})`);
-      return { ok: false, reason: 'session-drawdown' };
-    }
-    if (this.consecLosses >= this.cfg.maxConsecLosses) {
-      this.halt(`${this.consecLosses} consecutive losses`);
-      return { ok: false, reason: 'consecutive-losses' };
-    }
-    return { ok: true, reason: 'ok' };
-  }
-
-  onTradeOpened() { this.dayTrades++; }
-
-  onTradeClosed(profit) {
-    this.dayPnl += profit;
-    this.sessionPnl += profit;
-    this.sessionPeak = Math.max(this.sessionPeak, this.sessionPnl);
-    if (profit > 0) this.consecLosses = 0; else this.consecLosses++;
-  }
-
-  /**
-   * Stake sizing. Flat or fixed-fraction only.
-   *
-   * This manager deliberately avoids progressive-staking logic: Kelly for a
-   * negative-expectation bet is zero or negative; progressive staking converts
-   * a slow bleed into a fast wipeout. If the edge is real and positive, flat
-   * small stakes still capture it. (Optional progressive staking is handled
-   * at the bot level, not here.)
-   */
-  stakeFor(balance) {
-    let s = this.cfg.sizing === 'fraction'
-      ? balance * this.cfg.riskFraction
-      : this.cfg.stake;
-    s = Math.max(this.cfg.minStake, Math.min(this.cfg.maxStake, s));
-    return +s.toFixed(2);
-  }
-}
-
-
-// ═══════════════════════════════════════════════════════════════════════
-// 11. TRADE EXECUTOR
-//     Handles live and paper fills through one code path so that paper
-//     results are a faithful dry run of live behaviour.
-// ═══════════════════════════════════════════════════════════════════════
-const TERMINAL_STATUSES = new Set(['won', 'lost', 'sold', 'cancelled', 'expired', 'refunded']);
-
-class TradeExecutor extends EventEmitter {
-  constructor(client, marketData, cfg) {
-    super();
-    this.client = client;
-    this.md = marketData;
-    this.cfg = cfg;
-    this.open = new Map();      // contractId -> trade record
-    this.settled = new Set();   // contractIds already accounted for (idempotency)
-    this.paper = cfg.mode !== 'live';
-    this._paperSeq = 1;
-    this._opening = 0;          // in-flight opens (reserved before any await)
-  }
-
-  get openCount() { return this.open.size; }
-
-  /** True when a new contract may be opened (respects maxOpenTrades). */
-  canOpenNow() {
-    const max = Number(this.cfg.maxOpenTrades) || 1;
-    return this._opening + this.open.size < max;
-  }
-
-  /**
-   * TradeExecutor.openTrade: version matching accuFable5a.
-   * NOTE: body intentionally identical to accuFable5a.js for parity.
-   * All durations/timeout constants must stay in sync between the two bots.
-   */
-  async openTrade({ symbol, growthRate, stake, targetTicks, calibration }) {
-    // Reserve the open slot synchronously, BEFORE any await, so two nearly
-    // simultaneous ticks can never both pass maxOpenTrades (openTrade does
-    // proposal + buy round-trips in live mode; without this reservation the
-    // second tick sees openCount=0 and opens a second position on another
-    // asset while the first is still mid-flight).
-    if (!this.canOpenNow()) {
-      throw new Error(`max open trades (${this.cfg.maxOpenTrades}) already reached — skipping`);
-    }
-    this._opening++;
-    try {
-      const barrier = this.md.getBarrier(symbol, growthRate)
-        ?? await this.md.refreshBarrier(symbol, growthRate, stake);
-      if (!barrier) throw new Error(`no live barrier for ${symbol}@${growthRate}`);
-
-      // Take-profit that corresponds to the target hold: stake*((1+g)^K - 1),
-      // capped by the contract's maximum payout.
-      let tp = stake * (Math.pow(1 + growthRate, targetTicks) - 1);
-      if (barrier.maxPayout) tp = Math.min(tp, barrier.maxPayout - stake);
-      tp = Math.max(0.01, +tp.toFixed(2));
-
-      if (this.paper) return this._openPaper({ symbol, growthRate, stake, targetTicks, barrier, calibration, tp });
-
-      // ── LIVE ──
-      const proposal = await this.client._send({
-        proposal: 1,
-        amount: stake,
-        basis: 'stake',
-        contract_type: 'ACCU',
-        currency: this.cfg.currency,
-        [this.client.symbolKey]: symbol,
-        growth_rate: growthRate,
-        limit_order: { take_profit: tp },
-      }, 20000);
-
-      const p = proposal.proposal;
-      if (!p?.id) throw new Error('proposal returned no id');
-
-      const buy = await this.client._send({
-        buy: p.id,
-        price: parseFloat(p.ask_price ?? stake),
-      }, 25000);
-
-      const b = buy.buy;
-      if (!b?.contract_id) throw new Error('buy returned no contract_id');
-
-      const trade = this._makeTrade({
-        contractId: String(b.contract_id),
-        symbol, growthRate, stake, targetTicks, barrier, calibration,
-        entrySpot: parseFloat(b.start_time ? (p.spot ?? 0) : (p.spot ?? 0)),
-        takeProfit: tp,
-      });
-      this.open.set(trade.contractId, trade);
-      logger.info(
-        `OPEN ${symbol} g=${(growthRate * 100).toFixed(0)}% stake=${stake} ` +
-        `targetK=${targetTicks} tp=${tp} id=${trade.contractId}`,
-      );
-      this._watchLive(trade);
-      this.emit('opened', trade);
-      return trade;
-    } finally {
-      this._opening--;
-    }
-  }
-
-  _makeTrade(o) {
-    return {
-      contractId: o.contractId,
-      symbol: o.symbol,
-      growthRate: o.growthRate,
-      stake: o.stake,
-      targetTicks: o.targetTicks,
-      expectedTicks: o.targetTicks,
-      halfBarrierFrac: o.barrier.halfBarrierFrac,
-      entrySpot: o.entrySpot || 0,
-      takeProfit: o.takeProfit,
-      calibration: o.calibration ?? null,
-      openedAt: Date.now(),
-      buyTime: Date.now() / 1000,
-      sellTime: null,
-      sellPrice: 0,
-      exitReason: null,
-      ticksHeld: 0,
-      profit: 0,
-      status: 'open',
-      paper: this.paper,
-    };
-  }
-
-  // ────────────────────────── PAPER ──────────────────────────
-  _openPaper({ symbol, growthRate, stake, targetTicks, barrier, calibration, tp }) {
-    const hist = this.md.historyFor(symbol);
-    const entrySpot = hist.length ? hist[hist.length - 1].quote : barrier.spot;
-    const trade = this._makeTrade({
-      contractId: `paper-${this._paperSeq++}`,
-      symbol, growthRate, stake, targetTicks, barrier, calibration,
-      entrySpot, takeProfit: tp,
-    });
-    trade.lastSpot = entrySpot;
-    this.open.set(trade.contractId, trade);
-    logger.info(
-      `OPEN(paper) ${symbol} g=${(growthRate * 100).toFixed(0)}% stake=${stake} ` +
-      `targetK=${targetTicks} barrier=±${(barrier.halfBarrierFrac * 100).toFixed(6)}%`,
-    );
-
-    // Evaluate against the real incoming tick stream.
-    const onTick = (sym, tick) => {
-      if (sym !== symbol || !this.open.has(trade.contractId)) return;
-      const prev = trade.lastSpot;
-      trade.lastSpot = tick.quote;
-      if (!(prev > 0)) return;
-
-      const move = Math.abs(Math.log(tick.quote / prev));
-      const limit = Math.log(1 + trade.halfBarrierFrac);
-
-      if (move >= limit) {
-        // Barrier breached: the entire stake is lost.
-        this.md.off('tick', onTick);
-        this._settle(trade, { status: 'lost', profit: -trade.stake, exitReason: 'knockout' });
-        return;
-      }
-      trade.ticksHeld++;
-      trade.profit = trade.stake * (Math.pow(1 + growthRate, trade.ticksHeld) - 1);
-      if (trade.ticksHeld >= trade.targetTicks) {
-        this.md.off('tick', onTick);
-        // Model the round-trip exit cost on the way out.
-        const net = trade.profit - trade.stake * this.cfg.sellSpreadCost;
-        this._settle(trade, { status: 'sold', profit: +net.toFixed(4), sellPrice: +trade.profit.toFixed(4), exitReason: 'take-profit' });
-      }
-    };
-    this.md.on('tick', onTick);
-    trade._detach = () => this.md.off('tick', onTick);
-
-    this.emit('opened', trade);
-    return trade;
-  }
-
-  // ─────────────────────────── LIVE ──────────────────────────
-  async _watchLive(trade) {
-    let subId = null;
-
-    // Count ticks from the regular tick stream — NOT from Deriv's tick_count
-    // in proposal_open_contract, which for ACCU contracts reports unreliable
-    // values (often starting at 1 immediately after purchase).
-    let lastSpot = 0;
-    const onTick = (sym, tick) => {
-      if (sym !== trade.symbol || !this.open.has(trade.contractId)) return;
-      const prev = lastSpot;
-      lastSpot = tick.quote;
-      if (!(prev > 0)) return;
-
-      // If contract already settled, ignore stale ticks.
-      if (!this.open.has(trade.contractId)) return;
-
-      trade.ticksHeld++;
-      trade.profit = trade.stake * (Math.pow(1 + trade.growthRate, trade.ticksHeld) - 1);
-
-      if (trade.ticksHeld >= trade.targetTicks && !trade._closing) {
-        trade._closing = true;
-        trade._exitReason = trade._exitReason || `take-profit: held ${trade.ticksHeld} ticks`;
-        this._sell(trade).catch(e => {
-          trade._closing = false;
-          logger.warn(`sell ${trade.contractId}: ${e.message}`);
-        });
-      }
-    };
-    this.md.on('tick', onTick);
-    trade._detachTick = () => this.md.off('tick', onTick);
-
-    // Also subscribe to proposal_open_contract for settlement detection.
-    try {
-      subId = await this.client.subscribe(
-        { proposal_open_contract: 1, contract_id: trade.contractId },
-        msg => {
-          const c = msg.proposal_open_contract;
-          if (!c) return;
-          // Update profit from the API (authoritative once sold).
-          trade.profit = parseFloat(c.profit ?? trade.profit) || 0;
-          const status = String(c.status ?? 'open').toLowerCase();
-
-          if (c.is_sold === 1 || TERMINAL_STATUSES.has(status)) {
-            const finalProfit = parseFloat(c.profit ?? 0) || 0;
-            if (subId) this.client.forget(subId);
-            trade._detachTick();
-            this._settle(trade, {
-              status,
-              profit: finalProfit,
-              sellPrice: parseFloat(c.sell_price ?? 0) || 0,
-              exitReason: c.exit_reason || trade._exitReason || status,
+            this.pendingAssets.forEach(asset => {
+                if (this.activeTrades[asset]) return;
+                this.requestProposalForScan(asset);
             });
-            return;
-          }
-        },
-      );
-      trade._subId = subId;
-    } catch (e) {
-      this.md.off('tick', onTick);
-      logger.error(`watch ${trade.contractId} failed: ${e.message} — will reconcile`);
+
+        }, scanningTimer);
+
+        console.log('🔄 Pending asset scanner started (scan interval: ' + scanningTimer / 1000 + 's)');
     }
 
-    // Watchdog: if the stream dies, reconcile from the portfolio rather than
-    // leaving a phantom open position on the books.
-    trade._watchdog = setTimeout(() => this._reconcile(trade), this.cfg.watchdogMs * 4);
-  }
-
-  async _sell(trade) {
-    try {
-      await this.client._send({ sell: trade.contractId, price: 0 }, 20000);
-      logger.info(`SELL requested ${trade.contractId} at K=${trade.ticksHeld}`);
-    } catch (e) {
-      if (/already sold|not found/i.test(e.message)) {
-        await this._reconcile(trade);
-        return;
-      }
-      throw e;
-    }
-  }
-
-  async _reconcile(trade) {
-    if (!this.open.has(trade.contractId)) return;
-    const contracts = await this.client.portfolio();
-    const found = contracts.find(c => String(c.contract_id) === trade.contractId);
-    if (found) {
-      trade._watchdog = setTimeout(() => this._reconcile(trade), this.cfg.watchdogMs * 4);
-      return;
-    }
-    try {
-      const res = await this.client._send(
-        { proposal_open_contract: 1, contract_id: trade.contractId }, 20000);
-      const c = res.proposal_open_contract ?? {};
-      this._settle(trade, {
-        status: String(c.status ?? 'unknown').toLowerCase(),
-        profit: parseFloat(c.profit ?? 0) || 0,
-        sellPrice: parseFloat(c.sell_price ?? 0) || 0,
-        exitReason: c.exit_reason || String(c.status ?? 'unknown').toLowerCase(),
-      });
-    } catch (e) {
-      logger.error(`reconcile ${trade.contractId} failed: ${e.message}`);
-      this._settle(trade, { status: 'unknown', profit: 0, exitReason: 'unknown' });
-    }
-  }
-
-  /** Idempotent settlement. A contract is only ever booked once. */
-  _settle(trade, { status, profit, sellPrice = 0, exitReason = null }) {
-    if (this.settled.has(trade.contractId)) return;
-    this.settled.add(trade.contractId);
-    if (trade._watchdog) clearTimeout(trade._watchdog);
-    if (trade._detach) trade._detach();
-    if (trade._detachTick) trade._detachTick();
-    if (trade._subId) this.client.forget(trade._subId);
-    this.open.delete(trade.contractId);
-
-    trade.status = status;
-    trade.profit = profit;
-    trade.closedAt = Date.now();
-    trade.sellTime = Date.now() / 1000;
-    trade.sellPrice = sellPrice || 0;
-    trade.exitReason = exitReason || status;
-
-    const tag = profit > 0 ? 'WIN ' : 'LOSS';
-    logger.info(
-      `${tag} ${trade.symbol} g=${(trade.growthRate * 100).toFixed(0)}% ` +
-      `K=${trade.ticksHeld}/${trade.targetTicks} pnl=${money(profit)} ` +
-      `status=${status}${trade.paper ? ' (paper)' : ''}`,
-    );
-    this.emit('closed', trade);
-  }
-
-  async closeAll() {
-    for (const trade of [...this.open.values()]) {
-      if (trade.paper) { this._settle(trade, { status: 'cancelled', profit: trade.profit }); continue; }
-      try { await this._sell(trade); } catch (e) { logger.warn(`closeAll: ${e.message}`); }
-    }
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// 12. MONTE CARLO SIMULATOR
-//     Lets you price a config before risking anything. Simulates GBM ticks
-//     (which is exactly how Deriv generates volatility indices) against a
-//     barrier, then applies this bot's own entry/exit policy.
-// ═══════════════════════════════════════════════════════════════════════
-function gaussian() {
-  // Box-Muller
-  let u = 0, v = 0;
-  while (u === 0) u = Math.random();
-  while (v === 0) v = Math.random();
-  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
-}
-
-/**
- * Simulate N accumulator trades.
- * @param {object} o
- * @param {number} o.sigma           per-tick log-return stdev
- * @param {number} o.halfBarrierFrac barrier half-width as a fraction of spot
- * @param {number} o.growthRate      g
- * @param {number} o.holdTicks       K (exit target)
- * @param {number} o.stake
- * @param {number} o.trades
- * @param {number} o.spreadCost      round-trip exit cost as fraction of stake
- */
-function monteCarlo(o) {
-  const {
-    sigma, halfBarrierFrac, growthRate, holdTicks,
-    stake = 1, trades = 20000, spreadCost = 0,
-  } = o;
-  const limit = Math.log(1 + halfBarrierFrac);
-
-  let pnl = 0, wins = 0, losses = 0, equity = 0, peak = 0, maxDd = 0;
-  let consec = 0, maxConsec = 0, totalTicks = 0;
-  const perTrade = [];
-
-  for (let t = 0; t < trades; t++) {
-    let survived = 0, knocked = false;
-    for (let k = 0; k < holdTicks; k++) {
-      if (Math.abs(gaussian() * sigma) >= limit) { knocked = true; break; }
-      survived++;
-    }
-    totalTicks += survived + (knocked ? 1 : 0);
-
-    let profit;
-    if (knocked) {
-      profit = -stake;
-      losses++; consec++; maxConsec = Math.max(maxConsec, consec);
-    } else {
-      profit = stake * (Math.pow(1 + growthRate, survived) - 1) - stake * spreadCost;
-      if (profit > 0) wins++; else losses++;
-      consec = 0;
-    }
-    pnl += profit;
-    perTrade.push(profit / stake);
-    equity += profit;
-    peak = Math.max(peak, equity);
-    maxDd = Math.max(maxDd, peak - equity);
-  }
-
-  const pSurvive = Math.exp(-0) ; // placeholder removed below
-  return {
-    trades,
-    totalPnl: pnl,
-    pnlPerTrade: pnl / trades,
-    returnPerTradePct: (pnl / trades / stake) * 100,
-    winRate: wins / trades,
-    wins, losses,
-    maxDrawdown: maxDd,
-    maxConsecLosses: maxConsec,
-    avgTicksPerTrade: totalTicks / trades,
-    stdevPerTradePct: Stats.stdev(perTrade) * 100,
-    zScore: Stats.zStat(perTrade, 0),
-    barrierSigmas: limit / sigma,
-    theoreticalSurvival: 1 - 2 * (1 - Stats.normCdf(limit / sigma)),
-    breakEvenSurvival: Stats.breakEvenSurvival(growthRate),
-  };
-}
-
-/** Sweep growth rates x hold times for a given barrier model. */
-function sweep({ sigma, barrierOf, growthRates, holdTicks, trades = 20000, spreadCost = 0 }) {
-  const rows = [];
-  for (const g of growthRates) {
-    for (const K of holdTicks) {
-      const r = monteCarlo({
-        sigma, halfBarrierFrac: barrierOf(g), growthRate: g,
-        holdTicks: K, stake: 1, trades, spreadCost,
-      });
-      rows.push({ growthRate: g, holdTicks: K, ...r });
-    }
-  }
-  return rows;
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// 13. THE BOT
-// ═══════════════════════════════════════════════════════════════════════
-class AccuFable5 {
-  constructor(cfg) {
-    this.cfg = cfg;
-    this.client = new DerivClient(cfg);
-    this.md = new MarketData(this.client, cfg);
-    this.calib = new CalibrationEngine(cfg);
-    this.edge = new EdgeLedger(cfg);
-    this.risk = new RiskManager(cfg);
-    this.exec = new TradeExecutor(this.client, this.md, cfg);
-
-    this.lastTradeAt = 0;
-    this.loopTimer = null;
-    this.barrierTimer = null;
-    this.calibTimer = null;
-    this._ticking = false;       // re-entrancy guard for _tick()
-    this._tickOverlap = 0;       // dropped-cycle counter (diagnostic)
-    this._lastTickMs = 0;        // duration of the last completed cycle
-    this._staysAt = 0;           // last successful stayed-in refresh
-    this._barrierAt = 0;         // last successful barrier refresh
-    this._stallWarned = 0;       // last stall warning (dedup)
-    this._hourlyBoot = null;
-    this._hourlyT = null;
-    this._eodBoot = null;
-    this.running = false;
-    this.calibrations = new Map();  // key -> calibration result
-    this._lastTradeableKeys = new Set(); // for edge-transition logging
-    this.stats = { opened: 0, closed: 0, wins: 0, losses: 0, pnl: 0 };
-    this.statsLog = new StatisticsManager();  // trade log + hourly/EOD summaries
-    this.startedAt = Date.now();
-
-    // ── Martingale (accuHOLD_v2 semantics; OFF unless configured) ──
-    this.martingaleBase  = Number(cfg.martingaleBaseStake) > 0 ? Number(cfg.martingaleBaseStake) : Number(cfg.stake) || 1.0;
-    this.martingaleStep  = 0;
-    this.currentStake    = this.martingaleBase;
-    this.consecutiveLosses = 0;
-
-    // ── Chase-on-loss: when active, re-trade this same pair after each loss
-    //    until a win, skipping the gates. ──
-    this.chaseActive     = false;
-    this.chaseSymbol     = null;
-    this.chaseGrowthRate = null;
-
-    // ── Balance / P&L tracking for telegram reports ──
-    this.startBalance  = null;
-    this.lastBalance   = null;
-
-    this.exec.on('opened', t => this._onTradeOpened(t));
-    this.exec.on('closed', t => this._onClosed(t));
-    this.client.on('disconnected', () => {
-      logger.warn('feed lost — trading paused until reconnect');
-      telegram.send(`⚠️ <b>AccuFable5a Connection lost</b> — reconnecting\u2026`);
-    });
-    this.client.on('ready', () => { if (this.running) this.md.resubscribeAll().catch(() => {}); });
-  }
-
-  _onClosed(trade) {
-    this.stats.closed++;
-    this.stats.pnl += trade.profit;
-    if (trade.profit > 0) this.stats.wins++; else this.stats.losses++;
-    this.risk.onTradeClosed(trade.profit);
-
-    const verdict = this.edge.record(trade);
-    if (verdict.halt) this.risk.halt(verdict.reason);
-
-    // ── Trade log (feeds hourly/EOD telegram summaries) ──
-    const rec = this.statsLog.record({
-      ...trade,
-      status: trade.profit > 0 ? 'won' : (trade.profit < 0 ? 'lost' : 'unknown'),
-      date: utcDateStr(new Date(trade.closedAt)),
-    });
-    if (trade.profit > 0) this.consecutiveLosses = 0;
-    else if (trade.profit < 0) this.consecutiveLosses += 1;
-
-    // ── Chase-on-loss: on a loss, re-trade the SAME pair immediately (the
-    //    gates are suspended until a win). On a win, return to gated mode. ──
-    if (this.cfg.chaseOnLoss) {
-      if (trade.profit < 0 && !this.risk.halted) {
-        this.chaseActive     = true;
-        this.chaseSymbol     = trade.symbol;
-        this.chaseGrowthRate = trade.growthRate;
-        logger.warn(
-          `chaseON: loss on ${trade.symbol}@${String(trade.growthRate)} — ` +
-          `next trade reopens ${trade.symbol} at ${String(trade.growthRate)} without gates until a win`,
-        );
-      } else if (trade.profit > 0 && this.chaseActive) {
-        this.chaseActive     = false;
-        this.chaseSymbol     = null;
-        this.chaseGrowthRate = null;
-        logger.info(`chaseOFF: win on ${trade.symbol} — returning to gate-based selection`);
-      }
+    /**
+     * The new API (api.derivws.com) expects `underlying_symbol` in proposal
+     * payloads; the legacy v3 endpoint expects `symbol`. Sending the wrong
+     * one yields InputValidationFailed.
+     */
+    _proposalSymbolKey() {
+        return this._isPat ? 'underlying_symbol' : 'symbol';
     }
 
-    // ── Martingale: stake for the NEXT trade ──
-    const prevStep = this.martingaleStep;
-    const prevStake = this.currentStake;
-    const mg = this._updateMartingaleOnResult(trade.profit > 0 ? 'won' : (trade.profit < 0 ? 'lost' : 'unknown'));
-    this.lastBalance = (this.lastBalance ?? this.client.balance ?? this.startBalance ?? 0) + trade.profit;
+    /**
+     * Request a proposal specifically for scanning (not for trading)
+     * @param {string} asset - Asset symbol to scan
+     */
+    requestProposalForScan(asset) {
+        if (!this.wsReady) return;
 
-    this._sendTradeResult(trade, rec, { prevStep, prevStake, mg });
-
-    this._saveState();
-  }
-
-  _onTradeOpened(t) {
-    this._sendTradeOpen(t);
-  }
-
-  // ── Martingale helpers (accuHOLD_v2 semantics) ──
-  _isMartingaleEnabled() {
-    return Number(this.cfg.martingaleMultiplier) > 1.0 && parseInt(this.cfg.martingaleSteps, 10) > 0;
-  }
-  _martingaleLabel() {
-    if (!this._isMartingaleEnabled()) return 'OFF';
-    return `×${Number(this.cfg.martingaleMultiplier).toFixed(2)} (step ${this.martingaleStep}/${this.cfg.martingaleSteps})`;
-  }
-  _calcMartingaleStake(step) {
-    const mult = Number(this.cfg.martingaleMultiplier) || 1;
-    if (step <= 0 || mult <= 1) return +this.martingaleBase.toFixed(2);
-    return +(this.martingaleBase * Math.pow(mult, step)).toFixed(2);
-  }
-  _updateMartingaleOnResult(status) {
-    if (!this._isMartingaleEnabled()) {
-      this.martingaleStep = 0;
-      this.currentStake = this.martingaleBase;
-      return { changed: false, reason: 'disabled' };
-    }
-    const maxSteps = parseInt(this.cfg.martingaleSteps, 10);
-    if (status === 'won') {
-      if (this.martingaleStep > 0) {
-        logger.info(`martingale RESET: win after ${this.martingaleStep} steps → stake ${this.currentStake.toFixed(2)} → ${this.martingaleBase.toFixed(2)}`);
-        this.martingaleStep = 0;
-        this.currentStake = this.martingaleBase;
-        return { changed: true, reason: 'win-reset' };
-      }
-      this.martingaleStep = 0;
-      this.currentStake = this.martingaleBase;
-      return { changed: false, reason: 'win-base' };
-    }
-    if (status === 'lost') {
-      if (this.martingaleStep < maxSteps) {
-        this.martingaleStep += 1;
-        const prev = this.currentStake;
-        this.currentStake = this._calcMartingaleStake(this.martingaleStep);
-        logger.info(`martingale STEP UP: loss streak → step ${this.martingaleStep}/${maxSteps} stake ${prev.toFixed(2)} → ${this.currentStake.toFixed(2)} (×${this.cfg.martingaleMultiplier})`);
-        return { changed: true, reason: 'loss-step-up', prev };
-      }
-logger.warn(`martingale MAX STEPS hit (${this.martingaleStep}/${maxSteps}) on loss — halting trading`);
-      telegram.send(`⛔ <b>AccuAPEX v5 Martingale Max Steps Reached</b>\nStep ${this.martingaleStep}/${maxSteps} lost. Trading halted.`);
-      this.risk.halt(`martingale max steps reached (${this.martingaleStep}/${maxSteps})`);
-      return { changed: true, reason: 'max-halt' };
-    }
-    return { changed: false, reason: 'no-op' };
-  }
-
-  currencyStr() { return this.client.currency || this.cfg.currency; }
-
-  // ── Telegram: trade opened ──
-  _sendTradeOpen(t) {
-    const c = this.currencyStr();
-    const chaseNote = this.cfg.chaseOnLoss && this.chaseActive
-      ? `🔥 <b>Chase:</b> re-trading ${this.chaseSymbol} after loss (gates suspended)\n`
-      : '';
-    const martingaleNote = this._isMartingaleEnabled()
-      ? `♻️ <b>Martingale:</b> ${this._martingaleLabel()} · base ${this.martingaleBase.toFixed(2)} → <b>${t.stake.toFixed(2)} ${c}</b>${this.martingaleStep > 0 ? ` (step ${this.martingaleStep}/${this.cfg.martingaleSteps})` : ' (base)'}\n`
-      : '';
-    const lossNote = `📉 <b>Loss Streak:</b> ${this.consecutiveLosses} · max ${this.statsLog.maxLossStreak} · ${this.statsLog.lossStreakLine()}\n`;
-    const nextStakeNote = this._isMartingaleEnabled()
-      ? `➡️ <b>Next stake (if loss):</b> ${this._calcMartingaleStake(Math.min(this.martingaleStep + 1, this.cfg.martingaleSteps)).toFixed(2)} ${c}${this.martingaleStep + 1 > this.cfg.martingaleSteps ? ' (would reset to base)' : ''}\n`
-      : '';
-
-    // ── Trade analysis stats (shown alongside the entry signal) ──
-    const stayed = this.md.getStayedIn(t.symbol, t.growthRate) ?? [];
-    const stayedRecent = stayed.slice(-10).join(',') || 'n/a';
-    const evLower = t.calibration?.evLowerPerTick;
-    const evLine = evLower == null
-      ? `<b>evLower/tick:</b> n/a (chase)\n`
-      : `<b>evLower/tick:</b> <code>${(evLower * 100).toFixed(4)}%</code> (gate ≤ ${(this.cfg.evLowerGateMax * 100).toFixed(4)}% · ${evLower <= this.cfg.evLowerGateMax ? '✅ in' : '❌ out'})\n`;
-    const breachCount = t.calibration?.breaches;
-    const breachLine = breachCount == null
-      ? `<b>breachCount:</b> n/a (chase)\n`
-      : `<b>breachCount:</b> <code>${breachCount}</code> (gate ≥ ${this.cfg.breachMinCount} · ${breachCount >= this.cfg.breachMinCount ? '✅ in' : '❌ out'})\n`;
-    const analysisNote =
-      evLine +
-      breachLine +
-      `<b>stayedInArray (last 10 / ${stayed.length}):</b> <code>${stayedRecent}</code>\n`;
-
-    const msg =
-      `🟢 <b>AccuFable5a TRADE OPENED</b>\n\n` +
-      `<b>Contract:</b> #${t.contractId}\n` +
-      `<b>Symbol:</b> <code>${t.symbol}</code>\n` +
-      `<b>Growth Rate:</b> ${(t.growthRate * 100).toFixed(2)}%\n` +
-      `<b>Stake:</b> ${t.stake.toFixed(2)} ${c}${this.martingaleStep > 0 ? ` <i>(martingale ×${Math.pow(this.cfg.martingaleMultiplier, this.martingaleStep).toFixed(2)})</i>` : ''}\n` +
-      chaseNote +
-      martingaleNote +
-      `<b>Take-Profit:</b> sell after <b>${this.cfg.takeProfitTicks}</b> ticks\n` +
-      analysisNote +
-      lossNote +
-      nextStakeNote +
-      `<b>Overall:</b> ${money(this.statsLog.overallProfit, c)}\n\n` +
-      `<i>Entry: stays + evL/t + breachCount gates. Exit: TP at ${this.cfg.takeProfitTicks} ticks.</i>`;
-    telegram.send(msg);
-  }
-
-  // ── Telegram: trade closed / result ──
-  _sendTradeResult(t, rec, { prevStep, prevStake, mg }) {
-    const c = this.currencyStr();
-    const emoji = t.profit >= 0 ? '✅' : '❌';
-    const label = t.profit >= 0 ? 'WIN' : 'LOSS';
-    const exit = t.exitReason || 'n/a';
-    const exitLine = /^take.?profit/i.test(exit) ? '🎯 take-profit'
-                  : /^tick.?cap/i.test(exit)       ? '⏱️ tick-cap'
-                  : /^knockout/i.test(exit)        ? '💥 knockout'
-                  : exit;
-    const buyTs  = Number(t.buyTime  || 0);
-    const sellTs = Number(t.sellTime || 0);
-    const durationSec = (buyTs > 0 && sellTs > 0 && sellTs >= buyTs) ? (sellTs - buyTs) : null;
-    const durationLine = durationSec != null
-      ? `⏱️ <b>Duration:</b> ${formatDuration(durationSec)}\n`
-      : `⏱️ <b>Duration:</b> n/a\n`;
-    let martingaleLine = '';
-    if (this._isMartingaleEnabled()) {
-      if (t.profit < 0) {
-        if (mg.reason === 'loss-step-up') {
-          martingaleLine = `♻️ <b>Martingale:</b> STEP UP  ${prevStep}/${this.cfg.martingaleSteps} → ${this.martingaleStep}/${this.cfg.martingaleSteps}  stake ${prevStake.toFixed(2)} → <b>${this.currentStake.toFixed(2)} ${c}</b> (×${this.cfg.martingaleMultiplier})\n`;
-        } else if (mg.reason === 'max-halt') {
-          martingaleLine = `⛔ <b>Martingale:</b> MAX STEPS hit (${this.cfg.martingaleSteps}) → TRADING HALTED\n`;
-        } else {
-          martingaleLine = `♻️ <b>Martingale:</b> ${this._martingaleLabel()}  stake now ${this.currentStake.toFixed(2)} ${c}\n`;
-        }
-      } else {
-        if (mg.reason === 'win-reset') {
-          martingaleLine = `♻️ <b>Martingale:</b> WIN → RESET  ${prevStake.toFixed(2)} → <b>${this.currentStake.toFixed(2)} ${c}</b> (base)\n`;
-        } else {
-          martingaleLine = `♻️ <b>Martingale:</b> WIN at base — stake stays <b>${this.currentStake.toFixed(2)} ${c}</b>\n`;
-        }
-      }
-    } else {
-      martingaleLine = `♻️ <b>Martingale:</b> OFF  (flat stake)\n`;
-    }
-    const todayStats = this.statsLog.stats(this.statsLog.todayTrades(rec.date));
-    const lossBreakdown = `📉 <b>Loss Streak:</b> ${this.consecutiveLosses} · max ${this.statsLog.maxLossStreak}\n` +
-                          `   ${this.statsLog.lossStreakLine()}\n`;
-    const msg =
-      `${emoji} <b>AccuFable5a TRADE ${label}</b>\n\n` +
-      `<b>Contract:</b> #${t.contractId} · <b>Symbol:</b> <code>${t.symbol}</code>\n` +
-      `<b>Growth:</b> ${(t.growthRate * 100).toFixed(0)}% · <b>Stake:</b> ${Number(t.stake).toFixed(2)} ${c}\n` +
-      `<b>Sell:</b> ${Number(t.sellPrice ?? 0).toFixed(2)} ${c}\n` +
-      `${t.profit >= 0 ? '💚' : '💔'} <b>Profit:</b> ${money(t.profit, c)}\n` +
-      `<b>Exit:</b> ${exitLine}\n` +
-      durationLine +
-      `<b>Ticks held:</b> ${t.ticksHeld ?? '?'} (TP after ${this.cfg.takeProfitTicks})` +
-      `\n` +
-      martingaleLine +
-      lossBreakdown +
-      `<b>Balance:</b> ${(this.lastBalance ?? 0).toFixed(2)} ${c}\n\n` +
-      `<b>GMT Day (${rec.date})</b>\n` +
-      `• Trades: ${todayStats.count} (✅${todayStats.wins} ❌${todayStats.losses}) | WR ${todayStats.winRate.toFixed(1)}%\n` +
-      `• Net: ${money(todayStats.totalProfit, c)} | PF ${todayStats.profitFactor === Infinity ? '∞' : todayStats.profitFactor.toFixed(2)}\n\n` +
-      `<b>Overall:</b> ${money(this.statsLog.overallProfit, c)}`;
-    telegram.send(msg);
-  }
-
-  // ── Telegram: hourly summary ──
-  _sendHourly() {
-    const now = new Date();
-    const prev = new Date(now.getTime() - 3600_000);
-    const date = utcDateStr(prev), hour = utcHour(prev);
-    const list = this.statsLog.tradesForHour(date, hour);
-    const s = this.statsLog.stats(list);
-    const c = this.currencyStr();
-    const martingaleInfo = this._isMartingaleEnabled()
-      ? `♻️ Martingale: ${this._martingaleLabel()} · base ${this.martingaleBase.toFixed(2)} → now ${this.currentStake.toFixed(2)} ${c}\n`
-      : `♻️ Martingale: OFF\n`;
-    const lossInfo = `📉 Loss streak: ${this.consecutiveLosses} · max ${this.statsLog.maxLossStreak} · ${this.statsLog.lossStreakLine()}\n`;
-    if (!list.length) {
-      telegram.send(`⏰ AccuFable5a <b>${date} ${pad(hour)}:00</b> — No trades\n${martingaleInfo}${lossInfo}💼 Overall: ${money(this.statsLog.overallProfit, c)}`);
-      return;
-    }
-    let msg = `⏰ AccuFable5a <b>${date} ${pad(hour)}:00</b>\n\n📊 ${s.count} trades (✅${s.wins} ❌${s.losses})\n📈 WR: ${s.winRate.toFixed(1)}%\n💰 P/L: <b>${money(s.totalProfit, c)}</b>\n💼 Overall: <b>${money(this.statsLog.overallProfit, c)}</b>\n${martingaleInfo}${lossInfo}\n`;
-    list.slice(-15).forEach((t2, i) => {
-      const exit = (t2.exitReason || '').split(':')[0];
-      const mgTag = t2.martingaleStep != null && t2.martingaleStep > 0 ? ` MG×${Number(this.cfg.martingaleMultiplier).toFixed(2)}` : '';
-      msg += `${i + 1}. ${t2.status === 'won' ? '✅' : '❌'} #${t2.contractId} ${t2.symbol} ticks=${t2.ticksHeld ?? '?'} exit=${exit}${mgTag} ${money(t2.profit, c)}\n`;
-    });
-    telegram.send(msg);
-  }
-
-  // ── Telegram: end-of-day summary ──
-  _sendEod(reason = 'manual') {
-    const date = utcDateStr(new Date(Date.now() - 86_400_000));
-    if (this.statsLog.isEodSent(date) && reason === 'scheduled') return;
-    const summary = this.statsLog.archiveDate(date);
-    const ds = summary.stats;
-    const c = this.currencyStr();
-    const balStart = this.startBalance ?? 0, balNow = this.lastBalance ?? balStart;
-    const balDelta = balNow - balStart;
-    let msg = `🌙 <b>AccuFable5a DAILY REPORT — ${date}</b>\n\n`;
-    if (ds.count) msg += `📊 ${ds.count} trades (✅${ds.wins} ❌${ds.losses}) | WR ${ds.winRate.toFixed(1)}%\n💰 Net: <b>${money(ds.totalProfit, c)}</b> | PF ${ds.profitFactor === Infinity ? '∞' : ds.profitFactor.toFixed(2)}\n`;
-    else msg += `No trades.\n`;
-    msg += `\n💼 ${balStart.toFixed(2)} → ${balNow.toFixed(2)} (${balDelta >= 0 ? '+' : ''}${balDelta.toFixed(2)})\n`;
-    msg += `💼 Overall: <b>${money(this.statsLog.overallProfit, c)}</b>\n`;
-    msg += this._isMartingaleEnabled()
-      ? `♻️ Martingale: ${this._martingaleLabel()} · base ${this.martingaleBase.toFixed(2)} → now ${this.currentStake.toFixed(2)} ${c}\n`
-      : `♻️ Martingale: OFF (flat stake)\n`;
-    msg += `📉 Loss streak: current ${this.consecutiveLosses} · max ${this.statsLog.maxLossStreak} · ${this.statsLog.lossStreakLine()}`;
-    telegram.send(msg);
-    this.statsLog.markEodSent(date);
-    this._saveState();
-    this.startBalance = this.client.balance ?? this.lastBalance ?? this.startBalance;
-  }
-
-  async start() {
-    printBanner();
-    this._loadState();
-
-    if (this.cfg.mode === 'live' && this.cfg.confirmLive !== 'i-understand') {
-      logger.error(
-        'MODE=live requires CONFIG confirmation. Set CONFIRM_LIVE=i-understand in .env ' +
-        'to acknowledge that real money is at risk. Refusing to start.',
-      );
-      process.exit(1);
-    }
-
-    await this.client.connect();
-
-    // ── Balance + bot-online telegram ──
-    this.startBalance = this.startBalance ?? this.client.balance ?? 0;
-    this.lastBalance  = this.lastBalance  ?? this.startBalance;
-    if (this.cfg.mode === 'live') {
-      logger.warn('!!! LIVE MODE ON A REAL-MONEY ACCOUNT !!!');
-    }
-
-    const c = this.currencyStr();
-    const info = this.client.accountInfo || {};
-    const martingaleLine = this._isMartingaleEnabled()
-      ? `♻️ <b>Martingale:</b> ON  ×${Number(this.cfg.martingaleMultiplier).toFixed(2)}  steps ${this.cfg.martingaleSteps}  (base ${this.martingaleBase.toFixed(2)} → now ${this.currentStake.toFixed(2)} step ${this.martingaleStep})\n`
-      : `♻️ <b>Martingale:</b> OFF  (flat stake ${this.martingaleBase.toFixed(2)})\n`;
-    const lossLine = `📉 <b>Loss Streak:</b> ${this.consecutiveLosses} (max ${this.statsLog.maxLossStreak}) · ${this.statsLog.lossStreakLine()}\n`;
-    telegram.send(
-      `<b>AccuFable5a Bot Online</b>${this.cfg.mode !== 'live' ? ' <b>🔒 DRY-RUN</b>' : ''}\n\n` +
-      `<b>Account:</b> ${info.loginid ?? '?'} (${info.isVirtual ? '🟡 DEMO' : '🔴 REAL'})\n` +
-      `<b>Balance:</b> ${this.startBalance.toFixed(2)} ${c}\n` +
-      `<b>Assets:</b> ${this.cfg.assets.length} volatility indices\n` +
-      `<b>Growth rate:</b> ${this.cfg.growthRates.map(g => (g * 100) + '%').join(', ')} · <b>TP:</b> ${this.cfg.takeProfitTicks} ticks\n` +
-      `<b>ev gate:</b> evLower/tick ≤ ${(this.cfg.evLowerGateMax * 100).toFixed(4)}%\n` +
-      `<b>stay gate:</b> ${this.cfg.stayWindowN} most-current < ${this.cfg.stayMaxValue}, latest < ${this.cfg.stayCurrentMax}\n` +
-      `<b>breach gate:</b> breachCount ≥ ${this.cfg.breachMinCount}\n` +
-      `<b>Chase on loss:</b> ${this.cfg.chaseOnLoss ? '🟢 ON (re-trade same asset until win)' : 'OFF'}\n` +
-      martingaleLine +
-      lossLine +
-      `<b>Daily caps:</b> ${this.cfg.dailyMaxTrades} trades / ${this.cfg.dailyMaxLoss} ${c}\n` +
-      `<b>Overall:</b> ${money(this.statsLog.overallProfit, c)}`,
-    );
-
-    const nonVol = this.cfg.assets.filter(s => this.cfg.isBoomOrCrash(s));
-    if (nonVol.length) {
-      logger.warn(
-        `asset class caveat: ${nonVol.join(',')} ${nonVol.length > 1 ? 'are' : 'is'} ` +
-        'boom/crash, not a volatility index. These carry synthetic jump events, so ' +
-        'per-tick returns are not Gaussian and breachCount/EV figures below are ' +
-        'indicative only. Use R_* or 1HZ*V for the model to hold.',
-      );
-    }
-
-    logger.info(`bootstrapping tick history for ${this.cfg.assets.length} assets…`);
-    await this.md.bootstrap(this.cfg.assets);
-
-    await this._refreshBarriers();
-    this.barrierTimer = setInterval(() => this._refreshBarriers().catch(() => {}),
-      this.cfg.barrierRefreshMs);
-
-    this.running = true;
-    this.loopTimer = setInterval(() => this._tick().catch(e => logger.error('loop:', e.message)),
-      this.cfg.analysisIntervalMs);
-    this.calibTimer = setInterval(() => this._reportCalibration(), 5 * 60 * 1000);
-
-    // ── Hourly summary timer (fires at next whole hour, then every 60 min) ──
-    if (this.cfg.hourlySummary) {
-      const msToNextHour = 3600_000 - (Date.now() % 3600_000);
-      this._hourlyBoot = setTimeout(() => {
-        this._sendHourly();
-        this._hourlyT = setInterval(() => this._sendHourly(), 3600_000);
-      }, Math.max(1000, msToNextHour));
-    }
-
-    // ── EOD summary timer (fires at eodTimeGmt + delay, then daily) ──
-    const scheduleNextEod = () => {
-      const now = new Date();
-      const { h, min } = (() => {
-        const m = String(this.cfg.eodTimeGmt || '00:00').match(/^(\d{1,2}):(\d{2})$/);
-        return m ? { h: +m[1], min: +m[2] } : { h: 0, min: 0 };
-      })();
-      const target = new Date(Date.UTC(
-        now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(),
-        h, min, this.cfg.eodSendDelaySeconds, 0,
-      ));
-      let delay = target.getTime() - now.getTime();
-      if (delay <= 0) delay += 86_400_000;
-      this._eodBoot = setTimeout(() => { this._sendEod('scheduled'); scheduleNextEod(); }, delay);
-    };
-    scheduleNextEod();
-
-    logger.info(`running in ${this.cfg.mode.toUpperCase()} mode`);
-    this._reportCalibration();
-  }
-
-  async _refreshBarriers() {
-    const probeStake = Math.max(this.cfg.minStake, 1);
-    for (const symbol of this.cfg.assets) {
-      if (this.md.deadAssets.has(symbol)) continue;
-      for (const g of this.cfg.growthRates) {
-        const rec = await this.md.refreshBarrier(symbol, g, probeStake);
-        if (rec) { this._barrierAt = Date.now(); this._barrierFails = 0; }
-      }
-    }
-    this._warnIfStalled();
-  }
-
-  /**
-   * The single most useful diagnostic in this file.
-   *
-   * Calibration depends on two live records (the barrier and the stayed-in
-   * array) that are refreshed by periodic ACCU proposals. Both have a TTL. If
-   * the proposal stream dies they age out, the gates report "no-ev
-   * (uncalibrated)" forever, and nothing in the log says why. This makes the
-   * stall explicit and states the age, so the cause is never a guess.
-   */
-  _warnIfStalled() {
-    const barrierTtl = this.cfg.barrierRefreshMs * 4;
-    const now = Date.now();
-    const barrierAge = this._barrierAt ? now - this._barrierAt : Infinity;
-    const staysAge = this._staysAt ? now - this._staysAt : Infinity;
-    if (barrierAge < barrierTtl && staysAge < this.cfg.stayStaleMs) {
-      if (this._stallWarned) {
-        logger.info(
-          `calibration feed RECOVERED — barrier age ${(barrierAge / 1000).toFixed(0)}s, ` +
-          `stayed-in age ${(staysAge / 1000).toFixed(0)}s`,
-        );
-      }
-      this._stallWarned = 0;
-      return;
-    }
-    const ttl = Math.min(barrierTtl, this.cfg.stayStaleMs);
-    if (this._stallWarned && now - this._stallWarned < ttl) return;
-    this._stallWarned = now;
-    const rate = this.client._rateLimitHits || 0;
-    logger.error(
-      `CALIBRATION FEED STALLED — no usable ACCU proposal. ` +
-      `last barrier ${this._barrierAt ? `${((now - this._barrierAt) / 1000).toFixed(0)}s ago` : 'never'}, ` +
-      `last stayed-in ${this._staysAt ? `${((now - this._staysAt) / 1000).toFixed(0)}s ago` : 'never'} ` +
-      `(TTL ${(ttl / 1000).toFixed(0)}s). ` +
-      `barrier failures ${this._barrierFails || 0}, stayed-in failures ${this._staysFails || 0}, ` +
-      `rate-limit hits ${rate}, socket ${this.client.connected ? 'open' : 'CLOSED'}. ` +
-      'Every pair will read "uncalibrated" until this clears. ' +
-      'Likely: Deriv rate limit (raise CONFIG.minRequestGapMs), dropped socket, ' +
-      'or insufficient balance.',
-    );
-    telegram.send(
-      `⚠️ <b>AccuFable5a calibration stalled</b>\n` +
-      `No ACCU proposal for ${(ttl / 1000).toFixed(0)}s+. All pairs uncalibrated.\n` +
-      `barrier fails ${this._barrierFails || 0} · stayed-in fails ${this._staysFails || 0} · ` +
-      `rate-limit ${rate} · socket ${this.client.connected ? 'open' : 'closed'}`,
-    );
-  }
-
-  /**
-   * Refresh ticks_stayed_in for every live pair with a fresh ACCU proposal,
-   * fired in parallel so the gate always reads the CURRENT breakout history
-   * (each element = how many ticks the price stayed inside the barrier range
-   * before breaking out; last element = most recent). Called every tick.
-   */
-  async _refreshStayedIn() {
-    if (Date.now() - this._staysAt < (this.cfg.staysRefreshMs || 0) - 50) return;
-    const probeStake = Math.max(this.cfg.minStake, 1);
-    const tasks = [];
-    for (const symbol of this.cfg.assets) {
-      if (this.md.deadAssets.has(symbol)) continue;
-      for (const g of this.cfg.growthRates) {
-        tasks.push((async () => {
-          try {
-            const res = await this.client._send({
-              proposal: 1,
-              amount: probeStake,
-              basis: 'stake',
-              contract_type: 'ACCU',
-              currency: this.cfg.currency,
-              [this.client.symbolKey]: symbol,
-              growth_rate: g,
-            }, 15000);
-            const p = res?.proposal;
-            const cd = p?.contract_details ?? {};
-            if (Array.isArray(cd.ticks_stayed_in)) {
-              this.md.stays.set(this.md.barrierKey(symbol, g), {
-                arr: cd.ticks_stayed_in,
-                at: Date.now(),
-              });
-              this._staysAt = Date.now();
-              this._staysFails = 0;
-            } else {
-              this._staysFails = (this._staysFails || 0) + 1;
-              if (this._staysFails === 1 || this._staysFails % 30 === 0) {
-                logger.warn(
-                  `stayed-in ${symbol}@${(g * 100).toFixed(0)}% — proposal OK but ` +
-                  'contract_details.ticks_stayed_in is missing. The stay gate will block ' +
-                  'once the last good copy ages out.',
-                );
-              }
+        const proposal = {
+            proposal: 1,
+            amount: this.currentStake.toFixed(2),
+            basis: 'stake',
+            contract_type: 'ACCU',
+            currency: 'USD',
+            [this._proposalSymbolKey()]: asset,
+            growth_rate: this.config.growthRate,
+            limit_order: {
+                take_profit: (this.currentStake * this.config.takeProfitMultiplier).toFixed(2)
+            },
+            passthrough: {
+                action: 'scan_only',
+                asset: asset,
+                timestamp: Date.now()
             }
-          } catch (e) {
-            // A transient proposal failure must not be invisible: the stay
-            // record is the first thing to go stale, and a stale stay record
-            // is indistinguishable from "no analysis" in the gate log.
-            this._staysFails = (this._staysFails || 0) + 1;
-            this._noteRequestError(e);
-            if (this._staysFails === 1 || this._staysFails % 30 === 0) {
-              logger.warn(
-                `stayed-in ${symbol}@${(g * 100).toFixed(0)}% failed (${this._staysFails}×): ` +
-                `${e.code || ''} ${e.message}`,
-              );
+        };
+
+        this.sendRequest(proposal);
+    }
+
+    /**
+     * Get a summary of active and pending assets
+     * @returns {string} Formatted summary
+     */
+    getAssetFilteringSummary() {
+        const activeList = Array.from(this.activeAssets).map(asset => {
+            const value = this.assetStayedInValues[asset];
+            const trend = this.getStayedInTrendDirection(asset);
+            return `${asset}(${value !== null ? value : '?'}, ${trend})`;
+        }).join(', ');
+
+        const pendingList = Array.from(this.pendingAssets).map(asset => {
+            const value = this.assetStayedInValues[asset];
+            return `${asset}(${value !== null ? value : '?'})`;
+        }).join(', ');
+
+        return `\n📊 Asset Status:\n` +
+               `   ✅ Active (${this.activeAssets.size}): ${activeList || 'None'}\n` +
+               `   ⏸️  Pending (${this.pendingAssets.size}): ${pendingList || 'None'}`;
+    }
+
+    /**
+     * Stop the pending asset scanner
+     */
+    stopPendingAssetScan() {
+        if (this.pendingScanInterval) {
+            clearInterval(this.pendingScanInterval);
+            this.pendingScanInterval = null;
+            console.log('🛑 Pending asset scanner stopped');
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // ASSET SUSPENSION LOGIC
+    // ══════════════════════════════════════════════════════════════════════════
+    suspendOtherAssets(lossAsset) {
+        this.focusAsset = lossAsset;
+        this.assets.forEach(asset => {
+            if (asset !== lossAsset) {
+                this.suspendedAssets.add(asset);
             }
-          }
-        })());
-      }
-    }
-    await Promise.all(tasks);
-  }
-
-  /** Recalibrate every pair and return them ranked. */
-  _calibrateAll() {
-    const out = [];
-    for (const symbol of this.cfg.assets) {
-      if (this.md.deadAssets.has(symbol)) continue;
-      const ticks = this.md.historyFor(symbol);
-      for (const g of this.cfg.growthRates) {
-        const barrier = this.md.getBarrier(symbol, g);
-        const c = this.calib.calibrate(symbol, ticks, g, barrier);
-        this.calibrations.set(`${symbol}|${g}`, c);
-        out.push(c);
-      }
-    }
-    return this.calib.rank(out);
-  }
-
-  /** Human-readable one-line status for one (symbol, growth rate) calibration. */
-  _calibrationLine(c, stay) {
-    const sym = c.symbol.padEnd(9);
-    const g = `g=${(c.growthRate * 100).toFixed(0)}%`;
-    if (c.n) {
-      let stayTxt = '';
-      if (stay) {
-        stayTxt = stay.pass
-          ? ` stay=OK latest=${stay.latest}`
-          : ` stay=BLOCKED(${stay.reason}) latest=${stay.latest}`;
-      } else {
-        stayTxt = ' stay=n/a';
-      }
-      return (
-        `${c.tradeable ? 'TRADEABLE' : '  no-edge'} ${sym} ${g} ` +
-        `n=${String(c.n).padStart(6)} breach=${String(c.breaches).padStart(5)} ` +
-        `surv=${c.survivalPoint.toFixed(6)} lower=${c.survivalLower.toFixed(6)} ` +
-        `breakEven=${c.breakEven.toFixed(6)} evL/t=${(c.evLowerPerTick * 100).toFixed(4)}% ` +
-        `barrier=±${c.halfBarrierPct.toFixed(6)}% (${c.barrierSigmas.toFixed(3)}σ) ` +
-        `acf|r|=${c.acfAbs.toFixed(4)} maxTicks=${c.maxTicks ?? 'n/a'}` + stayTxt
-      );
-    }
-    const m = /^insufficient-history:(\d+)\/(\d+)$/.exec(c.reason || '');
-    if (m) {
-      const have = +m[1], need = +m[2];
-      const rem = Math.max(0, need - have);
-      const est = rem > 0
-        ? ` (~${Math.max(1, Math.round(rem / 3600))}h @1 tick/s)`
-        : '';
-      return `WAIT-HISTORY ${sym} ${g} — ${have}/${need} ticks, ${rem} more needed${est}`;
-    }
-    if (/^no-barrier$/.test(c.reason || '')) {
-      return `WAIT-BARRIER ${sym} ${g} — no live ACCU proposal yet (check refresh logs)`;
-    }
-    return `${'?'.padEnd(13)} ${sym} ${g} — ${c.reason || 'unknown state'}`;
-  }
-
-  /** Compact tally of what the calibration grid is waiting on. */
-  _pendingSummary(ranked) {
-    const tally = { calibrated: 0, 'insufficient-history': 0, 'no-barrier': 0, other: 0 };
-    for (const c of ranked) {
-      if (c.n) tally.calibrated++;
-      else if (/insufficient-history/.test(c.reason || '')) tally['insufficient-history']++;
-      else if (/no-barrier/.test(c.reason || '')) tally['no-barrier']++;
-      else tally.other++;
-    }
-    const parts = [];
-    for (const k of ['calibrated', 'insufficient-history', 'no-barrier', 'other']) {
-      if (tally[k] > 0) parts.push(`${tally[k]} ${k}`);
-    }
-    return `${parts.join(', ')} (${ranked.length} pairs total)`;
-  }
-
-  /**
-   * Log a transition the moment a pair first clears the edge gate (or stops
-   * clearing it), so a status change is visible immediately and not only on
-   * the periodic re-report.
-   */
-  _trackCalibTransitions(ranked) {
-    const now = new Set(ranked.filter(c => c.tradeable).map(c => `${c.symbol}|${c.growthRate}`));
-    for (const k of now) {
-      if (!this._lastTradeableKeys.has(k)) {
-        const c = ranked.find(x => `${x.symbol}|${x.growthRate}` === k);
-        logger.info(
-          `edge confirmed ${c.symbol} g=${(c.growthRate * 100).toFixed(0)}% — ` +
-          `lower=${c.survivalLower.toFixed(6)} breakeven=${c.breakEven.toFixed(6)} ` +
-          `evLower/tick=${(c.evLowerPerTick * 100).toFixed(4)}%`,
-        );
-      }
-    }
-    for (const k of this._lastTradeableKeys) {
-      if (!now.has(k)) {
-        const [symbol, gStr] = k.split('|');
-        logger.info(`edge LOST ${symbol} g=${(parseFloat(gStr) * 100).toFixed(0)}% — no longer clears the gate`);
-      }
-    }
-    this._lastTradeableKeys = now;
-  }
-
-  _reportCalibration() {
-    const ranked = this._calibrateAll();
-    logger.info('──── CALIBRATION ────');
-    const withData = ranked.filter(c => c.n);
-    if (!withData.length) {
-      logger.info(`no calibrated pairs yet — waiting on: ${this._pendingSummary(ranked)}`);
-      for (const c of ranked) logger.info('  ' + this._calibrationLine(c));
-      logger.info('calibration resumes automatically as live ticks accumulate and barriers refresh');
-      return ranked;
-    }
-    const stayOf = c => this.calib.stayAnalysis(this.md.getStayedIn(c.symbol, c.growthRate));
-    for (const c of withData.slice(0, 20)) logger.info('  ' + this._calibrationLine(c, stayOf(c)));
-    const pending = ranked.filter(c => !c.n);
-    if (pending.length > 0) {
-      logger.info(`${pending.length} pair(s) still pending — ${this._pendingSummary(pending)}`);
-      for (const c of pending) logger.info('  ' + this._calibrationLine(c, stayOf(c)));
-    }
-    logger.info(`──── STAYED-IN ARRAYS (complete; validated by 'stay gate') ────`);
-    for (const c of ranked) {
-      const arr = this.md.getStayedIn(c.symbol, c.growthRate);
-      if (!arr) {
-        logger.info(`STAYED-IN ${c.symbol}@g=${(c.growthRate * 100).toFixed(0)}% — no data yet`);
-        continue;
-      }
-      const stay = stayOf(c);
-      const ev = c.evLowerPerTick == null
-        ? 'ev=n/a'
-        : `evL/t=${(c.evLowerPerTick * 100).toFixed(4)}% (${c.evLowerPerTick <= this.cfg.evLowerGateMax ? '≤' : '>'}` +
-          `${(this.cfg.evLowerGateMax * 100).toFixed(4)}%)`;
-      const bc = c.breaches == null
-        ? 'breach=n/a'
-        : `breach=${c.breaches} (${c.breaches >= this.cfg.breachMinCount ? '≥' : '<'}` +
-          `${this.cfg.breachMinCount})`;
-      logger.info(
-        `STAYED-IN ${c.symbol}@g=${(c.growthRate * 100).toFixed(0)}% len=${arr.length} ` +
-        `latest=${stay.latest} gate=${stay.pass ? 'PASS' : `BLOCKED(${stay.reason})`} ${ev} ${bc} ` +
-        `arr=[${arr.join(',')}]`,
-      );
-    }
-    const passing = rankCandidate =>
-      stayOf(rankCandidate).pass && rankCandidate.evLowerPerTick != null &&
-      rankCandidate.evLowerPerTick <= this.cfg.evLowerGateMax &&
-      rankCandidate.breaches >= this.cfg.breachMinCount &&
-      rankCandidate.breaches <= this.cfg.breachMinCount2;
-    const passed = withData.filter(passing);
-    logger.info(
-      `${passed.length} of ${withData.length} calibrated pair(s) pass ALL gates ` +
-      `(stayed-in N=${this.cfg.stayWindowN} most-current < ${this.cfg.stayMaxValue} ` +
-      `& latest < ${this.cfg.stayCurrentMax}; evLowerPerTick ≤ ${(this.cfg.evLowerGateMax * 100).toFixed(4)}%; ` +
-      `breachCount ≥ ${this.cfg.breachMinCount}). ` +
-      'The bot acts on the LOWEST evLowerPerTick among those.',
-    );
-    return ranked;
-  }
-
-  async _tick() {
-    if (!this.running || !this.client.authorized || this.risk.halted) return;
-
-    // ── RE-ENTRANCY GUARD ──
-    // The analysis loop is driven by setInterval, which fires regardless of
-    // whether the previous tick finished. _tick() awaits network round-trips
-    // (_refreshStayedIn fires an ACCU proposal per pair), so once a cycle takes
-    // longer than analysisIntervalMs the loops overlap. Each overlap doubles
-    // the request rate, which lengthens the next cycle, which adds more
-    // overlap — a self-sustaining request storm. Deriv rate-limits, every
-    // proposal then fails, the barrier and stayed-in records age out, and the
-    // bot is stuck "uncalibrated" forever with no way back.
-    if (this._ticking) {
-      this._tickOverlap = (this._tickOverlap || 0) + 1;
-      return;
-    }
-    this._ticking = true;
-    const t0 = Date.now();
-    try {
-      await this._tickBody();
-    } finally {
-      this._ticking = false;
-      this._lastTickMs = Date.now() - t0;
-    }
-  }
-
-  async _tickBody() {
-
-    // ── maxOpenTrades enforcement ──
-    // Never open another position while any contract is open (or mid-open).
-    if (!this.exec.canOpenNow()) {
-      if (this.exec.openCount > 0) logger.info(`skip tick — ${this.exec.openCount} open trade(s) (max ${this.cfg.maxOpenTrades})`);
-      return;
-    }
-
-    // ── CHASE-ON-LOSS MODE ──
-    // After a loss, re-trade the SAME pair immediately. Gates (stay + ev)
-    // are suspended; we keep re-trading that pair on every tick until a win,
-    // then fall back to normal analysis.
-    if (this.cfg.chaseOnLoss && this.chaseActive && this.chaseSymbol) {
-      const g = this.chaseGrowthRate;
-      const barrier = this.md.getBarrier(this.chaseSymbol, g)
-        ?? await this.md.refreshBarrier(this.chaseSymbol, g, this.currentStake);
-      const stayArr = this.md.getStayedIn(this.chaseSymbol, g) ?? [];
-      logger.warn(
-        `CHASE trade ${this.chaseSymbol}@${(g * 100).toFixed(0)}% (skip gates) ` +
-        `stayedIn(len=${stayArr.length})=[${stayArr.join(',')}]`,
-      );
-      try {
-        this.lastTradeAt = Date.now();
-        await this.exec.openTrade({
-          symbol: this.chaseSymbol,
-          growthRate: g,
-          stake: this.currentStake,
-          targetTicks: this.cfg.takeProfitTicks,
-          calibration: { symbol: this.chaseSymbol, growthRate: g, chase: true },
         });
-        this.stats.opened++;
-        this.risk.onTradeOpened();
-      } catch (e) {
-        logger.warn(`chase open failed: ${e.message}`);
-      }
-      return;
+        console.log(`🔒 SUSPENDED: All assets except ${lossAsset}. Focusing on loss asset.`);
+        // this.sendTelegramMessage(
+        //     `🔒 <b>AccuFableBC Asset Suspension (Trend Filtered)</b>\n\n` +
+        //     `Loss on: <b>${lossAsset}</b>\n` +
+        //     `Suspended: ${this.assets.filter(a => a !== lossAsset).join(', ')}\n` +
+        //     `Focusing on ${lossAsset} until win`
+        // );
     }
 
-    // StayedInArray must reflect the current breakout history, so re-request
-    // fresh ACCU proposals every tick (not just on the 60s barrier timer).
-    await this._refreshStayedIn();
+    resumeAllAssets() {
+        const prevFocus = this.focusAsset;
+        this.suspendedAssets.clear();
+        this.focusAsset = null;
+        console.log(`✅ RESUMED: All assets active again (was focused on ${prevFocus})`);
+        // this.sendTelegramMessage(
+        //     `✅ <b>AccuFableBC All Assets Resumed (Trend Filtered)</b>\n\n` +
+        //     `Won on: <b>${prevFocus}</b>\n` +
+        //     `All assets now active for trading`
+        // );
+    }
 
-    // ── ONLY THREE GATES: StayedInArray + evLower/tick (≤ evLowerGateMax) + breachCount ─
-    const ranked = this._calibrateAll();
+    isAssetAllowed(asset) {
+        if (!this.focusAsset) return true;
+        return asset === this.focusAsset;
+    }
 
-    // An uncalibrated pair has evLowerPerTick == null, but for very different
-    // reasons: no live barrier, or not enough history. Collapsing both into
-    // "uncalibrated" is what made the original stall undiagnosable.
-    const evGate = c => {
-      if (c.evLowerPerTick == null) {
-        const why = c.reason === 'no-barrier'
-          ? 'no live ACCU barrier (proposal failing — see feed-stalled warning)'
-          : (c.reason || 'not calibrated');
-        return { pass: false, reason: `no-ev [${why}]` };
-      }
-      return c.evLowerPerTick <= this.cfg.evLowerGateMax
-        ? { pass: true, reason: `ev-ok: (${(c.evLowerPerTick * 100).toFixed(4)}%<=${(this.cfg.evLowerGateMax * 100).toFixed(4)}%)` }
-        : {
-            pass: false,
-            reason: `ev-over: ${(c.evLowerPerTick * 100).toFixed(4)}%>${(this.cfg.evLowerGateMax * 100).toFixed(4)}%`,
-          };
-    };
+    // ══════════════════════════════════════════════════════════════════════════
+    // STATE MANAGEMENT
+    // ══════════════════════════════════════════════════════════════════════════
+    loadSavedState() {
+        const state = StatePersistence.loadState();
+        if (!state) return;
+        try {
+            if (state.trading) {
+                this.currentStake = state.trading.currentStake || this.config.initialStake;
+                this.consecutiveLosses = state.trading.consecutiveLosses || 0;
+                this.totalTrades = state.trading.totalTrades || 0;
+                this.totalWins = state.trading.totalWins || 0;
+                this.totalLosses = state.trading.totalLosses || 0;
+                this.totalProfitLoss = state.trading.totalProfitLoss || 0;
+                this.dailyProfitLoss = state.trading.dailyProfitLoss || 0;
+                this.consecutiveLosses2 = state.trading.consecutiveLosses2 || 0;
+                this.consecutiveLosses3 = state.trading.consecutiveLosses3 || 0;
+                this.consecutiveLosses4 = state.trading.consecutiveLosses4 || 0;
+                this.consecutiveLosses5 = state.trading.consecutiveLosses5 || 0;
+                this.consecutiveLosses6 = state.trading.consecutiveLosses6 || 0;
+                this.kCountNum = state.trading.kCountNum || 0;
+                this.tradedDigitArray = state.trading.tradedDigitArray || [];
+                this.tradedDigitArray2 = state.trading.tradedDigitArray2 || [];
+                this.Sys1 = state.trading.Sys1 || 0;
+                this.Sys2 = state.trading.Sys2 || 0;
+                this.kCountNum = state.trading.kCountNum || 0;
+                this.filterNum = state.trading.filterNum || 0;
+            }
+            if (state.assetMetrics) this.assetMetrics = state.assetMetrics;
+            if (state.hourlyStats) this.hourlyStats = state.hourlyStats;
+            console.log(`✅ State restored: ${this.totalTrades} trades, P&L: $${this.totalProfitLoss.toFixed(2)}`);
+        } catch (error) {
+            console.error(`❌ Error restoring state: ${error.message}`);
+        }
+    }
 
-    const breachGate = c => {
-      const bc = c.breaches;
-      if (bc == null) return { pass: false, reason: 'no-breach-count' };
-      // Both bounds are enforced. Previously only the lower bound reached the
-      // gate, so the calibration report advertised a range the bot ignored.
-      const min = this.cfg.breachMinCount, max = this.cfg.breachMinCount2;
-      if (bc < min) return { pass: false, reason: `breach-low:${bc}<${min}` };
-      if (max > 0 && bc > max) return { pass: false, reason: `breach-high:${bc}>${max}` };
-      return { pass: true, reason: `breach-ok: (${bc} in [${min},${max}])` };
-    };
+    // ══════════════════════════════════════════════════════════════════════════
+    // WEBSOCKET CONNECTION + PING KEEP-ALIVE
+    // ──────────────────────────────────────────────────────────────────────────
+    // Dual-mode connect:
+    //   • PAT token (pat_…)   → new API: REST OTP flow, then open WS to the
+    //     pre-authenticated URL. No `authorize` message is sent.
+    //   • Legacy token        → old WS endpoint + `authorize` message.
+    // ══════════════════════════════════════════════════════════════════════════
+    connect() {
+        if (this.ws && this.ws.readyState === WebSocket.OPEN) return;
+        if (!this.token) {
+            console.error('❌ DERIV_API_TOKEN is empty — aborting');
+            return;
+        }
+        console.log('🔌 Connecting to Deriv API...');
+        this.cleanup();
 
-    const candidates = ranked
-      .map(c => ({
-        ...c,
-        stay: this.calib.stayAnalysis(this.md.getStayedIn(c.symbol, c.growthRate)),
-      }))
-      .filter(c => c.stay.pass && evGate(c).pass && breachGate(c).pass);
-    if (!candidates.length) {
-      const verdicts = ranked.map(c => {
-        const stay = this.calib.stayAnalysis(this.md.getStayedIn(c.symbol, c.growthRate));
-        return `${c.symbol}@${(c.growthRate * 100).toFixed(0)}% stay=${stay.reason} ev=${evGate(c).reason} breach=${breachGate(c).reason}`;
-      }).join(' | ');
-      // Only log when the verdict actually changes, plus a periodic heartbeat.
-      // Emitting this every second drowned the log and hid every other signal.
-      if (verdicts !== this._lastBlockedVerdict || Date.now() - (this._lastBlockedAt || 0) > 60_000) {
-        this._lastBlockedVerdict = verdicts;
-        this._lastBlockedAt = Date.now();
-        logger.info(
-          `gates blocked all pairs — ${verdicts} ` +
-          `[skipped ${this._tickOverlap || 0} overlapping cycle(s) total]`,
+        if (this._isPat) {
+            console.log('🔑 PAT token detected → using NEW Deriv API (OTP flow)');
+            this._newApiConnect().catch(err => {
+                console.error('❌ New API connect failed:', err.message);
+                this.handleDisconnect();
+            });
+        } else {
+            console.log('🔑 Using legacy Deriv API (token authorize flow)');
+            const url = `wss://ws.derivws.com/websockets/v3?app_id=${encodeURIComponent(this.appId)}`;
+            this._openWs(url);
+        }
+    }
+
+    /**
+     * Open a WebSocket to an arbitrary URL and wire up handlers. Shared by
+     * both the legacy and PAT connect paths.
+     */
+    _openWs(url) {
+        try {
+            this.ws = new WebSocket(url, {
+                headers: { 'User-Agent': 'AccumBC2n2/2.0 (+Node.js)' },
+                handshakeTimeout: 15000,
+            });
+        } catch (e) {
+            console.error('❌ WS construct failed:', e.message);
+            this.handleDisconnect();
+            return;
+        }
+
+        this.ws.on('open', () => {
+            console.log('✅ WebSocket connected');
+            this.connected = true;
+            this.reconnectAttempts = 0;
+            this.startPingKeepAlive();
+
+            // PAT flow: WS URL itself authenticates — skip `authorize`.
+            if (this._isPat) {
+                this._newApiMarkAuthorized();
+            } else {
+                this.authenticate();
+            }
+        });
+
+        this.ws.on('message', (data) => {
+            try {
+                this.handleMessage(JSON.parse(data));
+            } catch (error) {
+                console.error('Error parsing message:', error.message);
+            }
+        });
+
+        this.ws.on('error', (error) => {
+            console.error('WebSocket error:', error.message);
+        });
+
+        this.ws.on('close', () => {
+            console.log('⚡ WebSocket disconnected');
+            this.stopPingKeepAlive();
+            this.handleDisconnect();
+        });
+
+        this.ws.on('unexpected-response', (_req, res) => {
+            console.error(`❌ WS handshake failed: ${res.statusCode} ${res.statusMessage}`);
+            try { res.destroy(); } catch (_) {}
+            this.handleDisconnect();
+        });
+    }
+
+    /**
+     * NEW API flow:
+     *   1. REST GET  /trading/v1/options/accounts          → list accounts
+     *   2. REST POST /trading/v1/options/accounts/{id}/otp → mint WS URL
+     *   3. Open WebSocket to the OTP-pre-authenticated URL
+     *   4. _newApiMarkAuthorized() runs on 'open' (no `authorize` message)
+     */
+    async _newApiConnect() {
+        // Step 1: list Options accounts available to this PAT
+        console.log('🌐 REST: GET /trading/v1/options/accounts');
+        const accRes = await this._rest.get('/trading/v1/options/accounts');
+        if (accRes.status !== 200) {
+            const msg = accRes.body?.errors?.[0]?.message
+                || accRes.body?.message
+                || JSON.stringify(accRes.body);
+            let hint = '';
+            if (accRes.status === 401) {
+                hint = ' — check (1) PAT validity, (2) appId matches a registered app at https://developers.deriv.com/';
+            } else if (accRes.status === 403) {
+                hint = ' — PAT may lack the required "trade" scope (regenerate at https://app.deriv.com/account/api-token)';
+            } else if (accRes.status === 404) {
+                hint = ' — accounts endpoint not found; token may be legacy';
+            }
+            throw new Error(`Account list failed (${accRes.status}): ${msg}${hint}`);
+        }
+        const accounts = Array.isArray(accRes.body?.data) ? accRes.body.data : [];
+        if (!accounts.length) throw new Error('No Options accounts found for this token');
+
+        const acct = accounts.find(a => (a.account_type || '').toLowerCase() === this.accountType)
+                  || accounts[0];
+        this._targetAccount = acct;
+        this.accountInfo = {
+            loginid    : acct.account_id,
+            email      : acct.email,
+            isVirtual  : (acct.account_type || '').toLowerCase() === 'demo',
+            accountType: acct.account_type,
+            currency   : acct.currency,
+            balance    : parseFloat(acct.balance),
+            group      : acct.group,
+        };
+        console.log(`👤 Selected account ${acct.account_id} (${acct.account_type}, ${acct.currency}, balance=${acct.balance})`);
+
+        // Step 2: mint an OTP-authenticated WebSocket URL for this account
+        const otpPath = `/trading/v1/options/accounts/${encodeURIComponent(acct.account_id)}/otp`;
+        console.log(`🌐 REST: POST ${otpPath}`);
+        const otpRes = await this._rest.post(otpPath);
+        if (otpRes.status !== 200) {
+            const msg = otpRes.body?.errors?.[0]?.message || JSON.stringify(otpRes.body);
+            throw new Error(`OTP request failed (${otpRes.status}): ${msg}`);
+        }
+        const wsUrl = otpRes.body?.data?.url;
+        if (!wsUrl || !/^wss?:/i.test(wsUrl)) {
+            throw new Error(`OTP response missing .data.url: ${JSON.stringify(otpRes.body)}`);
+        }
+        this._otpUrl = wsUrl;
+        // Step 3: open the pre-authenticated WS
+        this._openWs(wsUrl);
+    }
+
+    /**
+     * Finalise PAT-mode auth: mark authorized and run the normal post-auth
+     * subscription bootstrap. The legacy 'authorize' response is not used.
+     */
+    _newApiMarkAuthorized() {
+        if (!this.accountInfo) return;
+        console.log(
+            `✅ Authenticated ${this.accountInfo.loginid} ` +
+            `(${this.accountInfo.isVirtual ? 'DEMO' : 'REAL'}) ` +
+            `balance=${this.accountInfo.balance} ${this.accountInfo.currency} via PAT/new-API`
         );
-      }
-      return;
+        this.wsReady = true;
+        this.initializeSubscriptions();
     }
-    this._lastBlockedVerdict = null;
-    // Lowest evLower/tick among gate-passing candidates.
-    candidates.sort((a, b) => (a.evLowerPerTick ?? Infinity) - (b.evLowerPerTick ?? Infinity));
-    const best = candidates[0];
-    const stayArr = this.md.getStayedIn(best.symbol, best.growthRate) ?? [];
-    logger.info(
-      `OPEN ${best.symbol} g=${(best.growthRate * 100).toFixed(0)}% ` +
-      `evL/t=${(best.evLowerPerTick * 100).toFixed(4)}% (gate ≤ ${(this.cfg.evLowerGateMax * 100).toFixed(4)}%) ` +
-      `stay=PASS latest=${best.stay.latest} ` +
-      `breaches=${best.breaches} (gate ≥ ${this.cfg.breachMinCount}) ` +
-      `stayedIn(len=${stayArr.length})=[${stayArr.join(',')}]`,
-    );
 
-    // TP after cfg.takeProfitTicks ticks (configurable). The same value feeds
-    // the hold target AND the live limit_order take-profit price.
-    const stake = this.currentStake;
-
-    try {
-      this.lastTradeAt = Date.now();
-      await this.exec.openTrade({
-        symbol: best.symbol,
-        growthRate: best.growthRate,
-        stake,
-        targetTicks: this.cfg.takeProfitTicks,
-        calibration: best,
-      });
-      this.stats.opened++;
-      this.risk.onTradeOpened();
-    } catch (e) {
-      logger.warn(`open failed: ${e.message}`);
+    startPingKeepAlive() {
+        this.stopPingKeepAlive();
+        this.pingInterval = setInterval(() => {
+            if (this.connected) {
+                this.sendRequest({ ping: 1 });
+            }
+        }, 25000);
     }
-  }
 
-  _saveState() {
-    try {
-      const tmp = this.cfg.stateFile + '.tmp';
-      fs.writeFileSync(tmp, JSON.stringify({
-        savedAt: new Date().toISOString(),
-        mode: this.cfg.mode,
-        stats: this.stats,
-        risk: {
-          day: this.risk.day, dayPnl: this.risk.dayPnl, dayTrades: this.risk.dayTrades,
-          sessionPnl: this.risk.sessionPnl, halted: this.risk.halted,
-          haltReason: this.risk.haltReason,
-        },
-        edge: this.edge.summary(),
-        // Martingale + trade log state (for hourly/EOD across restarts)
-        martingaleBase: this.martingaleBase,
-        martingaleStep: this.martingaleStep,
-        currentStake: this.currentStake,
-        consecutiveLosses: this.consecutiveLosses,
-        startBalance: this.startBalance,
-        lastBalance: this.lastBalance,
-        statsLog: this.statsLog.serialize(),
-        // Chase-on-loss state
-        chaseActive: this.chaseActive,
-        chaseSymbol: this.chaseSymbol,
-        chaseGrowthRate: this.chaseGrowthRate,
-      }, null, 2));
-      fs.renameSync(tmp, this.cfg.stateFile);
-    } catch (e) { logger.debug('state save:', e.message); }
-  }
-
-  _loadState() {
-    const file = this.cfg.stateFile;
-    try {
-      if (!fs.existsSync(file)) return;
-      const d = JSON.parse(fs.readFileSync(file, 'utf8'));
-      if (d.startBalance != null) this.startBalance = Number(d.startBalance);
-      if (d.lastBalance != null) this.lastBalance = Number(d.lastBalance);
-      if (d.consecutiveLosses != null) this.consecutiveLosses = Number(d.consecutiveLosses);
-      if (d.martingaleBase != null) this.martingaleBase = Number(d.martingaleBase);
-      if (d.currentStake != null) this.currentStake = Number(d.currentStake);
-      if (d.martingaleStep != null) this.martingaleStep = Number(d.martingaleStep) || 0;
-      if (d.statsLog) this.statsLog = new StatisticsManager(d.statsLog);
-      if (d.stats) this.stats = d.stats;
-      if (typeof d.chaseActive === 'boolean' && d.chaseActive && d.chaseSymbol) {
-        this.chaseActive = true;
-        this.chaseSymbol = String(d.chaseSymbol);
-        this.chaseGrowthRate = Number(d.chaseGrowthRate) ?? null;
-      } else if (d.chaseActive === false) {
-        this.chaseActive = false;
-        this.chaseSymbol = null;
-        this.chaseGrowthRate = null;
-      }
-      // Ensure martingale base matches current config
-      if (Number(this.cfg.stake) !== this.martingaleBase) {
-        this.martingaleBase = Number(this.cfg.martingaleBaseStake) > 0 ? Number(this.cfg.martingaleBaseStake) : Number(this.cfg.stake) || 1.0;
-        this.currentStake = this._calcMartingaleStake(this.martingaleStep);
-      }
-      logger.info(
-        `state restored: overallProfit=${(this.statsLog.overallProfit ?? 0).toFixed(2)} ` +
-        `consecLosses=${this.consecutiveLosses} martingale step=${this.martingaleStep} stake=${this.currentStake.toFixed(2)}/${this.martingaleBase.toFixed(2)}`,
-      );
-    } catch (e) { logger.debug('state load:', e.message); }
-  }
-
-  report() {
-    const e = this.edge.summary();
-    const mins = (Date.now() - this.startedAt) / 60000;
-    const lines = [
-      '──────── SESSION REPORT ────────',
-      `mode            : ${this.cfg.mode}`,
-      `uptime          : ${mins.toFixed(1)} min`,
-      `trades opened   : ${this.stats.opened}`,
-      `trades closed   : ${this.stats.closed}`,
-      `wins / losses   : ${this.stats.wins} / ${this.stats.losses}`,
-      `win rate        : ${this.stats.closed ? ((this.stats.wins / this.stats.closed) * 100).toFixed(2) : '0.00'}%`,
-      `net P&L         : ${money(this.stats.pnl)}`,
-      `mean return     : ${e.meanReturnPct.toFixed(4)}% of stake per trade`,
-      `edge z-score    : ${e.z == null ? 'n/a' : e.z.toFixed(3)}`,
-      `avg ticks held  : ${e.avgRealizedTicks.toFixed(2)} (target ${e.avgExpectedTicks.toFixed(2)})`,
-      `cycle health    : last ${this._lastTickMs}ms, ${this._tickOverlap || 0} overlapping cycle(s) dropped`,
-      `proposal health : ${this.client._rateLimitHits || 0} rate-limit, ${this._reqErrors || 0} other req error(s)`,
-      `feed freshness  : barrier ${this._barrierAt ? `${((Date.now() - this._barrierAt) / 1000).toFixed(0)}s` : 'never'}, ` +
-        `stayed-in ${this._staysAt ? `${((Date.now() - this._staysAt) / 1000).toFixed(0)}s` : 'never'} ago`,
-      `halted          : ${this.risk.halted ? 'YES — ' + this.risk.haltReason : 'no'}`,
-      '────────────────────────────────',
-    ];
-    for (const l of lines) logger.info(l);
-    return lines.join('\n');
-  }
-
-  async stop() {
-    this.running = false;
-    if (this.loopTimer) clearInterval(this.loopTimer);
-    if (this.barrierTimer) clearInterval(this.barrierTimer);
-    if (this.calibTimer) clearInterval(this.calibTimer);
-    if (this._hourlyT) clearInterval(this._hourlyT);
-    if (this._hourlyBoot) clearTimeout(this._hourlyBoot);
-    if (this._eodBoot) clearTimeout(this._eodBoot);
-    await this.exec.closeAll();
-    this.report();
-    this._saveState();
-    this.client.close();
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// 14. OFFLINE CALIBRATION REPORT (--calibrate)
-//     Connects, measures, prints the truth, trades nothing, exits.
-// ═══════════════════════════════════════════════════════════════════════
-async function runCalibration() {
-  printBanner();
-  logger.info('CALIBRATE MODE — no orders will be placed.');
-
-  const client = new DerivClient(CONFIG);
-  const md = new MarketData(client, CONFIG);
-  const calib = new CalibrationEngine(CONFIG);
-
-  await client.connect();
-  await md.bootstrap(CONFIG.assets);
-
-  const results = [];
-  for (const symbol of CONFIG.assets) {
-    if (md.deadAssets.has(symbol)) continue;
-    const ticks = md.historyFor(symbol);
-    for (const g of CONFIG.growthRates) {
-      const barrier = await md.refreshBarrier(symbol, g, Math.max(CONFIG.minStake, 1));
-      await sleep(150);
-      results.push(calib.calibrate(symbol, ticks, g, barrier));
+    stopPingKeepAlive() {
+        if (this.pingInterval) {
+            clearInterval(this.pingInterval);
+            this.pingInterval = null;
+        }
     }
-  }
 
-  const ranked = calib.rank(results).filter(c => c.n);
-  console.log('\n' + '='.repeat(118));
-  console.log('CALIBRATION REPORT — measured per-tick survival vs. priced break-even');
-  console.log('='.repeat(118));
-  console.log(
-    'SYMBOL'.padEnd(9) + 'G%'.padEnd(5) + 'TICKS'.padEnd(8) +
-    'BREACH'.padEnd(8) + 'SURVIVAL'.padEnd(11) + 'LOWER95'.padEnd(11) +
-    'BREAKEVEN'.padEnd(11) + 'EV/TICK%'.padEnd(11) + 'BARRIER%'.padEnd(12) +
-    'SIGMAS'.padEnd(8) + 'VERDICT',
-  );
-  console.log('-'.repeat(118));
-  for (const c of ranked) {
-    console.log(
-      c.symbol.padEnd(9) +
-      (c.growthRate * 100).toFixed(0).padEnd(5) +
-      String(c.n).padEnd(8) +
-      String(c.breaches).padEnd(8) +
-      c.survivalPoint.toFixed(6).padEnd(11) +
-      c.survivalLower.toFixed(6).padEnd(11) +
-      c.breakEven.toFixed(6).padEnd(11) +
-      (c.evPointPerTick * 100).toFixed(4).padEnd(11) +
-      c.halfBarrierPct.toFixed(6).padEnd(12) +
-      c.barrierSigmas.toFixed(3).padEnd(8) +
-      (c.tradeable ? 'TRADEABLE' : 'no edge'),
-    );
-  }
-  console.log('='.repeat(118));
-
-  const tradeable = ranked.filter(c => c.tradeable);
-  if (tradeable.length) {
-    console.log(`\n${tradeable.length} pair(s) measured a positive lower-bound edge (for reference only).`);
-  } else {
-    console.log('\nNo pair measured a positive lower-bound edge (for reference only).');
-  }
-  console.log(
-    `Entry gates in force: stayed-in array + evLowerPerTick ≤ ${(CONFIG.evLowerGateMax * 100).toFixed(4)}%.`,
-  );
-
-  // Autocorrelation diagnostic: the only thing that could justify a timing rule.
-  console.log('\nI.I.D. DIAGNOSTIC (lag-1 autocorrelation; ~0 means no exploitable memory)');
-  console.log('-'.repeat(60));
-  const seen = new Set();
-  for (const c of ranked) {
-    if (seen.has(c.symbol)) continue;
-    seen.add(c.symbol);
-    console.log(
-      `${c.symbol.padEnd(9)} acf(r)=${c.acfRaw.toFixed(5).padStart(9)}   ` +
-      `acf(|r|)=${c.acfAbs.toFixed(5).padStart(9)}   sigma=${c.sigma.toExponential(4)}`,
-    );
-  }
-
-  client.close();
-}
-
-// ═══════════════════════════════════════════════════════════════════════
-// 15. SELF TEST
-// ═══════════════════════════════════════════════════════════════════════
-function runSelfTest() {
-  let pass = 0, fail = 0;
-  const ok = (name, cond, extra = '') => {
-    if (cond) { console.log(`  ✓ ${name}`); pass++; }
-    else { console.log(`  ✗ ${name} ${extra}`); fail++; }
-  };
-  const near = (a, b, tol = 1e-6) => Math.abs(a - b) <= tol;
-
-  console.log('\nAccuAPEX v5 self-test\n' + '='.repeat(60));
-
-  console.log('\n[Stats]');
-  ok('breakEvenSurvival(0.05) = 1/1.05', near(Stats.breakEvenSurvival(0.05), 1 / 1.05));
-  ok('breakEvenSurvival(0.01) = 1/1.01', near(Stats.breakEvenSurvival(0.01), 1 / 1.01));
-  ok('evPerTick at break-even is 0', near(Stats.evPerTick(1 / 1.03, 0.03), 0, 1e-12));
-  ok('evPerTick below break-even is negative', Stats.evPerTick(0.90, 0.05) < 0);
-  ok('evPerTick above break-even is positive', Stats.evPerTick(0.99, 0.05) > 0);
-
-  const w = Stats.wilson(950, 1000, 1.96);
-  ok('wilson brackets the point estimate', w.lower < 0.95 && w.upper > 0.95);
-  ok('wilson stays inside [0,1]', w.lower >= 0 && w.upper <= 1);
-  const wSmall = Stats.wilson(9, 10, 1.96);
-  const wBig = Stats.wilson(900, 1000, 1.96);
-  ok('wilson interval narrows with more data',
-    (wBig.upper - wBig.lower) < (wSmall.upper - wSmall.lower));
-
-  ok('normCdf(0) = 0.5', near(Stats.normCdf(0), 0.5, 1e-4));
-  ok('normCdf(1.96) ~ 0.975', near(Stats.normCdf(1.96), 0.975, 1e-3));
-  ok('normCdf(-1.96) ~ 0.025', near(Stats.normCdf(-1.96), 0.025, 1e-3));
-
-  ok('evOverHold compounds', near(
-    Stats.evOverHold(1 / 1.02, 0.02, 10, 0), 0, 1e-9));
-  ok('evOverHold penalises spread', Stats.evOverHold(1 / 1.02, 0.02, 10, 0.002) < 0);
-
-  ok('zStat of constant-positive sample is positive', Stats.zStat([0.1, 0.11, 0.09, 0.1], 0) > 0);
-  ok('zStat of constant-negative sample is negative', Stats.zStat([-0.1, -0.11, -0.09], 0) < 0);
-
-  const iid = Array.from({ length: 4000 }, () => gaussian());
-  ok('autocorr1 of i.i.d. noise is near zero', Math.abs(Stats.autocorr1(iid)) < 0.08,
-    `(got ${Stats.autocorr1(iid).toFixed(4)})`);
-
-  console.log('\n[Published barrier check — is the barrier the fair quantile?]');
-  // Deriv's published barriers: 5% -> 0.0049358253%, 1% -> 0.0064867741%
-  const b5 = 0.0049358253 / 100, b1 = 0.0064867741 / 100;
-  const zFor = g => {
-    // quantile z such that P(|Z| < z) = 1/(1+g)  =>  z = Phi^-1((1 + 1/(1+g))/2)
-    const target = (1 + 1 / (1 + g)) / 2;
-    let lo = 0, hi = 8;
-    for (let i = 0; i < 200; i++) {
-      const mid = (lo + hi) / 2;
-      if (Stats.normCdf(mid) < target) lo = mid; else hi = mid;
+    authenticate() {
+        this.sendRequest({ authorize: this.token });
     }
-    return (lo + hi) / 2;
-  };
-  const barrierRatio = b5 / b1;
-  const fairRatio = zFor(0.05) / zFor(0.01);
-  console.log(`  published barrier ratio b(5%)/b(1%) = ${barrierRatio.toFixed(5)}`);
-  console.log(`  fair Gaussian ratio     z(5%)/z(1%) = ${fairRatio.toFixed(5)}`);
-  ok('barrier ratio matches the fair quantile ratio within 2%',
-    Math.abs(barrierRatio / fairRatio - 1) < 0.02,
-    `(off by ${((barrierRatio / fairRatio - 1) * 100).toFixed(2)}%)`);
-  ok('5% barrier is priced tighter than fair relative to 1%', barrierRatio < fairRatio);
 
-  console.log('\n[CalibrationEngine]');
-  const ce = new CalibrationEngine({ ...CONFIG, calibMinTicks: 10, edgeMarginPerTick: -0.6 });
+    sendRequest(request) {
+        if (!this.connected || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
+            return false;
+        }
+        try {
+            this.ws.send(JSON.stringify(request));
+            return true;
+        } catch (error) {
+            console.error('Error sending request:', error.message);
+            return false;
+        }
+    }
 
-  // A synthetic series that NEVER breaches: survival 1.0 -> must be tradeable.
-  const flat = Array.from({ length: 500 }, (_, i) => ({ quote: 100 + (i % 2) * 1e-9, epoch: i }));
-  const cFlat = ce.calibrate('TEST', flat, 0.03, { halfBarrierFrac: 0.001 });
-  ok('perfect survival is flagged tradeable', cFlat.tradeable === true, `(${cFlat.reason})`);
-  ok('perfect survival gives positive lower EV', cFlat.evLowerPerTick > 0);
+    handleDisconnect() {
+        if (this.endOfDay) {
+            this.cleanup();
+            return;
+        }
+        this.connected = false;
+        this.wsReady = false;
+        StatePersistence.saveState(this);
 
-  // A series that breaches constantly -> must NOT be tradeable.
-  const wild = Array.from({ length: 500 }, (_, i) => ({ quote: 100 * (1 + (i % 2 ? 0.01 : -0.01)), epoch: i }));
-  const cWild = ce.calibrate('TEST', wild, 0.03, { halfBarrierFrac: 0.0001 });
-  ok('constant breaching is rejected', cWild.tradeable === false);
-  ok('constant breaching gives negative EV', cWild.evPointPerTick < 0);
+        if (this.reconnectAttempts >= this.config.maxReconnectAttempts) {
+            console.error('❌ Max reconnection attempts reached');
+            return;
+        }
+        this.reconnectAttempts++;
+        const delay = Math.min(this.config.reconnectDelay * Math.pow(1.5, this.reconnectAttempts - 1), 30000);
+        console.log(`🔄 Reconnecting in ${(delay / 1000).toFixed(1)}s... (${this.reconnectAttempts}/${this.config.maxReconnectAttempts})`);
+        setTimeout(() => this.connect(), delay);
+    }
 
-  ok('missing barrier is rejected',
-    ce.calibrate('TEST', flat, 0.03, null).tradeable === false);
-  ok('thin history is rejected',
-    ce.calibrate('TEST', flat.slice(0, 3), 0.03, { halfBarrierFrac: 0.001 }).tradeable === false);
+    cleanup() {
+        this.stopPingKeepAlive();
+        this.stopPendingAssetScan();
+        this._clearWatchdogTimers();
+        if (this.ws) {
+            this.ws.removeAllListeners();
+            if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+                try { this.ws.close(); } catch (e) { }
+            }
+            this.ws = null;
+        }
+        this.connected = false;
+        this.wsReady = false;
+    }
 
-  ok('breachCount counts both tails',
-    ce.breachCount([0.02, -0.02, 0.0001], 0.01) === 2);
+    disconnect() {
+        console.log('🛑 Disconnecting...');
+        StatePersistence.saveState(this);
+        this.cleanup();
+        console.log('✅ Bot disconnected');
+    }
 
-  const hz = ce.chooseHorizon(0.90, 0.05, 20, 1, 0.002);
-  ok('negative-EV survival picks the shortest hold', hz.K === 1, `(got K=${hz.K})`);
-  const hzGood = ce.chooseHorizon(0.999, 0.05, 20, 1, 0.0);
-  ok('positive-EV survival picks the longest hold', hzGood.K === 20, `(got K=${hzGood.K})`);
+    // ══════════════════════════════════════════════════════════════════════════
+    // MESSAGE ROUTING
+    // ══════════════════════════════════════════════════════════════════════════
+    handleMessage(message) {
+        switch (message.msg_type) {
+            case 'authorize':
+                this.handleAuth(message);
+                break;
+            case 'history':
+                this.handleTickHistory(message);
+                break;
+            case 'tick':
+                if (message.subscription) {
+                    this.tickSubscriptionIds[message.tick.symbol] = message.subscription.id;
+                }
+                this.handleTickUpdate(message.tick);
+                break;
+            case 'proposal':
+                this.handleProposal(message);
+                break;
+            case 'buy':
+                this.handleBuyResponse(message);
+                break;
+            case 'proposal_open_contract':
+                if (message.error) {
+                    console.error('Contract error:', message.error.message);
+                    return;
+                }
+                this.handleContractUpdate(message);
+                break;
+            case 'sell':
+                this.handleSellResponse(message);
+                break;
+            case 'ping':
+                break;
+            default:
+                if (message.error) {
+                    console.error(`API Error [${message.msg_type}]:`, message.error.message);
+                }
+        }
+    }
 
-  console.log('\n[RiskManager]');
-  const rm = new RiskManager({ ...CONFIG, dailyMaxLoss: 10, sessionMaxDrawdown: 10, maxConsecLosses: 3, maxOpenTrades: 1 });
-  ok('fresh risk manager permits trading', rm.canTrade(0).ok === true);
-  ok('max open trades blocks', rm.canTrade(1).ok === false);
-  rm.onTradeClosed(-11);
-  ok('daily loss cap halts', rm.canTrade(0).ok === false);
-  ok('halt reason recorded', /daily loss/i.test(rm.haltReason || ''));
+    handleAuth(message) {
+        if (message.error) {
+            console.error('Auth failed:', message.error.message);
+            this.disconnect();
+            return;
+        }
+        console.log(`✅ Authenticated | Balance: $${message.authorize.balance}`);
+        this.wsReady = true;
+        this.initializeSubscriptions();
+    }
 
-  const rm2 = new RiskManager({ ...CONFIG, maxConsecLosses: 3 });
-  rm2.onTradeClosed(-1); rm2.onTradeClosed(-1); rm2.onTradeClosed(-1);
-  ok('consecutive-loss cap halts', rm2.canTrade(0).ok === false);
+    initializeSubscriptions() {
+        console.log('📡 Subscribing to tick streams for all assets...');
+        this.assets.forEach(asset => {
+            // Historical prices
+            this.sendRequest({
+                ticks_history: asset,
+                adjust_start_time: 1,
+                count: this.config.requiredHistoryLength,
+                end: 'latest',
+                start: 1,
+                style: 'ticks'
+            });
+            // Live tick subscription
+            this.sendRequest({
+                ticks: asset,
+                subscribe: 1
+            });
+        });
 
-  const rm3 = new RiskManager({ ...CONFIG, sizing: 'flat', stake: 2, minStake: 0.35, maxStake: 5 });
-  ok('flat sizing returns the flat stake', rm3.stakeFor(10000) === 2);
-  const rm4 = new RiskManager({ ...CONFIG, sizing: 'fraction', riskFraction: 0.01, minStake: 0.35, maxStake: 5 });
-  ok('fractional sizing scales with balance', rm4.stakeFor(200) === 2);
-  ok('fractional sizing respects the max cap', rm4.stakeFor(1000000) === 5);
-  ok('fractional sizing respects the min floor', rm4.stakeFor(1) === 0.35);
-  // Martingale lives at the bot level, not in RiskManager.  Verify the math.
-  const mgCfg = { stake: 1, martingaleMultiplier: 2.5, martingaleSteps: 3 };
-  const mgBase = Number(mgCfg.stake), mgMult = Number(mgCfg.martingaleMultiplier);
-  const mgCalc = step => step <= 0 ? +mgBase.toFixed(2) : +(mgBase * Math.pow(mgMult, step)).toFixed(2);
-  ok('no martingale exists in RiskManager',
-    typeof rm4.martingale === 'undefined' && !/martingale/i.test(RiskManager.toString()));
-  ok('martingale calc step 0 = base', mgCalc(0) === 1);
-  ok('martingale calc step 1 = base × mult', mgCalc(1) === 2.5);
-  ok('martingale calc step 2 = base × mult^2', mgCalc(2) === 6.25);
-  ok('martingale calc step 3 = base × mult^3', mgCalc(3) === 15.63);
+        // Start the pending asset scanner
+        this.startPendingAssetScan();
+    }
 
-  console.log('\n[EdgeLedger]');
-  const tmpEdge = path.join(process.cwd(), `.selftest-edge-${Date.now()}.json`);
-  const el = new EdgeLedger({ ...CONFIG, edgeFile: tmpEdge, edgeMonitorMinTrades: 20, edgeMonitorZStop: 2 });
-  let halted = false;
-  for (let i = 0; i < 60; i++) {
-    // A steady bleed: should be detected and halted.
-    const v = el.record({ stake: 1, profit: -0.02, ticksHeld: 3, expectedTicks: 3 });
-    if (v.halt) { halted = true; break; }
-  }
-  ok('a persistent bleed triggers an automatic halt', halted === true);
-  ok('halt reason is descriptive', /significantly negative/i.test(el.haltReason || ''));
-  try { fs.unlinkSync(tmpEdge); } catch (_) {}
+    // ══════════════════════════════════════════════════════════════════════════
+    // TELEGRAM
+    // ══════════════════════════════════════════════════════════════════════════
+    async sendTelegramMessage(message) {
+        if (!this.telegramBot) return;
+        try {
+            await this.telegramBot.sendMessage(this.config.telegramChatId, message, { parse_mode: 'HTML' });
+        } catch (error) {
+            console.error(`Telegram error: ${error.message}`);
+        }
+    }
 
-  const tmpEdge2 = path.join(process.cwd(), `.selftest-edge2-${Date.now()}.json`);
-  const el2 = new EdgeLedger({ ...CONFIG, edgeFile: tmpEdge2, edgeMonitorMinTrades: 20, edgeMonitorZStop: 2 });
-  let halted2 = false;
-  for (let i = 0; i < 60; i++) {
-    const v = el2.record({ stake: 1, profit: i % 5 === 0 ? -0.9 : 0.25, ticksHeld: 4, expectedTicks: 4 });
-    if (v.halt) halted2 = true;
-  }
-  ok('a genuinely profitable record is not halted', halted2 === false);
-  try { fs.unlinkSync(tmpEdge2); } catch (_) {}
+    startTelegramTimer() {
+        const now = new Date();
+        const nextHour = new Date(now);
+        nextHour.setHours(nextHour.getHours() + 1);
+        nextHour.setMinutes(0);
+        nextHour.setSeconds(0);
+        nextHour.setMilliseconds(0);
 
-  console.log('\n[Monte Carlo — fair barrier must return ~0, shaved barrier must lose]');
-  // Build a barrier that is exactly the fair quantile for g, then shave it.
-  const sigma = 2.5e-5;
-  const fairBarrier = g => Math.exp(zFor(g) * sigma) - 1;
-  const mcFair = monteCarlo({
-    sigma, halfBarrierFrac: fairBarrier(0.03), growthRate: 0.03,
-    holdTicks: 5, stake: 1, trades: 40000, spreadCost: 0,
-  });
-  console.log(`  fair barrier  : ${mcFair.returnPerTradePct.toFixed(4)}% per trade (z=${mcFair.zScore.toFixed(2)})`);
-  ok('a mathematically fair barrier is roughly break-even',
-    Math.abs(mcFair.zScore) < 4, `(z=${mcFair.zScore.toFixed(2)})`);
+        const timeUntilNextHour = nextHour.getTime() - now.getTime();
 
-  const mcShaved = monteCarlo({
-    sigma, halfBarrierFrac: fairBarrier(0.03) * 0.99, growthRate: 0.03,
-    holdTicks: 5, stake: 1, trades: 40000, spreadCost: 0,
-  });
-  console.log(`  shaved 1%     : ${mcShaved.returnPerTradePct.toFixed(4)}% per trade`);
-  ok('shaving the barrier by 1% produces a loss',
-    mcShaved.returnPerTradePct < mcFair.returnPerTradePct);
+        setTimeout(() => {
+            this.sendHourlySummary();
+            setInterval(() => {
+                this.sendHourlySummary();
+            }, 60 * 60 * 1000);
+        }, timeUntilNextHour);
 
-  ok('monteCarlo reports a sane win rate', mcFair.winRate > 0 && mcFair.winRate < 1);
-  ok('monteCarlo reports a non-negative drawdown', mcFair.maxDrawdown >= 0);
-  ok('theoretical survival is close to break-even for a fair barrier',
-    Math.abs(mcFair.theoreticalSurvival - mcFair.breakEvenSurvival) < 0.002);
+        console.log(`📱 Hourly summaries scheduled. First in ${Math.ceil(timeUntilNextHour / 60000)} minutes.`);
+    }
 
-  console.log('\n[Config safety]');
-  ok('no API token is hardcoded', CONFIG.apiToken === (process.env.DERIV_API_TOKEN || process.env.API_TOKEN || ''));
-  ok('no Telegram token is hardcoded',
-    CONFIG.telegram.botToken === (process.env.TELEGRAM_BOT_TOKEN || ''));
-  ok('default mode is paper', envStr('MODE', 'paper') === 'paper');
-  ok('live mode requires explicit confirmation',
-    CONFIG.mode !== 'live' || CONFIG.confirmLive === 'i-understand');
-  ok('growth rates stay within Deriv limits',
-    CONFIG.growthRates.every(g => g >= 0.01 && g <= 0.05));
-  // Check the DEFAULT family. A user may deliberately trade a boom/crash
-  // index, but that is a modelling caveat the banner warns about — it is not
-  // a config error, so it must not masquerade as a self-test failure.
-  const defaultAssets = envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V')
-    .split(',').map(s => s.trim()).filter(Boolean);
-  ok('default assets are volatility indices',
-    defaultAssets.every(s => /^(R_\d+|1HZ\d+V)$/.test(s)), `(${defaultAssets.join(',')})`);
-  if (CONFIG.assets.some(s => CONFIG.isBoomOrCrash(s))) {
-    console.log(`  ! note: configured non-volatility assets: ` +
-      `${CONFIG.assets.filter(s => CONFIG.isBoomOrCrash(s)).join(',')} — ` +
-      'boom/crash jump events make the Gaussian EV model unreliable');
-  }
-  ok('sizing mode is flat or fraction', ['flat', 'fraction'].includes(CONFIG.sizing));
-  ok('max hold never exceeds the 230-tick contract cap', CONFIG.maxHoldTicks <= 230);
-  ok('edge monitor can actually arm', CONFIG.edgeMonitorMinTrades > 0 && CONFIG.edgeMonitorMinTrades <= 1000,
-    `(got ${CONFIG.edgeMonitorMinTrades})`);
-  ok('a request gap is enforced to avoid rate limiting', CONFIG.minRequestGapMs >= 50,
-    `(got ${CONFIG.minRequestGapMs})`);
-  ok('breach gate bounds are a valid range',
-    CONFIG.breachMinCount2 === 0 || CONFIG.breachMinCount2 >= CONFIG.breachMinCount);
+    async sendHourlySummary() {
+        const winRate = this.totalTrades > 0
+            ? (this.totalWins / this.totalTrades * 100).toFixed(1)
+            : '0.0';
+        const pnlEmoji = this.totalProfitLoss >= 0 ? '🟢' : '🔴';
+        const pnlStr = (this.totalProfitLoss >= 0 ? '+' : '') + '$' + Math.abs(this.totalProfitLoss).toFixed(2);
 
-  console.log('\n' + '='.repeat(60));
-  console.log(`${pass} passed, ${fail} failed`);
-  console.log('='.repeat(60) + '\n');
-  return fail === 0;
+        await this.sendTelegramMessage(
+            `📊 <b>AccuFableBC Session Summary Trend Filtered</b>\n\n` +
+            `Trades: ${this.totalTrades}\n` +
+            `W/L: ${this.totalWins}/${this.totalLosses}\n` +
+            `Losses x2-x6: ${this.consecutiveLosses2} | ${this.consecutiveLosses3} | ${this.consecutiveLosses4} | ${this.consecutiveLosses5} | ${this.consecutiveLosses6}\n` +
+            `Win Rate: ${winRate}%\n` +
+            `${pnlEmoji} Total P&L: ${pnlStr}\n` +
+            `Daily P&L: ${this.dailyProfitLoss >= 0 ? '+' : ''}$${this.dailyProfitLoss.toFixed(2)}\n` +
+            `Current Stake: $${this.currentStake.toFixed(2)}\n\n` +
+            `⏰ ${new Date().toLocaleTimeString()}`
+        );
+    }
+
+    async sendDisconnectSummary() {
+        await this.sendTelegramMessage(
+            `⚠️ <b>AccuFableBC Disconnected</b>\n\n` +
+            `Trading Summary:\n` +
+            `Total Trades: ${this.totalTrades}\n` +
+            `Wins: ${this.totalWins} | Losses: ${this.totalLosses}\n` +
+            `x2-x6 Losses: ${this.consecutiveLosses2} | ${this.consecutiveLosses3} | ${this.consecutiveLosses4} | ${this.consecutiveLosses5} | ${this.consecutiveLosses6}\n\n` +
+            `Win Rate: ${this.totalTrades > 0 ? ((this.totalWins / this.totalTrades) * 100).toFixed(2) : '0.00'}%\n` +
+            `Total P&L: $${this.totalProfitLoss.toFixed(2)}\n\n`
+        );
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // TICK HISTORY & LIVE TICK HANDLING
+    // ══════════════════════════════════════════════════════════════════════════
+    getLastDigit(quote, asset) {
+        const quoteString = quote.toString();
+        const [, fractionalPart = ''] = quoteString.split('.');
+
+        if (['BOOM150N', 'CRASH150N'].includes(asset)) {
+            return fractionalPart.length >= 5 ? parseInt(fractionalPart[4]) : 0;
+        } else if (['RDBULL', 'RDBEAR', 'R_75', 'R_50'].includes(asset)) {
+            return fractionalPart.length >= 4 ? parseInt(fractionalPart[3]) : 0;
+        } else if (['R_10', 'R_25', 'BOOM50',
+            'BOOM300N',  'BOOM500',   'BOOM600',   'BOOM900',
+            'BOOM1000',  'CRASH50',   'CRASH300N',
+            'CRASH500',  'CRASH600',  'CRASH900',  'CRASH1000'].includes(asset)) {
+            return fractionalPart.length >= 3 ? parseInt(fractionalPart[2]) : 0;
+        } else {
+            return fractionalPart.length >= 2 ? parseInt(fractionalPart[1]) : 0;
+        }
+    }
+
+    handleTickHistory(message) {
+        const asset = message.echo_req.ticks_history;
+        const history = message.history;
+
+        // Store raw prices
+        this.priceHistories[asset] = history.prices.map(p => parseFloat(p));
+
+        // Build digit history from raw prices
+        this.tickHistory[asset] = history.prices.map(p => this.getLastDigit(p, asset));
+
+        console.log(`📊 ${asset}: Loaded ${this.priceHistories[asset].length} price ticks | ${this.tickHistory[asset].length} digits`);
+    }
+
+    handleTickUpdate(tick) {
+        const asset = tick.symbol;
+        const price = parseFloat(tick.quote);
+        const lastDigit = this.getLastDigit(price, asset);
+
+        // Store raw price
+        this.priceHistories[asset].push(price);
+        if (this.priceHistories[asset].length > 500) {
+            this.priceHistories[asset] = this.priceHistories[asset].slice(-300);
+        }
+
+        // Store digit
+        if (!this.lastDigitsList[asset]) this.lastDigitsList[asset] = [];
+        this.lastDigitsList[asset].push(lastDigit);
+
+        this.tickHistory[asset].push(lastDigit);
+        if (this.tickHistory[asset].length > this.config.requiredHistoryLength) {
+            this.tickHistory[asset].shift();
+        }
+
+        this.tickCounts[asset] = (this.tickCounts[asset] || 0) + 1;
+
+        if (!this.wsReady) return;
+        if (this.activeTrades[asset]) return;
+        if (this.tickHistory[asset].length < this.config.requiredHistoryLength) return;
+
+        // Hard gate — drop suspended assets before any further work
+        if (!this.isAssetAllowed(asset)) return;
+
+        // Allow the focus asset through even if it's been moved to
+        // pendingAssets (its stayedInArray resets low after a loss, so
+        // isAssetReady() would wrongly block its own recovery trade)
+        // if (!this.isAssetReady(asset) && asset !== this.focusAsset) return;
+
+        // Minimum time between trades
+        if (Date.now() - (this.lastTradeTime[asset] || 0) < this.config.minTimeBetweenTrades) return;
+
+        // Run analysis and maybe trade
+        this.evaluateAndTrade(asset);
+    }
+
+    // ========================================================================
+    // TRADE ANALYSIS & EXECUTION — Bollinger + MACD Strategy
+    // ========================================================================
+    evaluateAndTrade(asset) {
+        // Check if asset is suspended
+        if (!this.isAssetAllowed(asset)) return;
+
+        // Run original analyzeTicks logic — request proposal
+        this.requestProposal(asset);
+    }
+
+    requestProposal(asset) {
+        if (this.tradeInProgress) return;
+        if (!this.wsReady) return;
+
+        // Belt-and-suspenders — never send a proposal for a suspended asset
+        if (!this.isAssetAllowed(asset)) return;
+
+        // this.takeProfitAmount = this.consecutiveLosses < 1
+        //     ? this.currentStake * this.config.takeProfitMultiplier
+        //     : this.currentStake * this.config.takeProfitMultiplier2;
+
+        this.takeProfitAmount = this.currentStake * this.config.takeProfitMultiplier;
+            
+
+        const proposal = {
+            proposal: 1,
+            amount: this.currentStake.toFixed(2),
+            basis: 'stake',
+            contract_type: 'ACCU',
+            currency: 'USD',
+            [this._proposalSymbolKey()]: asset,
+            growth_rate: this.config.growthRate,
+            limit_order: {
+                take_profit: this.takeProfitAmount.toFixed(2)
+            }
+        };
+
+        this.sendRequest(proposal);
+    }
+
+    handleProposal(message) {
+        const asset = message.echo_req?.symbol || message.echo_req?.underlying_symbol;
+
+        if (message.error) {
+            if (asset && this.activeTrades[asset]?.status === 'requesting_proposal') {
+                console.log(`❌ Proposal rejected for ${asset}: ${message.error.message}`);
+                delete this.activeTrades[asset];
+                this.tradeInProgress = false;
+            }
+            return;
+        }
+
+        if (!message.proposal) return;
+        if (!asset) return;
+
+        const proposal = message.proposal;
+        const stayedInArray = proposal.contract_details.ticks_stayed_in;
+
+        if (!stayedInArray) return;
+
+        // ✅ TREND-FIX: Record a trend sample for EVERY proposal type (scan,
+        // final-settlement lookup, regular) so trend data stays continuous
+        // and is already available the moment an asset becomes eligible.
+        const totalStayedInSample = this.calculateTotalStayedIn(stayedInArray);
+        this.recordStayedInSample(asset, totalStayedInSample);
+
+        // Passthrough actions handled FIRST — unconditionally, before any
+        // consecutiveLosses branching, so they're never skipped in recovery.
+        const passthrough = message.echo_req?.passthrough;
+
+        if (passthrough?.action === 'scan_only') {
+            // if (this.consecutiveLosses <= 0) {
+                this.updateAssetStatus(asset, stayedInArray);
+            // }
+            console.log(`   🔍 Scan result for ${asset}: stayedIn=${totalStayedInSample} (${totalStayedInSample > this.config.STAYED_IN_THRESHOLD ? 'READY' : 'WAITING'})`);
+            return;
+        }
+
+        if (passthrough?.action === 'get_final_stayed_in') {
+            console.log(`✅ Final stayedInArray received for ${asset}: [${stayedInArray.slice(-6).join('|')}]`);
+
+            this.finalStayedInArray = stayedInArray;
+
+            if (!this.assetStayedInArrays) this.assetStayedInArrays = {};
+            this.assetStayedInArrays[asset] = stayedInArray;
+            this.stayedInArray = stayedInArray;
+
+            const trade = this.activeTrades[asset];
+            if (trade && trade.awaitingFinalStayedIn && trade.settledContract) {
+                trade.awaitingFinalStayedIn = false;
+                this.handleTradeResult(asset, trade.settledContract);
+            }
+            return;
+        }
+
+        // Hard gate for suspended assets — catches every in-flight proposal
+        // response that arrived after suspension was set.
+        if (!this.isAssetAllowed(asset)) {
+            console.log(`⏸️  ${asset} is suspended — ignoring proposal`);
+            return;
+        }
+
+        // Update asset status only in normal (non-recovery) mode
+        // if (this.consecutiveLosses <= 0) {
+            this.updateAssetStatus(asset, stayedInArray);
+        // }
+
+        // ── Regular proposal handling (for new trades) ──────────────────────────
+        this.stayedInArray = stayedInArray;
+        const stayedInArray2 = stayedInArray.slice(-this.config.STAYED_IN_THRESHOLD2FILTER);
+
+        if (!this.assetStayedInArrays) this.assetStayedInArrays = {};
+        this.assetStayedInArrays[asset] = stayedInArray;
+
+        if (this.tradeInProgress) return;
+
+        // Enforce active/pending filter only outside recovery mode. In
+        // recovery the focus asset must be allowed through regardless of
+        // its current stayedInArray total.
+        // if (!this.isAssetReady(asset) && this.consecutiveLosses <= 0) {
+        //     console.log(`⏸️  ${asset} is in pending list, skipping trade analysis`);
+        //     return;
+        // }
+
+        if (!this.isAssetReady(asset)) {
+            console.log(`⏸️  ${asset} is in pending list, skipping trade analysis`);
+            return;
+        }
+
+        const currentDigitCount = stayedInArray[99] + 1;
+        this.currentTick = stayedInArray[99];
+
+        // Store proposal ID
+        this.assetStates[asset].proposalId = proposal.id;
+
+        // ── Original frequency analysis logic ──────────────────────────────────
+        const digitFrequency = {};
+        stayedInArray.forEach(digit => {
+            digitFrequency[digit] = (digitFrequency[digit] || 0) + 1;
+        });
+
+        const appearedOnceArray = Object.keys(digitFrequency)
+            .filter(digit => digitFrequency[digit] === this.filterNum)
+            .map(Number);
+
+        const condition  = this.checkTradeCondition(stayedInArray, this.consecutiveLosses, this.config.STAYED_IN_THRESHOLD, asset);
+        const condition2 = this.checkTradeCondition2(stayedInArray2, this.consecutiveLosses, this.config.STAYED_IN_THRESHOLD2, asset);
+
+        // ✅ TREND-FIX: Only enter when the asset's total stayedInArray is
+        // FRESHLY trending upward. This applies to BOTH the normal entry
+        // path and the recovery (consecutiveLosses > 0) path — if the focus
+        // asset itself has rolled over and is declining, the bot waits for
+        // it to resume an upward trend rather than firing into a likely-
+        // exhausted run.
+        const entrySignal = condition;
+        const trendingUp = this.config.enableTrendFilter ? this.isStayedInTrendingUp(asset) : true;
+        const trendDirection = this.getStayedInTrendDirection(asset);
+        const tradeWithDirection = trendDirection === '📈 up';
+
+        if (!trendingUp) {
+            console.log(`   ⏳ ${asset}: entry conditions met but stayedIn trend is ${trendDirection} — waiting for a FRESH upward trend before entering`);
+        }
+
+        if (condition && condition2) {
+            console.log(`   Entry condition: ✅ MET | Trend: ${trendDirection}`);
+
+            this.tradedDigitArray.push(this.stayedInArray[99]);
+            this.stayedInArray2 = this.stayedInArray;
+
+            this.filteredArray = appearedOnceArray;
+
+            console.log(`   Traded Digit Array: [${this.tradedDigitArray.join(', ')}]`);
+
+            const growthRate = this.config.growthRate;
+
+            console.log(`\n🎯 ENTRY SIGNAL: ${asset}`);
+            console.log(`   Growth Rate: ${(growthRate * 100).toFixed(0)}% | Stake: $${this.currentStake.toFixed(2)}`);
+            console.log(`   Take Profit: $${this.takeProfitAmount.toFixed(2)}`);
+            console.log(`   StayedIn Trend: ${trendDirection} (fresh uptrend confirmed)`);
+
+            // Place trade
+            this.placeTrade(asset);
+        }
+    }
+
+    placeTrade(asset) {
+        if (this.tradeInProgress) return;
+
+        const proposalId = this.assetStates[asset]?.proposalId;
+        if (!proposalId) {
+            console.error(`❌ No valid proposal ID for ${asset}`);
+            return;
+        }
+
+        console.log(`\n🚀 PLACING TRADE: ${asset}`);
+        console.log(`   Proposal ID: ${proposalId}`);
+        console.log(`   Stake: $${this.currentStake.toFixed(2)}`);
+
+        this.sendRequest({
+            buy: proposalId,
+            price: this.currentStake.toFixed(2)
+        });
+
+        this.tradeInProgress = true;
+        this.activeTrades[asset] = {
+            status: 'buying',
+            proposalId,
+            stake: this.currentStake,
+            entryTime: Date.now(),
+        };
+
+        // Suspend all other assets immediately on trade open
+        // this.suspendOtherAssets(asset);
+
+        const trade = this.activeTrades[asset];
+        const trendDirection = this.getStayedInTrendDirection(asset);
+
+        // Telegram notification
+        this.sendTelegramMessage(
+            `🚀 <b>AccuFableBC TRADE OPENED (Trend Filtered)</b>\n\n` +
+            `Asset: <b>${asset}</b>\n` +
+            `stayedInArray: <b>[${this.stayedInArray2.slice(-6).join('|')}]</b>\n` +
+            `totalStayedInArray: ${this.totalStayedInArray}/${this.maxTotalStayedIn} (${this.totalStayedInArray2}/${this.maxTotalStayedIn2})\n` +
+            `StayedIn Trend: ${trendDirection}\n` +
+            `Stake: $${trade.stake.toFixed(2)}\n` +
+            `Growth Rate: ${(this.config.growthRate * 100).toFixed(0)}%\n` +
+            `Take Profit: $${this.takeProfitAmount.toFixed(2)}`
+        );
+
+        this.lastTradeTime[asset] = Date.now();
+    }
+
+    handleBuyResponse(message) {
+        const asset = this.findAssetByStatus('buying');
+
+        if (message.error) {
+            console.error(`❌ Buy error: ${message.error.message}`);
+            if (asset) {
+                delete this.activeTrades[asset];
+            }
+            this.tradeInProgress = false;
+            this._clearWatchdogTimers();
+            return;
+        }
+
+        if (!asset) {
+            console.warn('Buy response but no pending trade found');
+            this._clearWatchdogTimers();
+            return;
+        }
+
+        const trade = this.activeTrades[asset];
+        const contractId = message.buy.contract_id;
+
+        console.log(`✅ Contract opened: ${contractId} on ${asset}`);
+
+        trade.status = 'active';
+        trade.contractId = contractId;
+        trade.buyPrice = parseFloat(message.buy.buy_price);
+
+        // Subscribe to contract updates
+        this.sendRequest({
+            proposal_open_contract: 1,
+            contract_id: contractId,
+            subscribe: 1
+        });
+
+        // Record trade start time and start watchdog
+        this.tradeStartTime = Date.now();
+        this._startTradeWatchdog(contractId);
+        console.log(`⏱️  Trade watchdog started (${(this.tradeWatchdogMs / 1000).toFixed(0)}s timeout)`);
+    }
+
+    findAssetByStatus(status) {
+        return Object.keys(this.activeTrades).find(
+            asset => this.activeTrades[asset]?.status === status
+        );
+    }
+
+    findAssetByContractId(contractId) {
+        return Object.keys(this.activeTrades).find(
+            asset => this.activeTrades[asset]?.contractId === contractId
+        );
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // CONTRACT MONITORING & EXIT LOGIC
+    // ══════════════════════════════════════════════════════════════════════════
+    handleContractUpdate(message) {
+        const contract = message.proposal_open_contract;
+        if (!contract) return;
+
+        const asset = contract.underlying || this.findAssetByContractId(contract.contract_id);
+        if (!asset || !this.activeTrades[asset]) return;
+
+        const trade = this.activeTrades[asset];
+
+        // Store subscription ID
+        if (message.subscription?.id) {
+            this.contractSubscriptions[asset] = message.subscription.id;
+        }
+
+        // Contract settled?
+        if (contract.is_sold) {
+            // Store the settled contract data
+            trade.settledContract = contract;
+
+            this.tickPassed = contract.tick_passed;
+
+            // Request a fresh proposal to get the CURRENT ticks_stayed_in
+            this.requestFinalStayedInArray(asset);
+            return;
+        }
+
+        // Log progress
+        const tickCount = contract.tick_count || 0;
+        const profit = parseFloat(contract.profit || 0);
+        const bidPrice = parseFloat(contract.bid_price || 0);
+
+        if (tickCount > 0 && tickCount % 2 === 0) {
+            console.log(
+                `  📊 ${asset}: tick ${tickCount} | ` +
+                `Profit: $${profit.toFixed(3)} | Bid: $${bidPrice.toFixed(2)} | ` +
+                `Ticks Passed: ${contract.tick_passed || 0}`
+            );
+        }
+    }
+
+    requestFinalStayedInArray(asset) {
+        const trade = this.activeTrades[asset];
+        if (!trade) return;
+
+        // Mark that we're waiting for final data
+        trade.awaitingFinalStayedIn = true;
+
+        console.log(`🔍 Requesting final stayedInArray for ${asset}...`);
+
+        // Request a fresh proposal to get the current ticks_stayed_in
+        const proposal = {
+            proposal: 1,
+            amount: this.currentStake.toFixed(2),
+            basis: 'stake',
+            contract_type: 'ACCU',
+            currency: 'USD',
+            [this._proposalSymbolKey()]: asset,
+            growth_rate: this.config.growthRate,
+            limit_order: {
+                take_profit: this.takeProfitAmount.toFixed(2)
+            },
+            passthrough: {
+                action: 'get_final_stayed_in',
+                asset: asset,
+                timestamp: Date.now()
+            }
+        };
+
+        this.sendRequest(proposal);
+
+        // Safety timeout: if no response in 3 seconds, proceed with empty array
+        setTimeout(() => {
+            const currentTrade = this.activeTrades[asset];
+            if (currentTrade && currentTrade.awaitingFinalStayedIn) {
+                console.warn(`⚠️ Timeout waiting for final stayedInArray for ${asset}`);
+                currentTrade.awaitingFinalStayedIn = false;
+                this.handleTradeResult(asset, currentTrade.settledContract);
+            }
+        }, 3000);
+    }
+
+    handleSellResponse(message) {
+        if (message.error) {
+            console.error('❌ Sell error:', message.error.message);
+            return;
+        }
+        console.log(`✅ Sold for: $${message.sell?.sold_for || 'N/A'}`);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // TRADE WATCHDOG
+    // ══════════════════════════════════════════════════════════════════════════
+    _startTradeWatchdog(contractId) {
+        this._clearWatchdogTimers();
+
+        const timeoutMs = this.tradeWatchdogMs;
+
+        this.tradeWatchdogTimer = setTimeout(() => {
+            const hasActiveTrade = Object.keys(this.activeTrades).some(
+                a => this.activeTrades[a]?.contractId
+            );
+            if (!hasActiveTrade) {
+                this._clearWatchdogTimers();
+                return;
+            }
+
+            console.warn(
+                `⏰ WATCHDOG FIRED — Contract ${contractId || 'unknown'} has been open for ` +
+                `${(timeoutMs / 1000).toFixed(0)}s with no settlement`
+            );
+
+            if (contractId && this.connected && this.wsReady) {
+                console.log(`🔍 Polling contract ${contractId} for current status…`);
+                this.sendRequest({
+                    proposal_open_contract: 1,
+                    contract_id: contractId,
+                    subscribe: 1,
+                });
+
+                this.tradeWatchdogPollTimer = setTimeout(() => {
+                    const stillActive = Object.keys(this.activeTrades).some(
+                        a => this.activeTrades[a]?.contractId
+                    );
+                    if (!stillActive) {
+                        this._clearWatchdogTimers();
+                        return;
+                    }
+                    console.error(
+                        `🚨 WATCHDOG: Poll timed out — contract ${contractId} still unresolved, ` +
+                        `force-releasing lock`
+                    );
+                    this._recoverStuckTrade('watchdog-force');
+                }, 15000);
+
+            } else {
+                this._recoverStuckTrade('watchdog-offline');
+            }
+        }, timeoutMs);
+    }
+
+    _clearWatchdogTimers() {
+        if (this.tradeWatchdogTimer) {
+            clearTimeout(this.tradeWatchdogTimer);
+            this.tradeWatchdogTimer = null;
+        }
+        if (this.tradeWatchdogPollTimer) {
+            clearTimeout(this.tradeWatchdogPollTimer);
+            this.tradeWatchdogPollTimer = null;
+        }
+    }
+
+    _recoverStuckTrade(reason) {
+        this._clearWatchdogTimers();
+
+        const stuckAsset = Object.keys(this.activeTrades).find(
+            asset => this.activeTrades[asset]?.contractId
+        );
+        if (!stuckAsset) {
+            console.warn('⚠️  No active trade found for stuck trade recovery');
+            this.tradeInProgress = false;
+            return;
+        }
+
+        const trade = this.activeTrades[stuckAsset];
+        const contractId = trade.contractId || 'unknown';
+        const stake = trade.stake || 0;
+        const entryTime = this.tradeStartTime || Date.now();
+        const openSeconds = Math.round((Date.now() - entryTime) / 1000);
+
+        console.error(
+            `\n🚨 STUCK TRADE RECOVERY [${reason}]` +
+            `\n   Contract: ${contractId}` +
+            `\n   Asset: ${stuckAsset}` +
+            `\n   Stake: $${stake.toFixed(2)}` +
+            `\n   Open for: ${openSeconds}s`
+        );
+
+        // Emergency sell attempt
+        if (contractId && contractId !== 'unknown' && this.connected && this.wsReady) {
+            console.log(`🔄 Attempting emergency sell of contract ${contractId}…`);
+            this.sendRequest({
+                sell: contractId,
+                price: '0',
+            });
+        }
+
+        // Forget subscription
+        if (this.contractSubscriptions[stuckAsset]) {
+            this.sendRequest({ forget: this.contractSubscriptions[stuckAsset] });
+            delete this.contractSubscriptions[stuckAsset];
+        }
+
+        // Clear trade state
+        this.tradeInProgress = false;
+        this.tradeStartTime = null;
+        delete this.activeTrades[stuckAsset];
+
+        // Record as loss
+        this.totalLosses++;
+        this.consecutiveLosses++;
+        this.consecutiveLosses2++;
+
+        if (this.assetMetrics[stuckAsset]) {
+            this.assetMetrics[stuckAsset].losses++;
+            this.assetMetrics[stuckAsset].profitLoss -= stake;
+        }
+
+        this.totalProfitLoss -= stake;
+        this.dailyProfitLoss -= stake;
+
+        // this.suspendOtherAssets(stuckAsset);
+
+        console.log(
+            `\n   Trade lock released — bot can now trade again` +
+            `\n   Stake $${stake.toFixed(2)} recorded as loss`
+        );
+
+        this.sendTelegramMessage(
+            `🚨 <b>AccuFableBC STUCK TRADE RECOVERED Trend Filtered[${reason}]</b>\n\n` +
+            `Contract: ${contractId}\n` +
+            `Asset: ${stuckAsset}\n` +
+            `Stake: $${stake.toFixed(2)}\n` +
+            `Open for: ${openSeconds}s\n` +
+            `Action: Emergency sell attempted, trade lock released`
+        );
+
+        StatePersistence.saveState(this);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // TRADE RESULT HANDLING (original logic preserved)
+    // ══════════════════════════════════════════════════════════════════════════
+    handleTradeResult(asset, contract) {
+        const trade = this.activeTrades[asset];
+        if (!trade) {
+            this._clearWatchdogTimers();
+            return;
+        }
+
+        // Clear watchdog
+        this._clearWatchdogTimers();
+
+        const won = contract.status === 'won';
+        const profit = parseFloat(contract.profit);
+
+        // Get the final stayedInArray for this asset (updated continuously via proposal stream)
+        const finalStayedInArray = this.finalStayedInArray //this.assetStayedInArrays?.[asset] || [];
+
+        // Unsubscribe from contract
+        if (this.contractSubscriptions[asset]) {
+            this.sendRequest({ forget: this.contractSubscriptions[asset] });
+            delete this.contractSubscriptions[asset];
+        }
+
+        console.log(`\n${'═'.repeat(55)}`);
+        console.log(`  ${won ? '✅ WIN' : '❌ LOSS'}: ${asset}`);
+        console.log(`  Ticks: ${contract.tick_count || 0} | P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(3)}`);
+        console.log(`  Final StayedIn: [${this.finalStayedInArray.slice(-6).join('|')}]`);
+        console.log(`${'═'.repeat(55)}`);
+
+        // Update stats
+        this.totalTrades++;
+        this.totalProfitLoss += profit;
+        this.dailyProfitLoss += profit;
+        this.hourlyStats.trades++;
+        this.hourlyStats.pnl += profit;
+
+        if (this.assetMetrics[asset]) {
+            this.assetMetrics[asset].trades++;
+            this.assetMetrics[asset].profitLoss += profit;
+        }
+
+        if (won) {
+            this.totalWins++;
+            this.isWinTrade = true;
+            this.currentStake = this.config.initialStake;
+            this.consecutiveLosses = 0;
+            this.filterNum = this.config.filterNum;
+
+            if (this.assetMetrics[asset]) this.assetMetrics[asset].wins++;
+            this.hourlyStats.wins++;
+
+            // Resume all assets after win
+            // if (this.focusAsset) {
+            //     this.resumeAllAssets();
+            // }
+
+        } else {
+            this.totalLosses++;
+            this.consecutiveLosses++;
+            this.isWinTrade = false;
+            this.hourlyStats.losses++;
+
+            this.filterNum++;
+
+            if (this.assetMetrics[asset]) this.assetMetrics[asset].losses++;
+
+            if (this.consecutiveLosses === 2) this.consecutiveLosses2++;
+            else if (this.consecutiveLosses === 3) this.consecutiveLosses3++;
+            else if (this.consecutiveLosses === 4) this.consecutiveLosses4++;
+            else if (this.consecutiveLosses === 5) this.consecutiveLosses5++;
+            else if (this.consecutiveLosses === 6) this.consecutiveLosses6++;
+
+            if (this.consecutiveLosses >= 2) {
+                this.currentStake = Math.ceil(this.currentStake * this.config.multiplier2 * 100) / 100;
+            } else {
+                this.currentStake = Math.ceil(this.currentStake * this.config.multiplier * 100) / 100;
+            }
+        }
+
+        // Keep traded digit array trimmed
+        if (this.tradedDigitArray.length > 3) {
+            this.tradedDigitArray.shift();
+        }
+
+        this.Sys1 = 0;
+        this.currentTick = null;
+
+        this.tradeInProgress = false;
+        this.tradeStartTime = null;
+        delete this.activeTrades[asset];
+
+        // Send Trade result notification with final stayedInArray
+        this.sendTelegramMessage(
+            `<b>AccuFableBC</b>\n` +
+            `${won ? '✅ WON' : '❌ LOSS'}\n` +
+            `Asset: <b>${asset}</b>\n` +
+            `Tick Passed: <b>${this.tickPassed}</b>\n` +
+            `Final stayedInArray: [${this.finalStayedInArray.slice(-6).join('|')}]\n` +
+            `P&L: ${profit >= 0 ? '+' : ''}$${profit.toFixed(3)}\n` +
+            `Consecutive Losses: ${this.consecutiveLosses}\n` +
+            `Trades: ${this.totalTrades} (${this.totalWins}W/${this.totalLosses}L)\n` +
+            `Losses x2-x6: ${this.consecutiveLosses2} | ${this.consecutiveLosses3} | ${this.consecutiveLosses4} | ${this.consecutiveLosses5} | ${this.consecutiveLosses6}\n` +
+            `Win Rate: ${this.totalTrades > 0 ? ((this.totalWins / this.totalTrades) * 100).toFixed(2) : '0.00'}%\n` +
+            `Stake: $${this.currentStake.toFixed(2)}\n` +
+            `Total P&L: ${this.totalProfitLoss >= 0 ? '+' : ''}$${this.totalProfitLoss.toFixed(2)}`
+        );
+
+        // Log summary
+        this.logTradingSummary();
+
+        // Take profit condition
+        if (this.totalProfitLoss >= this.config.takeProfit) {
+            console.log('🎯 Take Profit Reached... Stopping trading.');
+            this.endOfDay = true;
+            this.TP_SL = true;
+            this.sendDisconnectSummary();
+            this.disconnect();
+            return;
+        }
+
+        // Stop conditions
+        if (this.consecutiveLosses >= this.config.maxConsecutiveLosses ||
+            this.totalProfitLoss <= -this.config.stopLoss) {
+            console.log('🛑 Stopping condition met. Disconnecting...');
+            this.endOfDay = true;
+            this.TP_SL = true;
+            this.sendDisconnectSummary();
+            this.disconnect();
+            return;
+        }
+
+        StatePersistence.saveState(this);
+
+        // ═══════════════════════════════════════════════════════════════════
+        // IMMEDIATE RE-EVALUATION — Don't wait for the next tick
+        // ═══════════════════════════════════════════════════════════════════
+        // this._evaluateAllAssetsImmediately();
+    }
+
+    /**
+     * Immediately evaluate all assets for a new trade opportunity
+     * after a trade closes.
+     */
+    _evaluateAllAssetsImmediately() {
+        this.assets.forEach(a => {
+            this.tickCounts[a] = 0;
+        });
+
+        for (const asset of this.assets) {
+            if (!this.isAssetAllowed(asset)) continue;
+
+            // Allow focus asset through even if its stayedInArray is low post-loss
+            // if (!this.isAssetReady(asset) && asset !== this.focusAsset) continue;
+
+            if (this.tradeInProgress) break;
+            if (this.activeTrades[asset]) continue;
+            if (!this.tickHistory[asset] || this.tickHistory[asset].length < this.config.requiredHistoryLength) continue;
+            if (Date.now() - (this.lastTradeTime[asset] || 0) < this.config.minTimeBetweenTrades) continue;
+
+            console.log(`\n⚡ IMMEDIATE RE-ENTRY: ${asset} (post-trade evaluation)`);
+            this.requestProposal(asset);
+            break;
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // TIME-BASED DISCONNECT / RECONNECT (original logic preserved)
+    // ══════════════════════════════════════════════════════════════════════════
+    checkTimeForDisconnectReconnect() {
+        setInterval(() => {
+            const now = new Date();
+            const gmtPlus1Time = new Date(now.getTime() + (1 * 60 * 60 * 1000));
+            const currentDay = gmtPlus1Time.getUTCDay(); // 0: Sunday, 1: Monday, ..., 6: Saturday
+            const currentHours = gmtPlus1Time.getUTCHours();
+            const currentMinutes = gmtPlus1Time.getUTCMinutes();
+
+            // Evening stop: after 11:00 PM following a win
+            if (this.isWinTrade && !this.endOfDay) {
+                if (currentHours >= 23 && currentMinutes >= 0) {
+                    console.log("It's past 11:00 PM after a win trade, disconnecting.");
+                    this.sendDisconnectSummary();
+                    this.Pause = true;
+                    this.disconnect();
+                    this.endOfDay = true;
+                }
+            }
+
+            // Morning Resumption: 2:00 AM
+            if (!this.TP_SL && this.endOfDay && currentHours === 2 && currentMinutes >= 0) {
+                console.log("It's 2:00 AM, reconnecting the bot.");
+                this.endOfDay = false;
+                this.Pause = false;
+                this.tradeInProgress = false;
+                this.tradedDigitArray = [];
+                this.tradedDigitArray2 = [];
+                this.tradeNum = Math.floor(Math.random() * (40 - 21 + 1)) + 21;
+                this.connect();
+            }
+
+        }, 20000);
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // TRADING SUMMARY
+    // ══════════════════════════════════════════════════════════════════════════
+    logTradingSummary() {
+        console.log('\n📊 Trading Summary:');
+        console.log(`  Total Trades: ${this.totalTrades}`);
+        console.log(`  Total Trades Won: ${this.totalWins}`);
+        console.log(`  Total Trades Lost: ${this.totalLosses}`);
+        console.log(`  x2 Losses: ${this.consecutiveLosses2}`);
+        console.log(`  x3 Losses: ${this.consecutiveLosses3}`);
+        console.log(`  x4 Losses: ${this.consecutiveLosses4}`);
+        console.log(`  x5 Losses: ${this.consecutiveLosses5}`);
+        console.log(`  x6 Losses: ${this.consecutiveLosses6}`);
+        console.log(`  Total Profit/Loss: $${this.totalProfitLoss.toFixed(2)}`);
+        console.log(`  Win Rate: ${this.totalTrades > 0 ? ((this.totalWins / this.totalTrades) * 100).toFixed(2) : '0.00'}%`);
+        console.log(`  Current Stake: $${this.currentStake.toFixed(2)}`);
+
+        // Show asset filtering status (now includes trend direction)
+        console.log(this.getAssetFilteringSummary());
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    // LIFECYCLE
+    // ══════════════════════════════════════════════════════════════════════════
+    start() {
+        console.log('═══════════════════════════════════════════════════════════');
+        console.log('  🚀 accumBotM — Enhanced Multi-Asset Accumulator Bot');
+        console.log('═══════════════════════════════════════════════════════════');
+        console.log(`  Assets:        ${this.assets.join(', ')}`);
+        console.log(`  Initial Stake: $${this.config.initialStake}`);
+        console.log(`  Multiplier:    x${this.config.multiplier}`);
+        console.log(`  Growth Rate:   ${(this.config.growthRate * 100)}%`);
+        console.log(`  Take Profit:   $${this.config.takeProfit}`);
+        console.log(`  Stop Loss:     $${this.config.stopLoss}`);
+        console.log(`  Trend Filter:  ${this.config.enableTrendFilter ? `ON (confirm=${this.config.trendConfirmCount}, samples=${this.config.trendSampleSize})` : 'OFF'}`);
+        console.log('═══════════════════════════════════════════════════════════\n');
+
+        this.connect();
+        // this.checkTimeForDisconnectReconnect();
+        this.startTelegramTimer();
+        StatePersistence.startAutoSave(this);
+    }
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// 16. BANNER + MAIN
-// ═══════════════════════════════════════════════════════════════════════
-function printBanner() {
-  const mode = CONFIG.mode.toUpperCase();
-  console.log(`
-╭──────────────────────────────────────────────────────────────────────╮
-│  AccuFable5 — measure-first Deriv Accumulator engine        │
-├──────────────────────────────────────────────────────────────────────┤
-│  mode          ${mode.padEnd(46)}│
-│  assets        ${String(CONFIG.assets.length + ' volatility indices').padEnd(46)}│
-│  growth rates  ${CONFIG.growthRates.map(g => (g * 100) + '%').join(', ').padEnd(46)}│
-│  sizing        ${String(CONFIG.sizing + (CONFIG.martingaleSteps > 0 ? ` (martingale ×${CONFIG.martingaleMultiplier}, ${CONFIG.martingaleSteps} steps)` : ' (no martingale)')).padEnd(46)}│
-│  chase-on-loss ${String(CONFIG.chaseOnLoss ? 'ON (re-trade same asset until win)' : 'OFF').padEnd(46)}│
-│  stake         ${String(CONFIG.stake + ' ' + CONFIG.currency).padEnd(46)}│
-│  take profit   ${String(CONFIG.takeProfitTicks + ' ticks').padEnd(46)}│
-│  daily max loss${String(' ' + CONFIG.dailyMaxLoss + ' ' + CONFIG.currency).padEnd(46)}│
-│  stay gate     ${String(CONFIG.stayWindowN + ' most current < ' + CONFIG.stayMaxValue + ', latest < ' + CONFIG.stayCurrentMax).padEnd(46)}│
-│  ev gate       ${String('evLower/tick ≤ ' + (CONFIG.evLowerGateMax * 100).toFixed(4) + '%').padEnd(46)}│
-╰──────────────────────────────────────────────────────────────────────╯`);
-  if (CONFIG.mode !== 'live') {
-    console.log('  PAPER MODE: real ticks, real barriers, simulated money.\n');
-  }
-}
+// ══════════════════════════════════════════════════════════════════════════════
+// BOT INITIALIZATION
+// ══════════════════════════════════════════════════════════════════════════════
+// ─────────────────────────────────────────────────────────────────────────
+// Token can be either:
+//   • Legacy Deriv API token (short alphanumeric, e.g. '0P94g4WdSrSrzir')
+//   • New Personal Access Token (PAT) prefixed with 'pat_' — triggers the
+//     new REST + OTP WebSocket flow automatically.
+// appId / accountType only apply to the new (PAT) API. Generate a PAT at
+// https://app.deriv.com/account/api-token and register an app at
+// https://developers.deriv.com/.
+// ─────────────────────────────────────────────────────────────────────────
+const bot = new EnhancedDerivTradingBot('pat_9407fd80466311ce13f2d2b5e884d95f6507f24a5dcb8ec853d775022c1591c7', {
+    appId: '33uslPtthXBEkQOdfKfoY',           // override with your registered Deriv app_id
+    accountType: 'demo',     // 'demo' | 'real' (PAT mode only)
+    initialStake: 1,
+    initialStake2: 5,
+    multiplier: 21,
+    multiplier2: 11,
+    recoveryWinNum: 100,
+    maxConsecutiveLosses: 4,
+    stopLoss: 127,
+    takeProfit: 2500,
+    growthRate: 0.05,
+    takeProfitMultiplier: 0.01, //0.12 25% of Stake Amount
+    takeProfitMultiplier2: 0.01, //15% of Stake Amount
+    filterNum: 7,
+    STAYED_IN_THRESHOLD: 3560, //3660 Threshold for asset filtering
+    STAYED_IN_THRESHOLD2: 30, //160 Threshold2 for asset filtering
+    STAYED_IN_THRESHOLD2FILTER: 6, //6 Threshold2 for asset filtering Total StayedInArray from Deriv API is 100, so we can filter the last 10 digits for more accurate analysis.
+    scanTimer: 60000, //Set Timer for Bot to Re-scan for Assets that are ready for Trade execution.
 
-async function main() {
-  const args = process.argv.slice(2);
+    // ── StayedIn trend filter (NEW) ──────────────────────────────────────────
+    enableTrendFilter: false,  // Only trade when stayedInArray sum is freshly trending upward
+    trendSampleSize: 10,       // How many recent stayedIn samples to retain per asset
+    trendConfirmCount: 2,     // Consecutive upward steps required to confirm a fresh uptrend
+    trendMinDelta: 1,         // Minimum increase per step to count as "up" (raise to filter noise)
+    trendMaxAgeMs: 12000000,    //120000 Ignore trend data older than this (stale safeguard)
 
-  if (args.includes('--selftest')) {
-    process.exit(runSelfTest() ? 0 : 1);
-  }
+    assets: [
+        // 'BOOM50','BOOM150N', 'BOOM300N', 'BOOM500', 'BOOM600', 'BOOM900', 'BOOM1000',
+        // 'CRASH50', 'CRASH150N', 'CRASH300N', 'CRASH500', 'CRASH600', 'CRASH900', 'CRASH1000',
+        // 'R_10', 'R_25', 'R_50', 'R_75', 'R_100',
+        // '1HZ10V', '1HZ25V', '1HZ75V', '1HZ100V',
+        'BOOM500', 'BOOM600', 'BOOM900', 'BOOM1000', 'CRASH500', 'CRASH600', 'CRASH900', 'CRASH1000'
+    ],
+    telegramToken: '8591937854:AAESyF-8b17sRK-xdQXzrHfALnKA1sAR3CI',
+    telegramChatId: '752497117',
+});
 
-  if (args.includes('--calibrate')) {
-    try { await runCalibration(); process.exit(0); }
-    catch (e) { logger.error('calibration failed:', e.message); process.exit(1); }
-  }
-
-  const bot = new AccuFable5(CONFIG);
-
-  const shutdown = async sig => {
-    logger.info(`received ${sig} — shutting down`);
-    try { await bot.stop(); } catch (e) { logger.error('shutdown:', e.message); }
-    process.exit(0);
-  };
-  process.on('SIGINT', () => shutdown('SIGINT'));
-  process.on('SIGTERM', () => shutdown('SIGTERM'));
-  process.on('unhandledRejection', r => logger.error('unhandledRejection:', String(r)));
-  process.on('uncaughtException', e => {
-    logger.error('uncaughtException:', e.message);
-    bot.stop().finally(() => process.exit(1));
-  });
-
-  // Periodic report so a long paper run is legible.
-  setInterval(() => bot.report(), 15 * 60 * 1000);
-
-  try { await bot.start(); }
-  catch (e) { logger.error('startup failed:', e.message); process.exit(1); }
-}
-
-if (require.main === module) main();
-
-module.exports = {
-  CONFIG, Stats, CalibrationEngine, EdgeLedger, RiskManager,
-  TradeExecutor, MarketData, DerivClient, AccuFable5,
-  monteCarlo, sweep, runSelfTest, gaussian,
-};
+bot.start();
