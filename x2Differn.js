@@ -1,5 +1,5 @@
 require('dotenv').config();
-const WebSocket = require('ws');
+const { DerivClient } = require('./lib/deriv-client');
 const https = require('https');
 const fs = require('fs');
 const { URL } = require('url');
@@ -21,33 +21,33 @@ const pad = n => String(n).padStart(2, '0');
 function utcTs() { const d = new Date(); return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())} ${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}:${pad(d.getUTCSeconds())} GMT`; }
 function htmlEscape(s) { return String(s).replace(/[&<>]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch])); }
 
-// ── CONFIG — credentials from x2DifferV2.js ───────────────────
+// ── CONFIG — credentials are read only from the environment ───────────
 const CONFIG = Object.freeze({
-    apiToken:    process.env.API_TOKEN || 'pat_a4392c86309361a50eca82c1ea872127636b84070f6c45295459ffb83de31360',
-    appId:       process.env.APP_ID || '33uslPtthXBEkQOdfKfoY',
-    accountId:   process.env.ACCOUNT_ID || '',
-    accountType: 'demo',
+    apiToken:    strEnv('API_TOKEN', ''),
+    appId:       strEnv('APP_ID', ''),
+    accountId:   strEnv('ACCOUNT_ID', strEnv('DERIV_ACCOUNT_ID', '')),
+    accountType: strEnv('ACCOUNT_TYPE', 'demo').toLowerCase(),
     legacyWsUrl: 'wss://ws.derivws.com/websockets/v3',
     restBaseUrl: 'https://api.derivws.com',
-    currency:    'USD',
+    currency:    strEnv('CURRENCY', 'USD'),
 
     
     // ── multi-asset selection / suspension ─────────────────────────────
-    randomAssetSelection:   boolEnv('RANDOM_ASSET_SELECTION', true), // pick a random asset each trade
+    randomAssetSelection:   boolEnv('RANDOM_ASSET_SELECTION', false), // pick a random asset each trade
     suspendAssetAfterTrade: boolEnv('SUSPEND_AFTER_TRADE', true),   // suspend traded asset after each trade
-    singleActiveAsset:      boolEnv('ONE_ASSET_AT_A_TIME', true),     // subscribe + trade ONE random asset per cycle
+    singleActiveAsset:      boolEnv('ONE_ASSET_AT_A_TIME', false),     // subscribe + trade ONE random asset per cycle
 
     // ── SESSION takeProfit cooldown (random) ───────────────────────────
     takeProfitCooldownMinMs: intEnv('TAKE_PROFIT_COOLDOWN_MS_MIN', 15 * 60 * 1000), // 15 min
     takeProfitCooldownMaxMs: intEnv('TAKE_PROFIT_COOLDOWN_MS_MAX', 60 * 60 * 1000), // 60 min
 
     // ── persistence (survive restart / network drop) ───────────────────
-    stateFile: strEnv('STATE_FILE', 'x2Differ_state_01.json'),
+    stateFile: strEnv('STATE_FILE', 'x2Differ_state_001.json'),
 
     telegram: {
-        enabled:  true,
-        botToken: '8306232249:AAGMwjFngs68Lcq27oGmqewQgthXTJJRxP0',
-        chatId:   '752497117',
+        enabled:  boolEnv('TELEGRAM_ENABLED', true),
+        botToken: strEnv('TELEGRAM_BOT_TOKEN', ''),
+        chatId:   strEnv('TELEGRAM_CHAT_ID', ''),
     },
     reconnect: {
         initialDelayMs: intEnv('RECONNECT_INITIAL_MS', 1000),
@@ -145,139 +145,6 @@ class TelegramNotifier extends EventEmitter {
     }
 }
 const telegram = new TelegramNotifier(CONFIG.telegram);
-
-// ── REST + WS CLIENT (new PAT connection — same as x2DifferV2.js)
-class RestClient {
-    constructor(base, appId, token) { this.baseUrl = base; this.appId = appId; this.token = token; }
-    static isPat(t) { return typeof t === 'string' && /^pat_[a-z0-9_\-]{16,}$/i.test(t.trim()); }
-    request(method, route, body = null) {
-        return new Promise((res, rej) => {
-            let u; try { u = new URL(route, this.baseUrl); } catch (e) { return rej(new Error(`Bad URL ${route}`)); }
-            const payload = body == null ? null : JSON.stringify(body);
-            const req = https.request({ method, hostname: u.hostname, port: u.port || 443, path: u.pathname + u.search, headers: { Authorization: `Bearer ${this.token}`, 'Deriv-App-ID': this.appId, Accept: 'application/json', ...(payload ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) } : {}) }, timeout: 15000 }, r => {
-                let d = ''; r.on('data', c => d += c); r.on('end', () => { try { d = JSON.parse(d); } catch (_) {} res({ status: r.statusCode, body: d }); });
-            });
-            req.on('timeout', () => req.destroy(new Error('REST timeout'))); req.on('error', rej);
-            if (payload) req.write(payload); req.end();
-        });
-    }
-    get(r) { return this.request('GET', r); }
-    post(r, b) { return this.request('POST', r, b); }
-}
-
-class DerivClient extends EventEmitter {
-    constructor(cfg) {
-        super(); this.cfg = cfg; this.ws = null; this.connected = false; this.authorized = false;
-        this._stopped = false; this._suspended = false; this._reconnecting = false; this._reconnectAttempt = 0; this._reqId = 0;
-        this._pending = new Map(); this._subs = new Map(); this.balance = null; this.currency = cfg.currency;
-        this.accountInfo = null; this.symbols = new Map();
-        this._isPat = RestClient.isPat(cfg.apiToken);
-        this._rest = this._isPat ? new RestClient(cfg.restBaseUrl, cfg.appId, cfg.apiToken) : null;
-        this._targetAccountId = cfg.accountId || '';
-    }
-    _nextId() { return ++this._reqId; }
-    _legacyUrl() { const s = this.cfg.legacyWsUrl.includes('?') ? '&' : '?'; return `${this.cfg.legacyWsUrl}${s}app_id=${encodeURIComponent(this.cfg.appId)}`; }
-    _redact(u) { return String(u).replace(/([?&])(otp|app_id|token|auth)=[^&]+/gi, '$1$2=***'); }
-    connect() {
-        if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return;
-        if (!this.cfg.apiToken) { logger.error('API token empty'); this._stopped = true; return; }
-        if (this._isPat) this._connectPat().catch(e => { logger.error('PAT connect:', e.message); this._schedReconnect(); });
-        else this._openWs(this._legacyUrl());
-    }
-    async _connectPat() {
-        const aid = await this._resolvePatAccountId();
-        const route = `/trading/v1/options/accounts/${encodeURIComponent(aid)}/otp`;
-        const res = await this._rest.post(route);
-        if (res.status !== 200) { const m = res.body?.errors?.[0]?.message || res.body?.message || JSON.stringify(res.body); throw new Error(`OTP ${res.status}: ${m}`); }
-        const wsUrl = res.body?.data?.url; if (!wsUrl) throw new Error(`OTP missing url: ${JSON.stringify(res.body)}`);
-        this._targetAccountId = aid;
-        this.accountInfo = { loginid: aid, accountType: this.cfg.accountType, isVirtual: this.cfg.accountType !== 'real', currency: this.cfg.currency };
-        logger.info(`connecting → ${this._redact(wsUrl)}`); this._openWs(wsUrl);
-    }
-    async _resolvePatAccountId() {
-        if (this._targetAccountId) return this._targetAccountId;
-        for (const [m, r] of [['GET', '/trading/v1/options/accounts'], ['POST', '/trading/v1/options/accounts/list']]) {
-            try {
-                const res = m === 'GET' ? await this._rest.get(r) : await this._rest.post(r, null);
-                if (res.status >= 200 && res.status < 300) {
-                    const arr = Array.isArray(res.body?.data) ? res.body.data : Array.isArray(res.body?.accounts) ? res.body.accounts : [];
-                    if (arr.length) { const d = arr.find(a => String(a.account_type || '').toLowerCase() === this.cfg.accountType) || arr[0]; const id = d.account_id || d.loginid || d.id; if (id) { this.accountInfo = { loginid: id, accountType: d.account_type || this.cfg.accountType, isVirtual: String(d.account_type || this.cfg.accountType).toLowerCase() !== 'real', currency: d.currency || this.cfg.currency, balance: d.balance != null ? Number(d.balance) : null }; return id; } }
-                }
-            } catch (e) { logger.debug(`PAT discovery ${m} ${r}:`, e.message); }
-        }
-        throw new Error('DERIV_ACCOUNT_ID required for PAT');
-    }
-    _openWs(url) {
-        try { this.ws = new WebSocket(url, { handshakeTimeout: 15000, headers: { 'User-Agent': 'DigitPredictorV2/2.0' } }); } catch (e) { logger.error('WS construct:', e.message); this._schedReconnect(); return; }
-        this.ws.on('open', () => this._onOpen()); this.ws.on('message', d => this._onMsg(d)); this.ws.on('error', e => this._onErr(e)); this.ws.on('close', (c, r) => this._onClose(c, r));
-        this.ws.on('unexpected-response', (_, res) => { logger.error('WS handshake:', res.statusCode, res.statusMessage); try { res.destroy(); } catch (_) {} this._schedReconnect(); });
-    }
-    _onOpen() { logger.info('WS connected ✔'); this.connected = true; this._reconnecting = false; this._reconnectAttempt = 0; this.emit('open'); if (this._isPat) this._markPatAuth(); else this._authLegacy(); }
-    async _authLegacy() {
-        try {
-            const res = await this._send({ authorize: this.cfg.apiToken }, 20000); const a = res.authorize;
-            this.authorized = true; this.balance = Number(a.balance); this.currency = a.currency || this.cfg.currency;
-            this.accountInfo = { loginid: a.loginid, email: a.email, isVirtual: !!a.is_virtual, accountType: a.account_type, currency: this.currency };
-            logger.info(`authorized ${a.loginid} (${this.accountInfo.isVirtual ? 'DEMO' : 'REAL'}) bal=${this.balance} ${this.currency}`); this.emit('authorized', this.accountInfo);
-        } catch (e) { logger.error('authorize:', e.message); this.authorized = false; this._schedReconnect(); }
-    }
-    async _markPatAuth() {
-        this.authorized = true; if (this.accountInfo?.balance != null) this.balance = Number(this.accountInfo.balance); this.currency = this.accountInfo?.currency || this.cfg.currency;
-        try { const b = await this._send({ balance: 1 }, 10000); if (b.balance) { this.balance = Number(b.balance.balance); this.currency = b.balance.currency || this.currency; } } catch (e) { logger.debug('balance skip:', e.message); }
-        logger.info(`authorized ${this.accountInfo?.loginid || this._targetAccountId} via PAT bal=${this.balance ?? '?'} ${this.currency}`); this.emit('authorized', this.accountInfo || { loginid: this._targetAccountId, isVirtual: this.cfg.accountType !== 'real' });
-    }
-    _onMsg(data) {
-        let msg; try { msg = JSON.parse(data.toString()); } catch { return; }
-        if (msg.error) {
-            const code = msg.error.code || 'Error', text = msg.error.message || code;
-            const benign = new Set(['AlreadySubscribedOrLimit', 'ContractNotFound', 'BetExpired', 'TradingDurationNotAllowed']);
-            (benign.has(code) ? logger.debug : logger.error)(`api: ${code} - ${text} req=${msg.req_id || '?'}`);
-            if (msg.req_id && this._pending.has(msg.req_id)) { const p = this._pending.get(msg.req_id); clearTimeout(p.timer); this._pending.delete(msg.req_id); p.reject(new Error(text)); }
-            if (['AuthorizationRequired', 'InvalidToken', 'InvalidAppID'].includes(code)) try { this.ws?.close(); } catch (_) {}
-            return;
-        }
-        if (msg.req_id && this._pending.has(msg.req_id)) { const p = this._pending.get(msg.req_id); clearTimeout(p.timer); this._pending.delete(msg.req_id); p.resolve(msg); return; }
-        if (msg.subscription?.id && this._subs.has(msg.subscription.id)) { const cb = this._subs.get(msg.subscription.id); try { cb(msg); } catch (e) { logger.error('sub handler:', e.message); } return; }
-        this.emit('message', msg);
-    }
-    _onErr(e) { logger.error('WS error:', e.message, e.code || ''); this.emit('error', e); }
-    _onClose(code, reason) {
-        const rs = (() => { try { return reason?.toString() || ''; } catch { return ''; } })();
-        logger.warn(`WS closed code=${code} ${rs || ''}`); const was = this.authorized; this.connected = false; this.authorized = false;
-        for (const [, p] of this._pending) { clearTimeout(p.timer); p.reject(new Error('Connection closed')); } this._pending.clear(); this._subs.clear();
-        this.emit('close', code, reason, was); if (!this._stopped && !this._suspended) this._schedReconnect();
-    }
-    _schedReconnect() {
-        if (this._stopped || this._suspended || this._reconnecting) return; this._reconnecting = true; this._reconnectAttempt++;
-        const base = Math.min(this.cfg.reconnect.initialDelayMs * Math.pow(this.cfg.reconnect.backoffFactor, this._reconnectAttempt - 1), this.cfg.reconnect.maxDelayMs);
-        const delay = base + Math.random() * this.cfg.reconnect.jitterMs;
-        logger.info(`reconnect #${this._reconnectAttempt} in ${(delay / 1000).toFixed(1)}s`);
-        setTimeout(() => { this._reconnecting = false; this.connect(); }, delay);
-    }
-    _send(payload, timeoutMs = 30000) {
-        return new Promise((res, rej) => {
-            if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return rej(new Error('Not connected'));
-            const id = this._nextId();
-            const timer = setTimeout(() => { if (this._pending.has(id)) { this._pending.delete(id); rej(new Error('Request timeout')); } }, timeoutMs);
-            this._pending.set(id, { resolve: res, reject: rej, timer });
-            try { this.ws.send(JSON.stringify({ ...payload, req_id: id })); } catch (e) { clearTimeout(timer); this._pending.delete(id); rej(e); }
-        });
-    }
-    subscribe(payload, cb, timeoutMs = 30000) {
-        return new Promise((res, rej) => {
-            if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return rej(new Error('Not connected'));
-            const id = this._nextId();
-            const timer = setTimeout(() => { if (this._pending.has(id)) { this._pending.delete(id); rej(new Error('Subscribe timeout')); } }, timeoutMs);
-            this._pending.set(id, { resolve: msg => { const sid = msg.subscription?.id; if (!sid) return rej(new Error('No sub id')); this._subs.set(sid, cb); res(sid); }, reject: rej, timer });
-            try { this.ws.send(JSON.stringify({ ...payload, subscribe: 1, req_id: id })); } catch (e) { clearTimeout(timer); this._pending.delete(id); rej(e); }
-        });
-    }
-    forget(subId) { if (!subId) return Promise.resolve(); this._subs.delete(subId); if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return Promise.resolve(); return this._send({ forget: subId }, 8000).catch(e => logger.debug('forget:', e.message)); }
-    suspend() { this._suspended = true; try { this.ws?.close(); } catch (_) {} }
-    resume() { this._suspended = false; this.connect(); }
-    stop() { this._stopped = true; try { this.ws?.close(); } catch (_) {} }
-    symbolField() { return this._isPat ? 'underlying_symbol' : 'symbol'; }
-}
 
 // ── REPEAT-REGIME ANALYZER ─────────────────────────────────────────────
 // Barrier digit = current last tick digit. A DIGITDIFF contract wins when
@@ -663,15 +530,17 @@ class EnhancedDigitDifferTradingBot {
         this.assets = config.assets || [
             // 'R_10','R_25','R_50','R_75', 'R_100', 
             // 'RDBULL', 'RDBEAR', 
-            'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR', 'JD10', 'JD25', 'JD50', 'JD75', 'JD100'
+            // 'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR', 'JD10', 'JD25', 'JD50', 'JD75', 'JD100'
             // 'JD10', 'JD25', 'JD50', 'JD75', 'JD100',
-            // 'R_10','R_25','R_50','R_75', 'R_100', 'RDBULL', 'RDBEAR',
+            'R_10','R_25','R_50','R_75', 'R_100', 'RDBULL', 'RDBEAR',
             // 'R_75',
         ];
 
         this.config = {
             initialStake: config.initialStake || 10.5,
             multiplier: config.multiplier || 11.3,
+            initialStake2: config.initialStake2 || 5.07,
+            initialStake3: config.initialStake3 || 10.15,
             maxConsecutiveLosses: config.maxConsecutiveLosses || 5,
             stopLoss: config.stopLoss || 50,
             takeProfit: config.takeProfit != null ? config.takeProfit : 25,
@@ -742,7 +611,9 @@ class EnhancedDigitDifferTradingBot {
         this.suspendedAssets = new Set();
         this.settledContracts = new Set();
         this.rStats = {};
-        this.sys = 1;
+        this.sys = 0;
+        this.sys1 = 0;
+        this.sys2 = 0;
 
         // ── session / takeProfit state (V2) ─────────────────────────────
         this._sessionNum = 1;
@@ -760,6 +631,9 @@ class EnhancedDigitDifferTradingBot {
         this.pendingContractId = null;
         this.pendingContractAsset = null;
         this.pendingContractDigit = null;
+        this.pendingBuy = null; // durable intent: a lost buy response must not trigger another order
+        this._contractSubscriptionIds = new Map();
+        this._contractPollTimer = null;
 
         this.assets.forEach(asset => {
             this.tickHistories[asset] = [];
@@ -771,7 +645,7 @@ class EnhancedDigitDifferTradingBot {
             this.lastPredictions[asset] = [];
         });
 
-        this.client = new DerivClient(CONFIG);
+        this.client = new DerivClient(CONFIG, logger);
         this.client.on('open', () => {
             console.log('Connected to Deriv API');
             this.connected = true;
@@ -783,6 +657,9 @@ class EnhancedDigitDifferTradingBot {
             console.log('Disconnected from Deriv API');
             this.connected = false;
             this.wsReady = false;
+            clearTimeout(this._contractPollTimer);
+            this._contractPollTimer = null;
+            this._contractSubscriptionIds.clear();
         });
         this.client.on('error', (error) => {
             console.error('WebSocket error:', error.message);
@@ -836,8 +713,14 @@ class EnhancedDigitDifferTradingBot {
 
     async handleAuthorized() {
         console.log('Authentication successful');
+        this.currency = this.client.currency || CONFIG.currency;
 
-        this.tradeInProgress = false;
+        // Keep the order gate locked until a previous purchase is reconciled.
+        this.tradeInProgress = !!(this.pendingContractId || this.pendingBuy);
+        if (this.pendingBuy) {
+            this.Pause = true;
+            logger.warn('Unconfirmed buy in state file. Check Deriv account history before manually resuming; no new orders will be sent.');
+        }
         this.predictionInProgress = false;
         this.assets.forEach(asset => {
             this.tickHistories[asset] = [];
@@ -1108,96 +991,108 @@ class EnhancedDigitDifferTradingBot {
             `[${asset}] 🔎 regime=${regime.phase}${entryRequired ? ' (quiet-entry)' : ''} P(repeat)=${regime.pRepeat} ` +
             `→ win%=${regime.winProbPct} (≥${this.config.winProbabilityThreshold}) | barrier=${lastDigit}`
         );
-        this.xDigit = lastDigit;
-        this.placeTrade(asset, lastDigit, regime.prevPhase, regime.phase, regime.winProbPct);
+
+        //Filter trades with prePhase quiet, to avoid entering trades with older quiet phase. Previous phase must be neutral or cooling to enter a trade in quiet phase.
+        const repeateThreshold = this.config.repeateThreshold || 0.05;
+        if (regime.prevPhase !== 'quiet' && regime.pRepeat <= repeateThreshold) {
+            this.xDigit = lastDigit;
+            this.placeTrade(asset, lastDigit, regime.prevPhase, regime.phase, regime.winProbPct);
+        }
     }
 
     async placeTrade(asset, predictedDigit, prevPhase, curPhase, winProbPct) {
-        if (this.tradeInProgress || this._tpAwaiting) {
+        if (this.tradeInProgress || this._tpAwaiting || this.Pause || this._stopped ||
+            this.pendingContractId || this.pendingBuy || !this.client.authorized || !this.client.connected) return;
+
+        this.tradeInProgress = true;
+        const stake = this.currentStake;
+        this.pendingBuy = { asset, digit: predictedDigit, stake, requestedAt: new Date().toISOString() };
+        if (!this._save('buy-submitting')) {
+            this.pendingBuy = null;
+            this.tradeInProgress = false;
+            this.Pause = true;
+            logger.error('Trading paused: cannot persist buy intent. Check STATE_FILE path/permissions before restarting.');
             return;
         }
 
-        this.tradeInProgress = true;
-
-        console.log(`[${asset}] 🚀 Placing trade for digit: ${predictedDigit} | Stake: ${this.currentStake.toFixed(2)} | prev regime: ${prevPhase ?? '-'}/${curPhase ?? '-'} (win%: ${winProbPct?.toFixed(2) ?? '-'})`);
+        console.log(`[${asset}] 🚀 Placing trade for digit: ${predictedDigit} | Stake: ${stake.toFixed(2)} | prev regime: ${prevPhase ?? '-'}/${curPhase ?? '-'} (win%: ${winProbPct?.toFixed(2) ?? '-'})`);
         try {
-            const symbolField = this.client.symbolField();
-            const proposalRes = await this.client._send({
-                proposal: 1,
-                amount: this.currentStake,
-                basis: 'stake',
-                contract_type: 'DIGITDIFF',
-                currency: this.currency,
-                duration: 1,
-                duration_unit: 't',
-                barrier: predictedDigit.toString(),
-                [symbolField]: asset
-            }, 15000);
+            const buy = await this.client.buyDigitDiffer({ asset, digit: predictedDigit, stake });
 
-            const proposal = proposalRes && proposalRes.proposal;
-            if (!proposal || !proposal.id) {
-                throw new Error('No proposal id returned');
-            }
-
-            const buyRes = await this.client._send({
-                buy: proposal.id,
-                price: Number(proposal.ask_price || this.currentStake)
-            }, 15000);
-
-            const buy = buyRes && buyRes.buy;
-            if (!buy || !buy.contract_id) {
-                throw new Error('Buy returned no contract_id');
-            }
-
-            console.log('Trade placed successfully');
+            console.log(`Trade placed successfully | contract=${buy.contract_id}`);
             this.currentTradeId = buy.contract_id;
             this.currentAsset = asset;
-            // Anchor the no-repeat rule to the trade that actually filled —
-            // a failed proposal/buy above must not count as a trade.
+            // Only a confirmed purchase advances the asset/digit anchors.
             this.lastTradedAsset = asset;
             this.lastTradedDigit = predictedDigit;
-            this.lastOpenStake = Number(proposal.ask_price || this.currentStake);
+            this.lastOpenStake = Number(buy.buy_price ?? stake);
             this.lastOpenDigits = (this.tickHistories[asset] || []).slice(-10);
-            // Remember the in-flight contract so a restart / network drop can
-            // reconcile its result instead of losing it (persisted below).
-            this.pendingContractId = this.currentTradeId;
+            this.pendingContractId = buy.contract_id;
             this.pendingContractAsset = asset;
             this.pendingContractDigit = predictedDigit;
+            this.pendingBuy = null;
             this._save('trade-open');
-            this.sendTradeOpenNotification(asset, predictedDigit, this.lastOpenStake);
-            await this.subscribeToOpenContract(this.currentTradeId);
-        } catch (e) {
-            console.error('Error placing trade:', e.message);
-            this.tradeInProgress = false;
+            // Notification failures must never prevent monitoring a filled trade.
+            try { this.sendTradeOpenNotification(asset, predictedDigit, this.lastOpenStake); }
+            catch (error) { logger.warn('trade notification:', error.message); }
+            await this.subscribeToOpenContract(buy.contract_id);
+        } catch (error) {
+            console.error(`Error placing trade${error.code ? ` [${error.code}]` : ''}:`, error.message);
+            if (error.buyOutcomeUnknown || this.pendingContractId) {
+                // A timeout/disconnect is NOT proof that Deriv rejected the buy.
+                // Persist the intent and pause, including across restarts.
+                this.Pause = true;
+                this._save('buy-unconfirmed');
+                logger.error('Trading paused: purchase outcome unconfirmed. Check Deriv account history before resuming; the buy will NOT be retried.');
+            } else {
+                this.pendingBuy = null;
+                this.tradeInProgress = false;
+                this._save('buy-rejected');
+            }
         }
     }
 
     async subscribeToOpenContract(contractId) {
         try {
-            await this.client.subscribe({ proposal_open_contract: 1, contract_id: contractId }, (msg) => {
-                const contract = msg.proposal_open_contract;
-                if (contract) this.handleContractUpdate(contract);
+            const subscriptionId = await this.client.subscribe({ proposal_open_contract: 1, contract_id: contractId }, (msg) => {
+                if (msg.proposal_open_contract) this.handleContractUpdate(msg.proposal_open_contract);
             }, 15000);
-            // The first response resolves the subscribe request and never reaches
-            // the callback above. A 1-tick contract can already be sold in it, so
-            // poll once after a short delay to catch that settlement (no-op if the
-            // live subscription already reported it).
-            setTimeout(() => {
-                this.client._send({ proposal_open_contract: 1, contract_id: contractId }, 15000)
-                    .then(res => {
-                        const contract = res && res.proposal_open_contract;
-                        if (contract) this.handleContractUpdate(contract);
-                    })
-                    .catch(() => {});
-            }, 2000);
-        } catch (e) {
-            console.warn(`Failed to subscribe to open contract #${contractId}:`, e.message);
+            // subscribe() now delivers the initial frame, which can already be sold.
+            if (this.settledContracts.has(contractId)) {
+                await this.client.forget(subscriptionId);
+                return;
+            }
+            this._contractSubscriptionIds.set(contractId, subscriptionId);
+        } catch (error) {
+            if (this.settledContracts.has(contractId)) return;
+            console.warn(`Failed to subscribe to open contract #${contractId}; falling back to polling:`, error.message);
         }
+        this._scheduleContractPoll(contractId);
+    }
+
+    _scheduleContractPoll(contractId) {
+        if (this._stopped || !this.client.authorized || this.pendingContractId !== contractId || this.settledContracts.has(contractId)) return;
+        clearTimeout(this._contractPollTimer);
+        this._contractPollTimer = setTimeout(async () => {
+            this._contractPollTimer = null;
+            try {
+                const response = await this.client._send({ proposal_open_contract: 1, contract_id: contractId }, 15000);
+                if (response.proposal_open_contract) this.handleContractUpdate(response.proposal_open_contract);
+            } catch (error) { logger.warn(`Contract #${contractId} poll failed:`, error.message); }
+            // Retry read-only monitoring, never the buy, until sold/disconnected.
+            this._scheduleContractPoll(contractId);
+        }, 2000);
     }
 
     handleContractUpdate(contract) {
         const contractId = contract.contract_id;
+        if (this.pendingContractId && String(contractId) !== String(this.pendingContractId)) return;
         if (contract.is_sold && !this.settledContracts.has(contractId)) {
+            clearTimeout(this._contractPollTimer);
+            this._contractPollTimer = null;
+            const subscriptionId = this._contractSubscriptionIds.get(contractId);
+            this._contractSubscriptionIds.delete(contractId);
+            if (subscriptionId) this.client.forget(subscriptionId);
             this.settledContracts.add(contractId);
             if (this.settledContracts.size > 5000) {
                 const first = this.settledContracts.values().next().value;
@@ -1219,7 +1114,28 @@ class EnhancedDigitDifferTradingBot {
             this.totalWins++;
             this.isWinTrade = true;
             this.consecutiveLosses = 0;
-            this.currentStake = this.config.initialStake;
+            if (this.sys > 0) {
+                if (this.sys === 1) {
+                    this.sys1++;
+                    this.currentStake = this.config.initialStake2;
+                    if(this.sys1 >= 35) {
+                        this.sys = 0;
+                        this.sys1 = 0;
+                        this.currentStake = this.config.initialStake;
+                    }
+                } else if (this.sys === 2) {
+                    this.sys2++;
+                    this.currentStake = this.config.initialStake3;
+                    if(this.sys2 >= 50) {
+                        this.sys = 0;
+                        this.sys2 = 0;
+                        this.currentStake = this.config.initialStake;
+                    }
+                }
+            } else {
+                this.currentStake = this.config.initialStake;
+            }
+            // this.currentStake = this.config.initialStake;
         } else {
             this.totalLosses++;
             this.consecutiveLosses++;
@@ -1233,13 +1149,20 @@ class EnhancedDigitDifferTradingBot {
             // Suspend the asset after a loss
             // this.suspendAsset(asset);
 
-            if (this.sys === 1) {
-                this.sys = 2;
+            if (this.consecutiveLosses === 2) {
+                if (this.sys === 0) {
+                    this.sys = 1;
+                    this.currentStake = this.config.initialStake2;
+                } else if (this.sys === 1) {
+                    this.sys = 2;
+                    this.sys1 = 0;
+                    this.currentStake = this.config.initialStake3;
+                }
             } else {
-                this.sys = 1;
+                this.currentStake = Math.ceil(this.currentStake * this.config.multiplier * 100) / 100;
             }
 
-            this.currentStake = Math.ceil(this.currentStake * this.config.multiplier * 100) / 100;
+            // this.currentStake = Math.ceil(this.currentStake * this.config.multiplier * 100) / 100;
         }
 
         this.totalProfitLoss += profit;
@@ -1302,7 +1225,7 @@ class EnhancedDigitDifferTradingBot {
     }
 
     async _startNextTradeCycle() {
-        if (this._stopped || this.endOfDay || this._tpAwaiting) return;
+        if (this._stopped || this.endOfDay || this._tpAwaiting || this.pendingContractId || this.pendingBuy) return;
 
         this.tradeInProgress = true;
         await this.unsubscribeAllTicks();
@@ -1395,23 +1318,27 @@ class EnhancedDigitDifferTradingBot {
     async _reconcilePendingContract() {
         const cid = this.pendingContractId;
         if (!cid || this.settledContracts.has(cid)) return;
+        this.tradeInProgress = true;
+        this.currentTradeId = cid;
+        this.currentAsset = this.pendingContractAsset || this.currentAsset;
+        if (this.pendingContractDigit != null) this.xDigit = this.pendingContractDigit;
         logger.info(`reconcile pending contract #${cid} after (re)connect`);
         try {
             const res = await this.client._send({ proposal_open_contract: 1, contract_id: cid }, 15000);
             const c = res && res.proposal_open_contract;
             if (c && c.is_sold) {
-                this.currentAsset = this.pendingContractAsset || this.currentAsset;
-                if (this.pendingContractDigit != null) this.xDigit = this.pendingContractDigit;
                 this.handleContractUpdate(c);
                 return;
             }
             if (c) {
-                this.currentAsset = this.pendingContractAsset || this.currentAsset;
                 await this.subscribeToOpenContract(cid);
+                return;
             }
-            // Unconfirmed — keep pendingContractId so a later reconnect retries.
+            // Unconfirmed — keep the order gate locked and retry read-only monitoring.
+            this._scheduleContractPoll(cid);
         } catch (e) {
             logger.warn(`reconcile #${cid} failed:`, e.message);
+            this._scheduleContractPoll(cid);
         }
     }
 
@@ -1436,6 +1363,7 @@ class EnhancedDigitDifferTradingBot {
                 sessionStartBal: this._sessionStartBal, sessionPL: this._sessionPL,
                 sessionTrades: this._sessionTrades,
                 tpAwaiting: this._tpAwaiting, tpPauseUntil: this._tpPauseUntil,
+                pendingBuy: this.pendingBuy,
                 pendingContractId: this.pendingContractId,
                 pendingContractAsset: this.pendingContractAsset,
                 pendingContractDigit: this.pendingContractDigit,
@@ -1443,7 +1371,8 @@ class EnhancedDigitDifferTradingBot {
                 lastTradedDigit: this.lastTradedDigit,
             }, null, 2));
             fs.renameSync(tmp, f);
-        } catch (e) { logger.warn('save state:', e.message); }
+            return true;
+        } catch (e) { logger.warn('save state:', e.message); return false; }
     }
 
     _loadState() {
@@ -1474,6 +1403,7 @@ class EnhancedDigitDifferTradingBot {
             this._sessionTrades = Number(d.sessionTrades || 0);
             this._tpAwaiting = !!d.tpAwaiting;
             this._tpPauseUntil = Number(d.tpPauseUntil || 0);
+            this.pendingBuy = d.pendingBuy || null;
             this.pendingContractId = d.pendingContractId || null;
             this.pendingContractAsset = d.pendingContractAsset || null;
             this.pendingContractDigit = d.pendingContractDigit != null ? Number(d.pendingContractDigit) : null;
@@ -1500,6 +1430,7 @@ class EnhancedDigitDifferTradingBot {
         if (this._hourlyBoot) clearTimeout(this._hourlyBoot);
         if (this._hourlyT) clearInterval(this._hourlyT);
         if (this._eodBoot) clearTimeout(this._eodBoot);
+        clearTimeout(this._contractPollTimer);
         this._save('shutdown');
         this.client.stop();
         setTimeout(() => process.exit(0), 1500);
@@ -1829,36 +1760,50 @@ class EnhancedDigitDifferTradingBot {
     }
 }
 
-// Offline validation: `SELFTEST=1 node x2Differn.js` (no network/login).
-if (boolEnv('SELFTEST', false) || process.argv.includes('--selftest')) {
-    runRepeatRegimeSelfTest();
-    process.exit(0);
+// Import-safe entrypoint: tests/tools can inspect the bot without trading.
+function main() {
+    if (boolEnv('SELFTEST', false) || process.argv.includes('--selftest')) {
+        runRepeatRegimeSelfTest();
+        return;
+    }
+    if (!CONFIG.apiToken || !CONFIG.appId) throw new Error('Set API_TOKEN and APP_ID in .env before starting the bot. See .env.example.');
+    if (!['demo', 'real'].includes(CONFIG.accountType)) throw new Error('ACCOUNT_TYPE must be demo or real.');
+
+    // Trading strategy and staking settings are unchanged.
+    const bot = new EnhancedDigitDifferTradingBot({
+        initialStake: 0.61,
+        initialStake2: 3.07,
+        initialStake3: 10.15,
+        multiplier: 11.3,
+        maxConsecutiveLosses: 6,
+        stopLoss:160,
+        takeProfit: 0,              // per-session profit target (0 = off)
+        requiredHistoryLength: 1000,
+        winProbabilityThreshold: 88,  // 88% minimum win probability to fire a trade
+        minWaitTime: 1000,  // 15 min 15 * 60 * 1000,
+        maxWaitTime: 1000,  // 30 min 60 * 60 * 1000,
+        minOccurrencesThreshold: 1,
+        assets: [
+            // 'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR',
+            // '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V',
+            // 'JD10', 'JD25', 'JD50', 'JD75', 'JD100'
+            'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR'
+            // 'R_50'
+        ],
+        // singleActiveAsset: ONE random asset subscribed + traded per trade, then
+        // forgotten and re-picked on the next cycle (default true; hard-pinned below).
+        // suspendAssetAfterTrade / cooldown default from CONFIG
+        // (env SUSPEND_AFTER_TRADE, TAKE_PROFIT_COOLDOWN_MS_MIN/MAX).
+        singleActiveAsset: false,  // false = all assets subscribed, trade any that fires
+    });
+
+    bot.start();
+    return bot;
 }
 
-// Usage — trading config preserved from the original x2Differ.js
-const bot = new EnhancedDigitDifferTradingBot({
-    initialStake: 1.15,
-    multiplier: 11.3,
-    maxConsecutiveLosses: 3,
-    stopLoss:129,
-    takeProfit: 0,              // per-session profit target (0 = off)
-    requiredHistoryLength: 1000,
-    winProbabilityThreshold: 88,  // 88% minimum win probability to fire a trade
-    minWaitTime: 1000,  // 15 min 15 * 60 * 1000,
-    maxWaitTime: 1000,  // 30 min 60 * 60 * 1000,
-    minOccurrencesThreshold: 1,
-    assets: [
-        // 'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR', 
-        // '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V', 
-        // 'JD10', 'JD25', 'JD50', 'JD75', 'JD100'
-        'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR'
-        // 'R_50'
-    ],
-    // singleActiveAsset: ONE random asset subscribed + traded per trade, then
-    // forgotten and re-picked on the next cycle (default true; hard-pinned below).
-    // suspendAssetAfterTrade / cooldown default from CONFIG
-    // (env SUSPEND_AFTER_TRADE, TAKE_PROFIT_COOLDOWN_MS_MIN/MAX).
-    singleActiveAsset: true,  // false = all assets subscribed, trade any that fires
-});
+if (require.main === module) {
+    try { main(); }
+    catch (error) { logger.error(error.message); process.exitCode = 1; }
+}
 
-bot.start();
+module.exports = { EnhancedDigitDifferTradingBot, RepeatRegimeAnalyzer, runRepeatRegimeSelfTest, main };
