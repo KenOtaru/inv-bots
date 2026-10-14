@@ -994,10 +994,10 @@ class EnhancedDigitDifferTradingBot {
 
         //Filter trades with prePhase quiet, to avoid entering trades with older quiet phase. Previous phase must be neutral or cooling to enter a trade in quiet phase.
         const repeateThreshold = this.config.repeateThreshold || 0.05;
-        if (regime.prevPhase !== 'quiet' && regime.pRepeat <= repeateThreshold) {
+        // if (regime.prevPhase !== 'quiet' && regime.pRepeat <= repeateThreshold) {
             this.xDigit = lastDigit;
             this.placeTrade(asset, lastDigit, regime.prevPhase, regime.phase, regime.winProbPct);
-        }
+        // }
     }
 
     async placeTrade(asset, predictedDigit, prevPhase, curPhase, winProbPct) {
