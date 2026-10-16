@@ -2631,7 +2631,7 @@ class IndexBot {
 
         const conn = this._connectionFor(mode);
         if (!this._isConnReady(conn)) {
-            LOGGER.error(`[${symbol}] ${mode} connection not authorized/open �?" waiting for connection to come online`);
+            LOGGER.error(`[${symbol}] ${mode} connection not authorized/open  ?" waiting for connection to come online`);
             assetState.canTrade = true;
             return null;
         }
