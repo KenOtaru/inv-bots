@@ -156,7 +156,7 @@ const CONFIG = Object.freeze({
   //   still runs, but breachCount is dominated by synthetic spikes and the
   //   EV figures are not meaningful. That is a modelling caveat, not a crash.
 
-  //   assets: envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH500,CRASH600,CRASH900,CRASH1000')
+  //   assets: envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100,1HZ10V,1HZ25V,1HZ50V,1HZ75V,1HZ100V,BOOM50,BOOM500,BOOM600,BOOM900,BOOM1000,CRASH50,CRASH500,CRASH600,CRASH900,CRASH1000')
   //     .split(',').map(s => s.trim()).filter(Boolean),
   assets: envStr('ASSETS', 'R_10,R_25,R_50,R_75,R_100')
     .split(',').map(s => s.trim()).filter(Boolean),
