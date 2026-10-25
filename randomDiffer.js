@@ -38,8 +38,8 @@ const CONFIG = Object.freeze({
     singleActiveAsset:      boolEnv('ONE_ASSET_AT_A_TIME', true),     // subscribe + trade ONE random asset per cycle
 
     // ── SESSION takeProfit cooldown (random) ───────────────────────────
-    takeProfitCooldownMinMs: intEnv('TAKE_PROFIT_COOLDOWN_MS_MIN', 15 * 60 * 1000), // 15 min
-    takeProfitCooldownMaxMs: intEnv('TAKE_PROFIT_COOLDOWN_MS_MAX', 60 * 60 * 1000), // 60 min
+    takeProfitCooldownMinMs: intEnv('TAKE_PROFIT_COOLDOWN_MS_MIN', 5 * 60 * 1000), // 15 min
+    takeProfitCooldownMaxMs: intEnv('TAKE_PROFIT_COOLDOWN_MS_MAX', 30 * 60 * 1000), // 60 min
 
     // ── persistence (survive restart / network drop) ───────────────────
     stateFile: strEnv('STATE_FILE', 'randomDiffer2_state_01.json'),
@@ -1421,15 +1421,15 @@ class EnhancedDigitDifferTradingBot {
 
 // Usage — trading config preserved from the original randomDiffer.js
 const bot = new EnhancedDigitDifferTradingBot({
-    initialStake: 1.25,
+    initialStake: 5.25,
     multiplier: 11.3,
     maxConsecutiveLosses: 3,
     stopLoss:129,
-    takeProfit: 0,              // per-session profit target (0 = off)
+    takeProfit: 1,              // per-session profit target (0 = off)
     requiredHistoryLength: 100,
     winProbabilityThreshold: 100,
-    minWaitTime: 1 * 60 * 1000,  // 15 min
-    maxWaitTime: 11 * 60 * 1000,  // 30 min
+    minWaitTime: 1000, //1 * 60 * 1000,  // 15 min
+    maxWaitTime: 16000, //11 * 60 * 1000,  // 30 min
     minOccurrencesThreshold: 1,
     assets: [
         // 'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR', 
