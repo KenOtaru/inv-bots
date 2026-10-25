@@ -46,7 +46,7 @@ const CONFIG = Object.freeze({
 
     telegram: {
         enabled:  true,
-        botToken: '8306232249:AAGMwjFngs68Lcq27oGmqewQgthXTJJRxP0',
+        botToken: '8591937854:AAESyF-8b17sRK-xdQXzrHfALnKA1sAR3CI',
         chatId:   '752497117',
     },
     reconnect: {
@@ -1428,8 +1428,8 @@ const bot = new EnhancedDigitDifferTradingBot({
     takeProfit: 0,              // per-session profit target (0 = off)
     requiredHistoryLength: 100,
     winProbabilityThreshold: 100,
-    minWaitTime: 15 * 60 * 1000,  // 15 min
-    maxWaitTime: 60 * 60 * 1000,  // 30 min
+    minWaitTime: 1 * 60 * 1000,  // 15 min
+    maxWaitTime: 11 * 60 * 1000,  // 30 min
     minOccurrencesThreshold: 1,
     assets: [
         // 'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR', 
