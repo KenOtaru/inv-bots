@@ -32,7 +32,7 @@ const CONFIG = Object.freeze({
     // bot to the VIRTUAL phase at flat stake.
     // MAIN_TOKEN is mandatory: the VIRTUAL leg owns no token, so without MAIN
     // there is no real trading path and the bot refuses to boot.
-    mainToken:    strEnv('MAIN_TOKEN', 'pat_a4392c86309361a50eca82c1ea872127636b84070f6c45295459ffb83de31360'),
+    mainToken:    strEnv('MAIN_TOKEN', 'pat_e02a554e3b6f9f939c07855fe28c91c68e58ea14f741f45f675f82de96da4289'),
 
     // ── VIRTUAL phase economics ─────────────────────────────────────────
     // stake $0.35 → payout $0.37 on a win (+$0.02). Stored as a ratio so the
