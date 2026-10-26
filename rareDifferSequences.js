@@ -33,9 +33,9 @@ const CONFIG = Object.freeze({
 
     
     // ── multi-asset selection / suspension ─────────────────────────────
-    randomAssetSelection:   boolEnv('RANDOM_ASSET_SELECTION', true), // pick a random asset each trade
+    randomAssetSelection:   boolEnv('RANDOM_ASSET_SELECTION', false), // pick a random asset each trade
     suspendAssetAfterTrade: boolEnv('SUSPEND_AFTER_TRADE', true),   // suspend traded asset after each trade
-    singleActiveAsset:      boolEnv('ONE_ASSET_AT_A_TIME', true),     // subscribe + trade ONE random asset per cycle
+    singleActiveAsset:      boolEnv('ONE_ASSET_AT_A_TIME', false),     // subscribe + trade ONE random asset per cycle
 
     // ── SESSION takeProfit cooldown (random) ───────────────────────────
     takeProfitCooldownMinMs: intEnv('TAKE_PROFIT_COOLDOWN_MS_MIN', 5 * 60 * 1000), // 15 min
@@ -1458,7 +1458,7 @@ const bot = new EnhancedDigitDifferTradingBot({
     // forgotten and re-picked on the next cycle (default true; hard-pinned below).
     // suspendAssetAfterTrade / cooldown default from CONFIG
     // (env SUSPEND_AFTER_TRADE, TAKE_PROFIT_COOLDOWN_MS_MIN/MAX).
-    singleActiveAsset: true,
+    singleActiveAsset: false, // true = one asset per trade cycle (lowest latency), false = all assets subscribed
 });
 
 bot.start();
