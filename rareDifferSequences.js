@@ -23,7 +23,7 @@ function htmlEscape(s) { return String(s).replace(/[&<>]/g, ch => ({ '&': '&amp;
 
 // ── CONFIG — credentials from randomDigitDifferV2.js ───────────────────
 const CONFIG = Object.freeze({
-    apiToken:    process.env.API_TOKEN || 'pat_a4392c86309361a50eca82c1ea872127636b84070f6c45295459ffb83de31360',
+    apiToken:    process.env.API_TOKEN || 'pat_e02a554e3b6f9f939c07855fe28c91c68e58ea14f741f45f675f82de96da4289',
     appId:       process.env.APP_ID || '33uslPtthXBEkQOdfKfoY',
     accountId:   process.env.ACCOUNT_ID || '',
     accountType: 'demo',
@@ -46,7 +46,7 @@ const CONFIG = Object.freeze({
 
     telegram: {
         enabled:  true,
-        botToken: '8306232249:AAGMwjFngs68Lcq27oGmqewQgthXTJJRxP0',
+        botToken: '8591937854:AAESyF-8b17sRK-xdQXzrHfALnKA1sAR3CI',
         chatId:   '752497117',
     },
     reconnect: {
@@ -922,7 +922,7 @@ class EnhancedDigitDifferTradingBot {
 
         if (this.config.singleActiveAsset) {
             this.activeAsset = this._pickActiveAsset();
-            console.log(`🎲 Next trade asset (random pick per trade): ${this.activeAsset}`);
+            console.log(`🎲 Next trade asset (Rare Digit Sequences pick per trade): ${this.activeAsset}`);
         }
 
         await this.initializeSubscriptions();
