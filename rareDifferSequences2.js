@@ -1347,8 +1347,24 @@ class EnhancedDigitDifferTradingBot {
         telegram.send(summaryText, 'high');
     }
 
+
     sendTradeOpenNotification(asset, digit, stake, payout) {
         const last10 = this.lastOpenDigits && this.lastOpenDigits.length ? this.lastOpenDigits.join(', ') : (this.tickHistories[asset] || []).slice(-10).join(', ') || '—';
+        let rareInfo = '';
+        try {
+            const st = this._rareFinderState && this._rareFinderState[asset];
+            const la = st && st.lastAnalysis;
+            if (la && la.chosen) {
+                rareInfo = '\n\n<b>RARE-FINDER ANALYSIS</b>\n' +
+                    'Context: <code>' + htmlEscape(la.chosen.ctx || '') + '</code> (k=' + la.chosen.k + ')\n' +
+                    'Support: ' + la.chosen.support + '\n' +
+                    'P(d|ctx): ' + ((la.chosen.p || 0) * 100).toFixed(2) + '%\n' +
+                    'Surprisal: ' + (la.chosen.surprisal || 0).toFixed(2) + ' bits\n' +
+                    'Reason: ' + htmlEscape(la.chosen.reason || 'conditional_rare');
+            } else if (la && Array.isArray(la.analysisLog) && la.analysisLog.length) {
+                rareInfo = '\n\n<b>RARE-FINDER ANALYSIS (last)</b>\n<code>' + htmlEscape(JSON.stringify(la.analysisLog.slice(-3))) + '</code>';
+            }
+        } catch (_) {}
 
         telegram.send(
             '🟢 <b>Rare Differ Sequences Bot — OPEN</b>\n' +
@@ -1356,10 +1372,10 @@ class EnhancedDigitDifferTradingBot {
             'Predicted digit: <b>' + digit + '</b>\n' +
             'Stake: <b>$' + stake.toFixed(2) + '</b> → payout ' + (payout ? payout.toFixed(2) : '—') + '\n\n' +
             'Last 10 digits: <code>' + last10 + '</code>\n' +
-            '🕒 ' + utcTs(),
-            'low'
+            rareInfo 
         );
     }
+
 
     sendTradeResultNotification(asset, contract, won, profit) {
         const winRate = this.totalTrades ? ((this.totalWins / this.totalTrades) * 100).toFixed(2) : '0.00';
@@ -1382,10 +1398,10 @@ class EnhancedDigitDifferTradingBot {
             'x2: ' + this.consecutiveLosses2 + ' | x3: ' + this.consecutiveLosses3 +
             ' | x4: ' + this.consecutiveLosses4 + ' | x5: ' + this.consecutiveLosses5 + '\n\n' +
             'Current Stake: <b>$' + this.currentStake.toFixed(2) + '</b>\n' +
-            'Waiting for: ' + this.waitTime + ' (' + this.waitSeconds + ' ms)  before next trade...\n' +
-            '🕒 ' + utcTs();
+            'Waiting for: ' + this.waitTime + ' (' + this.waitSeconds + ' ms)  before next trade...\n';
 
         telegram.send(summaryText, won ? 'low' : 'high');
+    
     }
 
     sendErrorNotification(errorMessage) {
@@ -1522,22 +1538,22 @@ class EnhancedDigitDifferTradingBot {
             const best = candidates[0];
             const best2 = candidates[1];
             // respect last traded digit/asset no-repeat if possible
-            // if (this.lastTradedDigit === best.digit && this.lastTradedAsset === asset) {
-            //     if (candidates.length > 1) {
-            //         if (best2.surprisal >= minSurprisal * 0.9) {
-            //             console.log(`[${asset}] [RARE-ANALYSIS] ${JSON.stringify(analysisLog)}`);
-            //             if (st) st.lastAnalysis = { asset, analysisLog, chosen: best2, ts: Date.now() };
-            //             return best2;
-            //         }
-            //     }
-            //     analysisLog.push({k, ctx: ctxKey, skipped: 'repeat_of_last_traded'});
-            //     continue;
-            // }
+            if (this.lastTradedDigit === best.digit && this.lastTradedAsset === asset) {
+                if (candidates.length > 1) {
+                    if (best2.surprisal >= minSurprisal * 0.9) {
+                        console.log(`[${asset}] [RARE-ANALYSIS] ${JSON.stringify(analysisLog)}`);
+                        if (st) st.lastAnalysis = { asset, analysisLog, chosen: best2, ts: Date.now() };
+                        return best2;
+                    }
+                }
+                analysisLog.push({k, ctx: ctxKey, skipped: 'repeat_of_last_traded'});
+                continue;
+            }
             console.log(`[${asset}] [RARE-ANALYSIS] ${JSON.stringify(analysisLog)} (${best.digit})`);
             if (st) st.lastAnalysis = { asset, analysisLog, chosen: best, ts: Date.now() };
             return best;
         }
-        console.log(`[${asset}] [RARE-ANALYSIS] ${JSON.stringify(analysisLog)}`);
+        console.log(`[${asset}] [RARE-ANALYSISn] ${JSON.stringify(analysisLog)}`);
         if (st) st.lastAnalysis = { asset, analysisLog, chosen: null, ts: Date.now() };
         return null;
     }
@@ -1636,12 +1652,12 @@ const bot = new EnhancedDigitDifferTradingBot({
     // (env SUSPEND_AFTER_TRADE, TAKE_PROFIT_COOLDOWN_MS_MIN/MAX).
     singleActiveAsset: false, // true = one asset per trade cycle (lowest latency), false = all assets subscribed
     useDynamicRareFinder: true, // true = use rareFinder logic to pick digit, false = use random digit
-    minSupport: 4,
+    minSupport: 5,
     maxCondProb: 0.07,
     alpha: 0.5,
     minSurprisal: 2.8,
     useOrders: [3], // [4,3,2] = try 4-gram first, then 3-gram, then 2-gram; [3,2] = try 3-gram first, then 2-gram
-    avoidMarginalOnly: true,
+    avoidMarginalOnly: false,
     maxTradesPerAssetHour: 106,
     minEdge: 0.0, // not using marginal lowest
 });
