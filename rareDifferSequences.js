@@ -678,50 +678,54 @@ class EnhancedDigitDifferTradingBot {
         let predictedDigit = null;
 
         // 8068, 8093, 9629, 6835, 7637 (Rarest sequences)
-        // if (this.sys !== 1) {
-            if (this.sys !== 1 && lastDigit3 === 8 && lastDigit2 === 0 && lastDigit === 6) {
-                predictedDigit = 8;
-                this.xDigit = predictedDigit;
-                this.sys = 1;
-                this.placeTrade(asset, predictedDigit);
-                return; // Exit after placing the trade to avoid multiple trades in one tick
-            }
-        // } else if (this.sys !== 2) {
-            if (this.sys !== 2 && lastDigit3 === 8 && lastDigit2 === 0 && lastDigit === 9) {
-                predictedDigit = 3;
-                this.xDigit = predictedDigit;
-                this.sys = 2;
-                this.placeTrade(asset, predictedDigit);
-                return;
-            }
-        // } else if (this.sys !== 3) {
-            if (this.sys !== 3 && lastDigit3 === 9 && lastDigit2 === 6 && lastDigit === 2) {
-                predictedDigit = 9;
-                this.xDigit = predictedDigit;
-                this.sys = 3;
-                this.placeTrade(asset, predictedDigit);
-                return;
-            }
-        // } else if (this.sys !== 4) {
-            if (this.sys !== 4 && lastDigit3 === 6 && lastDigit2 === 8 && lastDigit === 3) {
-                predictedDigit = 5;
-                this.xDigit = predictedDigit;
-                this.sys = 4;
-                this.placeTrade(asset, predictedDigit);
-                return;
-            }
-        // } else if (this.sys !== 5) {
-            if (this.sys !== 5 && lastDigit3 === 7 && lastDigit2 === 6 && lastDigit === 3) {
-                predictedDigit = 7;
-                this.xDigit = predictedDigit;
-                this.sys = 5;
-                this.placeTrade(asset, predictedDigit);
-                return;
-            }
-        // } else {
-            console.log(`[${asset}] Skipping trade for digit: ${predictedDigit} | Last Digit: ${lastDigit}`);
-            // this.disconnect();
+        if (lastDigit3 === 8 && lastDigit2 === 0 && lastDigit === 6) {
+            predictedDigit = 8;
+            this.xDigit = predictedDigit;
+            this.sys = 1;
+            this.placeTrade(asset, predictedDigit);
+            return; // Exit after placing the trade to avoid multiple trades in one tick
+        }
+
+
+
+        
+        // if (this.sys !== 1 && lastDigit3 === 8 && lastDigit2 === 0 && lastDigit === 6) {
+        //     predictedDigit = 8;
+        //     this.xDigit = predictedDigit;
+        //     this.sys = 1;
+        //     this.placeTrade(asset, predictedDigit);
+        //     return; // Exit after placing the trade to avoid multiple trades in one tick
         // }
+        // if (this.sys !== 2 && lastDigit3 === 8 && lastDigit2 === 0 && lastDigit === 9) {
+        //     predictedDigit = 3;
+        //     this.xDigit = predictedDigit;
+        //     this.sys = 2;
+        //     this.placeTrade(asset, predictedDigit);
+        //     return;
+        // }
+        // if (this.sys !== 3 && lastDigit3 === 9 && lastDigit2 === 6 && lastDigit === 2) {
+        //     predictedDigit = 9;
+        //     this.xDigit = predictedDigit;
+        //     this.sys = 3;
+        //     this.placeTrade(asset, predictedDigit);
+        //     return;
+        // }
+        // if (this.sys !== 4 && lastDigit3 === 6 && lastDigit2 === 8 && lastDigit === 3) {
+        //     predictedDigit = 5;
+        //     this.xDigit = predictedDigit;
+        //     this.sys = 4;
+        //     this.placeTrade(asset, predictedDigit);
+        //     return;
+        // }
+        // if (this.sys !== 5 && lastDigit3 === 7 && lastDigit2 === 6 && lastDigit === 3) {
+        //     predictedDigit = 7;
+        //     this.xDigit = predictedDigit;
+        //     this.sys = 5;
+        //     this.placeTrade(asset, predictedDigit);
+        //     return;
+        // }
+
+        console.log(`[${asset}] Skipping trade for digit: ${predictedDigit} | Last Digit: ${lastDigit}`);
     }
 
     clearContractPoll() {
