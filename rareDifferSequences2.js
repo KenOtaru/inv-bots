@@ -1506,6 +1506,19 @@ class EnhancedDigitDifferTradingBot {
             const margCount = Array(10).fill(0);
             for (let i = 0; i < ring.length; i++) margCount[ring[i]]++;
             const margTotal = ring.length || 1;
+            // find marg lowest digit(s) for guard
+            let margLowestDigits = [];
+            if (margTotal > 0 && avoidMarginalOnly) {
+                let minMarg = Infinity;
+                for (let d = 0; d < 10; d++) {
+                    const mp = margCount[d] / margTotal;
+                    if (mp < minMarg) minMarg = mp;
+                }
+                for (let d = 0; d < 10; d++) {
+                    const mp = margCount[d] / margTotal;
+                    if (Math.abs(mp - minMarg) < 1e-12) margLowestDigits.push(d);
+                }
+            }
             // find candidates with conditional prob <= maxCondProb
             const candidates = [];
             for (let d = 0; d < 10; d++) {
@@ -1514,6 +1527,13 @@ class EnhancedDigitDifferTradingBot {
                 if (pCond <= maxCondProb) {
                     const surprisal = -Math.log2(Math.max(pCond, 1e-12));
                     if (surprisal >= minSurprisal) {
+                        // Guard: if this is ONLY being considered because it's marginal lowest with no strong conditional signal relative to others, skip
+                        if (avoidMarginalOnly && margLowestDigits.includes(d)) {
+                            // Check if there is another candidate with higher conditional rarity or if this is clearly marginal-driven
+                            // Require that conditional prob is meaningfully lower than marginal? Or just ensure it's conditional
+                            // Additional check: if it's marginal lowest, still allow only if conditional is strong AND it's not just defaulting to lowest
+                            // But we must not pick purely based on marginal lowest - so skip if it's in marg lowest and conditional isn't unusually strong vs others
+                        }
                         candidates.push({
                             digit: d,
                             p: pCond,
@@ -1523,12 +1543,33 @@ class EnhancedDigitDifferTradingBot {
                             k,
                             reason: 'conditional_rare',
                             margP: margCount[d] / margTotal,
-                            cnt
+                            cnt,
+                            isMargLowest: margLowestDigits.includes(d)
                         });
                     }
                 }
             }
-            analysisLog.push({k, ctx: ctxKey, total, minSupport, maxCondProb, minSurprisal, candidatesCount: candidates.length, ringLen: ring.length});
+            // Filter out marginal-lowest-only cases: if candidate is marginal lowest AND there exists other digits with better conditional signal
+            if (avoidMarginalOnly && margLowestDigits.length > 0) {
+                const nonMargLowest = candidates.filter(c => !c.isMargLowest);
+                if (nonMargLowest.length > 0) {
+                    // Prefer non-marginal-lowest candidates
+                    for (let i = candidates.length - 1; i >= 0; i--) {
+                        if (candidates[i].isMargLowest) {
+                            candidates.splice(i, 1);
+                        }
+                    }
+                } else {
+                    // Only marginal lowest candidates exist - still require strong conditional signal, but don't pick "just because lowest"
+                    // Be stricter: require higher surprisal
+                    for (let i = candidates.length - 1; i >= 0; i--) {
+                        if (candidates[i].surprisal < minSurprisal + 0.5) {
+                            candidates.splice(i, 1);
+                        }
+                    }
+                }
+            }
+            analysisLog.push({k, ctx: ctxKey, total, minSupport, maxCondProb, minSurprisal, candidatesCount: candidates.length, ringLen: ring.length, margLowest: margLowestDigits});
             if (candidates.length === 0) continue;
             // sort by surprisal desc
             candidates.sort((a,b) => {
