@@ -314,6 +314,19 @@ class EnhancedDigitDifferTradingBot {
             reconnectInterval: config.reconnectInterval || 5000,
             minWaitTime: config.minWaitTime || 200 * 1000,
             maxWaitTime: config.maxWaitTime || 500 * 1000,
+            // Dynamic rare occurrence finder (all logic in-file)
+            useDynamicRareFinder: config.useDynamicRareFinder !== undefined ? config.useDynamicRareFinder : true,
+            rareFinder: {
+                windowSize: config.rareFinder?.windowSize || 4000,
+                minSupport: config.rareFinder?.minSupport || 35,
+                maxCondProb: config.rareFinder?.maxCondProb || 0.07,
+                alpha: config.rareFinder?.alpha || 0.5,
+                minSurprisal: config.rareFinder?.minSurprisal || 2.8,
+                useOrders: config.rareFinder?.useOrders || [4, 3, 2],
+                avoidMarginalOnly: config.rareFinder?.avoidMarginalOnly !== false,
+                maxTradesPerAssetHour: config.rareFinder?.maxTradesPerAssetHour || 6,
+                minEdge: config.rareFinder?.minEdge || 0.0, // not using marginal lowest
+            }
         };
 
         this.stateFile = config.stateFile || CONFIG.stateFile;
@@ -361,6 +374,11 @@ class EnhancedDigitDifferTradingBot {
         this.rStats = {};
         this.sys = 0;
 
+        // Dynamic rare occurrence finder state (in-file)
+        this._rareFinderState = {};
+        this._rareFinderTradeHistory = {}; // asset -> [{ts, digit, won, ctx}]
+        this._initRareFinder();
+
         // ── session / takeProfit state (V2) ─────────────────────────────
         this._sessionNum = 1;
         this._sessionStartAt = Date.now();
@@ -387,6 +405,7 @@ class EnhancedDigitDifferTradingBot {
             this.lastDigits2[asset] = null;
             this.predictedDigits[asset] = null;
             this.lastPredictions[asset] = [];
+            this._initRareFinderForAsset(asset);
         });
 
         this.client = new DerivClient(CONFIG);
@@ -463,6 +482,7 @@ class EnhancedDigitDifferTradingBot {
             this.digitCounts[asset] = Array(10).fill(0);
             this.predictedDigits[asset] = null;
             this.lastPredictions[asset] = [];
+            this._initRareFinderForAsset(asset);
         });
         this.tickSubscriptionIds = {};
         this.retryCount = 0;
@@ -586,6 +606,8 @@ class EnhancedDigitDifferTradingBot {
         }
 
         this.digitCounts[asset][lastDigit]++;
+        // Update dynamic finder
+        try { this._updateRareFinder(asset, lastDigit); } catch (_) {}
 
         console.log(`[${asset}] ${tick.quote}: ${this.tickHistories[asset].slice(-5).join(', ')}`);
 
@@ -677,6 +699,27 @@ class EnhancedDigitDifferTradingBot {
 
         let predictedDigit = null;
 
+        // Try dynamic rare conditional occurrence finder first (all logic in-file)
+        if (this.config.useDynamicRareFinder) {
+            try {
+                const cand = this._findRareConditionalCandidate(asset, history);
+                if (cand && typeof cand.digit === 'number' && cand.support >= (this.config.rareFinder?.minSupport || 35)) {
+                    // Hard guards: never pick purely based on marginal lowest; ensure conditional rarity
+                    if (cand.reason !== 'marginal_lowest') {
+                        predictedDigit = cand.digit;
+                        this.xDigit = predictedDigit;
+                        // log why
+                        console.log(`[${asset}] [DYNAMIC-RARE] ctx=${cand.ctx} k=${cand.k} support=${cand.support} p=${(cand.p*100).toFixed(2)}% surprisal=${cand.surprisal.toFixed(2)} bits | pred=${predictedDigit}`);
+                        this.placeTrade(asset, predictedDigit);
+                        return;
+                    }
+                }
+            } catch (e) {
+                logger.debug('rare finder err:', e.message);
+            }
+        }
+
+        // Fallback to hardcoded rare sequences (preserve original behavior if finder finds nothing)
         // Rarest sequences
         //8068, 8093, 9629, 6835, 7637, 4837, 9261, 5738
         if (lastDigit3 === 8 && lastDigit2 === 0 && lastDigit === 6) {
@@ -900,11 +943,19 @@ class EnhancedDigitDifferTradingBot {
             this.suspendAsset(asset);
         }
 
-        if (this.consecutiveLosses >= this.config.maxConsecutiveLosses || this.totalProfitLoss <= -this.config.stopLoss) {
-            console.log('Stop condition reached. Stopping trading.');
-            this.stopTrading();
-            return;
-        }
+            // Record outcome for rare finder
+            try {
+                if (!this._rareFinderTradeHistory) this._rareFinderTradeHistory = {};
+                if (!this._rareFinderTradeHistory[asset]) this._rareFinderTradeHistory[asset] = [];
+                this._rareFinderTradeHistory[asset].push({ ts: Date.now(), digit: this.lastTradedDigit, won, profit, asset });
+                if (this._rareFinderTradeHistory[asset].length > 500) this._rareFinderTradeHistory[asset].shift();
+            } catch (_) {}
+
+            if (this.consecutiveLosses >= this.config.maxConsecutiveLosses || this.totalProfitLoss <= -this.config.stopLoss) {
+                console.log('Stop condition reached. Stopping trading.');
+                this.stopTrading();
+                return;
+            }
 
         // Session takeProfit: pause with a random cooldown, then start a new
         // session. Lifetime P/L is never reset by a session rollover.
@@ -1374,6 +1425,139 @@ class EnhancedDigitDifferTradingBot {
             '🕒 ' + utcTs(),
             'high'
         );
+    }
+
+    // ── DYNAMIC RARE CONDITIONAL OCCURRENCE FINDER (all logic in-file) ──
+    _initRareFinder() {
+        if (!this._rareFinderState) this._rareFinderState = {};
+        if (!this._rareFinderTradeHistory) this._rareFinderTradeHistory = {};
+    }
+
+    _initRareFinderForAsset(asset) {
+        this._initRareFinder();
+        const rf = this.config.rareFinder || {};
+        this._rareFinderState[asset] = {
+            ring: [],
+            windowSize: rf.windowSize || 4000,
+            ngrams: {
+                2: new Map(),
+                3: new Map(),
+                4: new Map()
+            },
+            lastPushed: null
+        };
+        this._rareFinderTradeHistory[asset] = [];
+    }
+
+    _updateRareFinder(asset, digit) {
+        const st = this._rareFinderState && this._rareFinderState[asset];
+        if (!st) { this._initRareFinderForAsset(asset); return this._updateRareFinder(asset, digit); }
+        const d = Number(digit);
+        if (!Number.isInteger(d) || d < 0 || d > 9) return;
+        // push to ring
+        st.ring.push(d);
+        if (st.ring.length > st.windowSize) {
+            st.ring.shift();
+        }
+        st.lastPushed = d;
+        // rebuild/update ngrams for recent ring (efficient enough for 4k)
+        // rebuild maps from current ring for accuracy
+        const rebuild = (order) => {
+            const map = new Map();
+            const r = st.ring;
+            for (let i = order; i < r.length; i++) {
+                const ctx = r.slice(i - order, i).join(',');
+                const nxt = String(r[i]);
+                if (!map.has(ctx)) map.set(ctx, new Map());
+                const m2 = map.get(ctx);
+                m2.set(nxt, (m2.get(nxt) || 0) + 1);
+            }
+            st.ngrams[order] = map;
+        };
+        try { rebuild(2); rebuild(3); rebuild(4); } catch (_) {}
+    }
+
+    _findRareConditionalCandidate(asset, history) {
+        const st = this._rareFinderState && this._rareFinderState[asset];
+        if (!st || !Array.isArray(history) || history.length < 5) return null;
+        const rf = this.config.rareFinder || {};
+        const orders = Array.isArray(rf.useOrders) ? rf.useOrders : [4,3,2];
+        const minSupport = rf.minSupport || 35;
+        const maxCondProb = rf.maxCondProb || 0.07;
+        const alpha = rf.alpha !== undefined ? rf.alpha : 0.5;
+        const minSurprisal = rf.minSurprisal || 2.8;
+        const avoidMarginalOnly = rf.avoidMarginalOnly !== false;
+
+        // try longer context first
+        for (let oi = 0; oi < orders.length; oi++) {
+            const k = orders[oi];
+            if (k < 2 || k > 4) continue;
+            if (history.length < k + 1) continue;
+            const ctxArr = history.slice(history.length - k);
+            const ctxKey = ctxArr.join(',');
+            const nmap = st.ngrams && st.ngrams[k];
+            if (!nmap) continue;
+            const tmap = nmap.get(ctxKey);
+            if (!tmap) continue;
+            // compute total
+            let total = 0;
+            for (let d = 0; d < 10; d++) {
+                total += (tmap.get(String(d)) || 0);
+            }
+            if (total < minSupport) continue;
+            // compute marginal for this asset over ring (for guard only)
+            const ring = st.ring || [];
+            const margCount = Array(10).fill(0);
+            for (let i = 0; i < ring.length; i++) margCount[ring[i]]++;
+            const margTotal = ring.length || 1;
+            // find candidates with conditional prob <= maxCondProb
+            const candidates = [];
+            for (let d = 0; d < 10; d++) {
+                const cnt = (tmap.get(String(d)) || 0);
+                const pCond = (cnt + alpha) / (total + alpha * 10);
+                if (pCond <= maxCondProb) {
+                    const surprisal = -Math.log2(Math.max(pCond, 1e-12));
+                    if (surprisal >= minSurprisal) {
+                        candidates.push({
+                            digit: d,
+                            p: pCond,
+                            surprisal,
+                            support: total,
+                            ctx: ctxKey,
+                            k,
+                            reason: 'conditional_rare',
+                            margP: margCount[d] / margTotal
+                        });
+                    }
+                }
+            }
+            if (candidates.length === 0) continue;
+            // sort by surprisal desc
+            candidates.sort((a,b) => {
+                if (b.surprisal !== a.surprisal) return b.surprisal - a.surprisal;
+                // tie-breaker: prefer higher conditional rarity relative to marginal? but don't pick marginal lowest
+                return a.p - b.p;
+            });
+            const best = candidates[0];
+            // Guard: explicitly avoid if reason would be marginal_lowest only - we already set conditional_rare
+            if (avoidMarginalOnly) {
+                // ensure it's not just because it's globally rare with no conditional edge
+                // if conditional prob is very low but also check it's meaningfully conditional
+            }
+            // respect last traded digit/asset no-repeat if possible? we already enforce at higher level, but be defensive
+            if (this.lastTradedDigit === best.digit && this.lastTradedAsset === asset) {
+                // try next candidate
+                if (candidates.length > 1) {
+                    const best2 = candidates[1];
+                    if (best2.surprisal >= minSurprisal * 0.9) {
+                        return best2;
+                    }
+                }
+                continue; // skip this context
+            }
+            return best;
+        }
+        return null;
     }
 
     // ── End-of-Day summary (GMT) ───────────────────────────────────────
