@@ -23,7 +23,7 @@ function htmlEscape(s) { return String(s).replace(/[&<>]/g, ch => ({ '&': '&amp;
 
 // ── CONFIG — credentials from randomDigitDifferV2.js ───────────────────
 const CONFIG = Object.freeze({
-    apiToken:    process.env.API_TOKEN || 'pat_e02a554e3b6f9f939c07855fe28c91c68e58ea14f741f45f675f82de96da4289',
+    apiToken:    process.env.API_TOKEN || 'pat_9407fd80466311ce13f2d2b5e884d95f6507f24a5dcb8ec853d775022c1591c7',
     appId:       process.env.APP_ID || '33uslPtthXBEkQOdfKfoY',
     accountId:   process.env.ACCOUNT_ID || '',
     accountType: 'demo',
