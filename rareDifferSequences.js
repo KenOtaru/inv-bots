@@ -678,8 +678,10 @@ class EnhancedDigitDifferTradingBot {
         let predictedDigit = null;
 
         // 8068, 8093, 9629, 6835, 7637 (Rarest sequences)
-        if (lastDigit3 === 8 && lastDigit2 === 0 && lastDigit === 6) {
-            predictedDigit = 8;
+        //4837, 9261, 5738
+        //1089
+        if (lastDigit3 === 1 && lastDigit2 === 0 && lastDigit === 8) {
+            predictedDigit = 9;
             this.xDigit = predictedDigit;
             this.sys = 1;
             this.placeTrade(asset, predictedDigit);
@@ -688,7 +690,7 @@ class EnhancedDigitDifferTradingBot {
 
 
 
-        
+
         // if (this.sys !== 1 && lastDigit3 === 8 && lastDigit2 === 0 && lastDigit === 6) {
         //     predictedDigit = 8;
         //     this.xDigit = predictedDigit;
