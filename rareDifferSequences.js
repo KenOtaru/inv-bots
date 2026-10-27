@@ -377,6 +377,7 @@ class EnhancedDigitDifferTradingBot {
         this.pendingContractId = null;
         this.pendingContractAsset = null;
         this.pendingContractDigit = null;
+        this._contractPollTimer = null;
 
         this.assets.forEach(asset => {
             this.tickHistories[asset] = [];
@@ -674,7 +675,7 @@ class EnhancedDigitDifferTradingBot {
         const lastDigit2 = history[history.length - 2];
         const lastDigit3 = history[history.length - 3];
 
-        let predictedDigit = null; //this.createRandomPrediction(); 
+        let predictedDigit = null;
 
         // 8068, 8093, 9629, 6835, 7637 (Rarest sequences)
         // if (this.sys !== 1) {
@@ -723,17 +724,33 @@ class EnhancedDigitDifferTradingBot {
         // }
     }
 
-    // Uniform pick over 0-9 that never repeats the digit traded last. Excluding
-    // here (rather than at trade time) also covers ticks where the pick is
-    // later rejected by the adjacent-digit filter in analyzeTicks.
-    // createRandomPrediction() {
-    //     const candidates = [];
-    //     for (let d = 0; d <= 9; d++) {
-    //         if (d !== this.lastTradedDigit) candidates.push(d);
-    //     }
-    //     if (!candidates.length) return crypto.randomInt(0, 10);
-    //     return candidates[crypto.randomInt(0, candidates.length)];
-    // }
+    clearContractPoll() {
+        if (this._contractPollTimer) {
+            clearTimeout(this._contractPollTimer);
+            this._contractPollTimer = null;
+        }
+    }
+
+    _scheduleContractPoll(contractId) {
+        if (this._stopped || !this.client.authorized || this.pendingContractId !== contractId || this.settledContracts.has(contractId)) {
+            this.clearContractPoll();
+            return;
+        }
+        this.clearContractPoll();
+        this._contractPollTimer = setTimeout(() => {
+            this._contractPollTimer = null;
+            (async () => {
+                try {
+                    const res = await this.client._send({ proposal_open_contract: 1, contract_id: contractId }, 15000);
+                    const contract = res && res.proposal_open_contract;
+                    if (contract) this.handleContractUpdate(contract);
+                } catch (e) {
+                    console.warn(`Contract #${contractId} poll failed:`, e.message);
+                }
+                this._scheduleContractPoll(contractId);
+            })();
+        }, 2000);
+    }
 
     async placeTrade(asset, predictedDigit) {
         if (this.tradeInProgress || this._tpAwaiting) {
@@ -801,26 +818,21 @@ class EnhancedDigitDifferTradingBot {
                 const contract = msg.proposal_open_contract;
                 if (contract) this.handleContractUpdate(contract);
             }, 15000);
-            // The first response resolves the subscribe request and never reaches
-            // the callback above. A 1-tick contract can already be sold in it, so
-            // poll once after a short delay to catch that settlement (no-op if the
-            // live subscription already reported it).
-            setTimeout(() => {
-                this.client._send({ proposal_open_contract: 1, contract_id: contractId }, 15000)
-                    .then(res => {
-                        const contract = res && res.proposal_open_contract;
-                        if (contract) this.handleContractUpdate(contract);
-                    })
-                    .catch(() => {});
-            }, 2000);
         } catch (e) {
             console.warn(`Failed to subscribe to open contract #${contractId}:`, e.message);
         }
+        // Poll continuously like the web version to ensure we catch settlement
+        // even if subscription updates are delayed or missed
+        this._scheduleContractPoll(contractId);
     }
 
     handleContractUpdate(contract) {
         const contractId = contract.contract_id;
+        if (this.pendingContractId && String(contractId) !== String(this.pendingContractId)) {
+            return;
+        }
         if (contract.is_sold && !this.settledContracts.has(contractId)) {
+            this.clearContractPoll();
             this.settledContracts.add(contractId);
             if (this.settledContracts.size > 5000) {
                 const first = this.settledContracts.values().next().value;
@@ -874,6 +886,9 @@ class EnhancedDigitDifferTradingBot {
         this.pendingContractAsset = null;
         this.pendingContractDigit = null;
         this._save('after-trade');
+        // Contract settled — clear the in-flight marker and persist the result
+        // so a restart/network drop never loses this trade.
+        this.clearContractPoll();
 
         const randomWaitTime = Math.floor(Math.random() * (this.config.maxWaitTime - this.config.minWaitTime + 1)) + this.config.minWaitTime;
         const waitTimeMinutes = Math.round(randomWaitTime / 60000);

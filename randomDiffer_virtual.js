@@ -450,6 +450,7 @@ class EnhancedDigitDifferTradingBot {
         this.pendingContractAsset = null;
         this.pendingContractDigit = null;
         this.pendingContractMode = null;
+        this._contractPollTimer = null;
 
         // ── VIRTUAL phase ledger ────────────────────────────────────────
         // No Deriv account backs this leg, so the balance lives here.
@@ -881,6 +882,34 @@ class EnhancedDigitDifferTradingBot {
         return candidates[crypto.randomInt(0, candidates.length)];
     }
 
+    clearContractPoll() {
+        if (this._contractPollTimer) {
+            clearTimeout(this._contractPollTimer);
+            this._contractPollTimer = null;
+        }
+    }
+
+    _scheduleContractPoll(contractId) {
+        if (this._stopped || !this.client.authorized || this.pendingContractId !== contractId || this.settledContracts.has(contractId)) {
+            this.clearContractPoll();
+            return;
+        }
+        this.clearContractPoll();
+        this._contractPollTimer = setTimeout(() => {
+            this._contractPollTimer = null;
+            (async () => {
+                try {
+                    const res = await this.client._send({ proposal_open_contract: 1, contract_id: contractId }, 15000);
+                    const contract = res && res.proposal_open_contract;
+                    if (contract) this.handleContractUpdate(contract);
+                } catch (e) {
+                    console.warn(`Contract #${contractId} poll failed:`, e.message);
+                }
+                this._scheduleContractPoll(contractId);
+            })();
+        }, 2000);
+    }
+
     async placeTrade(asset, predictedDigit) {
         if (this.tradeInProgress || this._tpAwaiting) {
             return;
@@ -975,31 +1004,18 @@ console.log(`[${mode}] 🚀 Placing trade on ${asset} for digit: ${predictedDigi
         }
     }
 
-    async subscribeToOpenContract(contractId, mode = this.tradeTokenMode) {
-        const conn = this.clientFor(mode);
+    async subscribeToOpenContract(contractId) {
         try {
-            const subId = await conn.subscribe({ proposal_open_contract: 1, contract_id: contractId }, (msg) => {
+            await this.client.subscribe({ proposal_open_contract: 1, contract_id: contractId }, (msg) => {
                 const contract = msg.proposal_open_contract;
                 if (contract) this.handleContractUpdate(contract);
             }, 15000);
-            if (subId != null) this._openSubIds.set(String(contractId), subId);
-            // The first response resolves the subscribe request and never reaches
-            // the callback above. A 1-tick contract can already be sold in it, so
-            // poll once after a short delay to catch that settlement (no-op if the
-            // live subscription already reported it).
-            setTimeout(() => {
-                conn._send({ proposal_open_contract: 1, contract_id: contractId }, 15000)
-                    .then(res => {
-                        const contract = res && res.proposal_open_contract;
-                        if (contract) this.handleContractUpdate(contract);
-                    })
-                    .catch(() => {});
-            }, 2000);
-            return subId;
         } catch (e) {
-            console.warn(`[${mode}] Failed to subscribe to open contract #${contractId}:`, e.message);
-            return null;
+            console.warn(`Failed to subscribe to open contract #${contractId}:`, e.message);
         }
+        // Poll continuously like the web version to ensure we catch settlement
+        // even if subscription updates are delayed or missed
+        this._scheduleContractPoll(contractId);
     }
 
     // ── VIRTUAL phase executor ──────────────────────────────────────────
@@ -1322,33 +1338,49 @@ console.log(`[${mode}] 🚀 Placing trade on ${asset} for digit: ${predictedDigi
 
     // A contract we force-voided earlier must NEVER be double-counted — the
     // void stands and the actual outcome is surfaced loudly for reconcile.
+    // handleContractUpdate(contract) {
+    //     const contractId = contract.contract_id;
+    //     const cid = String(contractId);
+
+    //     const stuck = this.stuckTrades.find(s => String(s.contractId) === cid);
+    //     if (stuck) {
+    //         const won = contract.status === 'won';
+    //         const profit = Number(contract.profit);
+    //         const profitFinite = Number.isFinite(profit);
+    //         logger.error(`LATE SETTLEMENT #${cid}: actual ${won ? 'WIN' : 'LOSS'} but it was VOIDED on ${stuck.mode} — not double-counted`);
+    //         telegram.send(
+    //             '🚨 <b>LATE SETTLEMENT #' + cid + '</b> (' + stuck.mode + ')\n' +
+    //             'Actual: ' + (won
+    //                 ? '✅ WIN +$' + (profitFinite ? profit.toFixed(2) : '?')
+    //                 : '❌ LOSS') + ' | Accounted: VOIDED locally (stake $' + Number(stuck.stake || 0).toFixed(2) + ')\n' +
+    //             (won
+    //                 ? 'ACTION: payout never credited — ' + (stuck.refunded
+    //                     ? 'the virtual ledger already refunded the stake.'
+    //                     : 'manually add $' + (profitFinite ? profit.toFixed(2) : '?') + ' to the MAIN balance or reset the ledger.') + '\n'
+    //                 : 'Matches the void — no action needed.\n') +
+    //             'Audit entry kept.\n' +
+    //             '🕒 ' + utcTs(), 'high');
+    //         this._forgetOpenSub(cid);
+    //         return;
+    //     }
+
+    //     if (contract.is_sold && !this.settledContracts.has(contractId)) {
+    //         this.settledContracts.add(contractId);
+    //         if (this.settledContracts.size > 5000) {
+    //             const first = this.settledContracts.values().next().value;
+    //             this.settledContracts.delete(first);
+    //         }
+    //         this.handleTradeResult(contract);
+    //     }
+    // }
+
     handleContractUpdate(contract) {
         const contractId = contract.contract_id;
-        const cid = String(contractId);
-
-        const stuck = this.stuckTrades.find(s => String(s.contractId) === cid);
-        if (stuck) {
-            const won = contract.status === 'won';
-            const profit = Number(contract.profit);
-            const profitFinite = Number.isFinite(profit);
-            logger.error(`LATE SETTLEMENT #${cid}: actual ${won ? 'WIN' : 'LOSS'} but it was VOIDED on ${stuck.mode} — not double-counted`);
-            telegram.send(
-                '🚨 <b>LATE SETTLEMENT #' + cid + '</b> (' + stuck.mode + ')\n' +
-                'Actual: ' + (won
-                    ? '✅ WIN +$' + (profitFinite ? profit.toFixed(2) : '?')
-                    : '❌ LOSS') + ' | Accounted: VOIDED locally (stake $' + Number(stuck.stake || 0).toFixed(2) + ')\n' +
-                (won
-                    ? 'ACTION: payout never credited — ' + (stuck.refunded
-                        ? 'the virtual ledger already refunded the stake.'
-                        : 'manually add $' + (profitFinite ? profit.toFixed(2) : '?') + ' to the MAIN balance or reset the ledger.') + '\n'
-                    : 'Matches the void — no action needed.\n') +
-                'Audit entry kept.\n' +
-                '🕒 ' + utcTs(), 'high');
-            this._forgetOpenSub(cid);
+        if (this.pendingContractId && String(contractId) !== String(this.pendingContractId)) {
             return;
         }
-
         if (contract.is_sold && !this.settledContracts.has(contractId)) {
+            this.clearContractPoll();
             this.settledContracts.add(contractId);
             if (this.settledContracts.size > 5000) {
                 const first = this.settledContracts.values().next().value;
@@ -1417,6 +1449,9 @@ console.log(`[${mode}] 🚀 Placing trade on ${asset} for digit: ${predictedDigi
         this.pendingContractDigit = null;
         this.pendingContractMode = null;
         this._save('after-trade');
+        // Contract settled — clear the in-flight marker and persist the result
+        // so a restart/network drop never loses this trade.
+        this.clearContractPoll();
 
         const randomWaitTime = Math.floor(Math.random() * (this.config.maxWaitTime - this.config.minWaitTime + 1)) + this.config.minWaitTime;
         const waitTimeMinutes = Math.round(randomWaitTime / 60000);

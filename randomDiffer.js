@@ -376,6 +376,7 @@ class EnhancedDigitDifferTradingBot {
         this.pendingContractId = null;
         this.pendingContractAsset = null;
         this.pendingContractDigit = null;
+        this._contractPollTimer = null;
 
         this.assets.forEach(asset => {
             this.tickHistories[asset] = [];
@@ -774,26 +775,49 @@ class EnhancedDigitDifferTradingBot {
                 const contract = msg.proposal_open_contract;
                 if (contract) this.handleContractUpdate(contract);
             }, 15000);
-            // The first response resolves the subscribe request and never reaches
-            // the callback above. A 1-tick contract can already be sold in it, so
-            // poll once after a short delay to catch that settlement (no-op if the
-            // live subscription already reported it).
-            setTimeout(() => {
-                this.client._send({ proposal_open_contract: 1, contract_id: contractId }, 15000)
-                    .then(res => {
-                        const contract = res && res.proposal_open_contract;
-                        if (contract) this.handleContractUpdate(contract);
-                    })
-                    .catch(() => {});
-            }, 2000);
         } catch (e) {
             console.warn(`Failed to subscribe to open contract #${contractId}:`, e.message);
         }
+        // Poll continuously like the web version to ensure we catch settlement
+        // even if subscription updates are delayed or missed
+        this._scheduleContractPoll(contractId);
+    }
+
+    clearContractPoll() {
+        if (this._contractPollTimer) {
+            clearTimeout(this._contractPollTimer);
+            this._contractPollTimer = null;
+        }
+    }
+
+    _scheduleContractPoll(contractId) {
+        if (this._stopped || !this.client.authorized || this.pendingContractId !== contractId || this.settledContracts.has(contractId)) {
+            this.clearContractPoll();
+            return;
+        }
+        this.clearContractPoll();
+        this._contractPollTimer = setTimeout(() => {
+            this._contractPollTimer = null;
+            (async () => {
+                try {
+                    const res = await this.client._send({ proposal_open_contract: 1, contract_id: contractId }, 15000);
+                    const contract = res && res.proposal_open_contract;
+                    if (contract) this.handleContractUpdate(contract);
+                } catch (e) {
+                    console.warn(`Contract #${contractId} poll failed:`, e.message);
+                }
+                this._scheduleContractPoll(contractId);
+            })();
+        }, 2000);
     }
 
     handleContractUpdate(contract) {
         const contractId = contract.contract_id;
+        if (this.pendingContractId && String(contractId) !== String(this.pendingContractId)) {
+            return;
+        }
         if (contract.is_sold && !this.settledContracts.has(contractId)) {
+            this.clearContractPoll();
             this.settledContracts.add(contractId);
             if (this.settledContracts.size > 5000) {
                 const first = this.settledContracts.values().next().value;
@@ -848,6 +872,7 @@ class EnhancedDigitDifferTradingBot {
         this._trackDaily(asset, contract, won, profit);
         // Contract settled — clear the in-flight marker and persist the result
         // so a restart/network drop never loses this trade.
+        this.clearContractPoll();
         this.pendingContractId = null;
         this.pendingContractAsset = null;
         this.pendingContractDigit = null;

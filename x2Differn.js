@@ -634,6 +634,7 @@ class EnhancedDigitDifferTradingBot {
         this.pendingBuy = null; // durable intent: a lost buy response must not trigger another order
         this._contractSubscriptionIds = new Map();
         this._contractPollTimer = null;
+        
 
         this.assets.forEach(asset => {
             this.tickHistories[asset] = [];
@@ -1054,20 +1055,32 @@ class EnhancedDigitDifferTradingBot {
 
     async subscribeToOpenContract(contractId) {
         try {
-            const subscriptionId = await this.client.subscribe({ proposal_open_contract: 1, contract_id: contractId }, (msg) => {
-                if (msg.proposal_open_contract) this.handleContractUpdate(msg.proposal_open_contract);
+            await this.client.subscribe({ proposal_open_contract: 1, contract_id: contractId }, (msg) => {
+                const contract = msg.proposal_open_contract;
+                if (contract) this.handleContractUpdate(contract);
             }, 15000);
-            // subscribe() now delivers the initial frame, which can already be sold.
-            if (this.settledContracts.has(contractId)) {
-                await this.client.forget(subscriptionId);
-                return;
-            }
-            this._contractSubscriptionIds.set(contractId, subscriptionId);
-        } catch (error) {
-            if (this.settledContracts.has(contractId)) return;
-            console.warn(`Failed to subscribe to open contract #${contractId}; falling back to polling:`, error.message);
+        } catch (e) {
+            console.warn(`Failed to subscribe to open contract #${contractId}:`, e.message);
         }
+        // Poll continuously like the web version to ensure we catch settlement
+        // even if subscription updates are delayed or missed
         this._scheduleContractPoll(contractId);
+    }
+
+    handleContractUpdate(contract) {
+        const contractId = contract.contract_id;
+        if (this.pendingContractId && String(contractId) !== String(this.pendingContractId)) {
+            return;
+        }
+        if (contract.is_sold && !this.settledContracts.has(contractId)) {
+            this.clearContractPoll();
+            this.settledContracts.add(contractId);
+            if (this.settledContracts.size > 5000) {
+                const first = this.settledContracts.values().next().value;
+                this.settledContracts.delete(first);
+            }
+            this.handleTradeResult(contract);
+        }
     }
 
     _scheduleContractPoll(contractId) {
@@ -1082,24 +1095,6 @@ class EnhancedDigitDifferTradingBot {
             // Retry read-only monitoring, never the buy, until sold/disconnected.
             this._scheduleContractPoll(contractId);
         }, 2000);
-    }
-
-    handleContractUpdate(contract) {
-        const contractId = contract.contract_id;
-        if (this.pendingContractId && String(contractId) !== String(this.pendingContractId)) return;
-        if (contract.is_sold && !this.settledContracts.has(contractId)) {
-            clearTimeout(this._contractPollTimer);
-            this._contractPollTimer = null;
-            const subscriptionId = this._contractSubscriptionIds.get(contractId);
-            this._contractSubscriptionIds.delete(contractId);
-            if (subscriptionId) this.client.forget(subscriptionId);
-            this.settledContracts.add(contractId);
-            if (this.settledContracts.size > 5000) {
-                const first = this.settledContracts.values().next().value;
-                this.settledContracts.delete(first);
-            }
-            this.handleTradeResult(contract);
-        }
     }
 
     handleTradeResult(contract) {
@@ -1179,6 +1174,10 @@ class EnhancedDigitDifferTradingBot {
         this.pendingContractAsset = null;
         this.pendingContractDigit = null;
         this._save('after-trade');
+
+        // Contract settled — clear the in-flight marker and persist the result
+        // so a restart/network drop never loses this trade.
+        this.clearContractPoll();
 
         const randomWaitTime = Math.floor(Math.random() * (this.config.maxWaitTime - this.config.minWaitTime + 1)) + this.config.minWaitTime;
         const waitTimeMinutes = Math.round(randomWaitTime / 60000);
