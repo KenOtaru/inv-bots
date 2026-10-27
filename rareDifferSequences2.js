@@ -316,16 +316,17 @@ class EnhancedDigitDifferTradingBot {
             maxWaitTime: config.maxWaitTime || 500 * 1000,
             // Dynamic rare occurrence finder (all logic in-file)
             useDynamicRareFinder: config.useDynamicRareFinder,
+            // rareFinder: config.rareFinder || {},
             rareFinder: {
-                windowSize: config.rareFinder?.windowSize || 4000,
-                minSupport: config.rareFinder?.minSupport || 35,
-                maxCondProb: config.rareFinder?.maxCondProb || 0.07,
-                alpha: config.rareFinder?.alpha || 0.5,
-                minSurprisal: config.rareFinder?.minSurprisal || 2.8,
-                useOrders: config.rareFinder?.useOrders || [4, 3, 2],
-                avoidMarginalOnly: config.rareFinder?.avoidMarginalOnly !== false,
-                maxTradesPerAssetHour: config.rareFinder?.maxTradesPerAssetHour || 6,
-                minEdge: config.rareFinder?.minEdge || 0.0, // not using marginal lowest
+                windowSize: config.windowSize,
+                minSupport: config.minSupport,
+                maxCondProb: config.maxCondProb,
+                alpha: config.alpha,
+                minSurprisal: config.minSurprisal,
+                useOrders: config.useOrders,
+                avoidMarginalOnly: config.avoidMarginalOnly,
+                maxTradesPerAssetHour: config.maxTradesPerAssetHour,
+                minEdge: config.minEdge,
             }
         };
 
@@ -1666,7 +1667,8 @@ const bot = new EnhancedDigitDifferTradingBot({
         // 'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR', 
         // '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V', 
         // 'JD10', 'JD25', 'JD50', 'JD75', 'JD100'
-        'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR'
+        // 'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR'
+        'R_50'
     ],
     // singleActiveAsset: ONE random asset subscribed + traded per trade, then
     // forgotten and re-picked on the next cycle (default true; hard-pinned below).
@@ -1674,6 +1676,14 @@ const bot = new EnhancedDigitDifferTradingBot({
     // (env SUSPEND_AFTER_TRADE, TAKE_PROFIT_COOLDOWN_MS_MIN/MAX).
     singleActiveAsset: false, // true = one asset per trade cycle (lowest latency), false = all assets subscribed
     useDynamicRareFinder: true, // true = use rareFinder logic to pick digit, false = use random digit
+    minSupport: 35,
+    maxCondProb: 0.07,
+    alpha: 0.5,
+    minSurprisal: 2.8,
+    useOrders: [3], // [4,3,2] = try 4-gram first, then 3-gram, then 2-gram; [3,2] = try 3-gram first, then 2-gram
+    avoidMarginalOnly: true,
+    maxTradesPerAssetHour: 106,
+    minEdge: 0.0, // not using marginal lowest
 });
 
 bot.start();
