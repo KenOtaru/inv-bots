@@ -1657,7 +1657,7 @@ const bot = new EnhancedDigitDifferTradingBot({
     alpha: 0.5,
     minSurprisal: 2.8,
     useOrders: [3], // [4,3,2] = try 4-gram first, then 3-gram, then 2-gram; [3,2] = try 3-gram first, then 2-gram
-    avoidMarginalOnly: false,
+    avoidMarginalOnly: true,
     maxTradesPerAssetHour: 106,
     minEdge: 0.0, // not using marginal lowest
 });
