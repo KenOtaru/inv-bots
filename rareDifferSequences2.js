@@ -702,10 +702,6 @@ class EnhancedDigitDifferTradingBot {
 
         const history = this.tickHistories[asset];
 
-        const lastDigit = history[history.length - 1];
-        const lastDigit2 = history[history.length - 2];
-        const lastDigit3 = history[history.length - 3];
-
         let predictedDigit = null;
 
         // Try dynamic rare conditional occurrence finder first (all logic in-file)
@@ -728,42 +724,6 @@ class EnhancedDigitDifferTradingBot {
         } else {
             console.log(`[${asset}] [DYNAMIC-RARE] disabled by config`);
         }
-
-        // Fallback to hardcoded rare sequences (preserve original behavior if finder finds nothing)
-        // Rarest sequences
-        //8068, 8093, 9629, 6835, 7637, 4837, 9261, 5738
-        // if (lastDigit3 === 8 && lastDigit2 === 0 && lastDigit === 6) {
-        //     predictedDigit = 8;
-        //     this.xDigit = predictedDigit;
-        //     this.placeTrade(asset, predictedDigit);
-        //     return;
-        // }
-        // if (lastDigit3 === 8 && lastDigit2 === 0 && lastDigit === 9) {
-        //     predictedDigit = 3;
-        //     this.xDigit = predictedDigit;
-        //     this.placeTrade(asset, predictedDigit);
-        //     return;
-        // }
-        // if (lastDigit3 === 9 && lastDigit2 === 6 && lastDigit === 2) {
-        //     predictedDigit = 9;
-        //     this.xDigit = predictedDigit;
-        //     this.placeTrade(asset, predictedDigit);
-        //     return;
-        // }
-        // if (lastDigit3 === 6 && lastDigit2 === 8 && lastDigit === 3) {
-        //     predictedDigit = 5;
-        //     this.xDigit = predictedDigit;
-        //     this.placeTrade(asset, predictedDigit);
-        //     return;
-        // }
-        // if (lastDigit3 === 7 && lastDigit2 === 6 && lastDigit === 3) {
-        //     predictedDigit = 7;
-        //     this.xDigit = predictedDigit;
-        //     this.placeTrade(asset, predictedDigit);
-        //     return;
-        // }
-
-        // console.log(`[${asset}] Skipping trade for digit: ${predictedDigit} | Last Digit: ${lastDigit}`);
     }
 
     clearContractPoll() {
@@ -1560,20 +1520,20 @@ class EnhancedDigitDifferTradingBot {
                 return a.p - b.p;
             });
             const best = candidates[0];
+            const best2 = candidates[1];
             // respect last traded digit/asset no-repeat if possible
-            if (this.lastTradedDigit === best.digit && this.lastTradedAsset === asset) {
-                if (candidates.length > 1) {
-                    const best2 = candidates[1];
-                    if (best2.surprisal >= minSurprisal * 0.9) {
-                        console.log(`[${asset}] [RARE-ANALYSIS] ${JSON.stringify(analysisLog)}`);
-                        if (st) st.lastAnalysis = { asset, analysisLog, chosen: best2, ts: Date.now() };
-                        return best2;
-                    }
-                }
-                analysisLog.push({k, ctx: ctxKey, skipped: 'repeat_of_last_traded'});
-                continue;
-            }
-            console.log(`[${asset}] [RARE-ANALYSIS] ${JSON.stringify(analysisLog)}`);
+            // if (this.lastTradedDigit === best.digit && this.lastTradedAsset === asset) {
+            //     if (candidates.length > 1) {
+            //         if (best2.surprisal >= minSurprisal * 0.9) {
+            //             console.log(`[${asset}] [RARE-ANALYSIS] ${JSON.stringify(analysisLog)}`);
+            //             if (st) st.lastAnalysis = { asset, analysisLog, chosen: best2, ts: Date.now() };
+            //             return best2;
+            //         }
+            //     }
+            //     analysisLog.push({k, ctx: ctxKey, skipped: 'repeat_of_last_traded'});
+            //     continue;
+            // }
+            console.log(`[${asset}] [RARE-ANALYSIS] ${JSON.stringify(analysisLog)} (${best.digit})`);
             if (st) st.lastAnalysis = { asset, analysisLog, chosen: best, ts: Date.now() };
             return best;
         }
@@ -1676,7 +1636,7 @@ const bot = new EnhancedDigitDifferTradingBot({
     // (env SUSPEND_AFTER_TRADE, TAKE_PROFIT_COOLDOWN_MS_MIN/MAX).
     singleActiveAsset: false, // true = one asset per trade cycle (lowest latency), false = all assets subscribed
     useDynamicRareFinder: true, // true = use rareFinder logic to pick digit, false = use random digit
-    minSupport: 35,
+    minSupport: 4,
     maxCondProb: 0.07,
     alpha: 0.5,
     minSurprisal: 2.8,
