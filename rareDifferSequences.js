@@ -33,9 +33,9 @@ const CONFIG = Object.freeze({
 
     
     // ── multi-asset selection / suspension ─────────────────────────────
-    randomAssetSelection:   boolEnv('RANDOM_ASSET_SELECTION', true), // pick a random asset each trade
-    suspendAssetAfterTrade: boolEnv('SUSPEND_AFTER_TRADE', true),   // suspend traded asset after each trade
-    singleActiveAsset:      boolEnv('ONE_ASSET_AT_A_TIME', true),     // subscribe + trade ONE random asset per cycle
+    randomAssetSelection:   boolEnv('RANDOM_ASSET_SELECTION', false), // pick a random asset each trade
+    suspendAssetAfterTrade: boolEnv('SUSPEND_AFTER_TRADE', false),   // suspend traded asset after each trade
+    singleActiveAsset:      boolEnv('ONE_ASSET_AT_A_TIME', false),     // subscribe + trade ONE random asset per cycle
 
     // ── SESSION takeProfit cooldown (random) ───────────────────────────
     takeProfitCooldownMinMs: intEnv('TAKE_PROFIT_COOLDOWN_MS_MIN', 5 * 60 * 1000), // 15 min
@@ -495,17 +495,17 @@ class EnhancedDigitDifferTradingBot {
             ? '🎲 This trade: <code>' + htmlEscape(this.activeAsset || '?') + '</code> (random pick per trade) | pool: <code>' + this.assets.join(', ') + '</code>'
             : '📊 Assets: <code>' + this.assets.join(', ') + '</code> (' + (this.config.randomAssetSelection ? 'random pick' : 'tick-driven') + ')';
 
-        telegram.send(
-            '🤖 <b>Rare Differ Sequences Bot — ONLINE</b>\n' +
-            '👤 <code>' + htmlEscape(this.client.accountInfo?.loginid || '?') + '</code> ' + (this.client.accountInfo?.isVirtual ? '🟡 DEMO' : '🔴 REAL') + '\n' +
-            '💰 ' + Number(this.client.balance ?? 0).toFixed(2) + ' ' + this.currency + '\n' +
-            assetsLine + '\n' +
-            '💵 Base stake: ' + this.config.initialStake.toFixed(2) + ' | next: ' + this.currentStake.toFixed(2) + '\n' +
-            sessionLine + '\n' +
-            '💼 Lifetime: ' + this.totalTrades + ' trades (✅' + this.totalWins + ' ❌' + this.totalLosses + ') | P/L <b>' + this.totalProfitLoss.toFixed(2) + '</b>\n' +
-            '🕒 ' + utcTs(),
-            'high'
-        );
+        // telegram.send(
+        //     '🤖 <b>Rare Differ Sequences Bot — ONLINE</b>\n' +
+        //     '👤 <code>' + htmlEscape(this.client.accountInfo?.loginid || '?') + '</code> ' + (this.client.accountInfo?.isVirtual ? '🟡 DEMO' : '🔴 REAL') + '\n' +
+        //     '💰 ' + Number(this.client.balance ?? 0).toFixed(2) + ' ' + this.currency + '\n' +
+        //     assetsLine + '\n' +
+        //     '💵 Base stake: ' + this.config.initialStake.toFixed(2) + ' | next: ' + this.currentStake.toFixed(2) + '\n' +
+        //     sessionLine + '\n' +
+        //     '💼 Lifetime: ' + this.totalTrades + ' trades (✅' + this.totalWins + ' ❌' + this.totalLosses + ') | P/L <b>' + this.totalProfitLoss.toFixed(2) + '</b>\n' +
+        //     '🕒 ' + utcTs(),
+        //     'high'
+        // );
     }
 
     getLastDigit(quote, asset) {
@@ -1463,7 +1463,7 @@ const bot = new EnhancedDigitDifferTradingBot({
     // forgotten and re-picked on the next cycle (default true; hard-pinned below).
     // suspendAssetAfterTrade / cooldown default from CONFIG
     // (env SUSPEND_AFTER_TRADE, TAKE_PROFIT_COOLDOWN_MS_MIN/MAX).
-    singleActiveAsset: true, // true = one asset per trade cycle (lowest latency), false = all assets subscribed
+    singleActiveAsset: false, // true = one asset per trade cycle (lowest latency), false = all assets subscribed
 });
 
 bot.start();

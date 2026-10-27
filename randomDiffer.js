@@ -494,17 +494,17 @@ class EnhancedDigitDifferTradingBot {
             ? '🎲 This trade: <code>' + htmlEscape(this.activeAsset || '?') + '</code> (random pick per trade) | pool: <code>' + this.assets.join(', ') + '</code>'
             : '📊 Assets: <code>' + this.assets.join(', ') + '</code> (' + (this.config.randomAssetSelection ? 'random pick' : 'tick-driven') + ')';
 
-        telegram.send(
-            '🤖 <b>Random Digit Multi-Asset Bot — ONLINE</b>\n' +
-            '👤 <code>' + htmlEscape(this.client.accountInfo?.loginid || '?') + '</code> ' + (this.client.accountInfo?.isVirtual ? '🟡 DEMO' : '🔴 REAL') + '\n' +
-            '💰 ' + Number(this.client.balance ?? 0).toFixed(2) + ' ' + this.currency + '\n' +
-            assetsLine + '\n' +
-            '💵 Base stake: ' + this.config.initialStake.toFixed(2) + ' | next: ' + this.currentStake.toFixed(2) + '\n' +
-            sessionLine + '\n' +
-            '💼 Lifetime: ' + this.totalTrades + ' trades (✅' + this.totalWins + ' ❌' + this.totalLosses + ') | P/L <b>' + this.totalProfitLoss.toFixed(2) + '</b>\n' +
-            '🕒 ' + utcTs(),
-            'high'
-        );
+        // telegram.send(
+        //     '🤖 <b>Random Digit Multi-Asset Bot — ONLINE</b>\n' +
+        //     '👤 <code>' + htmlEscape(this.client.accountInfo?.loginid || '?') + '</code> ' + (this.client.accountInfo?.isVirtual ? '🟡 DEMO' : '🔴 REAL') + '\n' +
+        //     '💰 ' + Number(this.client.balance ?? 0).toFixed(2) + ' ' + this.currency + '\n' +
+        //     assetsLine + '\n' +
+        //     '💵 Base stake: ' + this.config.initialStake.toFixed(2) + ' | next: ' + this.currentStake.toFixed(2) + '\n' +
+        //     sessionLine + '\n' +
+        //     '💼 Lifetime: ' + this.totalTrades + ' trades (✅' + this.totalWins + ' ❌' + this.totalLosses + ') | P/L <b>' + this.totalProfitLoss.toFixed(2) + '</b>\n' +
+        //     '🕒 ' + utcTs(),
+        //     'high'
+        // );
     }
 
     getLastDigit(quote, asset) {
