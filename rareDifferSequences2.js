@@ -42,7 +42,7 @@ const CONFIG = Object.freeze({
     takeProfitCooldownMaxMs: intEnv('TAKE_PROFIT_COOLDOWN_MS_MAX', 30 * 60 * 1000), // 60 min
 
     // ── persistence (survive restart / network drop) ───────────────────
-    stateFile: strEnv('STATE_FILE', 'rareDifferSequences_state_01.json'),
+    stateFile: strEnv('STATE_FILE', 'rareDifferSequences2_state_01.json'),
 
     telegram: {
         enabled:  true,
@@ -315,7 +315,7 @@ class EnhancedDigitDifferTradingBot {
             minWaitTime: config.minWaitTime || 200 * 1000,
             maxWaitTime: config.maxWaitTime || 500 * 1000,
             // Dynamic rare occurrence finder (all logic in-file)
-            useDynamicRareFinder: config.useDynamicRareFinder !== undefined ? config.useDynamicRareFinder : true,
+            useDynamicRareFinder: config.useDynamicRareFinder,
             rareFinder: {
                 windowSize: config.rareFinder?.windowSize || 4000,
                 minSupport: config.rareFinder?.minSupport || 35,
@@ -722,36 +722,36 @@ class EnhancedDigitDifferTradingBot {
         // Fallback to hardcoded rare sequences (preserve original behavior if finder finds nothing)
         // Rarest sequences
         //8068, 8093, 9629, 6835, 7637, 4837, 9261, 5738
-        if (lastDigit3 === 8 && lastDigit2 === 0 && lastDigit === 6) {
-            predictedDigit = 8;
-            this.xDigit = predictedDigit;
-            this.placeTrade(asset, predictedDigit);
-            return;
-        }
-        if (lastDigit3 === 8 && lastDigit2 === 0 && lastDigit === 9) {
-            predictedDigit = 3;
-            this.xDigit = predictedDigit;
-            this.placeTrade(asset, predictedDigit);
-            return;
-        }
-        if (lastDigit3 === 9 && lastDigit2 === 6 && lastDigit === 2) {
-            predictedDigit = 9;
-            this.xDigit = predictedDigit;
-            this.placeTrade(asset, predictedDigit);
-            return;
-        }
-        if (lastDigit3 === 6 && lastDigit2 === 8 && lastDigit === 3) {
-            predictedDigit = 5;
-            this.xDigit = predictedDigit;
-            this.placeTrade(asset, predictedDigit);
-            return;
-        }
-        if (lastDigit3 === 7 && lastDigit2 === 6 && lastDigit === 3) {
-            predictedDigit = 7;
-            this.xDigit = predictedDigit;
-            this.placeTrade(asset, predictedDigit);
-            return;
-        }
+        // if (lastDigit3 === 8 && lastDigit2 === 0 && lastDigit === 6) {
+        //     predictedDigit = 8;
+        //     this.xDigit = predictedDigit;
+        //     this.placeTrade(asset, predictedDigit);
+        //     return;
+        // }
+        // if (lastDigit3 === 8 && lastDigit2 === 0 && lastDigit === 9) {
+        //     predictedDigit = 3;
+        //     this.xDigit = predictedDigit;
+        //     this.placeTrade(asset, predictedDigit);
+        //     return;
+        // }
+        // if (lastDigit3 === 9 && lastDigit2 === 6 && lastDigit === 2) {
+        //     predictedDigit = 9;
+        //     this.xDigit = predictedDigit;
+        //     this.placeTrade(asset, predictedDigit);
+        //     return;
+        // }
+        // if (lastDigit3 === 6 && lastDigit2 === 8 && lastDigit === 3) {
+        //     predictedDigit = 5;
+        //     this.xDigit = predictedDigit;
+        //     this.placeTrade(asset, predictedDigit);
+        //     return;
+        // }
+        // if (lastDigit3 === 7 && lastDigit2 === 6 && lastDigit === 3) {
+        //     predictedDigit = 7;
+        //     this.xDigit = predictedDigit;
+        //     this.placeTrade(asset, predictedDigit);
+        //     return;
+        // }
 
         console.log(`[${asset}] Skipping trade for digit: ${predictedDigit} | Last Digit: ${lastDigit}`);
     }
@@ -1652,6 +1652,7 @@ const bot = new EnhancedDigitDifferTradingBot({
     // suspendAssetAfterTrade / cooldown default from CONFIG
     // (env SUSPEND_AFTER_TRADE, TAKE_PROFIT_COOLDOWN_MS_MIN/MAX).
     singleActiveAsset: false, // true = one asset per trade cycle (lowest latency), false = all assets subscribed
+    useDynamicRareFinder: true, // true = use rareFinder logic to pick digit, false = use random digit
 });
 
 bot.start();
