@@ -585,8 +585,9 @@ class EnhancedDigitDifferTradingBot {
 
     handleTickHistory(asset, history) {
         this.tickHistories[asset] = history.prices.map(price => this.getLastDigit(price, asset));
-        // Feed historical ticks to finder
+        // Rebuild finder state from fresh history to avoid double-counting
         try {
+            this._initRareFinderForAsset(asset);
             if (Array.isArray(this.tickHistories[asset])) {
                 for (let i = 0; i < this.tickHistories[asset].length; i++) {
                     try { this._updateRareFinder(asset, this.tickHistories[asset][i]); } catch (_) {}
@@ -1447,11 +1448,11 @@ class EnhancedDigitDifferTradingBot {
             st.ring.shift();
         }
         st.lastPushed = d;
-        // rebuild/update ngrams for recent ring (efficient enough for 4k)
-        // rebuild maps from current ring for accuracy
+        // rebuild ngrams incrementally is complex; rebuild from ring for accuracy
         const rebuild = (order) => {
             const map = new Map();
             const r = st.ring;
+            if (r.length <= order) { st.ngrams[order] = map; return; }
             for (let i = order; i < r.length; i++) {
                 const ctx = r.slice(i - order, i).join(',');
                 const nxt = String(r[i]);
@@ -1594,7 +1595,7 @@ class EnhancedDigitDifferTradingBot {
             if (st) st.lastAnalysis = { asset, analysisLog, chosen: best, ts: Date.now() };
             return best;
         }
-        console.log(`[${asset}] [RARE-ANALYSISn] ${JSON.stringify(analysisLog)}`);
+        console.log(`[${asset}] [RARE-ANALYSIS] ${JSON.stringify(analysisLog)}`);
         if (st) st.lastAnalysis = { asset, analysisLog, chosen: null, ts: Date.now() };
         return null;
     }
@@ -1693,11 +1694,11 @@ const bot = new EnhancedDigitDifferTradingBot({
     // (env SUSPEND_AFTER_TRADE, TAKE_PROFIT_COOLDOWN_MS_MIN/MAX).
     singleActiveAsset: false, // true = one asset per trade cycle (lowest latency), false = all assets subscribed
     useDynamicRareFinder: true, // true = use rareFinder logic to pick digit, false = use random digit
-    minSupport: 4,
+    minSupport: 15,
     maxCondProb: 0.07,
     alpha: 0.5,
     minSurprisal: 2.8,
-    useOrders: [3], // [4,3,2] = try 4-gram first, then 3-gram, then 2-gram; [3,2] = try 3-gram first, then 2-gram
+    useOrders: [2], // [4,3,2] = try 4-gram first, then 3-gram, then 2-gram; [3,2] = try 3-gram first, then 2-gram
     avoidMarginalOnly: true, // true = avoid picking digits that are only marginally lowest with no strong conditional signal
     maxTradesPerAssetHour: 106,
     minEdge: 0.0, // not using marginal lowest
