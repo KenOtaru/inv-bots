@@ -75,7 +75,7 @@ const CONFIG = Object.freeze({
 
     telegram: {
         enabled:  true,
-        botToken: '8591937854:AAESyF-8b17sRK-xdQXzrHfALnKA1sAR3CI',
+        botToken: '8306232249:AAGMwjFngs68Lcq27oGmqewQgthXTJJRxP0',
         chatId:   '752497117',
     },
     reconnect: {
@@ -450,6 +450,7 @@ class EnhancedDigitDifferTradingBot {
         this.pendingContractAsset = null;
         this.pendingContractDigit = null;
         this.pendingContractMode = null;
+        this._contractPollTimer = null;
 
         // ── VIRTUAL phase ledger ────────────────────────────────────────
         // No Deriv account backs this leg, so the balance lives here.
@@ -983,23 +984,43 @@ console.log(`[${mode}] 🚀 Placing trade on ${asset} for digit: ${predictedDigi
                 if (contract) this.handleContractUpdate(contract);
             }, 15000);
             if (subId != null) this._openSubIds.set(String(contractId), subId);
-            // The first response resolves the subscribe request and never reaches
-            // the callback above. A 1-tick contract can already be sold in it, so
-            // poll once after a short delay to catch that settlement (no-op if the
-            // live subscription already reported it).
-            setTimeout(() => {
-                conn._send({ proposal_open_contract: 1, contract_id: contractId }, 15000)
-                    .then(res => {
-                        const contract = res && res.proposal_open_contract;
-                        if (contract) this.handleContractUpdate(contract);
-                    })
-                    .catch(() => {});
-            }, 2000);
-            return subId;
         } catch (e) {
             console.warn(`[${mode}] Failed to subscribe to open contract #${contractId}:`, e.message);
-            return null;
         }
+        // Poll continuously like the web version to ensure we catch settlement
+        // even if subscription updates are delayed or missed
+        this._scheduleContractPoll(contractId, mode);
+        return this._openSubIds.get(String(contractId)) || null;
+    }
+
+    clearContractPoll() {
+        if (this._contractPollTimer) {
+            clearTimeout(this._contractPollTimer);
+            this._contractPollTimer = null;
+        }
+    }
+
+    _scheduleContractPoll(contractId, mode = this.tradeTokenMode) {
+        if (this._stopped || !this.clientMain || !this.clientMain.authorized || this.pendingContractId !== contractId || this.settledContracts.has(contractId)) {
+            this.clearContractPoll();
+            return;
+        }
+        this.clearContractPoll();
+        this._contractPollTimer = setTimeout(() => {
+            this._contractPollTimer = null;
+            (async () => {
+                try {
+                    const conn = this.clientFor(mode);
+                    if (!conn) return;
+                    const res = await conn._send({ proposal_open_contract: 1, contract_id: contractId }, 15000);
+                    const contract = res && res.proposal_open_contract;
+                    if (contract) this.handleContractUpdate(contract);
+                } catch (e) {
+                    console.warn(`[${mode}] Contract #${contractId} poll failed:`, e.message);
+                }
+                this._scheduleContractPoll(contractId, mode);
+            })();
+        }, 2000);
     }
 
     // ── VIRTUAL phase executor ──────────────────────────────────────────
@@ -1412,6 +1433,7 @@ console.log(`[${mode}] 🚀 Placing trade on ${asset} for digit: ${predictedDigi
         this._trackDaily(asset, contract, won, profit, mode);
         // Contract settled — clear the in-flight marker and persist the result
         // so a restart/network drop never loses this trade.
+        this.clearContractPoll();
         this.pendingContractId = null;
         this.pendingContractAsset = null;
         this.pendingContractDigit = null;
