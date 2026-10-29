@@ -2400,11 +2400,11 @@ const bot = new EnhancedDigitDifferTradingBot({
     initialStake: 0.35,             // VIRTUAL phase flat stake (simulated — martingale never applies)
     // ── MAIN token base stake: the first rung of the martingale ladder once
     // trading hands over from the VIRTUAL phase. Deliberately different from initialStake.
-    mainInitialStake: 0.61,         // MAIN token base stake (martingale ladder L0)
+    mainInitialStake: 5.25,         // MAIN token base stake (martingale ladder L0)
     // Consecutive VIRTUAL losses before the next trades move to the MAIN token.
     lossesBeforeMainSwitch: 1,  // MAIN token handover threshold (1 = after 1 VIRTUAL loss)
-    multiplier: 11.3,         //11.3 MAIN martingale ladder multiplier (L0 → L1 → L2 → L3)
-    maxConsecutiveLosses: 4,     // MAIN martingale ladder cap (L0..L3), then the bot stops
+    multiplier: 1,         //11.3 MAIN martingale ladder multiplier (L0 → L1 → L2 → L3)
+    maxConsecutiveLosses: 8,     // MAIN martingale ladder cap (L0..L3), then the bot stops
     stopLoss: 906,                // lifetime P/L stop-loss (negative number, e.g. -1000)
     takeProfit: 0,              // per-session profit target (0 = off)
     requiredHistoryLength: 100,

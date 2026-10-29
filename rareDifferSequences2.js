@@ -1694,11 +1694,11 @@ const bot = new EnhancedDigitDifferTradingBot({
     // (env SUSPEND_AFTER_TRADE, TAKE_PROFIT_COOLDOWN_MS_MIN/MAX).
     singleActiveAsset: false, // true = one asset per trade cycle (lowest latency), false = all assets subscribed
     useDynamicRareFinder: true, // true = use rareFinder logic to pick digit, false = use random digit
-    minSupport: 15,
+    minSupport: 4,
     maxCondProb: 0.07,
     alpha: 0.5,
     minSurprisal: 2.8,
-    useOrders: [2], // [4,3,2] = try 4-gram first, then 3-gram, then 2-gram; [3,2] = try 3-gram first, then 2-gram
+    useOrders: [3], // [4,3,2] = try 4-gram first, then 3-gram, then 2-gram; [3,2] = try 3-gram first, then 2-gram
     avoidMarginalOnly: true, // true = avoid picking digits that are only marginally lowest with no strong conditional signal
     maxTradesPerAssetHour: 106,
     minEdge: 0.0, // not using marginal lowest
