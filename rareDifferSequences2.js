@@ -904,7 +904,7 @@ class EnhancedDigitDifferTradingBot {
         this.logTradingSummary(asset);
 
         // If there are suspended assets, reactivate the first one on win
-        if (this.suspendedAssets.size > 1) {
+        if (this.suspendedAssets.size > 3) {
             const firstSuspendedAsset = Array.from(this.suspendedAssets)[0];
             this.reactivateAsset(firstSuspendedAsset);
         }
@@ -1672,21 +1672,20 @@ class EnhancedDigitDifferTradingBot {
 // Usage — trading config preserved from the original randomDiffer.js
 const bot = new EnhancedDigitDifferTradingBot({
     initialStake: 5.25,
-    multiplier: 1, //11.3
+    multiplier: 11.3, //11.3
     maxConsecutiveLosses: 6,
     stopLoss:129,
-    takeProfit: 10000,              // per-session profit target (0 = off)
+    takeProfit: 0.5,              // per-session profit target (0 = off)
     requiredHistoryLength: 1000,
     winProbabilityThreshold: 100,
     minWaitTime: 1000, //1 * 60 * 1000,  // 15 min
     maxWaitTime: 2000, //11 * 60 * 1000,  // 30 min
     minOccurrencesThreshold: 1,
     assets: [
-        // 'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR', 
         // '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V', 
         // 'JD10', 'JD25', 'JD50', 'JD75', 'JD100'
-        // 'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR'
-        'R_50'
+        'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR'
+        // 'R_50'
     ],
     // singleActiveAsset: ONE random asset subscribed + traded per trade, then
     // forgotten and re-picked on the next cycle (default true; hard-pinned below).
@@ -1694,11 +1693,11 @@ const bot = new EnhancedDigitDifferTradingBot({
     // (env SUSPEND_AFTER_TRADE, TAKE_PROFIT_COOLDOWN_MS_MIN/MAX).
     singleActiveAsset: false, // true = one asset per trade cycle (lowest latency), false = all assets subscribed
     useDynamicRareFinder: true, // true = use rareFinder logic to pick digit, false = use random digit
-    minSupport: 4,
+    minSupport: 19, // minimum occurrences of context in history to consider it valid
     maxCondProb: 0.07,
     alpha: 0.5,
     minSurprisal: 2.8,
-    useOrders: [3], // [4,3,2] = try 4-gram first, then 3-gram, then 2-gram; [3,2] = try 3-gram first, then 2-gram
+    useOrders: [2], // [4,3,2] = try 4-gram first, then 3-gram, then 2-gram; [3,2] = try 3-gram first, then 2-gram
     avoidMarginalOnly: true, // true = avoid picking digits that are only marginally lowest with no strong conditional signal
     maxTradesPerAssetHour: 106,
     minEdge: 0.0, // not using marginal lowest
