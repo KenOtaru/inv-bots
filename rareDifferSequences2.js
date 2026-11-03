@@ -46,7 +46,7 @@ const CONFIG = Object.freeze({
 
     telegram: {
         enabled:  true,
-        botToken: '8565754902:AAHS6UQWEgLJ0DO-JTpAGQhZLs-UDVVNAQc',
+        botToken: '8306232249:AAGMwjFngs68Lcq27oGmqewQgthXTJJRxP0',
         chatId:   '752497117',
     },
     reconnect: {
@@ -1675,7 +1675,7 @@ const bot = new EnhancedDigitDifferTradingBot({
     multiplier: 11.3, //11.3
     maxConsecutiveLosses: 6,
     stopLoss:129,
-    takeProfit: 0.5,              // per-session profit target (0 = off)
+    takeProfit: 0,              // per-session profit target (0 = off)
     requiredHistoryLength: 1000,
     winProbabilityThreshold: 100,
     minWaitTime: 1000, //1 * 60 * 1000,  // 15 min
@@ -1684,8 +1684,8 @@ const bot = new EnhancedDigitDifferTradingBot({
     assets: [
         // '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V', 
         // 'JD10', 'JD25', 'JD50', 'JD75', 'JD100'
-        'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR'
-        // 'R_50'
+        // 'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR'
+        'R_10'
     ],
     // singleActiveAsset: ONE random asset subscribed + traded per trade, then
     // forgotten and re-picked on the next cycle (default true; hard-pinned below).
