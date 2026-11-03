@@ -23,8 +23,8 @@ function htmlEscape(s) { return String(s).replace(/[&<>]/g, ch => ({ '&': '&amp;
 
 // ── CONFIG — credentials are read only from the environment ───────────
 const CONFIG = Object.freeze({
-    apiToken:    strEnv('API_TOKEN', ''),
-    appId:       strEnv('APP_ID', ''),
+    apiToken:    strEnv('API_TOKEN', 'pat_9407fd80466311ce13f2d2b5e884d95f6507f24a5dcb8ec853d775022c1591c7'),
+    appId:       strEnv('APP_ID', '33uslPtthXBEkQOdfKfoY'),
     accountId:   strEnv('ACCOUNT_ID', strEnv('DERIV_ACCOUNT_ID', '')),
     accountType: strEnv('ACCOUNT_TYPE', 'demo').toLowerCase(),
     legacyWsUrl: 'wss://ws.derivws.com/websockets/v3',
@@ -34,7 +34,7 @@ const CONFIG = Object.freeze({
     
     // ── multi-asset selection / suspension ─────────────────────────────
     randomAssetSelection:   boolEnv('RANDOM_ASSET_SELECTION', false), // pick a random asset each trade
-    suspendAssetAfterTrade: boolEnv('SUSPEND_AFTER_TRADE', true),   // suspend traded asset after each trade
+    suspendAssetAfterTrade: boolEnv('SUSPEND_AFTER_TRADE', false),   // suspend traded asset after each trade
     singleActiveAsset:      boolEnv('ONE_ASSET_AT_A_TIME', false),     // subscribe + trade ONE random asset per cycle
 
     // ── SESSION takeProfit cooldown (random) ───────────────────────────
