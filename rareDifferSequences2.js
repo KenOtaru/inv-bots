@@ -1671,7 +1671,7 @@ class EnhancedDigitDifferTradingBot {
 
 // Usage — trading config preserved from the original randomDiffer.js
 const bot = new EnhancedDigitDifferTradingBot({
-    initialStake: 5.25,
+    initialStake: 10.5,
     multiplier: 11.3, //11.3
     maxConsecutiveLosses: 6,
     stopLoss:129,

@@ -1786,8 +1786,8 @@ function main() {
             // 'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR',
             // '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V',
             // 'JD10', 'JD25', 'JD50', 'JD75', 'JD100'
-            'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR'
-            // 'R_50'
+            // 'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR'
+            'R_50'
         ],
         // singleActiveAsset: ONE random asset subscribed + traded per trade, then
         // forgotten and re-picked on the next cycle (default true; hard-pinned below).
