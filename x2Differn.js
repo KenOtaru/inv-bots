@@ -1,5 +1,5 @@
 require('dotenv').config();
-const WebSocket = require('ws');
+const { DerivClient } = require('./lib/deriv-client');
 const https = require('https');
 const fs = require('fs');
 const { URL } = require('url');
@@ -25,7 +25,7 @@ function htmlEscape(s) { return String(s).replace(/[&<>]/g, ch => ({ '&': '&amp;
 const CONFIG = Object.freeze({
     apiToken:    strEnv('API_TOKEN', 'pat_9407fd80466311ce13f2d2b5e884d95f6507f24a5dcb8ec853d775022c1591c7'),
     appId:       strEnv('APP_ID', '33uslPtthXBEkQOdfKfoY'),
-    accountId:   strEnv('ACCOUNT_ID' || ''),
+    accountId:   strEnv('ACCOUNT_ID', strEnv('DERIV_ACCOUNT_ID', '')),
     accountType: strEnv('ACCOUNT_TYPE', 'demo').toLowerCase(),
     legacyWsUrl: 'wss://ws.derivws.com/websockets/v3',
     restBaseUrl: 'https://api.derivws.com',
@@ -203,139 +203,6 @@ function repeatAvoidDefaults(overrides = {}) {
         winProbabilityThreshold: numEnv('WIN_PROBABILITY_THRESHOLD', 60), //90
         ...overrides,
     };
-}
-
-// ── REST + WS CLIENT (new PAT connection — same as randomDigitDifferV2.js)
-class RestClient {
-    constructor(base, appId, token) { this.baseUrl = base; this.appId = appId; this.token = token; }
-    static isPat(t) { return typeof t === 'string' && /^pat_[a-z0-9_\-]{16,}$/i.test(t.trim()); }
-    request(method, route, body = null) {
-        return new Promise((res, rej) => {
-            let u; try { u = new URL(route, this.baseUrl); } catch (e) { return rej(new Error(`Bad URL ${route}`)); }
-            const payload = body == null ? null : JSON.stringify(body);
-            const req = https.request({ method, hostname: u.hostname, port: u.port || 443, path: u.pathname + u.search, headers: { Authorization: `Bearer ${this.token}`, 'Deriv-App-ID': this.appId, Accept: 'application/json', ...(payload ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) } : {}) }, timeout: 15000 }, r => {
-                let d = ''; r.on('data', c => d += c); r.on('end', () => { try { d = JSON.parse(d); } catch (_) {} res({ status: r.statusCode, body: d }); });
-            });
-            req.on('timeout', () => req.destroy(new Error('REST timeout'))); req.on('error', rej);
-            if (payload) req.write(payload); req.end();
-        });
-    }
-    get(r) { return this.request('GET', r); }
-    post(r, b) { return this.request('POST', r, b); }
-}
-
-class DerivClient extends EventEmitter {
-    constructor(cfg) {
-        super(); this.cfg = cfg; this.ws = null; this.connected = false; this.authorized = false;
-        this._stopped = false; this._suspended = false; this._reconnecting = false; this._reconnectAttempt = 0; this._reqId = 0;
-        this._pending = new Map(); this._subs = new Map(); this.balance = null; this.currency = cfg.currency;
-        this.accountInfo = null; this.symbols = new Map();
-        this._isPat = RestClient.isPat(cfg.apiToken);
-        this._rest = this._isPat ? new RestClient(cfg.restBaseUrl, cfg.appId, cfg.apiToken) : null;
-        this._targetAccountId = cfg.accountId || '';
-    }
-    _nextId() { return ++this._reqId; }
-    _legacyUrl() { const s = this.cfg.legacyWsUrl.includes('?') ? '&' : '?'; return `${this.cfg.legacyWsUrl}${s}app_id=${encodeURIComponent(this.cfg.appId)}`; }
-    _redact(u) { return String(u).replace(/([?&])(otp|app_id|token|auth)=[^&]+/gi, '$1$2=***'); }
-    connect() {
-        if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) return;
-        if (!this.cfg.apiToken) { logger.error('API token empty'); this._stopped = true; return; }
-        if (this._isPat) this._connectPat().catch(e => { logger.error('PAT connect:', e.message); this._schedReconnect(); });
-        else this._openWs(this._legacyUrl());
-    }
-    async _connectPat() {
-        const aid = await this._resolvePatAccountId();
-        const route = `/trading/v1/options/accounts/${encodeURIComponent(aid)}/otp`;
-        const res = await this._rest.post(route);
-        if (res.status !== 200) { const m = res.body?.errors?.[0]?.message || res.body?.message || JSON.stringify(res.body); throw new Error(`OTP ${res.status}: ${m}`); }
-        const wsUrl = res.body?.data?.url; if (!wsUrl) throw new Error(`OTP missing url: ${JSON.stringify(res.body)}`);
-        this._targetAccountId = aid;
-        this.accountInfo = { loginid: aid, accountType: this.cfg.accountType, isVirtual: this.cfg.accountType !== 'real', currency: this.cfg.currency };
-        logger.info(`connecting → ${this._redact(wsUrl)}`); this._openWs(wsUrl);
-    }
-    async _resolvePatAccountId() {
-        if (this._targetAccountId) return this._targetAccountId;
-        for (const [m, r] of [['GET', '/trading/v1/options/accounts'], ['POST', '/trading/v1/options/accounts/list']]) {
-            try {
-                const res = m === 'GET' ? await this._rest.get(r) : await this._rest.post(r, null);
-                if (res.status >= 200 && res.status < 300) {
-                    const arr = Array.isArray(res.body?.data) ? res.body.data : Array.isArray(res.body?.accounts) ? res.body.accounts : [];
-                    if (arr.length) { const d = arr.find(a => String(a.account_type || '').toLowerCase() === this.cfg.accountType) || arr[0]; const id = d.account_id || d.loginid || d.id; if (id) { this.accountInfo = { loginid: id, accountType: d.account_type || this.cfg.accountType, isVirtual: String(d.account_type || this.cfg.accountType).toLowerCase() !== 'real', currency: d.currency || this.cfg.currency, balance: d.balance != null ? Number(d.balance) : null }; return id; } }
-                }
-            } catch (e) { logger.debug(`PAT discovery ${m} ${r}:`, e.message); }
-        }
-        throw new Error('DERIV_ACCOUNT_ID required for PAT');
-    }
-    _openWs(url) {
-        try { this.ws = new WebSocket(url, { handshakeTimeout: 15000, headers: { 'User-Agent': 'DigitPredictorV2/2.0' } }); } catch (e) { logger.error('WS construct:', e.message); this._schedReconnect(); return; }
-        this.ws.on('open', () => this._onOpen()); this.ws.on('message', d => this._onMsg(d)); this.ws.on('error', e => this._onErr(e)); this.ws.on('close', (c, r) => this._onClose(c, r));
-        this.ws.on('unexpected-response', (_, res) => { logger.error('WS handshake:', res.statusCode, res.statusMessage); try { res.destroy(); } catch (_) {} this._schedReconnect(); });
-    }
-    _onOpen() { logger.info('WS connected ✔'); this.connected = true; this._reconnecting = false; this._reconnectAttempt = 0; this.emit('open'); if (this._isPat) this._markPatAuth(); else this._authLegacy(); }
-    async _authLegacy() {
-        try {
-            const res = await this._send({ authorize: this.cfg.apiToken }, 20000); const a = res.authorize;
-            this.authorized = true; this.balance = Number(a.balance); this.currency = a.currency || this.cfg.currency;
-            this.accountInfo = { loginid: a.loginid, email: a.email, isVirtual: !!a.is_virtual, accountType: a.account_type, currency: this.currency };
-            logger.info(`authorized ${a.loginid} (${this.accountInfo.isVirtual ? 'DEMO' : 'REAL'}) bal=${this.balance} ${this.currency}`); this.emit('authorized', this.accountInfo);
-        } catch (e) { logger.error('authorize:', e.message); this.authorized = false; this._schedReconnect(); }
-    }
-    async _markPatAuth() {
-        this.authorized = true; if (this.accountInfo?.balance != null) this.balance = Number(this.accountInfo.balance); this.currency = this.accountInfo?.currency || this.cfg.currency;
-        try { const b = await this._send({ balance: 1 }, 10000); if (b.balance) { this.balance = Number(b.balance.balance); this.currency = b.balance.currency || this.currency; } } catch (e) { logger.debug('balance skip:', e.message); }
-        logger.info(`authorized ${this.accountInfo?.loginid || this._targetAccountId} via PAT bal=${this.balance ?? '?'} ${this.currency}`); this.emit('authorized', this.accountInfo || { loginid: this._targetAccountId, isVirtual: this.cfg.accountType !== 'real' });
-    }
-    _onMsg(data) {
-        let msg; try { msg = JSON.parse(data.toString()); } catch { return; }
-        if (msg.error) {
-            const code = msg.error.code || 'Error', text = msg.error.message || code;
-            const benign = new Set(['AlreadySubscribedOrLimit', 'ContractNotFound', 'BetExpired', 'TradingDurationNotAllowed']);
-            (benign.has(code) ? logger.debug : logger.error)(`api: ${code} - ${text} req=${msg.req_id || '?'}`);
-            if (msg.req_id && this._pending.has(msg.req_id)) { const p = this._pending.get(msg.req_id); clearTimeout(p.timer); this._pending.delete(msg.req_id); p.reject(new Error(text)); }
-            if (['AuthorizationRequired', 'InvalidToken', 'InvalidAppID'].includes(code)) try { this.ws?.close(); } catch (_) {}
-            return;
-        }
-        if (msg.req_id && this._pending.has(msg.req_id)) { const p = this._pending.get(msg.req_id); clearTimeout(p.timer); this._pending.delete(msg.req_id); p.resolve(msg); return; }
-        if (msg.subscription?.id && this._subs.has(msg.subscription.id)) { const cb = this._subs.get(msg.subscription.id); try { cb(msg); } catch (e) { logger.error('sub handler:', e.message); } return; }
-        this.emit('message', msg);
-    }
-    _onErr(e) { logger.error('WS error:', e.message, e.code || ''); this.emit('error', e); }
-    _onClose(code, reason) {
-        const rs = (() => { try { return reason?.toString() || ''; } catch { return ''; } })();
-        logger.warn(`WS closed code=${code} ${rs || ''}`); const was = this.authorized; this.connected = false; this.authorized = false;
-        for (const [, p] of this._pending) { clearTimeout(p.timer); p.reject(new Error('Connection closed')); } this._pending.clear(); this._subs.clear();
-        this.emit('close', code, reason, was); if (!this._stopped && !this._suspended) this._schedReconnect();
-    }
-    _schedReconnect() {
-        if (this._stopped || this._suspended || this._reconnecting) return; this._reconnecting = true; this._reconnectAttempt++;
-        const base = Math.min(this.cfg.reconnect.initialDelayMs * Math.pow(this.cfg.reconnect.backoffFactor, this._reconnectAttempt - 1), this.cfg.reconnect.maxDelayMs);
-        const delay = base + Math.random() * this.cfg.reconnect.jitterMs;
-        logger.info(`reconnect #${this._reconnectAttempt} in ${(delay / 1000).toFixed(1)}s`);
-        setTimeout(() => { this._reconnecting = false; this.connect(); }, delay);
-    }
-    _send(payload, timeoutMs = 30000) {
-        return new Promise((res, rej) => {
-            if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return rej(new Error('Not connected'));
-            const id = this._nextId();
-            const timer = setTimeout(() => { if (this._pending.has(id)) { this._pending.delete(id); rej(new Error('Request timeout')); } }, timeoutMs);
-            this._pending.set(id, { resolve: res, reject: rej, timer });
-            try { this.ws.send(JSON.stringify({ ...payload, req_id: id })); } catch (e) { clearTimeout(timer); this._pending.delete(id); rej(e); }
-        });
-    }
-    subscribe(payload, cb, timeoutMs = 30000) {
-        return new Promise((res, rej) => {
-            if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return rej(new Error('Not connected'));
-            const id = this._nextId();
-            const timer = setTimeout(() => { if (this._pending.has(id)) { this._pending.delete(id); rej(new Error('Subscribe timeout')); } }, timeoutMs);
-            this._pending.set(id, { resolve: msg => { const sid = msg.subscription?.id; if (!sid) return rej(new Error('No sub id')); this._subs.set(sid, cb); res(sid); }, reject: rej, timer });
-            try { this.ws.send(JSON.stringify({ ...payload, subscribe: 1, req_id: id })); } catch (e) { clearTimeout(timer); this._pending.delete(id); rej(e); }
-        });
-    }
-    forget(subId) { if (!subId) return Promise.resolve(); this._subs.delete(subId); if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return Promise.resolve(); return this._send({ forget: subId }, 8000).catch(e => logger.debug('forget:', e.message)); }
-    suspend() { this._suspended = true; try { this.ws?.close(); } catch (_) {} }
-    resume() { this._suspended = false; this.connect(); }
-    stop() { this._stopped = true; try { this.ws?.close(); } catch (_) {} }
-    symbolField() { return this._isPat ? 'underlying_symbol' : 'symbol'; }
 }
 
 class RepeatRegimeAnalyzer {
@@ -767,7 +634,6 @@ class EnhancedDigitDifferTradingBot {
         this.pendingBuy = null; // durable intent: a lost buy response must not trigger another order
         this._contractSubscriptionIds = new Map();
         this._contractPollTimer = null;
-        
 
         this.assets.forEach(asset => {
             this.tickHistories[asset] = [];
@@ -1188,32 +1054,20 @@ class EnhancedDigitDifferTradingBot {
 
     async subscribeToOpenContract(contractId) {
         try {
-            await this.client.subscribe({ proposal_open_contract: 1, contract_id: contractId }, (msg) => {
-                const contract = msg.proposal_open_contract;
-                if (contract) this.handleContractUpdate(contract);
+            const subscriptionId = await this.client.subscribe({ proposal_open_contract: 1, contract_id: contractId }, (msg) => {
+                if (msg.proposal_open_contract) this.handleContractUpdate(msg.proposal_open_contract);
             }, 15000);
-        } catch (e) {
-            console.warn(`Failed to subscribe to open contract #${contractId}:`, e.message);
-        }
-        // Poll continuously like the web version to ensure we catch settlement
-        // even if subscription updates are delayed or missed
-        this._scheduleContractPoll(contractId);
-    }
-
-    handleContractUpdate(contract) {
-        const contractId = contract.contract_id;
-        if (this.pendingContractId && String(contractId) !== String(this.pendingContractId)) {
-            return;
-        }
-        if (contract.is_sold && !this.settledContracts.has(contractId)) {
-            this.clearContractPoll();
-            this.settledContracts.add(contractId);
-            if (this.settledContracts.size > 5000) {
-                const first = this.settledContracts.values().next().value;
-                this.settledContracts.delete(first);
+            // subscribe() now delivers the initial frame, which can already be sold.
+            if (this.settledContracts.has(contractId)) {
+                await this.client.forget(subscriptionId);
+                return;
             }
-            this.handleTradeResult(contract);
+            this._contractSubscriptionIds.set(contractId, subscriptionId);
+        } catch (error) {
+            if (this.settledContracts.has(contractId)) return;
+            console.warn(`Failed to subscribe to open contract #${contractId}; falling back to polling:`, error.message);
         }
+        this._scheduleContractPoll(contractId);
     }
 
     _scheduleContractPoll(contractId) {
@@ -1228,6 +1082,24 @@ class EnhancedDigitDifferTradingBot {
             // Retry read-only monitoring, never the buy, until sold/disconnected.
             this._scheduleContractPoll(contractId);
         }, 2000);
+    }
+
+    handleContractUpdate(contract) {
+        const contractId = contract.contract_id;
+        if (this.pendingContractId && String(contractId) !== String(this.pendingContractId)) return;
+        if (contract.is_sold && !this.settledContracts.has(contractId)) {
+            clearTimeout(this._contractPollTimer);
+            this._contractPollTimer = null;
+            const subscriptionId = this._contractSubscriptionIds.get(contractId);
+            this._contractSubscriptionIds.delete(contractId);
+            if (subscriptionId) this.client.forget(subscriptionId);
+            this.settledContracts.add(contractId);
+            if (this.settledContracts.size > 5000) {
+                const first = this.settledContracts.values().next().value;
+                this.settledContracts.delete(first);
+            }
+            this.handleTradeResult(contract);
+        }
     }
 
     handleTradeResult(contract) {
@@ -1307,10 +1179,6 @@ class EnhancedDigitDifferTradingBot {
         this.pendingContractAsset = null;
         this.pendingContractDigit = null;
         this._save('after-trade');
-
-        // Contract settled — clear the in-flight marker and persist the result
-        // so a restart/network drop never loses this trade.
-        this.clearContractPoll();
 
         const randomWaitTime = Math.floor(Math.random() * (this.config.maxWaitTime - this.config.minWaitTime + 1)) + this.config.minWaitTime;
         const waitTimeMinutes = Math.round(randomWaitTime / 60000);
@@ -1920,7 +1788,7 @@ function main() {
             // '1HZ10V', '1HZ25V', '1HZ50V', '1HZ75V', '1HZ100V',
             // 'JD10', 'JD25', 'JD50', 'JD75', 'JD100'
             // 'R_10','R_25','R_50','R_75', 'RDBULL', 'RDBEAR'
-            'R_50'
+            'R_10'
         ],
         // singleActiveAsset: ONE random asset subscribed + traded per trade, then
         // forgotten and re-picked on the next cycle (default true; hard-pinned below).
